@@ -1,36 +1,152 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Foreshadow App
 
-## Getting Started
+A modern web application built with Next.js 16, Tailwind CSS v4, and Supabase.
 
-First, run the development server:
+## 🚀 Getting Started
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+### Prerequisites
+
+- Node.js 18+ installed
+- Supabase account and project
+
+### Setup
+
+1. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+2. **Configure environment variables:**
+   
+   Create a `.env.local` file in the root directory:
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   ```
+
+3. **Run the development server:**
+   ```bash
+   npm run dev
+   ```
+
+4. **Open your browser:**
+   
+   Navigate to [http://localhost:3000](http://localhost:3000)
+
+## 📁 Project Structure
+
+```
+foreshadow-app/
+├── app/                    # Next.js App Router
+│   ├── dashboard/         # Dashboard page
+│   ├── layout.tsx         # Root layout
+│   ├── page.tsx           # Home page
+│   └── globals.css        # Global styles
+├── components/            # Reusable components
+│   └── Navigation.tsx     # Navigation component
+├── lib/                   # Utility functions
+│   └── supabaseClient.ts  # Supabase client config
+└── public/                # Static assets
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🛠️ Tech Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Framework:** Next.js 16 (App Router)
+- **Styling:** Tailwind CSS v4
+- **Database:** Supabase
+- **Language:** TypeScript
+- **Font:** Geist Sans & Geist Mono
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## ✨ Features
 
-## Learn More
+- ⚡ Lightning-fast performance with Next.js 16
+- 🎨 Modern, responsive UI with Tailwind CSS v4
+- 🌙 Dark mode support out of the box
+- 🔐 Pre-configured Supabase integration
+- 📱 Mobile-friendly responsive design
+- 🎯 TypeScript for type safety
 
-To learn more about Next.js, take a look at the following resources:
+## 📝 Development
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Available Scripts
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm start` - Start production server
+- `npm run lint` - Run ESLint
 
-## Deploy on Vercel
+### Adding New Pages
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Create a new folder in the `app` directory with a `page.tsx` file:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```typescript
+// app/new-page/page.tsx
+export default function NewPage() {
+  return (
+    <div>
+      <h1>New Page</h1>
+    </div>
+  );
+}
+```
+
+### Using Supabase
+
+The Supabase client is already configured in `lib/supabaseClient.ts`. Import and use it:
+
+```typescript
+import { supabase } from '@/lib/supabaseClient';
+
+// Example: Fetch data
+const { data, error } = await supabase
+  .from('your_table')
+  .select('*');
+```
+
+## 🎨 Customization
+
+### Colors
+
+Edit colors in `app/globals.css`:
+
+```css
+:root {
+  --background: #ffffff;
+  --foreground: #0f172a;
+}
+```
+
+### Fonts
+
+Update fonts in `app/layout.tsx` using Next.js font optimization.
+
+## 📦 Deployment
+
+### Vercel (Recommended)
+
+1. Push your code to GitHub
+2. Import your repository on [Vercel](https://vercel.com)
+3. Add your environment variables
+4. Deploy!
+
+### Other Platforms
+
+Build the production bundle:
+
+```bash
+npm run build
+```
+
+Then start the server:
+
+```bash
+npm start
+```
+
+## 📄 License
+
+MIT
+
+## 🤝 Contributing
+
+Contributions are welcome! Feel free to open issues or submit pull requests.
