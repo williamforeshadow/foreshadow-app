@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import OpenAI from 'openai';
+import Sidebar from '@/components/Sidebar';
 
 export default function Home() {
   const [functionName, setFunctionName] = useState('');
@@ -14,6 +15,9 @@ export default function Home() {
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [naturalQuery, setNaturalQuery] = useState('');
+  const [generatedSQL, setGeneratedSQL] = useState('');
+  const [isExecutingQuery, setIsExecutingQuery] = useState(false);
 
   const callRPC = async (rpcName?: string, rpcParams?: any) => {
     setLoading(true);
@@ -44,6 +48,36 @@ export default function Home() {
     setFunctionName(rpcName);
     setParams('{}');
     callRPC(rpcName, {});
+  };
+
+  const executeNaturalQuery = async () => {
+    setIsExecutingQuery(true);
+    setError(null);
+    setResponse(null);
+    setGeneratedSQL('');
+    setAiSummary(null);
+    
+    try {
+      const res = await fetch('/api/sql-query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: naturalQuery })
+      });
+      
+      const result = await res.json();
+      
+      if (result.error) {
+        setError(`SQL Error: ${result.error}\n\nGenerated SQL:\n${result.sql || 'N/A'}`);
+      } else {
+        setGeneratedSQL(result.sql);
+        setResponse(result.data);
+        setFunctionName('(AI Generated Query)');
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsExecutingQuery(false);
+    }
   };
 
   const generateAISummary = async () => {
@@ -262,8 +296,10 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-8">
-      <div className="w-full max-w-4xl">
+    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
+      <Sidebar />
+      <div className="flex-1 overflow-auto flex items-center justify-center p-8">
+        <div className="w-full max-w-6xl">
         <h1 className="text-3xl font-bold mb-8 text-slate-900 dark:text-white text-center">
           Supabase RPC Caller
         </h1>
@@ -413,6 +449,42 @@ export default function Home() {
           )}
         </div>
 
+        {/* Natural Language Query */}
+        <div className="mt-8 bg-white dark:bg-slate-900 p-6 rounded-lg border border-slate-200 dark:border-slate-800">
+          <h2 className="text-lg font-semibold mb-4 text-slate-900 dark:text-white">
+            Natural Language Query
+          </h2>
+          
+          <div className="space-y-3">
+            <textarea
+              value={naturalQuery}
+              onChange={(e) => setNaturalQuery(e.target.value)}
+              placeholder="e.g., show me all properties that need cleaning"
+              rows={3}
+              className="w-full px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+            
+            <button
+              onClick={executeNaturalQuery}
+              disabled={isExecutingQuery || !naturalQuery}
+              className="w-full px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors"
+            >
+              {isExecutingQuery ? '⚡ Generating & Running...' : '⚡ Run Query'}
+            </button>
+            
+            {generatedSQL && (
+              <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3">
+                <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                  Generated SQL:
+                </p>
+                <pre className="text-xs text-slate-900 dark:text-white font-mono overflow-x-auto">
+                  {generatedSQL}
+                </pre>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Quick Access Button */}
         <div className="mt-8">
           <button
@@ -422,6 +494,7 @@ export default function Home() {
           >
             Property Status
           </button>
+        </div>
         </div>
       </div>
     </div>
