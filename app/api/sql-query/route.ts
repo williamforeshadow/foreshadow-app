@@ -12,37 +12,49 @@ const openai = new OpenAI({
 });
 
 const DATABASE_SCHEMA = `
-Database Tables and Columns:
+Database Schema:
+
+get_property_turnovers() - Property turnover cards (reservation + cleaning combined)
+Returns:
+  - id (uuid) - Shared ID between reservation and cleaning
+  - property_name (text)
+  - guest_name (text)
+  - check_in (timestamptz)
+  - check_out (timestamptz)
+  - next_check_in (timestamptz)
+  - assigned_staff (text)
+  - status (text) - Cleaning status: 'pending', 'scheduled', 'in_progress', 'complete'
+  - scheduled_start (timestamptz)
+  - property_clean_status (text) - 'needs_cleaning', 'cleaning_scheduled', 'cleaning_complete'
 
 cleanings table:
   - id (uuid)
   - property_name (text)
-  - scheduled_start (timestamp with time zone)
+  - scheduled_start (timestamptz)
   - assigned_staff (text)
-  - content (text)
   - status (text)
-  - metadata (jsonb)
-  - created_at (timestamp with time zone)
-  - updated_at (timestamp with time zone)
   - reservation_id (uuid)
-  - earliest_start (timestamp with time zone)
-  - latest_finish (timestamp with time zone)
+  - earliest_start (timestamptz)
+  - latest_finish (timestamptz)
+  - created_at (timestamptz)
+  - updated_at (timestamptz)
 
 reservations table:
   - id (uuid)
   - property_name (text)
   - guest_name (text)
-  - check_in (timestamp with time zone)
-  - check_out (timestamp with time zone)
-  - created_at (timestamp with time zone)
-  - updated_at (timestamp with time zone)
-
-Relationship: cleanings.reservation_id → reservations.id
+  - check_in (timestamptz)
+  - check_out (timestamptz)
+  - created_at (timestamptz)
+  - updated_at (timestamptz)
 `;
 
 export async function POST(request: NextRequest) {
   try {
     const { prompt } = await request.json();
+    
+    // Get current date/time for context
+    const now = new Date();
     
     // Generate SQL with GPT-4o-mini
     const completion = await openai.chat.completions.create({
@@ -52,15 +64,42 @@ export async function POST(request: NextRequest) {
           role: "system",
           content: `You are a PostgreSQL expert. Generate SQL queries based on natural language requests.
 
+CURRENT DATE/TIME CONTEXT:
+- Full timestamp: ${now.toISOString()}
+- Current date: ${now.toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric',
+    timeZone: 'America/Los_Angeles'
+  })}
+- Current time: ${now.toLocaleTimeString('en-US', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    timeZone: 'America/Los_Angeles'
+  })}
+- Current year: ${now.getFullYear()}
+- Timezone: America/Los_Angeles
+
 ${DATABASE_SCHEMA}
+
+IMPORTANT: When the query includes '/cards', ALWAYS use get_property_turnovers() function.
+
+EXAMPLES:
+- "/cards show unassigned" → SELECT * FROM get_property_turnovers() WHERE assigned_staff IS NULL
+- "/cards properties needing cleaning" → SELECT * FROM get_property_turnovers() WHERE property_clean_status = 'needs_cleaning'
+- "/cards scheduled cleanings at crane" → SELECT * FROM get_property_turnovers() WHERE property_clean_status = 'cleaning_scheduled' AND property_name ILIKE '%crane%'
+
+For queries without '/cards', you may use base tables (cleanings, reservations) for analytical questions.
 
 Instructions:
 - Return ONLY the SQL query, no markdown, no explanations, no backticks
 - DO NOT include a semicolon at the end
 - Use proper PostgreSQL syntax
 - Add LIMIT 100 if no limit specified
-- Use table aliases for clarity
+- For property names, use ILIKE '%search%' for fuzzy matching
 - For date/time comparisons, use PostgreSQL functions like CURRENT_DATE, NOW(), INTERVAL
+- When user mentions dates without year, assume current year (${now.getFullYear()})
 - When joining tables, use proper JOIN syntax`
         },
         {

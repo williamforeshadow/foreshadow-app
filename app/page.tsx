@@ -221,64 +221,81 @@ export default function Home() {
             className={`rounded-lg border p-4 shadow-sm hover:shadow-md transition-shadow ${getCardBackgroundColor(item.property_clean_status)}`}
           >
             {/* Property Name */}
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-3">
-              {item.property_name || item.name || 'Unknown Property'}
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
+              {item.property_name || 'Unknown Property'}
             </h3>
 
-            {/* Dates */}
-            <div className="space-y-2 mb-3">
-              {item.check_out && (
-                <div className="flex items-start gap-2">
-                  <svg className="w-4 h-4 text-red-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
-                  <div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">Checked out</div>
-                    <div className="text-sm text-slate-900 dark:text-white">{formatDate(item.check_out)}</div>
-                  </div>
-                </div>
-              )}
-
-              {item.next_check_in && (
-                <div className="flex items-start gap-2">
-                  <svg className="w-4 h-4 text-green-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                  </svg>
-                  <div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">Next check in</div>
-                    <div className="text-sm text-slate-900 dark:text-white">{formatDate(item.next_check_in)}</div>
-                  </div>
-                </div>
-              )}
-
-              {item.scheduled_start && (
-                <div className="flex items-start gap-2">
-                  <svg className="w-4 h-4 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">Scheduled</div>
-                    <div className="text-sm text-slate-900 dark:text-white">{formatDate(item.scheduled_start)}</div>
-                  </div>
-                </div>
-              )}
+            {/* Guest Name */}
+            <div className="mb-3 flex items-center gap-2">
+              <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <span className="text-sm text-slate-600 dark:text-slate-300">
+                {item.guest_name || <span className="text-slate-400 dark:text-slate-600 italic">No guest</span>}
+              </span>
             </div>
 
-            {/* Status and Assignment */}
+            {/* Dates - ALWAYS SHOW ALL FIELDS */}
+            <div className="space-y-2 mb-3">
+              {/* Checked Out */}
+              <div className="flex items-start gap-2">
+                <svg className="w-4 h-4 text-red-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <div className="flex-1">
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Checked out</div>
+                  <div className="text-sm text-slate-900 dark:text-white">
+                    {item.check_out ? formatDate(item.check_out) : <span className="text-slate-400 dark:text-slate-600 italic">Not set</span>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Next Check In */}
+              <div className="flex items-start gap-2">
+                <svg className="w-4 h-4 text-green-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                </svg>
+                <div className="flex-1">
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Next check in</div>
+                  <div className="text-sm text-slate-900 dark:text-white">
+                    {item.next_check_in ? formatDate(item.next_check_in) : <span className="text-slate-400 dark:text-slate-600 italic">Not set</span>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Scheduled Start */}
+              <div className="flex items-start gap-2">
+                <svg className="w-4 h-4 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="flex-1">
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Scheduled</div>
+                  <div className="text-sm text-slate-900 dark:text-white">
+                    {item.scheduled_start ? formatDate(item.scheduled_start) : <span className="text-slate-400 dark:text-slate-600 italic">Not set</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Status and Assignment - ALWAYS SHOW */}
             <div className="flex flex-wrap gap-2">
-              {item.property_clean_status && (
-                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                  item.property_clean_status === 'needs_cleaning' 
-                    ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                    : item.property_clean_status === 'cleaning_scheduled'
-                    ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
-                    : 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200'
-                }`}>
-                  {item.property_clean_status === 'needs_cleaning' ? '🔴 Needs Cleaning' :
-                   item.property_clean_status === 'cleaning_scheduled' ? '🟡 Scheduled' :
-                   '🟢 Complete'}
-                </span>
-              )}
+              {/* Property Clean Status */}
+              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                item.property_clean_status === 'needs_cleaning' 
+                  ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
+                  : item.property_clean_status === 'cleaning_scheduled'
+                  ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
+                  : item.property_clean_status === 'cleaning_complete'
+                  ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+              }`}>
+                {item.property_clean_status === 'needs_cleaning' ? '🔴 Needs Cleaning' :
+                 item.property_clean_status === 'cleaning_scheduled' ? '🟡 Scheduled' :
+                 item.property_clean_status === 'cleaning_complete' ? '🟢 Complete' :
+                 '⚪ Unknown'}
+              </span>
+              
+              {/* Assigned Staff */}
               {item.assigned_staff ? (
                 <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
                   👤 {item.assigned_staff}
@@ -451,17 +468,22 @@ export default function Home() {
 
         {/* Natural Language Query */}
         <div className="mt-8 bg-white dark:bg-slate-900 p-6 rounded-lg border border-slate-200 dark:border-slate-800">
-          <h2 className="text-lg font-semibold mb-4 text-slate-900 dark:text-white">
-            Natural Language Query
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+              Natural Language Query
+            </h2>
+            <span className="text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
+              💡 Tip: Start with <code className="text-purple-600 dark:text-purple-400">/cards</code> for card results
+            </span>
+          </div>
           
           <div className="space-y-3">
             <textarea
               value={naturalQuery}
               onChange={(e) => setNaturalQuery(e.target.value)}
-              placeholder="e.g., show me all properties that need cleaning"
+              placeholder="e.g., /cards show unassigned cleanings"
               rows={3}
-              className="w-full px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono"
             />
             
             <button
