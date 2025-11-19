@@ -26,6 +26,7 @@ Returns:
   - status (text) - Cleaning status: 'pending', 'scheduled', 'in_progress', 'complete'
   - scheduled_start (timestamptz)
   - property_clean_status (text) - 'needs_cleaning', 'cleaning_scheduled', 'cleaning_complete'
+  - card_actions (text) - 'not_started', 'in_progress', 'paused', 'completed'
 
 cleanings table:
   - id (uuid)

@@ -4,6 +4,10 @@ import { useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import OpenAI from 'openai';
 import Sidebar from '@/components/Sidebar';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 
 export default function Home() {
   const [functionName, setFunctionName] = useState('');
@@ -18,6 +22,19 @@ export default function Home() {
   const [naturalQuery, setNaturalQuery] = useState('');
   const [generatedSQL, setGeneratedSQL] = useState('');
   const [isExecutingQuery, setIsExecutingQuery] = useState(false);
+  const [selectedCard, setSelectedCard] = useState<any>(null);
+  const [updatingCardAction, setUpdatingCardAction] = useState(false);
+  const [isEditingAssignment, setIsEditingAssignment] = useState(false);
+  const [assignmentLoading, setAssignmentLoading] = useState(false);
+  const [newStaffName, setNewStaffName] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    cleanStatus: [] as string[],
+    cardActions: [] as string[],
+    staff: [] as string[],
+    checkout: [] as string[],
+    checkin: [] as string[]
+  });
 
   const callRPC = async (rpcName?: string, rpcParams?: any) => {
     setLoading(true);
@@ -143,6 +160,230 @@ export default function Home() {
     window.speechSynthesis.cancel();
     setIsSpeaking(false);
   };
+
+  const updateCardAction = async (cleaningId: string, newAction: string) => {
+    setUpdatingCardAction(true);
+    try {
+      const response = await fetch('/api/update-card-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cleaningId, action: newAction })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update card action');
+      }
+
+      // Refresh the current view by re-calling the RPC or query
+      if (functionName) {
+        callRPC(functionName, JSON.parse(params));
+      } else if (generatedSQL) {
+        executeNaturalQuery();
+      }
+
+      setSelectedCard(null);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update card action');
+    } finally {
+      setUpdatingCardAction(false);
+    }
+  };
+
+  const updateAssignment = async (cleaningId: string, staffName: string | null) => {
+    setAssignmentLoading(true);
+    try {
+      const response = await fetch('/api/update-assignment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cleaningId, staffName })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update assignment');
+      }
+
+      // Refresh the current view
+      if (functionName) {
+        callRPC(functionName, JSON.parse(params));
+      } else if (generatedSQL) {
+        executeNaturalQuery();
+      }
+
+      // Update selected card locally to reflect change immediately
+      setSelectedCard((prev: any) => ({ ...prev, assigned_staff: staffName }));
+      setIsEditingAssignment(false);
+      setNewStaffName('');
+    } catch (err: any) {
+      setError(err.message || 'Failed to update assignment');
+    } finally {
+      setAssignmentLoading(false);
+    }
+  };
+
+  const getAvailableActions = (currentAction: string) => {
+    switch (currentAction) {
+      case 'not_started':
+      case null:
+      case undefined:
+        return [
+          { value: 'in_progress', label: '▶️ Start', icon: '▶️' },
+          { value: 'completed', label: '✅ Mark Complete', icon: '✅' }
+        ];
+      case 'in_progress':
+        return [
+          { value: 'paused', label: '⏸️ Pause', icon: '⏸️' },
+          { value: 'completed', label: '✅ Mark Complete', icon: '✅' }
+        ];
+      case 'paused':
+        return [
+          { value: 'in_progress', label: '▶️ Resume', icon: '▶️' },
+          { value: 'completed', label: '✅ Mark Complete', icon: '✅' }
+        ];
+      case 'completed':
+        return [
+          { value: 'not_started', label: '↺ Reopen', icon: '↺' }
+        ];
+      default:
+        return [
+          { value: 'in_progress', label: '▶️ Start', icon: '▶️' },
+          { value: 'completed', label: '✅ Mark Complete', icon: '✅' }
+        ];
+    }
+  };
+
+  const toggleFilter = (category: keyof typeof filters, value: string) => {
+    setFilters(prev => ({
+      ...prev,
+      [category]: prev[category].includes(value)
+        ? prev[category].filter(v => v !== value)
+        : [...prev[category], value]
+    }));
+  };
+
+  const clearAllFilters = () => {
+    setFilters({
+      cleanStatus: [],
+      cardActions: [],
+      staff: [],
+      checkout: [],
+      checkin: []
+    });
+  };
+
+  const getUniqueStaff = (items: any[]) => {
+    const staff = items
+      .map(item => item.assigned_staff)
+      .filter(s => s !== null && s !== undefined);
+    return Array.from(new Set(staff)).sort();
+  };
+
+  const applyFilters = (items: any[]) => {
+    return items.filter(item => {
+      const now = new Date();
+      const checkoutDate = item.check_out ? new Date(item.check_out) : null;
+      const checkinDate = item.next_check_in ? new Date(item.next_check_in) : null;
+      
+      // Clean Status filter
+      if (filters.cleanStatus.length > 0) {
+        if (!filters.cleanStatus.includes(item.property_clean_status || '')) {
+          return false;
+        }
+      }
+      
+      // Card Actions filter
+      if (filters.cardActions.length > 0) {
+        if (!filters.cardActions.includes(item.card_actions || 'not_started')) {
+          return false;
+        }
+      }
+      
+      // Staff filter
+      if (filters.staff.length > 0) {
+        if (filters.staff.includes('unassigned')) {
+          if (item.assigned_staff !== null && item.assigned_staff !== undefined) {
+            if (!filters.staff.includes(item.assigned_staff)) {
+              return false;
+            }
+          }
+        } else {
+          if (!filters.staff.includes(item.assigned_staff)) {
+            return false;
+          }
+        }
+      }
+      
+      // Checkout filter
+      if (filters.checkout.length > 0) {
+        let checkoutMatch = false;
+        if (checkoutDate) {
+          const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const tomorrowStart = new Date(todayStart);
+          tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+          
+          if (filters.checkout.includes('already_checked_out') && checkoutDate < now) {
+            checkoutMatch = true;
+          }
+          if (filters.checkout.includes('checking_out_today') && 
+              checkoutDate >= todayStart && checkoutDate < tomorrowStart) {
+            checkoutMatch = true;
+          }
+          if (filters.checkout.includes('checking_out_tomorrow') && 
+              checkoutDate >= tomorrowStart) {
+            const dayAfterTomorrow = new Date(tomorrowStart);
+            dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
+            if (checkoutDate < dayAfterTomorrow) {
+              checkoutMatch = true;
+            }
+          }
+        }
+        if (!checkoutMatch) return false;
+      }
+      
+      // Check-in filter
+      if (filters.checkin.length > 0) {
+        let checkinMatch = false;
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const tomorrowStart = new Date(todayStart);
+        tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+        
+        if (filters.checkin.includes('no_next_guest') && !checkinDate) {
+          checkinMatch = true;
+        }
+        if (checkinDate) {
+          if (filters.checkin.includes('checkin_today') && 
+              checkinDate >= todayStart && checkinDate < tomorrowStart) {
+            checkinMatch = true;
+          }
+          if (filters.checkin.includes('checkin_tomorrow')) {
+            const dayAfterTomorrow = new Date(tomorrowStart);
+            dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
+            if (checkinDate >= tomorrowStart && checkinDate < dayAfterTomorrow) {
+              checkinMatch = true;
+            }
+          }
+          if (filters.checkin.includes('checkin_this_week')) {
+            const weekFromNow = new Date(todayStart);
+            weekFromNow.setDate(weekFromNow.getDate() + 7);
+            if (checkinDate >= todayStart && checkinDate < weekFromNow) {
+              checkinMatch = true;
+            }
+          }
+        }
+        if (!checkinMatch) return false;
+      }
+      
+      return true;
+    });
+  };
+
+  const getActiveFilterCount = () => {
+    return filters.cleanStatus.length + filters.cardActions.length + 
+           filters.staff.length + filters.checkout.length + filters.checkin.length;
+  };
   
   const formatDate = (dateString: string) => {
     if (!dateString) return 'N/A';
@@ -196,6 +437,18 @@ export default function Home() {
       );
     }
 
+    // Apply filters
+    const totalCount = items.length;
+    items = applyFilters(items);
+    
+    if (items.length === 0) {
+      return (
+        <div className="text-center py-12 text-slate-500 dark:text-slate-400">
+          No cards match the selected filters
+        </div>
+      );
+    }
+
     // Sort items: first by status priority (red, yellow, green), then by next_check_in
     items = [...items].sort((a, b) => {
       // First sort by status priority
@@ -214,99 +467,118 @@ export default function Home() {
     });
 
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {items.map((item, index) => (
-          <div
+          <Card
             key={item.cleaning_id || item.id || index}
-            className={`rounded-lg border p-4 shadow-sm hover:shadow-md transition-shadow ${getCardBackgroundColor(item.property_clean_status)}`}
+            onClick={() => setSelectedCard(item)}
+            className={`cursor-pointer hover:shadow-xl transition-all duration-200 ${getCardBackgroundColor(item.property_clean_status)}`}
           >
-            {/* Property Name */}
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
-              {item.property_name || 'Unknown Property'}
-            </h3>
-
-            {/* Guest Name */}
-            <div className="mb-3 flex items-center gap-2">
-              <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              <span className="text-sm text-slate-600 dark:text-slate-300">
-                {item.guest_name || <span className="text-slate-400 dark:text-slate-600 italic">No guest</span>}
-              </span>
-            </div>
-
-            {/* Dates - ALWAYS SHOW ALL FIELDS */}
-            <div className="space-y-2 mb-3">
-              {/* Checked Out */}
-              <div className="flex items-start gap-2">
-                <svg className="w-4 h-4 text-red-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            <CardHeader>
+              <CardTitle>{item.property_name || 'Unknown Property'}</CardTitle>
+              <CardDescription className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
-                <div className="flex-1">
-                  <div className="text-xs text-slate-500 dark:text-slate-400">Checked out</div>
-                  <div className="text-sm text-slate-900 dark:text-white">
-                    {item.check_out ? formatDate(item.check_out) : <span className="text-slate-400 dark:text-slate-600 italic">Not set</span>}
+                {item.guest_name || <span className="italic opacity-60">No guest</span>}
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              {/* Dates */}
+              <div className="space-y-2.5">
+                {/* Checked Out */}
+                <div className="flex items-center gap-3">
+                  <svg className="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Checked out</div>
+                    <div className="text-sm truncate font-medium text-slate-900 dark:text-white">
+                      {item.check_out ? formatDate(item.check_out) : <span className="italic opacity-60">Not set</span>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Next Check In */}
+                <div className="flex items-center gap-3">
+                  <svg className="w-4 h-4 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Next check in</div>
+                    <div className="text-sm truncate font-medium text-slate-900 dark:text-white">
+                      {item.next_check_in ? formatDate(item.next_check_in) : <span className="italic opacity-60">Not set</span>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Scheduled Start */}
+                <div className="flex items-center gap-3">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Scheduled</div>
+                    <div className="text-sm truncate font-medium text-slate-900 dark:text-white">
+                      {item.scheduled_start ? formatDate(item.scheduled_start) : <span className="italic opacity-60">Not set</span>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card Actions - Read Only */}
+                <div className="flex items-center gap-3">
+                  <svg className="w-4 h-4 text-purple-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Action</div>
+                    <div className={`text-sm font-medium ${
+                      item.card_actions === 'in_progress' ? 'text-blue-600 dark:text-blue-400' :
+                      item.card_actions === 'paused' ? 'text-orange-600 dark:text-orange-400' :
+                      item.card_actions === 'completed' ? 'text-green-600 dark:text-green-400' :
+                      'text-slate-600 dark:text-slate-400'
+                    }`}>
+                      {item.card_actions === 'not_started' ? '🎬 Not Started' :
+                       item.card_actions === 'in_progress' ? '▶️ In Progress' :
+                       item.card_actions === 'paused' ? '⏸️ Paused' :
+                       item.card_actions === 'completed' ? '✅ Completed' :
+                       '🎬 Not Started'}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Next Check In */}
-              <div className="flex items-start gap-2">
-                <svg className="w-4 h-4 text-green-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                </svg>
-                <div className="flex-1">
-                  <div className="text-xs text-slate-500 dark:text-slate-400">Next check in</div>
-                  <div className="text-sm text-slate-900 dark:text-white">
-                    {item.next_check_in ? formatDate(item.next_check_in) : <span className="text-slate-400 dark:text-slate-600 italic">Not set</span>}
-                  </div>
-                </div>
+              {/* Status Badges */}
+              <div className="flex flex-wrap gap-2 pt-2">
+                <Badge 
+                  variant={
+                    item.property_clean_status === 'needs_cleaning' ? 'destructive' :
+                    item.property_clean_status === 'cleaning_complete' ? 'default' : 'secondary'
+                  }
+                  className={
+                    item.property_clean_status === 'needs_cleaning' 
+                      ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-300'
+                      : item.property_clean_status === 'cleaning_scheduled'
+                      ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-300'
+                      : item.property_clean_status === 'cleaning_complete'
+                      ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border-emerald-300'
+                      : ''
+                  }
+                >
+                  {item.property_clean_status === 'needs_cleaning' ? '🔴 Needs Cleaning' :
+                   item.property_clean_status === 'cleaning_scheduled' ? '🟡 Scheduled' :
+                   item.property_clean_status === 'cleaning_complete' ? '🟢 Complete' :
+                   '⚪ Unknown'}
+                </Badge>
+                
+                <Badge variant={item.assigned_staff ? 'default' : 'outline'}>
+                  {item.assigned_staff ? `👤 ${item.assigned_staff}` : 'Unassigned'}
+                </Badge>
               </div>
-
-              {/* Scheduled Start */}
-              <div className="flex items-start gap-2">
-                <svg className="w-4 h-4 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div className="flex-1">
-                  <div className="text-xs text-slate-500 dark:text-slate-400">Scheduled</div>
-                  <div className="text-sm text-slate-900 dark:text-white">
-                    {item.scheduled_start ? formatDate(item.scheduled_start) : <span className="text-slate-400 dark:text-slate-600 italic">Not set</span>}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Status and Assignment - ALWAYS SHOW */}
-            <div className="flex flex-wrap gap-2">
-              {/* Property Clean Status */}
-              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                item.property_clean_status === 'needs_cleaning' 
-                  ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                  : item.property_clean_status === 'cleaning_scheduled'
-                  ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
-                  : item.property_clean_status === 'cleaning_complete'
-                  ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-              }`}>
-                {item.property_clean_status === 'needs_cleaning' ? '🔴 Needs Cleaning' :
-                 item.property_clean_status === 'cleaning_scheduled' ? '🟡 Scheduled' :
-                 item.property_clean_status === 'cleaning_complete' ? '🟢 Complete' :
-                 '⚪ Unknown'}
-              </span>
-              
-              {/* Assigned Staff */}
-              {item.assigned_staff ? (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
-                  👤 {item.assigned_staff}
-                </span>
-              ) : (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
-                  Unassigned
-                </span>
-              )}
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
     );
@@ -370,9 +642,229 @@ export default function Home() {
           {/* Response Display */}
           {response !== null && (
             <div className="space-y-3">
+              {/* Filter Bar */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <button
+                    onClick={() => setShowFilters(!showFilters)}
+                    className="flex items-center gap-2 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                    </svg>
+                    <span className="font-medium">Filters</span>
+                    {getActiveFilterCount() > 0 && (
+                      <span className="px-2 py-0.5 bg-purple-600 text-white text-xs rounded-full">
+                        {getActiveFilterCount()}
+                      </span>
+                    )}
+                    <svg className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {getActiveFilterCount() > 0 && (
+                    <button
+                      onClick={clearAllFilters}
+                      className="text-sm text-red-600 dark:text-red-400 hover:underline"
+                    >
+                      Clear All
+                    </button>
+                  )}
+                </div>
+
+                {showFilters && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 pt-3 border-t border-slate-200 dark:border-slate-800">
+                    {/* Clean Status */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Clean Status</h4>
+                      <div className="space-y-1">
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={filters.cleanStatus.includes('needs_cleaning')}
+                            onChange={() => toggleFilter('cleanStatus', 'needs_cleaning')}
+                            className="rounded border-slate-300"
+                          />
+                          <span>🔴 Needs Cleaning</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={filters.cleanStatus.includes('cleaning_scheduled')}
+                            onChange={() => toggleFilter('cleanStatus', 'cleaning_scheduled')}
+                            className="rounded border-slate-300"
+                          />
+                          <span>🟡 Scheduled</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={filters.cleanStatus.includes('cleaning_complete')}
+                            onChange={() => toggleFilter('cleanStatus', 'cleaning_complete')}
+                            className="rounded border-slate-300"
+                          />
+                          <span>🟢 Complete</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Card Actions */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Card Actions</h4>
+                      <div className="space-y-1">
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={filters.cardActions.includes('not_started')}
+                            onChange={() => toggleFilter('cardActions', 'not_started')}
+                            className="rounded border-slate-300"
+                          />
+                          <span>🎬 Not Started</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={filters.cardActions.includes('in_progress')}
+                            onChange={() => toggleFilter('cardActions', 'in_progress')}
+                            className="rounded border-slate-300"
+                          />
+                          <span>▶️ In Progress</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={filters.cardActions.includes('paused')}
+                            onChange={() => toggleFilter('cardActions', 'paused')}
+                            className="rounded border-slate-300"
+                          />
+                          <span>⏸️ Paused</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={filters.cardActions.includes('completed')}
+                            onChange={() => toggleFilter('cardActions', 'completed')}
+                            className="rounded border-slate-300"
+                          />
+                          <span>✅ Completed</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Staff */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Staff</h4>
+                      <div className="space-y-1">
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={filters.staff.includes('unassigned')}
+                            onChange={() => toggleFilter('staff', 'unassigned')}
+                            className="rounded border-slate-300"
+                          />
+                          <span>👤 Unassigned</span>
+                        </label>
+                        {response && getUniqueStaff(Array.isArray(response) ? response : [response]).map(staff => (
+                          <label key={staff} className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={filters.staff.includes(staff)}
+                              onChange={() => toggleFilter('staff', staff)}
+                              className="rounded border-slate-300"
+                            />
+                            <span>{staff}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Checkout Status */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Checkout</h4>
+                      <div className="space-y-1">
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={filters.checkout.includes('already_checked_out')}
+                            onChange={() => toggleFilter('checkout', 'already_checked_out')}
+                            className="rounded border-slate-300"
+                          />
+                          <span>Already Out</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={filters.checkout.includes('checking_out_today')}
+                            onChange={() => toggleFilter('checkout', 'checking_out_today')}
+                            className="rounded border-slate-300"
+                          />
+                          <span>Today</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={filters.checkout.includes('checking_out_tomorrow')}
+                            onChange={() => toggleFilter('checkout', 'checking_out_tomorrow')}
+                            className="rounded border-slate-300"
+                          />
+                          <span>Tomorrow</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Check-in Status */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Next Check-in</h4>
+                      <div className="space-y-1">
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={filters.checkin.includes('no_next_guest')}
+                            onChange={() => toggleFilter('checkin', 'no_next_guest')}
+                            className="rounded border-slate-300"
+                          />
+                          <span>No Next Guest</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={filters.checkin.includes('checkin_today')}
+                            onChange={() => toggleFilter('checkin', 'checkin_today')}
+                            className="rounded border-slate-300"
+                          />
+                          <span>Today</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={filters.checkin.includes('checkin_tomorrow')}
+                            onChange={() => toggleFilter('checkin', 'checkin_tomorrow')}
+                            className="rounded border-slate-300"
+                          />
+                          <span>Tomorrow</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={filters.checkin.includes('checkin_this_week')}
+                            onChange={() => toggleFilter('checkin', 'checkin_this_week')}
+                            className="rounded border-slate-300"
+                          />
+                          <span>This Week</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Response: {Array.isArray(response) ? `${response.length} item(s)` : '1 item'}
+                  {Array.isArray(response) && getActiveFilterCount() > 0 ? (
+                    <>Showing {applyFilters(response).length} of {response.length} cards</>
+                  ) : (
+                    <>Response: {Array.isArray(response) ? `${response.length} item(s)` : '1 item'}</>
+                  )}
                 </p>
                 <div className="flex gap-2">
                   <button
@@ -509,16 +1001,219 @@ export default function Home() {
 
         {/* Quick Access Button */}
         <div className="mt-8">
-          <button
-            onClick={() => quickCall('property_clean_status')}
+          <Button
+            onClick={() => quickCall('get_property_turnovers')}
             disabled={loading}
-            className="w-full px-6 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold text-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
+            size="lg"
+            className="w-full text-lg py-6"
           >
             Property Status
-          </button>
+          </Button>
         </div>
         </div>
       </div>
+
+      {/* Card Detail Modal */}
+      <Dialog open={!!selectedCard} onOpenChange={(open) => !open && setSelectedCard(null)}>
+        <DialogContent 
+          className={`max-w-lg max-h-[90vh] overflow-y-auto border-2 ${
+            selectedCard?.property_clean_status === 'needs_cleaning' ? 'border-red-400' :
+            selectedCard?.property_clean_status === 'cleaning_scheduled' ? 'border-yellow-400' :
+            selectedCard?.property_clean_status === 'cleaning_complete' ? 'border-emerald-400' :
+            'border-slate-300'
+          }`}
+        >
+          {selectedCard && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-2xl">{selectedCard.property_name || 'Unknown Property'}</DialogTitle>
+                <DialogDescription className="flex items-center gap-2 text-base">
+                  <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  {selectedCard.guest_name || 'No guest'}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+              {/* Dates */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 p-3 bg-red-50 dark:bg-red-950/30 rounded-lg">
+                  <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  <div className="flex-1">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Checked out</div>
+                    <div className="font-medium text-slate-900 dark:text-white">
+                      {selectedCard.check_out ? formatDate(selectedCard.check_out) : 'Not set'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg">
+                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                  </svg>
+                  <div className="flex-1">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Next check in</div>
+                    <div className="font-medium text-slate-900 dark:text-white">
+                      {selectedCard.next_check_in ? formatDate(selectedCard.next_check_in) : 'Not set'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
+                  <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="flex-1">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Scheduled</div>
+                    <div className="font-medium text-slate-900 dark:text-white">
+                      {selectedCard.scheduled_start ? formatDate(selectedCard.scheduled_start) : 'Not set'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Badges */}
+              <div className="flex flex-wrap gap-2 pt-2">
+                <Badge
+                  variant={
+                    selectedCard.property_clean_status === 'needs_cleaning' ? 'destructive' :
+                    selectedCard.property_clean_status === 'cleaning_complete' ? 'default' : 'secondary'
+                  }
+                  className={`text-sm py-1.5 ${
+                    selectedCard.property_clean_status === 'needs_cleaning' 
+                      ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-300'
+                      : selectedCard.property_clean_status === 'cleaning_scheduled'
+                      ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-300'
+                      : selectedCard.property_clean_status === 'cleaning_complete'
+                      ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border-emerald-300'
+                      : ''
+                  }`}
+                >
+                  {selectedCard.property_clean_status === 'needs_cleaning' ? '🔴 Needs Cleaning' :
+                   selectedCard.property_clean_status === 'cleaning_scheduled' ? '🟡 Scheduled' :
+                   selectedCard.property_clean_status === 'cleaning_complete' ? '🟢 Complete' :
+                   '⚪ Unknown'}
+                </Badge>
+                
+                {isEditingAssignment ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="flex-1 px-3 py-1.5 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                        onChange={(e) => {
+                          if (e.target.value === 'new') {
+                            setNewStaffName('');
+                          } else {
+                            updateAssignment(selectedCard.id, e.target.value || null);
+                          }
+                        }}
+                        value={selectedCard.assigned_staff || ''}
+                        disabled={assignmentLoading}
+                      >
+                        <option value="">Unassigned</option>
+                        {response && getUniqueStaff(Array.isArray(response) ? response : [response]).map(staff => (
+                          <option key={staff} value={staff}>{staff}</option>
+                        ))}
+                        <option value="new">+ Add New Staff...</option>
+                      </select>
+                      <button
+                        onClick={() => setIsEditingAssignment(false)}
+                        className="p-1.5 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {/* New Staff Input - Show if needed (logic could be improved to show only when 'new' selected, but for now simple text input fallback) */}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Or type new name..."
+                        value={newStaffName}
+                        onChange={(e) => setNewStaffName(e.target.value)}
+                        className="flex-1 px-3 py-1.5 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                      />
+                      <button
+                        onClick={() => {
+                          if (newStaffName.trim()) {
+                            updateAssignment(selectedCard.id, newStaffName.trim());
+                          }
+                        }}
+                        disabled={!newStaffName.trim() || assignmentLoading}
+                        className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <Badge
+                    onClick={() => setIsEditingAssignment(true)}
+                    variant={selectedCard.assigned_staff ? 'default' : 'outline'}
+                    className="cursor-pointer hover:opacity-80 text-sm py-1.5"
+                  >
+                    {selectedCard.assigned_staff ? (
+                      <>👤 {selectedCard.assigned_staff}</>
+                    ) : (
+                      <>Unassigned <span className="ml-1 text-xs opacity-60">(Click to assign)</span></>
+                    )}
+                  </Badge>
+                )}
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-slate-200 dark:border-slate-800 my-6"></div>
+
+              {/* Current Action Status */}
+              <div className="text-center mb-4">
+                <div className="text-sm text-slate-500 dark:text-slate-400 mb-2">Current Action</div>
+                <div className={`text-lg font-semibold inline-flex items-center gap-2 ${
+                  selectedCard.card_actions === 'in_progress' ? 'text-blue-600 dark:text-blue-400' :
+                  selectedCard.card_actions === 'paused' ? 'text-orange-600 dark:text-orange-400' :
+                  selectedCard.card_actions === 'completed' ? 'text-green-600 dark:text-green-400' :
+                  'text-slate-600 dark:text-slate-400'
+                }`}>
+                  {selectedCard.card_actions === 'not_started' ? '🎬 Not Started' :
+                   selectedCard.card_actions === 'in_progress' ? '▶️ In Progress' :
+                   selectedCard.card_actions === 'paused' ? '⏸️ Paused' :
+                   selectedCard.card_actions === 'completed' ? '✅ Completed' :
+                   '🎬 Not Started'}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-3">
+                <div className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Change Action:</div>
+                {getAvailableActions(selectedCard.card_actions).map((action) => (
+                  <Button
+                    key={action.value}
+                    onClick={() => updateCardAction(selectedCard.id, action.value)}
+                    disabled={updatingCardAction}
+                    size="lg"
+                    className="w-full text-lg py-6 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-400"
+                  >
+                    <span className="text-2xl mr-3">{action.icon}</span>
+                    <span>{action.label}</span>
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <DialogFooter className="border-t pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setSelectedCard(null)}
+                className="w-full"
+              >
+                Close
+              </Button>
+            </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
