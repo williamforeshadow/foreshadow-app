@@ -162,14 +162,26 @@ export default function Home() {
         throw new Error(result.error || 'Failed to update card action');
       }
 
-      // Refresh the current view by re-calling the RPC or query
-      if (functionName) {
-        callRPC(functionName, JSON.parse(params));
-      } else if (generatedSQL) {
-        executeNaturalQuery();
-      }
+      // Update the local state instead of re-fetching
+      setResponse((prevResponse: any) => {
+        if (!prevResponse) return prevResponse;
+        
+        const items = Array.isArray(prevResponse) ? prevResponse : [prevResponse];
+        const updatedItems = items.map((item: any) => 
+          item.id === cleaningId 
+            ? { ...item, card_actions: newAction }
+            : item
+        );
+        
+        return Array.isArray(prevResponse) ? updatedItems : updatedItems[0];
+      });
 
-      setSelectedCard(null);
+      // Also update the selected card if still open
+      setSelectedCard((prev: any) => 
+        prev?.id === cleaningId 
+          ? { ...prev, card_actions: newAction }
+          : null
+      );
     } catch (err: any) {
       setError(err.message || 'Failed to update card action');
     } finally {
@@ -192,12 +204,19 @@ export default function Home() {
         throw new Error(result.error || 'Failed to update assignment');
       }
 
-      // Refresh the current view
-      if (functionName) {
-        callRPC(functionName, JSON.parse(params));
-      } else if (generatedSQL) {
-        executeNaturalQuery();
-      }
+      // Update the local state instead of re-fetching
+      setResponse((prevResponse: any) => {
+        if (!prevResponse) return prevResponse;
+        
+        const items = Array.isArray(prevResponse) ? prevResponse : [prevResponse];
+        const updatedItems = items.map((item: any) => 
+          item.id === cleaningId 
+            ? { ...item, assigned_staff: staffName }
+            : item
+        );
+        
+        return Array.isArray(prevResponse) ? updatedItems : updatedItems[0];
+      });
 
       // Update selected card locally to reflect change immediately
       setSelectedCard((prev: any) => ({ ...prev, assigned_staff: staffName }));
@@ -453,7 +472,7 @@ export default function Home() {
     });
 
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {items.map((item, index) => (
           <Card
             key={item.cleaning_id || item.id || index}
@@ -526,11 +545,11 @@ export default function Home() {
                       item.card_actions === 'completed' ? 'text-green-600 dark:text-green-400' :
                       'text-slate-600 dark:text-slate-400'
                     }`}>
-                      {item.card_actions === 'not_started' ? '🎬 Not Started' :
-                       item.card_actions === 'in_progress' ? '▶️ In Progress' :
-                       item.card_actions === 'paused' ? '⏸️ Paused' :
-                       item.card_actions === 'completed' ? '✅ Completed' :
-                       '🎬 Not Started'}
+                      {item.card_actions === 'not_started' ? 'Not Started' :
+                       item.card_actions === 'in_progress' ? 'In Progress' :
+                       item.card_actions === 'paused' ? 'Paused' :
+                       item.card_actions === 'completed' ? 'Completed' :
+                       'Not Started'}
                     </div>
                   </div>
                 </div>
@@ -553,14 +572,14 @@ export default function Home() {
                       : ''
                   }
                 >
-                  {item.property_clean_status === 'needs_cleaning' ? '🔴 Needs Cleaning' :
-                   item.property_clean_status === 'cleaning_scheduled' ? '🟡 Scheduled' :
-                   item.property_clean_status === 'cleaning_complete' ? '🟢 Complete' :
-                   '⚪ Unknown'}
+                  {item.property_clean_status === 'needs_cleaning' ? 'Needs Cleaning' :
+                   item.property_clean_status === 'cleaning_scheduled' ? 'Scheduled' :
+                   item.property_clean_status === 'cleaning_complete' ? 'Complete' :
+                   'Unknown'}
                 </Badge>
                 
                 <Badge variant={item.assigned_staff ? 'default' : 'outline'}>
-                  {item.assigned_staff ? `👤 ${item.assigned_staff}` : 'Unassigned'}
+                  {item.assigned_staff ? item.assigned_staff : 'Unassigned'}
                 </Badge>
               </div>
             </CardContent>
@@ -647,7 +666,7 @@ export default function Home() {
                             onChange={() => toggleFilter('cleanStatus', 'needs_cleaning')}
                             className="rounded border-slate-300"
                           />
-                          <span>🔴 Needs Cleaning</span>
+                          <span>Needs Cleaning</span>
                         </label>
                         <label className="flex items-center gap-2 text-sm cursor-pointer">
                           <input
@@ -656,7 +675,7 @@ export default function Home() {
                             onChange={() => toggleFilter('cleanStatus', 'cleaning_scheduled')}
                             className="rounded border-slate-300"
                           />
-                          <span>🟡 Scheduled</span>
+                          <span>Scheduled</span>
                         </label>
                         <label className="flex items-center gap-2 text-sm cursor-pointer">
                           <input
@@ -665,7 +684,7 @@ export default function Home() {
                             onChange={() => toggleFilter('cleanStatus', 'cleaning_complete')}
                             className="rounded border-slate-300"
                           />
-                          <span>🟢 Complete</span>
+                          <span>Complete</span>
                         </label>
                       </div>
                     </div>
@@ -674,42 +693,42 @@ export default function Home() {
                     <div>
                       <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Card Actions</h4>
                       <div className="space-y-1">
-                        <label className="flex items-center gap-2 text-sm cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={filters.cardActions.includes('not_started')}
-                            onChange={() => toggleFilter('cardActions', 'not_started')}
-                            className="rounded border-slate-300"
-                          />
-                          <span>🎬 Not Started</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-sm cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={filters.cardActions.includes('in_progress')}
-                            onChange={() => toggleFilter('cardActions', 'in_progress')}
-                            className="rounded border-slate-300"
-                          />
-                          <span>▶️ In Progress</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-sm cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={filters.cardActions.includes('paused')}
-                            onChange={() => toggleFilter('cardActions', 'paused')}
-                            className="rounded border-slate-300"
-                          />
-                          <span>⏸️ Paused</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-sm cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={filters.cardActions.includes('completed')}
-                            onChange={() => toggleFilter('cardActions', 'completed')}
-                            className="rounded border-slate-300"
-                          />
-                          <span>✅ Completed</span>
-                        </label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={filters.cardActions.includes('not_started')}
+                      onChange={() => toggleFilter('cardActions', 'not_started')}
+                      className="rounded border-slate-300"
+                    />
+                    <span>Not Started</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={filters.cardActions.includes('in_progress')}
+                      onChange={() => toggleFilter('cardActions', 'in_progress')}
+                      className="rounded border-slate-300"
+                    />
+                    <span>In Progress</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={filters.cardActions.includes('paused')}
+                      onChange={() => toggleFilter('cardActions', 'paused')}
+                      className="rounded border-slate-300"
+                    />
+                    <span>Paused</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={filters.cardActions.includes('completed')}
+                      onChange={() => toggleFilter('cardActions', 'completed')}
+                      className="rounded border-slate-300"
+                    />
+                    <span>Completed</span>
+                  </label>
                       </div>
                     </div>
 
@@ -724,7 +743,7 @@ export default function Home() {
                             onChange={() => toggleFilter('staff', 'unassigned')}
                             className="rounded border-slate-300"
                           />
-                          <span>👤 Unassigned</span>
+                          <span>Unassigned</span>
                         </label>
                         {response && getUniqueStaff(Array.isArray(response) ? response : [response]).map(staff => (
                           <label key={staff} className="flex items-center gap-2 text-sm cursor-pointer">
@@ -967,7 +986,7 @@ export default function Home() {
       {/* Card Detail Modal */}
       <Dialog open={!!selectedCard} onOpenChange={(open) => !open && setSelectedCard(null)}>
         <DialogContent 
-          className={`max-w-lg max-h-[90vh] overflow-y-auto border-2 ${
+          className={`max-w-md max-h-[90vh] overflow-y-auto border-2 ${
             selectedCard?.property_clean_status === 'needs_cleaning' ? 'border-red-400' :
             selectedCard?.property_clean_status === 'cleaning_scheduled' ? 'border-yellow-400' :
             selectedCard?.property_clean_status === 'cleaning_complete' ? 'border-emerald-400' :
@@ -1043,10 +1062,10 @@ export default function Home() {
                       : ''
                   }`}
                 >
-                  {selectedCard.property_clean_status === 'needs_cleaning' ? '🔴 Needs Cleaning' :
-                   selectedCard.property_clean_status === 'cleaning_scheduled' ? '🟡 Scheduled' :
-                   selectedCard.property_clean_status === 'cleaning_complete' ? '🟢 Complete' :
-                   '⚪ Unknown'}
+                  {selectedCard.property_clean_status === 'needs_cleaning' ? 'Needs Cleaning' :
+                   selectedCard.property_clean_status === 'cleaning_scheduled' ? 'Scheduled' :
+                   selectedCard.property_clean_status === 'cleaning_complete' ? 'Complete' :
+                   'Unknown'}
                 </Badge>
                 
                 <div className="flex-1">
@@ -1107,7 +1126,7 @@ export default function Home() {
                       className="cursor-pointer hover:opacity-80 text-sm py-1.5"
                     >
                       {selectedCard.assigned_staff ? (
-                        <>👤 {selectedCard.assigned_staff}</>
+                        <>{selectedCard.assigned_staff}</>
                       ) : (
                         <>Unassigned <span className="ml-1 text-xs opacity-60">(Click to assign)</span></>
                       )}
@@ -1122,33 +1141,33 @@ export default function Home() {
               {/* Current Action Status */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
                 <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">Current Action</div>
-                <div className={`text-base font-semibold flex items-center gap-2 ${
+                <div className={`text-base font-semibold ${
                   selectedCard.card_actions === 'in_progress' ? 'text-blue-600 dark:text-blue-400' :
                   selectedCard.card_actions === 'paused' ? 'text-orange-600 dark:text-orange-400' :
                   selectedCard.card_actions === 'completed' ? 'text-green-600 dark:text-green-400' :
                   'text-slate-600 dark:text-slate-400'
                 }`}>
-                  {selectedCard.card_actions === 'not_started' ? '🎬 Not Started' :
-                   selectedCard.card_actions === 'in_progress' ? '▶️ In Progress' :
-                   selectedCard.card_actions === 'paused' ? '⏸️ Paused' :
-                   selectedCard.card_actions === 'completed' ? '✅ Completed' :
-                   '🎬 Not Started'}
+                  {selectedCard.card_actions === 'not_started' ? 'Not Started' :
+                   selectedCard.card_actions === 'in_progress' ? 'In Progress' :
+                   selectedCard.card_actions === 'paused' ? 'Paused' :
+                   selectedCard.card_actions === 'completed' ? 'Completed' :
+                   'Not Started'}
                 </div>
               </div>
 
               {/* Action Buttons */}
               <div className="space-y-2 mt-4">
-                <div className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Change Action:</div>
+                <div className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Change Action</div>
                 {getAvailableActions(selectedCard.card_actions).map((action) => (
                   <Button
                     key={action.value}
                     onClick={() => updateCardAction(selectedCard.id, action.value)}
                     disabled={updatingCardAction}
+                    variant="outline"
                     size="lg"
-                    className="w-full py-4 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-400"
+                    className="w-full justify-start"
                   >
-                    <span className="text-xl mr-2">{action.icon}</span>
-                    <span>{action.label}</span>
+                    {action.label}
                   </Button>
                 ))}
               </div>

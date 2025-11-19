@@ -66,9 +66,23 @@ export default function StaffPage() {
         throw new Error(result.error || 'Failed to update card action');
       }
 
-      // Refresh the cleanings
-      await fetchMyCleanings();
-      setSelectedCard(null);
+      // Update the local state instead of re-fetching
+      setCleanings((prevCleanings: any) => {
+        if (!prevCleanings) return prevCleanings;
+        
+        return prevCleanings.map((item: any) => 
+          item.id === cleaningId 
+            ? { ...item, card_actions: newAction }
+            : item
+        );
+      });
+
+      // Also update the selected card if still open
+      setSelectedCard((prev: any) => 
+        prev?.id === cleaningId 
+          ? { ...prev, card_actions: newAction }
+          : null
+      );
     } catch (err: any) {
       setError(err.message || 'Failed to update card action');
     } finally {
@@ -163,7 +177,7 @@ export default function StaffPage() {
     });
 
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {items.map((item, index) => (
           <Card
             key={item.cleaning_id || item.id || index}
@@ -230,18 +244,18 @@ export default function StaffPage() {
                 </svg>
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Action</div>
-                  <div className={`text-sm font-medium ${
-                    item.card_actions === 'in_progress' ? 'text-blue-600 dark:text-blue-400' :
-                    item.card_actions === 'paused' ? 'text-orange-600 dark:text-orange-400' :
-                    item.card_actions === 'completed' ? 'text-green-600 dark:text-green-400' :
-                    'text-slate-600 dark:text-slate-400'
-                  }`}>
-                    {item.card_actions === 'not_started' ? '🎬 Not Started' :
-                     item.card_actions === 'in_progress' ? '▶️ In Progress' :
-                     item.card_actions === 'paused' ? '⏸️ Paused' :
-                     item.card_actions === 'completed' ? '✅ Completed' :
-                     '🎬 Not Started'}
-                  </div>
+                    <div className={`text-sm font-medium ${
+                      item.card_actions === 'in_progress' ? 'text-blue-600 dark:text-blue-400' :
+                      item.card_actions === 'paused' ? 'text-orange-600 dark:text-orange-400' :
+                      item.card_actions === 'completed' ? 'text-green-600 dark:text-green-400' :
+                      'text-slate-600 dark:text-slate-400'
+                    }`}>
+                      {item.card_actions === 'not_started' ? 'Not Started' :
+                       item.card_actions === 'in_progress' ? 'In Progress' :
+                       item.card_actions === 'paused' ? 'Paused' :
+                       item.card_actions === 'completed' ? 'Completed' :
+                       'Not Started'}
+                    </div>
                 </div>
               </div>
             </div>
@@ -263,14 +277,14 @@ export default function StaffPage() {
                     : ''
                 }
               >
-                {item.property_clean_status === 'needs_cleaning' ? '🔴 Needs Cleaning' :
-                 item.property_clean_status === 'cleaning_scheduled' ? '🟡 Scheduled' :
-                 item.property_clean_status === 'cleaning_complete' ? '🟢 Complete' :
-                 '⚪ Unknown'}
+                {item.property_clean_status === 'needs_cleaning' ? 'Needs Cleaning' :
+                 item.property_clean_status === 'cleaning_scheduled' ? 'Scheduled' :
+                 item.property_clean_status === 'cleaning_complete' ? 'Complete' :
+                 'Unknown'}
               </Badge>
               
               <Badge variant={item.assigned_staff ? 'default' : 'outline'}>
-                {item.assigned_staff ? `👤 ${item.assigned_staff}` : 'Unassigned'}
+                {item.assigned_staff ? item.assigned_staff : 'Unassigned'}
               </Badge>
             </div>
             </CardContent>
@@ -374,7 +388,7 @@ export default function StaffPage() {
       {/* Card Detail Modal */}
       <Dialog open={!!selectedCard} onOpenChange={(open) => !open && setSelectedCard(null)}>
         <DialogContent 
-          className={`max-w-lg max-h-[90vh] overflow-y-auto border-2 ${
+          className={`max-w-md max-h-[90vh] overflow-y-auto border-2 ${
             selectedCard?.property_clean_status === 'needs_cleaning' ? 'border-red-400' :
             selectedCard?.property_clean_status === 'cleaning_scheduled' ? 'border-yellow-400' :
             selectedCard?.property_clean_status === 'cleaning_complete' ? 'border-emerald-400' :
@@ -450,14 +464,14 @@ export default function StaffPage() {
                       : ''
                   }`}
                 >
-                  {selectedCard.property_clean_status === 'needs_cleaning' ? '🔴 Needs Cleaning' :
-                   selectedCard.property_clean_status === 'cleaning_scheduled' ? '🟡 Scheduled' :
-                   selectedCard.property_clean_status === 'cleaning_complete' ? '🟢 Complete' :
-                   '⚪ Unknown'}
+                  {selectedCard.property_clean_status === 'needs_cleaning' ? 'Needs Cleaning' :
+                   selectedCard.property_clean_status === 'cleaning_scheduled' ? 'Scheduled' :
+                   selectedCard.property_clean_status === 'cleaning_complete' ? 'Complete' :
+                   'Unknown'}
                 </Badge>
                 
                 <Badge variant={selectedCard.assigned_staff ? 'default' : 'outline'} className="text-sm py-1.5">
-                  {selectedCard.assigned_staff ? `👤 ${selectedCard.assigned_staff}` : 'Unassigned'}
+                  {selectedCard.assigned_staff ? selectedCard.assigned_staff : 'Unassigned'}
                 </Badge>
               </div>
 
@@ -467,33 +481,33 @@ export default function StaffPage() {
               {/* Current Action Status */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
                 <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">Current Action</div>
-                <div className={`text-base font-semibold flex items-center gap-2 ${
+                <div className={`text-base font-semibold ${
                   selectedCard.card_actions === 'in_progress' ? 'text-blue-600 dark:text-blue-400' :
                   selectedCard.card_actions === 'paused' ? 'text-orange-600 dark:text-orange-400' :
                   selectedCard.card_actions === 'completed' ? 'text-green-600 dark:text-green-400' :
                   'text-slate-600 dark:text-slate-400'
                 }`}>
-                  {selectedCard.card_actions === 'not_started' ? '🎬 Not Started' :
-                   selectedCard.card_actions === 'in_progress' ? '▶️ In Progress' :
-                   selectedCard.card_actions === 'paused' ? '⏸️ Paused' :
-                   selectedCard.card_actions === 'completed' ? '✅ Completed' :
-                   '🎬 Not Started'}
+                  {selectedCard.card_actions === 'not_started' ? 'Not Started' :
+                   selectedCard.card_actions === 'in_progress' ? 'In Progress' :
+                   selectedCard.card_actions === 'paused' ? 'Paused' :
+                   selectedCard.card_actions === 'completed' ? 'Completed' :
+                   'Not Started'}
                 </div>
               </div>
 
               {/* Action Buttons */}
               <div className="space-y-2 mt-4">
-                <div className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Change Action:</div>
+                <div className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Change Action</div>
                 {getAvailableActions(selectedCard.card_actions).map((action) => (
                   <Button
                     key={action.value}
                     onClick={() => updateCardAction(selectedCard.id, action.value)}
                     disabled={updatingCardAction}
+                    variant="outline"
                     size="lg"
-                    className="w-full py-4 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-400"
+                    className="w-full justify-start"
                   >
-                    <span className="text-xl mr-2">{action.icon}</span>
-                    <span>{action.label}</span>
+                    {action.label}
                   </Button>
                 ))}
               </div>
