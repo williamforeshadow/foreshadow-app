@@ -10,8 +10,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Badge } from '@/components/ui/badge';
 
 export default function Home() {
-  const [functionName, setFunctionName] = useState('');
-  const [params, setParams] = useState('{}');
   const [response, setResponse] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,18 +34,13 @@ export default function Home() {
     checkin: [] as string[]
   });
 
-  const callRPC = async (rpcName?: string, rpcParams?: any) => {
+  const quickCall = async (rpcName: string) => {
     setLoading(true);
     setError(null);
     setResponse(null);
 
     try {
-      // Use provided params or parse from input
-      const parsedParams = rpcParams !== undefined ? rpcParams : JSON.parse(params);
-      const funcName = rpcName || functionName;
-
-      // Call the Supabase RPC function
-      const { data, error: rpcError } = await supabase.rpc(funcName, parsedParams);
+      const { data, error: rpcError } = await supabase.rpc(rpcName, {});
 
       if (rpcError) {
         setError(rpcError.message);
@@ -59,12 +52,6 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const quickCall = (rpcName: string) => {
-    setFunctionName(rpcName);
-    setParams('{}');
-    callRPC(rpcName, {});
   };
 
   const executeNaturalQuery = async () => {
@@ -88,7 +75,6 @@ export default function Home() {
       } else {
         setGeneratedSQL(result.sql);
         setResponse(result.data);
-        setFunctionName('(AI Generated Query)');
       }
     } catch (err: any) {
       setError(err.message);
@@ -590,54 +576,30 @@ export default function Home() {
       <div className="flex-1 overflow-auto flex items-center justify-center p-8">
         <div className="w-full max-w-6xl">
         <h1 className="text-3xl font-bold mb-8 text-slate-900 dark:text-white text-center">
-          Supabase RPC Caller
+          Property Management Dashboard
         </h1>
 
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-lg border border-slate-200 dark:border-slate-800 space-y-4">
-          {/* Function Name Input */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Function Name
-            </label>
-            <input
-              type="text"
-              value={functionName}
-              onChange={(e) => setFunctionName(e.target.value)}
-              placeholder="e.g., my_function"
-              className="w-full px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+        {/* Error Display */}
+        {error && (
+          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg mb-6">
+            <p className="text-sm font-medium text-red-800 dark:text-red-400">Error:</p>
+            <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
           </div>
+        )}
 
-          {/* Parameters Input */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Parameters (JSON)
-            </label>
-            <textarea
-              value={params}
-              onChange={(e) => setParams(e.target.value)}
-              placeholder='{"param1": "value1", "param2": "value2"}'
-              rows={4}
-              className="w-full px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          {/* Call Button */}
-          <button
-            onClick={() => callRPC()}
-            disabled={loading || !functionName}
-            className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors"
+        {/* Quick Access Button */}
+        <div className="mb-8">
+          <Button
+            onClick={() => quickCall('get_property_turnovers')}
+            disabled={loading}
+            size="lg"
+            className="w-full text-lg py-6"
           >
-            {loading ? 'Calling...' : 'Call RPC Function'}
-          </button>
+            {loading ? 'Loading...' : 'Property Status'}
+          </Button>
+        </div>
 
-          {/* Error Display */}
-          {error && (
-            <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <p className="text-sm font-medium text-red-800 dark:text-red-400">Error:</p>
-              <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
-            </div>
-          )}
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-lg border border-slate-200 dark:border-slate-800 space-y-4">
 
           {/* Response Display */}
           {response !== null && (
@@ -978,13 +940,14 @@ export default function Home() {
               className="w-full px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono"
             />
             
-            <button
+            <Button
               onClick={executeNaturalQuery}
               disabled={isExecutingQuery || !naturalQuery}
-              className="w-full px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors"
+              size="lg"
+              className="w-full text-lg py-6 bg-purple-600 hover:bg-purple-700"
             >
               {isExecutingQuery ? '⚡ Generating & Running...' : '⚡ Run Query'}
-            </button>
+            </Button>
             
             {generatedSQL && (
               <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3">
@@ -997,18 +960,6 @@ export default function Home() {
               </div>
             )}
           </div>
-        </div>
-
-        {/* Quick Access Button */}
-        <div className="mt-8">
-          <Button
-            onClick={() => quickCall('get_property_turnovers')}
-            disabled={loading}
-            size="lg"
-            className="w-full text-lg py-6"
-          >
-            Property Status
-          </Button>
         </div>
         </div>
       </div>
