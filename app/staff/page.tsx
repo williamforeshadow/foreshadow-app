@@ -395,38 +395,38 @@ export default function StaffPage() {
 
               <div className="space-y-4">
               {/* Dates */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 p-3 bg-red-50 dark:bg-red-950/30 rounded-lg">
-                  <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="grid grid-cols-1 gap-3">
+                <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                   </svg>
                   <div className="flex-1">
-                    <div className="text-xs text-slate-500 dark:text-slate-400">Checked out</div>
-                    <div className="font-medium text-slate-900 dark:text-white">
+                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Checked out</div>
+                    <div className="text-sm font-semibold text-slate-900 dark:text-white">
                       {selectedCard.check_out ? formatDate(selectedCard.check_out) : 'Not set'}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg">
-                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <svg className="w-5 h-5 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                   </svg>
                   <div className="flex-1">
-                    <div className="text-xs text-slate-500 dark:text-slate-400">Next check in</div>
-                    <div className="font-medium text-slate-900 dark:text-white">
+                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Next check in</div>
+                    <div className="text-sm font-semibold text-slate-900 dark:text-white">
                       {selectedCard.next_check_in ? formatDate(selectedCard.next_check_in) : 'Not set'}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
-                  <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <svg className="w-5 h-5 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <div className="flex-1">
-                    <div className="text-xs text-slate-500 dark:text-slate-400">Scheduled</div>
-                    <div className="font-medium text-slate-900 dark:text-white">
+                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Scheduled</div>
+                    <div className="text-sm font-semibold text-slate-900 dark:text-white">
                       {selectedCard.scheduled_start ? formatDate(selectedCard.scheduled_start) : 'Not set'}
                     </div>
                   </div>
@@ -462,12 +462,12 @@ export default function StaffPage() {
               </div>
 
               {/* Divider */}
-              <div className="border-t border-slate-200 dark:border-slate-800 my-6"></div>
+              <div className="border-t border-slate-200 dark:border-slate-800 my-4"></div>
 
               {/* Current Action Status */}
-              <div className="text-center mb-4">
-                <div className="text-sm text-slate-500 dark:text-slate-400 mb-2">Current Action</div>
-                <div className={`text-lg font-semibold inline-flex items-center gap-2 ${
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">Current Action</div>
+                <div className={`text-base font-semibold flex items-center gap-2 ${
                   selectedCard.card_actions === 'in_progress' ? 'text-blue-600 dark:text-blue-400' :
                   selectedCard.card_actions === 'paused' ? 'text-orange-600 dark:text-orange-400' :
                   selectedCard.card_actions === 'completed' ? 'text-green-600 dark:text-green-400' :
@@ -482,17 +482,17 @@ export default function StaffPage() {
               </div>
 
               {/* Action Buttons */}
-              <div className="space-y-3">
-                <div className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Change Action:</div>
+              <div className="space-y-2 mt-4">
+                <div className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Change Action:</div>
                 {getAvailableActions(selectedCard.card_actions).map((action) => (
                   <Button
                     key={action.value}
                     onClick={() => updateCardAction(selectedCard.id, action.value)}
                     disabled={updatingCardAction}
                     size="lg"
-                    className="w-full text-lg py-6 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-400"
+                    className="w-full py-4 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-400"
                   >
-                    <span className="text-2xl mr-3">{action.icon}</span>
+                    <span className="text-xl mr-2">{action.icon}</span>
                     <span>{action.label}</span>
                   </Button>
                 ))}
