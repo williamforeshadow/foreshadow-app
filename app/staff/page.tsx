@@ -66,13 +66,15 @@ export default function StaffPage() {
         throw new Error(result.error || 'Failed to update card action');
       }
 
-      // Update the local state instead of re-fetching
+      // Update the local state with the complete card data (including recalculated property_clean_status)
+      const updatedCard = result.data;
+      
       setCleanings((prevCleanings: any) => {
         if (!prevCleanings) return prevCleanings;
         
         return prevCleanings.map((item: any) => 
           item.id === cleaningId 
-            ? { ...item, card_actions: newAction }
+            ? { ...item, ...updatedCard }
             : item
         );
       });
@@ -80,7 +82,7 @@ export default function StaffPage() {
       // Also update the selected card if still open
       setSelectedCard((prev: any) => 
         prev?.id === cleaningId 
-          ? { ...prev, card_actions: newAction }
+          ? { ...prev, ...updatedCard }
           : null
       );
     } catch (err: any) {

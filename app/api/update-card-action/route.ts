@@ -47,9 +47,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Fetch the complete card data with recalculated property_clean_status
+    const { data: cardData, error: cardError } = await supabase
+      .rpc('get_property_turnovers')
+      .eq('id', cleaningId)
+      .single();
+
+    if (cardError) {
+      // If we can't get the full card data, return basic data
+      return NextResponse.json({
+        success: true,
+        data: data[0]
+      });
+    }
+
     return NextResponse.json({
       success: true,
-      data: data[0]
+      data: cardData
     });
 
   } catch (err: any) {

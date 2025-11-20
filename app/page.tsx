@@ -162,14 +162,16 @@ export default function Home() {
         throw new Error(result.error || 'Failed to update card action');
       }
 
-      // Update the local state instead of re-fetching
+      // Update the local state with the complete card data (including recalculated property_clean_status)
+      const updatedCard = result.data;
+      
       setResponse((prevResponse: any) => {
         if (!prevResponse) return prevResponse;
         
         const items = Array.isArray(prevResponse) ? prevResponse : [prevResponse];
         const updatedItems = items.map((item: any) => 
           item.id === cleaningId 
-            ? { ...item, card_actions: newAction }
+            ? { ...item, ...updatedCard }
             : item
         );
         
@@ -179,7 +181,7 @@ export default function Home() {
       // Also update the selected card if still open
       setSelectedCard((prev: any) => 
         prev?.id === cleaningId 
-          ? { ...prev, card_actions: newAction }
+          ? { ...prev, ...updatedCard }
           : null
       );
     } catch (err: any) {
