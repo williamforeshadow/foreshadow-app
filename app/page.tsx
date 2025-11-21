@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function Home() {
   const [response, setResponse] = useState<any>(null);
@@ -29,10 +30,9 @@ export default function Home() {
   const [filters, setFilters] = useState({
     cleanStatus: [] as string[],
     cardActions: [] as string[],
-    staff: [] as string[],
-    checkout: [] as string[],
-    checkin: [] as string[]
+    staff: [] as string[]
   });
+  const [sortBy, setSortBy] = useState('status-priority');
 
   const quickCall = async (rpcName: string) => {
     setLoading(true);
@@ -290,10 +290,6 @@ export default function Home() {
 
   const applyFilters = (items: any[]) => {
     return items.filter(item => {
-      const now = new Date();
-      const checkoutDate = item.check_out ? new Date(item.check_out) : null;
-      const checkinDate = item.next_check_in ? new Date(item.next_check_in) : null;
-      
       // Clean Status filter
       if (filters.cleanStatus.length > 0) {
         if (!filters.cleanStatus.includes(item.property_clean_status || '')) {
@@ -323,73 +319,84 @@ export default function Home() {
         }
       }
       
-      // Checkout filter
-      if (filters.checkout.length > 0) {
-        let checkoutMatch = false;
-        if (checkoutDate) {
-          const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          const tomorrowStart = new Date(todayStart);
-          tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-          
-          if (filters.checkout.includes('already_checked_out') && checkoutDate < now) {
-            checkoutMatch = true;
-          }
-          if (filters.checkout.includes('checking_out_today') && 
-              checkoutDate >= todayStart && checkoutDate < tomorrowStart) {
-            checkoutMatch = true;
-          }
-          if (filters.checkout.includes('checking_out_tomorrow') && 
-              checkoutDate >= tomorrowStart) {
-            const dayAfterTomorrow = new Date(tomorrowStart);
-            dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
-            if (checkoutDate < dayAfterTomorrow) {
-              checkoutMatch = true;
-            }
-          }
-        }
-        if (!checkoutMatch) return false;
-      }
-      
-      // Check-in filter
-      if (filters.checkin.length > 0) {
-        let checkinMatch = false;
-        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const tomorrowStart = new Date(todayStart);
-        tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-        
-        if (filters.checkin.includes('no_next_guest') && !checkinDate) {
-          checkinMatch = true;
-        }
-        if (checkinDate) {
-          if (filters.checkin.includes('checkin_today') && 
-              checkinDate >= todayStart && checkinDate < tomorrowStart) {
-            checkinMatch = true;
-          }
-          if (filters.checkin.includes('checkin_tomorrow')) {
-            const dayAfterTomorrow = new Date(tomorrowStart);
-            dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
-            if (checkinDate >= tomorrowStart && checkinDate < dayAfterTomorrow) {
-              checkinMatch = true;
-            }
-          }
-          if (filters.checkin.includes('checkin_this_week')) {
-            const weekFromNow = new Date(todayStart);
-            weekFromNow.setDate(weekFromNow.getDate() + 7);
-            if (checkinDate >= todayStart && checkinDate < weekFromNow) {
-              checkinMatch = true;
-            }
-          }
-        }
-        if (!checkinMatch) return false;
-      }
-      
       return true;
     });
   };
 
+  const sortItems = (items: any[]) => {
+    const now = new Date().getTime(); // Current timestamp
+    
+    return [...items].sort((a, b) => {
+      switch (sortBy) {
+        case 'status-priority':
+          // Sort by status priority (red, yellow, green), then by next_check_in
+          const priorityA = getSortPriority(a.property_clean_status);
+          const priorityB = getSortPriority(b.property_clean_status);
+          
+          if (priorityA !== priorityB) {
+            return priorityA - priorityB;
+          }
+          
+          // If same status, sort by next_check_in (future dates first, soonest to latest)
+          const dateA = a.next_check_in ? new Date(a.next_check_in).getTime() : Infinity;
+          const dateB = b.next_check_in ? new Date(b.next_check_in).getTime() : Infinity;
+          
+          // Treat past dates as farther in the future (push to bottom)
+          const futureA = dateA < now ? Infinity : dateA;
+          const futureB = dateB < now ? Infinity : dateB;
+          
+          return futureA - futureB;
+
+        case 'checkin-soonest':
+          // Next Check-in: Soonest First (only future dates, push past to bottom)
+          const checkinA = a.next_check_in ? new Date(a.next_check_in).getTime() : Infinity;
+          const checkinB = b.next_check_in ? new Date(b.next_check_in).getTime() : Infinity;
+          
+          // Treat past dates as Infinity (push to bottom)
+          const futureCheckinA = checkinA < now ? Infinity : checkinA;
+          const futureCheckinB = checkinB < now ? Infinity : checkinB;
+          
+          return futureCheckinA - futureCheckinB;
+
+        case 'checkin-latest':
+          // Next Check-in: Latest First (future dates in descending order, past dates at bottom)
+          const checkinLatestA = a.next_check_in ? new Date(a.next_check_in).getTime() : -Infinity;
+          const checkinLatestB = b.next_check_in ? new Date(b.next_check_in).getTime() : -Infinity;
+          
+          // Treat past dates as -Infinity (push to bottom)
+          const futureLatestA = checkinLatestA < now ? -Infinity : checkinLatestA;
+          const futureLatestB = checkinLatestB < now ? -Infinity : checkinLatestB;
+          
+          return futureLatestB - futureLatestA;
+
+        case 'checkout-recent':
+          // Checkout: Most Recent First (today first, then yesterday, etc.)
+          const checkoutRecentA = a.check_out ? new Date(a.check_out).getTime() : -Infinity;
+          const checkoutRecentB = b.check_out ? new Date(b.check_out).getTime() : -Infinity;
+          return checkoutRecentB - checkoutRecentA;
+
+        case 'checkout-oldest':
+          // Checkout: Oldest First
+          const checkoutOldestA = a.check_out ? new Date(a.check_out).getTime() : Infinity;
+          const checkoutOldestB = b.check_out ? new Date(b.check_out).getTime() : Infinity;
+          return checkoutOldestA - checkoutOldestB;
+
+        case 'property-az':
+          // Property Name: A-Z
+          return (a.property_name || '').localeCompare(b.property_name || '');
+
+        case 'property-za':
+          // Property Name: Z-A
+          return (b.property_name || '').localeCompare(a.property_name || '');
+
+        default:
+          return 0;
+      }
+    });
+  };
+
   const getActiveFilterCount = () => {
-    return filters.cleanStatus.length + filters.cardActions.length + 
-           filters.staff.length + filters.checkout.length + filters.checkin.length;
+    return filters.cleanStatus.length + filters.cardActions.length + filters.staff.length;
   };
   
   const formatDate = (dateString: string) => {
@@ -456,22 +463,8 @@ export default function Home() {
       );
     }
 
-    // Sort items: first by status priority (red, yellow, green), then by next_check_in
-    items = [...items].sort((a, b) => {
-      // First sort by status priority
-      const priorityA = getSortPriority(a.property_clean_status);
-      const priorityB = getSortPriority(b.property_clean_status);
-      
-      if (priorityA !== priorityB) {
-        return priorityA - priorityB;
-      }
-      
-      // If same status, sort by next_check_in (soonest first)
-      const dateA = a.next_check_in ? new Date(a.next_check_in).getTime() : Infinity;
-      const dateB = b.next_check_in ? new Date(b.next_check_in).getTime() : Infinity;
-      
-      return dateA - dateB;
-    });
+    // Apply sorting
+    items = sortItems(items);
 
     return (
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -625,7 +618,7 @@ export default function Home() {
           {/* Response Display */}
           {response !== null && (
             <div className="space-y-3">
-              {/* Filter Bar */}
+              {/* Filter and Sort Bar */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-3">
                   <button
@@ -645,18 +638,40 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
-                  {getActiveFilterCount() > 0 && (
-                    <button
-                      onClick={clearAllFilters}
-                      className="text-sm text-red-600 dark:text-red-400 hover:underline"
-                    >
-                      Clear All
-                    </button>
-                  )}
+
+                  <div className="flex items-center gap-3">
+                    {getActiveFilterCount() > 0 && (
+                      <button
+                        onClick={clearAllFilters}
+                        className="text-sm text-red-600 dark:text-red-400 hover:underline"
+                      >
+                        Clear All
+                      </button>
+                    )}
+                    
+                    {/* Sort Dropdown */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-slate-600 dark:text-slate-400">Sort by:</span>
+                      <Select value={sortBy} onValueChange={setSortBy}>
+                        <SelectTrigger className="w-[220px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="status-priority">Status Priority</SelectItem>
+                          <SelectItem value="checkin-soonest">Next Check-in: Soonest</SelectItem>
+                          <SelectItem value="checkin-latest">Next Check-in: Latest</SelectItem>
+                          <SelectItem value="checkout-recent">Checkout: Most Recent</SelectItem>
+                          <SelectItem value="checkout-oldest">Checkout: Oldest</SelectItem>
+                          <SelectItem value="property-az">Property Name: A-Z</SelectItem>
+                          <SelectItem value="property-za">Property Name: Z-A</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                 </div>
 
                 {showFilters && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 pt-3 border-t border-slate-200 dark:border-slate-800">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-3 border-t border-slate-200 dark:border-slate-800">
                     {/* Clean Status */}
                     <div>
                       <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Clean Status</h4>
@@ -758,83 +773,6 @@ export default function Home() {
                             <span>{staff}</span>
                           </label>
                         ))}
-                      </div>
-                    </div>
-
-                    {/* Checkout Status */}
-                    <div>
-                      <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Checkout</h4>
-                      <div className="space-y-1">
-                        <label className="flex items-center gap-2 text-sm cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={filters.checkout.includes('already_checked_out')}
-                            onChange={() => toggleFilter('checkout', 'already_checked_out')}
-                            className="rounded border-slate-300"
-                          />
-                          <span>Already Out</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-sm cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={filters.checkout.includes('checking_out_today')}
-                            onChange={() => toggleFilter('checkout', 'checking_out_today')}
-                            className="rounded border-slate-300"
-                          />
-                          <span>Today</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-sm cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={filters.checkout.includes('checking_out_tomorrow')}
-                            onChange={() => toggleFilter('checkout', 'checking_out_tomorrow')}
-                            className="rounded border-slate-300"
-                          />
-                          <span>Tomorrow</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Check-in Status */}
-                    <div>
-                      <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Next Check-in</h4>
-                      <div className="space-y-1">
-                        <label className="flex items-center gap-2 text-sm cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={filters.checkin.includes('no_next_guest')}
-                            onChange={() => toggleFilter('checkin', 'no_next_guest')}
-                            className="rounded border-slate-300"
-                          />
-                          <span>No Next Guest</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-sm cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={filters.checkin.includes('checkin_today')}
-                            onChange={() => toggleFilter('checkin', 'checkin_today')}
-                            className="rounded border-slate-300"
-                          />
-                          <span>Today</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-sm cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={filters.checkin.includes('checkin_tomorrow')}
-                            onChange={() => toggleFilter('checkin', 'checkin_tomorrow')}
-                            className="rounded border-slate-300"
-                          />
-                          <span>Tomorrow</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-sm cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={filters.checkin.includes('checkin_this_week')}
-                            onChange={() => toggleFilter('checkin', 'checkin_this_week')}
-                            className="rounded border-slate-300"
-                          />
-                          <span>This Week</span>
-                        </label>
                       </div>
                     </div>
                   </div>
