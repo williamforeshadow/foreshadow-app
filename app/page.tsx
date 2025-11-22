@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import OpenAI from 'openai';
 import Sidebar from '@/components/Sidebar';
@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import ChatPopup from '@/components/ChatPopup';
 import Timeline from '@/components/Timeline';
+import FloatingWindow from '@/components/FloatingWindow';
 
 export default function Home() {
   const [response, setResponse] = useState<any>(null);
@@ -35,6 +36,13 @@ export default function Home() {
     staff: [] as string[]
   });
   const [sortBy, setSortBy] = useState('status-priority');
+  const [showCardsWindow, setShowCardsWindow] = useState(true);
+  const [showTimelineWindow, setShowTimelineWindow] = useState(true);
+
+  // Auto-load data on mount
+  useEffect(() => {
+    quickCall('get_property_turnovers');
+  }, []);
 
   const quickCall = async (rpcName: string) => {
     setLoading(true);
@@ -585,36 +593,64 @@ export default function Home() {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden">
       <Sidebar />
-      <div className="flex-1 overflow-auto flex items-center justify-center p-8">
-        <div className="w-full max-w-6xl">
-        <h1 className="text-3xl font-bold mb-8 text-slate-900 dark:text-white text-center">
-          Property Management Dashboard
-        </h1>
-
-        {/* Error Display */}
-        {error && (
-          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg mb-6">
-            <p className="text-sm font-medium text-red-800 dark:text-red-400">Error:</p>
-            <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
+      
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Fixed Header */}
+        <div className="flex-shrink-0 p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+              Property Management Dashboard
+            </h1>
+            
+            {/* Window Controls */}
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setShowCardsWindow(!showCardsWindow)}
+                variant={showCardsWindow ? 'default' : 'outline'}
+                size="sm"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                Cards
+              </Button>
+              <Button
+                onClick={() => setShowTimelineWindow(!showTimelineWindow)}
+                variant={showTimelineWindow ? 'default' : 'outline'}
+                size="sm"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Timeline
+              </Button>
+            </div>
           </div>
-        )}
 
-        {/* Quick Access Button */}
-        <div className="mb-8">
-          <Button
-            onClick={() => quickCall('get_property_turnovers')}
-            disabled={loading}
-            size="lg"
-            className="w-full text-lg py-6"
-          >
-            {loading ? 'Loading...' : 'Property Status'}
-          </Button>
+          {/* Error Display */}
+          {error && (
+            <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <p className="text-sm font-medium text-red-800 dark:text-red-400">Error:</p>
+              <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
+            </div>
+          )}
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-lg border border-slate-200 dark:border-slate-800 space-y-4">
-
+        {/* Floating Windows Container */}
+        <div className="flex-1 relative overflow-hidden">
+          {/* Cards Window */}
+          {showCardsWindow && (
+            <FloatingWindow
+              id="cards"
+              title="Cards View"
+              defaultPosition={{ x: 50, y: 50 }}
+              defaultSize={{ width: '70%', height: '80%' }}
+              onClose={() => setShowCardsWindow(false)}
+            >
+              <div className="p-6 space-y-4">
           {/* Response Display */}
           {response !== null && (
             <div className="space-y-3">
@@ -875,10 +911,22 @@ export default function Home() {
               )}
             </div>
           )}
-        </div>
+              </div>
+            </FloatingWindow>
+          )}
 
-        {/* Timeline View */}
-        <Timeline onCardClick={setSelectedCard} />
+          {/* Timeline Window */}
+          {showTimelineWindow && (
+            <FloatingWindow
+              id="timeline"
+              title="Timeline View"
+              defaultPosition={{ x: 150, y: 150 }}
+              defaultSize={{ width: '70%', height: '80%' }}
+              onClose={() => setShowTimelineWindow(false)}
+            >
+              <Timeline onCardClick={setSelectedCard} />
+            </FloatingWindow>
+          )}
         </div>
       </div>
 
