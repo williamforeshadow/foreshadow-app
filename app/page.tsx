@@ -9,7 +9,6 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import ChatPopup from '@/components/ChatPopup';
 import Timeline from '@/components/Timeline';
 import FloatingWindow from '@/components/FloatingWindow';
 
@@ -38,7 +37,8 @@ export default function Home() {
   const [sortBy, setSortBy] = useState('status-priority');
   const [showCardsWindow, setShowCardsWindow] = useState(true);
   const [showTimelineWindow, setShowTimelineWindow] = useState(true);
-  const [activeWindow, setActiveWindow] = useState<'cards' | 'timeline'>('cards');
+  const [showQueryWindow, setShowQueryWindow] = useState(false);
+  const [activeWindow, setActiveWindow] = useState<'cards' | 'timeline' | 'query'>('cards');
 
   // Auto-load data on mount
   useEffect(() => {
@@ -790,7 +790,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="overflow-auto max-h-96">
+          <div>
             {viewMode === 'cards' ? (
               <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
                 {renderCards()}
@@ -805,6 +805,46 @@ export default function Home() {
           </div>
         </div>
       )}
+    </div>
+  ), [response, viewMode, showFilters, filters, sortBy]);
+
+  const timelineWindowContent = useMemo(() => (
+    <Timeline onCardClick={setSelectedCard} />
+  ), []);
+
+  const queryWindowContent = useMemo(() => (
+    <div className="p-6 space-y-4">
+      {/* Natural Language Query Section */}
+      <div className="space-y-3">
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+          Natural Language Query
+        </h3>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={naturalQuery}
+            onChange={(e) => setNaturalQuery(e.target.value)}
+            placeholder="e.g., show me all cleanings for next week"
+            className="flex-1 px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+            onKeyDown={(e) => e.key === 'Enter' && executeNaturalQuery()}
+          />
+          <Button
+            onClick={executeNaturalQuery}
+            disabled={isExecutingQuery || !naturalQuery.trim()}
+          >
+            {isExecutingQuery ? 'Executing...' : 'Execute'}
+          </Button>
+        </div>
+        
+        {generatedSQL && (
+          <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-lg">
+            <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Generated SQL:</p>
+            <pre className="text-xs text-slate-900 dark:text-white font-mono overflow-x-auto">
+              {generatedSQL}
+            </pre>
+          </div>
+        )}
+      </div>
 
       {/* AI Summary Section */}
       {response !== null && (
@@ -857,11 +897,7 @@ export default function Home() {
         </div>
       )}
     </div>
-  ), [response, viewMode, showFilters, filters, sortBy, aiSummary, isGeneratingSummary, isSpeaking]);
-
-  const timelineWindowContent = useMemo(() => (
-    <Timeline onCardClick={setSelectedCard} />
-  ), []);
+  ), [naturalQuery, isExecutingQuery, generatedSQL, response, aiSummary, isGeneratingSummary, isSpeaking]);
 
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden">
@@ -912,6 +948,23 @@ export default function Home() {
                 </svg>
                 Timeline
               </Button>
+              <Button
+                onClick={() => {
+                  if (showQueryWindow) {
+                    setShowQueryWindow(false);
+                  } else {
+                    setShowQueryWindow(true);
+                    setActiveWindow('query');
+                  }
+                }}
+                variant={showQueryWindow ? 'default' : 'outline'}
+                size="sm"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+                Query
+              </Button>
             </div>
           </div>
 
@@ -953,6 +1006,21 @@ export default function Home() {
               onFocus={() => setActiveWindow('timeline')}
             >
               {timelineWindowContent}
+            </FloatingWindow>
+          )}
+
+          {/* Query Window */}
+          {showQueryWindow && (
+            <FloatingWindow
+              id="query"
+              title="Natural Language Query"
+              defaultPosition={{ x: 250, y: 250 }}
+              defaultSize={{ width: '60%', height: '70%' }}
+              zIndex={activeWindow === 'query' ? 20 : 10}
+              onClose={() => setShowQueryWindow(false)}
+              onFocus={() => setActiveWindow('query')}
+            >
+              {queryWindowContent}
             </FloatingWindow>
           )}
         </div>
@@ -1161,15 +1229,6 @@ export default function Home() {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* Chat Popup for Natural Language Query */}
-      <ChatPopup
-        naturalQuery={naturalQuery}
-        setNaturalQuery={setNaturalQuery}
-        executeNaturalQuery={executeNaturalQuery}
-        isExecutingQuery={isExecutingQuery}
-        generatedSQL={generatedSQL}
-      />
     </div>
   );
 }
