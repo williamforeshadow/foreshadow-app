@@ -9,6 +9,8 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import ChatPopup from '@/components/ChatPopup';
+import Timeline from '@/components/Timeline';
 
 export default function Home() {
   const [response, setResponse] = useState<any>(null);
@@ -358,22 +360,24 @@ export default function Home() {
           
           return futureCheckinA - futureCheckinB;
 
-        case 'checkin-latest':
-          // Next Check-in: Latest First (future dates in descending order, past dates at bottom)
-          const checkinLatestA = a.next_check_in ? new Date(a.next_check_in).getTime() : -Infinity;
-          const checkinLatestB = b.next_check_in ? new Date(b.next_check_in).getTime() : -Infinity;
-          
-          // Treat past dates as -Infinity (push to bottom)
-          const futureLatestA = checkinLatestA < now ? -Infinity : checkinLatestA;
-          const futureLatestB = checkinLatestB < now ? -Infinity : checkinLatestB;
-          
-          return futureLatestB - futureLatestA;
-
         case 'checkout-recent':
-          // Checkout: Most Recent First (today first, then yesterday, etc.)
-          const checkoutRecentA = a.check_out ? new Date(a.check_out).getTime() : -Infinity;
-          const checkoutRecentB = b.check_out ? new Date(b.check_out).getTime() : -Infinity;
-          return checkoutRecentB - checkoutRecentA;
+          // Checkout: Most Recent First (closest to today, prioritizing recent past)
+          const checkoutRecentA = a.check_out ? new Date(a.check_out).getTime() : Infinity;
+          const checkoutRecentB = b.check_out ? new Date(b.check_out).getTime() : Infinity;
+          
+          // Calculate distance from now (recent past checkouts first)
+          const distanceA = Math.abs(checkoutRecentA - now);
+          const distanceB = Math.abs(checkoutRecentB - now);
+          
+          // Prioritize past dates over future dates
+          const isPastA = checkoutRecentA <= now;
+          const isPastB = checkoutRecentB <= now;
+          
+          if (isPastA && !isPastB) return -1; // A is past, B is future -> A first
+          if (!isPastA && isPastB) return 1;  // A is future, B is past -> B first
+          
+          // Both past or both future: sort by distance from now
+          return distanceA - distanceB;
 
         case 'checkout-oldest':
           // Checkout: Oldest First
@@ -384,10 +388,6 @@ export default function Home() {
         case 'property-az':
           // Property Name: A-Z
           return (a.property_name || '').localeCompare(b.property_name || '');
-
-        case 'property-za':
-          // Property Name: Z-A
-          return (b.property_name || '').localeCompare(a.property_name || '');
 
         default:
           return 0;
@@ -659,11 +659,9 @@ export default function Home() {
                         <SelectContent>
                           <SelectItem value="status-priority">Status Priority</SelectItem>
                           <SelectItem value="checkin-soonest">Next Check-in: Soonest</SelectItem>
-                          <SelectItem value="checkin-latest">Next Check-in: Latest</SelectItem>
                           <SelectItem value="checkout-recent">Checkout: Most Recent</SelectItem>
                           <SelectItem value="checkout-oldest">Checkout: Oldest</SelectItem>
                           <SelectItem value="property-az">Property Name: A-Z</SelectItem>
-                          <SelectItem value="property-za">Property Name: Z-A</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -879,47 +877,8 @@ export default function Home() {
           )}
         </div>
 
-        {/* Natural Language Query */}
-        <div className="mt-8 bg-white dark:bg-slate-900 p-6 rounded-lg border border-slate-200 dark:border-slate-800">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-              Natural Language Query
-            </h2>
-            <span className="text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
-              💡 Tip: Start with <code className="text-purple-600 dark:text-purple-400">/cards</code> for card results
-            </span>
-          </div>
-          
-          <div className="space-y-3">
-            <textarea
-              value={naturalQuery}
-              onChange={(e) => setNaturalQuery(e.target.value)}
-              placeholder="e.g., /cards show unassigned cleanings"
-              rows={3}
-              className="w-full px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono"
-            />
-            
-            <Button
-              onClick={executeNaturalQuery}
-              disabled={isExecutingQuery || !naturalQuery}
-              size="lg"
-              className="w-full text-lg py-6 bg-purple-600 hover:bg-purple-700"
-            >
-              {isExecutingQuery ? '⚡ Generating & Running...' : '⚡ Run Query'}
-            </Button>
-            
-            {generatedSQL && (
-              <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3">
-                <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                  Generated SQL:
-                </p>
-                <pre className="text-xs text-slate-900 dark:text-white font-mono overflow-x-auto">
-                  {generatedSQL}
-                </pre>
-              </div>
-            )}
-          </div>
-        </div>
+        {/* Timeline View */}
+        <Timeline onCardClick={setSelectedCard} />
         </div>
       </div>
 
@@ -1126,6 +1085,15 @@ export default function Home() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Chat Popup for Natural Language Query */}
+      <ChatPopup
+        naturalQuery={naturalQuery}
+        setNaturalQuery={setNaturalQuery}
+        executeNaturalQuery={executeNaturalQuery}
+        isExecutingQuery={isExecutingQuery}
+        generatedSQL={generatedSQL}
+      />
     </div>
   );
 }
