@@ -40,7 +40,22 @@ export default function Home() {
   const [showTimelineWindow, setShowTimelineWindow] = useState(true);
   const [showQueryWindow, setShowQueryWindow] = useState(false);
   const [activeWindow, setActiveWindow] = useState<'cards' | 'timeline' | 'query'>('cards');
+  const [windowOrder, setWindowOrder] = useState<Array<'cards' | 'timeline' | 'query'>>(['cards', 'timeline', 'query']);
   const [showCleaningForm, setShowCleaningForm] = useState(false);
+
+  // Window stacking order management
+  const bringToFront = (window: 'cards' | 'timeline' | 'query') => {
+    setActiveWindow(window);
+    setWindowOrder(prev => {
+      const filtered = prev.filter(w => w !== window);
+      return [...filtered, window]; // Move window to end (top of stack)
+    });
+  };
+
+  const getZIndex = (window: 'cards' | 'timeline' | 'query') => {
+    const position = windowOrder.indexOf(window);
+    return 10 + position; // Base 10, then 11, 12 based on stack position
+  };
 
   // Auto-load data on mount
   useEffect(() => {
@@ -944,7 +959,7 @@ export default function Home() {
                     setShowCardsWindow(false);
                   } else {
                     setShowCardsWindow(true);
-                    setActiveWindow('cards');
+                    bringToFront('cards');
                   }
                 }}
                 variant={showCardsWindow ? 'default' : 'outline'}
@@ -961,7 +976,7 @@ export default function Home() {
                     setShowTimelineWindow(false);
                   } else {
                     setShowTimelineWindow(true);
-                    setActiveWindow('timeline');
+                    bringToFront('timeline');
                   }
                 }}
                 variant={showTimelineWindow ? 'default' : 'outline'}
@@ -978,7 +993,7 @@ export default function Home() {
                     setShowQueryWindow(false);
                   } else {
                     setShowQueryWindow(true);
-                    setActiveWindow('query');
+                    bringToFront('query');
                   }
                 }}
                 variant={showQueryWindow ? 'default' : 'outline'}
@@ -1010,9 +1025,9 @@ export default function Home() {
               title="Cards View"
               defaultPosition={{ x: 50, y: 50 }}
               defaultSize={{ width: '70%', height: '80%' }}
-              zIndex={activeWindow === 'cards' ? 20 : 10}
+              zIndex={getZIndex('cards')}
               onClose={() => setShowCardsWindow(false)}
-              onFocus={() => setActiveWindow('cards')}
+              onFocus={() => bringToFront('cards')}
             >
               {cardsWindowContent}
             </FloatingWindow>
@@ -1025,9 +1040,9 @@ export default function Home() {
               title="Timeline View"
               defaultPosition={{ x: 150, y: 150 }}
               defaultSize={{ width: '70%', height: '80%' }}
-              zIndex={activeWindow === 'timeline' ? 20 : 10}
+              zIndex={getZIndex('timeline')}
               onClose={() => setShowTimelineWindow(false)}
-              onFocus={() => setActiveWindow('timeline')}
+              onFocus={() => bringToFront('timeline')}
             >
               {timelineWindowContent}
             </FloatingWindow>
@@ -1040,9 +1055,9 @@ export default function Home() {
               title="Natural Language Query"
               defaultPosition={{ x: 250, y: 250 }}
               defaultSize={{ width: '60%', height: '70%' }}
-              zIndex={activeWindow === 'query' ? 20 : 10}
+              zIndex={getZIndex('query')}
               onClose={() => setShowQueryWindow(false)}
-              onFocus={() => setActiveWindow('query')}
+              onFocus={() => bringToFront('query')}
             >
               {queryWindowContent}
             </FloatingWindow>
