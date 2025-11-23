@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import CleaningForm from '@/components/CleaningForm';
 
 export default function StaffPage() {
   const [staffName, setStaffName] = useState('');
@@ -16,6 +17,7 @@ export default function StaffPage() {
   const [viewMode, setViewMode] = useState<'cards' | 'json'>('cards');
   const [selectedCard, setSelectedCard] = useState<any>(null);
   const [updatingCardAction, setUpdatingCardAction] = useState(false);
+  const [showCleaningForm, setShowCleaningForm] = useState(false);
 
   const fetchMyCleanings = async () => {
     if (!staffName.trim()) {
@@ -89,6 +91,28 @@ export default function StaffPage() {
       setError(err.message || 'Failed to update card action');
     } finally {
       setUpdatingCardAction(false);
+    }
+  };
+
+  const saveCleaningForm = async (cleaningId: string, formData: any) => {
+    try {
+      const response = await fetch('/api/save-cleaning-form', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cleaningId, formData })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to save form');
+      }
+
+      return result;
+    } catch (err: any) {
+      console.error('Error saving form:', err);
+      setError(err.message || 'Failed to save form');
+      throw err;
     }
   };
 
@@ -400,16 +424,53 @@ export default function StaffPage() {
           {selectedCard && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-2xl">{selectedCard.property_name || 'Unknown Property'}</DialogTitle>
-                <DialogDescription className="flex items-center gap-2 text-base">
-                  <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                  {selectedCard.guest_name || 'No guest'}
-                </DialogDescription>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <DialogTitle className="text-2xl">{selectedCard.property_name || 'Unknown Property'}</DialogTitle>
+                    <DialogDescription className="flex items-center gap-2 text-base">
+                      <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      {selectedCard.guest_name || 'No guest'}
+                    </DialogDescription>
+                  </div>
+                  
+                  {/* Form Icon Button - only show when not viewing form */}
+                  {!showCleaningForm && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowCleaningForm(true)}
+                      className="shrink-0 h-8 w-8 p-0"
+                      title="Open Cleaning Form"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                      </svg>
+                    </Button>
+                  )}
+                </div>
               </DialogHeader>
 
-              <div className="space-y-4">
+              {showCleaningForm ? (
+                <CleaningForm
+                  cleaningId={selectedCard.id}
+                  propertyName={selectedCard.property_name}
+                  formMetadata={selectedCard.form_metadata}
+                  currentAction={selectedCard.card_actions}
+                  availableActions={getAvailableActions(selectedCard.card_actions)}
+                  onSave={async (formData) => {
+                    await saveCleaningForm(selectedCard.id, formData);
+                    setSelectedCard({...selectedCard, form_metadata: formData});
+                    setShowCleaningForm(false);
+                  }}
+                  onActionChange={async (action) => {
+                    await updateCardAction(selectedCard.id, action);
+                  }}
+                  onCancel={() => setShowCleaningForm(false)}
+                />
+              ) : (
+                <div className="space-y-4">
               {/* Dates */}
               <div className="grid grid-cols-1 gap-3">
                 <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
@@ -477,43 +538,8 @@ export default function StaffPage() {
                 </Badge>
               </div>
 
-              {/* Divider */}
-              <div className="border-t border-slate-200 dark:border-slate-800 my-4"></div>
-
-              {/* Current Action Status */}
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
-                <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">Current Action</div>
-                <div className={`text-base font-semibold ${
-                  selectedCard.card_actions === 'in_progress' ? 'text-blue-600 dark:text-blue-400' :
-                  selectedCard.card_actions === 'paused' ? 'text-orange-600 dark:text-orange-400' :
-                  selectedCard.card_actions === 'completed' ? 'text-green-600 dark:text-green-400' :
-                  'text-slate-600 dark:text-slate-400'
-                }`}>
-                  {selectedCard.card_actions === 'not_started' ? 'Not Started' :
-                   selectedCard.card_actions === 'in_progress' ? 'In Progress' :
-                   selectedCard.card_actions === 'paused' ? 'Paused' :
-                   selectedCard.card_actions === 'completed' ? 'Completed' :
-                   'Not Started'}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="space-y-2 mt-4">
-                <div className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Change Action</div>
-                {getAvailableActions(selectedCard.card_actions).map((action) => (
-                  <Button
-                    key={action.value}
-                    onClick={() => updateCardAction(selectedCard.id, action.value)}
-                    disabled={updatingCardAction}
-                    variant="outline"
-                    size="lg"
-                    className="w-full justify-start"
-                  >
-                    {action.label}
-                  </Button>
-                ))}
-              </div>
             </div>
+              )}
 
             <DialogFooter className="border-t pt-4">
               <Button
