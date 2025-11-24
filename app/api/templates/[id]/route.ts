@@ -4,13 +4,15 @@ import { supabase } from '@/lib/supabaseClient';
 // GET single template
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+  
   try {
     const { data, error } = await supabase
       .from('templates')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (error) {
@@ -39,8 +41,10 @@ export async function GET(
 // PUT update template
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+  
   try {
     const body = await request.json();
     const { name, description, fields } = body;
@@ -60,7 +64,7 @@ export async function PUT(
         fields,
         updated_at: new Date().toISOString()
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single();
 
@@ -83,13 +87,15 @@ export async function PUT(
 // DELETE template
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+  
   try {
     const { error } = await supabase
       .from('templates')
       .delete()
-      .eq('id', params.id);
+      .eq('id', id);
 
     if (error) {
       return NextResponse.json(

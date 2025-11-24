@@ -52,12 +52,25 @@ const templateFormSchema = z.object({
   description: z.string().optional(),
 });
 
+interface PropertyAssignment {
+  id?: string;
+  property_name: string;
+  template_id: string | null;
+}
+
 export default function TemplatesPage() {
+  const [activeView, setActiveView] = useState<'templates' | 'assignments'>('templates');
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [fields, setFields] = useState<FieldDefinition[]>([]);
+  
+  // Property assignments state
+  const [properties, setProperties] = useState<string[]>([]);
+  const [assignments, setAssignments] = useState<PropertyAssignment[]>([]);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
+  const [savingAssignment, setSavingAssignment] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof templateFormSchema>>({
     resolver: zodResolver(templateFormSchema),
@@ -70,6 +83,13 @@ export default function TemplatesPage() {
   useEffect(() => {
     fetchTemplates();
   }, []);
+
+  useEffect(() => {
+    if (activeView === 'assignments') {
+      fetchProperties();
+      fetchAssignments();
+    }
+  }, [activeView]);
 
   const fetchTemplates = async () => {
     setLoading(true);
@@ -84,6 +104,62 @@ export default function TemplatesPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchProperties = async () => {
+    try {
+      const res = await fetch('/api/properties');
+      const data = await res.json();
+      if (data.properties) {
+        setProperties(data.properties);
+      }
+    } catch (err) {
+      console.error('Error fetching properties:', err);
+    }
+  };
+
+  const fetchAssignments = async () => {
+    setLoadingAssignments(true);
+    try {
+      const res = await fetch('/api/property-templates');
+      const data = await res.json();
+      if (data.assignments) {
+        setAssignments(data.assignments);
+      }
+    } catch (err) {
+      console.error('Error fetching assignments:', err);
+    } finally {
+      setLoadingAssignments(false);
+    }
+  };
+
+  const saveAssignment = async (propertyName: string, templateId: string | null) => {
+    setSavingAssignment(propertyName);
+    try {
+      const res = await fetch('/api/property-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          property_name: propertyName,
+          template_id: templateId
+        })
+      });
+
+      if (!res.ok) throw new Error('Failed to save assignment');
+      
+      // Refresh assignments
+      await fetchAssignments();
+    } catch (err) {
+      console.error('Error saving assignment:', err);
+      alert('Failed to save template assignment');
+    } finally {
+      setSavingAssignment(null);
+    }
+  };
+
+  const getAssignedTemplate = (propertyName: string): string | null => {
+    const assignment = assignments.find(a => a.property_name === propertyName);
+    return assignment?.template_id || null;
   };
 
   const openCreateDialog = () => {
@@ -193,39 +269,64 @@ export default function TemplatesPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-700 p-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
                 Cleaning Templates
               </h1>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Create and manage cleaning form templates
+                {activeView === 'templates' 
+                  ? 'Create and manage cleaning form templates'
+                  : 'Assign templates to properties'}
               </p>
             </div>
-            <Button onClick={openCreateDialog}>
-              Create New Template
+            {activeView === 'templates' && (
+              <Button onClick={openCreateDialog}>
+                Create New Template
+              </Button>
+            )}
+          </div>
+          
+          {/* View Tabs */}
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setActiveView('templates')}
+              variant={activeView === 'templates' ? 'default' : 'outline'}
+              size="sm"
+            >
+              Templates
+            </Button>
+            <Button
+              onClick={() => setActiveView('assignments')}
+              variant={activeView === 'assignments' ? 'default' : 'outline'}
+              size="sm"
+            >
+              Property Assignments
             </Button>
           </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-6">
-          {loading ? (
-            <div className="text-center py-12 text-slate-500">
-              Loading templates...
-            </div>
-          ) : templates.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-slate-500 dark:text-slate-400 mb-4">
-                No templates yet. Create your first cleaning template!
-              </p>
-              <Button onClick={openCreateDialog}>
-                Create Template
-              </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {templates.map((template) => (
+          {activeView === 'templates' ? (
+            // Templates View
+            <>
+              {loading ? (
+                <div className="text-center py-12 text-slate-500">
+                  Loading templates...
+                </div>
+              ) : templates.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-slate-500 dark:text-slate-400 mb-4">
+                    No templates yet. Create your first cleaning template!
+                  </p>
+                  <Button onClick={openCreateDialog}>
+                    Create Template
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {templates.map((template) => (
                 <Card key={template.id}>
                   <CardHeader>
                     <CardTitle>{template.name}</CardTitle>
@@ -263,6 +364,99 @@ export default function TemplatesPage() {
                 </Card>
               ))}
             </div>
+              )}
+            </>
+          ) : (
+            // Property Assignments View
+            <>
+              {loadingAssignments ? (
+                <div className="text-center py-12 text-slate-500">
+                  Loading property assignments...
+                </div>
+              ) : properties.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-slate-500 dark:text-slate-400">
+                    No properties found. Properties will appear here once you have cleanings scheduled.
+                  </p>
+                </div>
+              ) : (
+                <div className="max-w-4xl mx-auto">
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                            Property Name
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                            Default Template
+                          </th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                        {properties.map((property) => {
+                          const currentTemplate = getAssignedTemplate(property);
+                          const isSaving = savingAssignment === property;
+                          
+                          return (
+                            <tr key={property} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-white">
+                                {property}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                <Select
+                                  value={currentTemplate || 'none'}
+                                  onValueChange={(value) => saveAssignment(property, value === 'none' ? null : value)}
+                                  disabled={isSaving}
+                                >
+                                  <SelectTrigger className="w-full max-w-xs">
+                                    <SelectValue placeholder="Select template..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="none">
+                                      <span className="text-slate-500">No template</span>
+                                    </SelectItem>
+                                    {templates.map((template) => (
+                                      <SelectItem key={template.id} value={template.id}>
+                                        {template.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                                {isSaving ? (
+                                  <span className="text-slate-500">Saving...</span>
+                                ) : currentTemplate ? (
+                                  <Badge variant="secondary">Assigned</Badge>
+                                ) : (
+                                  <Badge variant="outline">Not assigned</Badge>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                    <h3 className="text-sm font-medium text-blue-900 dark:text-blue-300 mb-2">
+                      How it works
+                    </h3>
+                    <ul className="text-sm text-blue-800 dark:text-blue-400 space-y-1">
+                      <li>• Assign a default template to each property</li>
+                      <li>• New cleanings for that property will automatically use the assigned template</li>
+                      <li>• Staff will see custom form fields when filling out cleaning reports</li>
+                      <li>• You can change templates at any time</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
