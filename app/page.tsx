@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import Timeline from '@/components/Timeline';
 import FloatingWindow from '@/components/FloatingWindow';
 import CleaningForm from '@/components/CleaningForm';
+import DynamicCleaningForm from '@/components/DynamicCleaningForm';
 
 export default function Home() {
   const [response, setResponse] = useState<any>(null);
@@ -25,6 +26,8 @@ export default function Home() {
   const [generatedSQL, setGeneratedSQL] = useState('');
   const [isExecutingQuery, setIsExecutingQuery] = useState(false);
   const [selectedCard, setSelectedCard] = useState<any>(null);
+  const [currentTemplate, setCurrentTemplate] = useState<any>(null);
+  const [loadingTemplate, setLoadingTemplate] = useState(false);
   const [updatingCardAction, setUpdatingCardAction] = useState(false);
   const [isEditingAssignment, setIsEditingAssignment] = useState(false);
   const [assignmentLoading, setAssignmentLoading] = useState(false);
@@ -61,6 +64,31 @@ export default function Home() {
   useEffect(() => {
     quickCall('get_property_turnovers');
   }, []);
+
+  // Fetch template when card is selected
+  useEffect(() => {
+    const fetchTemplate = async () => {
+      if (selectedCard?.template_id) {
+        setLoadingTemplate(true);
+        try {
+          const res = await fetch(`/api/templates/${selectedCard.template_id}`);
+          const data = await res.json();
+          if (data.template) {
+            setCurrentTemplate(data.template);
+          }
+        } catch (err) {
+          console.error('Error fetching template:', err);
+          setCurrentTemplate(null);
+        } finally {
+          setLoadingTemplate(false);
+        }
+      } else {
+        setCurrentTemplate(null);
+      }
+    };
+
+    fetchTemplate();
+  }, [selectedCard?.template_id]);
 
   const quickCall = async (rpcName: string) => {
     setLoading(true);
@@ -1105,22 +1133,46 @@ export default function Home() {
               </DialogHeader>
 
               {showCleaningForm ? (
-                <CleaningForm
-                  cleaningId={selectedCard.id}
-                  propertyName={selectedCard.property_name}
-                  formMetadata={selectedCard.form_metadata}
-                  currentAction={selectedCard.card_actions}
-                  availableActions={getAvailableActions(selectedCard.card_actions)}
-                  onSave={async (formData) => {
-                    await saveCleaningForm(selectedCard.id, formData);
-                    setSelectedCard({...selectedCard, form_metadata: formData});
-                    setShowCleaningForm(false);
-                  }}
-                  onActionChange={async (action) => {
-                    await updateCardAction(selectedCard.id, action);
-                  }}
-                  onCancel={() => setShowCleaningForm(false)}
-                />
+                loadingTemplate ? (
+                  <div className="flex items-center justify-center py-12">
+                    <p className="text-slate-500">Loading form template...</p>
+                  </div>
+                ) : currentTemplate ? (
+                  <DynamicCleaningForm
+                    cleaningId={selectedCard.id}
+                    propertyName={selectedCard.property_name}
+                    template={currentTemplate}
+                    formMetadata={selectedCard.form_metadata}
+                    currentAction={selectedCard.card_actions}
+                    availableActions={getAvailableActions(selectedCard.card_actions)}
+                    onSave={async (formData) => {
+                      await saveCleaningForm(selectedCard.id, formData);
+                      setSelectedCard({...selectedCard, form_metadata: formData});
+                      setShowCleaningForm(false);
+                    }}
+                    onActionChange={async (action) => {
+                      await updateCardAction(selectedCard.id, action);
+                    }}
+                    onCancel={() => setShowCleaningForm(false)}
+                  />
+                ) : (
+                  <CleaningForm
+                    cleaningId={selectedCard.id}
+                    propertyName={selectedCard.property_name}
+                    formMetadata={selectedCard.form_metadata}
+                    currentAction={selectedCard.card_actions}
+                    availableActions={getAvailableActions(selectedCard.card_actions)}
+                    onSave={async (formData) => {
+                      await saveCleaningForm(selectedCard.id, formData);
+                      setSelectedCard({...selectedCard, form_metadata: formData});
+                      setShowCleaningForm(false);
+                    }}
+                    onActionChange={async (action) => {
+                      await updateCardAction(selectedCard.id, action);
+                    }}
+                    onCancel={() => setShowCleaningForm(false)}
+                  />
+                )
               ) : (
                 <div className="space-y-4">
               {/* Dates */}
