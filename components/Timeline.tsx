@@ -154,6 +154,19 @@ export default function Timeline({ onCardClick }: TimelineProps) {
     return { start: startIdx, span };
   };
 
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'needs_cleaning':
+        return 'bg-red-400 hover:bg-red-500';
+      case 'cleaning_scheduled':
+        return 'bg-yellow-400 hover:bg-yellow-500';
+      case 'cleaning_complete':
+        return 'bg-green-400 hover:bg-green-500';
+      default:
+        return 'bg-rose-400 hover:bg-rose-500'; // Fallback
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -271,7 +284,7 @@ export default function Timeline({ onCardClick }: TimelineProps) {
                           return (
                             <div
                               onClick={() => onCardClick(startingReservation)}
-                              className="absolute bg-rose-400 hover:bg-rose-500 border border-white dark:border-slate-800 rounded px-2 cursor-pointer transition-all duration-150 hover:shadow-lg hover:z-30 text-white text-xs font-medium flex items-center justify-center"
+                              className={`absolute border border-white dark:border-slate-800 rounded px-2 cursor-pointer transition-all duration-150 hover:shadow-lg hover:z-30 text-white text-xs font-medium flex items-center justify-center ${getStatusColor(startingReservation.property_clean_status)}`}
                               style={{
                                 left: '4px',
                                 width: span === 1 ? 'calc(100% - 8px)' : `calc(${span * 100}% + ${(span - 1) * 1}px - 8px)`,

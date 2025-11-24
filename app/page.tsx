@@ -325,9 +325,7 @@ export default function Home() {
     setFilters({
       cleanStatus: [],
       cardActions: [],
-      staff: [],
-      checkout: [],
-      checkin: []
+      staff: []
     });
   };
 
