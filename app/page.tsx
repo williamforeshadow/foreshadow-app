@@ -28,6 +28,7 @@ export default function Home() {
   const [selectedCard, setSelectedCard] = useState<any>(null);
   const [currentTemplate, setCurrentTemplate] = useState<any>(null);
   const [loadingTemplate, setLoadingTemplate] = useState(false);
+  const [allTemplates, setAllTemplates] = useState<any[]>([]);
   const [updatingCardAction, setUpdatingCardAction] = useState(false);
   const [isEditingAssignment, setIsEditingAssignment] = useState(false);
   const [assignmentLoading, setAssignmentLoading] = useState(false);
@@ -63,7 +64,20 @@ export default function Home() {
   // Auto-load data on mount
   useEffect(() => {
     quickCall('get_property_turnovers');
+    fetchAllTemplates();
   }, []);
+
+  const fetchAllTemplates = async () => {
+    try {
+      const res = await fetch('/api/templates');
+      const data = await res.json();
+      if (data.templates) {
+        setAllTemplates(data.templates);
+      }
+    } catch (err) {
+      console.error('Error fetching templates:', err);
+    }
+  };
 
   // Fetch template when card is selected
   useEffect(() => {
@@ -306,6 +320,57 @@ export default function Home() {
       console.error('Error saving form:', err);
       setError(err.message || 'Failed to save form');
       throw err;
+    }
+  };
+
+  const openCleaningForm = async () => {
+    // If card has a template_id from property default but not saved to cleanings table yet, save it
+    if (selectedCard && selectedCard.template_id) {
+      try {
+        await fetch('/api/update-template', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cleaningId: selectedCard.id,
+            templateId: selectedCard.template_id
+          })
+        });
+      } catch (err) {
+        console.error('Error saving template to cleaning:', err);
+      }
+    }
+    setShowCleaningForm(true);
+  };
+
+  const changeTemplate = async (templateId: string | null) => {
+    if (!selectedCard) return;
+    
+    try {
+      await fetch('/api/update-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cleaningId: selectedCard.id,
+          templateId
+        })
+      });
+
+      // Update local state
+      setSelectedCard({ ...selectedCard, template_id: templateId });
+      
+      // Refresh to fetch new template
+      if (templateId) {
+        const res = await fetch(`/api/templates/${templateId}`);
+        const data = await res.json();
+        if (data.template) {
+          setCurrentTemplate(data.template);
+        }
+      } else {
+        setCurrentTemplate(null);
+      }
+    } catch (err) {
+      console.error('Error changing template:', err);
+      alert('Failed to change template');
     }
   };
 
@@ -1120,7 +1185,7 @@ export default function Home() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => setShowCleaningForm(true)}
+                      onClick={openCleaningForm}
                       className="shrink-0 h-8 w-8 p-0"
                       title="Open Cleaning Form"
                     >
@@ -1131,6 +1196,35 @@ export default function Home() {
                   )}
                 </div>
               </DialogHeader>
+
+              {/* Template Selector - Only show when NOT in form view */}
+              {!showCleaningForm && allTemplates.length > 0 && (
+                <div className="px-6 pb-4 border-b border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center gap-3">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Template:
+                    </label>
+                    <Select
+                      value={selectedCard.template_id || 'none'}
+                      onValueChange={(value) => changeTemplate(value === 'none' ? null : value)}
+                    >
+                      <SelectTrigger className="w-64">
+                        <SelectValue placeholder="Select template..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">
+                          <span className="text-slate-500">No template</span>
+                        </SelectItem>
+                        {allTemplates.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
 
               {showCleaningForm ? (
                 loadingTemplate ? (
