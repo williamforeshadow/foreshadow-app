@@ -19,7 +19,6 @@ export default function StaffPage() {
   const [selectedCard, setSelectedCard] = useState<any>(null);
   const [currentTemplate, setCurrentTemplate] = useState<any>(null);
   const [loadingTemplate, setLoadingTemplate] = useState(false);
-  const [allTemplates, setAllTemplates] = useState<any[]>([]);
   const [updatingCardAction, setUpdatingCardAction] = useState(false);
   const [showCleaningForm, setShowCleaningForm] = useState(false);
 
@@ -47,22 +46,6 @@ export default function StaffPage() {
 
     fetchTemplate();
   }, [selectedCard?.template_id]);
-
-  const fetchAllTemplates = async () => {
-    try {
-      const res = await fetch('/api/templates');
-      const data = await res.json();
-      if (data.templates) {
-        setAllTemplates(data.templates);
-      }
-    } catch (err) {
-      console.error('Error fetching templates:', err);
-    }
-  };
-
-  useEffect(() => {
-    fetchAllTemplates();
-  }, []);
 
   const fetchMyCleanings = async () => {
     if (!staffName.trim()) {
@@ -178,38 +161,6 @@ export default function StaffPage() {
       }
     }
     setShowCleaningForm(true);
-  };
-
-  const changeTemplate = async (templateId: string | null) => {
-    if (!selectedCard) return;
-    
-    try {
-      await fetch('/api/update-template', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cleaningId: selectedCard.id,
-          templateId
-        })
-      });
-
-      // Update local state
-      setSelectedCard({ ...selectedCard, template_id: templateId });
-      
-      // Refresh to fetch new template
-      if (templateId) {
-        const res = await fetch(`/api/templates/${templateId}`);
-        const data = await res.json();
-        if (data.template) {
-          setCurrentTemplate(data.template);
-        }
-      } else {
-        setCurrentTemplate(null);
-      }
-    } catch (err) {
-      console.error('Error changing template:', err);
-      alert('Failed to change template');
-    }
   };
 
   const getAvailableActions = (currentAction: string) => {
@@ -547,35 +498,6 @@ export default function StaffPage() {
                   )}
                 </div>
               </DialogHeader>
-
-              {/* Template Selector - Only show when NOT in form view */}
-              {!showCleaningForm && allTemplates.length > 0 && (
-                <div className="px-6 pb-4 border-b border-slate-200 dark:border-slate-700">
-                  <div className="flex items-center gap-3">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Template:
-                    </label>
-                    <Select
-                      value={selectedCard.template_id || 'none'}
-                      onValueChange={(value) => changeTemplate(value === 'none' ? null : value)}
-                    >
-                      <SelectTrigger className="w-64">
-                        <SelectValue placeholder="Select template..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">
-                          <span className="text-slate-500">No template</span>
-                        </SelectItem>
-                        {allTemplates.map((template) => (
-                          <SelectItem key={template.id} value={template.id}>
-                            {template.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
 
               {showCleaningForm ? (
                 loadingTemplate ? (
