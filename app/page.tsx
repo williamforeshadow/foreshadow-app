@@ -51,7 +51,7 @@ export default function Home() {
   const [maintenanceCards, setMaintenanceCards] = useState<any[]>([]);
   const [showCreateMaintenance, setShowCreateMaintenance] = useState(false);
   const [maintenanceForm, setMaintenanceForm] = useState({
-    property_name: '',
+    property_name: 'none',
     title: '',
     description: '',
     assigned_staff: '',
@@ -180,7 +180,10 @@ export default function Home() {
       const res = await fetch('/api/maintenance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(maintenanceForm)
+        body: JSON.stringify({
+          ...maintenanceForm,
+          property_name: maintenanceForm.property_name === 'none' ? null : maintenanceForm.property_name
+        })
       });
       const data = await res.json();
       
@@ -191,7 +194,7 @@ export default function Home() {
         await fetchMaintenanceCards();
         // Reset form and close dialog
         setMaintenanceForm({
-          property_name: '',
+          property_name: 'none',
           title: '',
           description: '',
           assigned_staff: '',
@@ -1654,7 +1657,7 @@ export default function Home() {
                   <SelectValue placeholder="Select property or leave blank" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None (General)</SelectItem>
+                  <SelectItem value="none">None (General)</SelectItem>
                   {allProperties.map((property) => (
                     <SelectItem key={property} value={property}>
                       {property}
