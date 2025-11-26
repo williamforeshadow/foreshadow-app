@@ -29,6 +29,7 @@ export default function Home() {
   const [currentTemplate, setCurrentTemplate] = useState<any>(null);
   const [loadingTemplate, setLoadingTemplate] = useState(false);
   const [allTemplates, setAllTemplates] = useState<any[]>([]);
+  const [allProperties, setAllProperties] = useState<string[]>([]);
   const [updatingCardAction, setUpdatingCardAction] = useState(false);
   const [isEditingAssignment, setIsEditingAssignment] = useState(false);
   const [assignmentLoading, setAssignmentLoading] = useState(false);
@@ -46,6 +47,18 @@ export default function Home() {
   const [activeWindow, setActiveWindow] = useState<'cards' | 'timeline' | 'query'>('cards');
   const [windowOrder, setWindowOrder] = useState<Array<'cards' | 'timeline' | 'query'>>(['cards', 'timeline', 'query']);
   const [showCleaningForm, setShowCleaningForm] = useState(false);
+  const [cardViewMode, setCardViewMode] = useState<'cleanings' | 'maintenance'>('cleanings');
+  const [maintenanceCards, setMaintenanceCards] = useState<any[]>([]);
+  const [showCreateMaintenance, setShowCreateMaintenance] = useState(false);
+  const [maintenanceForm, setMaintenanceForm] = useState({
+    property_name: '',
+    title: '',
+    description: '',
+    assigned_staff: '',
+    scheduled_start: '',
+    priority: 'medium'
+  });
+  const [creatingMaintenance, setCreatingMaintenance] = useState(false);
 
   // Window stacking order management
   const bringToFront = (window: 'cards' | 'timeline' | 'query') => {
@@ -65,6 +78,7 @@ export default function Home() {
   useEffect(() => {
     quickCall('get_property_turnovers');
     fetchAllTemplates();
+    fetchAllProperties();
   }, []);
 
   const fetchAllTemplates = async () => {
@@ -76,6 +90,18 @@ export default function Home() {
       }
     } catch (err) {
       console.error('Error fetching templates:', err);
+    }
+  };
+
+  const fetchAllProperties = async () => {
+    try {
+      const res = await fetch('/api/properties');
+      const data = await res.json();
+      if (data.properties) {
+        setAllProperties(data.properties);
+      }
+    } catch (err) {
+      console.error('Error fetching properties:', err);
     }
   };
 
@@ -121,6 +147,63 @@ export default function Home() {
       setError(err.message || 'Failed to call RPC function');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchMaintenanceCards = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/maintenance');
+      const data = await res.json();
+      if (data.error) {
+        setError(data.error);
+      } else {
+        setMaintenanceCards(data.data || []);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch maintenance cards');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createMaintenance = async () => {
+    if (!maintenanceForm.title.trim()) {
+      setError('Title is required');
+      return;
+    }
+
+    setCreatingMaintenance(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/maintenance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(maintenanceForm)
+      });
+      const data = await res.json();
+      
+      if (data.error) {
+        setError(data.error);
+      } else {
+        // Refresh maintenance cards
+        await fetchMaintenanceCards();
+        // Reset form and close dialog
+        setMaintenanceForm({
+          property_name: '',
+          title: '',
+          description: '',
+          assigned_staff: '',
+          scheduled_start: '',
+          priority: 'medium'
+        });
+        setShowCreateMaintenance(false);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to create maintenance card');
+    } finally {
+      setCreatingMaintenance(false);
     }
   };
 
@@ -256,6 +339,45 @@ export default function Home() {
       );
     } catch (err: any) {
       setError(err.message || 'Failed to update card action');
+    } finally {
+      setUpdatingCardAction(false);
+    }
+  };
+
+  const updateMaintenanceAction = async (maintenanceId: string, newAction: string) => {
+    setUpdatingCardAction(true);
+    try {
+      const response = await fetch('/api/update-maintenance-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ maintenanceId, action: newAction })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update maintenance action');
+      }
+
+      // Update the local state
+      const updatedCard = result.data;
+      
+      setMaintenanceCards((prevCards: any[]) => 
+        prevCards.map((card: any) => 
+          card.id === maintenanceId 
+            ? { ...card, ...updatedCard }
+            : card
+        )
+      );
+
+      // Also update the selected card if still open
+      setSelectedCard((prev: any) => 
+        prev?.id === maintenanceId 
+          ? { ...prev, ...updatedCard }
+          : prev
+      );
+    } catch (err: any) {
+      setError(err.message || 'Failed to update maintenance action');
     } finally {
       setUpdatingCardAction(false);
     }
@@ -563,6 +685,20 @@ export default function Home() {
     }
   };
 
+  const getMaintenanceCardColor = (cardAction: string) => {
+    switch (cardAction) {
+      case 'not_started':
+        return 'bg-red-50/80 dark:bg-red-950/30 border-red-200 dark:border-red-900';
+      case 'in_progress':
+      case 'paused':
+        return 'bg-yellow-50/80 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-900';
+      case 'completed':
+        return 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900';
+      default:
+        return 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700';
+    }
+  };
+
   const getSortPriority = (status: string) => {
     switch (status) {
       case 'needs_cleaning':
@@ -577,15 +713,15 @@ export default function Home() {
   };
 
   const renderCards = () => {
-    if (!response) return null;
-    
-    // Ensure response is an array
-    let items = Array.isArray(response) ? response : [response];
+    // Get items based on view mode
+    let items = cardViewMode === 'cleanings' 
+      ? (response ? (Array.isArray(response) ? response : [response]) : [])
+      : maintenanceCards;
     
     if (items.length === 0) {
       return (
         <div className="text-center py-12 text-slate-500 dark:text-slate-400">
-          No results found
+          {cardViewMode === 'cleanings' ? 'No cleanings found' : 'No maintenance cards found'}
         </div>
       );
     }
@@ -611,46 +747,77 @@ export default function Home() {
           <Card
             key={item.cleaning_id || item.id || index}
             onClick={() => setSelectedCard(item)}
-            className={`cursor-pointer hover:shadow-xl transition-all duration-200 ${getCardBackgroundColor(item.property_clean_status)}`}
+            className={`cursor-pointer hover:shadow-xl transition-all duration-200 ${
+              cardViewMode === 'cleanings' 
+                ? getCardBackgroundColor(item.property_clean_status)
+                : getMaintenanceCardColor(item.card_actions)
+            }`}
           >
             <CardHeader>
-              <CardTitle>{item.property_name || 'Unknown Property'}</CardTitle>
+              <CardTitle>{item.property_name || (cardViewMode === 'maintenance' ? item.title : 'Unknown Property')}</CardTitle>
               <CardDescription className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                {item.guest_name || <span className="italic opacity-60">No guest</span>}
+                {cardViewMode === 'cleanings' ? (
+                  <>
+                    <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    {item.guest_name || <span className="italic opacity-60">No guest</span>}
+                  </>
+                ) : (
+                  <span className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">
+                    {item.description || <span className="italic opacity-60">No description</span>}
+                  </span>
+                )}
               </CardDescription>
             </CardHeader>
 
             <CardContent className="space-y-4">
               {/* Dates */}
               <div className="space-y-2.5">
-                {/* Checked Out */}
-                <div className="flex items-center gap-3">
-                  <svg className="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Checked out</div>
-                    <div className="text-sm truncate font-medium text-slate-900 dark:text-white">
-                      {item.check_out ? formatDate(item.check_out) : <span className="italic opacity-60">Not set</span>}
+                {/* Checked Out - Only for cleanings */}
+                {cardViewMode === 'cleanings' && (
+                  <div className="flex items-center gap-3">
+                    <svg className="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Checked out</div>
+                      <div className="text-sm truncate font-medium text-slate-900 dark:text-white">
+                        {item.check_out ? formatDate(item.check_out) : <span className="italic opacity-60">Not set</span>}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
-                {/* Next Check In */}
-                <div className="flex items-center gap-3">
-                  <svg className="w-4 h-4 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                  </svg>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Next check in</div>
-                    <div className="text-sm truncate font-medium text-slate-900 dark:text-white">
-                      {item.next_check_in ? formatDate(item.next_check_in) : <span className="italic opacity-60">Not set</span>}
+                {/* Next Check In - Only for cleanings */}
+                {cardViewMode === 'cleanings' && (
+                  <div className="flex items-center gap-3">
+                    <svg className="w-4 h-4 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Next check in</div>
+                      <div className="text-sm truncate font-medium text-slate-900 dark:text-white">
+                        {item.next_check_in ? formatDate(item.next_check_in) : <span className="italic opacity-60">Not set</span>}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
+
+                {/* Priority - Only for maintenance */}
+                {cardViewMode === 'maintenance' && (
+                  <div className="flex items-center gap-3">
+                    <svg className="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Priority</div>
+                      <div className="text-sm truncate font-medium text-slate-900 dark:text-white">
+                        {item.priority ? item.priority.charAt(0).toUpperCase() + item.priority.slice(1) : 'Medium'}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Scheduled Start */}
                 <div className="flex items-center gap-3">
@@ -691,26 +858,28 @@ export default function Home() {
 
               {/* Status Badges */}
               <div className="flex flex-wrap gap-2 pt-2">
-                <Badge 
-                  variant={
-                    item.property_clean_status === 'needs_cleaning' ? 'destructive' :
-                    item.property_clean_status === 'cleaning_complete' ? 'default' : 'secondary'
-                  }
-                  className={
-                    item.property_clean_status === 'needs_cleaning' 
-                      ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-300'
-                      : item.property_clean_status === 'cleaning_scheduled'
-                      ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-300'
-                      : item.property_clean_status === 'cleaning_complete'
-                      ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border-emerald-300'
-                      : ''
-                  }
-                >
-                  {item.property_clean_status === 'needs_cleaning' ? 'Needs Cleaning' :
-                   item.property_clean_status === 'cleaning_scheduled' ? 'Scheduled' :
-                   item.property_clean_status === 'cleaning_complete' ? 'Complete' :
-                   'Unknown'}
-                </Badge>
+                {cardViewMode === 'cleanings' && (
+                  <Badge 
+                    variant={
+                      item.property_clean_status === 'needs_cleaning' ? 'destructive' :
+                      item.property_clean_status === 'cleaning_complete' ? 'default' : 'secondary'
+                    }
+                    className={
+                      item.property_clean_status === 'needs_cleaning' 
+                        ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-300'
+                        : item.property_clean_status === 'cleaning_scheduled'
+                        ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-300'
+                        : item.property_clean_status === 'cleaning_complete'
+                        ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border-emerald-300'
+                        : ''
+                    }
+                  >
+                    {item.property_clean_status === 'needs_cleaning' ? 'Needs Cleaning' :
+                     item.property_clean_status === 'cleaning_scheduled' ? 'Scheduled' :
+                     item.property_clean_status === 'cleaning_complete' ? 'Complete' :
+                     'Unknown'}
+                  </Badge>
+                )}
                 
                 <Badge variant={item.assigned_staff ? 'default' : 'outline'}>
                   {item.assigned_staff ? item.assigned_staff : 'Unassigned'}
@@ -726,8 +895,45 @@ export default function Home() {
   // Memoize window contents to prevent re-renders when only z-index changes
   const cardsWindowContent = useMemo(() => (
     <div className="p-6 space-y-4">
+      {/* Card Type Toggle */}
+      <div className="flex items-center gap-2 mb-4">
+        <Button
+          variant={cardViewMode === 'cleanings' ? 'default' : 'outline'}
+          onClick={() => {
+            setCardViewMode('cleanings');
+            if (!response) {
+              quickCall('get_property_turnovers');
+            }
+          }}
+          size="sm"
+        >
+          Cleanings
+        </Button>
+        <Button
+          variant={cardViewMode === 'maintenance' ? 'default' : 'outline'}
+          onClick={() => {
+            setCardViewMode('maintenance');
+            fetchMaintenanceCards();
+          }}
+          size="sm"
+        >
+          Maintenance
+        </Button>
+        
+        {/* Create Maintenance Button - only show in maintenance mode */}
+        {cardViewMode === 'maintenance' && (
+          <Button
+            onClick={() => setShowCreateMaintenance(true)}
+            size="sm"
+            className="ml-auto"
+          >
+            + Create Maintenance
+          </Button>
+        )}
+      </div>
+
       {/* Response Display */}
-      {response !== null && (
+      {((cardViewMode === 'cleanings' && response !== null) || (cardViewMode === 'maintenance' && maintenanceCards.length > 0)) && (
         <div className="space-y-3">
           {/* Filter and Sort Bar */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4">
@@ -1171,17 +1377,28 @@ export default function Home() {
               <DialogHeader>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
-                    <DialogTitle className="text-2xl">{selectedCard.property_name || 'Unknown Property'}</DialogTitle>
+                    <DialogTitle className="text-2xl">
+                      {selectedCard.title || selectedCard.property_name || 'Unknown'}
+                    </DialogTitle>
                     <DialogDescription className="flex items-center gap-2 text-base">
-                      <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      {selectedCard.guest_name || 'No guest'}
+                      {/* Show guest name for cleanings, description for maintenance */}
+                      {selectedCard.guest_name ? (
+                        <>
+                          <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          {selectedCard.guest_name}
+                        </>
+                      ) : (
+                        <span className="text-slate-600 dark:text-slate-400">
+                          {selectedCard.description || 'No description'}
+                        </span>
+                      )}
                     </DialogDescription>
                   </div>
                   
-                  {/* Form Icon Button - only show when not viewing form */}
-                  {!showCleaningForm && (
+                  {/* Form Icon Button - only show for cleanings when not viewing form */}
+                  {!showCleaningForm && selectedCard.guest_name && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1197,8 +1414,8 @@ export default function Home() {
                 </div>
               </DialogHeader>
 
-              {/* Template Selector - Only show when NOT in form view */}
-              {!showCleaningForm && allTemplates.length > 0 && (
+              {/* Template Selector - Only show for cleanings when NOT in form view */}
+              {!showCleaningForm && selectedCard.guest_name && allTemplates.length > 0 && (
                 <div className="px-6 pb-4 border-b border-slate-200 dark:border-slate-700">
                   <div className="flex items-center gap-3">
                     <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -1412,6 +1629,123 @@ export default function Home() {
             </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Maintenance Dialog */}
+      <Dialog open={showCreateMaintenance} onOpenChange={setShowCreateMaintenance}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Create Maintenance Card</DialogTitle>
+            <DialogDescription>
+              Create a new maintenance task for a property or general item.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Property */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Property (Optional)</label>
+              <Select
+                value={maintenanceForm.property_name}
+                onValueChange={(value) => setMaintenanceForm({...maintenanceForm, property_name: value})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select property or leave blank" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None (General)</SelectItem>
+                  {allProperties.map((property) => (
+                    <SelectItem key={property} value={property}>
+                      {property}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Title */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Title *</label>
+              <input
+                type="text"
+                value={maintenanceForm.title}
+                onChange={(e) => setMaintenanceForm({...maintenanceForm, title: e.target.value})}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                placeholder="e.g., Fix leaky faucet"
+                required
+              />
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Description</label>
+              <textarea
+                value={maintenanceForm.description}
+                onChange={(e) => setMaintenanceForm({...maintenanceForm, description: e.target.value})}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white min-h-[80px]"
+                placeholder="Additional details..."
+              />
+            </div>
+
+            {/* Assigned Staff */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Assigned Staff</label>
+              <input
+                type="text"
+                value={maintenanceForm.assigned_staff}
+                onChange={(e) => setMaintenanceForm({...maintenanceForm, assigned_staff: e.target.value})}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                placeholder="Staff member name"
+              />
+            </div>
+
+            {/* Scheduled Start */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Scheduled Start</label>
+              <input
+                type="datetime-local"
+                value={maintenanceForm.scheduled_start}
+                onChange={(e) => setMaintenanceForm({...maintenanceForm, scheduled_start: e.target.value})}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+              />
+            </div>
+
+            {/* Priority */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Priority</label>
+              <Select
+                value={maintenanceForm.priority}
+                onValueChange={(value) => setMaintenanceForm({...maintenanceForm, priority: value})}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="urgent">Urgent</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowCreateMaintenance(false)}
+              disabled={creatingMaintenance}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={createMaintenance}
+              disabled={creatingMaintenance}
+            >
+              {creatingMaintenance ? 'Creating...' : 'Create Maintenance'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

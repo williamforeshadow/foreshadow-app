@@ -512,7 +512,7 @@ export default function TemplatesPage() {
                 <label className="block text-sm font-medium text-slate-900 dark:text-white">
                   Form Fields
                 </label>
-                <Button onClick={addField} size="sm" variant="outline">
+                <Button onClick={addField} size="sm" variant="outline" type="button">
                   + Add Field
                 </Button>
               </div>
@@ -586,6 +586,7 @@ export default function TemplatesPage() {
                           disabled={index === 0}
                           variant="ghost"
                           size="sm"
+                          type="button"
                         >
                           ↑
                         </Button>
@@ -594,6 +595,7 @@ export default function TemplatesPage() {
                           disabled={index === fields.length - 1}
                           variant="ghost"
                           size="sm"
+                          type="button"
                         >
                           ↓
                         </Button>
@@ -601,6 +603,7 @@ export default function TemplatesPage() {
                           onClick={() => removeField(index)}
                           variant="ghost"
                           size="sm"
+                          type="button"
                           className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900 ml-auto"
                         >
                           Remove
