@@ -163,12 +163,11 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/maintenance');
-      const data = await res.json();
-      if (data.error) {
-        setError(data.error);
+      const { data, error: rpcError } = await supabase.rpc('get_maintenance_cards');
+      if (rpcError) {
+        setError(rpcError.message);
       } else {
-        setMaintenanceCards(data.data || []);
+        setMaintenanceCards(data || []);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to fetch maintenance cards');
@@ -1327,30 +1326,78 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
+
+                <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <svg className={`w-5 h-5 shrink-0 ${
+                    selectedCard.occupancy_status === 'occupied' ? 'text-orange-500' : 
+                    selectedCard.occupancy_status === 'general' ? 'text-slate-400' : 
+                    'text-slate-400'
+                  }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  </svg>
+                  <div className="flex-1">
+                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Occupancy</div>
+                    <Badge 
+                      variant={selectedCard.occupancy_status === 'occupied' ? 'default' : 'outline'}
+                      className={`text-sm ${
+                        selectedCard.occupancy_status === 'occupied' 
+                          ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-300' 
+                          : selectedCard.occupancy_status === 'general'
+                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300'
+                      }`}
+                    >
+                      {selectedCard.occupancy_status === 'occupied' ? 'Occupied' : 
+                       selectedCard.occupancy_status === 'general' ? 'General' : 
+                       'Vacant'}
+                    </Badge>
+                  </div>
+                </div>
               </div>
 
               {/* Status Badges */}
               <div className="flex flex-wrap gap-2 pt-2">
-                <Badge
-                  variant={
-                    selectedCard.property_clean_status === 'needs_cleaning' ? 'destructive' :
-                    selectedCard.property_clean_status === 'cleaning_complete' ? 'default' : 'secondary'
-                  }
-                  className={`text-sm py-1.5 ${
-                    selectedCard.property_clean_status === 'needs_cleaning' 
-                      ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-300'
-                      : selectedCard.property_clean_status === 'cleaning_scheduled'
-                      ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-300'
-                      : selectedCard.property_clean_status === 'cleaning_complete'
-                      ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border-emerald-300'
-                      : ''
-                  }`}
-                >
-                  {selectedCard.property_clean_status === 'needs_cleaning' ? 'Needs Cleaning' :
-                   selectedCard.property_clean_status === 'cleaning_scheduled' ? 'Scheduled' :
-                   selectedCard.property_clean_status === 'cleaning_complete' ? 'Complete' :
-                   'Unknown'}
-                </Badge>
+                {/* Show clean status for cleanings, priority for maintenance */}
+                {selectedCard.guest_name ? (
+                  <Badge
+                    variant={
+                      selectedCard.property_clean_status === 'needs_cleaning' ? 'destructive' :
+                      selectedCard.property_clean_status === 'cleaning_complete' ? 'default' : 'secondary'
+                    }
+                    className={`text-sm py-1.5 ${
+                      selectedCard.property_clean_status === 'needs_cleaning' 
+                        ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-300'
+                        : selectedCard.property_clean_status === 'cleaning_scheduled'
+                        ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-300'
+                        : selectedCard.property_clean_status === 'cleaning_complete'
+                        ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border-emerald-300'
+                        : ''
+                    }`}
+                  >
+                    {selectedCard.property_clean_status === 'needs_cleaning' ? 'Needs Cleaning' :
+                     selectedCard.property_clean_status === 'cleaning_scheduled' ? 'Scheduled' :
+                     selectedCard.property_clean_status === 'cleaning_complete' ? 'Complete' :
+                     'Unknown'}
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant={
+                      selectedCard.priority === 'urgent' ? 'destructive' :
+                      selectedCard.priority === 'high' ? 'default' : 'secondary'
+                    }
+                    className={`text-sm py-1.5 capitalize ${
+                      selectedCard.priority === 'urgent' 
+                        ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-300'
+                        : selectedCard.priority === 'high'
+                        ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-300'
+                        : selectedCard.priority === 'low'
+                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300'
+                        : 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-300'
+                    }`}
+                  >
+                    {selectedCard.priority || 'Medium'} Priority
+                  </Badge>
+                )}
                 
                 <div className="flex-1">
                   {isEditingAssignment ? (
