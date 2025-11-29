@@ -1145,7 +1145,7 @@ export default function Home() {
         </div>
       )}
     </div>
-  ), [response, viewMode, showFilters, filters, sortBy]);
+  ), [response, viewMode, showFilters, filters, sortBy, cardViewMode, maintenanceCards]);
 
   const timelineWindowContent = useMemo(() => (
     <Timeline onCardClick={setSelectedCard} />
