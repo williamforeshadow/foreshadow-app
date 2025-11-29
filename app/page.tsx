@@ -13,6 +13,8 @@ import Timeline from '@/components/Timeline';
 import FloatingWindow from '@/components/FloatingWindow';
 import CleaningForm from '@/components/CleaningForm';
 import DynamicCleaningForm from '@/components/DynamicCleaningForm';
+import CleaningCards from '@/components/CleaningCards';
+import MaintenanceCards from '@/components/MaintenanceCards';
 
 export default function Home() {
   const [response, setResponse] = useState<any>(null);
@@ -41,6 +43,13 @@ export default function Home() {
     staff: [] as string[]
   });
   const [sortBy, setSortBy] = useState('status-priority');
+  const [maintenanceFilters, setMaintenanceFilters] = useState({
+    priority: [] as string[],
+    cardActions: [] as string[],
+    staff: [] as string[],
+    property: [] as string[]
+  });
+  const [maintenanceSortBy, setMaintenanceSortBy] = useState('priority-high');
   const [showCardsWindow, setShowCardsWindow] = useState(true);
   const [showTimelineWindow, setShowTimelineWindow] = useState(true);
   const [showQueryWindow, setShowQueryWindow] = useState(false);
@@ -539,12 +548,30 @@ export default function Home() {
     }));
   };
 
+  const toggleMaintenanceFilter = (category: keyof typeof maintenanceFilters, value: string) => {
+    setMaintenanceFilters(prev => ({
+      ...prev,
+      [category]: prev[category].includes(value)
+        ? prev[category].filter(v => v !== value)
+        : [...prev[category], value]
+    }));
+  };
+
   const clearAllFilters = () => {
-    setFilters({
-      cleanStatus: [],
-      cardActions: [],
-      staff: []
-    });
+    if (cardViewMode === 'cleanings') {
+      setFilters({
+        cleanStatus: [],
+        cardActions: [],
+        staff: []
+      });
+    } else {
+      setMaintenanceFilters({
+        priority: [],
+        cardActions: [],
+        staff: [],
+        property: []
+      });
+    }
   };
 
   const getUniqueStaff = (items: any[]) => {
@@ -554,113 +581,10 @@ export default function Home() {
     return Array.from(new Set(staff)).sort();
   };
 
-  const applyFilters = (items: any[]) => {
-    return items.filter(item => {
-      // Clean Status filter
-      if (filters.cleanStatus.length > 0) {
-        if (!filters.cleanStatus.includes(item.property_clean_status || '')) {
-          return false;
-        }
-      }
-      
-      // Card Actions filter
-      if (filters.cardActions.length > 0) {
-        if (!filters.cardActions.includes(item.card_actions || 'not_started')) {
-          return false;
-        }
-      }
-      
-      // Staff filter
-      if (filters.staff.length > 0) {
-        if (filters.staff.includes('unassigned')) {
-          if (item.assigned_staff !== null && item.assigned_staff !== undefined) {
-            if (!filters.staff.includes(item.assigned_staff)) {
-              return false;
-            }
-          }
-        } else {
-          if (!filters.staff.includes(item.assigned_staff)) {
-            return false;
-          }
-        }
-      }
-      
-      return true;
-    });
-  };
-
-  const sortItems = (items: any[]) => {
-    const now = new Date().getTime(); // Current timestamp
-    
-    return [...items].sort((a, b) => {
-      switch (sortBy) {
-        case 'status-priority':
-          // Sort by status priority (red, yellow, green), then by next_check_in
-          const priorityA = getSortPriority(a.property_clean_status);
-          const priorityB = getSortPriority(b.property_clean_status);
-          
-          if (priorityA !== priorityB) {
-            return priorityA - priorityB;
-          }
-          
-          // If same status, sort by next_check_in (future dates first, soonest to latest)
-          const dateA = a.next_check_in ? new Date(a.next_check_in).getTime() : Infinity;
-          const dateB = b.next_check_in ? new Date(b.next_check_in).getTime() : Infinity;
-          
-          // Treat past dates as farther in the future (push to bottom)
-          const futureA = dateA < now ? Infinity : dateA;
-          const futureB = dateB < now ? Infinity : dateB;
-          
-          return futureA - futureB;
-
-        case 'checkin-soonest':
-          // Next Check-in: Soonest First (only future dates, push past to bottom)
-          const checkinA = a.next_check_in ? new Date(a.next_check_in).getTime() : Infinity;
-          const checkinB = b.next_check_in ? new Date(b.next_check_in).getTime() : Infinity;
-          
-          // Treat past dates as Infinity (push to bottom)
-          const futureCheckinA = checkinA < now ? Infinity : checkinA;
-          const futureCheckinB = checkinB < now ? Infinity : checkinB;
-          
-          return futureCheckinA - futureCheckinB;
-
-        case 'checkout-recent':
-          // Checkout: Most Recent First (closest to today, prioritizing recent past)
-          const checkoutRecentA = a.check_out ? new Date(a.check_out).getTime() : Infinity;
-          const checkoutRecentB = b.check_out ? new Date(b.check_out).getTime() : Infinity;
-          
-          // Calculate distance from now (recent past checkouts first)
-          const distanceA = Math.abs(checkoutRecentA - now);
-          const distanceB = Math.abs(checkoutRecentB - now);
-          
-          // Prioritize past dates over future dates
-          const isPastA = checkoutRecentA <= now;
-          const isPastB = checkoutRecentB <= now;
-          
-          if (isPastA && !isPastB) return -1; // A is past, B is future -> A first
-          if (!isPastA && isPastB) return 1;  // A is future, B is past -> B first
-          
-          // Both past or both future: sort by distance from now
-          return distanceA - distanceB;
-
-        case 'checkout-oldest':
-          // Checkout: Oldest First
-          const checkoutOldestA = a.check_out ? new Date(a.check_out).getTime() : Infinity;
-          const checkoutOldestB = b.check_out ? new Date(b.check_out).getTime() : Infinity;
-          return checkoutOldestA - checkoutOldestB;
-
-        case 'property-az':
-          // Property Name: A-Z
-          return (a.property_name || '').localeCompare(b.property_name || '');
-
-        default:
-          return 0;
-      }
-    });
-  };
-
   const getActiveFilterCount = () => {
-    return filters.cleanStatus.length + filters.cardActions.length + filters.staff.length;
+    return cardViewMode === 'cleanings'
+      ? filters.cleanStatus.length + filters.cardActions.length + filters.staff.length
+      : maintenanceFilters.priority.length + maintenanceFilters.cardActions.length + maintenanceFilters.staff.length + maintenanceFilters.property.length;
   };
   
   const formatDate = (dateString: string) => {
@@ -675,224 +599,27 @@ export default function Home() {
     });
   };
 
-  const getCardBackgroundColor = (status: string) => {
-    switch (status) {
-      case 'needs_cleaning':
-        return 'bg-red-50/80 dark:bg-red-950/30 border-red-200 dark:border-red-900';
-      case 'cleaning_scheduled':
-        return 'bg-yellow-50/80 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-900';
-      case 'cleaning_complete':
-        return 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900';
-      default:
-        return 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700';
-    }
-  };
-
-  const getMaintenanceCardColor = (cardAction: string) => {
-    switch (cardAction) {
-      case 'not_started':
-        return 'bg-red-50/80 dark:bg-red-950/30 border-red-200 dark:border-red-900';
-      case 'in_progress':
-      case 'paused':
-        return 'bg-yellow-50/80 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-900';
-      case 'completed':
-        return 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900';
-      default:
-        return 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700';
-    }
-  };
-
-  const getSortPriority = (status: string) => {
-    switch (status) {
-      case 'needs_cleaning':
-        return 1; // Red first
-      case 'cleaning_scheduled':
-        return 2; // Yellow second
-      case 'cleaning_complete':
-        return 3; // Green last
-      default:
-        return 4;
-    }
-  };
-
-  const renderCards = () => {
-    // Get items based on view mode
-    let items = cardViewMode === 'cleanings' 
-      ? (response ? (Array.isArray(response) ? response : [response]) : [])
-      : maintenanceCards;
-    
-    if (items.length === 0) {
+  const renderCardsSection = () => {
+    if (cardViewMode === 'cleanings') {
+      const cleaningsData = response ? (Array.isArray(response) ? response : [response]) : [];
       return (
-        <div className="text-center py-12 text-slate-500 dark:text-slate-400">
-          {cardViewMode === 'cleanings' ? 'No cleanings found' : 'No maintenance cards found'}
-        </div>
+        <CleaningCards
+          data={cleaningsData}
+          filters={filters}
+          sortBy={sortBy}
+          onCardClick={setSelectedCard}
+        />
+      );
+    } else {
+      return (
+        <MaintenanceCards
+          data={maintenanceCards}
+          filters={maintenanceFilters}
+          sortBy={maintenanceSortBy}
+          onCardClick={setSelectedCard}
+        />
       );
     }
-
-    // Apply filters
-    const totalCount = items.length;
-    items = applyFilters(items);
-    
-    if (items.length === 0) {
-      return (
-        <div className="text-center py-12 text-slate-500 dark:text-slate-400">
-          No cards match the selected filters
-        </div>
-      );
-    }
-
-    // Apply sorting
-    items = sortItems(items);
-
-    return (
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        {items.map((item, index) => (
-          <Card
-            key={item.cleaning_id || item.id || index}
-            onClick={() => setSelectedCard(item)}
-            className={`cursor-pointer hover:shadow-xl transition-all duration-200 ${
-              cardViewMode === 'cleanings' 
-                ? getCardBackgroundColor(item.property_clean_status)
-                : getMaintenanceCardColor(item.card_actions)
-            }`}
-          >
-            <CardHeader>
-              <CardTitle>{item.property_name || (cardViewMode === 'maintenance' ? item.title : 'Unknown Property')}</CardTitle>
-              <CardDescription className="flex items-center gap-2">
-                {cardViewMode === 'cleanings' ? (
-                  <>
-                    <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    {item.guest_name || <span className="italic opacity-60">No guest</span>}
-                  </>
-                ) : (
-                  <span className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">
-                    {item.description || <span className="italic opacity-60">No description</span>}
-                  </span>
-                )}
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent className="space-y-4">
-              {/* Dates */}
-              <div className="space-y-2.5">
-                {/* Checked Out - Only for cleanings */}
-                {cardViewMode === 'cleanings' && (
-                  <div className="flex items-center gap-3">
-                    <svg className="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Checked out</div>
-                      <div className="text-sm truncate font-medium text-slate-900 dark:text-white">
-                        {item.check_out ? formatDate(item.check_out) : <span className="italic opacity-60">Not set</span>}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Next Check In - Only for cleanings */}
-                {cardViewMode === 'cleanings' && (
-                  <div className="flex items-center gap-3">
-                    <svg className="w-4 h-4 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                    </svg>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Next check in</div>
-                      <div className="text-sm truncate font-medium text-slate-900 dark:text-white">
-                        {item.next_check_in ? formatDate(item.next_check_in) : <span className="italic opacity-60">Not set</span>}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Priority - Only for maintenance */}
-                {cardViewMode === 'maintenance' && (
-                  <div className="flex items-center gap-3">
-                    <svg className="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Priority</div>
-                      <div className="text-sm truncate font-medium text-slate-900 dark:text-white">
-                        {item.priority ? item.priority.charAt(0).toUpperCase() + item.priority.slice(1) : 'Medium'}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Scheduled Start */}
-                <div className="flex items-center gap-3">
-                  <svg className="w-4 h-4 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Scheduled</div>
-                    <div className="text-sm truncate font-medium text-slate-900 dark:text-white">
-                      {item.scheduled_start ? formatDate(item.scheduled_start) : <span className="italic opacity-60">Not set</span>}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Card Actions - Read Only */}
-                <div className="flex items-center gap-3">
-                  <svg className="w-4 h-4 text-purple-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Action</div>
-                    <div className={`text-sm font-medium ${
-                      item.card_actions === 'in_progress' ? 'text-blue-600 dark:text-blue-400' :
-                      item.card_actions === 'paused' ? 'text-orange-600 dark:text-orange-400' :
-                      item.card_actions === 'completed' ? 'text-green-600 dark:text-green-400' :
-                      'text-slate-600 dark:text-slate-400'
-                    }`}>
-                      {item.card_actions === 'not_started' ? 'Not Started' :
-                       item.card_actions === 'in_progress' ? 'In Progress' :
-                       item.card_actions === 'paused' ? 'Paused' :
-                       item.card_actions === 'completed' ? 'Completed' :
-                       'Not Started'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Status Badges */}
-              <div className="flex flex-wrap gap-2 pt-2">
-                {cardViewMode === 'cleanings' && (
-                  <Badge 
-                    variant={
-                      item.property_clean_status === 'needs_cleaning' ? 'destructive' :
-                      item.property_clean_status === 'cleaning_complete' ? 'default' : 'secondary'
-                    }
-                    className={
-                      item.property_clean_status === 'needs_cleaning' 
-                        ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-300'
-                        : item.property_clean_status === 'cleaning_scheduled'
-                        ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-300'
-                        : item.property_clean_status === 'cleaning_complete'
-                        ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border-emerald-300'
-                        : ''
-                    }
-                  >
-                    {item.property_clean_status === 'needs_cleaning' ? 'Needs Cleaning' :
-                     item.property_clean_status === 'cleaning_scheduled' ? 'Scheduled' :
-                     item.property_clean_status === 'cleaning_complete' ? 'Complete' :
-                     'Unknown'}
-                  </Badge>
-                )}
-                
-                <Badge variant={item.assigned_staff ? 'default' : 'outline'}>
-                  {item.assigned_staff ? item.assigned_staff : 'Unassigned'}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    );
   };
 
   // Memoize window contents to prevent re-renders when only z-index changes
@@ -972,57 +699,120 @@ export default function Home() {
                 {/* Sort Dropdown */}
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-slate-600 dark:text-slate-400">Sort by:</span>
-                  <Select value={sortBy} onValueChange={setSortBy}>
-                    <SelectTrigger className="w-[220px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="status-priority">Status Priority</SelectItem>
-                      <SelectItem value="checkin-soonest">Next Check-in: Soonest</SelectItem>
-                      <SelectItem value="checkout-recent">Checkout: Most Recent</SelectItem>
-                      <SelectItem value="checkout-oldest">Checkout: Oldest</SelectItem>
-                      <SelectItem value="property-az">Property Name: A-Z</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {cardViewMode === 'cleanings' ? (
+                    <Select value={sortBy} onValueChange={setSortBy}>
+                      <SelectTrigger className="w-[220px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="status-priority">Status Priority</SelectItem>
+                        <SelectItem value="checkin-soonest">Next Check-in: Soonest</SelectItem>
+                        <SelectItem value="checkout-recent">Checkout: Most Recent</SelectItem>
+                        <SelectItem value="checkout-oldest">Checkout: Oldest</SelectItem>
+                        <SelectItem value="property-az">Property Name: A-Z</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Select value={maintenanceSortBy} onValueChange={setMaintenanceSortBy}>
+                      <SelectTrigger className="w-[220px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="priority-high">Priority: High First</SelectItem>
+                        <SelectItem value="status-priority">Status Priority</SelectItem>
+                        <SelectItem value="scheduled-soonest">Scheduled: Soonest</SelectItem>
+                        <SelectItem value="created-newest">Created: Newest</SelectItem>
+                        <SelectItem value="created-oldest">Created: Oldest</SelectItem>
+                        <SelectItem value="property-az">Property Name: A-Z</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
             </div>
 
             {showFilters && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-3 border-t border-slate-200 dark:border-slate-800">
-                {/* Clean Status */}
-                <div>
-                  <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Clean Status</h4>
-                  <div className="space-y-1">
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.cleanStatus.includes('needs_cleaning')}
-                        onChange={() => toggleFilter('cleanStatus', 'needs_cleaning')}
-                        className="rounded border-slate-300"
-                      />
-                      <span>Needs Cleaning</span>
-                    </label>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.cleanStatus.includes('cleaning_scheduled')}
-                        onChange={() => toggleFilter('cleanStatus', 'cleaning_scheduled')}
-                        className="rounded border-slate-300"
-                      />
-                      <span>Scheduled</span>
-                    </label>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.cleanStatus.includes('cleaning_complete')}
-                        onChange={() => toggleFilter('cleanStatus', 'cleaning_complete')}
-                        className="rounded border-slate-300"
-                      />
-                      <span>Complete</span>
-                    </label>
+                {/* Clean Status - Only for cleanings */}
+                {cardViewMode === 'cleanings' && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Clean Status</h4>
+                    <div className="space-y-1">
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={filters.cleanStatus.includes('needs_cleaning')}
+                          onChange={() => toggleFilter('cleanStatus', 'needs_cleaning')}
+                          className="rounded border-slate-300"
+                        />
+                        <span>Needs Cleaning</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={filters.cleanStatus.includes('cleaning_scheduled')}
+                          onChange={() => toggleFilter('cleanStatus', 'cleaning_scheduled')}
+                          className="rounded border-slate-300"
+                        />
+                        <span>Scheduled</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={filters.cleanStatus.includes('cleaning_complete')}
+                          onChange={() => toggleFilter('cleanStatus', 'cleaning_complete')}
+                          className="rounded border-slate-300"
+                        />
+                        <span>Complete</span>
+                      </label>
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {/* Priority - Only for maintenance */}
+                {cardViewMode === 'maintenance' && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Priority</h4>
+                    <div className="space-y-1">
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={maintenanceFilters.priority.includes('urgent')}
+                          onChange={() => toggleMaintenanceFilter('priority', 'urgent')}
+                          className="rounded border-slate-300"
+                        />
+                        <span>Urgent</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={maintenanceFilters.priority.includes('high')}
+                          onChange={() => toggleMaintenanceFilter('priority', 'high')}
+                          className="rounded border-slate-300"
+                        />
+                        <span>High</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={maintenanceFilters.priority.includes('medium')}
+                          onChange={() => toggleMaintenanceFilter('priority', 'medium')}
+                          className="rounded border-slate-300"
+                        />
+                        <span>Medium</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={maintenanceFilters.priority.includes('low')}
+                          onChange={() => toggleMaintenanceFilter('priority', 'low')}
+                          className="rounded border-slate-300"
+                        />
+                        <span>Low</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
 
                 {/* Card Actions */}
                 <div>
@@ -1031,8 +821,8 @@ export default function Home() {
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={filters.cardActions.includes('not_started')}
-                        onChange={() => toggleFilter('cardActions', 'not_started')}
+                        checked={cardViewMode === 'cleanings' ? filters.cardActions.includes('not_started') : maintenanceFilters.cardActions.includes('not_started')}
+                        onChange={() => cardViewMode === 'cleanings' ? toggleFilter('cardActions', 'not_started') : toggleMaintenanceFilter('cardActions', 'not_started')}
                         className="rounded border-slate-300"
                       />
                       <span>Not Started</span>
@@ -1040,8 +830,8 @@ export default function Home() {
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={filters.cardActions.includes('in_progress')}
-                        onChange={() => toggleFilter('cardActions', 'in_progress')}
+                        checked={cardViewMode === 'cleanings' ? filters.cardActions.includes('in_progress') : maintenanceFilters.cardActions.includes('in_progress')}
+                        onChange={() => cardViewMode === 'cleanings' ? toggleFilter('cardActions', 'in_progress') : toggleMaintenanceFilter('cardActions', 'in_progress')}
                         className="rounded border-slate-300"
                       />
                       <span>In Progress</span>
@@ -1049,8 +839,8 @@ export default function Home() {
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={filters.cardActions.includes('paused')}
-                        onChange={() => toggleFilter('cardActions', 'paused')}
+                        checked={cardViewMode === 'cleanings' ? filters.cardActions.includes('paused') : maintenanceFilters.cardActions.includes('paused')}
+                        onChange={() => cardViewMode === 'cleanings' ? toggleFilter('cardActions', 'paused') : toggleMaintenanceFilter('cardActions', 'paused')}
                         className="rounded border-slate-300"
                       />
                       <span>Paused</span>
@@ -1058,8 +848,8 @@ export default function Home() {
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={filters.cardActions.includes('completed')}
-                        onChange={() => toggleFilter('cardActions', 'completed')}
+                        checked={cardViewMode === 'cleanings' ? filters.cardActions.includes('completed') : maintenanceFilters.cardActions.includes('completed')}
+                        onChange={() => cardViewMode === 'cleanings' ? toggleFilter('cardActions', 'completed') : toggleMaintenanceFilter('cardActions', 'completed')}
                         className="rounded border-slate-300"
                       />
                       <span>Completed</span>
@@ -1074,18 +864,29 @@ export default function Home() {
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={filters.staff.includes('unassigned')}
-                        onChange={() => toggleFilter('staff', 'unassigned')}
+                        checked={cardViewMode === 'cleanings' ? filters.staff.includes('unassigned') : maintenanceFilters.staff.includes('unassigned')}
+                        onChange={() => cardViewMode === 'cleanings' ? toggleFilter('staff', 'unassigned') : toggleMaintenanceFilter('staff', 'unassigned')}
                         className="rounded border-slate-300"
                       />
                       <span>Unassigned</span>
                     </label>
-                    {response && getUniqueStaff(Array.isArray(response) ? response : [response]).map(staff => (
+                    {cardViewMode === 'cleanings' && response && getUniqueStaff(Array.isArray(response) ? response : [response]).map(staff => (
                       <label key={staff} className="flex items-center gap-2 text-sm cursor-pointer">
                         <input
                           type="checkbox"
                           checked={filters.staff.includes(staff)}
                           onChange={() => toggleFilter('staff', staff)}
+                          className="rounded border-slate-300"
+                        />
+                        <span>{staff}</span>
+                      </label>
+                    ))}
+                    {cardViewMode === 'maintenance' && maintenanceCards && getUniqueStaff(maintenanceCards).map(staff => (
+                      <label key={staff} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={maintenanceFilters.staff.includes(staff)}
+                          onChange={() => toggleMaintenanceFilter('staff', staff)}
                           className="rounded border-slate-300"
                         />
                         <span>{staff}</span>
@@ -1099,10 +900,10 @@ export default function Home() {
 
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              {Array.isArray(response) && getActiveFilterCount() > 0 ? (
-                <>Showing {applyFilters(response).length} of {response.length} cards</>
+              {cardViewMode === 'cleanings' ? (
+                <>Cleanings: {Array.isArray(response) ? response.length : 1} total</>
               ) : (
-                <>Response: {Array.isArray(response) ? `${response.length} item(s)` : '1 item'}</>
+                <>Maintenance: {maintenanceCards.length} total</>
               )}
             </p>
             <div className="flex gap-2">
@@ -1132,12 +933,12 @@ export default function Home() {
           <div>
             {viewMode === 'cards' ? (
               <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
-                {renderCards()}
+                {renderCardsSection()}
               </div>
             ) : (
               <div className="p-4 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
                 <pre className="text-sm text-slate-900 dark:text-slate-100 font-mono whitespace-pre-wrap">
-                  {JSON.stringify(response, null, 2)}
+                  {JSON.stringify(cardViewMode === 'cleanings' ? response : maintenanceCards, null, 2)}
                 </pre>
               </div>
             )}
@@ -1145,7 +946,7 @@ export default function Home() {
         </div>
       )}
     </div>
-  ), [response, viewMode, showFilters, filters, sortBy, cardViewMode, maintenanceCards]);
+  ), [response, viewMode, showFilters, filters, sortBy, cardViewMode, maintenanceCards, maintenanceFilters, maintenanceSortBy]);
 
   const timelineWindowContent = useMemo(() => (
     <Timeline onCardClick={setSelectedCard} />
