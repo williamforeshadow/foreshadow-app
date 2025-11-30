@@ -7,7 +7,7 @@ import * as z from 'zod';
 import Sidebar from '@/components/Sidebar';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -30,6 +30,7 @@ import {
 interface Template {
   id: string;
   name: string;
+  type: 'cleaning' | 'maintenance';
   description: string | null;
   fields: FieldDefinition[];
   created_at: string;
@@ -49,6 +50,9 @@ interface FieldDefinition {
 
 const templateFormSchema = z.object({
   name: z.string().min(1, 'Template name is required'),
+  type: z.enum(['cleaning', 'maintenance'], {
+    required_error: 'Template type is required',
+  }),
   description: z.string().optional(),
 });
 
@@ -56,6 +60,7 @@ interface PropertyAssignment {
   id?: string;
   property_name: string;
   template_id: string | null;
+  enabled?: boolean;
 }
 
 export default function TemplatesPage() {
@@ -71,11 +76,14 @@ export default function TemplatesPage() {
   const [assignments, setAssignments] = useState<PropertyAssignment[]>([]);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
   const [savingAssignment, setSavingAssignment] = useState<string | null>(null);
+  const [configuringTemplate, setConfiguringTemplate] = useState<Template | null>(null);
+  const [selectedProperties, setSelectedProperties] = useState<string[]>([]);
 
   const form = useForm<z.infer<typeof templateFormSchema>>({
     resolver: zodResolver(templateFormSchema),
     defaultValues: {
       name: '',
+      type: 'cleaning',
       description: '',
     },
   });
@@ -162,9 +170,47 @@ export default function TemplatesPage() {
     return assignment?.template_id || null;
   };
 
+  const getAssignedProperties = (templateId: string): string[] => {
+    return assignments
+      .filter(a => a.template_id === templateId && a.enabled)
+      .map(a => a.property_name);
+  };
+
+  const openConfigureDialog = (template: Template) => {
+    setConfiguringTemplate(template);
+    const assigned = getAssignedProperties(template.id);
+    setSelectedProperties(assigned);
+  };
+
+  const saveTemplateAssignments = async () => {
+    if (!configuringTemplate) return;
+
+    setSavingAssignment(configuringTemplate.id);
+    try {
+      const res = await fetch('/api/property-templates/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          template_id: configuringTemplate.id,
+          property_names: selectedProperties
+        })
+      });
+
+      if (!res.ok) throw new Error('Failed to save assignments');
+      
+      await fetchAssignments();
+      setConfiguringTemplate(null);
+    } catch (err) {
+      console.error('Error saving assignments:', err);
+      alert('Failed to save property assignments');
+    } finally {
+      setSavingAssignment(null);
+    }
+  };
+
   const openCreateDialog = () => {
     setEditingTemplate(null);
-    form.reset({ name: '', description: '' });
+    form.reset({ name: '', type: 'cleaning', description: '' });
     setFields([]);
     setShowCreateDialog(true);
   };
@@ -173,6 +219,7 @@ export default function TemplatesPage() {
     setEditingTemplate(template);
     form.reset({
       name: template.name,
+      type: template.type,
       description: template.description || '',
     });
     setFields(template.fields);
@@ -217,6 +264,7 @@ export default function TemplatesPage() {
     try {
       const payload = {
         name: values.name,
+        type: values.type,
         description: values.description || null,
         fields
       };
@@ -336,7 +384,16 @@ export default function TemplatesPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
-                      <div className="text-sm text-slate-600 dark:text-slate-400">
+                      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                        <Badge 
+                          variant={template.type === 'maintenance' ? 'default' : 'secondary'}
+                          className={template.type === 'maintenance' 
+                            ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-300' 
+                            : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-300'
+                          }
+                        >
+                          {template.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                        </Badge>
                         <Badge variant="secondary">
                           {template.fields.length} field{template.fields.length !== 1 ? 's' : ''}
                         </Badge>
@@ -367,93 +424,92 @@ export default function TemplatesPage() {
               )}
             </>
           ) : (
-            // Property Assignments View
+            // Template Assignments View (Template-centric)
             <>
-              {loadingAssignments ? (
+              {loading || loadingAssignments ? (
                 <div className="text-center py-12 text-slate-500">
-                  Loading property assignments...
+                  Loading template assignments...
                 </div>
-              ) : properties.length === 0 ? (
+              ) : templates.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-slate-500 dark:text-slate-400">
-                    No properties found. Properties will appear here once you have cleanings scheduled.
+                    No templates found. Create a template first to assign it to properties.
                   </p>
                 </div>
               ) : (
-                <div className="max-w-4xl mx-auto">
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-                    <table className="w-full">
-                      <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                            Property Name
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                            Default Template
-                          </th>
-                          <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                        {properties.map((property) => {
-                          const currentTemplate = getAssignedTemplate(property);
-                          const isSaving = savingAssignment === property;
-                          
-                          return (
-                            <tr key={property} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-white">
-                                {property}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                <Select
-                                  value={currentTemplate || 'none'}
-                                  onValueChange={(value) => saveAssignment(property, value === 'none' ? null : value)}
-                                  disabled={isSaving}
+                <div className="max-w-4xl mx-auto space-y-4">
+                  <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg p-4">
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      Configure which properties should automatically get tasks from each template. When a reservation is created for an assigned property, tasks will be auto-generated.
+                    </p>
+                  </div>
+
+                  {templates.map((template) => {
+                    const assignedProps = getAssignedProperties(template.id);
+                    const isSaving = savingAssignment === template.id;
+                    
+                    return (
+                      <Card key={template.id}>
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <CardTitle className="flex items-center gap-2">
+                                {template.name}
+                                <Badge 
+                                  variant={template.type === 'maintenance' ? 'default' : 'secondary'}
+                                  className={template.type === 'maintenance' 
+                                    ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-300' 
+                                    : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-300'
+                                  }
                                 >
-                                  <SelectTrigger className="w-full max-w-xs">
-                                    <SelectValue placeholder="Select template..." />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="none">
-                                      <span className="text-slate-500">No template</span>
-                                    </SelectItem>
-                                    {templates.map((template) => (
-                                      <SelectItem key={template.id} value={template.id}>
-                                        {template.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                                {isSaving ? (
-                                  <span className="text-slate-500">Saving...</span>
-                                ) : currentTemplate ? (
-                                  <Badge variant="secondary">Assigned</Badge>
-                                ) : (
-                                  <Badge variant="outline">Not assigned</Badge>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  
-                  <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                    <h3 className="text-sm font-medium text-blue-900 dark:text-blue-300 mb-2">
-                      How it works
-                    </h3>
-                    <ul className="text-sm text-blue-800 dark:text-blue-400 space-y-1">
-                      <li>• Assign a default template to each property</li>
-                      <li>• New cleanings for that property will automatically use the assigned template</li>
-                      <li>• Staff will see custom form fields when filling out cleaning reports</li>
-                      <li>• You can change templates at any time</li>
-                    </ul>
-                  </div>
+                                  {template.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                                </Badge>
+                              </CardTitle>
+                              {template.description && (
+                                <CardDescription>{template.description}</CardDescription>
+                              )}
+                            </div>
+                            <Button
+                              onClick={() => openConfigureDialog(template)}
+                              disabled={isSaving}
+                              size="sm"
+                            >
+                              {isSaving ? 'Saving...' : 'Configure Properties'}
+                            </Button>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-slate-600 dark:text-slate-400">
+                              Assigned to:
+                            </span>
+                            {assignedProps.length === 0 ? (
+                              <Badge variant="outline" className="text-slate-500">
+                                No properties
+                              </Badge>
+                            ) : assignedProps.length === properties.length ? (
+                              <Badge variant="default">
+                                All properties ({assignedProps.length})
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary">
+                                {assignedProps.length} {assignedProps.length === 1 ? 'property' : 'properties'}
+                              </Badge>
+                            )}
+                          </div>
+                          {assignedProps.length > 0 && assignedProps.length < 10 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {assignedProps.map(prop => (
+                                <Badge key={prop} variant="outline" className="text-xs">
+                                  {prop}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </div>
               )}
             </>
@@ -482,6 +538,29 @@ export default function TemplatesPage() {
                     <FormControl>
                       <Input placeholder="e.g., Standard Clean, Deep Clean" {...field} />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Template Type */}
+              <FormField
+                control={form.control}
+                name="type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Template Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select type..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="cleaning">Cleaning</SelectItem>
+                        <SelectItem value="maintenance">Maintenance</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -625,6 +704,93 @@ export default function TemplatesPage() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Configure Template Properties Dialog */}
+      <Dialog open={!!configuringTemplate} onOpenChange={(open) => !open && setConfiguringTemplate(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Configure Properties for "{configuringTemplate?.name}"</DialogTitle>
+            <DialogDescription>
+              Select which properties should automatically get tasks from this template when reservations are created.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {properties.length === 0 ? (
+              <div className="text-center py-8 text-slate-500">
+                No properties found. Properties will appear here once you have reservations.
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                  <span className="text-sm font-medium">
+                    {selectedProperties.length === properties.length 
+                      ? 'All properties selected' 
+                      : `${selectedProperties.length} of ${properties.length} selected`}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedProperties(properties)}
+                    >
+                      Select All
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedProperties([])}
+                    >
+                      Clear All
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[400px] overflow-y-auto p-2">
+                  {properties.map((property) => {
+                    const isSelected = selectedProperties.includes(property);
+                    return (
+                      <label
+                        key={property}
+                        className="flex items-center gap-2 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedProperties([...selectedProperties, property]);
+                            } else {
+                              setSelectedProperties(selectedProperties.filter(p => p !== property));
+                            }
+                          }}
+                          className="rounded border-slate-300"
+                        />
+                        <span className="text-sm font-medium">{property}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfiguringTemplate(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={saveTemplateAssignments}
+              disabled={savingAssignment === configuringTemplate?.id}
+            >
+              {savingAssignment === configuringTemplate?.id ? 'Saving...' : 'Save Assignments'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

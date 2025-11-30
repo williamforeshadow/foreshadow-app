@@ -28,23 +28,25 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { property_name, template_id } = body;
+    const { property_name, template_id, enabled = true } = body;
 
-    if (!property_name) {
+    if (!property_name || !template_id) {
       return NextResponse.json(
-        { error: 'Property name is required' },
+        { error: 'Property name and template ID are required' },
         { status: 400 }
       );
     }
 
     // Use upsert to handle both insert and update
+    // The unique constraint is now on (property_name, template_id)
     const { data, error } = await supabase
       .from('property_templates')
       .upsert({
         property_name,
-        template_id
+        template_id,
+        enabled
       }, {
-        onConflict: 'property_name'
+        onConflict: 'property_name,template_id'
       })
       .select()
       .single();

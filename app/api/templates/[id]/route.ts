@@ -47,11 +47,11 @@ export async function PUT(
   
   try {
     const body = await request.json();
-    const { name, description, fields } = body;
+    const { name, type, description, fields } = body;
 
-    if (!name || !fields) {
+    if (!name || !type || !fields) {
       return NextResponse.json(
-        { error: 'Name and fields are required' },
+        { error: 'Name, type, and fields are required' },
         { status: 400 }
       );
     }
@@ -60,6 +60,7 @@ export async function PUT(
       .from('templates')
       .update({
         name,
+        type,
         description,
         fields,
         updated_at: new Date().toISOString()

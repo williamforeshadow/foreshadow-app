@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import OpenAI from 'openai';
 import Sidebar from '@/components/Sidebar';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardAction, CardContent, CardFooter } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -56,6 +56,7 @@ export default function Home() {
   const [activeWindow, setActiveWindow] = useState<'cards' | 'timeline' | 'query'>('cards');
   const [windowOrder, setWindowOrder] = useState<Array<'cards' | 'timeline' | 'query'>>(['cards', 'timeline', 'query']);
   const [showCleaningForm, setShowCleaningForm] = useState(false);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [cardViewMode, setCardViewMode] = useState<'cleanings' | 'maintenance'>('cleanings');
   const [maintenanceCards, setMaintenanceCards] = useState<any[]>([]);
   const [showCreateMaintenance, setShowCreateMaintenance] = useState(false);
@@ -1199,96 +1200,10 @@ export default function Home() {
                       )}
                     </DialogDescription>
                   </div>
-                  
-                  {/* Form Icon Button - only show for cleanings when not viewing form */}
-                  {!showCleaningForm && selectedCard.guest_name && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={openCleaningForm}
-                      className="shrink-0 h-8 w-8 p-0"
-                      title="Open Cleaning Form"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                      </svg>
-                    </Button>
-                  )}
                 </div>
               </DialogHeader>
 
-              {/* Template Selector - Only show for cleanings when NOT in form view */}
-              {!showCleaningForm && selectedCard.guest_name && allTemplates.length > 0 && (
-                <div className="px-6 pb-4 border-b border-slate-200 dark:border-slate-700">
-                  <div className="flex items-center gap-3">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Template:
-                    </label>
-                    <Select
-                      value={selectedCard.template_id || 'none'}
-                      onValueChange={(value) => changeTemplate(value === 'none' ? null : value)}
-                    >
-                      <SelectTrigger className="w-64">
-                        <SelectValue placeholder="Select template..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">
-                          <span className="text-slate-500">No template</span>
-                        </SelectItem>
-                        {allTemplates.map((template) => (
-                          <SelectItem key={template.id} value={template.id}>
-                            {template.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
-
-              {showCleaningForm ? (
-                loadingTemplate ? (
-                  <div className="flex items-center justify-center py-12">
-                    <p className="text-slate-500">Loading form template...</p>
-                  </div>
-                ) : currentTemplate ? (
-                  <DynamicCleaningForm
-                    cleaningId={selectedCard.id}
-                    propertyName={selectedCard.property_name}
-                    template={currentTemplate}
-                    formMetadata={selectedCard.form_metadata}
-                    currentAction={selectedCard.card_actions}
-                    availableActions={getAvailableActions(selectedCard.card_actions)}
-                    onSave={async (formData) => {
-                      await saveCleaningForm(selectedCard.id, formData);
-                      setSelectedCard({...selectedCard, form_metadata: formData});
-                      setShowCleaningForm(false);
-                    }}
-                    onActionChange={async (action) => {
-                      await updateCardAction(selectedCard.id, action);
-                    }}
-                    onCancel={() => setShowCleaningForm(false)}
-                  />
-                ) : (
-                  <CleaningForm
-                    cleaningId={selectedCard.id}
-                    propertyName={selectedCard.property_name}
-                    formMetadata={selectedCard.form_metadata}
-                    currentAction={selectedCard.card_actions}
-                    availableActions={getAvailableActions(selectedCard.card_actions)}
-                    onSave={async (formData) => {
-                      await saveCleaningForm(selectedCard.id, formData);
-                      setSelectedCard({...selectedCard, form_metadata: formData});
-                      setShowCleaningForm(false);
-                    }}
-                    onActionChange={async (action) => {
-                      await updateCardAction(selectedCard.id, action);
-                    }}
-                    onCancel={() => setShowCleaningForm(false)}
-                  />
-                )
-              ) : (
-                <div className="space-y-4">
+              <div className="space-y-4">
               {/* Dates */}
               <div className="grid grid-cols-1 gap-3">
                 <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
@@ -1355,119 +1270,73 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Status Badges */}
-              <div className="flex flex-wrap gap-2 pt-2">
-                {/* Show clean status for cleanings, priority for maintenance */}
-                {selectedCard.guest_name ? (
-                  <Badge
-                    variant={
-                      selectedCard.property_clean_status === 'needs_cleaning' ? 'destructive' :
-                      selectedCard.property_clean_status === 'cleaning_complete' ? 'default' : 'secondary'
-                    }
-                    className={`text-sm py-1.5 ${
-                      selectedCard.property_clean_status === 'needs_cleaning' 
-                        ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-300'
-                        : selectedCard.property_clean_status === 'cleaning_scheduled'
-                        ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-300'
-                        : selectedCard.property_clean_status === 'cleaning_complete'
-                        ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border-emerald-300'
-                        : ''
-                    }`}
-                  >
-                    {selectedCard.property_clean_status === 'needs_cleaning' ? 'Needs Cleaning' :
-                     selectedCard.property_clean_status === 'cleaning_scheduled' ? 'Scheduled' :
-                     selectedCard.property_clean_status === 'cleaning_complete' ? 'Complete' :
-                     'Unknown'}
-                  </Badge>
-                ) : (
-                  <Badge
-                    variant={
-                      selectedCard.priority === 'urgent' ? 'destructive' :
-                      selectedCard.priority === 'high' ? 'default' : 'secondary'
-                    }
-                    className={`text-sm py-1.5 capitalize ${
-                      selectedCard.priority === 'urgent' 
-                        ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-300'
-                        : selectedCard.priority === 'high'
-                        ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-300'
-                        : selectedCard.priority === 'low'
-                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300'
-                        : 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-300'
-                    }`}
-                  >
-                    {selectedCard.priority || 'Medium'} Priority
-                  </Badge>
-                )}
-                
-                <div className="flex-1">
-                  {isEditingAssignment ? (
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center gap-2">
-                        <select
-                          className="flex-1 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500"
-                          onChange={(e) => {
-                            if (e.target.value === 'new') {
-                              setNewStaffName('');
-                            } else {
-                              updateAssignment(selectedCard.id, e.target.value || null);
-                            }
-                          }}
-                          value={selectedCard.assigned_staff || ''}
-                          disabled={assignmentLoading}
-                        >
-                          <option value="">Unassigned</option>
-                          {response && getUniqueStaff(Array.isArray(response) ? response : [response]).map(staff => (
-                            <option key={staff} value={staff}>{staff}</option>
-                          ))}
-                          <option value="new">+ Add New Staff...</option>
-                        </select>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setIsEditingAssignment(false)}
-                        >
-                          ✕
-                        </Button>
-                      </div>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="Or type new name..."
-                          value={newStaffName}
-                          onChange={(e) => setNewStaffName(e.target.value)}
-                          className="flex-1 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500"
-                        />
-                        <Button
-                          onClick={() => {
-                            if (newStaffName.trim()) {
-                              updateAssignment(selectedCard.id, newStaffName.trim());
-                            }
-                          }}
-                          disabled={!newStaffName.trim() || assignmentLoading}
-                          size="sm"
-                        >
-                          Save
-                        </Button>
-                      </div>
+              {/* Tasks Section */}
+              {selectedCard.tasks && selectedCard.tasks.length > 0 ? (
+                <div className="space-y-3 mt-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                      Tasks ({selectedCard.completed_tasks || 0}/{selectedCard.total_tasks || 0})
+                    </h3>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      Click a task to expand
                     </div>
-                  ) : (
-                    <Badge
-                      onClick={() => setIsEditingAssignment(true)}
-                      variant={selectedCard.assigned_staff ? 'default' : 'outline'}
-                      className="cursor-pointer hover:opacity-80 text-sm py-1.5"
-                    >
-                      {selectedCard.assigned_staff ? (
-                        <>{selectedCard.assigned_staff}</>
-                      ) : (
-                        <>Unassigned <span className="ml-1 text-xs opacity-60">(Click to assign)</span></>
-                      )}
-                    </Badge>
-                  )}
+                  </div>
+
+                  <div className="space-y-2">
+                    {selectedCard.tasks.map((task: any) => (
+                      <Card 
+                        key={task.task_id}
+                        className="cursor-pointer hover:shadow-md transition-all"
+                        onClick={() => setExpandedTaskId(expandedTaskId === task.task_id ? null : task.task_id)}
+                      >
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-base flex items-center gap-2">
+                              {task.status === 'complete' ? '✓' : 
+                               task.status === 'in_progress' ? '▶' :
+                               task.status === 'pending' ? '○' : ''}
+                              {task.template_name || 'Unnamed Task'}
+                            </CardTitle>
+                            <Badge
+                              variant={task.type === 'maintenance' ? 'default' : 'secondary'}
+                              className={task.type === 'maintenance' 
+                                ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200' 
+                                : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                              }
+                            >
+                              {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                            </Badge>
+                          </div>
+                          <CardDescription>
+                            {task.card_actions === 'not_started' ? 'Not Started' :
+                             task.card_actions === 'in_progress' ? 'In Progress' :
+                             task.card_actions === 'paused' ? 'Paused' :
+                             task.card_actions === 'completed' ? 'Completed' :
+                             'Not Started'}
+                            {task.assigned_staff && ` • ${task.assigned_staff}`}
+                          </CardDescription>
+                        </CardHeader>
+
+                        {expandedTaskId === task.task_id && (
+                          <CardContent className="pt-0">
+                            <div className="text-sm text-slate-600 dark:text-slate-400">
+                              Task details and form will appear here
+                            </div>
+                          </CardContent>
+                        )}
+                      </Card>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="mt-6 p-6 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 text-center">
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    No tasks configured for this property. Assign templates in the Templates page.
+                  </p>
+                </div>
+              )}
 
             </div>
-              )}
 
             <DialogFooter className="border-t pt-4">
               <Button
