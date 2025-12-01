@@ -103,19 +103,6 @@ export default function CleaningCards({ data, filters, sortBy, onCardClick }: Cl
                 </div>
               </div>
 
-              {/* Scheduled Start */}
-              <div className="flex items-center gap-3">
-                <svg className="w-4 h-4 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Scheduled</div>
-                  <div className="text-sm truncate font-medium text-slate-900 dark:text-white">
-                    {item.scheduled_start ? formatDate(item.scheduled_start) : <span className="italic opacity-60">Not set</span>}
-                  </div>
-                </div>
-              </div>
-
               {/* Card Actions - Read Only */}
               <div className="flex items-center gap-3">
                 <svg className="w-4 h-4 text-purple-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

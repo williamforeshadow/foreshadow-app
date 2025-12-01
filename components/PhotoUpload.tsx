@@ -144,7 +144,7 @@ export default function PhotoUpload({
 
       {/* Photo Grid */}
       {currentPhotos.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
           {currentPhotos.map((url, index) => (
             <div key={index} className="relative group aspect-square bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600">
               <Image

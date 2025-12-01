@@ -7,6 +7,10 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Input } from '@/components/ui/input';
+import { ChevronDownIcon } from 'lucide-react';
 import CleaningForm from '@/components/CleaningForm';
 import DynamicCleaningForm from '@/components/DynamicCleaningForm';
 
@@ -21,6 +25,11 @@ export default function StaffPage() {
   const [loadingTemplate, setLoadingTemplate] = useState(false);
   const [updatingCardAction, setUpdatingCardAction] = useState(false);
   const [showCleaningForm, setShowCleaningForm] = useState(false);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [editingTaskStaff, setEditingTaskStaff] = useState<string | null>(null);
+  const [newTaskStaffName, setNewTaskStaffName] = useState('');
+  const [taskTemplates, setTaskTemplates] = useState<{[key: string]: any}>({});
+  const [loadingTaskTemplate, setLoadingTaskTemplate] = useState<string | null>(null);
 
   // Fetch template when card is selected
   useEffect(() => {
@@ -119,6 +128,289 @@ export default function StaffPage() {
       setError(err.message || 'Failed to update card action');
     } finally {
       setUpdatingCardAction(false);
+    }
+  };
+
+  const updateTaskAction = async (taskId: string, action: string) => {
+    try {
+      const response = await fetch('/api/update-task-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, action })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update task action');
+      }
+
+      // Update the task in selectedCard.tasks array
+      setSelectedCard((prev: any) => {
+        if (!prev || !prev.tasks) return prev;
+        
+        const updatedTasks = prev.tasks.map((task: any) => 
+          task.task_id === taskId 
+            ? { ...task, card_actions: action, status: result.data.status }
+            : task
+        );
+        
+        const completedCount = updatedTasks.filter((t: any) => t.status === 'complete').length;
+        const inProgressCount = updatedTasks.filter((t: any) => t.status === 'in_progress').length;
+        
+        // If this was the first cleaning task, update top-level fields for backward compatibility
+        const firstCleaningTask = updatedTasks.find((t: any) => t.type === 'cleaning');
+        const updatedTask = updatedTasks.find((t: any) => t.task_id === taskId);
+        const shouldUpdateTopLevel = firstCleaningTask && updatedTask && firstCleaningTask.task_id === taskId;
+        
+        return { 
+          ...prev, 
+          tasks: updatedTasks,
+          completed_tasks: completedCount,
+          tasks_in_progress: inProgressCount,
+          ...(shouldUpdateTopLevel ? {
+            card_actions: action,
+            status: result.data.status
+          } : {})
+        };
+      });
+
+      // Also update cleanings array
+      setCleanings((prevCleanings: any) => {
+        if (!prevCleanings) return prevCleanings;
+        
+        return prevCleanings.map((item: any) => {
+          if (item.id === selectedCard.id && item.tasks) {
+            const updatedTasks = item.tasks.map((task: any) => 
+              task.task_id === taskId 
+                ? { ...task, card_actions: action, status: result.data.status }
+                : task
+            );
+            const completedCount = updatedTasks.filter((t: any) => t.status === 'complete').length;
+            const inProgressCount = updatedTasks.filter((t: any) => t.status === 'in_progress').length;
+            
+            // If this was the first cleaning task, update top-level fields for backward compatibility
+            const firstCleaningTask = updatedTasks.find((t: any) => t.type === 'cleaning');
+            const updatedTask = updatedTasks.find((t: any) => t.task_id === taskId);
+            const shouldUpdateTopLevel = firstCleaningTask && updatedTask && firstCleaningTask.task_id === taskId;
+            
+            return { 
+              ...item, 
+              tasks: updatedTasks,
+              completed_tasks: completedCount,
+              tasks_in_progress: inProgressCount,
+              ...(shouldUpdateTopLevel ? {
+                card_actions: action,
+                status: result.data.status
+              } : {})
+            };
+          }
+          return item;
+        });
+      });
+    } catch (err: any) {
+      setError(err.message || 'Failed to update task action');
+    }
+  };
+
+  const updateTaskAssignment = async (taskId: string, staffName: string | null) => {
+    try {
+      const response = await fetch('/api/update-task-assignment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, staffName })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update task assignment');
+      }
+
+      // Update the task in selectedCard.tasks array
+      setSelectedCard((prev: any) => {
+        if (!prev || !prev.tasks) return prev;
+        
+        const updatedTasks = prev.tasks.map((task: any) => 
+          task.task_id === taskId 
+            ? { ...task, assigned_staff: staffName }
+            : task
+        );
+        
+        // If this was the first cleaning task, update top-level field for backward compatibility
+        const firstCleaningTask = updatedTasks.find((t: any) => t.type === 'cleaning');
+        const updatedTask = updatedTasks.find((t: any) => t.task_id === taskId);
+        const shouldUpdateTopLevel = firstCleaningTask && updatedTask && firstCleaningTask.task_id === taskId;
+        
+        return { 
+          ...prev, 
+          tasks: updatedTasks,
+          ...(shouldUpdateTopLevel ? { assigned_staff: staffName } : {})
+        };
+      });
+
+      // Also update cleanings array
+      setCleanings((prevCleanings: any) => {
+        if (!prevCleanings) return prevCleanings;
+        
+        return prevCleanings.map((item: any) => {
+          if (item.id === selectedCard.id && item.tasks) {
+            const updatedTasks = item.tasks.map((task: any) => 
+              task.task_id === taskId 
+                ? { ...task, assigned_staff: staffName }
+                : task
+            );
+            
+            // If this was the first cleaning task, update top-level field for backward compatibility
+            const firstCleaningTask = updatedTasks.find((t: any) => t.type === 'cleaning');
+            const updatedTask = updatedTasks.find((t: any) => t.task_id === taskId);
+            const shouldUpdateTopLevel = firstCleaningTask && updatedTask && firstCleaningTask.task_id === taskId;
+            
+            return { 
+              ...item, 
+              tasks: updatedTasks,
+              ...(shouldUpdateTopLevel ? { assigned_staff: staffName } : {})
+            };
+          }
+          return item;
+        });
+      });
+    } catch (err: any) {
+      setError(err.message || 'Failed to update task assignment');
+    }
+  };
+
+  const getUniqueStaffFromTasks = () => {
+    if (!cleanings) return [];
+    const allTasks = cleanings.flatMap((item: any) => item.tasks || []);
+    const staff = allTasks
+      .map((task: any) => task.assigned_staff)
+      .filter(s => s !== null && s !== undefined);
+    return Array.from(new Set(staff)).sort();
+  };
+
+  const fetchTaskTemplate = async (templateId: string) => {
+    if (taskTemplates[templateId]) {
+      return taskTemplates[templateId];
+    }
+
+    setLoadingTaskTemplate(templateId);
+    try {
+      const response = await fetch(`/api/templates/${templateId}`);
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to fetch template');
+      }
+
+      setTaskTemplates(prev => ({ ...prev, [templateId]: result.template }));
+      return result.template;
+    } catch (err: any) {
+      console.error('Error fetching template:', err);
+      setError(err.message || 'Failed to fetch template');
+      return null;
+    } finally {
+      setLoadingTaskTemplate(null);
+    }
+  };
+
+  const updateTaskSchedule = async (taskId: string, dateTime: string | null) => {
+    try {
+      const response = await fetch('/api/update-task-schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, scheduledStart: dateTime })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update task schedule');
+      }
+
+      // Update the task in selectedCard.tasks array
+      setSelectedCard((prev: any) => {
+        if (!prev || !prev.tasks) return prev;
+        
+        const updatedTasks = prev.tasks.map((task: any) => 
+          task.task_id === taskId 
+            ? { ...task, scheduled_start: dateTime }
+            : task
+        );
+        
+        return { ...prev, tasks: updatedTasks };
+      });
+
+      // Also update in cleanings array
+      setCleanings((prevCleanings: any) => {
+        if (!prevCleanings) return prevCleanings;
+        
+        return prevCleanings.map((item: any) => {
+          if (item.id === selectedCard.id && item.tasks) {
+            const updatedTasks = item.tasks.map((task: any) => 
+              task.task_id === taskId 
+                ? { ...task, scheduled_start: dateTime }
+                : task
+            );
+            return { ...item, tasks: updatedTasks };
+          }
+          return item;
+        });
+      });
+    } catch (err: any) {
+      setError(err.message || 'Failed to update task schedule');
+    }
+  };
+
+  const saveTaskForm = async (taskId: string, formData: any) => {
+    try {
+      const response = await fetch('/api/save-task-form', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, formData })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to save task form');
+      }
+
+      // Update the task in selectedCard
+      setSelectedCard((prev: any) => {
+        if (!prev || !prev.tasks) return prev;
+        
+        const updatedTasks = prev.tasks.map((task: any) => 
+          task.task_id === taskId 
+            ? { ...task, form_metadata: formData }
+            : task
+        );
+        
+        return { ...prev, tasks: updatedTasks };
+      });
+
+      // Also update in cleanings array
+      setCleanings((prevCleanings: any) => {
+        if (!prevCleanings) return prevCleanings;
+        
+        return prevCleanings.map((item: any) => {
+          if (item.id === selectedCard.id && item.tasks) {
+            const updatedTasks = item.tasks.map((task: any) => 
+              task.task_id === taskId 
+                ? { ...task, form_metadata: formData }
+                : task
+            );
+            return { ...item, tasks: updatedTasks };
+          }
+          return item;
+        });
+      });
+
+      return result;
+    } catch (err: any) {
+      console.error('Error saving task form:', err);
+      setError(err.message || 'Failed to save task form');
+      throw err;
     }
   };
 
@@ -500,67 +792,10 @@ export default function StaffPage() {
                       {selectedCard.guest_name || 'No guest'}
                     </DialogDescription>
                   </div>
-                  
-                  {/* Form Icon Button - only show when not viewing form */}
-                  {!showCleaningForm && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={openCleaningForm}
-                      className="shrink-0 h-8 w-8 p-0"
-                      title="Open Cleaning Form"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                      </svg>
-                    </Button>
-                  )}
                 </div>
               </DialogHeader>
 
-              {showCleaningForm ? (
-                loadingTemplate ? (
-                  <div className="flex items-center justify-center py-12">
-                    <p className="text-slate-500">Loading form template...</p>
-                  </div>
-                ) : currentTemplate ? (
-                  <DynamicCleaningForm
-                    cleaningId={selectedCard.id}
-                    propertyName={selectedCard.property_name}
-                    template={currentTemplate}
-                    formMetadata={selectedCard.form_metadata}
-                    currentAction={selectedCard.card_actions}
-                    availableActions={getAvailableActions(selectedCard.card_actions)}
-                    onSave={async (formData) => {
-                      await saveCleaningForm(selectedCard.id, formData);
-                      setSelectedCard({...selectedCard, form_metadata: formData});
-                      setShowCleaningForm(false);
-                    }}
-                    onActionChange={async (action) => {
-                      await updateCardAction(selectedCard.id, action);
-                    }}
-                    onCancel={() => setShowCleaningForm(false)}
-                  />
-                ) : (
-                  <CleaningForm
-                    cleaningId={selectedCard.id}
-                    propertyName={selectedCard.property_name}
-                    formMetadata={selectedCard.form_metadata}
-                    currentAction={selectedCard.card_actions}
-                    availableActions={getAvailableActions(selectedCard.card_actions)}
-                    onSave={async (formData) => {
-                      await saveCleaningForm(selectedCard.id, formData);
-                      setSelectedCard({...selectedCard, form_metadata: formData});
-                      setShowCleaningForm(false);
-                    }}
-                    onActionChange={async (action) => {
-                      await updateCardAction(selectedCard.id, action);
-                    }}
-                    onCancel={() => setShowCleaningForm(false)}
-                  />
-                )
-              ) : (
-                <div className="space-y-4">
+              <div className="space-y-4">
               {/* Dates */}
               <div className="grid grid-cols-1 gap-3">
                 <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
@@ -618,36 +853,306 @@ export default function StaffPage() {
                 </div>
               </div>
 
-              {/* Status Badges */}
-              <div className="flex flex-wrap gap-2 pt-2">
-                <Badge
-                  variant={
-                    selectedCard.property_clean_status === 'needs_cleaning' ? 'destructive' :
-                    selectedCard.property_clean_status === 'cleaning_complete' ? 'default' : 'secondary'
-                  }
-                  className={`text-sm py-1.5 ${
-                    selectedCard.property_clean_status === 'needs_cleaning' 
-                      ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-300'
-                      : selectedCard.property_clean_status === 'cleaning_scheduled'
-                      ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-300'
-                      : selectedCard.property_clean_status === 'cleaning_complete'
-                      ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border-emerald-300'
-                      : ''
-                  }`}
-                >
-                  {selectedCard.property_clean_status === 'needs_cleaning' ? 'Needs Cleaning' :
-                   selectedCard.property_clean_status === 'cleaning_scheduled' ? 'Scheduled' :
-                   selectedCard.property_clean_status === 'cleaning_complete' ? 'Complete' :
-                   'Unknown'}
-                </Badge>
-                
-                <Badge variant={selectedCard.assigned_staff ? 'default' : 'outline'} className="text-sm py-1.5">
-                  {selectedCard.assigned_staff ? selectedCard.assigned_staff : 'Unassigned'}
-                </Badge>
-              </div>
+              {/* Tasks Section */}
+              {selectedCard.tasks && selectedCard.tasks.length > 0 ? (
+                <div className="space-y-3 mt-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                      Tasks ({selectedCard.completed_tasks || 0}/{selectedCard.total_tasks || 0})
+                    </h3>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      Click a task to expand
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {selectedCard.tasks.map((task: any) => (
+                      <Card 
+                        key={task.task_id}
+                        className="cursor-pointer hover:shadow-md transition-all"
+                        onClick={async () => {
+                          const newExpandedId = expandedTaskId === task.task_id ? null : task.task_id;
+                          setExpandedTaskId(newExpandedId);
+                          
+                          // Fetch template if expanding and template exists
+                          if (newExpandedId && task.template_id && !taskTemplates[task.template_id]) {
+                            await fetchTaskTemplate(task.template_id);
+                          }
+                        }}
+                      >
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-base flex items-center gap-2">
+                              {task.status === 'complete' ? '✓' : 
+                               task.status === 'in_progress' ? '▶' :
+                               task.status === 'pending' ? '○' : ''}
+                              {task.template_name || 'Unnamed Task'}
+                            </CardTitle>
+                            <Badge
+                              variant={task.type === 'maintenance' ? 'default' : 'secondary'}
+                              className={task.type === 'maintenance' 
+                                ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200' 
+                                : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                              }
+                            >
+                              {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                            </Badge>
+                          </div>
+                          <CardDescription>
+                            {task.card_actions === 'not_started' ? 'Not Started' :
+                             task.card_actions === 'in_progress' ? 'In Progress' :
+                             task.card_actions === 'paused' ? 'Paused' :
+                             task.card_actions === 'completed' ? 'Completed' :
+                             task.card_actions === 'reopened' ? 'Reopened' :
+                             'Not Started'}
+                            {task.assigned_staff && ` • ${task.assigned_staff}`}
+                          </CardDescription>
+                        </CardHeader>
+
+                        {expandedTaskId === task.task_id && (
+                          <CardContent className="pt-0 space-y-4" onClick={(e) => e.stopPropagation()}>
+                            {/* Staff Assignment */}
+                            <div>
+                              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
+                                Assigned Staff
+                              </label>
+                              {editingTaskStaff === task.task_id ? (
+                                <div className="flex flex-col gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <select
+                                      className="flex-1 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800"
+                                      onChange={(e) => {
+                                        if (e.target.value === 'new') {
+                                          setNewTaskStaffName('');
+                                        } else {
+                                          updateTaskAssignment(task.task_id, e.target.value || null);
+                                          setEditingTaskStaff(null);
+                                        }
+                                      }}
+                                      value={task.assigned_staff || ''}
+                                    >
+                                      <option value="">Unassigned</option>
+                                      {getUniqueStaffFromTasks().map(staff => (
+                                        <option key={staff} value={staff}>{staff}</option>
+                                      ))}
+                                      <option value="new">+ Add New Staff...</option>
+                                    </select>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => setEditingTaskStaff(null)}
+                                    >
+                                      ✕
+                                    </Button>
+                                  </div>
+                                  {newTaskStaffName !== undefined && (
+                                    <div className="flex gap-2">
+                                      <input
+                                        type="text"
+                                        placeholder="Enter staff name..."
+                                        value={newTaskStaffName}
+                                        onChange={(e) => setNewTaskStaffName(e.target.value)}
+                                        className="flex-1 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg"
+                                      />
+                                      <Button
+                                        onClick={() => {
+                                          if (newTaskStaffName.trim()) {
+                                            updateTaskAssignment(task.task_id, newTaskStaffName.trim());
+                                            setEditingTaskStaff(null);
+                                            setNewTaskStaffName('');
+                                          }
+                                        }}
+                                        disabled={!newTaskStaffName.trim()}
+                                        size="sm"
+                                      >
+                                        Save
+                                      </Button>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setEditingTaskStaff(task.task_id)}
+                                  className="w-full justify-start"
+                                >
+                                  {task.assigned_staff || 'Click to assign staff'}
+                                </Button>
+                              )}
+                            </div>
+
+                            {/* Scheduled Date/Time */}
+                            <div>
+                              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
+                                Scheduled For
+                              </label>
+                              <div className="flex gap-2">
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      className="w-40 justify-between font-normal"
+                                      size="sm"
+                                    >
+                                      {task.scheduled_start 
+                                        ? new Date(task.scheduled_start).toLocaleDateString() 
+                                        : "Select date"}
+                                      <ChevronDownIcon className="h-4 w-4" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-0" align="start">
+                                    <Calendar
+                                      mode="single"
+                                      selected={task.scheduled_start ? new Date(task.scheduled_start) : undefined}
+                                      onSelect={(date) => {
+                                        if (date) {
+                                          const timeStr = task.scheduled_start 
+                                            ? new Date(task.scheduled_start).toTimeString().slice(0, 5) 
+                                            : '09:00';
+                                          const dateStr = date.toISOString().split('T')[0];
+                                          updateTaskSchedule(task.task_id, `${dateStr}T${timeStr}:00`);
+                                        } else {
+                                          updateTaskSchedule(task.task_id, null);
+                                        }
+                                      }}
+                                    />
+                                  </PopoverContent>
+                                </Popover>
+                                
+                                <Input
+                                  type="time"
+                                  value={task.scheduled_start ? new Date(task.scheduled_start).toTimeString().slice(0, 5) : ""}
+                                  onChange={(e) => {
+                                    if (task.scheduled_start) {
+                                      const dateStr = new Date(task.scheduled_start).toISOString().split('T')[0];
+                                      updateTaskSchedule(task.task_id, `${dateStr}T${e.target.value}:00`);
+                                    } else {
+                                      const today = new Date().toISOString().split('T')[0];
+                                      updateTaskSchedule(task.task_id, `${today}T${e.target.value}:00`);
+                                    }
+                                  }}
+                                  className="w-32"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Template Form */}
+                            {task.template_id && (
+                              <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
+                                {loadingTaskTemplate === task.template_id ? (
+                                  <div className="flex items-center justify-center py-4">
+                                    <p className="text-sm text-slate-500">Loading form...</p>
+                                  </div>
+                                ) : taskTemplates[task.template_id] ? (
+                                  <DynamicCleaningForm
+                                    cleaningId={task.task_id}
+                                    propertyName={selectedCard.property_name}
+                                    template={taskTemplates[task.template_id]}
+                                    formMetadata={task.form_metadata}
+                                    onSave={async (formData) => {
+                                      await saveTaskForm(task.task_id, formData);
+                                    }}
+                                  />
+                                ) : (
+                                  <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-2">
+                                    No template configured
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </CardContent>
+                        )}
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-6 p-6 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 text-center">
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    No tasks configured for this property. Assign templates in the Templates page.
+                  </p>
+                </div>
+              )}
 
             </div>
-              )}
+
+            {/* Task Action Buttons - Show when task is expanded */}
+            {expandedTaskId && selectedCard.tasks && selectedCard.tasks.length > 0 && (() => {
+              const expandedTask = selectedCard.tasks.find((t: any) => t.task_id === expandedTaskId);
+              return expandedTask ? (
+                <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700">
+                  <div className="flex flex-wrap gap-2">
+                    {expandedTask.card_actions === 'not_started' && (
+                      <>
+                        <Button
+                          onClick={() => updateTaskAction(expandedTask.task_id, 'in_progress')}
+                          size="lg"
+                          className="flex-1"
+                        >
+                          Start
+                        </Button>
+                        <Button
+                          onClick={() => updateTaskAction(expandedTask.task_id, 'completed')}
+                          size="lg"
+                          variant="outline"
+                          className="flex-1"
+                        >
+                          Mark Complete
+                        </Button>
+                      </>
+                    )}
+                    {expandedTask.card_actions === 'in_progress' && (
+                      <>
+                        <Button
+                          onClick={() => updateTaskAction(expandedTask.task_id, 'paused')}
+                          size="lg"
+                          variant="outline"
+                          className="flex-1"
+                        >
+                          Pause
+                        </Button>
+                        <Button
+                          onClick={() => updateTaskAction(expandedTask.task_id, 'completed')}
+                          size="lg"
+                          className="flex-1"
+                        >
+                          Complete
+                        </Button>
+                      </>
+                    )}
+                    {expandedTask.card_actions === 'paused' && (
+                      <>
+                        <Button
+                          onClick={() => updateTaskAction(expandedTask.task_id, 'in_progress')}
+                          size="lg"
+                          className="flex-1"
+                        >
+                          Resume
+                        </Button>
+                        <Button
+                          onClick={() => updateTaskAction(expandedTask.task_id, 'completed')}
+                          size="lg"
+                          variant="outline"
+                          className="flex-1"
+                        >
+                          Complete
+                        </Button>
+                      </>
+                    )}
+                    {(expandedTask.card_actions === 'completed' || expandedTask.card_actions === 'reopened') && (
+                      <Button
+                        onClick={() => updateTaskAction(expandedTask.task_id, 'not_started')}
+                        size="lg"
+                        className="w-full"
+                      >
+                        Reopen
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ) : null;
+            })()}
 
             <DialogFooter className="border-t pt-4">
               <Button

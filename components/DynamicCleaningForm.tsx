@@ -38,26 +38,18 @@ interface DynamicCleaningFormProps {
   propertyName: string;
   template: Template | null;
   formMetadata?: any;
-  currentAction: string;
-  availableActions: { label: string; value: string }[];
   onSave: (formData: any) => Promise<void>;
-  onActionChange: (action: string) => Promise<void>;
-  onCancel: () => void;
 }
 
 export default function DynamicCleaningForm({ 
   cleaningId, 
   propertyName, 
-  template,
-  formMetadata,
-  currentAction,
-  availableActions,
-  onSave,
-  onActionChange,
-  onCancel 
+  template, 
+  formMetadata, 
+  onSave
 }: DynamicCleaningFormProps) {
   const [isSaving, setIsSaving] = useState(false);
-  const [isUpdatingAction, setIsUpdatingAction] = useState(false);
+  const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Create default values from template fields and existing metadata
   const getDefaultValues = () => {
@@ -103,35 +95,55 @@ export default function DynamicCleaningForm({
     form.reset(getDefaultValues());
   }, [template, formMetadata]);
 
-  const handleActionChange = async (action: string) => {
-    setIsUpdatingAction(true);
-    try {
-      await onActionChange(action);
-    } finally {
-      setIsUpdatingAction(false);
-    }
-  };
+  // Auto-save form on change with debounce
+  useEffect(() => {
+    const subscription = form.watch((values) => {
+      // Clear existing timeout
+      if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+      }
 
-  const handleComplete = async () => {
-    await handleActionChange('completed');
-  };
+      // Set new timeout for auto-save
+      const timeout = setTimeout(async () => {
+        setIsSaving(true);
+        try {
+          await onSave({
+            ...values,
+            property_name: propertyName,
+            template_id: template?.id
+          });
+        } catch (err) {
+          console.error('Auto-save error:', err);
+        } finally {
+          setIsSaving(false);
+        }
+      }, 500); // 500ms debounce
+
+      setAutoSaveTimeout(timeout);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+      }
+    };
+  }, [form.watch, autoSaveTimeout]);
 
   const onSubmit = async (values: any) => {
+    // Form submission is now handled by auto-save
+    // This is just for explicit save if needed
     setIsSaving(true);
     try {
       await onSave({
         ...values,
-        completed_at: new Date().toISOString(),
         property_name: propertyName,
         template_id: template?.id
       });
-      await handleComplete();
     } finally {
       setIsSaving(false);
     }
   };
-
-  const primaryAction = availableActions.find(action => action.value !== 'completed');
 
   if (!template) {
     return (
@@ -309,45 +321,17 @@ export default function DynamicCleaningForm({
           </p>
         </div>
 
-        {/* Primary Action Button (Start/Pause/Resume/Reopen) */}
-        {primaryAction && (
-          <Button
-            onClick={() => handleActionChange(primaryAction.value)}
-            disabled={isUpdatingAction}
-            variant="outline"
-            size="lg"
-            className="w-full"
-          >
-            {primaryAction.label}
-          </Button>
-        )}
-
         {/* Dynamic Form */}
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             {template.fields.map(field => renderField(field))}
-
-            {/* Bottom Actions */}
-            <div className="flex gap-3 pt-4 border-t">
-              <Button 
-                type="button" 
-                onClick={onCancel} 
-                variant="outline" 
-                size="lg"
-                className="flex-1"
-              >
-                Back
-              </Button>
-              <Button 
-                type="submit"
-                disabled={isSaving || isUpdatingAction}
-                variant="default"
-                size="lg"
-                className="flex-1 bg-green-600 hover:bg-green-700"
-              >
-                {isSaving || isUpdatingAction ? 'Saving...' : 'Mark Complete'}
-              </Button>
-            </div>
+            
+            {/* Auto-save indicator */}
+            {isSaving && (
+              <div className="text-xs text-slate-500 dark:text-slate-400 text-center py-2">
+                Saving...
+              </div>
+            )}
           </form>
         </Form>
       </div>
