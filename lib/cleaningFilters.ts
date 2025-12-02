@@ -6,14 +6,14 @@ export interface CleaningFilters {
 
 export function applyCleaningFilters(items: any[], filters: CleaningFilters): any[] {
   return items.filter(item => {
-    // Clean Status filter
+    // Clean Status filter - now uses turnover_status
     if (filters.cleanStatus.length > 0) {
-      if (!filters.cleanStatus.includes(item.property_clean_status || '')) {
+      if (!filters.cleanStatus.includes(item.turnover_status || 'no_tasks')) {
         return false;
       }
     }
     
-    // Card Actions filter
+    // Card Actions filter - kept for backward compatibility but may not be as useful now
     if (filters.cardActions.length > 0) {
       if (!filters.cardActions.includes(item.card_actions || 'not_started')) {
         return false;
@@ -45,9 +45,9 @@ export function sortCleanings(items: any[], sortBy: string): any[] {
   return [...items].sort((a, b) => {
     switch (sortBy) {
       case 'status-priority':
-        // Sort by status priority (red, yellow, green), then by next_check_in
-        const priorityA = getSortPriority(a.property_clean_status);
-        const priorityB = getSortPriority(b.property_clean_status);
+        // Sort by turnover_status priority (red, yellow, green), then by next_check_in
+        const priorityA = getSortPriority(a.turnover_status);
+        const priorityB = getSortPriority(b.turnover_status);
         
         if (priorityA !== priorityB) {
           return priorityA - priorityB;
@@ -104,14 +104,15 @@ export function sortCleanings(items: any[], sortBy: string): any[] {
 
 function getSortPriority(status: string): number {
   switch (status) {
-    case 'needs_cleaning':
-      return 1;
-    case 'cleaning_scheduled':
-      return 2;
-    case 'cleaning_complete':
-      return 3;
+    case 'not_started':
+      return 1; // Red - highest priority
+    case 'in_progress':
+      return 2; // Yellow
+    case 'complete':
+      return 3; // Green
+    case 'no_tasks':
+      return 4; // Gray - lowest priority
     default:
-      return 4;
+      return 5;
   }
 }
-

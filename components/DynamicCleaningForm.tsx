@@ -49,7 +49,6 @@ export default function DynamicCleaningForm({
   onSave
 }: DynamicCleaningFormProps) {
   const [isSaving, setIsSaving] = useState(false);
-  const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Create default values from template fields and existing metadata
   const getDefaultValues = () => {
@@ -95,55 +94,33 @@ export default function DynamicCleaningForm({
     form.reset(getDefaultValues());
   }, [template, formMetadata]);
 
-  // Auto-save form on change with debounce
-  useEffect(() => {
-    const subscription = form.watch((values) => {
-      // Clear existing timeout
-      if (autoSaveTimeout) {
-        clearTimeout(autoSaveTimeout);
-      }
-
-      // Set new timeout for auto-save
-      const timeout = setTimeout(async () => {
-        setIsSaving(true);
-        try {
-          await onSave({
-            ...values,
-            property_name: propertyName,
-            template_id: template?.id
-          });
-        } catch (err) {
-          console.error('Auto-save error:', err);
-        } finally {
-          setIsSaving(false);
-        }
-      }, 500); // 500ms debounce
-
-      setAutoSaveTimeout(timeout);
-    });
-
-    return () => {
-      subscription.unsubscribe();
-      if (autoSaveTimeout) {
-        clearTimeout(autoSaveTimeout);
-      }
+  // Get current form values - exposed for external save
+  const getFormValues = () => {
+    return {
+      ...form.getValues(),
+      property_name: propertyName,
+      template_id: template?.id
     };
-  }, [form.watch, autoSaveTimeout]);
+  };
 
-  const onSubmit = async (values: any) => {
-    // Form submission is now handled by auto-save
-    // This is just for explicit save if needed
+  // Save form and call onSave callback
+  const saveForm = async () => {
     setIsSaving(true);
     try {
-      await onSave({
-        ...values,
-        property_name: propertyName,
-        template_id: template?.id
-      });
+      await onSave(getFormValues());
     } finally {
       setIsSaving(false);
     }
   };
+
+  // Expose saveForm to parent via ref or callback on mount
+  useEffect(() => {
+    // Store save function reference for parent to access
+    (window as any).__currentFormSave = saveForm;
+    return () => {
+      delete (window as any).__currentFormSave;
+    };
+  }, []);
 
   if (!template) {
     return (
@@ -323,16 +300,9 @@ export default function DynamicCleaningForm({
 
         {/* Dynamic Form */}
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <div className="space-y-6">
             {template.fields.map(field => renderField(field))}
-            
-            {/* Auto-save indicator */}
-            {isSaving && (
-              <div className="text-xs text-slate-500 dark:text-slate-400 text-center py-2">
-                Saving...
-              </div>
-            )}
-          </form>
+          </div>
         </Form>
       </div>
     </div>

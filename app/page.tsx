@@ -445,6 +445,11 @@ export default function Home() {
 
   const updateTaskAction = async (taskId: string, action: string) => {
     try {
+      // Save form data if there's a form open
+      if ((window as any).__currentFormSave) {
+        await (window as any).__currentFormSave();
+      }
+
       const response = await fetch('/api/update-task-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1046,29 +1051,29 @@ export default function Home() {
                       <label className="flex items-center gap-2 text-sm cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={filters.cleanStatus.includes('needs_cleaning')}
-                          onChange={() => toggleFilter('cleanStatus', 'needs_cleaning')}
+                          checked={filters.cleanStatus.includes('not_started')}
+                          onChange={() => toggleFilter('cleanStatus', 'not_started')}
                           className="rounded border-slate-300"
                         />
-                        <span>Needs Cleaning</span>
+                        <span className="text-red-600">Not Started</span>
                       </label>
                       <label className="flex items-center gap-2 text-sm cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={filters.cleanStatus.includes('cleaning_scheduled')}
-                          onChange={() => toggleFilter('cleanStatus', 'cleaning_scheduled')}
+                          checked={filters.cleanStatus.includes('in_progress')}
+                          onChange={() => toggleFilter('cleanStatus', 'in_progress')}
                           className="rounded border-slate-300"
                         />
-                        <span>Scheduled</span>
+                        <span className="text-yellow-600">In Progress</span>
                       </label>
                       <label className="flex items-center gap-2 text-sm cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={filters.cleanStatus.includes('cleaning_complete')}
-                          onChange={() => toggleFilter('cleanStatus', 'cleaning_complete')}
+                          checked={filters.cleanStatus.includes('complete')}
+                          onChange={() => toggleFilter('cleanStatus', 'complete')}
                           className="rounded border-slate-300"
                         />
-                        <span>Complete</span>
+                        <span className="text-green-600">Complete</span>
                       </label>
                     </div>
                   </div>
@@ -1475,9 +1480,9 @@ export default function Home() {
       <Dialog open={!!selectedCard} onOpenChange={(open) => !open && setSelectedCard(null)}>
         <DialogContent
           className={`max-w-md max-h-[90vh] overflow-y-auto border-2 ${
-            selectedCard?.property_clean_status === 'needs_cleaning' ? 'border-red-400' :
-            selectedCard?.property_clean_status === 'cleaning_scheduled' ? 'border-yellow-400' :
-            selectedCard?.property_clean_status === 'cleaning_complete' ? 'border-emerald-400' :
+            selectedCard?.turnover_status === 'not_started' ? 'border-red-400' :
+            selectedCard?.turnover_status === 'in_progress' ? 'border-yellow-400' :
+            selectedCard?.turnover_status === 'complete' ? 'border-emerald-400' :
             'border-slate-300'
           }`}
         >
@@ -1531,18 +1536,6 @@ export default function Home() {
                     <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Next check in</div>
                     <div className="text-sm font-semibold text-slate-900 dark:text-white">
                       {selectedCard.next_check_in ? formatDate(selectedCard.next_check_in) : 'Not set'}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
-                  <svg className="w-5 h-5 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div className="flex-1">
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Scheduled</div>
-                    <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                      {selectedCard.scheduled_start ? formatDate(selectedCard.scheduled_start) : 'Not set'}
                     </div>
                   </div>
                 </div>

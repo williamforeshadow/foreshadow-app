@@ -43,14 +43,17 @@ export default function CleaningCards({ data, filters, sortBy, onCardClick }: Cl
     });
   };
 
+  // New: Use turnover_status for card colors
   const getCardBackgroundColor = (status: string) => {
     switch (status) {
-      case 'needs_cleaning':
+      case 'not_started':
         return 'bg-red-50/80 dark:bg-red-950/30 border-red-200 dark:border-red-900';
-      case 'cleaning_scheduled':
+      case 'in_progress':
         return 'bg-yellow-50/80 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-900';
-      case 'cleaning_complete':
+      case 'complete':
         return 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900';
+      case 'no_tasks':
+        return 'bg-slate-50/80 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700';
       default:
         return 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700';
     }
@@ -62,10 +65,27 @@ export default function CleaningCards({ data, filters, sortBy, onCardClick }: Cl
         <Card
           key={item.cleaning_id || item.id || index}
           onClick={() => onCardClick(item)}
-          className={`cursor-pointer hover:shadow-xl transition-all duration-200 ${getCardBackgroundColor(item.property_clean_status)}`}
+          className={`cursor-pointer hover:shadow-xl transition-all duration-200 ${getCardBackgroundColor(item.turnover_status)}`}
         >
-          <CardHeader>
-            <CardTitle>{item.property_name || 'Unknown Property'}</CardTitle>
+          <CardHeader className="pb-2">
+            <div className="flex items-start justify-between gap-2">
+              <CardTitle className="text-base">{item.property_name || 'Unknown Property'}</CardTitle>
+              {/* Task Count Badge */}
+              {item.total_tasks > 0 && (
+                <Badge 
+                  variant="outline" 
+                  className={`shrink-0 text-xs font-semibold ${
+                    item.turnover_status === 'complete' 
+                      ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border-emerald-300'
+                      : item.turnover_status === 'in_progress'
+                      ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 border-yellow-300'
+                      : 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 border-red-300'
+                  }`}
+                >
+                  {item.completed_tasks || 0}/{item.total_tasks}
+                </Badge>
+              )}
+            </div>
             <CardDescription className="flex items-center gap-2">
               <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -103,29 +123,6 @@ export default function CleaningCards({ data, filters, sortBy, onCardClick }: Cl
                 </div>
               </div>
 
-              {/* Card Actions - Read Only */}
-              <div className="flex items-center gap-3">
-                <svg className="w-4 h-4 text-purple-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Action</div>
-                  <div className={`text-sm font-medium ${
-                    item.card_actions === 'in_progress' ? 'text-blue-600 dark:text-blue-400' :
-                    item.card_actions === 'paused' ? 'text-orange-600 dark:text-orange-400' :
-                    item.card_actions === 'completed' ? 'text-green-600 dark:text-green-400' :
-                    'text-slate-600 dark:text-slate-400'
-                  }`}>
-                    {item.card_actions === 'not_started' ? 'Not Started' :
-                     item.card_actions === 'in_progress' ? 'In Progress' :
-                     item.card_actions === 'paused' ? 'Paused' :
-                     item.card_actions === 'completed' ? 'Completed' :
-                     'Not Started'}
-                  </div>
-                </div>
-              </div>
-
               {/* Occupancy Status */}
               <div className="flex items-center gap-3">
                 <svg className={`w-4 h-4 shrink-0 ${item.occupancy_status === 'occupied' ? 'text-orange-500' : 'text-slate-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -145,38 +142,9 @@ export default function CleaningCards({ data, filters, sortBy, onCardClick }: Cl
                 </div>
               </div>
             </div>
-
-            {/* Status Badges */}
-            <div className="flex flex-wrap gap-2 pt-2">
-              <Badge 
-                variant={
-                  item.property_clean_status === 'needs_cleaning' ? 'destructive' :
-                  item.property_clean_status === 'cleaning_complete' ? 'default' : 'secondary'
-                }
-                className={
-                  item.property_clean_status === 'needs_cleaning' 
-                    ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-300'
-                    : item.property_clean_status === 'cleaning_scheduled'
-                    ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-300'
-                    : item.property_clean_status === 'cleaning_complete'
-                    ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border-emerald-300'
-                    : ''
-                }
-              >
-                {item.property_clean_status === 'needs_cleaning' ? 'Needs Cleaning' :
-                 item.property_clean_status === 'cleaning_scheduled' ? 'Scheduled' :
-                 item.property_clean_status === 'cleaning_complete' ? 'Complete' :
-                 'Unknown'}
-              </Badge>
-              
-              <Badge variant={item.assigned_staff ? 'default' : 'outline'}>
-                {item.assigned_staff ? item.assigned_staff : 'Unassigned'}
-              </Badge>
-            </div>
           </CardContent>
         </Card>
       ))}
     </div>
   );
 }
-
