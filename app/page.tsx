@@ -65,6 +65,9 @@ export default function Home() {
   const [newTaskStaffName, setNewTaskStaffName] = useState('');
   const [taskTemplates, setTaskTemplates] = useState<{[key: string]: any}>({});
   const [loadingTaskTemplate, setLoadingTaskTemplate] = useState<string | null>(null);
+  const [availableTemplates, setAvailableTemplates] = useState<any[]>([]);
+  const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
+  const [addingTask, setAddingTask] = useState(false);
   const [cardViewMode, setCardViewMode] = useState<'cleanings' | 'maintenance'>('cleanings');
   const [maintenanceCards, setMaintenanceCards] = useState<any[]>([]);
   const [showCreateMaintenance, setShowCreateMaintenance] = useState(false);
@@ -462,6 +465,18 @@ export default function Home() {
         throw new Error(result.error || 'Failed to update task action');
       }
 
+      // Helper to calculate turnover_status from task counts
+      const calculateTurnoverStatus = (tasks: any[]) => {
+        const total = tasks.length;
+        const completed = tasks.filter((t: any) => t.status === 'complete').length;
+        const inProgress = tasks.filter((t: any) => t.status === 'in_progress').length;
+        
+        if (total === 0) return 'no_tasks';
+        if (completed === total) return 'complete';
+        if (inProgress > 0 || completed > 0) return 'in_progress';
+        return 'not_started';
+      };
+
       // Update the task in selectedCard.tasks array
       setSelectedCard((prev: any) => {
         if (!prev || !prev.tasks) return prev;
@@ -472,9 +487,10 @@ export default function Home() {
             : task
         );
         
-        // Recalculate task counts
+        // Recalculate task counts and turnover_status
         const completedCount = updatedTasks.filter((t: any) => t.status === 'complete').length;
         const inProgressCount = updatedTasks.filter((t: any) => t.status === 'in_progress').length;
+        const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
         
         // If this was the first cleaning task, update top-level fields for backward compatibility
         const firstCleaningTask = updatedTasks.find((t: any) => t.type === 'cleaning');
@@ -486,6 +502,7 @@ export default function Home() {
           tasks: updatedTasks,
           completed_tasks: completedCount,
           tasks_in_progress: inProgressCount,
+          turnover_status: newTurnoverStatus,
           ...(shouldUpdateTopLevel ? {
             card_actions: action,
             status: result.data.status
@@ -493,7 +510,7 @@ export default function Home() {
         };
       });
 
-      // Also update the response array
+      // Also update the response array (grid view)
       setResponse((prevResponse: any) => {
         if (!prevResponse) return prevResponse;
         
@@ -507,6 +524,7 @@ export default function Home() {
             );
             const completedCount = updatedTasks.filter((t: any) => t.status === 'complete').length;
             const inProgressCount = updatedTasks.filter((t: any) => t.status === 'in_progress').length;
+            const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
             
             // If this was the first cleaning task, update top-level fields for backward compatibility
             const firstCleaningTask = updatedTasks.find((t: any) => t.type === 'cleaning');
@@ -518,6 +536,7 @@ export default function Home() {
               tasks: updatedTasks,
               completed_tasks: completedCount,
               tasks_in_progress: inProgressCount,
+              turnover_status: newTurnoverStatus,
               ...(shouldUpdateTopLevel ? {
                 card_actions: action,
                 status: result.data.status
@@ -732,6 +751,170 @@ export default function Home() {
       console.error('Error saving task form:', err);
       setError(err.message || 'Failed to save task form');
       throw err;
+    }
+  };
+
+  // Fetch available templates for adding tasks
+  const fetchAvailableTemplates = async () => {
+    try {
+      const response = await fetch('/api/tasks');
+      const result = await response.json();
+      if (response.ok && result.data) {
+        setAvailableTemplates(result.data);
+      }
+    } catch (err) {
+      console.error('Error fetching templates:', err);
+    }
+  };
+
+  // Helper to calculate turnover_status
+  const calculateTurnoverStatus = (tasks: any[]) => {
+    const total = tasks.length;
+    const completed = tasks.filter((t: any) => t.status === 'complete').length;
+    const inProgress = tasks.filter((t: any) => t.status === 'in_progress').length;
+    
+    if (total === 0) return 'no_tasks';
+    if (completed === total) return 'complete';
+    if (inProgress > 0 || completed > 0) return 'in_progress';
+    return 'not_started';
+  };
+
+  // Add a new task to the current turnover card
+  const addTaskToCard = async (templateId: string) => {
+    if (!selectedCard) return;
+    
+    setAddingTask(true);
+    try {
+      const response = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reservation_id: selectedCard.id,
+          template_id: templateId
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to add task');
+      }
+
+      const newTask = result.data;
+
+      // Update selectedCard with new task
+      setSelectedCard((prev: any) => {
+        if (!prev) return prev;
+        
+        const updatedTasks = [...(prev.tasks || []), newTask];
+        const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
+        
+        return {
+          ...prev,
+          tasks: updatedTasks,
+          total_tasks: updatedTasks.length,
+          completed_tasks: updatedTasks.filter((t: any) => t.status === 'complete').length,
+          tasks_in_progress: updatedTasks.filter((t: any) => t.status === 'in_progress').length,
+          turnover_status: newTurnoverStatus
+        };
+      });
+
+      // Update response array (grid view)
+      setResponse((prevResponse: any) => {
+        if (!prevResponse) return prevResponse;
+        
+        const items = Array.isArray(prevResponse) ? prevResponse : [prevResponse];
+        const updatedItems = items.map((item: any) => {
+          if (item.id === selectedCard.id) {
+            const updatedTasks = [...(item.tasks || []), newTask];
+            const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
+            
+            return {
+              ...item,
+              tasks: updatedTasks,
+              total_tasks: updatedTasks.length,
+              completed_tasks: updatedTasks.filter((t: any) => t.status === 'complete').length,
+              tasks_in_progress: updatedTasks.filter((t: any) => t.status === 'in_progress').length,
+              turnover_status: newTurnoverStatus
+            };
+          }
+          return item;
+        });
+        
+        return Array.isArray(prevResponse) ? updatedItems : updatedItems[0];
+      });
+
+      setShowAddTaskDialog(false);
+    } catch (err: any) {
+      setError(err.message || 'Failed to add task');
+    } finally {
+      setAddingTask(false);
+    }
+  };
+
+  // Delete a task from the current turnover card
+  const deleteTaskFromCard = async (taskId: string) => {
+    if (!selectedCard) return;
+    
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'DELETE'
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to delete task');
+      }
+
+      // Update selectedCard by removing the task
+      setSelectedCard((prev: any) => {
+        if (!prev) return prev;
+        
+        const updatedTasks = (prev.tasks || []).filter((t: any) => t.task_id !== taskId);
+        const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
+        
+        return {
+          ...prev,
+          tasks: updatedTasks,
+          total_tasks: updatedTasks.length,
+          completed_tasks: updatedTasks.filter((t: any) => t.status === 'complete').length,
+          tasks_in_progress: updatedTasks.filter((t: any) => t.status === 'in_progress').length,
+          turnover_status: newTurnoverStatus
+        };
+      });
+
+      // Update response array (grid view)
+      setResponse((prevResponse: any) => {
+        if (!prevResponse) return prevResponse;
+        
+        const items = Array.isArray(prevResponse) ? prevResponse : [prevResponse];
+        const updatedItems = items.map((item: any) => {
+          if (item.id === selectedCard.id) {
+            const updatedTasks = (item.tasks || []).filter((t: any) => t.task_id !== taskId);
+            const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
+            
+            return {
+              ...item,
+              tasks: updatedTasks,
+              total_tasks: updatedTasks.length,
+              completed_tasks: updatedTasks.filter((t: any) => t.status === 'complete').length,
+              tasks_in_progress: updatedTasks.filter((t: any) => t.status === 'in_progress').length,
+              turnover_status: newTurnoverStatus
+            };
+          }
+          return item;
+        });
+        
+        return Array.isArray(prevResponse) ? updatedItems : updatedItems[0];
+      });
+
+      // If the deleted task was expanded, collapse it
+      if (expandedTaskId === taskId) {
+        setExpandedTaskId(null);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete task');
     }
   };
 
@@ -1477,7 +1660,13 @@ export default function Home() {
       </div>
 
       {/* Card Detail Modal */}
-      <Dialog open={!!selectedCard} onOpenChange={(open) => !open && setSelectedCard(null)}>
+      <Dialog open={!!selectedCard} onOpenChange={(open) => {
+        if (!open) {
+          setSelectedCard(null);
+          setShowAddTaskDialog(false);
+          setExpandedTaskId(null);
+        }
+      }}>
         <DialogContent
           className={`max-w-md max-h-[90vh] overflow-y-auto border-2 ${
             selectedCard?.turnover_status === 'not_started' ? 'border-red-400' :
@@ -1585,7 +1774,10 @@ export default function Home() {
                       <Card 
                         key={task.task_id}
                         className="cursor-pointer hover:shadow-md transition-all"
-                        onClick={async () => {
+                        onClick={async (e) => {
+                          // Don't expand if clicking delete button
+                          if ((e.target as HTMLElement).closest('button')) return;
+                          
                           const newExpandedId = expandedTaskId === task.task_id ? null : task.task_id;
                           setExpandedTaskId(newExpandedId);
                           
@@ -1603,15 +1795,32 @@ export default function Home() {
                                task.status === 'pending' ? '○' : ''}
                               {task.template_name || 'Unnamed Task'}
                             </CardTitle>
-                            <Badge
-                              variant={task.type === 'maintenance' ? 'default' : 'secondary'}
-                              className={task.type === 'maintenance' 
-                                ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200' 
-                                : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                              }
-                            >
-                              {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
-                            </Badge>
+                            <div className="flex items-center gap-2">
+                              <Badge
+                                variant={task.type === 'maintenance' ? 'default' : 'secondary'}
+                                className={task.type === 'maintenance' 
+                                  ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200' 
+                                  : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                                }
+                              >
+                                {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                              </Badge>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm('Remove this task from the turnover?')) {
+                                    deleteTaskFromCard(task.task_id);
+                                  }
+                                }}
+                              >
+                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </Button>
+                            </div>
                           </div>
                           <CardDescription>
                             {task.card_actions === 'not_started' ? 'Not Started' :
@@ -1781,12 +1990,149 @@ export default function Home() {
                       </Card>
                     ))}
                   </div>
+
+                  {/* Add Task Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full mt-3"
+                    onClick={() => {
+                      fetchAvailableTemplates();
+                      setShowAddTaskDialog(true);
+                    }}
+                  >
+                    <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Add Task
+                  </Button>
+
+                  {/* Add Task Dialog */}
+                  {showAddTaskDialog && (
+                    <div className="mt-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-medium text-slate-900 dark:text-white">Select a Template</h4>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={() => setShowAddTaskDialog(false)}
+                        >
+                          ✕
+                        </Button>
+                      </div>
+                      
+                      {availableTemplates.length > 0 ? (
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {availableTemplates
+                            .filter(template => 
+                              // Filter out templates already assigned to this card
+                              !selectedCard.tasks?.some((t: any) => t.template_id === template.id)
+                            )
+                            .map((template) => (
+                              <Button
+                                key={template.id}
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start"
+                                disabled={addingTask}
+                                onClick={() => addTaskToCard(template.id)}
+                              >
+                                <Badge 
+                                  variant="outline" 
+                                  className={`mr-2 ${
+                                    template.type === 'maintenance' 
+                                      ? 'bg-orange-100 text-orange-800 border-orange-300' 
+                                      : 'bg-blue-100 text-blue-800 border-blue-300'
+                                  }`}
+                                >
+                                  {template.type === 'cleaning' ? 'C' : 'M'}
+                                </Badge>
+                                {template.name}
+                              </Button>
+                            ))}
+                          {availableTemplates.filter(t => 
+                            !selectedCard.tasks?.some((task: any) => task.template_id === t.id)
+                          ).length === 0 && (
+                            <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-2">
+                              All templates already assigned
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-2">
+                          Loading templates...
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="mt-6 p-6 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 text-center">
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    No tasks configured for this property. Assign templates in the Templates page.
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
+                    No tasks configured for this property.
                   </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      fetchAvailableTemplates();
+                      setShowAddTaskDialog(true);
+                    }}
+                  >
+                    <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Add Task
+                  </Button>
+                  
+                  {/* Add Task Dialog (when no tasks exist) */}
+                  {showAddTaskDialog && (
+                    <div className="mt-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-left">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-medium text-slate-900 dark:text-white">Select a Template</h4>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={() => setShowAddTaskDialog(false)}
+                        >
+                          ✕
+                        </Button>
+                      </div>
+                      
+                      {availableTemplates.length > 0 ? (
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {availableTemplates.map((template) => (
+                            <Button
+                              key={template.id}
+                              variant="ghost"
+                              size="sm"
+                              className="w-full justify-start"
+                              disabled={addingTask}
+                              onClick={() => addTaskToCard(template.id)}
+                            >
+                              <Badge 
+                                variant="outline" 
+                                className={`mr-2 ${
+                                  template.type === 'maintenance' 
+                                    ? 'bg-orange-100 text-orange-800 border-orange-300' 
+                                    : 'bg-blue-100 text-blue-800 border-blue-300'
+                                }`}
+                              >
+                                {template.type === 'cleaning' ? 'C' : 'M'}
+                              </Badge>
+                              {template.name}
+                            </Button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-2">
+                          Loading templates...
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
