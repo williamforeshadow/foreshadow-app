@@ -50,9 +50,7 @@ interface FieldDefinition {
 
 const templateFormSchema = z.object({
   name: z.string().min(1, 'Template name is required'),
-  type: z.enum(['cleaning', 'maintenance'], {
-    required_error: 'Template type is required',
-  }),
+  type: z.enum(['cleaning', 'maintenance']),
   description: z.string().optional(),
 });
 

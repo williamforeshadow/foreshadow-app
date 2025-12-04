@@ -304,12 +304,12 @@ export default function StaffPage() {
     }
   };
 
-  const getUniqueStaffFromTasks = () => {
+  const getUniqueStaffFromTasks = (): string[] => {
     if (!cleanings) return [];
     const allTasks = cleanings.flatMap((item: any) => item.tasks || []);
     const staff = allTasks
       .map((task: any) => task.assigned_staff)
-      .filter(s => s !== null && s !== undefined);
+      .filter((s: any) => s !== null && s !== undefined) as string[];
     return Array.from(new Set(staff)).sort();
   };
 

@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { ChevronDownIcon } from 'lucide-react';
 import Timeline from '@/components/Timeline';
 import FloatingWindow from '@/components/FloatingWindow';
@@ -57,8 +58,23 @@ export default function Home() {
   const [showCardsWindow, setShowCardsWindow] = useState(true);
   const [showTimelineWindow, setShowTimelineWindow] = useState(true);
   const [showQueryWindow, setShowQueryWindow] = useState(false);
-  const [activeWindow, setActiveWindow] = useState<'cards' | 'timeline' | 'query'>('cards');
-  const [windowOrder, setWindowOrder] = useState<Array<'cards' | 'timeline' | 'query'>>(['cards', 'timeline', 'query']);
+  const [showProjectsWindow, setShowProjectsWindow] = useState(false);
+  const [activeWindow, setActiveWindow] = useState<'cards' | 'timeline' | 'query' | 'projects'>('cards');
+  const [windowOrder, setWindowOrder] = useState<Array<'cards' | 'timeline' | 'query' | 'projects'>>(['cards', 'timeline', 'query', 'projects']);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [showProjectDialog, setShowProjectDialog] = useState(false);
+  const [editingProject, setEditingProject] = useState<any>(null);
+  const [savingProject, setSavingProject] = useState(false);
+  const [projectForm, setProjectForm] = useState({
+    property_name: '',
+    title: '',
+    description: '',
+    status: 'not_started',
+    priority: 'medium',
+    assigned_staff: '',
+    due_date: ''
+  });
   const [showCleaningForm, setShowCleaningForm] = useState(false);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [editingTaskStaff, setEditingTaskStaff] = useState<string | null>(null);
@@ -82,7 +98,7 @@ export default function Home() {
   const [creatingMaintenance, setCreatingMaintenance] = useState(false);
 
   // Window stacking order management
-  const bringToFront = (window: 'cards' | 'timeline' | 'query') => {
+  const bringToFront = (window: 'cards' | 'timeline' | 'query' | 'projects') => {
     setActiveWindow(window);
     setWindowOrder(prev => {
       const filtered = prev.filter(w => w !== window);
@@ -90,9 +106,9 @@ export default function Home() {
     });
   };
 
-  const getZIndex = (window: 'cards' | 'timeline' | 'query') => {
+  const getZIndex = (window: 'cards' | 'timeline' | 'query' | 'projects') => {
     const position = windowOrder.indexOf(window);
-    return 10 + position; // Base 10, then 11, 12 based on stack position
+    return 10 + position; // Base 10, then 11, 12, 13 based on stack position
   };
 
   // Auto-load data on mount
@@ -101,6 +117,132 @@ export default function Home() {
     fetchAllTemplates();
     fetchAllProperties();
   }, []);
+
+  // Fetch projects when Projects window is shown
+  useEffect(() => {
+    if (showProjectsWindow && projects.length === 0) {
+      fetchProjects();
+    }
+  }, [showProjectsWindow]);
+
+  const fetchProjects = async () => {
+    setLoadingProjects(true);
+    try {
+      const response = await fetch('/api/projects');
+      const result = await response.json();
+      if (response.ok && result.data) {
+        setProjects(result.data);
+      }
+    } catch (err) {
+      console.error('Error fetching projects:', err);
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  const resetProjectForm = () => {
+    setProjectForm({
+      property_name: '',
+      title: '',
+      description: '',
+      status: 'not_started',
+      priority: 'medium',
+      assigned_staff: '',
+      due_date: ''
+    });
+    setEditingProject(null);
+  };
+
+  const openCreateProjectDialog = (propertyName?: string) => {
+    resetProjectForm();
+    if (propertyName) {
+      setProjectForm(prev => ({ ...prev, property_name: propertyName }));
+    }
+    setShowProjectDialog(true);
+  };
+
+  const openEditProjectDialog = (project: any) => {
+    setProjectForm({
+      property_name: project.property_name,
+      title: project.title,
+      description: project.description || '',
+      status: project.status,
+      priority: project.priority,
+      assigned_staff: project.assigned_staff || '',
+      due_date: project.due_date ? project.due_date.split('T')[0] : ''
+    });
+    setEditingProject(project);
+    setShowProjectDialog(true);
+  };
+
+  const saveProject = async () => {
+    if (!projectForm.property_name || !projectForm.title) {
+      setError('Property and title are required');
+      return;
+    }
+
+    setSavingProject(true);
+    try {
+      const payload = {
+        property_name: projectForm.property_name,
+        title: projectForm.title,
+        description: projectForm.description || null,
+        status: projectForm.status,
+        priority: projectForm.priority,
+        assigned_staff: projectForm.assigned_staff || null,
+        due_date: projectForm.due_date ? new Date(projectForm.due_date).toISOString() : null
+      };
+
+      const url = editingProject 
+        ? `/api/projects/${editingProject.id}`
+        : '/api/projects';
+      
+      const response = await fetch(url, {
+        method: editingProject ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to save project');
+      }
+
+      // Update local state
+      if (editingProject) {
+        setProjects(prev => prev.map(p => p.id === editingProject.id ? result.data : p));
+      } else {
+        setProjects(prev => [...prev, result.data]);
+      }
+
+      setShowProjectDialog(false);
+      resetProjectForm();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSavingProject(false);
+    }
+  };
+
+  const deleteProject = async (project: any) => {
+    if (!confirm(`Delete project "${project.title}"?`)) return;
+
+    try {
+      const response = await fetch(`/api/projects/${project.id}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.error || 'Failed to delete project');
+      }
+
+      setProjects(prev => prev.filter(p => p.id !== project.id));
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
 
   const fetchAllTemplates = async () => {
     try {
@@ -1532,6 +1674,310 @@ export default function Home() {
     </div>
   ), [naturalQuery, isExecutingQuery, generatedSQL, response, aiSummary, isGeneratingSummary, isSpeaking]);
 
+  // Group projects by property
+  const groupedProjects = useMemo(() => {
+    const grouped: { [key: string]: any[] } = {};
+    projects.forEach(project => {
+      if (!grouped[project.property_name]) {
+        grouped[project.property_name] = [];
+      }
+      grouped[project.property_name].push(project);
+    });
+    return grouped;
+  }, [projects]);
+
+  const projectsWindowContent = useMemo(() => (
+    <div className="p-4 space-y-4 h-full overflow-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+          Property Projects
+        </h3>
+        <Button size="sm" onClick={() => openCreateProjectDialog()}>
+          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          New Project
+        </Button>
+      </div>
+
+      {/* Projects List */}
+      {loadingProjects ? (
+        <div className="flex items-center justify-center py-12">
+          <p className="text-slate-500">Loading projects...</p>
+        </div>
+      ) : projects.length === 0 ? (
+        <div className="text-center py-12 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+          <p className="text-slate-500 dark:text-slate-400 mb-4">
+            No projects yet. Create your first property project!
+          </p>
+          <Button onClick={() => openCreateProjectDialog()}>
+            Create First Project
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {Object.entries(groupedProjects).sort().map(([propertyName, propertyProjects]) => (
+            <div key={propertyName} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+              {/* Property Header */}
+              <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-slate-900 dark:text-white">
+                    {propertyName}
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">
+                      {propertyProjects.length} project{propertyProjects.length !== 1 ? 's' : ''}
+                    </Badge>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-7 w-7 p-0"
+                      onClick={() => openCreateProjectDialog(propertyName)}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Projects Grid - ROI UI inspired cards */}
+              <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {propertyProjects.map((project: any) => (
+                  <div 
+                    key={project.id} 
+                    className="group bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:shadow-lg hover:border-slate-300 dark:hover:border-slate-600 transition-all duration-200 overflow-hidden"
+                  >
+                    {/* Card Header */}
+                    <div className="p-4 pb-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <h5 className="font-medium text-slate-900 dark:text-white text-sm leading-tight">
+                          {project.title}
+                        </h5>
+                        {/* Action Menu */}
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => openEditProjectDialog(project)}
+                            className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
+                          >
+                            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => deleteProject(project)}
+                            className="p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                          >
+                            <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      {project.description && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                          {project.description}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Tags/Badges */}
+                    <div className="px-4 pb-2 flex flex-wrap gap-1.5">
+                      <Badge 
+                        variant="outline" 
+                        className={`text-xs ${
+                          project.status === 'complete' ? 'bg-green-50 text-green-700 border-green-200' :
+                          project.status === 'in_progress' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          project.status === 'on_hold' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                          'bg-slate-50 text-slate-600 border-slate-200'
+                        }`}
+                      >
+                        {project.status?.replace('_', ' ') || 'not started'}
+                      </Badge>
+                      <Badge 
+                        variant="outline" 
+                        className={`text-xs ${
+                          project.priority === 'urgent' ? 'bg-red-50 text-red-700 border-red-200' :
+                          project.priority === 'high' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                          project.priority === 'medium' ? 'bg-blue-50 text-blue-600 border-blue-200' :
+                          'bg-slate-50 text-slate-500 border-slate-200'
+                        }`}
+                      >
+                        {project.priority}
+                      </Badge>
+                    </div>
+
+                    {/* Card Footer - ROI UI style */}
+                    <div className="px-4 py-2 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
+                      <div className="flex items-center justify-between text-xs text-slate-500">
+                        <div className="flex items-center gap-3">
+                          {project.assigned_staff && (
+                            <span className="flex items-center gap-1">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
+                              {project.assigned_staff}
+                            </span>
+                          )}
+                        </div>
+                        {project.due_date && (
+                          <span className={`flex items-center gap-1 ${
+                            new Date(project.due_date) < new Date() ? 'text-red-500' :
+                            new Date(project.due_date) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) ? 'text-orange-500' :
+                            'text-slate-500'
+                          }`}>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            {new Date(project.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Create/Edit Project Dialog */}
+      <Dialog open={showProjectDialog} onOpenChange={(open) => {
+        if (!open) {
+          setShowProjectDialog(false);
+          resetProjectForm();
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingProject ? 'Edit Project' : 'New Project'}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Property */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Property *
+              </label>
+              <select
+                className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800"
+                value={projectForm.property_name}
+                onChange={(e) => setProjectForm(prev => ({ ...prev, property_name: e.target.value }))}
+                disabled={!!editingProject}
+              >
+                <option value="">Select a property</option>
+                {allProperties.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Title */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Title *
+              </label>
+              <Input
+                value={projectForm.title}
+                onChange={(e) => setProjectForm(prev => ({ ...prev, title: e.target.value }))}
+                placeholder="Project title"
+              />
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Description
+              </label>
+              <Textarea
+                value={projectForm.description}
+                onChange={(e) => setProjectForm(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Project description (optional)"
+                rows={2}
+              />
+            </div>
+
+            {/* Status & Priority */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Status
+                </label>
+                <select
+                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800"
+                  value={projectForm.status}
+                  onChange={(e) => setProjectForm(prev => ({ ...prev, status: e.target.value }))}
+                >
+                  <option value="not_started">Not Started</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="on_hold">On Hold</option>
+                  <option value="complete">Complete</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Priority
+                </label>
+                <select
+                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800"
+                  value={projectForm.priority}
+                  onChange={(e) => setProjectForm(prev => ({ ...prev, priority: e.target.value }))}
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Assigned Staff */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Assigned Staff
+              </label>
+              <Input
+                value={projectForm.assigned_staff}
+                onChange={(e) => setProjectForm(prev => ({ ...prev, assigned_staff: e.target.value }))}
+                placeholder="Staff name (optional)"
+              />
+            </div>
+
+            {/* Due Date */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Due Date
+              </label>
+              <Input
+                type="date"
+                value={projectForm.due_date}
+                onChange={(e) => setProjectForm(prev => ({ ...prev, due_date: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowProjectDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={saveProject} 
+              disabled={savingProject || !projectForm.property_name || !projectForm.title}
+            >
+              {savingProject ? 'Saving...' : editingProject ? 'Update' : 'Create'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  ), [projects, loadingProjects, groupedProjects, showProjectDialog, editingProject, projectForm, savingProject, allProperties]);
+
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden">
       <Sidebar />
@@ -1598,6 +2044,23 @@ export default function Home() {
                 </svg>
                 Query
               </Button>
+              <Button
+                onClick={() => {
+                  if (showProjectsWindow) {
+                    setShowProjectsWindow(false);
+                  } else {
+                    setShowProjectsWindow(true);
+                    bringToFront('projects');
+                  }
+                }}
+                variant={showProjectsWindow ? 'default' : 'outline'}
+                size="sm"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
+                Projects
+              </Button>
             </div>
           </div>
 
@@ -1654,6 +2117,21 @@ export default function Home() {
               onFocus={() => bringToFront('query')}
             >
               {queryWindowContent}
+            </FloatingWindow>
+          )}
+
+          {/* Projects Window */}
+          {showProjectsWindow && (
+            <FloatingWindow
+              id="projects"
+              title="Property Projects"
+              defaultPosition={{ x: 300, y: 100 }}
+              defaultSize={{ width: '70%', height: '80%' }}
+              zIndex={getZIndex('projects')}
+              onClose={() => setShowProjectsWindow(false)}
+              onFocus={() => bringToFront('projects')}
+            >
+              {projectsWindowContent}
             </FloatingWindow>
           )}
         </div>

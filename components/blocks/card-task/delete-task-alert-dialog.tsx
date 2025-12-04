@@ -1,0 +1,44 @@
+import {
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog/alert-dialog";
+import { Button } from "@/components/ui/button/button";
+import styles from "./card-task.module.css";
+
+type DeleteTaskAlertDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDelete: () => void;
+};
+
+export function DeleteTaskAlertDialog({
+  open,
+  onOpenChange,
+  onDelete,
+}: DeleteTaskAlertDialogProps) {
+  return (
+    <AlertDialog onOpenChange={onOpenChange} open={open}>
+      <AlertDialogContent className={styles.alertContent}>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Task</AlertDialogTitle>
+          <AlertDialogDescription className={styles.alertDescription}>
+            Are you sure you want to delete this task?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className={styles.alertFooter}>
+          <AlertDialogClose
+            render={<Button variant="outline">Cancel</Button>}
+          />
+          <Button onClick={onDelete} variant="destructive">
+            Delete
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}

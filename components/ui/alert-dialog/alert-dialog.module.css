@@ -1,0 +1,115 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--dialog-z);
+  background-color: var(--dialog-overlay);
+  transition: opacity 150ms;
+
+  &[data-starting-style],
+  &[data-ending-style] {
+    opacity: 0;
+  }
+}
+
+.content {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 101;
+  display: grid;
+  width: 100%;
+  max-width: 32rem;
+  max-height: 85vh;
+  overflow-y: auto;
+  gap: 1rem;
+  border: 0.5px solid oklch(from var(--border) l c h / 0.6);
+  padding: 1.5rem;
+  border-radius: var(--radius);
+  background-color: var(--mix-card-5-bg);
+  transform: translate(-50%, -50%);
+  transition: all 150ms;
+
+  &[data-starting-style],
+  &[data-ending-style] {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+
+  @media (max-width: 640px) {
+    width: calc(100vw - 2rem);
+    max-width: none;
+    left: 1rem;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+
+    &[data-starting-style],
+    &[data-ending-style] {
+      opacity: 0;
+      transform: translateY(-50%) scale(0.95);
+    }
+  }
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  text-align: left;
+
+  & h2 {
+    margin: 0;
+  }
+
+  & p {
+    margin: 0;
+  }
+}
+
+.footer {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.5rem;
+
+  @media (min-width: 640px) {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+}
+
+.title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.025em;
+  color: var(--foreground);
+  margin: 0;
+}
+
+.description {
+  font-size: 0.875rem;
+  color: var(--secondary-foreground);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.close {
+  appearance: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 150ms ease-out;
+
+  &:hover {
+    background-color: var(--muted);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
