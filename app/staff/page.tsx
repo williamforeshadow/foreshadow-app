@@ -690,9 +690,9 @@ export default function StaffPage() {
       case 'complete':
         return 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900';
       case 'no_tasks':
-        return 'bg-slate-50/80 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700';
+        return 'bg-neutral-50/80 dark:bg-neutral-800/30 border-neutral-200 dark:border-neutral-700';
       default:
-        return 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700';
+        return 'bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700';
     }
   };
 
@@ -772,8 +772,8 @@ export default function StaffPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Checked out</div>
-                  <div className="text-sm truncate font-medium text-slate-900 dark:text-white">
+                  <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Checked out</div>
+                  <div className="text-sm truncate font-medium text-neutral-900 dark:text-white">
                     {item.check_out ? formatDate(item.check_out) : <span className="italic opacity-60">Not set</span>}
                   </div>
                 </div>
@@ -785,8 +785,8 @@ export default function StaffPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                 </svg>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Next check in</div>
-                  <div className="text-sm truncate font-medium text-slate-900 dark:text-white">
+                  <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Next check in</div>
+                  <div className="text-sm truncate font-medium text-neutral-900 dark:text-white">
                     {item.next_check_in ? formatDate(item.next_check_in) : <span className="italic opacity-60">Not set</span>}
                   </div>
                 </div>
@@ -794,16 +794,16 @@ export default function StaffPage() {
 
               {/* Occupancy Status */}
               <div className="flex items-center gap-3">
-                <svg className={`w-4 h-4 shrink-0 ${item.occupancy_status === 'occupied' ? 'text-orange-500' : 'text-slate-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`w-4 h-4 shrink-0 ${item.occupancy_status === 'occupied' ? 'text-orange-500' : 'text-neutral-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                 </svg>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Occupancy</div>
+                  <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Occupancy</div>
                   <Badge 
                     variant={item.occupancy_status === 'occupied' ? 'default' : 'outline'}
                     className={item.occupancy_status === 'occupied' 
                       ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-300' 
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300'
+                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300'
                     }
                   >
                     {item.occupancy_status === 'occupied' ? 'Occupied' : 'Vacant'}
@@ -819,17 +819,17 @@ export default function StaffPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
+    <div className="flex min-h-screen bg-neutral-50 dark:bg-neutral-950">
       <Sidebar />
       <div className="flex-1 overflow-auto flex items-center justify-center p-8">
         <div className="w-full max-w-6xl">
-        <h1 className="text-3xl font-bold mb-8 text-slate-900 dark:text-white text-center">
+        <h1 className="text-3xl font-bold mb-8 text-neutral-900 dark:text-white text-center">
           Staff Portal
         </h1>
 
         {/* Name Input */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-lg border border-slate-200 dark:border-slate-800 mb-8">
-          <label className="block text-lg font-medium text-slate-700 dark:text-slate-300 mb-4">
+        <div className="bg-white dark:bg-neutral-900 p-6 rounded-lg border border-neutral-200 dark:border-neutral-800 mb-8">
+          <label className="block text-lg font-medium text-neutral-700 dark:text-neutral-300 mb-4">
             What is your name?
           </label>
           <div className="flex gap-3">
@@ -839,7 +839,7 @@ export default function StaffPage() {
               onChange={(e) => setStaffName(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && fetchMyCleanings()}
               placeholder="Enter your name"
-              className="flex-1 px-4 py-3 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"
+              className="flex-1 px-4 py-3 border border-neutral-300 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"
             />
             <Button
               onClick={fetchMyCleanings}
@@ -862,9 +862,9 @@ export default function StaffPage() {
 
         {/* Results */}
         {cleanings !== null && (
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-lg border border-slate-200 dark:border-slate-800">
+          <div className="bg-white dark:bg-neutral-900 p-6 rounded-lg border border-neutral-200 dark:border-neutral-800">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
+              <h2 className="text-xl font-semibold text-neutral-900 dark:text-white">
                 Your Cleanings ({cleanings.length})
               </h2>
               <div className="flex gap-2">
@@ -873,7 +873,7 @@ export default function StaffPage() {
                   className={`px-3 py-1 text-xs font-medium rounded ${
                     viewMode === 'cards'
                       ? 'bg-blue-600 text-white'
-                      : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300'
                   }`}
                 >
                   Cards
@@ -883,7 +883,7 @@ export default function StaffPage() {
                   className={`px-3 py-1 text-xs font-medium rounded ${
                     viewMode === 'json'
                       ? 'bg-blue-600 text-white'
-                      : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300'
                   }`}
                 >
                   JSON
@@ -893,12 +893,12 @@ export default function StaffPage() {
 
             <div className="overflow-auto max-h-96">
               {viewMode === 'cards' ? (
-                <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
+                <div className="p-4 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg">
                   {renderCards()}
                 </div>
               ) : (
-                <div className="p-4 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
-                  <pre className="text-sm text-slate-900 dark:text-slate-100 font-mono whitespace-pre-wrap">
+                <div className="p-4 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg">
+                  <pre className="text-sm text-neutral-900 dark:text-neutral-100 font-mono whitespace-pre-wrap">
                     {JSON.stringify(cleanings, null, 2)}
                   </pre>
                 </div>
@@ -922,7 +922,7 @@ export default function StaffPage() {
             selectedCard?.turnover_status === 'not_started' ? 'border-red-400' :
             selectedCard?.turnover_status === 'in_progress' ? 'border-yellow-400' :
             selectedCard?.turnover_status === 'complete' ? 'border-emerald-400' :
-            'border-slate-300'
+            'border-neutral-300'
           }`}
         >
           {selectedCard && (
@@ -944,41 +944,41 @@ export default function StaffPage() {
               <div className="space-y-4">
               {/* Dates */}
               <div className="grid grid-cols-1 gap-3">
-                <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center gap-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg border border-neutral-200 dark:border-neutral-700">
                   <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                   </svg>
                   <div className="flex-1">
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Checked out</div>
-                    <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                    <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Checked out</div>
+                    <div className="text-sm font-semibold text-neutral-900 dark:text-white">
                       {selectedCard.check_out ? formatDate(selectedCard.check_out) : 'Not set'}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center gap-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg border border-neutral-200 dark:border-neutral-700">
                   <svg className="w-5 h-5 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                   </svg>
                   <div className="flex-1">
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Next check in</div>
-                    <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                    <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Next check in</div>
+                    <div className="text-sm font-semibold text-neutral-900 dark:text-white">
                       {selectedCard.next_check_in ? formatDate(selectedCard.next_check_in) : 'Not set'}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
-                  <svg className={`w-5 h-5 shrink-0 ${selectedCard.occupancy_status === 'occupied' ? 'text-orange-500' : 'text-slate-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex items-center gap-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                  <svg className={`w-5 h-5 shrink-0 ${selectedCard.occupancy_status === 'occupied' ? 'text-orange-500' : 'text-neutral-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                   </svg>
                   <div className="flex-1">
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Occupancy</div>
+                    <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Occupancy</div>
                     <Badge 
                       variant={selectedCard.occupancy_status === 'occupied' ? 'default' : 'outline'}
                       className={`text-sm ${selectedCard.occupancy_status === 'occupied' 
                         ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-300' 
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300'
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300'
                       }`}
                     >
                       {selectedCard.occupancy_status === 'occupied' ? 'Occupied' : 'Vacant'}
@@ -991,10 +991,10 @@ export default function StaffPage() {
               {selectedCard.tasks && selectedCard.tasks.length > 0 ? (
                 <div className="space-y-3 mt-6">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                    <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
                       Tasks ({selectedCard.completed_tasks || 0}/{selectedCard.total_tasks || 0})
                     </h3>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                    <div className="text-xs text-neutral-500 dark:text-neutral-400">
                       Click a task to expand
                     </div>
                   </div>
@@ -1038,7 +1038,7 @@ export default function StaffPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-6 w-6 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50"
+                                className="h-6 w-6 p-0 text-neutral-400 hover:text-red-500 hover:bg-red-50"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (confirm('Remove this task from the turnover?')) {
@@ -1067,14 +1067,14 @@ export default function StaffPage() {
                           <CardContent className="pt-0 space-y-4" onClick={(e) => e.stopPropagation()}>
                             {/* Staff Assignment */}
                             <div>
-                              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
+                              <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2">
                                 Assigned Staff
                               </label>
                               {editingTaskStaff === task.task_id ? (
                                 <div className="flex flex-col gap-2">
                                   <div className="flex items-center gap-2">
                                     <select
-                                      className="flex-1 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800"
+                                      className="flex-1 px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-800"
                                       onChange={(e) => {
                                         if (e.target.value === 'new') {
                                           setNewTaskStaffName('');
@@ -1106,7 +1106,7 @@ export default function StaffPage() {
                                         placeholder="Enter staff name..."
                                         value={newTaskStaffName}
                                         onChange={(e) => setNewTaskStaffName(e.target.value)}
-                                        className="flex-1 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg"
+                                        className="flex-1 px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg"
                                       />
                                       <Button
                                         onClick={() => {
@@ -1138,7 +1138,7 @@ export default function StaffPage() {
 
                             {/* Scheduled Date/Time */}
                             <div>
-                              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
+                              <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2">
                                 Scheduled For
                               </label>
                               <div className="flex gap-2">
@@ -1193,10 +1193,10 @@ export default function StaffPage() {
 
                             {/* Template Form */}
                             {task.template_id && (
-                              <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
+                              <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
                                 {loadingTaskTemplate === task.template_id ? (
                                   <div className="flex items-center justify-center py-4">
-                                    <p className="text-sm text-slate-500">Loading form...</p>
+                                    <p className="text-sm text-neutral-500">Loading form...</p>
                                   </div>
                                 ) : taskTemplates[task.template_id] ? (
                                   <DynamicCleaningForm
@@ -1209,7 +1209,7 @@ export default function StaffPage() {
                                     }}
                                   />
                                 ) : (
-                                  <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-2">
+                                  <p className="text-xs text-neutral-500 dark:text-neutral-400 text-center py-2">
                                     No template configured
                                   </p>
                                 )}
@@ -1239,9 +1239,9 @@ export default function StaffPage() {
 
                   {/* Add Task Dialog */}
                   {showAddTaskDialog && (
-                    <div className="mt-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800">
+                    <div className="mt-3 p-4 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-neutral-50 dark:bg-neutral-800">
                       <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-medium text-slate-900 dark:text-white">Select a Template</h4>
+                        <h4 className="text-sm font-medium text-neutral-900 dark:text-white">Select a Template</h4>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1284,13 +1284,13 @@ export default function StaffPage() {
                           {availableTemplates.filter(t => 
                             !selectedCard.tasks?.some((task: any) => task.template_id === t.id)
                           ).length === 0 && (
-                            <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-2">
+                            <p className="text-xs text-neutral-500 dark:text-neutral-400 text-center py-2">
                               All templates already assigned
                             </p>
                           )}
                         </div>
                       ) : (
-                        <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-2">
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400 text-center py-2">
                           Loading templates...
                         </p>
                       )}
@@ -1298,8 +1298,8 @@ export default function StaffPage() {
                   )}
                 </div>
               ) : (
-                <div className="mt-6 p-6 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 text-center">
-                  <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
+                <div className="mt-6 p-6 bg-neutral-50 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 text-center">
+                  <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">
                     No tasks configured for this property.
                   </p>
                   <Button
@@ -1318,9 +1318,9 @@ export default function StaffPage() {
                   
                   {/* Add Task Dialog (when no tasks exist) */}
                   {showAddTaskDialog && (
-                    <div className="mt-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-left">
+                    <div className="mt-3 p-4 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-900 text-left">
                       <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-medium text-slate-900 dark:text-white">Select a Template</h4>
+                        <h4 className="text-sm font-medium text-neutral-900 dark:text-white">Select a Template</h4>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1357,7 +1357,7 @@ export default function StaffPage() {
                           ))}
                         </div>
                       ) : (
-                        <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-2">
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400 text-center py-2">
                           Loading templates...
                         </p>
                       )}
@@ -1372,7 +1372,7 @@ export default function StaffPage() {
             {expandedTaskId && selectedCard.tasks && selectedCard.tasks.length > 0 && (() => {
               const expandedTask = selectedCard.tasks.find((t: any) => t.task_id === expandedTaskId);
               return expandedTask ? (
-                <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700">
+                <div className="px-6 py-4 border-t border-neutral-200 dark:border-neutral-700">
                   <div className="flex flex-wrap gap-2">
                     {expandedTask.card_actions === 'not_started' && (
                       <>

@@ -12,7 +12,7 @@ interface CleaningCardsProps {
 export default function CleaningCards({ data, filters, sortBy, onCardClick }: CleaningCardsProps) {
   if (!data || data.length === 0) {
     return (
-      <div className="text-center py-12 text-slate-500 dark:text-slate-400">
+      <div className="text-center py-12 text-neutral-500 dark:text-neutral-400">
         No cleanings found
       </div>
     );
@@ -23,7 +23,7 @@ export default function CleaningCards({ data, filters, sortBy, onCardClick }: Cl
   
   if (items.length === 0) {
     return (
-      <div className="text-center py-12 text-slate-500 dark:text-slate-400">
+      <div className="text-center py-12 text-neutral-500 dark:text-neutral-400">
         No cards match the selected filters
       </div>
     );
@@ -53,9 +53,9 @@ export default function CleaningCards({ data, filters, sortBy, onCardClick }: Cl
       case 'complete':
         return 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900';
       case 'no_tasks':
-        return 'bg-slate-50/80 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700';
+        return 'bg-neutral-50/80 dark:bg-neutral-800/30 border-neutral-200 dark:border-neutral-700';
       default:
-        return 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700';
+        return 'bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700';
     }
   };
 
@@ -103,8 +103,8 @@ export default function CleaningCards({ data, filters, sortBy, onCardClick }: Cl
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Checked out</div>
-                  <div className="text-sm truncate font-medium text-slate-900 dark:text-white">
+                  <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Checked out</div>
+                  <div className="text-sm truncate font-medium text-neutral-900 dark:text-white">
                     {item.check_out ? formatDate(item.check_out) : <span className="italic opacity-60">Not set</span>}
                   </div>
                 </div>
@@ -116,8 +116,8 @@ export default function CleaningCards({ data, filters, sortBy, onCardClick }: Cl
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                 </svg>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Next check in</div>
-                  <div className="text-sm truncate font-medium text-slate-900 dark:text-white">
+                  <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Next check in</div>
+                  <div className="text-sm truncate font-medium text-neutral-900 dark:text-white">
                     {item.next_check_in ? formatDate(item.next_check_in) : <span className="italic opacity-60">Not set</span>}
                   </div>
                 </div>
@@ -125,16 +125,16 @@ export default function CleaningCards({ data, filters, sortBy, onCardClick }: Cl
 
               {/* Occupancy Status */}
               <div className="flex items-center gap-3">
-                <svg className={`w-4 h-4 shrink-0 ${item.occupancy_status === 'occupied' ? 'text-orange-500' : 'text-slate-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`w-4 h-4 shrink-0 ${item.occupancy_status === 'occupied' ? 'text-orange-500' : 'text-neutral-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                 </svg>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Occupancy</div>
+                  <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Occupancy</div>
                   <Badge 
                     variant={item.occupancy_status === 'occupied' ? 'default' : 'outline'}
                     className={item.occupancy_status === 'occupied' 
                       ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-300' 
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300'
+                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300'
                     }
                   >
                     {item.occupancy_status === 'occupied' ? 'Occupied' : 'Vacant'}

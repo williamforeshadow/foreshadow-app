@@ -98,10 +98,10 @@ export default function CleaningForm({
       <div className="w-full max-w-md space-y-6">
         {/* Header */}
         <div className="text-center border-b pb-4">
-          <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
+          <h3 className="text-xl font-semibold text-neutral-900 dark:text-white">
             Cleaning Form
           </h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
             {propertyName}
           </p>
         </div>

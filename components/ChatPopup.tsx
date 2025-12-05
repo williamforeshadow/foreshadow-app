@@ -40,15 +40,15 @@ export default function ChatPopup({
 
       {/* Chat Popup */}
       {isOpen && (
-        <div className="fixed bottom-24 right-6 z-50 w-96 max-h-[600px] bg-white dark:bg-slate-900 rounded-lg shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col">
+        <div className="fixed bottom-24 right-6 z-50 w-96 max-h-[600px] bg-white dark:bg-neutral-900 rounded-lg shadow-2xl border border-neutral-200 dark:border-neutral-800 flex flex-col">
           {/* Header */}
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+          <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-neutral-900 dark:text-white">
               Natural Language Query
             </h2>
             <button
               onClick={() => setIsOpen(false)}
-              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -58,7 +58,7 @@ export default function ChatPopup({
 
           {/* Content */}
           <div className="p-4 flex-1 overflow-y-auto">
-            <span className="text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded inline-block mb-3">
+            <span className="text-xs text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded inline-block mb-3">
               💡 Tip: Start with <code className="text-purple-600 dark:text-purple-400">/cards</code> for card results
             </span>
             
@@ -68,7 +68,7 @@ export default function ChatPopup({
                 onChange={(e) => setNaturalQuery(e.target.value)}
                 placeholder="e.g., /cards show unassigned cleanings"
                 rows={3}
-                className="w-full px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm"
+                className="w-full px-4 py-2 border border-neutral-300 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm"
               />
               
               <Button
@@ -84,11 +84,11 @@ export default function ChatPopup({
               </Button>
               
               {generatedSQL && (
-                <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3">
-                  <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                <div className="bg-neutral-100 dark:bg-neutral-800 rounded-lg p-3">
+                  <p className="text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">
                     Generated SQL:
                   </p>
-                  <pre className="text-xs text-slate-900 dark:text-white font-mono overflow-x-auto whitespace-pre-wrap break-words">
+                  <pre className="text-xs text-neutral-900 dark:text-white font-mono overflow-x-auto whitespace-pre-wrap break-words">
                     {generatedSQL}
                   </pre>
                 </div>

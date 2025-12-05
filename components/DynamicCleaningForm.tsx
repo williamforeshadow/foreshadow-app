@@ -125,7 +125,7 @@ export default function DynamicCleaningForm({
   if (!template) {
     return (
       <div className="flex items-center justify-center py-12">
-        <p className="text-slate-500 dark:text-slate-400">
+        <p className="text-neutral-500 dark:text-neutral-400">
           No template assigned to this property. Please assign a template first.
         </p>
       </div>
@@ -290,10 +290,10 @@ export default function DynamicCleaningForm({
       <div className="w-full max-w-md space-y-6">
         {/* Header */}
         <div className="text-center border-b pb-4">
-          <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
+          <h3 className="text-xl font-semibold text-neutral-900 dark:text-white">
             {template.name}
           </h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
             {propertyName}
           </p>
         </div>

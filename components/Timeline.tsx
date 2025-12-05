@@ -95,10 +95,10 @@ export default function Timeline({ onCardClick }: TimelineProps) {
     
     return (
       <div className="text-center">
-        <div className={`text-xs ${isToday ? 'font-bold text-purple-600 dark:text-purple-400' : 'text-slate-600 dark:text-slate-400'}`}>
+        <div className={`text-xs ${isToday ? 'font-bold text-purple-600 dark:text-purple-400' : 'text-neutral-600 dark:text-neutral-400'}`}>
           {date.toLocaleDateString('en-US', { weekday: 'short' })}
         </div>
-        <div className={`text-sm ${isToday ? 'font-bold text-purple-600 dark:text-purple-400' : 'text-slate-900 dark:text-white'}`}>
+        <div className={`text-sm ${isToday ? 'font-bold text-purple-600 dark:text-purple-400' : 'text-neutral-900 dark:text-white'}`}>
           {month}/{day}
         </div>
       </div>
@@ -164,7 +164,7 @@ export default function Timeline({ onCardClick }: TimelineProps) {
       case 'complete':
         return 'bg-green-400 hover:bg-green-500';
       case 'no_tasks':
-        return 'bg-slate-400 hover:bg-slate-500';
+        return 'bg-neutral-400 hover:bg-neutral-500';
       default:
         return 'bg-rose-400 hover:bg-rose-500'; // Fallback
     }
@@ -173,7 +173,7 @@ export default function Timeline({ onCardClick }: TimelineProps) {
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
-        <div className="text-center py-12 text-slate-500 dark:text-slate-400">
+        <div className="text-center py-12 text-neutral-500 dark:text-neutral-400">
           Loading timeline...
         </div>
       </div>
@@ -185,7 +185,7 @@ export default function Timeline({ onCardClick }: TimelineProps) {
       {/* Header with navigation - fixed at top */}
       <div className="flex-shrink-0 p-6 pb-4">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+          <h2 className="text-lg font-semibold text-neutral-900 dark:text-white">
             Property Timeline
           </h2>
           
@@ -240,17 +240,17 @@ export default function Timeline({ onCardClick }: TimelineProps) {
       <div className="flex-1 overflow-auto px-6 pb-6">
         <div className="overflow-hidden">
           <div 
-            className="grid border border-slate-200 dark:border-slate-700 w-full"
+            className="grid border border-neutral-200 dark:border-neutral-700 w-full"
             style={{
               gridTemplateColumns: `200px repeat(${dateRange.length}, minmax(0, 1fr))`
             }}
           >
             {/* Header Row - will stick when scrolling */}
-            <div className="bg-slate-200 dark:bg-slate-700 p-2 font-semibold text-slate-900 dark:text-white sticky left-0 top-0 z-20 border-b border-r border-slate-300 dark:border-slate-600">
+            <div className="bg-neutral-200 dark:bg-neutral-700 p-2 font-semibold text-neutral-900 dark:text-white sticky left-0 top-0 z-20 border-b border-r border-neutral-300 dark:border-neutral-600">
               Property
             </div>
             {dateRange.map((date, idx) => (
-              <div key={idx} className="bg-slate-100 dark:bg-slate-800 p-2 border-b border-r border-slate-200 dark:border-slate-700 sticky top-0 z-10">
+              <div key={idx} className="bg-neutral-100 dark:bg-neutral-800 p-2 border-b border-r border-neutral-200 dark:border-neutral-700 sticky top-0 z-10">
                 {formatHeaderDate(date)}
               </div>
             ))}
@@ -265,7 +265,7 @@ export default function Timeline({ onCardClick }: TimelineProps) {
                   className="contents"
                 >
                   {/* Property Name */}
-                  <div className="bg-slate-50 dark:bg-slate-800 p-2 font-medium text-slate-900 dark:text-white sticky left-0 z-10 border-b border-r border-slate-300 dark:border-slate-600 truncate">
+                  <div className="bg-neutral-50 dark:bg-neutral-800 p-2 font-medium text-neutral-900 dark:text-white sticky left-0 z-10 border-b border-r border-neutral-300 dark:border-neutral-600 truncate">
                     {property}
                   </div>
                   
@@ -280,14 +280,14 @@ export default function Timeline({ onCardClick }: TimelineProps) {
                     return (
                       <div
                         key={idx}
-                        className="bg-white dark:bg-slate-900 border-b border-r border-slate-200 dark:border-slate-700 h-[48px] relative overflow-visible"
+                        className="bg-white dark:bg-neutral-900 border-b border-r border-neutral-200 dark:border-neutral-700 h-[48px] relative overflow-visible"
                       >
                         {startingReservation && (() => {
                           const { span } = getBlockPosition(startingReservation.check_in, startingReservation.check_out);
                           return (
                             <div
                               onClick={() => onCardClick(startingReservation)}
-                              className={`absolute border border-white dark:border-slate-800 rounded px-2 cursor-pointer transition-all duration-150 hover:shadow-lg hover:z-30 text-white text-xs font-medium flex items-center justify-center ${getStatusColor(startingReservation.turnover_status)}`}
+                              className={`absolute border border-white dark:border-neutral-800 rounded px-2 cursor-pointer transition-all duration-150 hover:shadow-lg hover:z-30 text-white text-xs font-medium flex items-center justify-center ${getStatusColor(startingReservation.turnover_status)}`}
                               style={{
                                 left: '4px',
                                 width: span === 1 ? 'calc(100% - 8px)' : `calc(${span * 100}% + ${(span - 1) * 1}px - 8px)`,

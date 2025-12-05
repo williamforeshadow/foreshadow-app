@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { ModeToggle } from '@/components/mode-toggle';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -41,11 +42,11 @@ export default function Sidebar() {
   return (
     <>
       {/* Sidebar */}
-      <div className={`${isOpen ? 'w-64' : 'w-16'} h-screen bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col transition-all duration-300 relative`}>
+      <div className={`${isOpen ? 'w-64' : 'w-16'} h-screen bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 flex flex-col transition-all duration-300 relative`}>
         {/* Toggle Button */}
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="absolute -right-3 top-6 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors shadow-sm"
+          className="absolute -right-3 top-6 w-6 h-6 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-full flex items-center justify-center text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors shadow-sm"
         >
           <svg 
             className={`w-4 h-4 transition-transform duration-300 ${isOpen ? '' : 'rotate-180'}`} 
@@ -58,18 +59,18 @@ export default function Sidebar() {
         </button>
 
         {/* Logo/Title */}
-        <div className={`p-6 border-b border-slate-200 dark:border-slate-800 ${isOpen ? '' : 'px-3'}`}>
+        <div className={`p-6 border-b border-neutral-200 dark:border-neutral-800 ${isOpen ? '' : 'px-3'}`}>
           {isOpen ? (
             <>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+              <h1 className="text-2xl font-bold text-neutral-900 dark:text-white">
                 Foreshadow
               </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
                 Property Management
               </p>
             </>
           ) : (
-            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 text-center">
+            <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 text-center">
               F
             </div>
           )}
@@ -86,8 +87,8 @@ export default function Sidebar() {
                   href={item.path}
                   className={`flex items-center ${isOpen ? 'gap-3 px-4' : 'justify-center px-2'} py-3 rounded-lg transition-colors ${
                     isActive
-                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-semibold'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-white font-semibold'
+                      : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-white'
                   }`}
                   title={!isOpen ? item.name : undefined}
                 >
@@ -100,13 +101,18 @@ export default function Sidebar() {
         </nav>
 
         {/* Footer */}
-        {isOpen && (
-          <div className="p-4 border-t border-slate-200 dark:border-slate-800">
-            <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
-              v1.0.0
-            </p>
-          </div>
-        )}
+        <div className={`p-4 border-t border-neutral-200 dark:border-neutral-800 ${isOpen ? '' : 'flex justify-center'}`}>
+          {isOpen ? (
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                v1.0.0
+              </p>
+              <ModeToggle />
+            </div>
+          ) : (
+            <ModeToggle />
+          )}
+        </div>
       </div>
     </>
   );

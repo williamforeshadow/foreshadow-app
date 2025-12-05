@@ -309,18 +309,18 @@ export default function TemplatesPage() {
   };
 
   return (
-    <div className="flex h-screen bg-white dark:bg-slate-900">
+    <div className="flex h-screen bg-white dark:bg-neutral-900">
       <Sidebar />
       
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-700 p-6">
+        <div className="flex-shrink-0 border-b border-neutral-200 dark:border-neutral-700 p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+              <h1 className="text-2xl font-bold text-neutral-900 dark:text-white">
                 Cleaning Templates
               </h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
                 {activeView === 'templates' 
                   ? 'Create and manage cleaning form templates'
                   : 'Assign templates to properties'}
@@ -358,12 +358,12 @@ export default function TemplatesPage() {
             // Templates View
             <>
               {loading ? (
-                <div className="text-center py-12 text-slate-500">
+                <div className="text-center py-12 text-neutral-500">
                   Loading templates...
                 </div>
               ) : templates.length === 0 ? (
                 <div className="text-center py-12">
-                  <p className="text-slate-500 dark:text-slate-400 mb-4">
+                  <p className="text-neutral-500 dark:text-neutral-400 mb-4">
                     No templates yet. Create your first cleaning template!
                   </p>
                   <Button onClick={openCreateDialog}>
@@ -382,7 +382,7 @@ export default function TemplatesPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                      <div className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
                         <Badge 
                           variant={template.type === 'maintenance' ? 'default' : 'secondary'}
                           className={template.type === 'maintenance' 
@@ -425,12 +425,12 @@ export default function TemplatesPage() {
             // Template Assignments View (Template-centric)
             <>
               {loading || loadingAssignments ? (
-                <div className="text-center py-12 text-slate-500">
+                <div className="text-center py-12 text-neutral-500">
                   Loading template assignments...
                 </div>
               ) : templates.length === 0 ? (
                 <div className="text-center py-12">
-                  <p className="text-slate-500 dark:text-slate-400">
+                  <p className="text-neutral-500 dark:text-neutral-400">
                     No templates found. Create a template first to assign it to properties.
                   </p>
                 </div>
@@ -478,11 +478,11 @@ export default function TemplatesPage() {
                         </CardHeader>
                         <CardContent>
                           <div className="flex items-center gap-2">
-                            <span className="text-sm text-slate-600 dark:text-slate-400">
+                            <span className="text-sm text-neutral-600 dark:text-neutral-400">
                               Assigned to:
                             </span>
                             {assignedProps.length === 0 ? (
-                              <Badge variant="outline" className="text-slate-500">
+                              <Badge variant="outline" className="text-neutral-500">
                                 No properties
                               </Badge>
                             ) : assignedProps.length === properties.length ? (
@@ -586,7 +586,7 @@ export default function TemplatesPage() {
             {/* Fields */}
             <div>
               <div className="flex items-center justify-between mb-3">
-                <label className="block text-sm font-medium text-slate-900 dark:text-white">
+                <label className="block text-sm font-medium text-neutral-900 dark:text-white">
                   Form Fields
                 </label>
                 <Button onClick={addField} size="sm" variant="outline" type="button">
@@ -595,8 +595,8 @@ export default function TemplatesPage() {
               </div>
 
               {fields.length === 0 ? (
-                <div className="text-center py-8 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                <div className="text-center py-8 border-2 border-dashed border-neutral-300 dark:border-neutral-600 rounded-lg">
+                  <p className="text-sm text-neutral-500 dark:text-neutral-400">
                     No fields yet. Click "Add Field" to get started.
                   </p>
                 </div>
@@ -605,31 +605,31 @@ export default function TemplatesPage() {
                   {fields.map((field, index) => (
                     <div
                       key={field.id}
-                      className="border border-slate-300 dark:border-slate-600 rounded-lg p-4 bg-slate-50 dark:bg-slate-800"
+                      className="border border-neutral-300 dark:border-neutral-600 rounded-lg p-4 bg-neutral-50 dark:bg-neutral-800"
                     >
                       <div className="grid grid-cols-2 gap-3">
                         {/* Field Label */}
                         <div className="col-span-2">
-                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                             Field Label
                           </label>
                           <input
                             type="text"
                             value={field.label}
                             onChange={(e) => updateField(index, { label: e.target.value })}
-                            className="w-full px-2 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                            className="w-full px-2 py-1 text-sm border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white"
                           />
                         </div>
 
                         {/* Field Type */}
                         <div>
-                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                             Field Type
                           </label>
                           <select
                             value={field.type}
                             onChange={(e) => updateField(index, { type: e.target.value as any })}
-                            className="w-full px-2 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                            className="w-full px-2 py-1 text-sm border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white"
                           >
                             <option value="rating">Rating (1-5)</option>
                             <option value="yes-no">Yes/No</option>
@@ -642,7 +642,7 @@ export default function TemplatesPage() {
 
                         {/* Required */}
                         <div>
-                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                             Required
                           </label>
                           <div className="flex items-center h-8">
@@ -717,12 +717,12 @@ export default function TemplatesPage() {
 
           <div className="space-y-4">
             {properties.length === 0 ? (
-              <div className="text-center py-8 text-slate-500">
+              <div className="text-center py-8 text-neutral-500">
                 No properties found. Properties will appear here once you have reservations.
               </div>
             ) : (
               <>
-                <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                <div className="flex items-center justify-between p-3 bg-neutral-50 dark:bg-neutral-800 rounded-lg">
                   <span className="text-sm font-medium">
                     {selectedProperties.length === properties.length 
                       ? 'All properties selected' 
@@ -754,7 +754,7 @@ export default function TemplatesPage() {
                     return (
                       <label
                         key={property}
-                        className="flex items-center gap-2 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                        className="flex items-center gap-2 p-3 border rounded-lg cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
                       >
                         <input
                           type="checkbox"
@@ -766,7 +766,7 @@ export default function TemplatesPage() {
                               setSelectedProperties(selectedProperties.filter(p => p !== property));
                             }
                           }}
-                          className="rounded border-slate-300"
+                          className="rounded border-neutral-300"
                         />
                         <span className="text-sm font-medium">{property}</span>
                       </label>

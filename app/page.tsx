@@ -1301,11 +1301,11 @@ export default function Home() {
       {((cardViewMode === 'cleanings' && response !== null) || (cardViewMode === 'maintenance' && maintenanceCards.length > 0)) && (
         <div className="space-y-3">
           {/* Filter and Sort Bar */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4">
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className="flex items-center gap-2 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
+                className="flex items-center gap-2 text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white transition-colors"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
@@ -1333,7 +1333,7 @@ export default function Home() {
                 
                 {/* Sort Dropdown */}
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-slate-600 dark:text-slate-400">Sort by:</span>
+                  <span className="text-sm text-neutral-600 dark:text-neutral-400">Sort by:</span>
                   {cardViewMode === 'cleanings' ? (
                     <Select value={sortBy} onValueChange={setSortBy}>
                       <SelectTrigger className="w-[220px]">
@@ -1367,18 +1367,18 @@ export default function Home() {
             </div>
 
             {showFilters && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-3 border-t border-neutral-200 dark:border-neutral-800">
                 {/* Clean Status - Only for cleanings */}
                 {cardViewMode === 'cleanings' && (
                   <div>
-                    <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Clean Status</h4>
+                    <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-2">Clean Status</h4>
                     <div className="space-y-1">
                       <label className="flex items-center gap-2 text-sm cursor-pointer">
                         <input
                           type="checkbox"
                           checked={filters.cleanStatus.includes('not_started')}
                           onChange={() => toggleFilter('cleanStatus', 'not_started')}
-                          className="rounded border-slate-300"
+                          className="rounded border-neutral-300"
                         />
                         <span className="text-red-600">Not Started</span>
                       </label>
@@ -1387,7 +1387,7 @@ export default function Home() {
                           type="checkbox"
                           checked={filters.cleanStatus.includes('in_progress')}
                           onChange={() => toggleFilter('cleanStatus', 'in_progress')}
-                          className="rounded border-slate-300"
+                          className="rounded border-neutral-300"
                         />
                         <span className="text-yellow-600">In Progress</span>
                       </label>
@@ -1396,7 +1396,7 @@ export default function Home() {
                           type="checkbox"
                           checked={filters.cleanStatus.includes('complete')}
                           onChange={() => toggleFilter('cleanStatus', 'complete')}
-                          className="rounded border-slate-300"
+                          className="rounded border-neutral-300"
                         />
                         <span className="text-green-600">Complete</span>
                       </label>
@@ -1407,14 +1407,14 @@ export default function Home() {
                 {/* Priority - Only for maintenance */}
                 {cardViewMode === 'maintenance' && (
                   <div>
-                    <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Priority</h4>
+                    <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-2">Priority</h4>
                     <div className="space-y-1">
                       <label className="flex items-center gap-2 text-sm cursor-pointer">
                         <input
                           type="checkbox"
                           checked={maintenanceFilters.priority.includes('urgent')}
                           onChange={() => toggleMaintenanceFilter('priority', 'urgent')}
-                          className="rounded border-slate-300"
+                          className="rounded border-neutral-300"
                         />
                         <span>Urgent</span>
                       </label>
@@ -1423,7 +1423,7 @@ export default function Home() {
                           type="checkbox"
                           checked={maintenanceFilters.priority.includes('high')}
                           onChange={() => toggleMaintenanceFilter('priority', 'high')}
-                          className="rounded border-slate-300"
+                          className="rounded border-neutral-300"
                         />
                         <span>High</span>
                       </label>
@@ -1432,7 +1432,7 @@ export default function Home() {
                           type="checkbox"
                           checked={maintenanceFilters.priority.includes('medium')}
                           onChange={() => toggleMaintenanceFilter('priority', 'medium')}
-                          className="rounded border-slate-300"
+                          className="rounded border-neutral-300"
                         />
                         <span>Medium</span>
                       </label>
@@ -1441,7 +1441,7 @@ export default function Home() {
                           type="checkbox"
                           checked={maintenanceFilters.priority.includes('low')}
                           onChange={() => toggleMaintenanceFilter('priority', 'low')}
-                          className="rounded border-slate-300"
+                          className="rounded border-neutral-300"
                         />
                         <span>Low</span>
                       </label>
@@ -1451,14 +1451,14 @@ export default function Home() {
 
                 {/* Card Actions */}
                 <div>
-                  <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Card Actions</h4>
+                  <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-2">Card Actions</h4>
                   <div className="space-y-1">
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <input
                         type="checkbox"
                         checked={cardViewMode === 'cleanings' ? filters.cardActions.includes('not_started') : maintenanceFilters.cardActions.includes('not_started')}
                         onChange={() => cardViewMode === 'cleanings' ? toggleFilter('cardActions', 'not_started') : toggleMaintenanceFilter('cardActions', 'not_started')}
-                        className="rounded border-slate-300"
+                        className="rounded border-neutral-300"
                       />
                       <span>Not Started</span>
                     </label>
@@ -1467,7 +1467,7 @@ export default function Home() {
                         type="checkbox"
                         checked={cardViewMode === 'cleanings' ? filters.cardActions.includes('in_progress') : maintenanceFilters.cardActions.includes('in_progress')}
                         onChange={() => cardViewMode === 'cleanings' ? toggleFilter('cardActions', 'in_progress') : toggleMaintenanceFilter('cardActions', 'in_progress')}
-                        className="rounded border-slate-300"
+                        className="rounded border-neutral-300"
                       />
                       <span>In Progress</span>
                     </label>
@@ -1476,7 +1476,7 @@ export default function Home() {
                         type="checkbox"
                         checked={cardViewMode === 'cleanings' ? filters.cardActions.includes('paused') : maintenanceFilters.cardActions.includes('paused')}
                         onChange={() => cardViewMode === 'cleanings' ? toggleFilter('cardActions', 'paused') : toggleMaintenanceFilter('cardActions', 'paused')}
-                        className="rounded border-slate-300"
+                        className="rounded border-neutral-300"
                       />
                       <span>Paused</span>
                     </label>
@@ -1485,7 +1485,7 @@ export default function Home() {
                         type="checkbox"
                         checked={cardViewMode === 'cleanings' ? filters.cardActions.includes('completed') : maintenanceFilters.cardActions.includes('completed')}
                         onChange={() => cardViewMode === 'cleanings' ? toggleFilter('cardActions', 'completed') : toggleMaintenanceFilter('cardActions', 'completed')}
-                        className="rounded border-slate-300"
+                        className="rounded border-neutral-300"
                       />
                       <span>Completed</span>
                     </label>
@@ -1494,14 +1494,14 @@ export default function Home() {
 
                 {/* Staff */}
                 <div>
-                  <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Staff</h4>
+                  <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-2">Staff</h4>
                   <div className="space-y-1">
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <input
                         type="checkbox"
                         checked={cardViewMode === 'cleanings' ? filters.staff.includes('unassigned') : maintenanceFilters.staff.includes('unassigned')}
                         onChange={() => cardViewMode === 'cleanings' ? toggleFilter('staff', 'unassigned') : toggleMaintenanceFilter('staff', 'unassigned')}
-                        className="rounded border-slate-300"
+                        className="rounded border-neutral-300"
                       />
                       <span>Unassigned</span>
                     </label>
@@ -1511,7 +1511,7 @@ export default function Home() {
                           type="checkbox"
                           checked={filters.staff.includes(staff)}
                           onChange={() => toggleFilter('staff', staff)}
-                          className="rounded border-slate-300"
+                          className="rounded border-neutral-300"
                         />
                         <span>{staff}</span>
                       </label>
@@ -1522,7 +1522,7 @@ export default function Home() {
                           type="checkbox"
                           checked={maintenanceFilters.staff.includes(staff)}
                           onChange={() => toggleMaintenanceFilter('staff', staff)}
-                          className="rounded border-slate-300"
+                          className="rounded border-neutral-300"
                         />
                         <span>{staff}</span>
                       </label>
@@ -1534,7 +1534,7 @@ export default function Home() {
           </div>
 
           <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
               {cardViewMode === 'cleanings' ? (
                 <>Cleanings: {Array.isArray(response) ? response.length : 1} total</>
               ) : (
@@ -1547,7 +1547,7 @@ export default function Home() {
                 className={`px-3 py-1 text-xs font-medium rounded ${
                   viewMode === 'cards'
                     ? 'bg-blue-600 text-white'
-                    : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                    : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300'
                 }`}
               >
                 Cards
@@ -1557,7 +1557,7 @@ export default function Home() {
                 className={`px-3 py-1 text-xs font-medium rounded ${
                   viewMode === 'json'
                     ? 'bg-blue-600 text-white'
-                    : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                    : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300'
                 }`}
               >
                 JSON
@@ -1567,12 +1567,12 @@ export default function Home() {
 
           <div>
             {viewMode === 'cards' ? (
-              <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
+              <div className="p-4 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg">
                 {renderCardsSection()}
               </div>
             ) : (
-              <div className="p-4 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
-                <pre className="text-sm text-slate-900 dark:text-slate-100 font-mono whitespace-pre-wrap">
+              <div className="p-4 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg">
+                <pre className="text-sm text-neutral-900 dark:text-neutral-100 font-mono whitespace-pre-wrap">
                   {JSON.stringify(cardViewMode === 'cleanings' ? response : maintenanceCards, null, 2)}
                 </pre>
               </div>
@@ -1591,7 +1591,7 @@ export default function Home() {
     <div className="p-6 space-y-4">
       {/* Natural Language Query Section */}
       <div className="space-y-3">
-        <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+        <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
           Natural Language Query
         </h3>
         <div className="flex gap-2">
@@ -1600,7 +1600,7 @@ export default function Home() {
             value={naturalQuery}
             onChange={(e) => setNaturalQuery(e.target.value)}
             placeholder="e.g., show me all cleanings for next week"
-            className="flex-1 px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+            className="flex-1 px-4 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
             onKeyDown={(e) => e.key === 'Enter' && executeNaturalQuery()}
           />
           <Button
@@ -1612,9 +1612,9 @@ export default function Home() {
         </div>
         
         {generatedSQL && (
-          <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-lg">
-            <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Generated SQL:</p>
-            <pre className="text-xs text-slate-900 dark:text-white font-mono overflow-x-auto">
+          <div className="p-3 bg-neutral-100 dark:bg-neutral-800 rounded-lg">
+            <p className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-1">Generated SQL:</p>
+            <pre className="text-xs text-neutral-900 dark:text-white font-mono overflow-x-auto">
               {generatedSQL}
             </pre>
           </div>
@@ -1623,16 +1623,16 @@ export default function Home() {
 
       {/* AI Summary Section */}
       {response !== null && (
-        <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
+        <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+            <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
               🤖 AI Summary
             </h3>
             <div className="flex gap-2">
               <button
                 onClick={generateAISummary}
                 disabled={isGeneratingSummary || isSpeaking}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:bg-neutral-400 disabled:cursor-not-allowed transition-colors"
               >
                 {isGeneratingSummary ? '🔄 Generating...' : '✨ Generate Summary'}
               </button>
@@ -1655,7 +1655,7 @@ export default function Home() {
                   {isSpeaking ? '🔊' : '💬'}
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm text-slate-900 dark:text-white leading-relaxed">
+                  <p className="text-sm text-neutral-900 dark:text-white leading-relaxed">
                     {aiSummary}
                   </p>
                   <button
@@ -1690,7 +1690,7 @@ export default function Home() {
     <div className="p-4 space-y-4 h-full overflow-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+        <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
           Property Projects
         </h3>
         <Button size="sm" onClick={() => openCreateProjectDialog()}>
@@ -1704,11 +1704,11 @@ export default function Home() {
       {/* Projects List */}
       {loadingProjects ? (
         <div className="flex items-center justify-center py-12">
-          <p className="text-slate-500">Loading projects...</p>
+          <p className="text-neutral-500">Loading projects...</p>
         </div>
       ) : projects.length === 0 ? (
-        <div className="text-center py-12 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-          <p className="text-slate-500 dark:text-slate-400 mb-4">
+        <div className="text-center py-12 bg-neutral-50 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
+          <p className="text-neutral-500 dark:text-neutral-400 mb-4">
             No projects yet. Create your first property project!
           </p>
           <Button onClick={() => openCreateProjectDialog()}>
@@ -1718,11 +1718,11 @@ export default function Home() {
       ) : (
         <div className="space-y-4">
           {Object.entries(groupedProjects).sort().map(([propertyName, propertyProjects]) => (
-            <div key={propertyName} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+            <div key={propertyName} className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden shadow-sm">
               {/* Property Header */}
-              <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+              <div className="px-4 py-3 bg-gradient-to-r from-neutral-50 to-neutral-100 dark:from-neutral-800 dark:to-neutral-800/50 border-b border-neutral-200 dark:border-neutral-700">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-semibold text-slate-900 dark:text-white">
+                  <h4 className="font-semibold text-neutral-900 dark:text-white">
                     {propertyName}
                   </h4>
                   <div className="flex items-center gap-2">
@@ -1743,100 +1743,103 @@ export default function Home() {
                 </div>
               </div>
               
-              {/* Projects Grid - ROI UI inspired cards */}
-              <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Projects Grid - ROI UI Task Cards */}
+              <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 auto-rows-fr">
                 {propertyProjects.map((project: any) => (
-                  <div 
+                  <Card 
                     key={project.id} 
-                    className="group bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:shadow-lg hover:border-slate-300 dark:hover:border-slate-600 transition-all duration-200 overflow-hidden"
+                    className="group w-full gap-4 !p-4 hover:shadow-lg transition-all duration-200 !flex !flex-col"
                   >
-                    {/* Card Header */}
-                    <div className="p-4 pb-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <h5 className="font-medium text-slate-900 dark:text-white text-sm leading-tight">
-                          {project.title}
-                        </h5>
-                        {/* Action Menu */}
+                    <CardHeader className="min-h-[4.5rem]">
+                      <CardTitle className="text-base leading-tight line-clamp-2">{project.title}</CardTitle>
+                      <CardDescription className="line-clamp-2 text-muted-foreground">
+                        {project.description || '\u00A0'}
+                      </CardDescription>
+                      <CardAction>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={() => openEditProjectDialog(project)}
-                            className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
+                            className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-md transition-colors"
                           >
-                            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
                           </button>
                           <button
                             onClick={() => deleteProject(project)}
-                            className="p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                            className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
                           >
                             <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
                           </button>
                         </div>
+                      </CardAction>
+                    </CardHeader>
+
+                    <CardContent className="flex-grow">
+                      <div className="flex w-full items-center justify-between">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge 
+                            className={`text-xs ${
+                              project.priority === 'urgent' ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800' :
+                              project.priority === 'high' ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800' :
+                              project.priority === 'medium' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' :
+                              'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+                            }`}
+                          >
+                            {project.priority}
+                          </Badge>
+                          <Badge 
+                            className={`text-xs ${
+                              project.status === 'complete' ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800' :
+                              project.status === 'in_progress' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' :
+                              project.status === 'on_hold' ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800' :
+                              'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+                            }`}
+                          >
+                            {project.status?.replace('_', ' ') || 'not started'}
+                          </Badge>
+                        </div>
+                        {/* Avatar placeholder for assigned staff */}
+                        {project.assigned_staff && (
+                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-200 dark:bg-neutral-700 text-xs font-medium text-neutral-600 dark:text-neutral-300">
+                            {project.assigned_staff.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
                       </div>
-                      {project.description && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
-                          {project.description}
-                        </p>
-                      )}
-                    </div>
+                    </CardContent>
 
-                    {/* Tags/Badges */}
-                    <div className="px-4 pb-2 flex flex-wrap gap-1.5">
-                      <Badge 
-                        variant="outline" 
-                        className={`text-xs ${
-                          project.status === 'complete' ? 'bg-green-50 text-green-700 border-green-200' :
-                          project.status === 'in_progress' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                          project.status === 'on_hold' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                          'bg-slate-50 text-slate-600 border-slate-200'
-                        }`}
-                      >
-                        {project.status?.replace('_', ' ') || 'not started'}
-                      </Badge>
-                      <Badge 
-                        variant="outline" 
-                        className={`text-xs ${
-                          project.priority === 'urgent' ? 'bg-red-50 text-red-700 border-red-200' :
-                          project.priority === 'high' ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                          project.priority === 'medium' ? 'bg-blue-50 text-blue-600 border-blue-200' :
-                          'bg-slate-50 text-slate-500 border-slate-200'
-                        }`}
-                      >
-                        {project.priority}
-                      </Badge>
-                    </div>
-
-                    {/* Card Footer - ROI UI style */}
-                    <div className="px-4 py-2 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
-                      <div className="flex items-center justify-between text-xs text-slate-500">
-                        <div className="flex items-center gap-3">
+                    <CardFooter className="mt-auto flex flex-col gap-2">
+                      <div className="w-full py-1">
+                        <div className="h-px w-full bg-border/60" />
+                      </div>
+                      <div className="flex w-full justify-between text-xs text-muted-foreground/60">
+                        <div className="flex items-center gap-2">
                           {project.assigned_staff && (
-                            <span className="flex items-center gap-1">
+                            <div className="flex h-[27px] items-center justify-center gap-1 rounded-xl border border-border/20 bg-[var(--mix-card-33-bg)] px-2 py-1 transition-all duration-150 hover:border-border hover:bg-[var(--mix-card-50-bg)]">
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                               </svg>
-                              {project.assigned_staff}
-                            </span>
+                              <span className="max-w-[80px] truncate">{project.assigned_staff}</span>
+                            </div>
                           )}
                         </div>
                         {project.due_date && (
-                          <span className={`flex items-center gap-1 ${
+                          <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-border/20 bg-[var(--mix-card-33-bg)] px-2 py-1 transition-all duration-150 hover:border-border hover:bg-[var(--mix-card-50-bg)] ${
                             new Date(project.due_date) < new Date() ? 'text-red-500' :
-                            new Date(project.due_date) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) ? 'text-orange-500' :
-                            'text-slate-500'
+                            new Date(project.due_date) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) ? 'text-[var(--warning-foreground)]' :
+                            ''
                           }`}>
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
-                            {new Date(project.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </span>
+                            <span>{new Date(project.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                          </div>
                         )}
                       </div>
-                    </div>
-                  </div>
+                    </CardFooter>
+                  </Card>
                 ))}
               </div>
             </div>
@@ -1861,11 +1864,11 @@ export default function Home() {
           <div className="space-y-4 py-4">
             {/* Property */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                 Property *
               </label>
               <select
-                className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800"
+                className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-800"
                 value={projectForm.property_name}
                 onChange={(e) => setProjectForm(prev => ({ ...prev, property_name: e.target.value }))}
                 disabled={!!editingProject}
@@ -1879,7 +1882,7 @@ export default function Home() {
 
             {/* Title */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                 Title *
               </label>
               <Input
@@ -1891,7 +1894,7 @@ export default function Home() {
 
             {/* Description */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                 Description
               </label>
               <Textarea
@@ -1905,11 +1908,11 @@ export default function Home() {
             {/* Status & Priority */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                   Status
                 </label>
                 <select
-                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800"
+                  className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-800"
                   value={projectForm.status}
                   onChange={(e) => setProjectForm(prev => ({ ...prev, status: e.target.value }))}
                 >
@@ -1921,11 +1924,11 @@ export default function Home() {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                   Priority
                 </label>
                 <select
-                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800"
+                  className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-800"
                   value={projectForm.priority}
                   onChange={(e) => setProjectForm(prev => ({ ...prev, priority: e.target.value }))}
                 >
@@ -1939,7 +1942,7 @@ export default function Home() {
 
             {/* Assigned Staff */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                 Assigned Staff
               </label>
               <Input
@@ -1951,7 +1954,7 @@ export default function Home() {
 
             {/* Due Date */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                 Due Date
               </label>
               <Input
@@ -1979,15 +1982,15 @@ export default function Home() {
   ), [projects, loadingProjects, groupedProjects, showProjectDialog, editingProject, projectForm, savingProject, allProperties]);
 
   return (
-    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden">
+    <div className="flex h-screen bg-neutral-50 dark:bg-neutral-950 overflow-hidden">
       <Sidebar />
       
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Fixed Header */}
-        <div className="flex-shrink-0 p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex-shrink-0 p-4 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            <h1 className="text-2xl font-bold text-neutral-900 dark:text-white">
               Property Management Dashboard
             </h1>
             
@@ -2074,7 +2077,7 @@ export default function Home() {
         </div>
 
         {/* Floating Windows Container */}
-        <div className="flex-1 relative overflow-hidden bg-slate-700 dark:bg-slate-800">
+        <div className="flex-1 relative overflow-hidden bg-neutral-700 dark:bg-neutral-800">
           {/* Cards Window */}
           {showCardsWindow && (
             <FloatingWindow
@@ -2150,7 +2153,7 @@ export default function Home() {
             selectedCard?.turnover_status === 'not_started' ? 'border-red-400' :
             selectedCard?.turnover_status === 'in_progress' ? 'border-yellow-400' :
             selectedCard?.turnover_status === 'complete' ? 'border-emerald-400' :
-            'border-slate-300'
+            'border-neutral-300'
           }`}
         >
           {selectedCard && (
@@ -2171,7 +2174,7 @@ export default function Home() {
                           {selectedCard.guest_name}
                         </>
                       ) : (
-                        <span className="text-slate-600 dark:text-slate-400">
+                        <span className="text-neutral-600 dark:text-neutral-400">
                           {selectedCard.description || 'No description'}
                         </span>
                       )}
@@ -2183,48 +2186,48 @@ export default function Home() {
               <div className="space-y-4">
               {/* Dates */}
               <div className="grid grid-cols-1 gap-3">
-                <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center gap-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg border border-neutral-200 dark:border-neutral-700">
                   <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                   </svg>
                   <div className="flex-1">
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Checked out</div>
-                    <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                    <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Checked out</div>
+                    <div className="text-sm font-semibold text-neutral-900 dark:text-white">
                       {selectedCard.check_out ? formatDate(selectedCard.check_out) : 'Not set'}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center gap-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg border border-neutral-200 dark:border-neutral-700">
                   <svg className="w-5 h-5 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                   </svg>
                   <div className="flex-1">
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Next check in</div>
-                    <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                    <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Next check in</div>
+                    <div className="text-sm font-semibold text-neutral-900 dark:text-white">
                       {selectedCard.next_check_in ? formatDate(selectedCard.next_check_in) : 'Not set'}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center gap-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg border border-neutral-200 dark:border-neutral-700">
                   <svg className={`w-5 h-5 shrink-0 ${
                     selectedCard.occupancy_status === 'occupied' ? 'text-orange-500' : 
-                    selectedCard.occupancy_status === 'general' ? 'text-slate-400' : 
-                    'text-slate-400'
+                    selectedCard.occupancy_status === 'general' ? 'text-neutral-400' : 
+                    'text-neutral-400'
                   }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                   </svg>
                   <div className="flex-1">
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Occupancy</div>
+                    <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Occupancy</div>
                     <Badge 
                       variant={selectedCard.occupancy_status === 'occupied' ? 'default' : 'outline'}
                       className={`text-sm ${
                         selectedCard.occupancy_status === 'occupied' 
                           ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-300' 
                           : selectedCard.occupancy_status === 'general'
-                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300'
+                          ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-300'
+                          : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300'
                       }`}
                     >
                       {selectedCard.occupancy_status === 'occupied' ? 'Occupied' : 
@@ -2239,10 +2242,10 @@ export default function Home() {
               {selectedCard.tasks && selectedCard.tasks.length > 0 ? (
                 <div className="space-y-3 mt-6">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                    <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
                       Tasks ({selectedCard.completed_tasks || 0}/{selectedCard.total_tasks || 0})
                     </h3>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                    <div className="text-xs text-neutral-500 dark:text-neutral-400">
                       Click a task to expand
                     </div>
                   </div>
@@ -2286,7 +2289,7 @@ export default function Home() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-6 w-6 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50"
+                                className="h-6 w-6 p-0 text-neutral-400 hover:text-red-500 hover:bg-red-50"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (confirm('Remove this task from the turnover?')) {
@@ -2315,14 +2318,14 @@ export default function Home() {
                           <CardContent className="pt-0 space-y-4" onClick={(e) => e.stopPropagation()}>
                             {/* Staff Assignment */}
                             <div>
-                              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
+                              <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2">
                                 Assigned Staff
                               </label>
                               {editingTaskStaff === task.task_id ? (
                                 <div className="flex flex-col gap-2">
                                   <div className="flex items-center gap-2">
                                     <select
-                                      className="flex-1 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800"
+                                      className="flex-1 px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-800"
                                       onChange={(e) => {
                                         if (e.target.value === 'new') {
                                           setNewTaskStaffName('');
@@ -2354,7 +2357,7 @@ export default function Home() {
                                         placeholder="Enter staff name..."
                                         value={newTaskStaffName}
                                         onChange={(e) => setNewTaskStaffName(e.target.value)}
-                                        className="flex-1 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg"
+                                        className="flex-1 px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg"
                                       />
                                       <Button
                                         onClick={() => {
@@ -2386,7 +2389,7 @@ export default function Home() {
 
                             {/* Scheduled Date/Time */}
                             <div>
-                              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
+                              <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2">
                                 Scheduled For
                               </label>
                               <div className="flex gap-2">
@@ -2441,10 +2444,10 @@ export default function Home() {
 
                             {/* Template Form */}
                             {task.template_id && (
-                              <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
+                              <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
                                 {loadingTaskTemplate === task.template_id ? (
                                   <div className="flex items-center justify-center py-4">
-                                    <p className="text-sm text-slate-500">Loading form...</p>
+                                    <p className="text-sm text-neutral-500">Loading form...</p>
                                   </div>
                                 ) : taskTemplates[task.template_id] ? (
                                   <DynamicCleaningForm
@@ -2457,7 +2460,7 @@ export default function Home() {
                                     }}
                                   />
                                 ) : (
-                                  <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-2">
+                                  <p className="text-xs text-neutral-500 dark:text-neutral-400 text-center py-2">
                                     No template configured
                                   </p>
                                 )}
@@ -2487,9 +2490,9 @@ export default function Home() {
 
                   {/* Add Task Dialog */}
                   {showAddTaskDialog && (
-                    <div className="mt-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800">
+                    <div className="mt-3 p-4 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-neutral-50 dark:bg-neutral-800">
                       <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-medium text-slate-900 dark:text-white">Select a Template</h4>
+                        <h4 className="text-sm font-medium text-neutral-900 dark:text-white">Select a Template</h4>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -2532,13 +2535,13 @@ export default function Home() {
                           {availableTemplates.filter(t => 
                             !selectedCard.tasks?.some((task: any) => task.template_id === t.id)
                           ).length === 0 && (
-                            <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-2">
+                            <p className="text-xs text-neutral-500 dark:text-neutral-400 text-center py-2">
                               All templates already assigned
                             </p>
                           )}
                         </div>
                       ) : (
-                        <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-2">
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400 text-center py-2">
                           Loading templates...
                         </p>
                       )}
@@ -2546,8 +2549,8 @@ export default function Home() {
                   )}
                 </div>
               ) : (
-                <div className="mt-6 p-6 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 text-center">
-                  <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
+                <div className="mt-6 p-6 bg-neutral-50 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 text-center">
+                  <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">
                     No tasks configured for this property.
                   </p>
                   <Button
@@ -2566,9 +2569,9 @@ export default function Home() {
                   
                   {/* Add Task Dialog (when no tasks exist) */}
                   {showAddTaskDialog && (
-                    <div className="mt-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-left">
+                    <div className="mt-3 p-4 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-900 text-left">
                       <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-medium text-slate-900 dark:text-white">Select a Template</h4>
+                        <h4 className="text-sm font-medium text-neutral-900 dark:text-white">Select a Template</h4>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -2605,7 +2608,7 @@ export default function Home() {
                           ))}
                         </div>
                       ) : (
-                        <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-2">
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400 text-center py-2">
                           Loading templates...
                         </p>
                       )}
@@ -2620,7 +2623,7 @@ export default function Home() {
             {expandedTaskId && selectedCard.tasks && selectedCard.tasks.length > 0 && (() => {
               const expandedTask = selectedCard.tasks.find((t: any) => t.task_id === expandedTaskId);
               return expandedTask ? (
-                <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700">
+                <div className="px-6 py-4 border-t border-neutral-200 dark:border-neutral-700">
                   <div className="flex flex-wrap gap-2">
                     {expandedTask.card_actions === 'not_started' && (
                       <>
@@ -2746,7 +2749,7 @@ export default function Home() {
                 type="text"
                 value={maintenanceForm.title}
                 onChange={(e) => setMaintenanceForm({...maintenanceForm, title: e.target.value})}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white"
                 placeholder="e.g., Fix leaky faucet"
                 required
               />
@@ -2758,7 +2761,7 @@ export default function Home() {
               <textarea
                 value={maintenanceForm.description}
                 onChange={(e) => setMaintenanceForm({...maintenanceForm, description: e.target.value})}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white min-h-[80px]"
+                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white min-h-[80px]"
                 placeholder="Additional details..."
               />
             </div>
@@ -2770,7 +2773,7 @@ export default function Home() {
                 type="text"
                 value={maintenanceForm.assigned_staff}
                 onChange={(e) => setMaintenanceForm({...maintenanceForm, assigned_staff: e.target.value})}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white"
                 placeholder="Staff member name"
               />
             </div>
@@ -2782,7 +2785,7 @@ export default function Home() {
                 type="datetime-local"
                 value={maintenanceForm.scheduled_start}
                 onChange={(e) => setMaintenanceForm({...maintenanceForm, scheduled_start: e.target.value})}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white"
               />
             </div>
 

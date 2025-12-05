@@ -146,7 +146,7 @@ export default function PhotoUpload({
       {currentPhotos.length > 0 && (
         <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
           {currentPhotos.map((url, index) => (
-            <div key={index} className="relative group aspect-square bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600">
+            <div key={index} className="relative group aspect-square bg-neutral-100 dark:bg-neutral-800 rounded-lg overflow-hidden border border-neutral-300 dark:border-neutral-600">
               <Image
                 src={url}
                 alt={`Photo ${index + 1}`}
