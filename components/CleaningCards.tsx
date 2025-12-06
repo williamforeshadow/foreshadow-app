@@ -68,7 +68,7 @@ export default function CleaningCards({ data, filters, sortBy, onCardClick }: Cl
   };
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 auto-rows-fr">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 auto-rows-fr">
       {items.map((item, index) => (
         <Card
           key={item.cleaning_id || item.id || index}

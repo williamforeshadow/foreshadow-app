@@ -21,7 +21,22 @@ import DynamicCleaningForm from '@/components/DynamicCleaningForm';
 import CleaningCards from '@/components/CleaningCards';
 import MaintenanceCards from '@/components/MaintenanceCards';
 
+// Mobile imports
+import { useIsMobile } from '@/lib/useIsMobile';
+import { 
+  MobileLayout, 
+  MobileCardsView, 
+  MobileTimelineView, 
+  MobileQueryView, 
+  MobileProjectsView,
+  type MobileTab 
+} from '@/components/mobile';
+
 export default function Home() {
+  // Mobile detection
+  const isMobile = useIsMobile();
+  const [mobileTab, setMobileTab] = useState<MobileTab>('cards');
+  
   const [response, setResponse] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -118,6 +133,7 @@ export default function Home() {
     quickCall('get_property_turnovers');
     fetchAllTemplates();
     fetchAllProperties();
+    fetchMaintenanceCards(); // Also load maintenance cards for mobile view
   }, []);
 
   // Fetch projects when Projects window is shown
@@ -1983,6 +1999,345 @@ export default function Home() {
     </div>
   ), [projects, loadingProjects, groupedProjects, showProjectDialog, editingProject, projectForm, savingProject, allProperties]);
 
+  // Mobile query handlers for MobileQueryView
+  const handleMobileGenerateSQL = async (naturalQuery: string): Promise<string> => {
+    const openai = new OpenAI({ apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY, dangerouslyAllowBrowser: true });
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a SQL expert. Convert natural language to PostgreSQL queries for a property management database. Tables: property_turnovers, cleanings, maintenance_cards, projects, templates. Return ONLY the SQL query, no explanation.`
+        },
+        { role: 'user', content: naturalQuery }
+      ]
+    });
+    return completion.choices[0]?.message?.content || '';
+  };
+
+  const handleMobileExecuteQuery = async (sql: string): Promise<any> => {
+    const res = await fetch('/api/sql-query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: sql })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Query failed');
+    return data.data;
+  };
+
+  // Mobile UI
+  if (isMobile) {
+    return (
+      <>
+        <MobileLayout
+          activeTab={mobileTab}
+          onTabChange={setMobileTab}
+        >
+          {mobileTab === 'cards' && (
+            <MobileCardsView
+              cleaningData={response}
+              cleaningFilters={filters}
+              cleaningSortBy={sortBy}
+              onCleaningFiltersChange={setFilters}
+              onCleaningSortChange={setSortBy}
+              maintenanceData={maintenanceCards}
+              maintenanceFilters={maintenanceFilters}
+              maintenanceSortBy={maintenanceSortBy}
+              onMaintenanceFiltersChange={setMaintenanceFilters}
+              onMaintenanceSortChange={setMaintenanceSortBy}
+              onCardClick={setSelectedCard}
+              onCreateMaintenance={() => setShowCreateMaintenance(true)}
+              onRefresh={() => {
+                quickCall('get_property_turnovers');
+                fetchMaintenanceCards();
+              }}
+              isLoading={loading}
+            />
+          )}
+          
+          {mobileTab === 'timeline' && (
+            <MobileTimelineView onCardClick={setSelectedCard} />
+          )}
+          
+          {mobileTab === 'query' && (
+            <MobileQueryView
+              onGenerateSQL={handleMobileGenerateSQL}
+              onExecuteQuery={handleMobileExecuteQuery}
+            />
+          )}
+          
+          {mobileTab === 'projects' && (
+            <MobileProjectsView
+              projects={projects}
+              isLoading={loadingProjects}
+              onRefresh={fetchProjects}
+              onCreateProject={() => openCreateProjectDialog()}
+              onEditProject={openEditProjectDialog}
+            />
+          )}
+        </MobileLayout>
+
+        {/* Mobile Dialogs */}
+        {/* Project Dialog */}
+        <Dialog open={showProjectDialog} onOpenChange={(open) => {
+          if (!open) {
+            setShowProjectDialog(false);
+            resetProjectForm();
+          }
+        }}>
+          <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{editingProject ? 'Edit Project' : 'Create Project'}</DialogTitle>
+              <DialogDescription>
+                {editingProject ? 'Update project details' : 'Create a new project for a property'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Property *</label>
+                <Select
+                  value={projectForm.property_name}
+                  onValueChange={(value) => setProjectForm({...projectForm, property_name: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select property" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allProperties.map((property) => (
+                      <SelectItem key={property} value={property}>{property}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Title *</label>
+                <Input
+                  value={projectForm.title}
+                  onChange={(e) => setProjectForm({...projectForm, title: e.target.value})}
+                  placeholder="Project title"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Description</label>
+                <Textarea
+                  value={projectForm.description}
+                  onChange={(e) => setProjectForm({...projectForm, description: e.target.value})}
+                  placeholder="Project description"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Status</label>
+                  <Select
+                    value={projectForm.status}
+                    onValueChange={(value) => setProjectForm({...projectForm, status: value})}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="not_started">Not Started</SelectItem>
+                      <SelectItem value="in_progress">In Progress</SelectItem>
+                      <SelectItem value="on_hold">On Hold</SelectItem>
+                      <SelectItem value="complete">Complete</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Priority</label>
+                  <Select
+                    value={projectForm.priority}
+                    onValueChange={(value) => setProjectForm({...projectForm, priority: value})}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="urgent">Urgent</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Assigned Staff</label>
+                <Input
+                  value={projectForm.assigned_staff}
+                  onChange={(e) => setProjectForm({...projectForm, assigned_staff: e.target.value})}
+                  placeholder="Staff member name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Due Date</label>
+                <Input
+                  type="date"
+                  value={projectForm.due_date}
+                  onChange={(e) => setProjectForm({...projectForm, due_date: e.target.value})}
+                />
+              </div>
+            </div>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button variant="outline" onClick={() => setShowProjectDialog(false)} className="w-full sm:w-auto">Cancel</Button>
+              <Button onClick={saveProject} disabled={savingProject} className="w-full sm:w-auto">
+                {savingProject ? 'Saving...' : (editingProject ? 'Update' : 'Create')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Card Detail Dialog */}
+        <Dialog open={!!selectedCard} onOpenChange={(open) => {
+          if (!open) {
+            setSelectedCard(null);
+            setShowAddTaskDialog(false);
+            setFullscreenTask(null);
+            setShowPropertyProjects(false);
+          }
+        }}>
+          <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto">
+            {selectedCard && (
+              <>
+                <DialogHeader>
+                  <DialogTitle>{selectedCard.property_name}</DialogTitle>
+                  <DialogDescription>
+                    {selectedCard.guest_name || 'No guest'} • {selectedCard.turnover_status?.replace('_', ' ')}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  {/* Status & Tasks */}
+                  <div className="flex items-center justify-between">
+                    <Badge className={
+                      selectedCard.turnover_status === 'complete' ? 'bg-emerald-500/10 text-emerald-600' :
+                      selectedCard.turnover_status === 'in_progress' ? 'bg-yellow-500/10 text-yellow-600' :
+                      'bg-red-500/10 text-red-600'
+                    }>
+                      {selectedCard.turnover_status?.replace('_', ' ') || 'unknown'}
+                    </Badge>
+                    {selectedCard.total_tasks > 0 && (
+                      <span className="text-sm text-neutral-500">
+                        {selectedCard.completed_tasks || 0}/{selectedCard.total_tasks} tasks
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* Dates */}
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-neutral-500">Check Out</span>
+                      <p className="font-medium">{selectedCard.check_out ? new Date(selectedCard.check_out).toLocaleDateString() : 'N/A'}</p>
+                    </div>
+                    <div>
+                      <span className="text-neutral-500">Check In</span>
+                      <p className="font-medium">{selectedCard.next_check_in ? new Date(selectedCard.next_check_in).toLocaleDateString() : 'N/A'}</p>
+                    </div>
+                  </div>
+
+                  {/* Tasks List */}
+                  {selectedCard.tasks && selectedCard.tasks.length > 0 && (
+                    <div>
+                      <h4 className="font-medium mb-2">Tasks</h4>
+                      <div className="space-y-2">
+                        {selectedCard.tasks.map((task: any) => (
+                          <div key={task.task_id} className="flex items-center justify-between p-2 bg-neutral-50 dark:bg-neutral-800 rounded">
+                            <span className="text-sm">{task.template_name || task.type}</span>
+                            <Badge className={
+                              task.status === 'complete' ? 'bg-emerald-500/10 text-emerald-600' :
+                              task.status === 'in_progress' ? 'bg-yellow-500/10 text-yellow-600' :
+                              'bg-neutral-500/10 text-neutral-600'
+                            }>
+                              {task.status?.replace('_', ' ') || 'pending'}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setSelectedCard(null)} className="w-full">
+                    Close
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Create Maintenance Dialog */}
+        <Dialog open={showCreateMaintenance} onOpenChange={setShowCreateMaintenance}>
+          <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Create Maintenance</DialogTitle>
+              <DialogDescription>Create a new maintenance task</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Property (Optional)</label>
+                <Select
+                  value={maintenanceForm.property_name}
+                  onValueChange={(value) => setMaintenanceForm({...maintenanceForm, property_name: value})}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select property" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None (General)</SelectItem>
+                    {allProperties.map((property) => (
+                      <SelectItem key={property} value={property}>{property}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Title *</label>
+                <Input
+                  value={maintenanceForm.title}
+                  onChange={(e) => setMaintenanceForm({...maintenanceForm, title: e.target.value})}
+                  placeholder="e.g., Fix leaky faucet"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Description</label>
+                <Textarea
+                  value={maintenanceForm.description}
+                  onChange={(e) => setMaintenanceForm({...maintenanceForm, description: e.target.value})}
+                  placeholder="Additional details..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Assigned Staff</label>
+                <Input
+                  value={maintenanceForm.assigned_staff}
+                  onChange={(e) => setMaintenanceForm({...maintenanceForm, assigned_staff: e.target.value})}
+                  placeholder="Staff member name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Priority</label>
+                <Select
+                  value={maintenanceForm.priority}
+                  onValueChange={(value) => setMaintenanceForm({...maintenanceForm, priority: value})}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button variant="outline" onClick={() => setShowCreateMaintenance(false)} className="w-full sm:w-auto">Cancel</Button>
+              <Button onClick={createMaintenance} disabled={creatingMaintenance} className="w-full sm:w-auto">
+                {creatingMaintenance ? 'Creating...' : 'Create'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
+
+  // Desktop UI
   return (
     <div className="flex h-screen bg-neutral-50 dark:bg-neutral-950 overflow-hidden">
       <Sidebar />
