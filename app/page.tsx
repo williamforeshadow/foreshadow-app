@@ -77,7 +77,6 @@ export default function Home() {
     due_date: ''
   });
   const [showCleaningForm, setShowCleaningForm] = useState(false);
-  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [editingTaskStaff, setEditingTaskStaff] = useState<string | null>(null);
   const [newTaskStaffName, setNewTaskStaffName] = useState('');
   const [taskTemplates, setTaskTemplates] = useState<{[key: string]: any}>({});
@@ -85,6 +84,8 @@ export default function Home() {
   const [availableTemplates, setAvailableTemplates] = useState<any[]>([]);
   const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
   const [addingTask, setAddingTask] = useState(false);
+  const [showPropertyProjects, setShowPropertyProjects] = useState(false);
+  const [fullscreenTask, setFullscreenTask] = useState<any>(null);
   const [cardViewMode, setCardViewMode] = useState<'cleanings' | 'maintenance'>('cleanings');
   const [maintenanceCards, setMaintenanceCards] = useState<any[]>([]);
   const [showCreateMaintenance, setShowCreateMaintenance] = useState(false);
@@ -1052,9 +1053,9 @@ export default function Home() {
         return Array.isArray(prevResponse) ? updatedItems : updatedItems[0];
       });
 
-      // If the deleted task was expanded, collapse it
-      if (expandedTaskId === taskId) {
-        setExpandedTaskId(null);
+      // If the deleted task was in fullscreen, close it
+      if (fullscreenTask?.task_id === taskId) {
+        setFullscreenTask(null);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to delete task');
@@ -2165,7 +2166,8 @@ export default function Home() {
         if (!open) {
           setSelectedCard(null);
           setShowAddTaskDialog(false);
-          setExpandedTaskId(null);
+          setFullscreenTask(null);
+          setShowPropertyProjects(false);
         }
       }}>
         <DialogContent
@@ -2178,6 +2180,185 @@ export default function Home() {
         >
           {selectedCard && (
             <>
+              {fullscreenTask ? (
+                /* Task Template View - takes over the dialog */
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="text-xl">
+                      {fullscreenTask.template_name || 'Task'}
+                    </DialogTitle>
+                    <DialogDescription className="flex items-center gap-2">
+                      <span>{selectedCard.property_name}</span>
+                      <Badge
+                        className={fullscreenTask.type === 'maintenance' 
+                          ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200' 
+                          : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                        }
+                      >
+                        {fullscreenTask.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                      </Badge>
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-4">
+                    {/* Task Status Bar */}
+                    <div className="p-3 bg-neutral-50 dark:bg-neutral-800 rounded-lg flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">Status</p>
+                        <Badge 
+                          className={`${
+                            fullscreenTask.card_actions === 'completed' 
+                              ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                              : fullscreenTask.card_actions === 'in_progress'
+                              ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                              : fullscreenTask.card_actions === 'paused'
+                              ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
+                              : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200'
+                          }`}
+                        >
+                          {fullscreenTask.card_actions === 'not_started' ? 'Not Started' :
+                           fullscreenTask.card_actions === 'in_progress' ? 'In Progress' :
+                           fullscreenTask.card_actions === 'paused' ? 'Paused' :
+                           fullscreenTask.card_actions === 'completed' ? 'Completed' :
+                           fullscreenTask.card_actions === 'reopened' ? 'Reopened' :
+                           'Not Started'}
+                        </Badge>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">Assigned to</p>
+                        <p className="text-sm font-medium text-neutral-900 dark:text-white">
+                          {fullscreenTask.assigned_staff || 'Unassigned'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Template Form */}
+                    {fullscreenTask.template_id ? (
+                      loadingTaskTemplate === fullscreenTask.template_id ? (
+                        <div className="flex items-center justify-center py-8">
+                          <p className="text-neutral-500">Loading form...</p>
+                        </div>
+                      ) : taskTemplates[fullscreenTask.template_id] ? (
+                        <DynamicCleaningForm
+                          cleaningId={fullscreenTask.task_id}
+                          propertyName={selectedCard?.property_name || ''}
+                          template={taskTemplates[fullscreenTask.template_id]}
+                          formMetadata={fullscreenTask.form_metadata}
+                          onSave={async (formData) => {
+                            await saveTaskForm(fullscreenTask.task_id, formData);
+                          }}
+                        />
+                      ) : (
+                        <p className="text-center text-neutral-500 py-8">
+                          No template configured for this task
+                        </p>
+                      )
+                    ) : (
+                      <p className="text-center text-neutral-500 py-8">
+                        No template configured for this task
+                      </p>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
+                      <div className="flex flex-wrap gap-2">
+                        {(fullscreenTask.card_actions === 'not_started' || !fullscreenTask.card_actions) && (
+                          <>
+                            <Button
+                              onClick={() => {
+                                updateTaskAction(fullscreenTask.task_id, 'in_progress');
+                                setFullscreenTask({ ...fullscreenTask, card_actions: 'in_progress' });
+                              }}
+                              className="flex-1"
+                            >
+                              Start Task
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                updateTaskAction(fullscreenTask.task_id, 'completed');
+                                setFullscreenTask({ ...fullscreenTask, card_actions: 'completed' });
+                              }}
+                              variant="outline"
+                              className="flex-1"
+                            >
+                              Mark Complete
+                            </Button>
+                          </>
+                        )}
+                        {fullscreenTask.card_actions === 'in_progress' && (
+                          <>
+                            <Button
+                              onClick={() => {
+                                updateTaskAction(fullscreenTask.task_id, 'paused');
+                                setFullscreenTask({ ...fullscreenTask, card_actions: 'paused' });
+                              }}
+                              variant="outline"
+                              className="flex-1"
+                            >
+                              Pause
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                updateTaskAction(fullscreenTask.task_id, 'completed');
+                                setFullscreenTask({ ...fullscreenTask, card_actions: 'completed' });
+                              }}
+                              className="flex-1"
+                            >
+                              Complete
+                            </Button>
+                          </>
+                        )}
+                        {fullscreenTask.card_actions === 'paused' && (
+                          <>
+                            <Button
+                              onClick={() => {
+                                updateTaskAction(fullscreenTask.task_id, 'in_progress');
+                                setFullscreenTask({ ...fullscreenTask, card_actions: 'in_progress' });
+                              }}
+                              className="flex-1"
+                            >
+                              Resume
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                updateTaskAction(fullscreenTask.task_id, 'completed');
+                                setFullscreenTask({ ...fullscreenTask, card_actions: 'completed' });
+                              }}
+                              variant="outline"
+                              className="flex-1"
+                            >
+                              Complete
+                            </Button>
+                          </>
+                        )}
+                        {(fullscreenTask.card_actions === 'completed' || fullscreenTask.card_actions === 'reopened') && (
+                          <Button
+                            onClick={() => {
+                              updateTaskAction(fullscreenTask.task_id, 'not_started');
+                              setFullscreenTask({ ...fullscreenTask, card_actions: 'not_started' });
+                            }}
+                            className="w-full"
+                          >
+                            Reopen Task
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <DialogFooter className="border-t pt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => setFullscreenTask(null)}
+                      className="w-full"
+                    >
+                      Back
+                    </Button>
+                  </DialogFooter>
+                </>
+              ) : (
+                /* Turnover Card Content - normal view */
+                <>
               <DialogHeader>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
@@ -2266,7 +2447,7 @@ export default function Home() {
                       Tasks ({selectedCard.completed_tasks || 0}/{selectedCard.total_tasks || 0})
                     </h3>
                     <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                      Click a task to expand
+                      Click a task to open
                     </div>
                   </div>
 
@@ -2276,16 +2457,14 @@ export default function Home() {
                         key={task.task_id}
                         className="cursor-pointer hover:shadow-md transition-all"
                         onClick={async (e) => {
-                          // Don't expand if clicking delete button
+                          // Don't open fullscreen if clicking delete button
                           if ((e.target as HTMLElement).closest('button')) return;
                           
-                          const newExpandedId = expandedTaskId === task.task_id ? null : task.task_id;
-                          setExpandedTaskId(newExpandedId);
-                          
-                          // Fetch template if expanding and template exists
-                          if (newExpandedId && task.template_id && !taskTemplates[task.template_id]) {
+                          // Fetch template if needed, then open fullscreen
+                          if (task.template_id && !taskTemplates[task.template_id]) {
                             await fetchTaskTemplate(task.template_id);
                           }
+                          setFullscreenTask(task);
                         }}
                       >
                         <CardHeader className="pb-3">
@@ -2333,161 +2512,6 @@ export default function Home() {
                             {task.assigned_staff && ` • ${task.assigned_staff}`}
                           </CardDescription>
                         </CardHeader>
-
-                        {expandedTaskId === task.task_id && (
-                          <CardContent className="pt-0 space-y-4" onClick={(e) => e.stopPropagation()}>
-                            {/* Staff Assignment */}
-                            <div>
-                              <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2">
-                                Assigned Staff
-                              </label>
-                              {editingTaskStaff === task.task_id ? (
-                                <div className="flex flex-col gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <select
-                                      className="flex-1 px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-800"
-                                      onChange={(e) => {
-                                        if (e.target.value === 'new') {
-                                          setNewTaskStaffName('');
-                                        } else {
-                                          updateTaskAssignment(task.task_id, e.target.value || null);
-                                          setEditingTaskStaff(null);
-                                        }
-                                      }}
-                                      value={task.assigned_staff || ''}
-                                    >
-                                      <option value="">Unassigned</option>
-                                      {getUniqueStaffFromTasks().map(staff => (
-                                        <option key={staff} value={staff}>{staff}</option>
-                                      ))}
-                                      <option value="new">+ Add New Staff...</option>
-                                    </select>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => setEditingTaskStaff(null)}
-                                    >
-                                      ✕
-                                    </Button>
-                                  </div>
-                                  {newTaskStaffName !== undefined && (
-                                    <div className="flex gap-2">
-                                      <input
-                                        type="text"
-                                        placeholder="Enter staff name..."
-                                        value={newTaskStaffName}
-                                        onChange={(e) => setNewTaskStaffName(e.target.value)}
-                                        className="flex-1 px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg"
-                                      />
-                                      <Button
-                                        onClick={() => {
-                                          if (newTaskStaffName.trim()) {
-                                            updateTaskAssignment(task.task_id, newTaskStaffName.trim());
-                                            setEditingTaskStaff(null);
-                                            setNewTaskStaffName('');
-                                          }
-                                        }}
-                                        disabled={!newTaskStaffName.trim()}
-                                        size="sm"
-                                      >
-                                        Save
-                                      </Button>
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setEditingTaskStaff(task.task_id)}
-                                  className="w-full justify-start"
-                                >
-                                  {task.assigned_staff || 'Click to assign staff'}
-                                </Button>
-                              )}
-                            </div>
-
-                            {/* Scheduled Date/Time */}
-                            <div>
-                              <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2">
-                                Scheduled For
-                              </label>
-                              <div className="flex gap-2">
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    <Button
-                                      variant="outline"
-                                      className="w-40 justify-between font-normal"
-                                      size="sm"
-                                    >
-                                      {task.scheduled_start 
-                                        ? new Date(task.scheduled_start).toLocaleDateString() 
-                                        : "Select date"}
-                                      <ChevronDownIcon className="h-4 w-4" />
-                                    </Button>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-auto p-0" align="start">
-                                    <Calendar
-                                      mode="single"
-                                      selected={task.scheduled_start ? new Date(task.scheduled_start) : undefined}
-                                      onSelect={(date) => {
-                                        if (date) {
-                                          const timeStr = task.scheduled_start 
-                                            ? new Date(task.scheduled_start).toTimeString().slice(0, 5) 
-                                            : '09:00';
-                                          const dateStr = date.toISOString().split('T')[0];
-                                          updateTaskSchedule(task.task_id, `${dateStr}T${timeStr}:00`);
-                                        } else {
-                                          updateTaskSchedule(task.task_id, null);
-                                        }
-                                      }}
-                                    />
-                                  </PopoverContent>
-                                </Popover>
-                                
-                                <Input
-                                  type="time"
-                                  value={task.scheduled_start ? new Date(task.scheduled_start).toTimeString().slice(0, 5) : ""}
-                                  onChange={(e) => {
-                                    if (task.scheduled_start) {
-                                      const dateStr = new Date(task.scheduled_start).toISOString().split('T')[0];
-                                      updateTaskSchedule(task.task_id, `${dateStr}T${e.target.value}:00`);
-                                    } else {
-                                      const today = new Date().toISOString().split('T')[0];
-                                      updateTaskSchedule(task.task_id, `${today}T${e.target.value}:00`);
-                                    }
-                                  }}
-                                  className="w-32"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Template Form */}
-                            {task.template_id && (
-                              <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
-                                {loadingTaskTemplate === task.template_id ? (
-                                  <div className="flex items-center justify-center py-4">
-                                    <p className="text-sm text-neutral-500">Loading form...</p>
-                                  </div>
-                                ) : taskTemplates[task.template_id] ? (
-                                  <DynamicCleaningForm
-                                    cleaningId={task.task_id}
-                                    propertyName={selectedCard.property_name}
-                                    template={taskTemplates[task.template_id]}
-                                    formMetadata={task.form_metadata}
-                                    onSave={async (formData) => {
-                                      await saveTaskForm(task.task_id, formData);
-                                    }}
-                                  />
-                                ) : (
-                                  <p className="text-xs text-neutral-500 dark:text-neutral-400 text-center py-2">
-                                    No template configured
-                                  </p>
-                                )}
-                              </div>
-                            )}
-                          </CardContent>
-                        )}
                       </Card>
                     ))}
                   </div>
@@ -2502,9 +2526,6 @@ export default function Home() {
                       setShowAddTaskDialog(true);
                     }}
                   >
-                    <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
                     Add Task
                   </Button>
 
@@ -2581,9 +2602,6 @@ export default function Home() {
                       setShowAddTaskDialog(true);
                     }}
                   >
-                    <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
                     Add Task
                   </Button>
                   
@@ -2637,84 +2655,130 @@ export default function Home() {
                 </div>
               )}
 
-            </div>
+              {/* Property Projects Section */}
+              {selectedCard.property_name && (
+                <div className="mt-6 border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
+                  {/* Collapsible Header */}
+                  <button
+                    onClick={() => setShowPropertyProjects(!showPropertyProjects)}
+                    className="w-full flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-800/50 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                      </svg>
+                      <span className="font-semibold text-neutral-900 dark:text-white">
+                        Property Projects
+                      </span>
+                      <Badge variant="outline" className="text-xs">
+                        {projects.filter(p => p.property_name === selectedCard.property_name).length}
+                      </Badge>
+                    </div>
+                    <svg 
+                      className={`w-5 h-5 text-neutral-500 transition-transform duration-200 ${showPropertyProjects ? 'rotate-180' : ''}`} 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
 
-            {/* Task Action Buttons - Show when task is expanded */}
-            {expandedTaskId && selectedCard.tasks && selectedCard.tasks.length > 0 && (() => {
-              const expandedTask = selectedCard.tasks.find((t: any) => t.task_id === expandedTaskId);
-              return expandedTask ? (
-                <div className="px-6 py-4 border-t border-neutral-200 dark:border-neutral-700">
-                  <div className="flex flex-wrap gap-2">
-                    {expandedTask.card_actions === 'not_started' && (
-                      <>
-                        <Button
-                          onClick={() => updateTaskAction(expandedTask.task_id, 'in_progress')}
-                          size="lg"
-                          className="flex-1"
-                        >
-                          Start
-                        </Button>
-                        <Button
-                          onClick={() => updateTaskAction(expandedTask.task_id, 'completed')}
-                          size="lg"
-                          variant="outline"
-                          className="flex-1"
-                        >
-                          Mark Complete
-                        </Button>
-                      </>
-                    )}
-                    {expandedTask.card_actions === 'in_progress' && (
-                      <>
-                        <Button
-                          onClick={() => updateTaskAction(expandedTask.task_id, 'paused')}
-                          size="lg"
-                          variant="outline"
-                          className="flex-1"
-                        >
-                          Pause
-                        </Button>
-                        <Button
-                          onClick={() => updateTaskAction(expandedTask.task_id, 'completed')}
-                          size="lg"
-                          className="flex-1"
-                        >
-                          Complete
-                        </Button>
-                      </>
-                    )}
-                    {expandedTask.card_actions === 'paused' && (
-                      <>
-                        <Button
-                          onClick={() => updateTaskAction(expandedTask.task_id, 'in_progress')}
-                          size="lg"
-                          className="flex-1"
-                        >
-                          Resume
-                        </Button>
-                        <Button
-                          onClick={() => updateTaskAction(expandedTask.task_id, 'completed')}
-                          size="lg"
-                          variant="outline"
-                          className="flex-1"
-                        >
-                          Complete
-                        </Button>
-                      </>
-                    )}
-                    {(expandedTask.card_actions === 'completed' || expandedTask.card_actions === 'reopened') && (
+                  {/* Expandable Content */}
+                  {showPropertyProjects && (
+                    <div className="p-4 space-y-3 bg-white dark:bg-neutral-900">
+                      {projects.filter(p => p.property_name === selectedCard.property_name).length > 0 ? (
+                        projects
+                          .filter(p => p.property_name === selectedCard.property_name)
+                          .map((project: any) => (
+                            <div 
+                              key={project.id}
+                              className="p-3 bg-neutral-50 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="font-medium text-sm text-neutral-900 dark:text-white truncate">
+                                    {project.title}
+                                  </h4>
+                                  {project.description && (
+                                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 line-clamp-2">
+                                      {project.description}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="flex flex-col items-end gap-1 shrink-0">
+                                  <Badge 
+                                    className={`text-xs ${
+                                      project.status === 'complete' 
+                                        ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800'
+                                        : project.status === 'in_progress'
+                                        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800'
+                                        : project.status === 'on_hold'
+                                        ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800'
+                                        : 'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+                                    }`}
+                                  >
+                                    {project.status?.replace('_', ' ') || 'not started'}
+                                  </Badge>
+                                  <Badge 
+                                    className={`text-xs ${
+                                      project.priority === 'urgent' 
+                                        ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800'
+                                        : project.priority === 'high'
+                                        ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800'
+                                        : 'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+                                    }`}
+                                  >
+                                    {project.priority || 'medium'}
+                                  </Badge>
+                                </div>
+                              </div>
+                              {/* Footer with staff and due date */}
+                              <div className="flex items-center justify-between mt-2 pt-2 border-t border-neutral-200 dark:border-neutral-700">
+                                <div className="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                  </svg>
+                                  <span>{project.assigned_staff || 'Unassigned'}</span>
+                                </div>
+                                {project.due_date && (
+                                  <div className={`flex items-center gap-1 text-xs ${
+                                    new Date(project.due_date) < new Date() 
+                                      ? 'text-red-500' 
+                                      : new Date(project.due_date) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+                                      ? 'text-orange-500'
+                                      : 'text-neutral-500 dark:text-neutral-400'
+                                  }`}>
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                    <span>{new Date(project.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                      ) : null}
+                      
+                      {/* Create Project Button - always visible */}
                       <Button
-                        onClick={() => updateTaskAction(expandedTask.task_id, 'not_started')}
-                        size="lg"
+                        variant="outline"
+                        size="sm"
                         className="w-full"
+                        onClick={() => {
+                          setShowProjectsWindow(true);
+                          bringToFront('projects');
+                          openCreateProjectDialog(selectedCard.property_name);
+                        }}
                       >
-                        Reopen
+                        Create Project
                       </Button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
-              ) : null;
-            })()}
+              )}
+
+            </div>
 
             <DialogFooter className="border-t pt-4">
               <Button
@@ -2725,6 +2789,8 @@ export default function Home() {
                 Close
               </Button>
             </DialogFooter>
+                </>
+              )}
             </>
           )}
         </DialogContent>

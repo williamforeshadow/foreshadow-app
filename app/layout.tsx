@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthProvider } from "@/lib/authContext";
+import RoleSwitcher from "@/components/RoleSwitcher";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Foreshadow - Your Modern App",
-  description: "Built with Next.js, Tailwind CSS, and Supabase",
+  title: "Foreshadow",
+  description: "Property Management System",
 };
 
 export default function RootLayout({
@@ -34,7 +36,10 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          <AuthProvider>
+            {children}
+            <RoleSwitcher />
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

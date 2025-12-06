@@ -4,12 +4,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { ModeToggle } from '@/components/mode-toggle';
+import { useAuth } from '@/lib/authContext';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(true);
+  const { canEditTemplates } = useAuth();
 
-  const navItems = [
+  const allNavItems = [
     {
       name: 'Dashboard',
       path: '/',
@@ -38,6 +40,12 @@ export default function Sidebar() {
       )
     }
   ];
+
+  // Filter out Templates for staff users
+  const navItems = allNavItems.filter(item => {
+    if (item.path === '/templates') return canEditTemplates;
+    return true;
+  });
 
   return (
     <>
