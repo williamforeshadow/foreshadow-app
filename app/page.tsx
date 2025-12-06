@@ -18,8 +18,7 @@ import Timeline from '@/components/Timeline';
 import FloatingWindow from '@/components/FloatingWindow';
 import CleaningForm from '@/components/CleaningForm';
 import DynamicCleaningForm from '@/components/DynamicCleaningForm';
-import CleaningCards from '@/components/CleaningCards';
-import MaintenanceCards from '@/components/MaintenanceCards';
+import TurnoverCards from '@/components/TurnoverCards';
 
 // Mobile imports
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -63,13 +62,6 @@ export default function Home() {
     staff: [] as string[]
   });
   const [sortBy, setSortBy] = useState('status-priority');
-  const [maintenanceFilters, setMaintenanceFilters] = useState({
-    priority: [] as string[],
-    cardActions: [] as string[],
-    staff: [] as string[],
-    property: [] as string[]
-  });
-  const [maintenanceSortBy, setMaintenanceSortBy] = useState('priority-high');
   const [showCardsWindow, setShowCardsWindow] = useState(true);
   const [showTimelineWindow, setShowTimelineWindow] = useState(true);
   const [showQueryWindow, setShowQueryWindow] = useState(false);
@@ -101,18 +93,6 @@ export default function Home() {
   const [addingTask, setAddingTask] = useState(false);
   const [showPropertyProjects, setShowPropertyProjects] = useState(false);
   const [fullscreenTask, setFullscreenTask] = useState<any>(null);
-  const [cardViewMode, setCardViewMode] = useState<'cleanings' | 'maintenance'>('cleanings');
-  const [maintenanceCards, setMaintenanceCards] = useState<any[]>([]);
-  const [showCreateMaintenance, setShowCreateMaintenance] = useState(false);
-  const [maintenanceForm, setMaintenanceForm] = useState({
-    property_name: 'none',
-    title: '',
-    description: '',
-    assigned_staff: '',
-    scheduled_start: '',
-    priority: 'medium'
-  });
-  const [creatingMaintenance, setCreatingMaintenance] = useState(false);
 
   // Window stacking order management
   const bringToFront = (window: 'cards' | 'timeline' | 'query' | 'projects') => {
@@ -133,7 +113,6 @@ export default function Home() {
     quickCall('get_property_turnovers');
     fetchAllTemplates();
     fetchAllProperties();
-    fetchMaintenanceCards(); // Also load maintenance cards for mobile view
   }, []);
 
   // Fetch projects when Projects window is shown
@@ -331,65 +310,6 @@ export default function Home() {
     }
   };
 
-  const fetchMaintenanceCards = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error: rpcError } = await supabase.rpc('get_maintenance_cards');
-      if (rpcError) {
-        setError(rpcError.message);
-      } else {
-        setMaintenanceCards(data || []);
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch maintenance cards');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const createMaintenance = async () => {
-    if (!maintenanceForm.title.trim()) {
-      setError('Title is required');
-      return;
-    }
-
-    setCreatingMaintenance(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/maintenance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...maintenanceForm,
-          property_name: maintenanceForm.property_name === 'none' ? null : maintenanceForm.property_name
-        })
-      });
-      const data = await res.json();
-      
-      if (data.error) {
-        setError(data.error);
-      } else {
-        // Refresh maintenance cards
-        await fetchMaintenanceCards();
-        // Reset form and close dialog
-        setMaintenanceForm({
-          property_name: 'none',
-          title: '',
-          description: '',
-          assigned_staff: '',
-          scheduled_start: '',
-          priority: 'medium'
-        });
-        setShowCreateMaintenance(false);
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to create maintenance card');
-    } finally {
-      setCreatingMaintenance(false);
-    }
-  };
-
   const executeNaturalQuery = async () => {
     setIsExecutingQuery(true);
     setError(null);
@@ -522,45 +442,6 @@ export default function Home() {
       );
     } catch (err: any) {
       setError(err.message || 'Failed to update card action');
-    } finally {
-      setUpdatingCardAction(false);
-    }
-  };
-
-  const updateMaintenanceAction = async (maintenanceId: string, newAction: string) => {
-    setUpdatingCardAction(true);
-    try {
-      const response = await fetch('/api/update-maintenance-action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ maintenanceId, action: newAction })
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to update maintenance action');
-      }
-
-      // Update the local state
-      const updatedCard = result.data;
-      
-      setMaintenanceCards((prevCards: any[]) => 
-        prevCards.map((card: any) => 
-          card.id === maintenanceId 
-            ? { ...card, ...updatedCard }
-            : card
-        )
-      );
-
-      // Also update the selected card if still open
-      setSelectedCard((prev: any) => 
-        prev?.id === maintenanceId 
-          ? { ...prev, ...updatedCard }
-          : prev
-      );
-    } catch (err: any) {
-      setError(err.message || 'Failed to update maintenance action');
     } finally {
       setUpdatingCardAction(false);
     }
@@ -1191,30 +1072,12 @@ export default function Home() {
     }));
   };
 
-  const toggleMaintenanceFilter = (category: keyof typeof maintenanceFilters, value: string) => {
-    setMaintenanceFilters(prev => ({
-      ...prev,
-      [category]: prev[category].includes(value)
-        ? prev[category].filter(v => v !== value)
-        : [...prev[category], value]
-    }));
-  };
-
   const clearAllFilters = () => {
-    if (cardViewMode === 'cleanings') {
-      setFilters({
-        cleanStatus: [],
-        cardActions: [],
-        staff: []
-      });
-    } else {
-      setMaintenanceFilters({
-        priority: [],
-        cardActions: [],
-        staff: [],
-        property: []
-      });
-    }
+    setFilters({
+      cleanStatus: [],
+      cardActions: [],
+      staff: []
+    });
   };
 
   const getUniqueStaff = (items: any[]) => {
@@ -1235,9 +1098,7 @@ export default function Home() {
   };
 
   const getActiveFilterCount = () => {
-    return cardViewMode === 'cleanings'
-      ? filters.cleanStatus.length + filters.cardActions.length + filters.staff.length
-      : maintenanceFilters.priority.length + maintenanceFilters.cardActions.length + maintenanceFilters.staff.length + maintenanceFilters.property.length;
+    return filters.cleanStatus.length + filters.cardActions.length + filters.staff.length;
   };
   
   const formatDate = (dateString: string) => {
@@ -1252,71 +1113,11 @@ export default function Home() {
     });
   };
 
-  const renderCardsSection = () => {
-    if (cardViewMode === 'cleanings') {
-      const cleaningsData = response ? (Array.isArray(response) ? response : [response]) : [];
-      return (
-        <CleaningCards
-          data={cleaningsData}
-          filters={filters}
-          sortBy={sortBy}
-          onCardClick={setSelectedCard}
-        />
-      );
-    } else {
-      return (
-        <MaintenanceCards
-          data={maintenanceCards}
-          filters={maintenanceFilters}
-          sortBy={maintenanceSortBy}
-          onCardClick={setSelectedCard}
-        />
-      );
-    }
-  };
-
   // Memoize window contents to prevent re-renders when only z-index changes
   const cardsWindowContent = useMemo(() => (
     <div className="p-6 space-y-4">
-      {/* Card Type Toggle */}
-      <div className="flex items-center gap-2 mb-4">
-        <Button
-          variant={cardViewMode === 'cleanings' ? 'default' : 'outline'}
-          onClick={() => {
-            setCardViewMode('cleanings');
-            if (!response) {
-              quickCall('get_property_turnovers');
-            }
-          }}
-          size="sm"
-        >
-          Cleanings
-        </Button>
-        <Button
-          variant={cardViewMode === 'maintenance' ? 'default' : 'outline'}
-          onClick={() => {
-            setCardViewMode('maintenance');
-            fetchMaintenanceCards();
-          }}
-          size="sm"
-        >
-          Maintenance
-        </Button>
-        
-        {/* Create Maintenance Button - only show in maintenance mode */}
-        {cardViewMode === 'maintenance' && (
-          <Button
-            onClick={() => setShowCreateMaintenance(true)}
-            size="sm"
-            className="ml-auto"
-          >
-            + Create Maintenance
-          </Button>
-        )}
-      </div>
-
       {/* Response Display */}
-      {((cardViewMode === 'cleanings' && response !== null) || (cardViewMode === 'maintenance' && maintenanceCards.length > 0)) && (
+      {response !== null && (
         <div className="space-y-3">
           {/* Filter and Sort Bar */}
           <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg p-4">
@@ -1352,120 +1153,57 @@ export default function Home() {
                 {/* Sort Dropdown */}
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-neutral-600 dark:text-neutral-400">Sort by:</span>
-                  {cardViewMode === 'cleanings' ? (
-                    <Select value={sortBy} onValueChange={setSortBy}>
-                      <SelectTrigger className="w-[220px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="status-priority">Status Priority</SelectItem>
-                        <SelectItem value="checkin-soonest">Next Check-in: Soonest</SelectItem>
-                        <SelectItem value="checkout-recent">Checkout: Most Recent</SelectItem>
-                        <SelectItem value="checkout-oldest">Checkout: Oldest</SelectItem>
-                        <SelectItem value="property-az">Property Name: A-Z</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Select value={maintenanceSortBy} onValueChange={setMaintenanceSortBy}>
-                      <SelectTrigger className="w-[220px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="priority-high">Priority: High First</SelectItem>
-                        <SelectItem value="status-priority">Status Priority</SelectItem>
-                        <SelectItem value="scheduled-soonest">Scheduled: Soonest</SelectItem>
-                        <SelectItem value="created-newest">Created: Newest</SelectItem>
-                        <SelectItem value="created-oldest">Created: Oldest</SelectItem>
-                        <SelectItem value="property-az">Property Name: A-Z</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
+                  <Select value={sortBy} onValueChange={setSortBy}>
+                    <SelectTrigger className="w-[220px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="status-priority">Status Priority</SelectItem>
+                      <SelectItem value="checkin-soonest">Next Check-in: Soonest</SelectItem>
+                      <SelectItem value="checkout-recent">Checkout: Most Recent</SelectItem>
+                      <SelectItem value="checkout-oldest">Checkout: Oldest</SelectItem>
+                      <SelectItem value="property-az">Property Name: A-Z</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
 
             {showFilters && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-3 border-t border-neutral-200 dark:border-neutral-800">
-                {/* Clean Status - Only for cleanings */}
-                {cardViewMode === 'cleanings' && (
-                  <div>
-                    <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-2">Clean Status</h4>
-                    <div className="space-y-1">
-                      <label className="flex items-center gap-2 text-sm cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={filters.cleanStatus.includes('not_started')}
-                          onChange={() => toggleFilter('cleanStatus', 'not_started')}
-                          className="rounded border-neutral-300"
-                        />
-                        <span className="text-red-600">Not Started</span>
-                      </label>
-                      <label className="flex items-center gap-2 text-sm cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={filters.cleanStatus.includes('in_progress')}
-                          onChange={() => toggleFilter('cleanStatus', 'in_progress')}
-                          className="rounded border-neutral-300"
-                        />
-                        <span className="text-yellow-600">In Progress</span>
-                      </label>
-                      <label className="flex items-center gap-2 text-sm cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={filters.cleanStatus.includes('complete')}
-                          onChange={() => toggleFilter('cleanStatus', 'complete')}
-                          className="rounded border-neutral-300"
-                        />
-                        <span className="text-green-600">Complete</span>
-                      </label>
-                    </div>
+                {/* Turnover Status */}
+                <div>
+                  <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-2">Turnover Status</h4>
+                  <div className="space-y-1">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.cleanStatus.includes('not_started')}
+                        onChange={() => toggleFilter('cleanStatus', 'not_started')}
+                        className="rounded border-neutral-300"
+                      />
+                      <span className="text-red-600">Not Started</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.cleanStatus.includes('in_progress')}
+                        onChange={() => toggleFilter('cleanStatus', 'in_progress')}
+                        className="rounded border-neutral-300"
+                      />
+                      <span className="text-yellow-600">In Progress</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.cleanStatus.includes('complete')}
+                        onChange={() => toggleFilter('cleanStatus', 'complete')}
+                        className="rounded border-neutral-300"
+                      />
+                      <span className="text-green-600">Complete</span>
+                    </label>
                   </div>
-                )}
-
-                {/* Priority - Only for maintenance */}
-                {cardViewMode === 'maintenance' && (
-                  <div>
-                    <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-2">Priority</h4>
-                    <div className="space-y-1">
-                      <label className="flex items-center gap-2 text-sm cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={maintenanceFilters.priority.includes('urgent')}
-                          onChange={() => toggleMaintenanceFilter('priority', 'urgent')}
-                          className="rounded border-neutral-300"
-                        />
-                        <span>Urgent</span>
-                      </label>
-                      <label className="flex items-center gap-2 text-sm cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={maintenanceFilters.priority.includes('high')}
-                          onChange={() => toggleMaintenanceFilter('priority', 'high')}
-                          className="rounded border-neutral-300"
-                        />
-                        <span>High</span>
-                      </label>
-                      <label className="flex items-center gap-2 text-sm cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={maintenanceFilters.priority.includes('medium')}
-                          onChange={() => toggleMaintenanceFilter('priority', 'medium')}
-                          className="rounded border-neutral-300"
-                        />
-                        <span>Medium</span>
-                      </label>
-                      <label className="flex items-center gap-2 text-sm cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={maintenanceFilters.priority.includes('low')}
-                          onChange={() => toggleMaintenanceFilter('priority', 'low')}
-                          className="rounded border-neutral-300"
-                        />
-                        <span>Low</span>
-                      </label>
-                    </div>
-                  </div>
-                )}
+                </div>
 
                 {/* Card Actions */}
                 <div>
@@ -1474,8 +1212,8 @@ export default function Home() {
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={cardViewMode === 'cleanings' ? filters.cardActions.includes('not_started') : maintenanceFilters.cardActions.includes('not_started')}
-                        onChange={() => cardViewMode === 'cleanings' ? toggleFilter('cardActions', 'not_started') : toggleMaintenanceFilter('cardActions', 'not_started')}
+                        checked={filters.cardActions.includes('not_started')}
+                        onChange={() => toggleFilter('cardActions', 'not_started')}
                         className="rounded border-neutral-300"
                       />
                       <span>Not Started</span>
@@ -1483,8 +1221,8 @@ export default function Home() {
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={cardViewMode === 'cleanings' ? filters.cardActions.includes('in_progress') : maintenanceFilters.cardActions.includes('in_progress')}
-                        onChange={() => cardViewMode === 'cleanings' ? toggleFilter('cardActions', 'in_progress') : toggleMaintenanceFilter('cardActions', 'in_progress')}
+                        checked={filters.cardActions.includes('in_progress')}
+                        onChange={() => toggleFilter('cardActions', 'in_progress')}
                         className="rounded border-neutral-300"
                       />
                       <span>In Progress</span>
@@ -1492,8 +1230,8 @@ export default function Home() {
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={cardViewMode === 'cleanings' ? filters.cardActions.includes('paused') : maintenanceFilters.cardActions.includes('paused')}
-                        onChange={() => cardViewMode === 'cleanings' ? toggleFilter('cardActions', 'paused') : toggleMaintenanceFilter('cardActions', 'paused')}
+                        checked={filters.cardActions.includes('paused')}
+                        onChange={() => toggleFilter('cardActions', 'paused')}
                         className="rounded border-neutral-300"
                       />
                       <span>Paused</span>
@@ -1501,8 +1239,8 @@ export default function Home() {
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={cardViewMode === 'cleanings' ? filters.cardActions.includes('completed') : maintenanceFilters.cardActions.includes('completed')}
-                        onChange={() => cardViewMode === 'cleanings' ? toggleFilter('cardActions', 'completed') : toggleMaintenanceFilter('cardActions', 'completed')}
+                        checked={filters.cardActions.includes('completed')}
+                        onChange={() => toggleFilter('cardActions', 'completed')}
                         className="rounded border-neutral-300"
                       />
                       <span>Completed</span>
@@ -1517,29 +1255,18 @@ export default function Home() {
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={cardViewMode === 'cleanings' ? filters.staff.includes('unassigned') : maintenanceFilters.staff.includes('unassigned')}
-                        onChange={() => cardViewMode === 'cleanings' ? toggleFilter('staff', 'unassigned') : toggleMaintenanceFilter('staff', 'unassigned')}
+                        checked={filters.staff.includes('unassigned')}
+                        onChange={() => toggleFilter('staff', 'unassigned')}
                         className="rounded border-neutral-300"
                       />
                       <span>Unassigned</span>
                     </label>
-                    {cardViewMode === 'cleanings' && response && getUniqueStaff(Array.isArray(response) ? response : [response]).map(staff => (
+                    {response && getUniqueStaff(Array.isArray(response) ? response : [response]).map(staff => (
                       <label key={staff} className="flex items-center gap-2 text-sm cursor-pointer">
                         <input
                           type="checkbox"
                           checked={filters.staff.includes(staff)}
                           onChange={() => toggleFilter('staff', staff)}
-                          className="rounded border-neutral-300"
-                        />
-                        <span>{staff}</span>
-                      </label>
-                    ))}
-                    {cardViewMode === 'maintenance' && maintenanceCards && getUniqueStaff(maintenanceCards).map(staff => (
-                      <label key={staff} className="flex items-center gap-2 text-sm cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={maintenanceFilters.staff.includes(staff)}
-                          onChange={() => toggleMaintenanceFilter('staff', staff)}
                           className="rounded border-neutral-300"
                         />
                         <span>{staff}</span>
@@ -1553,11 +1280,7 @@ export default function Home() {
 
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-              {cardViewMode === 'cleanings' ? (
-                <>Cleanings: {Array.isArray(response) ? response.length : 1} total</>
-              ) : (
-                <>Maintenance: {maintenanceCards.length} total</>
-              )}
+              Turnovers: {Array.isArray(response) ? response.length : 1} total
             </p>
             <div className="flex gap-2">
               <button
@@ -1586,12 +1309,17 @@ export default function Home() {
           <div>
             {viewMode === 'cards' ? (
               <div className="p-4 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg">
-                {renderCardsSection()}
+                <TurnoverCards
+                  data={Array.isArray(response) ? response : [response]}
+                  filters={filters}
+                  sortBy={sortBy}
+                  onCardClick={setSelectedCard}
+                />
               </div>
             ) : (
               <div className="p-4 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg">
                 <pre className="text-sm text-neutral-900 dark:text-neutral-100 font-mono whitespace-pre-wrap">
-                  {JSON.stringify(cardViewMode === 'cleanings' ? response : maintenanceCards, null, 2)}
+                  {JSON.stringify(response, null, 2)}
                 </pre>
               </div>
             )}
@@ -1599,7 +1327,7 @@ export default function Home() {
         </div>
       )}
     </div>
-  ), [response, viewMode, showFilters, filters, sortBy, cardViewMode, maintenanceCards, maintenanceFilters, maintenanceSortBy]);
+  ), [response, viewMode, showFilters, filters, sortBy]);
 
   const timelineWindowContent = useMemo(() => (
     <Timeline onCardClick={setSelectedCard} />
@@ -1799,7 +1527,7 @@ export default function Home() {
                       <div className="flex w-full items-center justify-between">
                         <div className="flex items-center gap-2 flex-wrap">
                           <Badge 
-                            className={`text-xs ${
+                            className={`px-2.5 py-1 ${
                               project.priority === 'urgent' ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800' :
                               project.priority === 'high' ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800' :
                               project.priority === 'medium' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' :
@@ -1809,7 +1537,7 @@ export default function Home() {
                             {project.priority}
                           </Badge>
                           <Badge 
-                            className={`text-xs ${
+                            className={`px-2.5 py-1 ${
                               project.status === 'complete' ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800' :
                               project.status === 'in_progress' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' :
                               project.status === 'on_hold' ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800' :
@@ -2036,22 +1764,13 @@ export default function Home() {
         >
           {mobileTab === 'cards' && (
             <MobileCardsView
-              cleaningData={response}
-              cleaningFilters={filters}
-              cleaningSortBy={sortBy}
-              onCleaningFiltersChange={setFilters}
-              onCleaningSortChange={setSortBy}
-              maintenanceData={maintenanceCards}
-              maintenanceFilters={maintenanceFilters}
-              maintenanceSortBy={maintenanceSortBy}
-              onMaintenanceFiltersChange={setMaintenanceFilters}
-              onMaintenanceSortChange={setMaintenanceSortBy}
+              data={response}
+              filters={filters}
+              sortBy={sortBy}
+              onFiltersChange={setFilters}
+              onSortChange={setSortBy}
               onCardClick={setSelectedCard}
-              onCreateMaintenance={() => setShowCreateMaintenance(true)}
-              onRefresh={() => {
-                quickCall('get_property_turnovers');
-                fetchMaintenanceCards();
-              }}
+              onRefresh={() => quickCall('get_property_turnovers')}
               isLoading={loading}
             />
           )}
@@ -2262,77 +1981,6 @@ export default function Home() {
           </DialogContent>
         </Dialog>
 
-        {/* Create Maintenance Dialog */}
-        <Dialog open={showCreateMaintenance} onOpenChange={setShowCreateMaintenance}>
-          <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Create Maintenance</DialogTitle>
-              <DialogDescription>Create a new maintenance task</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Property (Optional)</label>
-                <Select
-                  value={maintenanceForm.property_name}
-                  onValueChange={(value) => setMaintenanceForm({...maintenanceForm, property_name: value})}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select property" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None (General)</SelectItem>
-                    {allProperties.map((property) => (
-                      <SelectItem key={property} value={property}>{property}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Title *</label>
-                <Input
-                  value={maintenanceForm.title}
-                  onChange={(e) => setMaintenanceForm({...maintenanceForm, title: e.target.value})}
-                  placeholder="e.g., Fix leaky faucet"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Description</label>
-                <Textarea
-                  value={maintenanceForm.description}
-                  onChange={(e) => setMaintenanceForm({...maintenanceForm, description: e.target.value})}
-                  placeholder="Additional details..."
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Assigned Staff</label>
-                <Input
-                  value={maintenanceForm.assigned_staff}
-                  onChange={(e) => setMaintenanceForm({...maintenanceForm, assigned_staff: e.target.value})}
-                  placeholder="Staff member name"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Priority</label>
-                <Select
-                  value={maintenanceForm.priority}
-                  onValueChange={(value) => setMaintenanceForm({...maintenanceForm, priority: value})}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="urgent">Urgent</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter className="flex-col sm:flex-row gap-2">
-              <Button variant="outline" onClick={() => setShowCreateMaintenance(false)} className="w-full sm:w-auto">Cancel</Button>
-              <Button onClick={createMaintenance} disabled={creatingMaintenance} className="w-full sm:w-auto">
-                {creatingMaintenance ? 'Creating...' : 'Create'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </>
     );
   }
@@ -2362,13 +2010,11 @@ export default function Home() {
                     bringToFront('cards');
                   }
                 }}
-                variant={showCardsWindow ? 'default' : 'outline'}
+                variant="secondary"
                 size="sm"
+                className="px-4 py-2"
               >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-                Cards
+                Turnovers
               </Button>
               <Button
                 onClick={() => {
@@ -2379,30 +2025,11 @@ export default function Home() {
                     bringToFront('timeline');
                   }
                 }}
-                variant={showTimelineWindow ? 'default' : 'outline'}
+                variant="secondary"
                 size="sm"
+                className="px-4 py-2"
               >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
                 Timeline
-              </Button>
-              <Button
-                onClick={() => {
-                  if (showQueryWindow) {
-                    setShowQueryWindow(false);
-                  } else {
-                    setShowQueryWindow(true);
-                    bringToFront('query');
-                  }
-                }}
-                variant={showQueryWindow ? 'default' : 'outline'}
-                size="sm"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                </svg>
-                Query
               </Button>
               <Button
                 onClick={() => {
@@ -2413,13 +2040,26 @@ export default function Home() {
                     bringToFront('projects');
                   }
                 }}
-                variant={showProjectsWindow ? 'default' : 'outline'}
+                variant="secondary"
                 size="sm"
+                className="px-4 py-2"
               >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                </svg>
                 Projects
+              </Button>
+              <Button
+                onClick={() => {
+                  if (showQueryWindow) {
+                    setShowQueryWindow(false);
+                  } else {
+                    setShowQueryWindow(true);
+                    bringToFront('query');
+                  }
+                }}
+                variant="secondary"
+                size="sm"
+                className="px-4 py-2"
+              >
+                Query
               </Button>
             </div>
           </div>
@@ -2443,11 +2083,11 @@ export default function Home() {
             backgroundRepeat: 'no-repeat'
           }}
         >
-          {/* Cards Window */}
+          {/* Turnovers Window */}
           {showCardsWindow && (
             <FloatingWindow
               id="cards"
-              title="Cards View"
+              title="Turnovers"
               defaultPosition={{ x: 50, y: 50 }}
               defaultSize={{ width: '70%', height: '80%' }}
               zIndex={getZIndex('cards')}
@@ -2778,7 +2418,7 @@ export default function Home() {
                     <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Occupancy</div>
                     <Badge 
                       variant={selectedCard.occupancy_status === 'occupied' ? 'default' : 'outline'}
-                      className={`text-sm ${
+                      className={`px-3 py-1 ${
                         selectedCard.occupancy_status === 'occupied' 
                           ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-300' 
                           : selectedCard.occupancy_status === 'general'
@@ -2833,10 +2473,10 @@ export default function Home() {
                             <div className="flex items-center gap-2">
                               <Badge
                                 variant={task.type === 'maintenance' ? 'default' : 'secondary'}
-                                className={task.type === 'maintenance' 
+                                className={`px-2.5 py-1 ${task.type === 'maintenance' 
                                   ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200' 
                                   : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                                }
+                                }`}
                               >
                                 {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
                               </Badge>
@@ -3151,122 +2791,6 @@ export default function Home() {
         </DialogContent>
       </Dialog>
 
-      {/* Create Maintenance Dialog */}
-      <Dialog open={showCreateMaintenance} onOpenChange={setShowCreateMaintenance}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Create Maintenance Card</DialogTitle>
-            <DialogDescription>
-              Create a new maintenance task for a property or general item.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {/* Property */}
-            <div>
-              <label className="block text-sm font-medium mb-2">Property (Optional)</label>
-              <Select
-                value={maintenanceForm.property_name}
-                onValueChange={(value) => setMaintenanceForm({...maintenanceForm, property_name: value})}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select property or leave blank" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None (General)</SelectItem>
-                  {allProperties.map((property) => (
-                    <SelectItem key={property} value={property}>
-                      {property}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Title */}
-            <div>
-              <label className="block text-sm font-medium mb-2">Title *</label>
-              <input
-                type="text"
-                value={maintenanceForm.title}
-                onChange={(e) => setMaintenanceForm({...maintenanceForm, title: e.target.value})}
-                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white"
-                placeholder="e.g., Fix leaky faucet"
-                required
-              />
-            </div>
-
-            {/* Description */}
-            <div>
-              <label className="block text-sm font-medium mb-2">Description</label>
-              <textarea
-                value={maintenanceForm.description}
-                onChange={(e) => setMaintenanceForm({...maintenanceForm, description: e.target.value})}
-                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white min-h-[80px]"
-                placeholder="Additional details..."
-              />
-            </div>
-
-            {/* Assigned Staff */}
-            <div>
-              <label className="block text-sm font-medium mb-2">Assigned Staff</label>
-              <input
-                type="text"
-                value={maintenanceForm.assigned_staff}
-                onChange={(e) => setMaintenanceForm({...maintenanceForm, assigned_staff: e.target.value})}
-                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white"
-                placeholder="Staff member name"
-              />
-            </div>
-
-            {/* Scheduled Start */}
-            <div>
-              <label className="block text-sm font-medium mb-2">Scheduled Start</label>
-              <input
-                type="datetime-local"
-                value={maintenanceForm.scheduled_start}
-                onChange={(e) => setMaintenanceForm({...maintenanceForm, scheduled_start: e.target.value})}
-                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white"
-              />
-            </div>
-
-            {/* Priority */}
-            <div>
-              <label className="block text-sm font-medium mb-2">Priority</label>
-              <Select
-                value={maintenanceForm.priority}
-                onValueChange={(value) => setMaintenanceForm({...maintenanceForm, priority: value})}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="urgent">Urgent</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowCreateMaintenance(false)}
-              disabled={creatingMaintenance}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={createMaintenance}
-              disabled={creatingMaintenance}
-            >
-              {creatingMaintenance ? 'Creating...' : 'Create Maintenance'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

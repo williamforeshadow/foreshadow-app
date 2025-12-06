@@ -1,24 +1,22 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldSeparator,
+  FieldSet,
+} from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
 import PhotoUpload from '@/components/PhotoUpload';
 
 interface FieldDefinition {
   id: string;
-  type: 'rating' | 'yes-no' | 'text' | 'checkbox' | 'photo' | 'photos';
+  type: 'rating' | 'yes-no' | 'text' | 'checkbox' | 'photo' | 'photos' | 'separator';
   label: string;
   required: boolean;
   options?: {
@@ -49,13 +47,17 @@ export default function DynamicCleaningForm({
   onSave
 }: DynamicCleaningFormProps) {
   const [isSaving, setIsSaving] = useState(false);
+  const [formValues, setFormValues] = useState<Record<string, any>>({});
 
-  // Create default values from template fields and existing metadata
-  const getDefaultValues = () => {
-    if (!template) return {};
+  // Initialize form values from template fields and existing metadata
+  useEffect(() => {
+    if (!template) return;
     
-    const defaults: any = {};
+    const defaults: Record<string, any> = {};
     template.fields.forEach(field => {
+      // Skip separators - they don't have values
+      if (field.type === 'separator') return;
+      
       if (formMetadata && formMetadata[field.id] !== undefined) {
         defaults[field.id] = formMetadata[field.id];
       } else {
@@ -65,7 +67,7 @@ export default function DynamicCleaningForm({
             defaults[field.id] = '';
             break;
           case 'yes-no':
-            defaults[field.id] = 'yes';
+            defaults[field.id] = '';
             break;
           case 'checkbox':
             defaults[field.id] = false;
@@ -82,22 +84,17 @@ export default function DynamicCleaningForm({
         }
       }
     });
-    return defaults;
-  };
-
-  const form = useForm({
-    defaultValues: getDefaultValues(),
-  });
-
-  // Reset form when template or formMetadata changes
-  useEffect(() => {
-    form.reset(getDefaultValues());
+    setFormValues(defaults);
   }, [template, formMetadata]);
+
+  const updateValue = (fieldId: string, value: any) => {
+    setFormValues(prev => ({ ...prev, [fieldId]: value }));
+  };
 
   // Get current form values - exposed for external save
   const getFormValues = () => {
     return {
-      ...form.getValues(),
+      ...formValues,
       property_name: propertyName,
       template_id: template?.id
     };
@@ -120,7 +117,7 @@ export default function DynamicCleaningForm({
     return () => {
       delete (window as any).__currentFormSave;
     };
-  }, []);
+  }, [formValues]);
 
   if (!template) {
     return (
@@ -133,179 +130,174 @@ export default function DynamicCleaningForm({
   }
 
   const renderField = (field: FieldDefinition) => {
+    const value = formValues[field.id];
+
     switch (field.type) {
+      case 'separator':
+        return (
+          <FieldSeparator key={field.id}>
+            {field.label}
+          </FieldSeparator>
+        );
+
       case 'rating':
         return (
-          <FormField
-            key={field.id}
-            control={form.control}
-            name={field.id}
-            render={({ field: formField }) => (
-              <FormItem>
-                <FormLabel>
-                  {field.label} {field.required && <span className="text-red-500">*</span>}
-                </FormLabel>
-                <FormControl>
-                  <RadioGroup
-                    onValueChange={formField.onChange}
-                    value={formField.value}
-                    className="flex gap-4"
+          <Field key={field.id}>
+            <FieldLabel>
+              {field.label} {field.required && <span className="text-red-500">*</span>}
+            </FieldLabel>
+            <FieldContent>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map((rating) => (
+                  <button
+                    key={rating}
+                    type="button"
+                    onClick={() => updateValue(field.id, rating.toString())}
+                    className={`w-12 h-12 rounded-lg border-2 text-sm font-medium transition-all ${
+                      value === rating.toString()
+                        ? 'bg-emerald-500 border-emerald-500 text-white'
+                        : 'border-neutral-300 dark:border-neutral-600 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
+                    }`}
                   >
-                    {[1, 2, 3, 4, 5].map((rating) => (
-                      <div key={rating} className="flex items-center">
-                        <RadioGroupItem value={rating.toString()} id={`${field.id}-${rating}`} />
-                        <label htmlFor={`${field.id}-${rating}`} className="ml-2 cursor-pointer">
-                          {rating}
-                        </label>
-                      </div>
-                    ))}
-                  </RadioGroup>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                    {rating}
+                  </button>
+                ))}
+              </div>
+              <FieldDescription>Rate from 1 (poor) to 5 (excellent)</FieldDescription>
+            </FieldContent>
+          </Field>
         );
 
       case 'yes-no':
         return (
-          <FormField
-            key={field.id}
-            control={form.control}
-            name={field.id}
-            render={({ field: formField }) => (
-              <FormItem>
-                <FormLabel>
-                  {field.label} {field.required && <span className="text-red-500">*</span>}
-                </FormLabel>
-                <FormControl>
-                  <RadioGroup
-                    onValueChange={formField.onChange}
-                    value={formField.value}
-                    className="flex gap-4"
-                  >
-                    <div className="flex items-center">
-                      <RadioGroupItem value="yes" id={`${field.id}-yes`} />
-                      <label htmlFor={`${field.id}-yes`} className="ml-2 cursor-pointer">
-                        Yes
-                      </label>
-                    </div>
-                    <div className="flex items-center">
-                      <RadioGroupItem value="no" id={`${field.id}-no`} />
-                      <label htmlFor={`${field.id}-no`} className="ml-2 cursor-pointer">
-                        No
-                      </label>
-                    </div>
-                  </RadioGroup>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <Field key={field.id}>
+            <FieldLabel>
+              {field.label} {field.required && <span className="text-red-500">*</span>}
+            </FieldLabel>
+            <FieldContent>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => updateValue(field.id, 'yes')}
+                  className={`flex-1 py-3 px-5 rounded-lg border-2 text-sm font-medium transition-all ${
+                    value === 'yes'
+                      ? 'bg-emerald-500 border-emerald-500 text-white'
+                      : 'border-neutral-300 dark:border-neutral-600 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
+                  }`}
+                >
+                  Yes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateValue(field.id, 'no')}
+                  className={`flex-1 py-3 px-5 rounded-lg border-2 text-sm font-medium transition-all ${
+                    value === 'no'
+                      ? 'bg-red-500 border-red-500 text-white'
+                      : 'border-neutral-300 dark:border-neutral-600 hover:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
+                  }`}
+                >
+                  No
+                </button>
+              </div>
+            </FieldContent>
+          </Field>
         );
 
       case 'checkbox':
         return (
-          <FormField
-            key={field.id}
-            control={form.control}
-            name={field.id}
-            render={({ field: formField }) => (
-              <FormItem className="flex items-center gap-2">
-                <FormControl>
-                  <input
-                    type="checkbox"
-                    checked={formField.value}
-                    onChange={formField.onChange}
-                    className="w-4 h-4"
-                  />
-                </FormControl>
-                <FormLabel className="!mt-0">
-                  {field.label} {field.required && <span className="text-red-500">*</span>}
-                </FormLabel>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <Field key={field.id} orientation="horizontal">
+            <label className="flex items-center gap-4 cursor-pointer group p-3 rounded-lg border border-transparent hover:border-neutral-200 dark:hover:border-neutral-700 transition-colors w-full">
+              <div className={`w-7 h-7 rounded-md border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                value
+                  ? 'bg-emerald-500 border-emerald-500'
+                  : 'border-neutral-300 dark:border-neutral-600 group-hover:border-emerald-400'
+              }`}>
+                {value && (
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </div>
+              <input
+                type="checkbox"
+                checked={value || false}
+                onChange={(e) => updateValue(field.id, e.target.checked)}
+                className="sr-only"
+              />
+              <span className="text-sm font-medium text-neutral-900 dark:text-white">
+                {field.label} {field.required && <span className="text-red-500">*</span>}
+              </span>
+            </label>
+          </Field>
         );
 
       case 'photo':
       case 'photos':
         return (
-          <FormField
-            key={field.id}
-            control={form.control}
-            name={field.id}
-            render={({ field: formField }) => (
-              <FormItem>
-                <FormLabel>
-                  {field.label} {field.required && <span className="text-red-500">*</span>}
-                </FormLabel>
-                <FormControl>
-                  <PhotoUpload
-                    cleaningId={cleaningId}
-                    fieldId={field.id}
-                    value={formField.value}
-                    onChange={formField.onChange}
-                    multiple={field.type === 'photos'}
-                    maxPhotos={field.options?.maxPhotos || 5}
-                    required={field.required}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <Field key={field.id}>
+            <FieldLabel>
+              {field.label} {field.required && <span className="text-red-500">*</span>}
+            </FieldLabel>
+            <FieldContent>
+              <PhotoUpload
+                cleaningId={cleaningId}
+                fieldId={field.id}
+                value={value}
+                onChange={(newValue) => updateValue(field.id, newValue)}
+                multiple={field.type === 'photos'}
+                maxPhotos={field.options?.maxPhotos || 5}
+                required={field.required}
+              />
+              {field.type === 'photos' && (
+                <FieldDescription>Upload up to {field.options?.maxPhotos || 5} photos</FieldDescription>
+              )}
+            </FieldContent>
+          </Field>
         );
 
       case 'text':
       default:
         return (
-          <FormField
-            key={field.id}
-            control={form.control}
-            name={field.id}
-            render={({ field: formField }) => (
-              <FormItem>
-                <FormLabel>
-                  {field.label} {field.required && <span className="text-red-500">*</span>}
-                </FormLabel>
-                <FormControl>
-                  <Textarea
-                    {...formField}
-                    placeholder={`Enter ${field.label.toLowerCase()}`}
-                    rows={3}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <Field key={field.id}>
+            <FieldLabel>
+              {field.label} {field.required && <span className="text-red-500">*</span>}
+            </FieldLabel>
+            <FieldContent>
+              <Textarea
+                value={value || ''}
+                onChange={(e) => updateValue(field.id, e.target.value)}
+                placeholder={`Enter ${field.label.toLowerCase()}`}
+                rows={3}
+                className="resize-none"
+              />
+            </FieldContent>
+          </Field>
         );
     }
   };
 
   return (
-    <div className="flex items-center justify-center py-6">
-      <div className="w-full max-w-md space-y-6">
+    <div className="flex items-center justify-center py-8 px-6">
+      <div className="w-full max-w-lg">
         {/* Header */}
-        <div className="text-center border-b pb-4">
+        <div className="text-center mb-10">
           <h3 className="text-xl font-semibold text-neutral-900 dark:text-white">
             {template.name}
           </h3>
-          <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
+          <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-2">
             {propertyName}
           </p>
         </div>
 
         {/* Dynamic Form */}
-        <Form {...form}>
-          <div className="space-y-6">
-            {template.fields.map(field => renderField(field))}
-          </div>
-        </Form>
+        <form onSubmit={(e) => { e.preventDefault(); saveForm(); }} className="px-2">
+          <FieldSet>
+            <FieldGroup>
+              {template.fields.map(field => renderField(field))}
+            </FieldGroup>
+          </FieldSet>
+        </form>
       </div>
     </div>
   );
 }
-

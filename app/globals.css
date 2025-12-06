@@ -166,13 +166,32 @@ a {
   padding-right: env(safe-area-inset-right);
 }
 
+/* Hide scrollbar utility - works everywhere */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Mobile touch optimizations */
 @media (max-width: 767px) {
-  /* Larger touch targets */
-  button, 
-  [role="button"],
-  a {
-    min-height: 44px;
+  /* Hide all scrollbars on mobile */
+  * {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  *::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Larger touch targets - but not for small utility buttons */
+  button:not(.compact-btn), 
+  [role="button"]:not(.compact-btn) {
+    min-height: 40px;
   }
   
   /* Prevent text selection on touch */
@@ -184,15 +203,5 @@ a {
   /* Smooth scrolling for mobile */
   .scroll-smooth {
     -webkit-overflow-scrolling: touch;
-  }
-  
-  /* Hide scrollbars on mobile while keeping scroll functionality */
-  .hide-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  
-  .hide-scrollbar::-webkit-scrollbar {
-    display: none;
   }
 }

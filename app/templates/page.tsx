@@ -1,9 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import Sidebar from '@/components/Sidebar';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -12,13 +9,15 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldSeparator,
+  FieldSet,
+} from '@/components/ui/field';
 import {
   Select,
   SelectContent,
@@ -26,6 +25,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface Template {
   id: string;
@@ -37,9 +42,11 @@ interface Template {
   updated_at: string;
 }
 
+type FieldType = 'rating' | 'yes-no' | 'text' | 'checkbox' | 'photo' | 'photos' | 'separator';
+
 interface FieldDefinition {
   id: string;
-  type: 'rating' | 'yes-no' | 'text' | 'checkbox' | 'photo' | 'photos';
+  type: FieldType;
   label: string;
   required: boolean;
   options?: {
@@ -48,11 +55,15 @@ interface FieldDefinition {
   };
 }
 
-const templateFormSchema = z.object({
-  name: z.string().min(1, 'Template name is required'),
-  type: z.enum(['cleaning', 'maintenance']),
-  description: z.string().optional(),
-});
+const FIELD_TYPE_OPTIONS: { value: FieldType; label: string }[] = [
+  { value: 'rating', label: 'Rating (1-5)' },
+  { value: 'yes-no', label: 'Yes/No' },
+  { value: 'text', label: 'Text' },
+  { value: 'checkbox', label: 'Checkbox' },
+  { value: 'photo', label: 'Photo (Single)' },
+  { value: 'photos', label: 'Photos (Multiple)' },
+  { value: 'separator', label: 'Section Separator' },
+];
 
 interface PropertyAssignment {
   id?: string;
@@ -76,15 +87,13 @@ export default function TemplatesPage() {
   const [savingAssignment, setSavingAssignment] = useState<string | null>(null);
   const [configuringTemplate, setConfiguringTemplate] = useState<Template | null>(null);
   const [selectedProperties, setSelectedProperties] = useState<string[]>([]);
-
-  const form = useForm<z.infer<typeof templateFormSchema>>({
-    resolver: zodResolver(templateFormSchema),
-    defaultValues: {
-      name: '',
-      type: 'cleaning',
-      description: '',
-    },
-  });
+  
+  // Simple form state for template editor
+  const [formName, setFormName] = useState('');
+  const [formType, setFormType] = useState<'cleaning' | 'maintenance'>('cleaning');
+  const [formDescription, setFormDescription] = useState('');
+  const [formErrors, setFormErrors] = useState<{ name?: string }>({});
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     fetchTemplates();
@@ -208,28 +217,40 @@ export default function TemplatesPage() {
 
   const openCreateDialog = () => {
     setEditingTemplate(null);
-    form.reset({ name: '', type: 'cleaning', description: '' });
+    setFormName('');
+    setFormType('cleaning');
+    setFormDescription('');
+    setFormErrors({});
     setFields([]);
     setShowCreateDialog(true);
   };
 
   const openEditDialog = (template: Template) => {
     setEditingTemplate(template);
-    form.reset({
-      name: template.name,
-      type: template.type,
-      description: template.description || '',
-    });
+    setFormName(template.name);
+    setFormType(template.type);
+    setFormDescription(template.description || '');
+    setFormErrors({});
     setFields(template.fields);
     setShowCreateDialog(true);
   };
 
-  const addField = () => {
+  const addField = (type: FieldType) => {
+    const defaultLabels: Record<FieldType, string> = {
+      'rating': 'Rating',
+      'yes-no': 'Question',
+      'text': 'Notes',
+      'checkbox': 'Completed',
+      'photo': 'Photo',
+      'photos': 'Photos',
+      'separator': 'Section Title',
+    };
+    
     const newField: FieldDefinition = {
       id: `field_${Date.now()}`,
-      type: 'text',
-      label: 'New Field',
-      required: false
+      type,
+      label: defaultLabels[type],
+      required: type !== 'separator' ? false : false
     };
     setFields([...fields, newField]);
   };
@@ -258,12 +279,26 @@ export default function TemplatesPage() {
     setFields(newFields);
   };
 
-  const saveTemplate = async (values: z.infer<typeof templateFormSchema>) => {
+  const saveTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validate
+    const errors: { name?: string } = {};
+    if (!formName.trim()) {
+      errors.name = 'Template name is required';
+    }
+    
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+    
+    setIsSaving(true);
     try {
       const payload = {
-        name: values.name,
-        type: values.type,
-        description: values.description || null,
+        name: formName,
+        type: formType,
+        description: formDescription || null,
         fields
       };
 
@@ -290,6 +325,8 @@ export default function TemplatesPage() {
     } catch (err) {
       console.error('Error saving template:', err);
       alert('Failed to save template');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -522,186 +559,181 @@ export default function TemplatesPage() {
             <DialogTitle>
               {editingTemplate ? 'Edit Template' : 'Create New Template'}
             </DialogTitle>
+            <DialogDescription>
+              Configure the template details and form fields below.
+            </DialogDescription>
           </DialogHeader>
 
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(saveTemplate)} className="space-y-6">
-              {/* Template Name */}
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Template Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Standard Clean, Deep Clean" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+          <form onSubmit={saveTemplate} className="px-2">
+            <FieldSet>
+              <FieldGroup>
+                {/* Template Name */}
+                <Field>
+                  <FieldLabel>Template Name</FieldLabel>
+                  <FieldContent>
+                    <Input 
+                      placeholder="e.g., Standard Clean, Deep Clean" 
+                      value={formName}
+                      onChange={(e) => {
+                        setFormName(e.target.value);
+                        if (formErrors.name) setFormErrors({});
+                      }}
+                      disabled={isSaving}
+                      required
+                    />
+                    {formErrors.name && <FieldError>{formErrors.name}</FieldError>}
+                  </FieldContent>
+                </Field>
 
-              {/* Template Type */}
-              <FormField
-                control={form.control}
-                name="type"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Template Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select type..." />
-                        </SelectTrigger>
-                      </FormControl>
+                {/* Template Type */}
+                <Field>
+                  <FieldLabel>Template Type</FieldLabel>
+                  <FieldContent>
+                    <Select 
+                      onValueChange={(value) => setFormType(value as 'cleaning' | 'maintenance')} 
+                      value={formType}
+                      disabled={isSaving}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select type..." />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="cleaning">Cleaning</SelectItem>
                         <SelectItem value="maintenance">Maintenance</SelectItem>
                       </SelectContent>
                     </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                    <FieldDescription>Choose whether this is a cleaning or maintenance template</FieldDescription>
+                  </FieldContent>
+                </Field>
 
-              {/* Template Description */}
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description (Optional)</FormLabel>
-                    <FormControl>
-                      <Textarea 
-                        placeholder="Brief description of this template"
-                        rows={2}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                {/* Template Description */}
+                <Field>
+                  <FieldLabel>Description (Optional)</FieldLabel>
+                  <FieldContent>
+                    <Textarea 
+                      placeholder="Brief description of this template"
+                      rows={2}
+                      value={formDescription}
+                      onChange={(e) => setFormDescription(e.target.value)}
+                      disabled={isSaving}
+                    />
+                  </FieldContent>
+                </Field>
+              </FieldGroup>
 
-            {/* Fields */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <label className="block text-sm font-medium text-neutral-900 dark:text-white">
-                  Form Fields
-                </label>
-                <Button onClick={addField} size="sm" variant="outline" type="button">
-                  + Add Field
-                </Button>
-              </div>
+              <FieldSeparator>Form Fields</FieldSeparator>
 
-              {fields.length === 0 ? (
-                <div className="text-center py-8 border-2 border-dashed border-neutral-300 dark:border-neutral-600 rounded-lg">
-                  <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                    No fields yet. Click "Add Field" to get started.
-                  </p>
+              {/* Form Fields Section */}
+              <div>
+                <div className="flex items-center justify-end mb-4">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" variant="outline" type="button" disabled={isSaving}>
+                        + Add Field
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      {FIELD_TYPE_OPTIONS.map((option) => (
+                        <DropdownMenuItem
+                          key={option.value}
+                          onClick={() => addField(option.value)}
+                        >
+                          {option.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {fields.map((field, index) => (
-                    <div
-                      key={field.id}
-                      className="border border-neutral-300 dark:border-neutral-600 rounded-lg p-4 bg-neutral-50 dark:bg-neutral-800"
-                    >
-                      <div className="grid grid-cols-2 gap-3">
-                        {/* Field Label */}
-                        <div className="col-span-2">
-                          <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">
-                            Field Label
-                          </label>
-                          <input
-                            type="text"
-                            value={field.label}
-                            onChange={(e) => updateField(index, { label: e.target.value })}
-                            className="w-full px-2 py-1 text-sm border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white"
-                          />
+
+                {fields.length === 0 ? (
+                  <div className="text-center py-8 border-2 border-dashed border-neutral-300 dark:border-neutral-600 rounded-lg">
+                    <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                      No fields yet. Click "Add Field" to get started.
+                    </p>
+                  </div>
+                ) : (
+                  <FieldGroup>
+                    {fields.map((field, index) => (
+                      <div
+                        key={field.id}
+                        className={`border rounded-lg p-6 ${
+                          field.type === 'separator'
+                            ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/20'
+                            : 'border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50'
+                        }`}
+                      >
+                        {/* Field Type Badge & Required */}
+                        <div className="flex items-center justify-between mb-4">
+                          <Badge variant="secondary" className="text-xs px-3 py-1">
+                            {FIELD_TYPE_OPTIONS.find(o => o.value === field.type)?.label || field.type}
+                          </Badge>
+                          {field.type !== 'separator' && (
+                            <label className="flex items-center gap-2 cursor-pointer pr-1">
+                              <input
+                                type="checkbox"
+                                checked={field.required}
+                                onChange={(e) => updateField(index, { required: e.target.checked })}
+                                className="w-4 h-4 rounded border-neutral-300"
+                                disabled={isSaving}
+                              />
+                              <span className="text-xs text-neutral-600 dark:text-neutral-400">Required</span>
+                            </label>
+                          )}
                         </div>
 
-                        {/* Field Type */}
-                        <div>
-                          <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">
-                            Field Type
-                          </label>
-                          <select
-                            value={field.type}
-                            onChange={(e) => updateField(index, { type: e.target.value as any })}
-                            className="w-full px-2 py-1 text-sm border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white"
+                        {/* Field Label Input */}
+                        <Input
+                          value={field.label}
+                          onChange={(e) => updateField(index, { label: e.target.value })}
+                          placeholder={field.type === 'separator' ? 'Enter section title' : 'Enter field label'}
+                          disabled={isSaving}
+                        />
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-1 mt-4 pt-3 border-t border-neutral-200 dark:border-neutral-700">
+                          <button
+                            onClick={() => moveFieldUp(index)}
+                            disabled={index === 0 || isSaving}
+                            type="button"
+                            className="p-2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                           >
-                            <option value="rating">Rating (1-5)</option>
-                            <option value="yes-no">Yes/No</option>
-                            <option value="text">Text</option>
-                            <option value="checkbox">Checkbox</option>
-                            <option value="photo">Photo (Single)</option>
-                            <option value="photos">Photos (Multiple)</option>
-                          </select>
-                        </div>
-
-                        {/* Required */}
-                        <div>
-                          <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">
-                            Required
-                          </label>
-                          <div className="flex items-center h-8">
-                            <input
-                              type="checkbox"
-                              checked={field.required}
-                              onChange={(e) => updateField(index, { required: e.target.checked })}
-                              className="w-4 h-4"
-                            />
-                          </div>
+                            ↑
+                          </button>
+                          <button
+                            onClick={() => moveFieldDown(index)}
+                            disabled={index === fields.length - 1 || isSaving}
+                            type="button"
+                            className="p-2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          >
+                            ↓
+                          </button>
+                          <Button
+                            onClick={() => removeField(index)}
+                            variant="ghost"
+                            size="sm"
+                            type="button"
+                            className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 ml-auto"
+                            disabled={isSaving}
+                          >
+                            Remove
+                          </Button>
                         </div>
                       </div>
+                    ))}
+                  </FieldGroup>
+                )}
+              </div>
+            </FieldSet>
 
-                      {/* Action Buttons */}
-                      <div className="flex gap-2 mt-3">
-                        <Button
-                          onClick={() => moveFieldUp(index)}
-                          disabled={index === 0}
-                          variant="ghost"
-                          size="sm"
-                          type="button"
-                        >
-                          ↑
-                        </Button>
-                        <Button
-                          onClick={() => moveFieldDown(index)}
-                          disabled={index === fields.length - 1}
-                          variant="ghost"
-                          size="sm"
-                          type="button"
-                        >
-                          ↓
-                        </Button>
-                        <Button
-                          onClick={() => removeField(index)}
-                          variant="ghost"
-                          size="sm"
-                          type="button"
-                          className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900 ml-auto"
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="flex justify-end gap-3 mt-8">
+              <Button type="button" variant="outline" onClick={() => setShowCreateDialog(false)} disabled={isSaving}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? 'Saving...' : editingTemplate ? 'Update Template' : 'Create Template'}
+              </Button>
             </div>
-
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setShowCreateDialog(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">
-                  {editingTemplate ? 'Update Template' : 'Create Template'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
+          </form>
         </DialogContent>
       </Dialog>
 

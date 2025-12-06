@@ -2,18 +2,18 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, 
 import { Badge } from '@/components/ui/badge';
 import { applyCleaningFilters, sortCleanings, type CleaningFilters } from '@/lib/cleaningFilters';
 
-interface CleaningCardsProps {
+interface TurnoverCardsProps {
   data: any[] | null;
   filters: CleaningFilters;
   sortBy: string;
   onCardClick: (card: any) => void;
 }
 
-export default function CleaningCards({ data, filters, sortBy, onCardClick }: CleaningCardsProps) {
+export default function TurnoverCards({ data, filters, sortBy, onCardClick }: TurnoverCardsProps) {
   if (!data || data.length === 0) {
     return (
       <div className="text-center py-12 text-neutral-500 dark:text-neutral-400">
-        No cleanings found
+        No turnovers found
       </div>
     );
   }
@@ -86,7 +86,7 @@ export default function CleaningCards({ data, filters, sortBy, onCardClick }: Cl
               {/* Task Count Badge */}
               {item.total_tasks > 0 && (
                 <Badge 
-                  className={`text-xs font-semibold ${
+                  className={`font-semibold px-2.5 py-1 ${
                     item.turnover_status === 'complete' 
                       ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
                       : item.turnover_status === 'in_progress'
@@ -105,7 +105,7 @@ export default function CleaningCards({ data, filters, sortBy, onCardClick }: Cl
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Status Badge */}
                 <Badge 
-                  className={`text-xs ${
+                  className={`px-2.5 py-1 ${
                     item.turnover_status === 'complete' 
                       ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
                       : item.turnover_status === 'in_progress'
@@ -122,7 +122,7 @@ export default function CleaningCards({ data, filters, sortBy, onCardClick }: Cl
                 </Badge>
                 {/* Occupancy Badge */}
                 <Badge 
-                  className={`text-xs ${
+                  className={`px-2.5 py-1 ${
                     item.occupancy_status === 'occupied' 
                       ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800'
                       : 'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
@@ -164,3 +164,4 @@ export default function CleaningCards({ data, filters, sortBy, onCardClick }: Cl
     </div>
   );
 }
+
