@@ -93,6 +93,7 @@ export default function Home() {
   const [addingTask, setAddingTask] = useState(false);
   const [showPropertyProjects, setShowPropertyProjects] = useState(false);
   const [fullscreenTask, setFullscreenTask] = useState<any>(null);
+  const [expandedProject, setExpandedProject] = useState<any>(null);
 
   // Window stacking order management
   const bringToFront = (window: 'cards' | 'timeline' | 'query' | 'projects') => {
@@ -1433,163 +1434,350 @@ export default function Home() {
   }, [projects]);
 
   const projectsWindowContent = useMemo(() => (
-    <div className="p-4 space-y-4 h-full overflow-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
-          Property Projects
-        </h3>
-        <Button size="sm" onClick={() => openCreateProjectDialog()}>
-          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          New Project
-        </Button>
-      </div>
+    <div className="flex h-full">
+      {/* Left Panel - Project List */}
+      <div className={`${expandedProject ? 'w-1/2' : 'w-full'} h-full overflow-auto transition-all duration-300 border-r border-neutral-200 dark:border-neutral-700`}>
+        <div className="p-4 space-y-4">
+          {/* Header */}
+          <div className="flex items-center justify-between sticky top-0 bg-white dark:bg-neutral-900 z-10 pb-2">
+            <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
+              Property Projects
+            </h3>
+            <Button size="sm" onClick={() => openCreateProjectDialog()}>
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              New Project
+            </Button>
+          </div>
 
-      {/* Projects List */}
-      {loadingProjects ? (
-        <div className="flex items-center justify-center py-12">
-          <p className="text-neutral-500">Loading projects...</p>
-        </div>
-      ) : projects.length === 0 ? (
-        <div className="text-center py-12 bg-neutral-50 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
-          <p className="text-neutral-500 dark:text-neutral-400 mb-4">
-            No projects yet. Create your first property project!
-          </p>
-          <Button onClick={() => openCreateProjectDialog()}>
-            Create First Project
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {Object.entries(groupedProjects).sort().map(([propertyName, propertyProjects]) => (
-            <div key={propertyName} className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden shadow-sm">
-              {/* Property Header */}
-              <div className="px-4 py-3 bg-gradient-to-r from-neutral-50 to-neutral-100 dark:from-neutral-800 dark:to-neutral-800/50 border-b border-neutral-200 dark:border-neutral-700">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-semibold text-neutral-900 dark:text-white">
-                    {propertyName}
-                  </h4>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs">
-                      {propertyProjects.length} project{propertyProjects.length !== 1 ? 's' : ''}
-                    </Badge>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-7 w-7 p-0"
-                      onClick={() => openCreateProjectDialog(propertyName)}
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                    </Button>
+          {/* Projects List */}
+          {loadingProjects ? (
+            <div className="flex items-center justify-center py-12">
+              <p className="text-neutral-500">Loading projects...</p>
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="text-center py-12 bg-neutral-50 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
+              <p className="text-neutral-500 dark:text-neutral-400 mb-4">
+                No projects yet. Create your first property project!
+              </p>
+              <Button onClick={() => openCreateProjectDialog()}>
+                Create First Project
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {Object.entries(groupedProjects).sort().map(([propertyName, propertyProjects]) => (
+                <div key={propertyName} className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden shadow-sm">
+                  {/* Property Header */}
+                  <div className="px-4 py-3 bg-gradient-to-r from-neutral-50 to-neutral-100 dark:from-neutral-800 dark:to-neutral-800/50 border-b border-neutral-200 dark:border-neutral-700">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-semibold text-neutral-900 dark:text-white">
+                        {propertyName}
+                      </h4>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          {propertyProjects.length} project{propertyProjects.length !== 1 ? 's' : ''}
+                        </Badge>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-7 w-7 p-0"
+                          onClick={() => openCreateProjectDialog(propertyName)}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                          </svg>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Projects Grid */}
+                  <div className={`p-4 grid gap-4 auto-rows-fr ${expandedProject ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'}`}>
+                    {propertyProjects.map((project: any) => (
+                      <Card 
+                        key={project.id} 
+                        className={`group w-full gap-4 !p-4 hover:shadow-lg transition-all duration-200 !flex !flex-col cursor-pointer ${
+                          expandedProject?.id === project.id 
+                            ? 'ring-2 ring-emerald-500 shadow-lg' 
+                            : ''
+                        }`}
+                        onClick={() => setExpandedProject(expandedProject?.id === project.id ? null : project)}
+                      >
+                        <CardHeader className="min-h-[4.5rem]">
+                          <CardTitle className="text-base leading-tight line-clamp-2">{project.title}</CardTitle>
+                          <CardDescription className="line-clamp-2 text-muted-foreground">
+                            {project.description || '\u00A0'}
+                          </CardDescription>
+                          <CardAction>
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openEditProjectDialog(project); }}
+                                className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-md transition-colors"
+                              >
+                                <svg className="w-4 h-4 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); deleteProject(project); }}
+                                className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                              >
+                                <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </div>
+                          </CardAction>
+                        </CardHeader>
+
+                        <CardContent className="flex-grow">
+                          <div className="flex w-full items-center justify-between">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge 
+                                className={`px-2.5 py-1 ${
+                                  project.priority === 'urgent' ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800' :
+                                  project.priority === 'high' ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800' :
+                                  project.priority === 'medium' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' :
+                                  'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+                                }`}
+                              >
+                                {project.priority}
+                              </Badge>
+                              <Badge 
+                                className={`px-2.5 py-1 ${
+                                  project.status === 'complete' ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800' :
+                                  project.status === 'in_progress' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' :
+                                  project.status === 'on_hold' ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800' :
+                                  'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+                                }`}
+                              >
+                                {project.status?.replace('_', ' ') || 'not started'}
+                              </Badge>
+                            </div>
+                            {project.assigned_staff && (
+                              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-200 dark:bg-neutral-700 text-xs font-medium text-neutral-600 dark:text-neutral-300">
+                                {project.assigned_staff.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+
+                        <CardFooter className="mt-auto flex flex-col gap-2">
+                          <div className="w-full py-1">
+                            <div className="h-px w-full bg-border/60" />
+                          </div>
+                          <div className="flex w-full justify-between text-xs text-muted-foreground/60">
+                            <div className="flex items-center gap-2">
+                              {project.assigned_staff && (
+                                <div className="flex h-[27px] items-center justify-center gap-1 rounded-xl border border-border/20 bg-[var(--mix-card-33-bg)] px-2 py-1 transition-all duration-150 hover:border-border hover:bg-[var(--mix-card-50-bg)]">
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                  </svg>
+                                  <span className="max-w-[80px] truncate">{project.assigned_staff}</span>
+                                </div>
+                              )}
+                            </div>
+                            {project.due_date && (
+                              <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-border/20 bg-[var(--mix-card-33-bg)] px-2 py-1 transition-all duration-150 hover:border-border hover:bg-[var(--mix-card-50-bg)] ${
+                                new Date(project.due_date) < new Date() ? 'text-red-500' :
+                                new Date(project.due_date) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) ? 'text-[var(--warning-foreground)]' :
+                                ''
+                              }`}>
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <span>{new Date(project.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                              </div>
+                            )}
+                          </div>
+                        </CardFooter>
+                      </Card>
+                    ))}
                   </div>
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Right Panel - Expanded Project Detail */}
+      {expandedProject && (
+        <div className="w-1/2 h-full overflow-auto bg-neutral-50 dark:bg-neutral-800/50 border-l border-neutral-200 dark:border-neutral-700">
+          <div className="p-6 space-y-6">
+            {/* Header */}
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400 mb-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  </svg>
+                  {expandedProject.property_name}
+                </div>
+                <h2 className="text-2xl font-bold text-neutral-900 dark:text-white">
+                  {expandedProject.title}
+                </h2>
               </div>
-              
-              {/* Projects Grid - ROI UI Task Cards */}
-              <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 auto-rows-fr">
-                {propertyProjects.map((project: any) => (
-                  <Card 
-                    key={project.id} 
-                    className="group w-full gap-4 !p-4 hover:shadow-lg transition-all duration-200 !flex !flex-col"
-                  >
-                    <CardHeader className="min-h-[4.5rem]">
-                      <CardTitle className="text-base leading-tight line-clamp-2">{project.title}</CardTitle>
-                      <CardDescription className="line-clamp-2 text-muted-foreground">
-                        {project.description || '\u00A0'}
-                      </CardDescription>
-                      <CardAction>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => openEditProjectDialog(project)}
-                            className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-md transition-colors"
-                          >
-                            <svg className="w-4 h-4 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => deleteProject(project)}
-                            className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
-                          >
-                            <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                      </CardAction>
-                    </CardHeader>
+              <button
+                onClick={() => setExpandedProject(null)}
+                className="p-2 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
 
-                    <CardContent className="flex-grow">
-                      <div className="flex w-full items-center justify-between">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge 
-                            className={`px-2.5 py-1 ${
-                              project.priority === 'urgent' ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800' :
-                              project.priority === 'high' ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800' :
-                              project.priority === 'medium' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' :
-                              'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
-                            }`}
-                          >
-                            {project.priority}
-                          </Badge>
-                          <Badge 
-                            className={`px-2.5 py-1 ${
-                              project.status === 'complete' ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800' :
-                              project.status === 'in_progress' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' :
-                              project.status === 'on_hold' ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800' :
-                              'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
-                            }`}
-                          >
-                            {project.status?.replace('_', ' ') || 'not started'}
-                          </Badge>
-                        </div>
-                        {/* Avatar placeholder for assigned staff */}
-                        {project.assigned_staff && (
-                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-200 dark:bg-neutral-700 text-xs font-medium text-neutral-600 dark:text-neutral-300">
-                            {project.assigned_staff.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
+            {/* Status & Priority Badges */}
+            <div className="flex items-center gap-3">
+              <Badge 
+                className={`px-3 py-1.5 text-sm ${
+                  expandedProject.status === 'complete' ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800' :
+                  expandedProject.status === 'in_progress' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' :
+                  expandedProject.status === 'on_hold' ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800' :
+                  'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+                }`}
+              >
+                {expandedProject.status?.replace('_', ' ') || 'Not Started'}
+              </Badge>
+              <Badge 
+                className={`px-3 py-1.5 text-sm ${
+                  expandedProject.priority === 'urgent' ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800' :
+                  expandedProject.priority === 'high' ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800' :
+                  expandedProject.priority === 'medium' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' :
+                  'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+                }`}
+              >
+                {expandedProject.priority} priority
+              </Badge>
+            </div>
 
-                    <CardFooter className="mt-auto flex flex-col gap-2">
-                      <div className="w-full py-1">
-                        <div className="h-px w-full bg-border/60" />
-                      </div>
-                      <div className="flex w-full justify-between text-xs text-muted-foreground/60">
-                        <div className="flex items-center gap-2">
-                          {project.assigned_staff && (
-                            <div className="flex h-[27px] items-center justify-center gap-1 rounded-xl border border-border/20 bg-[var(--mix-card-33-bg)] px-2 py-1 transition-all duration-150 hover:border-border hover:bg-[var(--mix-card-50-bg)]">
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                              </svg>
-                              <span className="max-w-[80px] truncate">{project.assigned_staff}</span>
-                            </div>
-                          )}
-                        </div>
-                        {project.due_date && (
-                          <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-border/20 bg-[var(--mix-card-33-bg)] px-2 py-1 transition-all duration-150 hover:border-border hover:bg-[var(--mix-card-50-bg)] ${
-                            new Date(project.due_date) < new Date() ? 'text-red-500' :
-                            new Date(project.due_date) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) ? 'text-[var(--warning-foreground)]' :
-                            ''
-                          }`}>
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            <span>{new Date(project.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                          </div>
-                        )}
-                      </div>
-                    </CardFooter>
-                  </Card>
-                ))}
+            {/* Description */}
+            {expandedProject.description && (
+              <div className="bg-white dark:bg-neutral-900 rounded-lg p-4 border border-neutral-200 dark:border-neutral-700">
+                <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-2">Description</h3>
+                <p className="text-neutral-600 dark:text-neutral-400">
+                  {expandedProject.description}
+                </p>
+              </div>
+            )}
+
+            {/* Details Grid */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Assigned Staff */}
+              <div className="bg-white dark:bg-neutral-900 rounded-lg p-4 border border-neutral-200 dark:border-neutral-700">
+                <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400 mb-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Assigned To
+                </div>
+                <p className="font-medium text-neutral-900 dark:text-white">
+                  {expandedProject.assigned_staff || 'Unassigned'}
+                </p>
+              </div>
+
+              {/* Due Date */}
+              <div className="bg-white dark:bg-neutral-900 rounded-lg p-4 border border-neutral-200 dark:border-neutral-700">
+                <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400 mb-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Due Date
+                </div>
+                <p className={`font-medium ${
+                  expandedProject.due_date && new Date(expandedProject.due_date) < new Date() 
+                    ? 'text-red-600 dark:text-red-400' 
+                    : 'text-neutral-900 dark:text-white'
+                }`}>
+                  {expandedProject.due_date 
+                    ? new Date(expandedProject.due_date).toLocaleDateString('en-US', { 
+                        weekday: 'short', 
+                        month: 'long', 
+                        day: 'numeric',
+                        year: 'numeric'
+                      }) 
+                    : 'No due date'}
+                </p>
+              </div>
+
+              {/* Created Date */}
+              <div className="bg-white dark:bg-neutral-900 rounded-lg p-4 border border-neutral-200 dark:border-neutral-700">
+                <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400 mb-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Created
+                </div>
+                <p className="font-medium text-neutral-900 dark:text-white">
+                  {expandedProject.created_at 
+                    ? new Date(expandedProject.created_at).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric',
+                        year: 'numeric'
+                      }) 
+                    : 'Unknown'}
+                </p>
+              </div>
+
+              {/* Last Updated */}
+              <div className="bg-white dark:bg-neutral-900 rounded-lg p-4 border border-neutral-200 dark:border-neutral-700">
+                <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400 mb-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Last Updated
+                </div>
+                <p className="font-medium text-neutral-900 dark:text-white">
+                  {expandedProject.updated_at 
+                    ? new Date(expandedProject.updated_at).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric',
+                        year: 'numeric'
+                      }) 
+                    : 'Never'}
+                </p>
               </div>
             </div>
-          ))}
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 pt-4 border-t border-neutral-200 dark:border-neutral-700">
+              <Button 
+                onClick={() => openEditProjectDialog(expandedProject)}
+                className="flex-1"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Edit Project
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  if (confirm('Are you sure you want to delete this project?')) {
+                    deleteProject(expandedProject);
+                    setExpandedProject(null);
+                  }
+                }}
+                className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </Button>
+            </div>
+
+            {/* Placeholder for future features */}
+            <div className="bg-neutral-100 dark:bg-neutral-800 rounded-lg p-6 border-2 border-dashed border-neutral-300 dark:border-neutral-600 text-center">
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                More project management features coming soon...
+                <br />
+                <span className="text-xs">(Subtasks, Comments, Activity Log, Attachments)</span>
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1725,7 +1913,7 @@ export default function Home() {
         </DialogContent>
       </Dialog>
     </div>
-  ), [projects, loadingProjects, groupedProjects, showProjectDialog, editingProject, projectForm, savingProject, allProperties]);
+  ), [projects, loadingProjects, groupedProjects, showProjectDialog, editingProject, projectForm, savingProject, allProperties, expandedProject]);
 
   // Mobile query handlers for MobileQueryView
   const handleMobileGenerateSQL = async (naturalQuery: string): Promise<string> => {
