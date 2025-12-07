@@ -13,6 +13,13 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Field,
+  FieldContent,
+  FieldGroup,
+  FieldLabel,
+  FieldSeparator,
+} from '@/components/ui/field';
 import { ChevronDownIcon } from 'lucide-react';
 import Timeline from '@/components/Timeline';
 import FloatingWindow from '@/components/FloatingWindow';
@@ -1436,7 +1443,7 @@ export default function Home() {
   const projectsWindowContent = useMemo(() => (
     <div className="flex h-full">
       {/* Left Panel - Project List */}
-      <div className={`${expandedProject ? 'w-1/2' : 'w-full'} h-full overflow-auto transition-all duration-300 border-r border-neutral-200 dark:border-neutral-700`}>
+      <div className={`${expandedProject ? 'w-1/2' : 'w-full'} h-full overflow-auto transition-all duration-300 hide-scrollbar`}>
         <div className="p-4 space-y-4">
           {/* Header */}
           <div className="flex items-center justify-between sticky top-0 bg-white dark:bg-neutral-900 z-10 pb-2">
@@ -1500,7 +1507,7 @@ export default function Home() {
                         key={project.id} 
                         className={`group w-full gap-4 !p-4 hover:shadow-lg transition-all duration-200 !flex !flex-col cursor-pointer ${
                           expandedProject?.id === project.id 
-                            ? 'ring-2 ring-emerald-500 shadow-lg' 
+                            ? 'ring-1 ring-amber-400/70 shadow-md' 
                             : ''
                         }`}
                         onClick={() => setExpandedProject(expandedProject?.id === project.id ? null : project)}
@@ -1605,10 +1612,10 @@ export default function Home() {
 
       {/* Right Panel - Expanded Project Detail */}
       {expandedProject && (
-        <div className="w-1/2 h-full overflow-auto bg-neutral-50 dark:bg-neutral-800/50 border-l border-neutral-200 dark:border-neutral-700">
-          <div className="p-6 space-y-6">
+        <div className="w-1/2 h-full overflow-auto bg-neutral-50 dark:bg-neutral-800/50 hide-scrollbar">
+          <div className="p-6">
             {/* Header */}
-            <div className="flex items-start justify-between">
+            <div className="flex items-start justify-between mb-6">
               <div className="flex-1">
                 <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400 mb-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1631,7 +1638,7 @@ export default function Home() {
             </div>
 
             {/* Status & Priority Badges */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 mb-6">
               <Badge 
                 className={`px-3 py-1.5 text-sm ${
                   expandedProject.status === 'complete' ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800' :
@@ -1654,96 +1661,107 @@ export default function Home() {
               </Badge>
             </div>
 
-            {/* Description */}
-            {expandedProject.description && (
-              <div className="bg-white dark:bg-neutral-900 rounded-lg p-4 border border-neutral-200 dark:border-neutral-700">
-                <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-2">Description</h3>
-                <p className="text-neutral-600 dark:text-neutral-400">
-                  {expandedProject.description}
-                </p>
-              </div>
-            )}
+            {/* Project Details using shadcn Field components */}
+            <FieldGroup className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700 p-5 mb-6">
+              {/* Description */}
+              {expandedProject.description && (
+                <Field>
+                  <FieldLabel>Description</FieldLabel>
+                  <FieldContent>
+                    <p className="text-neutral-600 dark:text-neutral-400">
+                      {expandedProject.description}
+                    </p>
+                  </FieldContent>
+                </Field>
+              )}
 
-            {/* Details Grid */}
-            <div className="grid grid-cols-2 gap-4">
-              {/* Assigned Staff */}
-              <div className="bg-white dark:bg-neutral-900 rounded-lg p-4 border border-neutral-200 dark:border-neutral-700">
-                <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400 mb-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                  Assigned To
-                </div>
-                <p className="font-medium text-neutral-900 dark:text-white">
-                  {expandedProject.assigned_staff || 'Unassigned'}
-                </p>
-              </div>
+              <FieldSeparator />
 
-              {/* Due Date */}
-              <div className="bg-white dark:bg-neutral-900 rounded-lg p-4 border border-neutral-200 dark:border-neutral-700">
-                <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400 mb-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  Due Date
-                </div>
-                <p className={`font-medium ${
-                  expandedProject.due_date && new Date(expandedProject.due_date) < new Date() 
-                    ? 'text-red-600 dark:text-red-400' 
-                    : 'text-neutral-900 dark:text-white'
-                }`}>
-                  {expandedProject.due_date 
-                    ? new Date(expandedProject.due_date).toLocaleDateString('en-US', { 
-                        weekday: 'short', 
-                        month: 'long', 
-                        day: 'numeric',
-                        year: 'numeric'
-                      }) 
-                    : 'No due date'}
-                </p>
-              </div>
+              {/* Details Row */}
+              <div className="grid grid-cols-2 gap-6">
+                <Field>
+                  <FieldLabel className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    Assigned To
+                  </FieldLabel>
+                  <FieldContent>
+                    <p className="font-medium text-neutral-900 dark:text-white">
+                      {expandedProject.assigned_staff || 'Unassigned'}
+                    </p>
+                  </FieldContent>
+                </Field>
 
-              {/* Created Date */}
-              <div className="bg-white dark:bg-neutral-900 rounded-lg p-4 border border-neutral-200 dark:border-neutral-700">
-                <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400 mb-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Created
-                </div>
-                <p className="font-medium text-neutral-900 dark:text-white">
-                  {expandedProject.created_at 
-                    ? new Date(expandedProject.created_at).toLocaleDateString('en-US', { 
-                        month: 'short', 
-                        day: 'numeric',
-                        year: 'numeric'
-                      }) 
-                    : 'Unknown'}
-                </p>
-              </div>
+                <Field>
+                  <FieldLabel className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Due Date
+                  </FieldLabel>
+                  <FieldContent>
+                    <p className={`font-medium ${
+                      expandedProject.due_date && new Date(expandedProject.due_date) < new Date() 
+                        ? 'text-red-600 dark:text-red-400' 
+                        : 'text-neutral-900 dark:text-white'
+                    }`}>
+                      {expandedProject.due_date 
+                        ? new Date(expandedProject.due_date).toLocaleDateString('en-US', { 
+                            weekday: 'short', 
+                            month: 'long', 
+                            day: 'numeric',
+                            year: 'numeric'
+                          }) 
+                        : 'No due date'}
+                    </p>
+                  </FieldContent>
+                </Field>
 
-              {/* Last Updated */}
-              <div className="bg-white dark:bg-neutral-900 rounded-lg p-4 border border-neutral-200 dark:border-neutral-700">
-                <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400 mb-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Last Updated
-                </div>
-                <p className="font-medium text-neutral-900 dark:text-white">
-                  {expandedProject.updated_at 
-                    ? new Date(expandedProject.updated_at).toLocaleDateString('en-US', { 
-                        month: 'short', 
-                        day: 'numeric',
-                        year: 'numeric'
-                      }) 
-                    : 'Never'}
-                </p>
+                <Field>
+                  <FieldLabel className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Created
+                  </FieldLabel>
+                  <FieldContent>
+                    <p className="font-medium text-neutral-900 dark:text-white">
+                      {expandedProject.created_at 
+                        ? new Date(expandedProject.created_at).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric',
+                            year: 'numeric'
+                          }) 
+                        : 'Unknown'}
+                    </p>
+                  </FieldContent>
+                </Field>
+
+                <Field>
+                  <FieldLabel className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Last Updated
+                  </FieldLabel>
+                  <FieldContent>
+                    <p className="font-medium text-neutral-900 dark:text-white">
+                      {expandedProject.updated_at 
+                        ? new Date(expandedProject.updated_at).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric',
+                            year: 'numeric'
+                          }) 
+                        : 'Never'}
+                    </p>
+                  </FieldContent>
+                </Field>
               </div>
-            </div>
+            </FieldGroup>
 
             {/* Action Buttons */}
-            <div className="flex gap-3 pt-4 border-t border-neutral-200 dark:border-neutral-700">
+            <div className="flex gap-3 mb-6">
               <Button 
                 onClick={() => openEditProjectDialog(expandedProject)}
                 className="flex-1"
@@ -1769,13 +1787,48 @@ export default function Home() {
               </Button>
             </div>
 
-            {/* Placeholder for future features */}
-            <div className="bg-neutral-100 dark:bg-neutral-800 rounded-lg p-6 border-2 border-dashed border-neutral-300 dark:border-neutral-600 text-center">
-              <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                More project management features coming soon...
-                <br />
-                <span className="text-xs">(Subtasks, Comments, Activity Log, Attachments)</span>
-              </p>
+            {/* Discussion Section */}
+            <div className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+              <div className="px-5 py-4 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
+                <h3 className="font-semibold text-neutral-900 dark:text-white flex items-center gap-2">
+                  <svg className="w-5 h-5 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  Discussion
+                </h3>
+              </div>
+              
+              <div className="p-5">
+                {/* Comment Input */}
+                <div className="flex gap-3 mb-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                    <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">You</span>
+                  </div>
+                  <div className="flex-1">
+                    <Textarea
+                      placeholder="Add a comment..."
+                      rows={2}
+                      className="resize-none"
+                    />
+                    <div className="flex justify-end mt-2">
+                      <Button size="sm">
+                        Post Comment
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Comments List - placeholder */}
+                <div className="space-y-4 pt-4 border-t border-neutral-200 dark:border-neutral-700">
+                  <div className="text-center py-8 text-neutral-400 dark:text-neutral-500">
+                    <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    <p className="text-sm">No comments yet</p>
+                    <p className="text-xs mt-1">Start the discussion by adding a comment above</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
