@@ -29,6 +29,7 @@ import TurnoverCards from '@/components/TurnoverCards';
 
 // Mobile imports
 import { useIsMobile } from '@/lib/useIsMobile';
+import { useAuth } from '@/lib/authContext';
 import { 
   MobileLayout, 
   MobileCardsView, 
@@ -41,6 +42,7 @@ import {
 export default function Home() {
   // Mobile detection
   const isMobile = useIsMobile();
+  const { user: currentUser } = useAuth();
   const [mobileTab, setMobileTab] = useState<MobileTab>('cards');
   
   const [response, setResponse] = useState<any>(null);
@@ -101,6 +103,12 @@ export default function Home() {
   const [showPropertyProjects, setShowPropertyProjects] = useState(false);
   const [fullscreenTask, setFullscreenTask] = useState<any>(null);
   const [expandedProject, setExpandedProject] = useState<any>(null);
+  
+  // Project comments state
+  const [projectComments, setProjectComments] = useState<any[]>([]);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [postingComment, setPostingComment] = useState(false);
 
   // Window stacking order management
   const bringToFront = (window: 'cards' | 'timeline' | 'query' | 'projects') => {
@@ -129,6 +137,16 @@ export default function Home() {
       fetchProjects();
     }
   }, [showProjectsWindow]);
+
+  // Fetch comments when a project is expanded
+  useEffect(() => {
+    if (expandedProject?.id) {
+      fetchProjectComments(expandedProject.id);
+    } else {
+      setProjectComments([]);
+      setNewComment('');
+    }
+  }, [expandedProject?.id]);
 
   const fetchProjects = async () => {
     setLoadingProjects(true);
@@ -246,6 +264,50 @@ export default function Home() {
       setProjects(prev => prev.filter(p => p.id !== project.id));
     } catch (err: any) {
       setError(err.message);
+    }
+  };
+
+  // Project Comments functions
+  const fetchProjectComments = async (projectId: string) => {
+    setLoadingComments(true);
+    try {
+      const res = await fetch(`/api/project-comments?project_id=${projectId}`);
+      const data = await res.json();
+      if (data.data) {
+        setProjectComments(data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching comments:', err);
+      setProjectComments([]);
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const postProjectComment = async () => {
+    if (!expandedProject || !newComment.trim()) return;
+    
+    setPostingComment(true);
+    try {
+      const res = await fetch('/api/project-comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: expandedProject.id,
+          user_name: currentUser.name,
+          comment_content: newComment.trim()
+        })
+      });
+      
+      const data = await res.json();
+      if (data.success && data.data) {
+        setProjectComments(prev => [...prev, data.data]);
+        setNewComment('');
+      }
+    } catch (err) {
+      console.error('Error posting comment:', err);
+    } finally {
+      setPostingComment(false);
     }
   };
 
@@ -1795,38 +1857,82 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                   Discussion
+                  {projectComments.length > 0 && (
+                    <Badge variant="secondary" className="text-xs ml-1">
+                      {projectComments.length}
+                    </Badge>
+                  )}
                 </h3>
               </div>
               
               <div className="p-5">
                 {/* Comment Input */}
                 <div className="flex gap-3 mb-4">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                    <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">You</span>
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                    {currentUser.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
                   </div>
                   <div className="flex-1">
                     <Textarea
                       placeholder="Add a comment..."
                       rows={2}
                       className="resize-none"
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      disabled={postingComment}
                     />
                     <div className="flex justify-end mt-2">
-                      <Button size="sm">
-                        Post Comment
+                      <Button 
+                        size="sm" 
+                        onClick={postProjectComment}
+                        disabled={postingComment || !newComment.trim()}
+                      >
+                        {postingComment ? 'Posting...' : 'Post Comment'}
                       </Button>
                     </div>
                   </div>
                 </div>
 
-                {/* Comments List - placeholder */}
+                {/* Comments List */}
                 <div className="space-y-4 pt-4 border-t border-neutral-200 dark:border-neutral-700">
-                  <div className="text-center py-8 text-neutral-400 dark:text-neutral-500">
-                    <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                    </svg>
-                    <p className="text-sm">No comments yet</p>
-                    <p className="text-xs mt-1">Start the discussion by adding a comment above</p>
-                  </div>
+                  {loadingComments ? (
+                    <div className="text-center py-6 text-neutral-400 dark:text-neutral-500">
+                      <p className="text-sm">Loading comments...</p>
+                    </div>
+                  ) : projectComments.length === 0 ? (
+                    <div className="text-center py-8 text-neutral-400 dark:text-neutral-500">
+                      <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      <p className="text-sm">No comments yet</p>
+                      <p className="text-xs mt-1">Start the discussion by adding a comment above</p>
+                    </div>
+                  ) : (
+                    projectComments.map((comment: any) => (
+                      <div key={comment.id} className="flex gap-3">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
+                          {comment.user_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium text-sm text-neutral-900 dark:text-white">
+                              {comment.user_name}
+                            </span>
+                            <span className="text-xs text-neutral-400 dark:text-neutral-500">
+                              {new Date(comment.created_at).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit'
+                              })}
+                            </span>
+                          </div>
+                          <p className="text-sm text-neutral-600 dark:text-neutral-400 whitespace-pre-wrap">
+                            {comment.comment_content}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -1966,7 +2072,7 @@ export default function Home() {
         </DialogContent>
       </Dialog>
     </div>
-  ), [projects, loadingProjects, groupedProjects, showProjectDialog, editingProject, projectForm, savingProject, allProperties, expandedProject]);
+  ), [projects, loadingProjects, groupedProjects, showProjectDialog, editingProject, projectForm, savingProject, allProperties, expandedProject, projectComments, loadingComments, newComment, postingComment, currentUser]);
 
   // Mobile query handlers for MobileQueryView
   const handleMobileGenerateSQL = async (naturalQuery: string): Promise<string> => {
