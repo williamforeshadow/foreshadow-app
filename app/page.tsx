@@ -7,6 +7,7 @@ import Sidebar from '@/components/Sidebar';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardAction, CardContent, CardFooter } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
@@ -109,6 +110,18 @@ export default function Home() {
   const [loadingComments, setLoadingComments] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [postingComment, setPostingComment] = useState(false);
+  
+  // Project editing state
+  const [editingProjectFields, setEditingProjectFields] = useState<{
+    title: string;
+    description: string;
+    status: string;
+    priority: string;
+    assigned_staff: string;
+    due_date: string;
+  } | null>(null);
+  const [savingProjectEdit, setSavingProjectEdit] = useState(false);
+  const [discussionExpanded, setDiscussionExpanded] = useState(false);
 
   // Window stacking order management
   const bringToFront = (window: 'cards' | 'timeline' | 'query' | 'projects') => {
@@ -142,9 +155,19 @@ export default function Home() {
   useEffect(() => {
     if (expandedProject?.id) {
       fetchProjectComments(expandedProject.id);
+      // Initialize editing fields
+      setEditingProjectFields({
+        title: expandedProject.title || '',
+        description: expandedProject.description || '',
+        status: expandedProject.status || 'not_started',
+        priority: expandedProject.priority || 'medium',
+        assigned_staff: expandedProject.assigned_staff || '',
+        due_date: expandedProject.due_date ? expandedProject.due_date.split('T')[0] : ''
+      });
     } else {
       setProjectComments([]);
       setNewComment('');
+      setEditingProjectFields(null);
     }
   }, [expandedProject?.id]);
 
@@ -308,6 +331,38 @@ export default function Home() {
       console.error('Error posting comment:', err);
     } finally {
       setPostingComment(false);
+    }
+  };
+
+  const saveProjectChanges = async () => {
+    if (!expandedProject || !editingProjectFields) return;
+    
+    setSavingProjectEdit(true);
+    try {
+      const res = await fetch(`/api/projects/${expandedProject.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: editingProjectFields.title,
+          description: editingProjectFields.description || null,
+          status: editingProjectFields.status,
+          priority: editingProjectFields.priority,
+          assigned_staff: editingProjectFields.assigned_staff || null,
+          due_date: editingProjectFields.due_date || null
+        })
+      });
+      
+      const data = await res.json();
+      if (data.data) {
+        // Update local projects list
+        setProjects(prev => prev.map(p => p.id === expandedProject.id ? data.data : p));
+        // Update expanded project
+        setExpandedProject(data.data);
+      }
+    } catch (err) {
+      console.error('Error saving project:', err);
+    } finally {
+      setSavingProjectEdit(false);
     }
   };
 
@@ -1579,26 +1634,6 @@ export default function Home() {
                           <CardDescription className="line-clamp-2 text-muted-foreground">
                             {project.description || '\u00A0'}
                           </CardDescription>
-                          <CardAction>
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); openEditProjectDialog(project); }}
-                                className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-md transition-colors"
-                              >
-                                <svg className="w-4 h-4 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                </svg>
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); deleteProject(project); }}
-                                className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
-                              >
-                                <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
-                            </div>
-                          </CardAction>
                         </CardHeader>
 
                         <CardContent className="flex-grow">
@@ -1672,269 +1707,229 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Right Panel - Expanded Project Detail */}
-      {expandedProject && (
-        <div className="w-1/2 h-full overflow-auto bg-neutral-50 dark:bg-neutral-800/50 hide-scrollbar">
-          <div className="p-6">
-            {/* Header */}
-            <div className="flex items-start justify-between mb-6">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400 mb-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+      {/* Right Panel - Project Detail */}
+      {expandedProject && editingProjectFields && (
+        <div className="w-1/2 h-full overflow-y-auto hide-scrollbar border-l border-neutral-200 dark:border-neutral-700 bg-card">
+          {/* Header */}
+          <div className="sticky top-0 bg-card z-10 border-b border-neutral-200 dark:border-neutral-700 p-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">{expandedProject.property_name}</h2>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    if (confirm('Are you sure you want to delete this project?')) {
+                      deleteProject(expandedProject);
+                      setExpandedProject(null);
+                    }
+                  }}
+                  className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                  title="Delete project"
+                >
+                  <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
-                  {expandedProject.property_name}
-                </div>
-                <h2 className="text-2xl font-bold text-neutral-900 dark:text-white">
-                  {expandedProject.title}
-                </h2>
-              </div>
-              <button
-                onClick={() => setExpandedProject(null)}
-                className="p-2 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors"
-              >
-                <svg className="w-5 h-5 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Status & Priority Badges */}
-            <div className="flex items-center gap-3 mb-6">
-              <Badge 
-                className={`px-3 py-1.5 text-sm ${
-                  expandedProject.status === 'complete' ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800' :
-                  expandedProject.status === 'in_progress' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' :
-                  expandedProject.status === 'on_hold' ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800' :
-                  'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
-                }`}
-              >
-                {expandedProject.status?.replace('_', ' ') || 'Not Started'}
-              </Badge>
-              <Badge 
-                className={`px-3 py-1.5 text-sm ${
-                  expandedProject.priority === 'urgent' ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800' :
-                  expandedProject.priority === 'high' ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800' :
-                  expandedProject.priority === 'medium' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' :
-                  'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
-                }`}
-              >
-                {expandedProject.priority} priority
-              </Badge>
-            </div>
-
-            {/* Project Details using shadcn Field components */}
-            <FieldGroup className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700 p-5 mb-6">
-              {/* Description */}
-              {expandedProject.description && (
-                <Field>
-                  <FieldLabel>Description</FieldLabel>
-                  <FieldContent>
-                    <p className="text-neutral-600 dark:text-neutral-400">
-                      {expandedProject.description}
-                    </p>
-                  </FieldContent>
-                </Field>
-              )}
-
-              <FieldSeparator />
-
-              {/* Details Row */}
-              <div className="grid grid-cols-2 gap-6">
-                <Field>
-                  <FieldLabel className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    Assigned To
-                  </FieldLabel>
-                  <FieldContent>
-                    <p className="font-medium text-neutral-900 dark:text-white">
-                      {expandedProject.assigned_staff || 'Unassigned'}
-                    </p>
-                  </FieldContent>
-                </Field>
-
-                <Field>
-                  <FieldLabel className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    Due Date
-                  </FieldLabel>
-                  <FieldContent>
-                    <p className={`font-medium ${
-                      expandedProject.due_date && new Date(expandedProject.due_date) < new Date() 
-                        ? 'text-red-600 dark:text-red-400' 
-                        : 'text-neutral-900 dark:text-white'
-                    }`}>
-                      {expandedProject.due_date 
-                        ? new Date(expandedProject.due_date).toLocaleDateString('en-US', { 
-                            weekday: 'short', 
-                            month: 'long', 
-                            day: 'numeric',
-                            year: 'numeric'
-                          }) 
-                        : 'No due date'}
-                    </p>
-                  </FieldContent>
-                </Field>
-
-                <Field>
-                  <FieldLabel className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Created
-                  </FieldLabel>
-                  <FieldContent>
-                    <p className="font-medium text-neutral-900 dark:text-white">
-                      {expandedProject.created_at 
-                        ? new Date(expandedProject.created_at).toLocaleDateString('en-US', { 
-                            month: 'short', 
-                            day: 'numeric',
-                            year: 'numeric'
-                          }) 
-                        : 'Unknown'}
-                    </p>
-                  </FieldContent>
-                </Field>
-
-                <Field>
-                  <FieldLabel className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Last Updated
-                  </FieldLabel>
-                  <FieldContent>
-                    <p className="font-medium text-neutral-900 dark:text-white">
-                      {expandedProject.updated_at 
-                        ? new Date(expandedProject.updated_at).toLocaleDateString('en-US', { 
-                            month: 'short', 
-                            day: 'numeric',
-                            year: 'numeric'
-                          }) 
-                        : 'Never'}
-                    </p>
-                  </FieldContent>
-                </Field>
-              </div>
-            </FieldGroup>
-
-            {/* Action Buttons */}
-            <div className="flex gap-3 mb-6">
-              <Button 
-                onClick={() => openEditProjectDialog(expandedProject)}
-                className="flex-1"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                Edit Project
-              </Button>
-              <Button 
-                variant="outline"
-                onClick={() => {
-                  if (confirm('Are you sure you want to delete this project?')) {
-                    deleteProject(expandedProject);
-                    setExpandedProject(null);
-                  }
-                }}
-                className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </Button>
-            </div>
-
-            {/* Discussion Section */}
-            <div className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
-              <div className="px-5 py-4 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
-                <h3 className="font-semibold text-neutral-900 dark:text-white flex items-center gap-2">
+                </button>
+                <button
+                  onClick={() => setExpandedProject(null)}
+                  className="p-2 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+                  title="Close"
+                >
                   <svg className="w-5 h-5 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
-                  Discussion
-                  {projectComments.length > 0 && (
-                    <Badge variant="secondary" className="text-xs ml-1">
-                      {projectComments.length}
-                    </Badge>
-                  )}
-                </h3>
+                </button>
               </div>
-              
-              <div className="p-5">
-                {/* Comment Input */}
-                <div className="flex gap-3 mb-4">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                    {currentUser.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
-                  </div>
-                  <div className="flex-1">
-                    <Textarea
-                      placeholder="Add a comment..."
-                      rows={2}
-                      className="resize-none"
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      disabled={postingComment}
-                    />
-                    <div className="flex justify-end mt-2">
-                      <Button 
-                        size="sm" 
-                        onClick={postProjectComment}
-                        disabled={postingComment || !newComment.trim()}
-                      >
-                        {postingComment ? 'Posting...' : 'Post Comment'}
-                      </Button>
-                    </div>
-                  </div>
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">Edit project details and manage discussion</p>
+          </div>
+
+          {/* Form Content - Padded Container */}
+          <div className="p-6 space-y-6">
+              {/* Title Field */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-neutral-900 dark:text-white">Title</label>
+                <Input
+                  value={editingProjectFields.title}
+                  onChange={(e) => setEditingProjectFields(prev => prev ? {...prev, title: e.target.value} : null)}
+                  placeholder="Project title"
+                />
+              </div>
+
+              {/* Description Field */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-neutral-900 dark:text-white">Description</label>
+                <Textarea
+                  value={editingProjectFields.description}
+                  onChange={(e) => setEditingProjectFields(prev => prev ? {...prev, description: e.target.value} : null)}
+                  placeholder="Project description (optional)"
+                  rows={3}
+                />
+              </div>
+
+              {/* Status & Priority */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-neutral-900 dark:text-white">Status</label>
+                  <Select
+                    value={editingProjectFields.status}
+                    onValueChange={(value) => setEditingProjectFields(prev => prev ? {...prev, status: value} : null)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="not_started">Not Started</SelectItem>
+                      <SelectItem value="in_progress">In Progress</SelectItem>
+                      <SelectItem value="on_hold">On Hold</SelectItem>
+                      <SelectItem value="complete">Complete</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                {/* Comments List */}
-                <div className="space-y-4 pt-4 border-t border-neutral-200 dark:border-neutral-700">
-                  {loadingComments ? (
-                    <div className="text-center py-6 text-neutral-400 dark:text-neutral-500">
-                      <p className="text-sm">Loading comments...</p>
-                    </div>
-                  ) : projectComments.length === 0 ? (
-                    <div className="text-center py-8 text-neutral-400 dark:text-neutral-500">
-                      <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                      </svg>
-                      <p className="text-sm">No comments yet</p>
-                      <p className="text-xs mt-1">Start the discussion by adding a comment above</p>
-                    </div>
-                  ) : (
-                    projectComments.map((comment: any) => (
-                      <div key={comment.id} className="flex gap-3">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
-                          {comment.user_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium text-sm text-neutral-900 dark:text-white">
-                              {comment.user_name}
-                            </span>
-                            <span className="text-xs text-neutral-400 dark:text-neutral-500">
-                              {new Date(comment.created_at).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: 'numeric',
-                                minute: '2-digit'
-                              })}
-                            </span>
-                          </div>
-                          <p className="text-sm text-neutral-600 dark:text-neutral-400 whitespace-pre-wrap">
-                            {comment.comment_content}
-                          </p>
-                        </div>
-                      </div>
-                    ))
-                  )}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-neutral-900 dark:text-white">Priority</label>
+                  <Select
+                    value={editingProjectFields.priority}
+                    onValueChange={(value) => setEditingProjectFields(prev => prev ? {...prev, priority: value} : null)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="urgent">Urgent</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
+
+              {/* Assigned Staff & Due Date */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-neutral-900 dark:text-white">Assigned To</label>
+                  <Input
+                    value={editingProjectFields.assigned_staff}
+                    onChange={(e) => setEditingProjectFields(prev => prev ? {...prev, assigned_staff: e.target.value} : null)}
+                    placeholder="Staff name (optional)"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-neutral-900 dark:text-white">Due Date</label>
+                  <Input
+                    type="date"
+                    value={editingProjectFields.due_date}
+                    onChange={(e) => setEditingProjectFields(prev => prev ? {...prev, due_date: e.target.value} : null)}
+                  />
+                </div>
+              </div>
+
+              {/* Discussion Section - Collapsible */}
+              <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+                <button
+                  onClick={() => setDiscussionExpanded(!discussionExpanded)}
+                  className="w-full px-6 py-3 bg-neutral-50 dark:bg-neutral-800/50 flex items-center justify-between hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                >
+                  <h3 className="font-medium text-neutral-900 dark:text-white flex items-center gap-2">
+                    <svg className="w-4 h-4 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    Discussion
+                    {projectComments.length > 0 && (
+                      <Badge variant="secondary" className="text-xs ml-1">
+                        {projectComments.length}
+                      </Badge>
+                    )}
+                  </h3>
+                  <svg 
+                    className={`w-4 h-4 text-neutral-500 transition-transform ${discussionExpanded ? 'rotate-180' : ''}`} 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                {discussionExpanded && (
+                  <div className="p-6 border-t border-neutral-200 dark:border-neutral-700">
+                    {/* Comment Input */}
+                    <div className="flex gap-3 mb-4">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                        {currentUser.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="flex-1">
+                        <Textarea
+                          placeholder="Add a comment... (Press Enter to post)"
+                          rows={2}
+                          className="resize-none"
+                          value={newComment}
+                          onChange={(e) => setNewComment(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) {
+                              e.preventDefault();
+                              postProjectComment();
+                            }
+                          }}
+                          disabled={postingComment}
+                        />
+                        <p className="text-xs text-neutral-400 mt-1">Press Enter to post, Shift+Enter for new line</p>
+                      </div>
+                    </div>
+
+                    {/* Comments List */}
+                    <div className="space-y-4 pt-4 border-t border-neutral-200 dark:border-neutral-700">
+                      {loadingComments ? (
+                        <div className="text-center py-4 text-neutral-400 dark:text-neutral-500">
+                          <p className="text-sm">Loading comments...</p>
+                        </div>
+                      ) : projectComments.length === 0 ? (
+                        <div className="text-center py-4 text-neutral-400 dark:text-neutral-500">
+                          <p className="text-sm">No comments yet</p>
+                          <p className="text-xs mt-1">Start the discussion above</p>
+                        </div>
+                      ) : (
+                        projectComments.map((comment: any) => (
+                          <div key={comment.id} className="flex gap-3">
+                            <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
+                              {comment.user_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-medium text-sm text-neutral-900 dark:text-white">
+                                  {comment.user_name}
+                                </span>
+                                <span className="text-xs text-neutral-400 dark:text-neutral-500">
+                                  {new Date(comment.created_at).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: 'numeric',
+                                    minute: '2-digit'
+                                  })}
+                                </span>
+                              </div>
+                              <p className="text-sm text-neutral-600 dark:text-neutral-400 whitespace-pre-wrap">
+                                {comment.comment_content}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            {/* Save Button */}
+            <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
+              <Button
+                onClick={saveProjectChanges}
+                disabled={savingProjectEdit}
+                className="w-full"
+              >
+                {savingProjectEdit ? 'Saving...' : 'Save Changes'}
+              </Button>
             </div>
           </div>
         </div>
@@ -2072,7 +2067,7 @@ export default function Home() {
         </DialogContent>
       </Dialog>
     </div>
-  ), [projects, loadingProjects, groupedProjects, showProjectDialog, editingProject, projectForm, savingProject, allProperties, expandedProject, projectComments, loadingComments, newComment, postingComment, currentUser]);
+  ), [projects, loadingProjects, groupedProjects, showProjectDialog, editingProject, projectForm, savingProject, allProperties, expandedProject, projectComments, loadingComments, newComment, postingComment, currentUser, editingProjectFields, savingProjectEdit, discussionExpanded]);
 
   // Mobile query handlers for MobileQueryView
   const handleMobileGenerateSQL = async (naturalQuery: string): Promise<string> => {
