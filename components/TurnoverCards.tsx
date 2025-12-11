@@ -10,7 +10,14 @@ interface TurnoverCardsProps {
 }
 
 export default function TurnoverCards({ data, filters, sortBy, onCardClick }: TurnoverCardsProps) {
+  console.log('=== TurnoverCards Render ===');
+  console.log('Data received:', data);
+  console.log('Data type:', typeof data);
+  console.log('Data is array:', Array.isArray(data));
+  console.log('Data length:', data?.length);
+  
   if (!data || data.length === 0) {
+    console.log('Returning: No turnovers found');
     return (
       <div className="text-center py-12 text-neutral-500 dark:text-neutral-400">
         No turnovers found
@@ -20,6 +27,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick }: Tu
 
   // Apply filters and sorting
   let items = applyCleaningFilters(data, filters);
+  console.log('After filters, items count:', items.length);
   
   if (items.length === 0) {
     return (
@@ -67,13 +75,16 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick }: Tu
     }
   };
 
+  const filteredItems = items.filter(Boolean);
+  console.log('After filter(Boolean), count:', filteredItems.length);
+  
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 auto-rows-fr">
-      {items.map((item, index) => (
+      {filteredItems.map((item, index) => (
         <Card
-          key={item.cleaning_id || item.id || index}
+          key={item.id || index}
           onClick={() => onCardClick(item)}
-          className={`group cursor-pointer hover:shadow-xl transition-all duration-200 !flex !flex-col !p-4 gap-4 ${getCardBackgroundColor(item.turnover_status)}`}
+          className={`group cursor-pointer hover:shadow-xl transition-all duration-200 !flex !flex-col !p-4 gap-4 ${getCardBackgroundColor(item.turnover_status || 'no_tasks')}`}
         >
           <CardHeader className="min-h-[4rem]">
             <CardTitle className="text-base leading-tight line-clamp-2">

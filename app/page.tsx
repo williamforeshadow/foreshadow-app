@@ -454,8 +454,15 @@ export default function Home() {
       if (result.error) {
         setError(`SQL Error: ${result.error}\n\nGenerated SQL:\n${result.sql || 'N/A'}`);
       } else {
+        console.log('=== SQL Query Response ===');
+        console.log('SQL:', result.sql);
+        console.log('Results type:', typeof result.results);
+        console.log('Results is array:', Array.isArray(result.results));
+        console.log('Results length:', result.results?.length);
+        console.log('First result:', JSON.stringify(result.results?.[0], null, 2));
         setGeneratedSQL(result.sql);
-        setResponse(result.data);
+        setResponse(result.results);
+        console.log('Response state set');
       }
     } catch (err: any) {
       setError(err.message);

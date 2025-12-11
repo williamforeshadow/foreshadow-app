@@ -12,40 +12,77 @@ const openai = new OpenAI({
 });
 
 const DATABASE_SCHEMA = `
-Database Schema:
+Foreshadow Database Schema (Clean, Current, AI-Ready)
 
-get_property_turnovers() - Property turnover cards (reservation + cleaning combined)
-Returns:
-  - id (uuid) - Shared ID between reservation and cleaning
+Primary RPC:
+get_property_turnovers() - Returns the operational turnover snapshot for each reservation.
+
+Fields returned by get_property_turnovers():
+  - id (uuid)                -- reservation id
   - property_name (text)
   - guest_name (text)
   - check_in (timestamptz)
   - check_out (timestamptz)
   - next_check_in (timestamptz)
-  - assigned_staff (text)
-  - status (text) - Cleaning status: 'pending', 'scheduled', 'in_progress', 'complete'
-  - scheduled_start (timestamptz)
-  - property_clean_status (text) - 'needs_cleaning', 'cleaning_scheduled', 'cleaning_complete'
-  - card_actions (text) - 'not_started', 'in_progress', 'paused', 'completed'
+  - occupancy_status (text)  -- 'occupied' or 'vacant'
+  - tasks (jsonb)            -- array of turnover task objects
+  - total_tasks (integer)
+  - completed_tasks (integer)
+  - tasks_in_progress (integer)
+  - turnover_status (text)   -- 'no_tasks', 'not_started', 'in_progress', 'complete'
 
-cleanings table:
-  - id (uuid)
-  - property_name (text)
-  - scheduled_start (timestamptz)
+Each task object inside "tasks" has:
+  - task_id (uuid)
+  - template_id (uuid)
+  - template_name (text)
+  - type (text)              -- 'cleaning', 'maintenance', 'inspection', etc.
+  - status (text)            -- 'not_started', 'in_progress', 'complete'
   - assigned_staff (text)
-  - status (text)
-  - reservation_id (uuid)
-  - earliest_start (timestamptz)
-  - latest_finish (timestamptz)
-  - created_at (timestamptz)
-  - updated_at (timestamptz)
+  - scheduled_start (timestamptz)
+  - card_actions (text)
+  - form_metadata (jsonb)
+  - completed_at (timestamptz)
 
-reservations table:
+----------------------------------------------------
+Base Tables
+----------------------------------------------------
+
+reservations:
   - id (uuid)
   - property_name (text)
   - guest_name (text)
   - check_in (timestamptz)
   - check_out (timestamptz)
+  - created_at (timestamptz)
+  - updated_at (timestamptz)
+
+turnover_tasks:
+  - id (uuid)
+  - reservation_id (uuid)
+  - template_id (uuid)
+  - type (text)
+  - status (text)            -- 'not_started', 'in_progress', 'complete'
+  - assigned_staff (text)
+  - scheduled_start (timestamptz)
+  - card_actions (text)
+  - form_metadata (jsonb)
+  - completed_at (timestamptz)
+  - created_at (timestamptz)
+  - updated_at (timestamptz)
+
+templates (task templates):
+  - id (uuid)
+  - name (text)
+  - description (text)
+  - fields (jsonb)
+  - type (text)
+  - created_at (timestamptz)
+  - updated_at (timestamptz)
+
+property_templates:
+  - property_name (text)
+  - template_id (uuid)
+  - enabled (boolean)
   - created_at (timestamptz)
   - updated_at (timestamptz)
 `;
@@ -53,55 +90,66 @@ reservations table:
 export async function POST(request: NextRequest) {
   try {
     const { prompt } = await request.json();
-    
-    // Get current date/time for context
+    if (!prompt) {
+      return NextResponse.json({ error: "Missing prompt" }, { status: 400 });
+    }
+
     const now = new Date();
-    
-    // Generate SQL with GPT-4o-mini
+
+    //
+    // CHAIN-OF-THOUGHT: Intent + SQL in one call
+    //
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content: `You are a PostgreSQL expert. Generate SQL queries based on natural language requests.
+          content: `You are a PostgreSQL expert for the Foreshadow property management system.
 
-CURRENT DATE/TIME CONTEXT:
-- Full timestamp: ${now.toISOString()}
-- Current date: ${now.toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric',
-    timeZone: 'America/Los_Angeles'
-  })}
-- Current time: ${now.toLocaleTimeString('en-US', { 
-    hour: '2-digit', 
-    minute: '2-digit',
-    timeZone: 'America/Los_Angeles'
-  })}
-- Current year: ${now.getFullYear()}
+STEP 1: First, analyze the user's question and create a structured intent:
+{
+  "entity": "turnovers" | "tasks" | "reservations" | "templates",
+  "filters": { key-value pairs for constraints },
+  "reasoning": "brief explanation of what data is needed"
+}
+
+STEP 2: Then generate the SQL query based on that intent.
+
+Current context:
+- Today: ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' })}
+- Year: ${now.getFullYear()}
 - Timezone: America/Los_Angeles
 
 ${DATABASE_SCHEMA}
 
-IMPORTANT: When the query includes '/cards', ALWAYS use get_property_turnovers() function.
+QUERY PATTERNS:
 
-EXAMPLES:
-- "/cards show unassigned" → SELECT * FROM get_property_turnovers() WHERE assigned_staff IS NULL
-- "/cards properties needing cleaning" → SELECT * FROM get_property_turnovers() WHERE property_clean_status = 'needs_cleaning'
-- "/cards scheduled cleanings at crane" → SELECT * FROM get_property_turnovers() WHERE property_clean_status = 'cleaning_scheduled' AND property_name ILIKE '%crane%'
+1. entity = "turnovers" (property overview, occupancy, turnover status):
+   SELECT * FROM get_property_turnovers() WHERE ...
 
-For queries without '/cards', you may use base tables (cleanings, reservations) for analytical questions.
+2. entity = "tasks" (specific task queries, staff assignments, cleanings):
+   SELECT * FROM turnover_tasks WHERE type = 'cleaning' AND assigned_staff ILIKE '%name%'
 
-Instructions:
-- Return ONLY the SQL query, no markdown, no explanations, no backticks
-- DO NOT include a semicolon at the end
-- Use proper PostgreSQL syntax
+3. For filtering tasks within turnovers:
+   SELECT t.property_name, t.guest_name, task
+   FROM get_property_turnovers() t, jsonb_array_elements(t.tasks) AS task
+   WHERE task->>'assigned_staff' ILIKE '%Grace%'
+   AND task->>'status' = 'complete'
+
+4. entity = "reservations":
+   SELECT * FROM reservations WHERE ...
+
+OUTPUT FORMAT (you MUST follow this exactly):
+---INTENT---
+{your JSON intent here}
+---SQL---
+{your SQL query here, no backticks, no semicolon}
+
+RULES:
+- Use ILIKE for case-insensitive text matching
+- Use proper date functions (CURRENT_DATE, NOW(), INTERVAL)
 - Add LIMIT 100 if no limit specified
-- For property names, use ILIKE '%search%' for fuzzy matching
-- For date/time comparisons, use PostgreSQL functions like CURRENT_DATE, NOW(), INTERVAL
-- When user mentions dates without year, assume current year (${now.getFullYear()})
-- When joining tables, use proper JOIN syntax`
+- Do NOT include semicolons or markdown backticks in SQL`
         },
         {
           role: "user",
@@ -110,36 +158,71 @@ Instructions:
       ],
       temperature: 0.3
     });
+
+    const responseText = completion.choices[0].message.content || '';
     
-    let sqlQuery = completion.choices[0]?.message?.content?.trim() || '';
+    // Parse out the intent and SQL from the response
+    let intent = null;
+    let sqlQuery = '';
     
-    // Remove markdown code blocks if present
-    sqlQuery = sqlQuery.replace(/```sql\n?/g, '').replace(/```\n?/g, '').trim();
-    
-    // Remove trailing semicolon (causes issues with dynamic SQL execution)
-    sqlQuery = sqlQuery.replace(/;+\s*$/g, '');
-    
-    // Execute via Supabase RPC
-    const { data, error } = await supabase.rpc('execute_dynamic_sql', {
-      sql_query: sqlQuery
-    });
-    
-    if (error) {
-      return NextResponse.json({ 
-        error: error.message,
-        sql: sqlQuery 
-      }, { status: 400 });
+    // Extract intent
+    const intentMatch = responseText.match(/---INTENT---\s*([\s\S]*?)\s*---SQL---/);
+    if (intentMatch) {
+      try {
+        intent = JSON.parse(intentMatch[1].trim());
+      } catch (e) {
+        // Intent parsing failed, but we can still try to get SQL
+        intent = { raw: intentMatch[1].trim() };
+      }
     }
     
-    return NextResponse.json({ 
-      data, 
-      sql: sqlQuery 
-    });
+    // Extract SQL
+    const sqlMatch = responseText.match(/---SQL---\s*([\s\S]*?)$/);
+    if (sqlMatch) {
+      sqlQuery = sqlMatch[1].trim();
+    }
     
+    // Fallback: if no markers found, try to extract SQL directly
+    if (!sqlQuery) {
+      sqlQuery = responseText.replace(/```sql\n?/gi, '').replace(/```\n?/g, '').trim();
+    }
+    
+    // Clean up SQL
+    sqlQuery = sqlQuery.replace(/;+\s*$/g, '').trim();
+
+    // SQL SAFETY CHECK — only allow SELECT
+    if (!sqlQuery || !sqlQuery.toLowerCase().startsWith("select")) {
+      return NextResponse.json(
+        { error: "Unsafe SQL rejected", sql: sqlQuery || 'N/A', intent, rawResponse: responseText },
+        { status: 400 }
+      );
+    }
+
+    //
+    // EXECUTE SQL AGAINST SUPABASE
+    //
+    const { data, error } = await supabase.rpc("execute_dynamic_sql", { sql_query: sqlQuery });
+
+    if (error) {
+      return NextResponse.json(
+        { error: "Database error", details: error.message, sql: sqlQuery, intent },
+        { status: 500 }
+      );
+    }
+
+    //
+    // RETURN RESULTS
+    //
+    return NextResponse.json({
+      intent,
+      sql: sqlQuery,
+      results: data
+    });
+
   } catch (err: any) {
-    return NextResponse.json({ 
-      error: err.message 
-    }, { status: 500 });
+    return NextResponse.json(
+      { error: err.message || "Unknown server error" },
+      { status: 500 }
+    );
   }
 }
-
