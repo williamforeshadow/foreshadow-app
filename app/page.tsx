@@ -27,6 +27,7 @@ import FloatingWindow from '@/components/FloatingWindow';
 import CleaningForm from '@/components/CleaningForm';
 import DynamicCleaningForm from '@/components/DynamicCleaningForm';
 import TurnoverCards from '@/components/TurnoverCards';
+import { AiChat } from '@/components/AiChat';
 
 // Mobile imports
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -53,9 +54,6 @@ export default function Home() {
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [naturalQuery, setNaturalQuery] = useState('');
-  const [generatedSQL, setGeneratedSQL] = useState('');
-  const [isExecutingQuery, setIsExecutingQuery] = useState(false);
   const [selectedCard, setSelectedCard] = useState<any>(null);
   const [currentTemplate, setCurrentTemplate] = useState<any>(null);
   const [loadingTemplate, setLoadingTemplate] = useState(false);
@@ -74,11 +72,10 @@ export default function Home() {
   const [sortBy, setSortBy] = useState('status-priority');
   const [showCardsWindow, setShowCardsWindow] = useState(true);
   const [showTimelineWindow, setShowTimelineWindow] = useState(true);
-  const [showQueryWindow, setShowQueryWindow] = useState(false);
   const [showProjectsWindow, setShowProjectsWindow] = useState(false);
   const [backgroundImage, setBackgroundImage] = useState<1 | 2>(1);
-  const [activeWindow, setActiveWindow] = useState<'cards' | 'timeline' | 'query' | 'projects'>('cards');
-  const [windowOrder, setWindowOrder] = useState<Array<'cards' | 'timeline' | 'query' | 'projects'>>(['cards', 'timeline', 'query', 'projects']);
+  const [activeWindow, setActiveWindow] = useState<'cards' | 'timeline' | 'projects'>('cards');
+  const [windowOrder, setWindowOrder] = useState<Array<'cards' | 'timeline' | 'projects'>>(['cards', 'timeline', 'projects']);
   const [projects, setProjects] = useState<any[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [showProjectDialog, setShowProjectDialog] = useState(false);
@@ -124,7 +121,7 @@ export default function Home() {
   const [discussionExpanded, setDiscussionExpanded] = useState(false);
 
   // Window stacking order management
-  const bringToFront = (window: 'cards' | 'timeline' | 'query' | 'projects') => {
+  const bringToFront = (window: 'cards' | 'timeline' | 'projects') => {
     setActiveWindow(window);
     setWindowOrder(prev => {
       const filtered = prev.filter(w => w !== window);
@@ -132,7 +129,7 @@ export default function Home() {
     });
   };
 
-  const getZIndex = (window: 'cards' | 'timeline' | 'query' | 'projects') => {
+  const getZIndex = (window: 'cards' | 'timeline' | 'projects') => {
     const position = windowOrder.indexOf(window);
     return 10 + position; // Base 10, then 11, 12, 13 based on stack position
   };
@@ -432,42 +429,6 @@ export default function Home() {
       setError(err.message || 'Failed to call RPC function');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const executeNaturalQuery = async () => {
-    setIsExecutingQuery(true);
-    setError(null);
-    setResponse(null);
-    setGeneratedSQL('');
-    setAiSummary(null);
-    
-    try {
-      const res = await fetch('/api/sql-query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: naturalQuery })
-      });
-      
-      const result = await res.json();
-      
-      if (result.error) {
-        setError(`SQL Error: ${result.error}\n\nGenerated SQL:\n${result.sql || 'N/A'}`);
-      } else {
-        console.log('=== SQL Query Response ===');
-        console.log('SQL:', result.sql);
-        console.log('Results type:', typeof result.results);
-        console.log('Results is array:', Array.isArray(result.results));
-        console.log('Results length:', result.results?.length);
-        console.log('First result:', JSON.stringify(result.results?.[0], null, 2));
-        setGeneratedSQL(result.sql);
-        setResponse(result.results);
-        console.log('Response state set');
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setIsExecutingQuery(false);
     }
   };
 
@@ -1464,93 +1425,6 @@ export default function Home() {
   const timelineWindowContent = useMemo(() => (
     <Timeline onCardClick={setSelectedCard} />
   ), []);
-
-  const queryWindowContent = useMemo(() => (
-    <div className="p-6 space-y-4">
-      {/* Natural Language Query Section */}
-      <div className="space-y-3">
-        <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
-          Natural Language Query
-        </h3>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={naturalQuery}
-            onChange={(e) => setNaturalQuery(e.target.value)}
-            placeholder="e.g., show me all cleanings for next week"
-            className="flex-1 px-4 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
-            onKeyDown={(e) => e.key === 'Enter' && executeNaturalQuery()}
-          />
-          <Button
-            onClick={executeNaturalQuery}
-            disabled={isExecutingQuery || !naturalQuery.trim()}
-          >
-            {isExecutingQuery ? 'Executing...' : 'Execute'}
-          </Button>
-        </div>
-        
-        {generatedSQL && (
-          <div className="p-3 bg-neutral-100 dark:bg-neutral-800 rounded-lg">
-            <p className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-1">Generated SQL:</p>
-            <pre className="text-xs text-neutral-900 dark:text-white font-mono overflow-x-auto">
-              {generatedSQL}
-            </pre>
-          </div>
-        )}
-      </div>
-
-      {/* AI Summary Section */}
-      {response !== null && (
-        <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
-              🤖 AI Summary
-            </h3>
-            <div className="flex gap-2">
-              <button
-                onClick={generateAISummary}
-                disabled={isGeneratingSummary || isSpeaking}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:bg-neutral-400 disabled:cursor-not-allowed transition-colors"
-              >
-                {isGeneratingSummary ? '🔄 Generating...' : '✨ Generate Summary'}
-              </button>
-              
-              {isSpeaking && (
-                <button
-                  onClick={stopSpeaking}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
-                >
-                  🔇 Stop Speaking
-                </button>
-              )}
-            </div>
-          </div>
-          
-          {aiSummary && (
-            <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <div className="text-2xl">
-                  {isSpeaking ? '🔊' : '💬'}
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-neutral-900 dark:text-white leading-relaxed">
-                    {aiSummary}
-                  </p>
-                  <button
-                    onClick={() => speakText(aiSummary)}
-                    disabled={isSpeaking}
-                    className="mt-3 text-xs text-purple-600 dark:text-purple-400 hover:underline disabled:opacity-50"
-                  >
-                    🔊 Read again
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  ), [naturalQuery, isExecutingQuery, generatedSQL, response, aiSummary, isGeneratingSummary, isSpeaking]);
 
   // Group projects by property
   const groupedProjects = useMemo(() => {
@@ -2942,21 +2816,6 @@ export default function Home() {
               >
                 Projects
               </Button>
-              <Button
-                onClick={() => {
-                  if (showQueryWindow) {
-                    setShowQueryWindow(false);
-                  } else {
-                    setShowQueryWindow(true);
-                    bringToFront('query');
-                  }
-                }}
-                variant="secondary"
-                size="sm"
-                className="px-4 py-2"
-              >
-                Query
-              </Button>
             </div>
           </div>
 
@@ -3009,21 +2868,6 @@ export default function Home() {
             </FloatingWindow>
           )}
 
-          {/* Query Window */}
-          {showQueryWindow && (
-            <FloatingWindow
-              id="query"
-              title="Natural Language Query"
-              defaultPosition={{ x: 250, y: 250 }}
-              defaultSize={{ width: '60%', height: '70%' }}
-              zIndex={getZIndex('query')}
-              onClose={() => setShowQueryWindow(false)}
-              onFocus={() => bringToFront('query')}
-            >
-              {queryWindowContent}
-            </FloatingWindow>
-          )}
-
           {/* Projects Window */}
           {showProjectsWindow && (
             <FloatingWindow
@@ -3042,13 +2886,16 @@ export default function Home() {
           {/* Background Toggle Button */}
           <button
             onClick={() => setBackgroundImage(prev => prev === 1 ? 2 : 1)}
-            className="absolute bottom-4 right-4 p-2 rounded-full bg-black/20 hover:bg-black/40 backdrop-blur-sm border border-white/10 transition-all duration-200 opacity-40 hover:opacity-100 z-50"
+            className="absolute bottom-4 left-4 p-2 rounded-full bg-black/20 hover:bg-black/40 backdrop-blur-sm border border-white/10 transition-all duration-200 opacity-40 hover:opacity-100 z-50"
             title={`Switch to background ${backgroundImage === 1 ? '2' : '1'}`}
           >
             <svg className="w-4 h-4 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </button>
+
+          {/* AI Chat */}
+          <AiChat />
         </div>
       </div>
 

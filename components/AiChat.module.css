@@ -1,0 +1,205 @@
+.container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 50;
+  width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.responseArea {
+  position: relative;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  padding: 1rem;
+  max-height: 300px;
+  overflow-y: auto;
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.2);
+}
+
+.responseMessage {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.botIcon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: hsl(var(--primary) / 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.botIconSvg {
+  width: 14px;
+  height: 14px;
+  color: hsl(var(--primary));
+}
+
+.responseText {
+  flex: 1;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: hsl(var(--foreground));
+  white-space: pre-wrap;
+}
+
+.toolBadge {
+  font-size: 0.625rem;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 0.25rem;
+}
+
+.inputCard {
+  padding: 0.75rem !important;
+  gap: 0.75rem;
+  border-radius: var(--radius);
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card) / 0.95);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+.inputArea {
+  width: 100%;
+  padding: 0 !important;
+}
+
+.textarea {
+  background-color: transparent;
+  border: none;
+  padding: 0.25rem;
+  resize: none;
+  min-height: 2.5rem;
+  height: auto;
+  outline: none !important;
+  line-height: 1.5;
+  width: 100%;
+  font-size: 0.875rem;
+  color: hsl(var(--foreground));
+}
+
+.textarea::placeholder {
+  color: hsl(var(--muted-foreground));
+}
+
+.footer {
+  gap: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 !important;
+}
+
+.leftActions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.iconButton {
+  padding: 8px;
+  border-radius: 50% !important;
+  flex-shrink: 0;
+  width: 32px !important;
+  height: 32px !important;
+}
+
+.attachButton {
+  composes: iconButton;
+}
+
+.attachButtonIcon {
+  color: hsl(var(--muted-foreground));
+  flex-shrink: 0;
+  transform: rotate(-45deg);
+}
+
+.submitButton {
+  border-radius: 50% !important;
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+}
+
+.submitButtonIcon {
+  color: hsl(var(--muted-foreground));
+}
+
+.selectTrigger {
+  gap: 0.5rem;
+}
+
+.selectIcon {
+  color: hsl(var(--muted-foreground));
+}
+
+.toggleButton {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 50;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.loadingDots {
+  display: flex;
+  gap: 4px;
+  padding: 0.5rem 0;
+}
+
+.loadingDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: hsl(var(--muted-foreground));
+  animation: bounce 1.4s infinite ease-in-out both;
+}
+
+.loadingDot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.loadingDot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}
+
+.closeResponseButton {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 20px !important;
+  height: 20px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+}
+
+.mainCloseButton {
+  position: absolute;
+  top: -0.75rem;
+  right: -0.75rem;
+  width: 24px !important;
+  height: 24px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  background: hsl(var(--background)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
