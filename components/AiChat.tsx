@@ -29,7 +29,6 @@ const aiModes = [
 
 interface AIResponse {
   content: string;
-  toolUsed?: string;
 }
 
 export function AiChat() {
@@ -58,7 +57,7 @@ export function AiChat() {
     setResponse(null);
 
     try {
-      const res = await fetch("/api/ai-router", {
+      const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: userMessage }),
@@ -66,13 +65,10 @@ export function AiChat() {
 
       const data = await res.json();
 
-      if (data.error) {
-        setResponse({ content: `Error: ${data.error}` });
+      if (!res.ok || data.error) {
+        setResponse({ content: `Error: ${data.error || "Something went wrong"}` });
       } else {
-        setResponse({
-          content: data.answer,
-          toolUsed: data.tool_used,
-        });
+        setResponse({ content: data.answer });
       }
     } catch (err: any) {
       setResponse({ content: `Error: ${err.message || "Failed to get response"}` });
@@ -128,14 +124,7 @@ export function AiChat() {
                   <span className={styles.loadingDot} />
                 </div>
               ) : response ? (
-                <>
-                  {response.toolUsed && response.toolUsed !== "none" && (
-                    <div className={styles.toolBadge}>
-                      {response.toolUsed === "snapshot" ? "📊 Snapshot" : "🔍 Database"}
-                    </div>
-                  )}
-                  {response.content}
-                </>
+                response.content
               ) : null}
             </div>
           </div>

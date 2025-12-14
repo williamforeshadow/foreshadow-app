@@ -445,7 +445,7 @@ export default function Home() {
       });
   
       const completion = await openai.chat.completions.create({
-        model: "gpt-4",
+        model: "gpt-5",
         messages: [
           {
             role: "system",
@@ -456,7 +456,7 @@ export default function Home() {
             content: `Please summarize this data in natural language:\n\n${JSON.stringify(response, null, 2)}`
           }
         ],
-        temperature: 0.7,
+        temperature: 0.2,
         max_tokens: 500
       });
   
