@@ -17,6 +17,7 @@
     "mobile:android": "npm run build && npm run cap:sync && npm run cap:open:android"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
     "@base-ui-components/react": "^1.0.0-beta.7",
     "@capacitor/android": "^7.4.4",
     "@capacitor/cli": "^7.4.4",
