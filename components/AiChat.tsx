@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 import {
   ArrowUp,
   AudioLines,
@@ -124,7 +125,9 @@ export function AiChat() {
                   <span className={styles.loadingDot} />
                 </div>
               ) : response ? (
-                response.content
+                <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-li:my-0">
+                  <ReactMarkdown>{response.content}</ReactMarkdown>
+                </div>
               ) : null}
             </div>
           </div>

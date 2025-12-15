@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 
+// Debug: Log if API key is present
+console.log("ANTHROPIC_API_KEY present:", !!process.env.ANTHROPIC_API_KEY);
+
 const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
+  apiKey: process.env.ANTHROPIC_API_KEY || "",
 });
 
 const supabase = createClient(
@@ -157,6 +160,17 @@ Guidelines:
 - If there's an error, explain what might have gone wrong`;
 
 export async function POST(req: NextRequest) {
+  console.log("=== Agent API called ===");
+  
+  // Check if API key is available
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error("ANTHROPIC_API_KEY is not set!");
+    return NextResponse.json(
+      { error: "Server configuration error: Missing API key" },
+      { status: 500 }
+    );
+  }
+  
   try {
     const { prompt } = await req.json();
 
@@ -296,7 +310,10 @@ Please provide a clear, helpful answer to the user's question based on these res
     });
 
   } catch (err: any) {
-    console.error("Agent error:", err);
+    console.error("=== Agent error ===");
+    console.error("Error message:", err.message);
+    console.error("Error stack:", err.stack);
+    console.error("Full error:", JSON.stringify(err, null, 2));
     return NextResponse.json(
       { error: err.message || "Unknown server error" },
       { status: 500 }
