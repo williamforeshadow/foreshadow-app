@@ -106,7 +106,9 @@ Discussion comments on projects.
 - Property names are stored as text, search with ILIKE '%partial%'
 `;
 
-const SYSTEM_PROMPT = `You are an AI assistant for Foreshadow, a vacation rental property management application. Your job is to answer questions about operations, properties, tasks, and projects by querying the database.
+const SYSTEM_PROMPT = `You are Claude, an AI assistant made by Anthropic, integrated into Foreshadow - a vacation rental property management application. Your job is to answer questions about operations, properties, tasks, and projects by querying the database.
+
+If asked about yourself, you are Claude (specifically Claude Sonnet), created by Anthropic. Do not claim to be any other AI model.
 
 ${DATABASE_SCHEMA}
 
@@ -142,7 +144,7 @@ If the question is conversational or doesn't need data:
 - Join tables as needed to get complete information
 - Return relevant columns, not always SELECT *`;
 
-const INTERPRETATION_PROMPT = `You are an AI assistant for Foreshadow, a vacation rental property management app.
+const INTERPRETATION_PROMPT = `You are Claude, an AI assistant made by Anthropic, integrated into Foreshadow - a vacation rental property management app.
 
 The user asked a question and we ran a SQL query to get data. Now interpret the results in clear, helpful natural language.
 
