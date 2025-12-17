@@ -10,13 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Field,
-  FieldContent,
   FieldDescription,
   FieldError,
-  FieldGroup,
   FieldLabel,
-  FieldSeparator,
-  FieldSet,
 } from '@/components/ui/field';
 import {
   Select,
@@ -564,66 +560,57 @@ export default function TemplatesPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={saveTemplate} className="px-2">
-            <FieldSet>
-              <FieldGroup>
-                {/* Template Name */}
-                <Field>
-                  <FieldLabel>Template Name</FieldLabel>
-                  <FieldContent>
-                    <Input 
-                      placeholder="e.g., Standard Clean, Deep Clean" 
-                      value={formName}
-                      onChange={(e) => {
-                        setFormName(e.target.value);
-                        if (formErrors.name) setFormErrors({});
-                      }}
-                      disabled={isSaving}
-                      required
-                    />
-                    {formErrors.name && <FieldError>{formErrors.name}</FieldError>}
-                  </FieldContent>
-                </Field>
+          <form onSubmit={saveTemplate} className="px-2 space-y-6">
+            {/* Template Name */}
+            <Field>
+              <FieldLabel>Template Name</FieldLabel>
+              <Input 
+                placeholder="e.g., Standard Clean, Deep Clean" 
+                value={formName}
+                onChange={(e) => {
+                  setFormName(e.target.value);
+                  if (formErrors.name) setFormErrors({});
+                }}
+                disabled={isSaving}
+                required
+              />
+              {formErrors.name && <FieldError>{formErrors.name}</FieldError>}
+            </Field>
 
-                {/* Template Type */}
-                <Field>
-                  <FieldLabel>Template Type</FieldLabel>
-                  <FieldContent>
-                    <Select 
-                      onValueChange={(value) => setFormType(value as 'cleaning' | 'maintenance')} 
-                      value={formType}
-                      disabled={isSaving}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select type..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cleaning">Cleaning</SelectItem>
-                        <SelectItem value="maintenance">Maintenance</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FieldDescription>Choose whether this is a cleaning or maintenance template</FieldDescription>
-                  </FieldContent>
-                </Field>
+            {/* Template Type */}
+            <Field>
+              <FieldLabel>Template Type</FieldLabel>
+              <Select 
+                onValueChange={(value) => setFormType(value as 'cleaning' | 'maintenance')} 
+                value={formType}
+                disabled={isSaving}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cleaning">Cleaning</SelectItem>
+                  <SelectItem value="maintenance">Maintenance</SelectItem>
+                </SelectContent>
+              </Select>
+              <FieldDescription>Choose whether this is a cleaning or maintenance template</FieldDescription>
+            </Field>
 
-                {/* Template Description */}
-                <Field>
-                  <FieldLabel>Description (Optional)</FieldLabel>
-                  <FieldContent>
-                    <Textarea 
-                      placeholder="Brief description of this template"
-                      rows={2}
-                      value={formDescription}
-                      onChange={(e) => setFormDescription(e.target.value)}
-                      disabled={isSaving}
-                    />
-                  </FieldContent>
-                </Field>
-              </FieldGroup>
+            {/* Template Description */}
+            <Field>
+              <FieldLabel>Description (Optional)</FieldLabel>
+              <Textarea 
+                placeholder="Brief description of this template"
+                rows={2}
+                value={formDescription}
+                onChange={(e) => setFormDescription(e.target.value)}
+                disabled={isSaving}
+              />
+            </Field>
 
-              <FieldSeparator>Form Fields</FieldSeparator>
-
-              {/* Form Fields Section */}
+            {/* Form Fields Section */}
+            <div className="border-t border-neutral-200 dark:border-neutral-700 pt-6">
+              <h3 className="text-sm font-medium mb-4">Form Fields</h3>
               <div>
                 <div className="flex items-center justify-end mb-4">
                   <DropdownMenu>
@@ -652,7 +639,7 @@ export default function TemplatesPage() {
                     </p>
                   </div>
                 ) : (
-                  <FieldGroup>
+                  <div className="space-y-4">
                     {fields.map((field, index) => (
                       <div
                         key={field.id}
@@ -720,10 +707,10 @@ export default function TemplatesPage() {
                         </div>
                       </div>
                     ))}
-                  </FieldGroup>
+                  </div>
                 )}
               </div>
-            </FieldSet>
+            </div>
 
             <div className="flex justify-end gap-3 mt-8">
               <Button type="button" variant="outline" onClick={() => setShowCreateDialog(false)} disabled={isSaving}>

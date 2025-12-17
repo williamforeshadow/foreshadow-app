@@ -16,10 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Field,
-  FieldContent,
-  FieldGroup,
   FieldLabel,
-  FieldSeparator,
 } from '@/components/ui/field';
 import { ChevronDownIcon } from 'lucide-react';
 import Timeline from '@/components/Timeline';
@@ -430,70 +427,6 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const generateAISummary = async () => {
-    if (!response) return;
-    
-    setIsGeneratingSummary(true);
-    setAiSummary(null);
-    
-    try {
-      const openai = new OpenAI({
-        apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
-        dangerouslyAllowBrowser: true // Note: In production, call OpenAI from a server route
-      });
-  
-      const completion = await openai.chat.completions.create({
-        model: "gpt-5",
-        messages: [
-          {
-            role: "system",
-            content: "You are a helpful assistant that summarizes property cleaning and reservation data in a clear, concise, and natural way. Focus on key information like property names, dates, guest names, and status."
-          },
-          {
-            role: "user",
-            content: `Please summarize this data in natural language:\n\n${JSON.stringify(response, null, 2)}`
-          }
-        ],
-        temperature: 0.2,
-        max_tokens: 500
-      });
-  
-      const summary = completion.choices[0]?.message?.content || 'No summary generated';
-      setAiSummary(summary);
-      
-      // Automatically speak the summary
-      speakText(summary);
-      
-    } catch (err: any) {
-      setError(`AI Summary Error: ${err.message}`);
-    } finally {
-      setIsGeneratingSummary(false);
-    }
-  };
-  
-  const speakText = (text: string) => {
-    // Cancel any ongoing speech
-    window.speechSynthesis.cancel();
-    
-    if (!text) return;
-    
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-    
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-    
-    window.speechSynthesis.speak(utterance);
-  };
-  
-  const stopSpeaking = () => {
-    window.speechSynthesis.cancel();
-    setIsSpeaking(false);
   };
 
   const updateCardAction = async (cleaningId: string, newAction: string) => {
