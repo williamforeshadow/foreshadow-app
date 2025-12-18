@@ -41,7 +41,7 @@ Tasks associated with turnovers (cleanings, maintenance between guests).
 | assigned_staff | text | Name of assigned staff member |
 | scheduled_start | timestamptz | Scheduled start time |
 | card_actions | text | Action state: 'not_started', 'in_progress', 'paused', 'completed' |
-| form_metadata | jsonb | Form data and responses |
+| form_metadata | jsonb | Form responses with field labels. Each field is stored as: {"field_id": {"label": "Human readable question", "type": "rating|text|yes-no|checkbox|photo", "value": "the answer"}}. Also contains template_name and property_name. |
 | completed_at | timestamptz | When task was completed |
 | created_at | timestamptz | Record creation time |
 | updated_at | timestamptz | Last update time |

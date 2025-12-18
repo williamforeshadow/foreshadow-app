@@ -4,29 +4,15 @@ import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import {
   ArrowUp,
-  AudioLines,
-  Bot,
+  ChevronUp,
+  ChevronDown,
   MessageSquare,
   Paperclip,
-  WandSparkles,
   X,
-  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import styles from "./AiChat.module.css";
-
-const aiModes = [
-  { value: "default", label: "Default", icon: WandSparkles },
-  { value: "fast", label: "Fast", icon: Zap },
-];
 
 interface AIResponse {
   content: string;
@@ -34,10 +20,10 @@ interface AIResponse {
 
 export function AiChat() {
   const [inputValue, setInputValue] = useState("");
-  const [selectedMode, setSelectedMode] = useState("default");
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] = useState<AIResponse | null>(null);
+  const [showResponse, setShowResponse] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize textarea
@@ -56,6 +42,7 @@ export function AiChat() {
     setInputValue("");
     setIsLoading(true);
     setResponse(null);
+    setShowResponse(true);
 
     try {
       const res = await fetch("/api/agent", {
@@ -98,25 +85,21 @@ export function AiChat() {
     );
   }
 
-  const SelectedIcon = aiModes.find((m) => m.value === selectedMode)?.icon || WandSparkles;
-
   return (
     <div className={styles.container}>
       {/* Response Area */}
-      {(response || isLoading) && (
+      {(response || isLoading) && showResponse && (
         <div className={styles.responseArea}>
           <Button
             variant="ghost"
             size="icon"
             className={styles.closeResponseButton}
-            onClick={() => setResponse(null)}
+            onClick={() => setShowResponse(false)}
+            title="Minimize response"
           >
-            <X className="h-3 w-3" />
+            <ChevronDown className="h-4 w-4" />
           </Button>
           <div className={styles.responseMessage}>
-            <div className={styles.botIcon}>
-              <Bot />
-            </div>
             <div className={styles.responseText}>
               {isLoading ? (
                 <div className={styles.loadingDots}>
@@ -125,13 +108,24 @@ export function AiChat() {
                   <span className={styles.loadingDot} />
                 </div>
               ) : response ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-li:my-0">
+                <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-3 prose-ul:my-2 prose-li:my-0.5">
                   <ReactMarkdown>{response.content}</ReactMarkdown>
                 </div>
               ) : null}
             </div>
           </div>
         </div>
+      )}
+
+      {/* Toggle button to show response when hidden */}
+      {response && !showResponse && !isLoading && (
+        <button
+          className={styles.responseToggle}
+          onClick={() => setShowResponse(true)}
+        >
+          <ChevronUp size={14} />
+          <span>Show AI Response</span>
+        </button>
       )}
 
       {/* Input Card */}
@@ -142,7 +136,7 @@ export function AiChat() {
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask and I'll answer."
+            placeholder="Ask a question..."
             rows={1}
             style={{ outline: "none" }}
           />
@@ -150,45 +144,23 @@ export function AiChat() {
         <CardFooter className={styles.footer}>
           <div className={styles.leftActions}>
             <Button
-              className={`${styles.iconButton} ${styles.attachButton}`}
+              className={styles.attachButton}
               size="icon"
               type="button"
-              variant="outline"
+              variant="ghost"
             >
-              <Paperclip size={14} />
+              <Paperclip size={12} />
             </Button>
-
-            <Select value={selectedMode} onValueChange={setSelectedMode}>
-              <SelectTrigger size="sm" className={styles.selectTrigger}>
-                <SelectValue>
-                  <div className="flex items-center gap-2">
-                    <SelectedIcon size={14} />
-                    <span>{aiModes.find((m) => m.value === selectedMode)?.label}</span>
-                  </div>
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {aiModes.map(({ label, value, icon: Icon }) => (
-                  <SelectItem key={value} value={value}>
-                    <div className="flex items-center gap-2">
-                      <Icon size={14} />
-                      <span>{label}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
 
           <Button
             className={styles.submitButton}
             size="icon"
             type="button"
-            variant="outline"
             onClick={handleSubmit}
-            disabled={isLoading}
+            disabled={isLoading || !inputValue.trim()}
           >
-            {inputValue.trim() ? <ArrowUp size={16} /> : <AudioLines size={16} />}
+            <ArrowUp size={14} />
           </Button>
         </CardFooter>
 

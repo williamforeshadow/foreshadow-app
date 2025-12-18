@@ -25,7 +25,7 @@ TABLE: turnover_tasks
   assigned_staff (text)
   scheduled_start (timestamptz)
   card_actions (text)
-  form_metadata (jsonb)
+  form_metadata (jsonb) — Form responses with labels. Structure: {"field_id": {"label": "Question text", "type": "rating|text|yes-no|checkbox|photo", "value": "answer"}, template_name, property_name}
   completed_at (timestamptz)
   created_at (timestamptz)
   updated_at (timestamptz)

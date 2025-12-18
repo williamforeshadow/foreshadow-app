@@ -46,6 +46,7 @@ export default function DynamicCleaningForm({
   const [formValues, setFormValues] = useState<Record<string, any>>({});
 
   // Initialize form values from template fields and existing metadata
+  // Handles both old format (raw values) and new format (objects with label/type/value)
   useEffect(() => {
     if (!template) return;
     
@@ -55,7 +56,11 @@ export default function DynamicCleaningForm({
       if (field.type === 'separator') return;
       
       if (formMetadata && formMetadata[field.id] !== undefined) {
-        defaults[field.id] = formMetadata[field.id];
+        const stored = formMetadata[field.id];
+        // Handle both old format (raw value) and new format (object with value property)
+        defaults[field.id] = (typeof stored === 'object' && stored !== null && 'value' in stored)
+          ? stored.value
+          : stored;
       } else {
         // Set default based on field type
         switch (field.type) {
@@ -88,11 +93,26 @@ export default function DynamicCleaningForm({
   };
 
   // Get current form values - exposed for external save
+  // Enriched with labels so AI can understand field context
   const getFormValues = () => {
+    const enrichedFields: Record<string, any> = {};
+    
+    template?.fields.forEach(field => {
+      // Skip separators - they don't have values
+      if (field.type === 'separator') return;
+      
+      enrichedFields[field.id] = {
+        label: field.label,
+        type: field.type,
+        value: formValues[field.id]
+      };
+    });
+
     return {
-      ...formValues,
+      ...enrichedFields,
       property_name: propertyName,
-      template_id: template?.id
+      template_id: template?.id,
+      template_name: template?.name
     };
   };
 

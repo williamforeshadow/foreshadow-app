@@ -1,71 +1,82 @@
+/* Main container - centered at bottom of dashboard */
 .container {
   position: fixed;
-  bottom: 1.5rem;
-  right: 1.5rem;
+  bottom: 0;
+  left: var(--sidebar-width, 256px);
+  right: 0;
   z-index: 50;
-  width: 380px;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  gap: 0.5rem;
 }
 
+/* Response area - solid background, centered */
 .responseArea {
-  position: relative;
-  background: hsl(var(--card));
+  position: fixed;
+  top: 50%;
+  left: calc((100% - var(--sidebar-width, 256px)) / 2 + var(--sidebar-width, 256px));
+  transform: translate(-50%, -50%);
+  width: min(90%, 600px);
+  max-height: 70vh;
+  /* Solid background with fallbacks */
+  background: white !important;
+  background: var(--color-card, white) !important;
   border: 1px solid hsl(var(--border));
-  border-radius: var(--radius);
-  padding: 1rem;
-  max-height: 300px;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
   overflow-y: auto;
   box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.2);
+  z-index: 51;
+  animation: slideUp 0.2s ease-out;
+}
+
+:global(.dark) .responseArea {
+  background: #333 !important;
+  background: var(--color-card, #333) !important;
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translate(-50%, -45%);
+  }
+  to { 
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
 }
 
 .responseMessage {
   display: flex;
-  gap: 0.75rem;
-  align-items: flex-start;
-}
-
-.botIcon {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: hsl(var(--primary) / 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.botIconSvg {
-  width: 14px;
-  height: 14px;
-  color: hsl(var(--primary));
+  flex-direction: column;
 }
 
 .responseText {
-  flex: 1;
   font-size: 0.875rem;
-  line-height: 1.5;
+  line-height: 1.7;
   color: hsl(var(--foreground));
-  white-space: pre-wrap;
 }
 
-.toolBadge {
-  font-size: 0.625rem;
-  color: hsl(var(--muted-foreground));
-  margin-bottom: 0.25rem;
-}
-
+/* Input card - solid background, centered, compact */
 .inputCard {
-  padding: 0.75rem !important;
-  gap: 0.75rem;
-  border-radius: var(--radius);
+  width: 100%;
+  max-width: 600px;
+  padding: 0.5rem 0.75rem !important;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
   border: 1px solid hsl(var(--border));
-  background: hsl(var(--card) / 0.95);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.2);
+  /* Solid background with fallbacks */
+  background: white !important;
+  background: var(--color-card, white) !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
   position: relative;
+}
+
+:global(.dark) .inputCard {
+  background: #333 !important;
+  background: var(--color-card, #333) !important;
 }
 
 .inputArea {
@@ -73,26 +84,26 @@
   padding: 0 !important;
 }
 
-.textarea {
+.inputArea textarea {
   background-color: transparent;
   border: none;
-  padding: 0.25rem;
+  padding: 0.25rem 0;
   resize: none;
-  min-height: 2.5rem;
+  min-height: 1.75rem;
   height: auto;
   outline: none !important;
-  line-height: 1.5;
+  line-height: 1.4;
   width: 100%;
   font-size: 0.875rem;
   color: hsl(var(--foreground));
 }
 
-.textarea::placeholder {
+.inputArea textarea::placeholder {
   color: hsl(var(--muted-foreground));
 }
 
 .footer {
-  gap: 0.5rem;
+  gap: 0.375rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -101,48 +112,45 @@
 
 .leftActions {
   display: flex;
-  gap: 0.5rem;
   align-items: center;
 }
 
-.iconButton {
-  padding: 8px;
-  border-radius: 50% !important;
-  flex-shrink: 0;
-  width: 32px !important;
-  height: 32px !important;
-}
-
 .attachButton {
-  composes: iconButton;
+  width: 28px !important;
+  height: 28px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  color: hsl(var(--muted-foreground));
 }
 
-.attachButtonIcon {
-  color: hsl(var(--muted-foreground));
-  flex-shrink: 0;
-  transform: rotate(-45deg);
+.attachButton:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--accent));
 }
 
 .submitButton {
   border-radius: 50% !important;
-  width: 36px !important;
-  height: 36px !important;
-  min-width: 36px !important;
-  min-height: 36px !important;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  background: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+  border: none !important;
+  transition: opacity 0.15s ease;
 }
 
-.submitButtonIcon {
-  color: hsl(var(--muted-foreground));
+.submitButton:hover {
+  opacity: 0.85;
 }
 
-.selectTrigger {
-  gap: 0.5rem;
+.submitButton:disabled {
+  background: hsl(var(--muted)) !important;
+  color: hsl(var(--muted-foreground)) !important;
+  opacity: 0.6;
 }
 
-.selectIcon {
-  color: hsl(var(--muted-foreground));
-}
-
+/* Toggle button when chat is collapsed */
 .toggleButton {
   position: fixed;
   bottom: 1.5rem;
@@ -151,30 +159,59 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  background: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+  transition: transform 0.15s ease;
 }
 
+.toggleButton:hover {
+  transform: scale(1.05);
+}
+
+/* Show/hide response toggle button */
+.responseToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  border-radius: 1rem;
+  background: #f3f4f6;
+  background: var(--color-muted, #f3f4f6);
+  color: hsl(var(--muted-foreground));
+  border: 1px solid hsl(var(--border));
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+:global(.dark) .responseToggle {
+  background: #3f3f46;
+  background: var(--color-muted, #3f3f46);
+}
+
+.responseToggle:hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+/* Loading dots */
 .loadingDots {
   display: flex;
-  gap: 4px;
+  gap: 5px;
   padding: 0.5rem 0;
 }
 
 .loadingDot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: hsl(var(--muted-foreground));
   animation: bounce 1.4s infinite ease-in-out both;
 }
 
-.loadingDot:nth-child(1) {
-  animation-delay: -0.32s;
-}
-
-.loadingDot:nth-child(2) {
-  animation-delay: -0.16s;
-}
+.loadingDot:nth-child(1) { animation-delay: -0.32s; }
+.loadingDot:nth-child(2) { animation-delay: -0.16s; }
 
 @keyframes bounce {
   0%, 80%, 100% { transform: scale(0); }
@@ -183,23 +220,30 @@
 
 .closeResponseButton {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  width: 20px !important;
-  height: 20px !important;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 28px !important;
+  height: 28px !important;
   padding: 0 !important;
   border-radius: 50% !important;
 }
 
+.closeResponseButton:hover {
+  background: hsl(var(--accent)) !important;
+}
+
 .mainCloseButton {
   position: absolute;
-  top: -0.75rem;
-  right: -0.75rem;
-  width: 24px !important;
-  height: 24px !important;
+  top: 0.375rem;
+  right: 0.375rem;
+  width: 20px !important;
+  height: 20px !important;
   padding: 0 !important;
   border-radius: 50% !important;
-  background: hsl(var(--background)) !important;
-  border: 1px solid hsl(var(--border)) !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  opacity: 0.4;
+  transition: opacity 0.15s ease;
+}
+
+.mainCloseButton:hover {
+  opacity: 1;
 }
