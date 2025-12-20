@@ -311,7 +311,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project_id: expandedProject.id,
-          user_name: currentUser.name,
+          user_id: currentUser.id,
           comment_content: newComment.trim()
         })
       });
@@ -1708,12 +1708,12 @@ export default function Home() {
                         projectComments.map((comment: any) => (
                           <div key={comment.id} className="flex gap-3">
                             <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
-                              {comment.user_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                              {comment.users?.avatar || (comment.users?.name || 'U').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="font-medium text-sm text-neutral-900 dark:text-white">
-                                  {comment.user_name}
+                                  {comment.users?.name || 'Unknown User'}
                                 </span>
                                 <span className="text-xs text-neutral-400 dark:text-neutral-500">
                                   {new Date(comment.created_at).toLocaleDateString('en-US', {

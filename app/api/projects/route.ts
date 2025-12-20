@@ -6,15 +6,23 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET - List all property projects (optionally filter by property_name)
+// GET - List all property projects with assignees
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const propertyName = searchParams.get('property_name');
+    const userId = searchParams.get('user_id'); // For "My Assignments" filtering
 
     let query = supabase
       .from('property_projects')
-      .select('*')
+      .select(`
+        *,
+        project_assignments(
+          user_id,
+          assigned_at,
+          users(id, name, email, role, avatar)
+        )
+      `)
       .order('property_name', { ascending: true })
       .order('priority', { ascending: false })
       .order('created_at', { ascending: false });
@@ -32,7 +40,15 @@ export async function GET(request: Request) {
       );
     }
 
-    return NextResponse.json({ data });
+    // If filtering by user_id, filter projects that have this user assigned
+    let filteredData = data;
+    if (userId && data) {
+      filteredData = data.filter(project => 
+        project.project_assignments?.some((a: any) => a.user_id === userId)
+      );
+    }
+
+    return NextResponse.json({ data: filteredData });
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || 'Failed to fetch projects' },
@@ -41,7 +57,7 @@ export async function GET(request: Request) {
   }
 }
 
-// POST - Create a new property project
+// POST - Create a new property project with optional assignees
 export async function POST(request: Request) {
   console.log('POST /api/projects called');
   
@@ -49,7 +65,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     console.log('Request body:', JSON.stringify(body, null, 2));
     
-    const { property_name, title, description, status, priority, assigned_staff, due_date } = body;
+    const { property_name, title, description, status, priority, assigned_user_ids, due_date } = body;
 
     if (!property_name || !title) {
       console.log('Validation failed: missing property_name or title');
@@ -59,8 +75,9 @@ export async function POST(request: Request) {
       );
     }
 
+    // Insert the project
     console.log('Inserting into Supabase...');
-    const { data, error } = await supabase
+    const { data: project, error } = await supabase
       .from('property_projects')
       .insert({
         property_name,
@@ -68,7 +85,6 @@ export async function POST(request: Request) {
         description: description || null,
         status: status || 'not_started',
         priority: priority || 'medium',
-        assigned_staff: assigned_staff || null,
         due_date: due_date || null
       })
       .select()
@@ -82,8 +98,47 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log('Success! Created project:', data);
-    return NextResponse.json({ success: true, data });
+    // Insert assignments if provided
+    const userIds: string[] = Array.isArray(assigned_user_ids) ? assigned_user_ids : (assigned_user_ids ? [assigned_user_ids] : []);
+    
+    if (userIds.length > 0) {
+      const assignments = userIds.map(userId => ({
+        project_id: project.id,
+        user_id: userId
+      }));
+
+      const { error: assignError } = await supabase
+        .from('project_assignments')
+        .insert(assignments);
+
+      if (assignError) {
+        console.error('Error creating assignments:', assignError);
+        // Don't fail the whole request, project was created
+      }
+    }
+
+    // Fetch the project with assignments
+    const { data: fullProject, error: fetchError } = await supabase
+      .from('property_projects')
+      .select(`
+        *,
+        project_assignments(
+          user_id,
+          assigned_at,
+          users(id, name, email, role, avatar)
+        )
+      `)
+      .eq('id', project.id)
+      .single();
+
+    if (fetchError) {
+      // Return basic project if fetch fails
+      console.log('Success! Created project:', project);
+      return NextResponse.json({ success: true, data: project });
+    }
+
+    console.log('Success! Created project with assignments:', fullProject);
+    return NextResponse.json({ success: true, data: fullProject });
   } catch (err: any) {
     console.error('Caught error:', err);
     return NextResponse.json(
@@ -92,4 +147,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

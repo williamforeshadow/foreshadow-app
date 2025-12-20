@@ -20,6 +20,17 @@ const MEMORY_WINDOW = 10;
 const DATABASE_SCHEMA = `
 ## DATABASE SCHEMA
 
+### users
+Application users who can be assigned to tasks and projects.
+| Column | Type | Description |
+|--------|------|-------------|
+| id | text | Primary key (e.g., 'test-staff-001') |
+| name | text | User's display name |
+| email | text | User's email (unique) |
+| role | text | 'superadmin', 'manager', or 'staff' |
+| avatar | text | Emoji avatar |
+| created_at | timestamptz | Record creation time |
+
 ### reservations
 Guest booking records for properties.
 | Column | Type | Description |
@@ -41,13 +52,21 @@ Tasks associated with turnovers (cleanings, maintenance between guests).
 | template_id | uuid | FK to templates |
 | type | text | Task type (e.g., 'cleaning', 'maintenance') |
 | status | text | Task status |
-| assigned_staff | text | Name of assigned staff member |
 | scheduled_start | timestamptz | Scheduled start time |
 | card_actions | text | Action state: 'not_started', 'in_progress', 'paused', 'completed' |
-| form_metadata | jsonb | Form responses with field labels. Each field is stored as: {"field_id": {"label": "Human readable question", "type": "rating|text|yes-no|checkbox|photo", "value": "the answer"}}. Also contains template_name and property_name. |
+| form_metadata | jsonb | Form responses with field labels |
 | completed_at | timestamptz | When task was completed |
 | created_at | timestamptz | Record creation time |
 | updated_at | timestamptz | Last update time |
+
+### task_assignments
+Junction table linking tasks to assigned users (supports multiple assignees).
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| task_id | uuid | FK to turnover_tasks |
+| user_id | text | FK to users |
+| assigned_at | timestamptz | When assignment was made |
 
 ### templates
 Reusable templates for tasks and forms.
@@ -81,10 +100,18 @@ Capital/renovation projects for properties.
 | description | text | Project description |
 | status | text | 'not_started', 'in_progress', 'on_hold', 'complete' |
 | priority | text | 'low', 'medium', 'high', 'urgent' |
-| assigned_staff | text | Assigned staff member |
 | due_date | timestamptz | Project due date |
 | created_at | timestamptz | Record creation time |
 | updated_at | timestamptz | Last update time |
+
+### project_assignments
+Junction table linking projects to assigned users (supports multiple assignees).
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| project_id | uuid | FK to property_projects |
+| user_id | text | FK to users |
+| assigned_at | timestamptz | When assignment was made |
 
 ### project_comments
 Discussion comments on projects.
@@ -92,7 +119,7 @@ Discussion comments on projects.
 |--------|------|-------------|
 | id | uuid | Primary key |
 | project_id | uuid | FK to property_projects |
-| user_name | text | Name of commenter |
+| user_id | text | FK to users (who posted the comment) |
 | comment_content | text | The comment text |
 | created_at | timestamptz | Comment creation time |
 
@@ -100,16 +127,19 @@ Discussion comments on projects.
 
 1. **Today's operations**: Use CURRENT_DATE for today, CURRENT_DATE + 1 for tomorrow
 2. **Same-day flips**: Properties where check_out and next check_in are same day
-3. **Staff workload**: GROUP BY assigned_staff with COUNT
+3. **Staff workload**: JOIN task_assignments and GROUP BY user_id
 4. **Occupancy**: Compare check_in/check_out dates against date ranges
 5. **Overdue tasks**: WHERE card_actions != 'completed' AND scheduled_start < NOW()
 6. **Property history**: Filter by property_name with date ranges
+7. **User's assignments**: JOIN task_assignments or project_assignments WHERE user_id = 'xxx'
+8. **Get assignees for a task**: SELECT u.* FROM users u JOIN task_assignments ta ON ta.user_id = u.id WHERE ta.task_id = 'xxx'
 
 ## NOTES
 - Use ILIKE for case-insensitive text search
 - Always include reasonable LIMIT (default 100) unless aggregating
 - For date comparisons, cast to date if needed: check_in::date
 - Property names are stored as text, search with ILIKE '%partial%'
+- To get user names for assignments, JOIN with the users table
 `;
 
 const SYSTEM_PROMPT = `You are Claude, an AI assistant made by Anthropic, integrated into Foreshadow - a vacation rental property management application. Your job is to answer questions about operations, properties, tasks, and projects by querying the database.

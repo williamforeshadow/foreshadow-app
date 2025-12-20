@@ -6,7 +6,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET - Get a single project
+// GET - Get a single project with assignments
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -16,7 +16,14 @@ export async function GET(
 
     const { data, error } = await supabase
       .from('property_projects')
-      .select('*')
+      .select(`
+        *,
+        project_assignments(
+          user_id,
+          assigned_at,
+          users(id, name, email, role, avatar)
+        )
+      `)
       .eq('id', id)
       .single();
 
@@ -43,7 +50,7 @@ export async function GET(
   }
 }
 
-// PUT - Update a project
+// PUT - Update a project and its assignments
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -51,27 +58,77 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, description, status, priority, assigned_staff, due_date } = body;
+    const { title, description, status, priority, assigned_user_ids, due_date } = body;
 
+    // Update project fields
     const updateData: any = { updated_at: new Date().toISOString() };
     
     if (title !== undefined) updateData.title = title;
     if (description !== undefined) updateData.description = description;
     if (status !== undefined) updateData.status = status;
     if (priority !== undefined) updateData.priority = priority;
-    if (assigned_staff !== undefined) updateData.assigned_staff = assigned_staff;
     if (due_date !== undefined) updateData.due_date = due_date;
 
-    const { data, error } = await supabase
+    const { error: updateError } = await supabase
       .from('property_projects')
       .update(updateData)
+      .eq('id', id);
+
+    if (updateError) {
+      return NextResponse.json(
+        { error: updateError.message },
+        { status: 500 }
+      );
+    }
+
+    // Update assignments if provided
+    if (assigned_user_ids !== undefined) {
+      const userIds: string[] = Array.isArray(assigned_user_ids) ? assigned_user_ids : (assigned_user_ids ? [assigned_user_ids] : []);
+
+      // Delete existing assignments
+      const { error: deleteError } = await supabase
+        .from('project_assignments')
+        .delete()
+        .eq('project_id', id);
+
+      if (deleteError) {
+        console.error('Error deleting assignments:', deleteError);
+      }
+
+      // Insert new assignments
+      if (userIds.length > 0) {
+        const assignments = userIds.map(userId => ({
+          project_id: id,
+          user_id: userId
+        }));
+
+        const { error: insertError } = await supabase
+          .from('project_assignments')
+          .insert(assignments);
+
+        if (insertError) {
+          console.error('Error inserting assignments:', insertError);
+        }
+      }
+    }
+
+    // Fetch updated project with assignments
+    const { data, error: fetchError } = await supabase
+      .from('property_projects')
+      .select(`
+        *,
+        project_assignments(
+          user_id,
+          assigned_at,
+          users(id, name, email, role, avatar)
+        )
+      `)
       .eq('id', id)
-      .select()
       .single();
 
-    if (error) {
+    if (fetchError) {
       return NextResponse.json(
-        { error: error.message },
+        { error: fetchError.message },
         { status: 500 }
       );
     }
@@ -85,7 +142,7 @@ export async function PUT(
   }
 }
 
-// DELETE - Delete a project
+// DELETE - Delete a project (assignments cascade automatically)
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -113,4 +170,3 @@ export async function DELETE(
     );
   }
 }
-

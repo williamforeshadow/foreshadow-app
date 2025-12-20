@@ -6,7 +6,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET - List comments for a specific project
+// GET - List comments for a specific project with user details
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -21,7 +21,10 @@ export async function GET(request: Request) {
 
     const { data, error } = await supabase
       .from('project_comments')
-      .select('*')
+      .select(`
+        *,
+        users(id, name, email, role, avatar)
+      `)
       .eq('project_id', projectId)
       .order('created_at', { ascending: true });
 
@@ -45,11 +48,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { project_id, user_name, comment_content } = body;
+    const { project_id, user_id, comment_content } = body;
 
-    if (!project_id || !user_name || !comment_content) {
+    if (!project_id || !user_id || !comment_content) {
       return NextResponse.json(
-        { error: 'project_id, user_name, and comment_content are required' },
+        { error: 'project_id, user_id, and comment_content are required' },
         { status: 400 }
       );
     }
@@ -58,10 +61,13 @@ export async function POST(request: Request) {
       .from('project_comments')
       .insert({
         project_id,
-        user_name,
+        user_id,
         comment_content
       })
-      .select()
+      .select(`
+        *,
+        users(id, name, email, role, avatar)
+      `)
       .single();
 
     if (error) {
@@ -79,4 +85,3 @@ export async function POST(request: Request) {
     );
   }
 }
-
