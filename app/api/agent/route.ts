@@ -14,6 +14,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// Sliding window memory: number of message exchanges to remember
+const MEMORY_WINDOW = 10;
+
 const DATABASE_SCHEMA = `
 ## DATABASE SCHEMA
 
@@ -159,6 +162,21 @@ Guidelines:
 - Format lists nicely if there are multiple items
 - If there's an error, explain what might have gone wrong`;
 
+// Helper function to save assistant message
+async function saveAssistantMessage(userId: string | undefined, content: string, metadata: object = {}) {
+  if (!userId) return;
+  try {
+    await supabase.from("ai_chat_messages").insert({
+      user_id: userId,
+      role: "assistant",
+      content,
+      metadata,
+    });
+  } catch (err) {
+    console.error("Failed to save assistant message:", err);
+  }
+}
+
 export async function POST(req: NextRequest) {
   console.log("=== Agent API called ===");
   
@@ -172,7 +190,7 @@ export async function POST(req: NextRequest) {
   }
   
   try {
-    const { prompt } = await req.json();
+    const { prompt, user_id } = await req.json();
 
     if (!prompt || typeof prompt !== "string") {
       return NextResponse.json(
@@ -181,16 +199,45 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // --- MEMORY: Fetch recent conversation history ---
+    let conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [];
+    
+    if (user_id) {
+      // Fetch last N messages for this user (sliding window)
+      const { data: recentMessages, error: historyError } = await supabase
+        .from("ai_chat_messages")
+        .select("role, content")
+        .eq("user_id", user_id)
+        .order("created_at", { ascending: false })
+        .limit(MEMORY_WINDOW * 2); // *2 for user + assistant pairs
+
+      if (!historyError && recentMessages) {
+        // Reverse to get chronological order (oldest first)
+        conversationHistory = recentMessages.reverse().map((msg) => ({
+          role: msg.role as "user" | "assistant",
+          content: msg.content,
+        }));
+      }
+
+      // Save the current user message
+      await supabase.from("ai_chat_messages").insert({
+        user_id,
+        role: "user",
+        content: prompt,
+      });
+    }
+
+    // Build messages array with history + current prompt
+    const messages: Array<{ role: "user" | "assistant"; content: string }> = [
+      ...conversationHistory,
+      { role: "user", content: prompt },
+    ];
+
     // Step 1: Ask Claude to determine if we need data and generate SQL
     const analysisResponse = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1024,
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
+      messages,
       system: SYSTEM_PROMPT,
     });
 
@@ -209,6 +256,7 @@ export async function POST(req: NextRequest) {
       analysis = JSON.parse(jsonMatch[0]);
     } catch (parseError) {
       // If parsing fails, treat as conversational
+      await saveAssistantMessage(user_id, analysisText, { tool_used: "conversation" });
       return NextResponse.json({
         answer: analysisText,
         tool_used: "conversation",
@@ -217,6 +265,7 @@ export async function POST(req: NextRequest) {
 
     // If no data needed, return the conversational response
     if (!analysis.needs_data) {
+      await saveAssistantMessage(user_id, analysis.response, { tool_used: "conversation" });
       return NextResponse.json({
         answer: analysis.response,
         tool_used: "conversation",
@@ -227,16 +276,20 @@ export async function POST(req: NextRequest) {
     const sql = analysis.sql?.trim();
 
     if (!sql) {
+      const errorMsg = "I understood your question but couldn't generate a proper query. Could you rephrase it?";
+      await saveAssistantMessage(user_id, errorMsg, { tool_used: "error" });
       return NextResponse.json({
-        answer: "I understood your question but couldn't generate a proper query. Could you rephrase it?",
+        answer: errorMsg,
         tool_used: "error",
       });
     }
 
     // Safety check: only SELECT
     if (!sql.toLowerCase().startsWith("select")) {
+      const errorMsg = "I can only read data, not modify it. Please ask a question about your data.";
+      await saveAssistantMessage(user_id, errorMsg, { tool_used: "error" });
       return NextResponse.json({
-        answer: "I can only read data, not modify it. Please ask a question about your data.",
+        answer: errorMsg,
         tool_used: "error",
       });
     }
@@ -270,6 +323,7 @@ Please explain what went wrong and suggest how the user might rephrase their que
         ? errorResponse.content[0].text
         : "An error occurred while querying the database.";
 
+      await saveAssistantMessage(user_id, errorText, { tool_used: "sql_error", sql, error: error.message });
       return NextResponse.json({
         answer: errorText,
         tool_used: "sql_error",
@@ -302,11 +356,14 @@ Please provide a clear, helpful answer to the user's question based on these res
       ? interpretResponse.content[0].text
       : "I retrieved the data but couldn't interpret it.";
 
+    const rowCount = Array.isArray(data) ? data.length : 0;
+    await saveAssistantMessage(user_id, interpretation, { tool_used: "sql", sql, row_count: rowCount });
+    
     return NextResponse.json({
       answer: interpretation,
       tool_used: "sql",
       sql,
-      row_count: Array.isArray(data) ? data.length : 0,
+      row_count: rowCount,
     });
 
   } catch (err: any) {

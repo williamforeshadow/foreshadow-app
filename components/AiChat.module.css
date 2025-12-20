@@ -12,14 +12,26 @@
   gap: 0.5rem;
 }
 
-/* Response area - solid background, centered */
-.responseArea {
+/* Response wrapper - positions close button outside scroll area */
+.responseWrapper {
   position: fixed;
   top: 50%;
   left: calc((100% - var(--sidebar-width, 256px)) / 2 + var(--sidebar-width, 256px));
   transform: translate(-50%, -50%);
   width: min(90%, 600px);
   max-height: 70vh;
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  animation: slideUp 0.2s ease-out;
+}
+
+/* Response area - solid background, scrollable */
+.responseArea {
+  width: 100%;
+  max-height: calc(70vh - 40px);
   /* Solid background with fallbacks */
   background: white !important;
   background: var(--color-card, white) !important;
@@ -28,8 +40,6 @@
   padding: 1.5rem;
   overflow-y: auto;
   box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.2);
-  z-index: 51;
-  animation: slideUp 0.2s ease-out;
 }
 
 :global(.dark) .responseArea {
@@ -48,6 +58,68 @@
   }
 }
 
+/* Messages container */
+.messagesContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.messageRow {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.userMessage {
+  flex-direction: row-reverse;
+}
+
+.messageIcon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+.userMessage .messageIcon {
+  background: #228B22;
+  color: white;
+}
+
+.messageContent {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: hsl(var(--foreground));
+}
+
+.userMessage .messageContent {
+  text-align: right;
+}
+
+.userMessage .messageContent p {
+  display: inline-block;
+  background: #228B22;
+  color: white;
+  padding: 0.5rem 0.875rem;
+  border-radius: 1rem 1rem 0.25rem 1rem;
+  margin: 0;
+}
+
+.assistantMessage .messageContent {
+  background: hsl(var(--muted) / 0.5);
+  padding: 0.75rem 1rem;
+  border-radius: 0.25rem 1rem 1rem 1rem;
+}
+
+/* Legacy support */
 .responseMessage {
   display: flex;
   flex-direction: column;
@@ -219,13 +291,20 @@
 }
 
 .closeResponseButton {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  width: 28px !important;
-  height: 28px !important;
+  width: 32px !important;
+  height: 32px !important;
   padding: 0 !important;
   border-radius: 50% !important;
+  background: white !important;
+  background: var(--color-card, white) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+}
+
+:global(.dark) .closeResponseButton {
+  background: #333 !important;
+  background: var(--color-card, #333) !important;
 }
 
 .closeResponseButton:hover {

@@ -4,27 +4,38 @@ import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import {
   ArrowUp,
-  ChevronUp,
   ChevronDown,
   MessageSquare,
   Paperclip,
   X,
+  User,
+  Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { useAuth } from "@/lib/authContext";
 import styles from "./AiChat.module.css";
 
-interface AIResponse {
+interface Message {
+  id: string;
+  role: "user" | "assistant";
   content: string;
 }
 
 export function AiChat() {
+  const { user } = useAuth();
   const [inputValue, setInputValue] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [response, setResponse] = useState<AIResponse | null>(null);
-  const [showResponse, setShowResponse] = useState(true);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [showMessages, setShowMessages] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -39,27 +50,42 @@ export function AiChat() {
     if (!inputValue.trim() || isLoading) return;
 
     const userMessage = inputValue.trim();
+    const userMsgId = `user-${Date.now()}`;
+    
+    // Add user message immediately to UI
+    setMessages((prev) => [...prev, { id: userMsgId, role: "user", content: userMessage }]);
     setInputValue("");
     setIsLoading(true);
-    setResponse(null);
-    setShowResponse(true);
+    setShowMessages(true);
 
     try {
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: userMessage }),
+        body: JSON.stringify({ 
+          prompt: userMessage,
+          user_id: user.id,
+        }),
       });
 
       const data = await res.json();
 
       if (!res.ok || data.error) {
-        setResponse({ content: `Error: ${data.error || "Something went wrong"}` });
+        setMessages((prev) => [
+          ...prev,
+          { id: `assistant-${Date.now()}`, role: "assistant", content: `Error: ${data.error || "Something went wrong"}` },
+        ]);
       } else {
-        setResponse({ content: data.answer });
+        setMessages((prev) => [
+          ...prev,
+          { id: `assistant-${Date.now()}`, role: "assistant", content: data.answer },
+        ]);
       }
     } catch (err: any) {
-      setResponse({ content: `Error: ${err.message || "Failed to get response"}` });
+      setMessages((prev) => [
+        ...prev,
+        { id: `assistant-${Date.now()}`, role: "assistant", content: `Error: ${err.message || "Failed to get response"}` },
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -87,44 +113,73 @@ export function AiChat() {
 
   return (
     <div className={styles.container}>
-      {/* Response Area */}
-      {(response || isLoading) && showResponse && (
-        <div className={styles.responseArea}>
+      {/* Messages Area */}
+      {(messages.length > 0 || isLoading) && showMessages && (
+        <div className={styles.responseWrapper}>
           <Button
             variant="ghost"
             size="icon"
             className={styles.closeResponseButton}
-            onClick={() => setShowResponse(false)}
-            title="Minimize response"
+            onClick={() => setShowMessages(false)}
+            title="Minimize chat"
           >
             <ChevronDown className="h-4 w-4" />
           </Button>
-          <div className={styles.responseMessage}>
-            <div className={styles.responseText}>
-              {isLoading ? (
-                <div className={styles.loadingDots}>
-                  <span className={styles.loadingDot} />
-                  <span className={styles.loadingDot} />
-                  <span className={styles.loadingDot} />
+          <div className={styles.responseArea}>
+            <div className={styles.messagesContainer}>
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`${styles.messageRow} ${
+                  msg.role === "user" ? styles.userMessage : styles.assistantMessage
+                }`}
+              >
+                <div className={styles.messageIcon}>
+                  {msg.role === "user" ? (
+                    <User size={14} />
+                  ) : (
+                    <Bot size={14} />
+                  )}
                 </div>
-              ) : response ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-3 prose-ul:my-2 prose-li:my-0.5">
-                  <ReactMarkdown>{response.content}</ReactMarkdown>
+                <div className={styles.messageContent}>
+                  {msg.role === "assistant" ? (
+                    <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-3 prose-ul:my-2 prose-li:my-0.5">
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p>{msg.content}</p>
+                  )}
                 </div>
-              ) : null}
+              </div>
+            ))}
+            {isLoading && (
+              <div className={`${styles.messageRow} ${styles.assistantMessage}`}>
+                <div className={styles.messageIcon}>
+                  <Bot size={14} />
+                </div>
+                <div className={styles.messageContent}>
+                  <div className={styles.loadingDots}>
+                    <span className={styles.loadingDot} />
+                    <span className={styles.loadingDot} />
+                    <span className={styles.loadingDot} />
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
             </div>
           </div>
         </div>
       )}
 
-      {/* Toggle button to show response when hidden */}
-      {response && !showResponse && !isLoading && (
+      {/* Toggle button to show messages when hidden */}
+      {messages.length > 0 && !showMessages && !isLoading && (
         <button
           className={styles.responseToggle}
-          onClick={() => setShowResponse(true)}
+          onClick={() => setShowMessages(true)}
         >
-          <ChevronUp size={14} />
-          <span>Show AI Response</span>
+          <MessageSquare size={14} />
+          <span>Show Chat</span>
         </button>
       )}
 
