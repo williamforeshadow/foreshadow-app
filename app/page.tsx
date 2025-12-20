@@ -19,6 +19,15 @@ import {
   FieldLabel,
 } from '@/components/ui/field';
 import { ChevronDownIcon } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useUsers } from '@/lib/useUsers';
 import Timeline from '@/components/Timeline';
 import FloatingWindow from '@/components/FloatingWindow';
 import CleaningForm from '@/components/CleaningForm';
@@ -42,6 +51,7 @@ export default function Home() {
   // Mobile detection
   const isMobile = useIsMobile();
   const { user: currentUser } = useAuth();
+  const { users } = useUsers();
   const [mobileTab, setMobileTab] = useState<MobileTab>('cards');
   
   const [response, setResponse] = useState<any>(null);
@@ -620,12 +630,12 @@ export default function Home() {
     }
   };
 
-  const updateTaskAssignment = async (taskId: string, staffName: string | null) => {
+  const updateTaskAssignment = async (taskId: string, userIds: string[]) => {
     try {
       const response = await fetch('/api/update-task-assignment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId, staffName })
+        body: JSON.stringify({ taskId, userIds })
       });
 
       const result = await response.json();
@@ -634,26 +644,23 @@ export default function Home() {
         throw new Error(result.error || 'Failed to update task assignment');
       }
 
+      // Build the assigned_users array from the users list
+      const assignedUsers = userIds.map(id => {
+        const user = users.find(u => u.id === id);
+        return user ? { user_id: user.id, name: user.name, avatar: user.avatar, role: user.role } : null;
+      }).filter(Boolean);
+
       // Update the task in selectedCard.tasks array
       setSelectedCard((prev: any) => {
         if (!prev || !prev.tasks) return prev;
         
         const updatedTasks = prev.tasks.map((task: any) => 
           task.task_id === taskId 
-            ? { ...task, assigned_staff: staffName }
+            ? { ...task, assigned_users: assignedUsers }
             : task
         );
         
-        // If this was the first cleaning task, update top-level field for backward compatibility
-        const firstCleaningTask = updatedTasks.find((t: any) => t.type === 'cleaning');
-        const updatedTask = updatedTasks.find((t: any) => t.task_id === taskId);
-        const shouldUpdateTopLevel = firstCleaningTask && updatedTask && firstCleaningTask.task_id === taskId;
-        
-        return { 
-          ...prev, 
-          tasks: updatedTasks,
-          ...(shouldUpdateTopLevel ? { assigned_staff: staffName } : {})
-        };
+        return { ...prev, tasks: updatedTasks };
       });
 
       // Also update the response array
@@ -662,23 +669,13 @@ export default function Home() {
         
         const items = Array.isArray(prevResponse) ? prevResponse : [prevResponse];
         const updatedItems = items.map((item: any) => {
-          if (item.id === selectedCard.id && item.tasks) {
+          if (item.id === selectedCard?.id && item.tasks) {
             const updatedTasks = item.tasks.map((task: any) => 
               task.task_id === taskId 
-                ? { ...task, assigned_staff: staffName }
+                ? { ...task, assigned_users: assignedUsers }
                 : task
             );
-            
-            // If this was the first cleaning task, update top-level field for backward compatibility
-            const firstCleaningTask = updatedTasks.find((t: any) => t.type === 'cleaning');
-            const updatedTask = updatedTasks.find((t: any) => t.task_id === taskId);
-            const shouldUpdateTopLevel = firstCleaningTask && updatedTask && firstCleaningTask.task_id === taskId;
-            
-            return { 
-              ...item, 
-              tasks: updatedTasks,
-              ...(shouldUpdateTopLevel ? { assigned_staff: staffName } : {})
-            };
+            return { ...item, tasks: updatedTasks };
           }
           return item;
         });
@@ -2373,65 +2370,107 @@ export default function Home() {
                           </div>
 
                           <div className="space-y-2">
-                            {selectedCard.tasks.map((task: any) => (
-                              <Card 
-                                key={task.task_id}
-                                className="cursor-pointer hover:shadow-md transition-all"
-                                onClick={async (e) => {
-                                  if ((e.target as HTMLElement).closest('button')) return;
-                                  if (task.template_id && !taskTemplates[task.template_id]) {
-                                    await fetchTaskTemplate(task.template_id);
-                                  }
-                                  setFullscreenTask(task);
-                                }}
-                              >
-                                <CardHeader className="pb-3">
-                                  <div className="flex items-center justify-between">
-                                    <CardTitle className="text-base flex items-center gap-2">
-                                      {task.status === 'complete' ? '✓' : 
-                                       task.status === 'in_progress' ? '▶' :
-                                       task.status === 'pending' ? '○' : ''}
-                                      {task.template_name || 'Unnamed Task'}
-                                    </CardTitle>
-                                    <div className="flex items-center gap-2">
-                                      <Badge
-                                        variant={task.type === 'maintenance' ? 'default' : 'secondary'}
-                                        className={`px-2.5 py-1 ${task.type === 'maintenance' 
-                                          ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200' 
-                                          : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                                        }`}
-                                      >
-                                        {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
-                                      </Badge>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-6 w-6 p-0 text-neutral-400 hover:text-red-500 hover:bg-red-50"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          if (confirm('Remove this task from the turnover?')) {
-                                            deleteTaskFromCard(task.task_id);
-                                          }
-                                        }}
-                                      >
-                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                      </Button>
+                            {selectedCard.tasks.map((task: any) => {
+                              const assignedUserIds = (task.assigned_users || []).map((u: any) => u.user_id);
+                              return (
+                                <Card 
+                                  key={task.task_id}
+                                  className="cursor-pointer hover:shadow-md transition-all"
+                                  onClick={async (e) => {
+                                    if ((e.target as HTMLElement).closest('button, [data-radix-popper-content-wrapper]')) return;
+                                    if (task.template_id && !taskTemplates[task.template_id]) {
+                                      await fetchTaskTemplate(task.template_id);
+                                    }
+                                    setFullscreenTask(task);
+                                  }}
+                                >
+                                  <CardHeader className="pb-3">
+                                    <div className="flex items-center justify-between">
+                                      <CardTitle className="text-base flex items-center gap-2">
+                                        {task.status === 'complete' ? '✓' : 
+                                         task.status === 'in_progress' ? '▶' :
+                                         task.status === 'pending' ? '○' : ''}
+                                        {task.template_name || 'Unnamed Task'}
+                                      </CardTitle>
+                                      <div className="flex items-center gap-2">
+                                        <Badge
+                                          variant={task.type === 'maintenance' ? 'default' : 'secondary'}
+                                          className={`px-2.5 py-1 ${task.type === 'maintenance' 
+                                            ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200' 
+                                            : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                                          }`}
+                                        >
+                                          {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                                        </Badge>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-6 w-6 p-0 text-neutral-400 hover:text-red-500 hover:bg-red-50"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (confirm('Remove this task from the turnover?')) {
+                                              deleteTaskFromCard(task.task_id);
+                                            }
+                                          }}
+                                        >
+                                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                          </svg>
+                                        </Button>
+                                      </div>
                                     </div>
-                                  </div>
-                                  <CardDescription>
-                                    {task.card_actions === 'not_started' ? 'Not Started' :
-                                     task.card_actions === 'in_progress' ? 'In Progress' :
-                                     task.card_actions === 'paused' ? 'Paused' :
-                                     task.card_actions === 'completed' ? 'Completed' :
-                                     task.card_actions === 'reopened' ? 'Reopened' :
-                                     'Not Started'}
-                                    {task.assigned_staff && ` • ${task.assigned_staff}`}
-                                  </CardDescription>
-                                </CardHeader>
-                              </Card>
-                            ))}
+                                    <div className="flex items-center justify-between mt-2">
+                                      <CardDescription className="flex-1">
+                                        {task.card_actions === 'not_started' ? 'Not Started' :
+                                         task.card_actions === 'in_progress' ? 'In Progress' :
+                                         task.card_actions === 'paused' ? 'Paused' :
+                                         task.card_actions === 'completed' ? 'Completed' :
+                                         task.card_actions === 'reopened' ? 'Reopened' :
+                                         'Not Started'}
+                                      </CardDescription>
+                                      
+                                      {/* Assignment Dropdown */}
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                                            {assignedUserIds.length > 0 ? (
+                                              <span className="flex items-center gap-1">
+                                                {(task.assigned_users || []).slice(0, 2).map((u: any) => (
+                                                  <span key={u.user_id} title={u.name}>{u.avatar || '👤'}</span>
+                                                ))}
+                                                {assignedUserIds.length > 2 && <span className="text-neutral-500">+{assignedUserIds.length - 2}</span>}
+                                              </span>
+                                            ) : (
+                                              <span className="text-neutral-400">Assign</span>
+                                            )}
+                                          </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                          <DropdownMenuLabel>Assign Users</DropdownMenuLabel>
+                                          <DropdownMenuSeparator />
+                                          {users.map((user) => (
+                                            <DropdownMenuCheckboxItem
+                                              key={user.id}
+                                              checked={assignedUserIds.includes(user.id)}
+                                              onCheckedChange={(checked) => {
+                                                const newIds = checked
+                                                  ? [...assignedUserIds, user.id]
+                                                  : assignedUserIds.filter((id: string) => id !== user.id);
+                                                updateTaskAssignment(task.task_id, newIds);
+                                              }}
+                                            >
+                                              <span className="mr-2">{user.avatar}</span>
+                                              {user.name}
+                                              <span className="ml-auto text-xs text-neutral-400">{user.role}</span>
+                                            </DropdownMenuCheckboxItem>
+                                          ))}
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    </div>
+                                  </CardHeader>
+                                </Card>
+                              );
+                            })}
                           </div>
 
                           {/* Add Task Button */}
@@ -3136,68 +3175,107 @@ export default function Home() {
                         </div>
 
                         <div className="space-y-2">
-                          {selectedCard.tasks.map((task: any) => (
-                            <Card 
-                              key={task.task_id}
-                              className="cursor-pointer hover:shadow-md transition-all"
-                              onClick={async (e) => {
-                                // Don't open fullscreen if clicking delete button
-                                if ((e.target as HTMLElement).closest('button')) return;
-                                
-                                // Fetch template if needed, then open fullscreen
-                                if (task.template_id && !taskTemplates[task.template_id]) {
-                                  await fetchTaskTemplate(task.template_id);
-                                }
-                                setFullscreenTask(task);
-                              }}
-                            >
-                              <CardHeader className="pb-3">
-                                <div className="flex items-center justify-between">
-                                  <CardTitle className="text-base flex items-center gap-2">
-                                    {task.status === 'complete' ? '✓' : 
-                                     task.status === 'in_progress' ? '▶' :
-                                     task.status === 'pending' ? '○' : ''}
-                                    {task.template_name || 'Unnamed Task'}
-                                  </CardTitle>
-                                  <div className="flex items-center gap-2">
-                                    <Badge
-                                      variant={task.type === 'maintenance' ? 'default' : 'secondary'}
-                                      className={`px-2.5 py-1 ${task.type === 'maintenance' 
-                                        ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200' 
-                                        : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                                      }`}
-                                    >
-                                      {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
-                                    </Badge>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-6 w-6 p-0 text-neutral-400 hover:text-red-500 hover:bg-red-50"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (confirm('Remove this task from the turnover?')) {
-                                          deleteTaskFromCard(task.task_id);
-                                        }
-                                      }}
-                                    >
-                                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                      </svg>
-                                    </Button>
+                          {selectedCard.tasks.map((task: any) => {
+                            const assignedUserIds = (task.assigned_users || []).map((u: any) => u.user_id);
+                            return (
+                              <Card 
+                                key={task.task_id}
+                                className="cursor-pointer hover:shadow-md transition-all"
+                                onClick={async (e) => {
+                                  if ((e.target as HTMLElement).closest('button, [data-radix-popper-content-wrapper]')) return;
+                                  if (task.template_id && !taskTemplates[task.template_id]) {
+                                    await fetchTaskTemplate(task.template_id);
+                                  }
+                                  setFullscreenTask(task);
+                                }}
+                              >
+                                <CardHeader className="pb-3">
+                                  <div className="flex items-center justify-between">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                      {task.status === 'complete' ? '✓' : 
+                                       task.status === 'in_progress' ? '▶' :
+                                       task.status === 'pending' ? '○' : ''}
+                                      {task.template_name || 'Unnamed Task'}
+                                    </CardTitle>
+                                    <div className="flex items-center gap-2">
+                                      <Badge
+                                        variant={task.type === 'maintenance' ? 'default' : 'secondary'}
+                                        className={`px-2.5 py-1 ${task.type === 'maintenance' 
+                                          ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200' 
+                                          : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                                        }`}
+                                      >
+                                        {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                                      </Badge>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0 text-neutral-400 hover:text-red-500 hover:bg-red-50"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (confirm('Remove this task from the turnover?')) {
+                                            deleteTaskFromCard(task.task_id);
+                                          }
+                                        }}
+                                      >
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                      </Button>
+                                    </div>
                                   </div>
-                                </div>
-                                <CardDescription>
-                                  {task.card_actions === 'not_started' ? 'Not Started' :
-                                   task.card_actions === 'in_progress' ? 'In Progress' :
-                                   task.card_actions === 'paused' ? 'Paused' :
-                                   task.card_actions === 'completed' ? 'Completed' :
-                                   task.card_actions === 'reopened' ? 'Reopened' :
-                                   'Not Started'}
-                                  {task.assigned_staff && ` • ${task.assigned_staff}`}
-                                </CardDescription>
-                              </CardHeader>
-                            </Card>
-                          ))}
+                                  <div className="flex items-center justify-between mt-2">
+                                    <CardDescription className="flex-1">
+                                      {task.card_actions === 'not_started' ? 'Not Started' :
+                                       task.card_actions === 'in_progress' ? 'In Progress' :
+                                       task.card_actions === 'paused' ? 'Paused' :
+                                       task.card_actions === 'completed' ? 'Completed' :
+                                       task.card_actions === 'reopened' ? 'Reopened' :
+                                       'Not Started'}
+                                    </CardDescription>
+                                    
+                                    {/* Assignment Dropdown */}
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                                          {assignedUserIds.length > 0 ? (
+                                            <span className="flex items-center gap-1">
+                                              {(task.assigned_users || []).slice(0, 2).map((u: any) => (
+                                                <span key={u.user_id} title={u.name}>{u.avatar || '👤'}</span>
+                                              ))}
+                                              {assignedUserIds.length > 2 && <span className="text-neutral-500">+{assignedUserIds.length - 2}</span>}
+                                            </span>
+                                          ) : (
+                                            <span className="text-neutral-400">Assign</span>
+                                          )}
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                        <DropdownMenuLabel>Assign Users</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        {users.map((user) => (
+                                          <DropdownMenuCheckboxItem
+                                            key={user.id}
+                                            checked={assignedUserIds.includes(user.id)}
+                                            onCheckedChange={(checked) => {
+                                              const newIds = checked
+                                                ? [...assignedUserIds, user.id]
+                                                : assignedUserIds.filter((id: string) => id !== user.id);
+                                              updateTaskAssignment(task.task_id, newIds);
+                                            }}
+                                          >
+                                            <span className="mr-2">{user.avatar}</span>
+                                            {user.name}
+                                            <span className="ml-auto text-xs text-neutral-400">{user.role}</span>
+                                          </DropdownMenuCheckboxItem>
+                                        ))}
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </div>
+                                </CardHeader>
+                              </Card>
+                            );
+                          })}
                         </div>
 
                         {/* Add Task Button */}
