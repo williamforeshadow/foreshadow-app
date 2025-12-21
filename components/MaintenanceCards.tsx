@@ -64,7 +64,7 @@ export default function MaintenanceCards({ data, filters, sortBy, onCardClick }:
         return 'text-blue-600 dark:text-blue-400';
       case 'paused':
         return 'text-orange-600 dark:text-orange-400';
-      case 'completed':
+      case 'complete':
         return 'text-green-600 dark:text-green-400';
       default:
         return 'text-neutral-600 dark:text-neutral-400';
@@ -78,7 +78,7 @@ export default function MaintenanceCards({ data, filters, sortBy, onCardClick }:
       case 'in_progress':
       case 'paused':
         return 'bg-yellow-50/80 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-900';
-      case 'completed':
+      case 'complete':
         return 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900';
       default:
         return 'bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700';
@@ -91,7 +91,7 @@ export default function MaintenanceCards({ data, filters, sortBy, onCardClick }:
         <Card
           key={item.id || index}
           onClick={() => onCardClick(item)}
-          className={`cursor-pointer hover:shadow-xl transition-all duration-200 ${getCardBackgroundColor(item.card_actions)}`}
+          className={`cursor-pointer hover:shadow-xl transition-all duration-200 ${getCardBackgroundColor(item.status)}`}
         >
           <CardHeader>
             <CardTitle className="line-clamp-2">
@@ -169,11 +169,11 @@ export default function MaintenanceCards({ data, filters, sortBy, onCardClick }:
               <svg className="w-4 h-4 text-neutral-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span className={`text-sm font-medium ${getStatusColor(item.card_actions)}`}>
-                {item.card_actions === 'not_started' ? 'Not Started' :
-                 item.card_actions === 'in_progress' ? 'In Progress' :
-                 item.card_actions === 'paused' ? 'Paused' :
-                 item.card_actions === 'completed' ? 'Completed' :
+              <span className={`text-sm font-medium ${getStatusColor(item.status)}`}>
+                {item.status === 'not_started' ? 'Not Started' :
+                 item.status === 'in_progress' ? 'In Progress' :
+                 item.status === 'paused' ? 'Paused' :
+                 item.status === 'complete' ? 'Completed' :
                  'Not Started'}
               </span>
             </div>

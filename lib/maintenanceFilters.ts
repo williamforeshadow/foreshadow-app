@@ -14,9 +14,9 @@ export function applyMaintenanceFilters(items: any[], filters: MaintenanceFilter
       }
     }
     
-    // Card Actions filter
+    // Status filter
     if (filters.cardActions.length > 0) {
-      if (!filters.cardActions.includes(item.card_actions || 'not_started')) {
+      if (!filters.cardActions.includes(item.status || 'not_started')) {
         return false;
       }
     }
@@ -87,9 +87,9 @@ export function sortMaintenance(items: any[], sortBy: string): any[] {
         return nameA.localeCompare(nameB);
         
       case 'status-priority':
-        // Status Priority: not_started → in_progress/paused → completed
-        const statusA = getStatusPriority(a.card_actions);
-        const statusB = getStatusPriority(b.card_actions);
+        // Status Priority: not_started → in_progress/paused → complete
+        const statusA = getStatusPriority(a.status);
+        const statusB = getStatusPriority(b.status);
         
         if (statusA !== statusB) {
           return statusA - statusB;
@@ -128,7 +128,7 @@ function getStatusPriority(status: string): number {
     case 'in_progress':
     case 'paused':
       return 2;
-    case 'completed':
+    case 'complete':
       return 3;
     default:
       return 1;

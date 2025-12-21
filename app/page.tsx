@@ -560,7 +560,7 @@ export default function Home() {
         
         const updatedTasks = prev.tasks.map((task: any) => 
           task.task_id === taskId 
-            ? { ...task, card_actions: action, status: result.data.status }
+            ? { ...task, status: action }
             : task
         );
         
@@ -569,21 +569,12 @@ export default function Home() {
         const inProgressCount = updatedTasks.filter((t: any) => t.status === 'in_progress').length;
         const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
         
-        // If this was the first cleaning task, update top-level fields for backward compatibility
-        const firstCleaningTask = updatedTasks.find((t: any) => t.type === 'cleaning');
-        const updatedTask = updatedTasks.find((t: any) => t.task_id === taskId);
-        const shouldUpdateTopLevel = firstCleaningTask && updatedTask && firstCleaningTask.task_id === taskId;
-        
         return { 
           ...prev, 
           tasks: updatedTasks,
           completed_tasks: completedCount,
           tasks_in_progress: inProgressCount,
-          turnover_status: newTurnoverStatus,
-          ...(shouldUpdateTopLevel ? {
-            card_actions: action,
-            status: result.data.status
-          } : {})
+          turnover_status: newTurnoverStatus
         };
       });
 
@@ -596,28 +587,19 @@ export default function Home() {
           if (item.id === selectedCard.id && item.tasks) {
             const updatedTasks = item.tasks.map((task: any) => 
               task.task_id === taskId 
-                ? { ...task, card_actions: action, status: result.data.status }
+                ? { ...task, status: action }
                 : task
             );
             const completedCount = updatedTasks.filter((t: any) => t.status === 'complete').length;
             const inProgressCount = updatedTasks.filter((t: any) => t.status === 'in_progress').length;
             const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
             
-            // If this was the first cleaning task, update top-level fields for backward compatibility
-            const firstCleaningTask = updatedTasks.find((t: any) => t.type === 'cleaning');
-            const updatedTask = updatedTasks.find((t: any) => t.task_id === taskId);
-            const shouldUpdateTopLevel = firstCleaningTask && updatedTask && firstCleaningTask.task_id === taskId;
-            
             return { 
               ...item, 
               tasks: updatedTasks,
               completed_tasks: completedCount,
               tasks_in_progress: inProgressCount,
-              turnover_status: newTurnoverStatus,
-              ...(shouldUpdateTopLevel ? {
-                card_actions: action,
-                status: result.data.status
-              } : {})
+              turnover_status: newTurnoverStatus
             };
           }
           return item;
@@ -1062,26 +1044,26 @@ export default function Home() {
       case undefined:
         return [
           { value: 'in_progress', label: '▶️ Start', icon: '▶️' },
-          { value: 'completed', label: '✅ Mark Complete', icon: '✅' }
+          { value: 'complete', label: '✅ Mark Complete', icon: '✅' }
         ];
       case 'in_progress':
         return [
           { value: 'paused', label: '⏸️ Pause', icon: '⏸️' },
-          { value: 'completed', label: '✅ Mark Complete', icon: '✅' }
+          { value: 'complete', label: '✅ Mark Complete', icon: '✅' }
         ];
       case 'paused':
         return [
           { value: 'in_progress', label: '▶️ Resume', icon: '▶️' },
-          { value: 'completed', label: '✅ Mark Complete', icon: '✅' }
+          { value: 'complete', label: '✅ Mark Complete', icon: '✅' }
         ];
-      case 'completed':
+      case 'complete':
         return [
           { value: 'not_started', label: '↺ Reopen', icon: '↺' }
         ];
       default:
         return [
           { value: 'in_progress', label: '▶️ Start', icon: '▶️' },
-          { value: 'completed', label: '✅ Mark Complete', icon: '✅' }
+          { value: 'complete', label: '✅ Mark Complete', icon: '✅' }
         ];
     }
   };
@@ -1138,7 +1120,9 @@ export default function Home() {
 
   // Memoize window contents to prevent re-renders when only z-index changes
   const cardsWindowContent = useMemo(() => (
-    <div className="p-6 space-y-4">
+    <div className="flex h-full">
+      {/* Left Panel - Cards */}
+      <div className={`${selectedCard ? 'w-1/2 border-r border-neutral-200 dark:border-neutral-700' : 'w-full'} transition-all duration-300 overflow-y-auto p-6 space-y-4`}>
       {/* Response Display */}
       {response !== null && (
         <div className="space-y-3">
@@ -1262,8 +1246,8 @@ export default function Home() {
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={filters.cardActions.includes('completed')}
-                        onChange={() => toggleFilter('cardActions', 'completed')}
+                        checked={filters.cardActions.includes('complete')}
+                        onChange={() => toggleFilter('cardActions', 'complete')}
                         className="rounded border-neutral-300"
                       />
                       <span>Completed</span>
@@ -1349,8 +1333,536 @@ export default function Home() {
           </div>
         </div>
       )}
+      </div>
+
+      {/* Right Panel - Turnover Detail */}
+      {selectedCard && (
+        <div className="w-1/2 h-full overflow-y-auto border-l border-neutral-200 dark:border-neutral-700 bg-card">
+          {fullscreenTask ? (
+            /* Task Template View */
+            <div className="flex flex-col h-full">
+              {/* Header */}
+              <div className="sticky top-0 bg-card z-10 border-b border-neutral-200 dark:border-neutral-700 p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold">{fullscreenTask.template_name || 'Task'}</h2>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-sm text-neutral-500">{selectedCard.property_name}</span>
+                      <Badge
+                        className={fullscreenTask.type === 'maintenance' 
+                          ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200' 
+                          : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                        }
+                      >
+                        {fullscreenTask.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                      </Badge>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setFullscreenTask(null)}
+                    className="p-2 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {/* Task Status Bar */}
+                <div className="p-3 bg-neutral-50 dark:bg-neutral-800 rounded-lg flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">Status</p>
+                    <Badge 
+                      className={`${
+                        fullscreenTask.status === 'complete' 
+                          ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                          : fullscreenTask.status === 'in_progress'
+                          ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                          : fullscreenTask.status === 'paused'
+                          ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
+                          : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200'
+                      }`}
+                    >
+                      {fullscreenTask.status === 'not_started' ? 'Not Started' :
+                       fullscreenTask.status === 'in_progress' ? 'In Progress' :
+                       fullscreenTask.status === 'paused' ? 'Paused' :
+                       fullscreenTask.status === 'complete' ? 'Completed' :
+                       fullscreenTask.status === 'reopened' ? 'Reopened' :
+                       'Not Started'}
+                    </Badge>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">Assigned to</p>
+                    <p className="text-sm font-medium text-neutral-900 dark:text-white">
+                      {fullscreenTask.assigned_staff || 'Unassigned'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Template Form */}
+                {fullscreenTask.template_id ? (
+                  loadingTaskTemplate === fullscreenTask.template_id ? (
+                    <div className="flex items-center justify-center py-8">
+                      <p className="text-neutral-500">Loading form...</p>
+                    </div>
+                  ) : taskTemplates[fullscreenTask.template_id] ? (
+                    <DynamicCleaningForm
+                      cleaningId={fullscreenTask.task_id}
+                      propertyName={selectedCard?.property_name || ''}
+                      template={taskTemplates[fullscreenTask.template_id]}
+                      formMetadata={fullscreenTask.form_metadata}
+                      onSave={async (formData) => {
+                        await saveTaskForm(fullscreenTask.task_id, formData);
+                      }}
+                    />
+                  ) : (
+                    <p className="text-center text-neutral-500 py-8">
+                      No template configured for this task
+                    </p>
+                  )
+                ) : (
+                  <p className="text-center text-neutral-500 py-8">
+                    No template configured for this task
+                  </p>
+                )}
+
+                {/* Action Buttons */}
+                <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
+                  <div className="flex flex-wrap gap-2">
+                    {(fullscreenTask.status === 'not_started' || !fullscreenTask.status) && (
+                      <>
+                        <Button
+                          onClick={() => {
+                            updateTaskAction(fullscreenTask.task_id, 'in_progress');
+                            setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
+                          }}
+                          className="flex-1"
+                        >
+                          Start Task
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            updateTaskAction(fullscreenTask.task_id, 'complete');
+                            setFullscreenTask({ ...fullscreenTask, status: 'complete' });
+                          }}
+                          variant="outline"
+                          className="flex-1"
+                        >
+                          Mark Complete
+                        </Button>
+                      </>
+                    )}
+                    {fullscreenTask.status === 'in_progress' && (
+                      <>
+                        <Button
+                          onClick={() => {
+                            updateTaskAction(fullscreenTask.task_id, 'paused');
+                            setFullscreenTask({ ...fullscreenTask, status: 'paused' });
+                          }}
+                          variant="outline"
+                          className="flex-1"
+                        >
+                          Pause
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            updateTaskAction(fullscreenTask.task_id, 'complete');
+                            setFullscreenTask({ ...fullscreenTask, status: 'complete' });
+                          }}
+                          className="flex-1"
+                        >
+                          Complete
+                        </Button>
+                      </>
+                    )}
+                    {fullscreenTask.status === 'paused' && (
+                      <>
+                        <Button
+                          onClick={() => {
+                            updateTaskAction(fullscreenTask.task_id, 'in_progress');
+                            setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
+                          }}
+                          className="flex-1"
+                        >
+                          Resume
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            updateTaskAction(fullscreenTask.task_id, 'complete');
+                            setFullscreenTask({ ...fullscreenTask, status: 'complete' });
+                          }}
+                          variant="outline"
+                          className="flex-1"
+                        >
+                          Complete
+                        </Button>
+                      </>
+                    )}
+                    {(fullscreenTask.status === 'complete' || fullscreenTask.status === 'reopened') && (
+                      <Button
+                        onClick={() => {
+                          updateTaskAction(fullscreenTask.task_id, 'not_started');
+                          setFullscreenTask({ ...fullscreenTask, status: 'not_started' });
+                        }}
+                        className="w-full"
+                      >
+                        Reopen Task
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="border-t border-neutral-200 dark:border-neutral-700 p-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setFullscreenTask(null)}
+                  className="w-full"
+                >
+                  Back to Tasks
+                </Button>
+              </div>
+            </div>
+          ) : (
+            /* Turnover Card Detail */
+            <div className="flex flex-col h-full">
+              {/* Header */}
+              <div className="sticky top-0 bg-card z-10 border-b border-neutral-200 dark:border-neutral-700 p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold">{selectedCard.property_name}</h2>
+                    {selectedCard.guest_name && (
+                      <div className="flex items-center gap-2 mt-1 text-sm text-neutral-500">
+                        <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        {selectedCard.guest_name}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedCard(null);
+                      setShowAddTaskDialog(false);
+                      setFullscreenTask(null);
+                    }}
+                    className="p-2 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {/* Dates */}
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="flex items-center gap-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                    <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    <div className="flex-1">
+                      <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Checked out</div>
+                      <div className="text-sm font-semibold text-neutral-900 dark:text-white">
+                        {selectedCard.check_out ? formatDate(selectedCard.check_out) : 'Not set'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                    <svg className="w-5 h-5 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                    </svg>
+                    <div className="flex-1">
+                      <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Next check in</div>
+                      <div className="text-sm font-semibold text-neutral-900 dark:text-white">
+                        {selectedCard.next_check_in ? formatDate(selectedCard.next_check_in) : 'Not set'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                    <svg className={`w-5 h-5 shrink-0 ${
+                      selectedCard.occupancy_status === 'occupied' ? 'text-orange-500' : 'text-neutral-400'
+                    }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                    </svg>
+                    <div className="flex-1">
+                      <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Occupancy</div>
+                      <Badge 
+                        variant={selectedCard.occupancy_status === 'occupied' ? 'default' : 'outline'}
+                        className={`px-3 py-1 ${
+                          selectedCard.occupancy_status === 'occupied' 
+                            ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-300' 
+                            : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300'
+                        }`}
+                      >
+                        {selectedCard.occupancy_status === 'occupied' ? 'Occupied' : 'Vacant'}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tasks Section */}
+                {selectedCard.tasks && selectedCard.tasks.length > 0 ? (
+                  <div className="space-y-3 mt-6">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
+                        Tasks ({selectedCard.completed_tasks || 0}/{selectedCard.total_tasks || 0})
+                      </h3>
+                      <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                        Click a task to open
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {selectedCard.tasks.map((task: any) => {
+                        const assignedUserIds = (task.assigned_users || []).map((u: any) => u.user_id);
+                        const taskStatus = task.status || 'not_started';
+                        
+                        const getStatusStyles = (status: string) => {
+                          switch (status) {
+                            case 'complete':
+                              return { border: 'border', badge: 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' };
+                            case 'in_progress':
+                              return { border: 'border', badge: 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800' };
+                            case 'paused':
+                              return { border: 'border', badge: 'bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800' };
+                            default:
+                              return { border: 'border', badge: 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800' };
+                          }
+                        };
+                        
+                        const statusStyles = getStatusStyles(taskStatus);
+                        
+                        return (
+                          <Card 
+                            key={task.task_id}
+                            className={`cursor-pointer hover:shadow-md transition-all bg-white dark:bg-neutral-900 ${statusStyles.border}`}
+                            onClick={async () => {
+                              if (task.template_id && !taskTemplates[task.template_id]) {
+                                await fetchTaskTemplate(task.template_id);
+                              }
+                              setFullscreenTask(task);
+                            }}
+                          >
+                            <CardHeader className="pb-3">
+                              <div className="flex items-center justify-between">
+                                <CardTitle className="text-base">{task.template_name || 'Unnamed Task'}</CardTitle>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (confirm('Remove this task from the turnover?')) {
+                                      deleteTaskFromCard(task.task_id);
+                                    }
+                                  }}
+                                >
+                                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </Button>
+                              </div>
+                              
+                              <div className="flex items-center gap-2 mt-2">
+                                <Badge className={`px-2 py-0.5 text-xs border ${statusStyles.badge}`}>
+                                  {taskStatus === 'complete' ? 'Complete' :
+                                   taskStatus === 'in_progress' ? 'In Progress' :
+                                   taskStatus === 'paused' ? 'Paused' :
+                                   taskStatus === 'reopened' ? 'Reopened' :
+                                   'Not Started'}
+                                </Badge>
+                                <Badge className={`px-2 py-0.5 text-xs border ${task.type === 'maintenance' 
+                                  ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800' 
+                                  : 'bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800'
+                                }`}>
+                                  {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                                </Badge>
+                              </div>
+                              
+                              <div className="flex items-center justify-between mt-4 pt-3 border-t border-neutral-200 dark:border-neutral-700">
+                                <div className="flex items-center gap-2">
+                                  <Popover>
+                                    <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                      <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
+                                        {task.scheduled_start ? new Date(task.scheduled_start).toLocaleDateString() : 'Date'}
+                                      </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="start" onClick={(e) => e.stopPropagation()}>
+                                      <Calendar
+                                        mode="single"
+                                        selected={task.scheduled_start ? new Date(task.scheduled_start) : undefined}
+                                        onSelect={(date) => {
+                                          if (date) {
+                                            const existingDate = task.scheduled_start ? new Date(task.scheduled_start) : null;
+                                            if (existingDate) {
+                                              date.setHours(existingDate.getHours(), existingDate.getMinutes());
+                                            } else {
+                                              date.setHours(12, 0);
+                                            }
+                                            updateTaskSchedule(task.task_id, date.toISOString());
+                                          }
+                                        }}
+                                      />
+                                    </PopoverContent>
+                                  </Popover>
+                                  <input
+                                    type="time"
+                                    className="h-7 px-2 text-xs border rounded-md bg-background dark:bg-neutral-800 dark:border-neutral-700"
+                                    value={task.scheduled_start ? new Date(task.scheduled_start).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : ''}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      const [hours, minutes] = e.target.value.split(':').map(Number);
+                                      const date = task.scheduled_start ? new Date(task.scheduled_start) : new Date();
+                                      date.setHours(hours, minutes);
+                                      updateTaskSchedule(task.task_id, date.toISOString());
+                                    }}
+                                  />
+                                </div>
+                                
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                                      {assignedUserIds.length > 0 ? (
+                                        <span className="flex items-center gap-1">
+                                          {(task.assigned_users || []).slice(0, 2).map((u: any) => (
+                                            <span key={u.user_id} title={u.name}>{u.avatar || '👤'}</span>
+                                          ))}
+                                          {assignedUserIds.length > 2 && <span className="text-neutral-500">+{assignedUserIds.length - 2}</span>}
+                                        </span>
+                                      ) : (
+                                        <span className="text-neutral-400">Assign</span>
+                                      )}
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                    <DropdownMenuLabel>Assign Users</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    {users.map((user) => (
+                                      <DropdownMenuCheckboxItem
+                                        key={user.id}
+                                        checked={assignedUserIds.includes(user.id)}
+                                        onCheckedChange={(checked) => {
+                                          const newIds = checked
+                                            ? [...assignedUserIds, user.id]
+                                            : assignedUserIds.filter((id: string) => id !== user.id);
+                                          updateTaskAssignment(task.task_id, newIds);
+                                        }}
+                                      >
+                                        <span className="mr-2">{user.avatar}</span>
+                                        {user.name}
+                                        <span className="ml-auto text-xs text-neutral-400">{user.role}</span>
+                                      </DropdownMenuCheckboxItem>
+                                    ))}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </CardHeader>
+                          </Card>
+                        );
+                      })}
+                    </div>
+
+                    {/* Add Task Button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full mt-3"
+                      onClick={() => {
+                        fetchAvailableTemplates();
+                        setShowAddTaskDialog(true);
+                      }}
+                    >
+                      Add Task
+                    </Button>
+
+                    {/* Add Task Panel */}
+                    {showAddTaskDialog && (
+                      <div className="mt-3 p-4 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-neutral-50 dark:bg-neutral-800">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-medium text-neutral-900 dark:text-white">Select a Template</h4>
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setShowAddTaskDialog(false)}>✕</Button>
+                        </div>
+                        
+                        {availableTemplates.length > 0 ? (
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {availableTemplates
+                              .filter(template => !selectedCard.tasks?.some((t: any) => t.template_id === template.id))
+                              .map((template) => (
+                                <button
+                                  key={template.id}
+                                  className="w-full p-3 text-left border border-neutral-200 dark:border-neutral-700 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+                                  onClick={() => addTaskToCard(template.id)}
+                                >
+                                  <div className="font-medium text-sm">{template.name}</div>
+                                  <div className="text-xs text-neutral-500 capitalize">{template.type}</div>
+                                </button>
+                              ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-neutral-500">Loading templates...</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-neutral-500">
+                    <p>No tasks assigned yet</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => {
+                        fetchAvailableTemplates();
+                        setShowAddTaskDialog(true);
+                      }}
+                    >
+                      Add Task
+                    </Button>
+                    
+                    {showAddTaskDialog && (
+                      <div className="mt-3 p-4 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-neutral-50 dark:bg-neutral-800 text-left">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-medium text-neutral-900 dark:text-white">Select a Template</h4>
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setShowAddTaskDialog(false)}>✕</Button>
+                        </div>
+                        
+                        {availableTemplates.length > 0 ? (
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {availableTemplates.map((template) => (
+                              <button
+                                key={template.id}
+                                className="w-full p-3 text-left border border-neutral-200 dark:border-neutral-700 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+                                onClick={() => addTaskToCard(template.id)}
+                              >
+                                <div className="font-medium text-sm">{template.name}</div>
+                                <div className="text-xs text-neutral-500 capitalize">{template.type}</div>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-neutral-500">Loading templates...</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
-  ), [response, viewMode, showFilters, filters, sortBy]);
+  ), [response, viewMode, showFilters, filters, sortBy, selectedCard, fullscreenTask, showAddTaskDialog, availableTemplates, taskTemplates, loadingTaskTemplate, users]);
 
   const timelineWindowContent = useMemo(() => (
     <Timeline onCardClick={setSelectedCard} />
@@ -2077,10 +2589,8 @@ export default function Home() {
         </Dialog>
         */}
 
-        {/* ============================================
-            NEW SHEET - Turnover Card Detail
-            ============================================ */}
-        <Sheet open={!!selectedCard} onOpenChange={(open) => {
+        {/* SHEET DISABLED - Now using 2-pane layout in FloatingWindow */}
+        {false && <Sheet open={!!selectedCard} onOpenChange={(open) => {
           if (!open) {
             setSelectedCard(null);
             setShowAddTaskDialog(false);
@@ -2126,20 +2636,20 @@ export default function Home() {
                           <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">Status</p>
                           <Badge 
                             className={`${
-                              fullscreenTask.card_actions === 'completed' 
+                              fullscreenTask.status === 'complete' 
                                 ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
-                                : fullscreenTask.card_actions === 'in_progress'
+                                : fullscreenTask.status === 'in_progress'
                                 ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                                : fullscreenTask.card_actions === 'paused'
+                                : fullscreenTask.status === 'paused'
                                 ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
                                 : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200'
                             }`}
                           >
-                            {fullscreenTask.card_actions === 'not_started' ? 'Not Started' :
-                             fullscreenTask.card_actions === 'in_progress' ? 'In Progress' :
-                             fullscreenTask.card_actions === 'paused' ? 'Paused' :
-                             fullscreenTask.card_actions === 'completed' ? 'Completed' :
-                             fullscreenTask.card_actions === 'reopened' ? 'Reopened' :
+                            {fullscreenTask.status === 'not_started' ? 'Not Started' :
+                             fullscreenTask.status === 'in_progress' ? 'In Progress' :
+                             fullscreenTask.status === 'paused' ? 'Paused' :
+                             fullscreenTask.status === 'complete' ? 'Completed' :
+                             fullscreenTask.status === 'reopened' ? 'Reopened' :
                              'Not Started'}
                           </Badge>
                         </div>
@@ -2181,12 +2691,12 @@ export default function Home() {
                       {/* Action Buttons */}
                       <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
                         <div className="flex flex-wrap gap-2">
-                          {(fullscreenTask.card_actions === 'not_started' || !fullscreenTask.card_actions) && (
+                          {(fullscreenTask.status === 'not_started' || !fullscreenTask.status) && (
                             <>
                               <Button
                                 onClick={() => {
                                   updateTaskAction(fullscreenTask.task_id, 'in_progress');
-                                  setFullscreenTask({ ...fullscreenTask, card_actions: 'in_progress' });
+                                  setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
                                 }}
                                 className="flex-1"
                               >
@@ -2194,8 +2704,8 @@ export default function Home() {
                               </Button>
                               <Button
                                 onClick={() => {
-                                  updateTaskAction(fullscreenTask.task_id, 'completed');
-                                  setFullscreenTask({ ...fullscreenTask, card_actions: 'completed' });
+                                  updateTaskAction(fullscreenTask.task_id, 'complete');
+                                  setFullscreenTask({ ...fullscreenTask, status: 'complete' });
                                 }}
                                 variant="outline"
                                 className="flex-1"
@@ -2204,12 +2714,12 @@ export default function Home() {
                               </Button>
                             </>
                           )}
-                          {fullscreenTask.card_actions === 'in_progress' && (
+                          {fullscreenTask.status === 'in_progress' && (
                             <>
                               <Button
                                 onClick={() => {
                                   updateTaskAction(fullscreenTask.task_id, 'paused');
-                                  setFullscreenTask({ ...fullscreenTask, card_actions: 'paused' });
+                                  setFullscreenTask({ ...fullscreenTask, status: 'paused' });
                                 }}
                                 variant="outline"
                                 className="flex-1"
@@ -2218,8 +2728,8 @@ export default function Home() {
                               </Button>
                               <Button
                                 onClick={() => {
-                                  updateTaskAction(fullscreenTask.task_id, 'completed');
-                                  setFullscreenTask({ ...fullscreenTask, card_actions: 'completed' });
+                                  updateTaskAction(fullscreenTask.task_id, 'complete');
+                                  setFullscreenTask({ ...fullscreenTask, status: 'complete' });
                                 }}
                                 className="flex-1"
                               >
@@ -2227,12 +2737,12 @@ export default function Home() {
                               </Button>
                             </>
                           )}
-                          {fullscreenTask.card_actions === 'paused' && (
+                          {fullscreenTask.status === 'paused' && (
                             <>
                               <Button
                                 onClick={() => {
                                   updateTaskAction(fullscreenTask.task_id, 'in_progress');
-                                  setFullscreenTask({ ...fullscreenTask, card_actions: 'in_progress' });
+                                  setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
                                 }}
                                 className="flex-1"
                               >
@@ -2240,8 +2750,8 @@ export default function Home() {
                               </Button>
                               <Button
                                 onClick={() => {
-                                  updateTaskAction(fullscreenTask.task_id, 'completed');
-                                  setFullscreenTask({ ...fullscreenTask, card_actions: 'completed' });
+                                  updateTaskAction(fullscreenTask.task_id, 'complete');
+                                  setFullscreenTask({ ...fullscreenTask, status: 'complete' });
                                 }}
                                 variant="outline"
                                 className="flex-1"
@@ -2250,11 +2760,11 @@ export default function Home() {
                               </Button>
                             </>
                           )}
-                          {(fullscreenTask.card_actions === 'completed' || fullscreenTask.card_actions === 'reopened') && (
+                          {(fullscreenTask.status === 'complete' || fullscreenTask.status === 'reopened') && (
                             <Button
                               onClick={() => {
                                 updateTaskAction(fullscreenTask.task_id, 'not_started');
-                                setFullscreenTask({ ...fullscreenTask, card_actions: 'not_started' });
+                                setFullscreenTask({ ...fullscreenTask, status: 'not_started' });
                               }}
                               className="w-full"
                             >
@@ -2369,13 +2879,43 @@ export default function Home() {
                             </div>
                           </div>
 
-                          <div className="space-y-2">
+                          <div className="space-y-3">
                             {selectedCard.tasks.map((task: any) => {
                               const assignedUserIds = (task.assigned_users || []).map((u: any) => u.user_id);
+                              const taskStatus = task.status || 'not_started';
+                              
+                              // Color scheme based on status
+                              const getStatusStyles = (status: string) => {
+                                switch (status) {
+                                  case 'complete':
+                                    return {
+                                      border: 'border',
+                                      badge: 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                    };
+                                  case 'in_progress':
+                                    return {
+                                      border: 'border',
+                                      badge: 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800'
+                                    };
+                                  case 'paused':
+                                    return {
+                                      border: 'border',
+                                      badge: 'bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800'
+                                    };
+                                  default: // not_started, reopened
+                                    return {
+                                      border: 'border',
+                                      badge: 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'
+                                    };
+                                }
+                              };
+                              
+                              const statusStyles = getStatusStyles(taskStatus);
+                              
                               return (
                                 <Card 
                                   key={task.task_id}
-                                  className="cursor-pointer hover:shadow-md transition-all"
+                                  className={`cursor-pointer hover:shadow-md transition-all bg-white dark:bg-neutral-900 ${statusStyles.border}`}
                                   onClick={async (e) => {
                                     if ((e.target as HTMLElement).closest('button, [data-radix-popper-content-wrapper]')) return;
                                     if (task.template_id && !taskTemplates[task.template_id]) {
@@ -2386,26 +2926,14 @@ export default function Home() {
                                 >
                                   <CardHeader className="pb-3">
                                     <div className="flex items-center justify-between">
-                                      <CardTitle className="text-base flex items-center gap-2">
-                                        {task.status === 'complete' ? '✓' : 
-                                         task.status === 'in_progress' ? '▶' :
-                                         task.status === 'pending' ? '○' : ''}
+                                      <CardTitle className="text-base">
                                         {task.template_name || 'Unnamed Task'}
                                       </CardTitle>
                                       <div className="flex items-center gap-2">
-                                        <Badge
-                                          variant={task.type === 'maintenance' ? 'default' : 'secondary'}
-                                          className={`px-2.5 py-1 ${task.type === 'maintenance' 
-                                            ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200' 
-                                            : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                                          }`}
-                                        >
-                                          {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
-                                        </Badge>
                                         <Button
                                           variant="ghost"
                                           size="sm"
-                                          className="h-6 w-6 p-0 text-neutral-400 hover:text-red-500 hover:bg-red-50"
+                                          className="h-6 w-6 p-0 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             if (confirm('Remove this task from the turnover?')) {
@@ -2419,15 +2947,73 @@ export default function Home() {
                                         </Button>
                                       </div>
                                     </div>
-                                    <div className="flex items-center justify-between mt-2">
-                                      <CardDescription className="flex-1">
-                                        {task.card_actions === 'not_started' ? 'Not Started' :
-                                         task.card_actions === 'in_progress' ? 'In Progress' :
-                                         task.card_actions === 'paused' ? 'Paused' :
-                                         task.card_actions === 'completed' ? 'Completed' :
-                                         task.card_actions === 'reopened' ? 'Reopened' :
+                                    
+                                    {/* Status & Type Badges */}
+                                    <div className="flex items-center gap-2 mt-2">
+                                      <Badge className={`px-2 py-0.5 text-xs border ${statusStyles.badge}`}>
+                                        {taskStatus === 'complete' ? 'Complete' :
+                                         taskStatus === 'in_progress' ? 'In Progress' :
+                                         taskStatus === 'paused' ? 'Paused' :
+                                         taskStatus === 'reopened' ? 'Reopened' :
                                          'Not Started'}
-                                      </CardDescription>
+                                      </Badge>
+                                      <Badge
+                                        className={`px-2 py-0.5 text-xs border ${task.type === 'maintenance' 
+                                          ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800' 
+                                          : 'bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800'
+                                        }`}
+                                      >
+                                        {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                                      </Badge>
+                                    </div>
+                                    
+                                    {/* Schedule & Assignment Row */}
+                                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-neutral-200 dark:border-neutral-700">
+                                      {/* Date/Time Picker */}
+                                      <div className="flex items-center gap-2">
+                                        <Popover>
+                                          <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                            <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
+                                              {task.scheduled_start 
+                                                ? new Date(task.scheduled_start).toLocaleDateString() 
+                                                : 'Date'}
+                                            </Button>
+                                          </PopoverTrigger>
+                                          <PopoverContent className="w-auto p-0" align="start" onClick={(e) => e.stopPropagation()}>
+                                            <Calendar
+                                              mode="single"
+                                              selected={task.scheduled_start ? new Date(task.scheduled_start) : undefined}
+                                              onSelect={(date) => {
+                                                if (date) {
+                                                  const existingDate = task.scheduled_start ? new Date(task.scheduled_start) : null;
+                                                  if (existingDate) {
+                                                    date.setHours(existingDate.getHours(), existingDate.getMinutes());
+                                                  } else {
+                                                    date.setHours(12, 0);
+                                                  }
+                                                  updateTaskSchedule(task.task_id, date.toISOString());
+                                                }
+                                              }}
+                                            />
+                                          </PopoverContent>
+                                        </Popover>
+                                        <input
+                                          type="time"
+                                          className="h-7 px-2 text-xs border rounded-md bg-background dark:bg-neutral-800 dark:border-neutral-700"
+                                          value={task.scheduled_start 
+                                            ? new Date(task.scheduled_start).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
+                                            : ''
+                                          }
+                                          onClick={(e) => e.stopPropagation()}
+                                          onChange={(e) => {
+                                            e.stopPropagation();
+                                            const [hours, minutes] = e.target.value.split(':').map(Number);
+                                            const date = task.scheduled_start ? new Date(task.scheduled_start) : new Date();
+                                            date.setHours(hours, minutes);
+                                            updateTaskSchedule(task.task_id, date.toISOString());
+                                          }}
+                                        />
+                                      </div>
                                       
                                       {/* Assignment Dropdown */}
                                       <DropdownMenu>
@@ -2745,7 +3331,7 @@ export default function Home() {
               </>
             )}
           </SheetContent>
-        </Sheet>
+        </Sheet>}
 
       </>
     );
@@ -2897,9 +3483,9 @@ export default function Home() {
 
       {/* ============================================
           DESKTOP: Turnover Card Detail Sheet
-          OLD DIALOG DISABLED - To restore, swap Sheet for Dialog
+          DISABLED - Now using 2-pane layout in FloatingWindow
           ============================================ */}
-      <Sheet open={!!selectedCard} onOpenChange={(open) => {
+      {false && <Sheet open={!!selectedCard} onOpenChange={(open) => {
         if (!open) {
           setSelectedCard(null);
           setShowAddTaskDialog(false);
@@ -2945,20 +3531,20 @@ export default function Home() {
                         <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">Status</p>
                         <Badge 
                           className={`${
-                            fullscreenTask.card_actions === 'completed' 
+                            fullscreenTask.status === 'complete' 
                               ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
-                              : fullscreenTask.card_actions === 'in_progress'
+                              : fullscreenTask.status === 'in_progress'
                               ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                              : fullscreenTask.card_actions === 'paused'
+                              : fullscreenTask.status === 'paused'
                               ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
                               : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200'
                           }`}
                         >
-                          {fullscreenTask.card_actions === 'not_started' ? 'Not Started' :
-                           fullscreenTask.card_actions === 'in_progress' ? 'In Progress' :
-                           fullscreenTask.card_actions === 'paused' ? 'Paused' :
-                           fullscreenTask.card_actions === 'completed' ? 'Completed' :
-                           fullscreenTask.card_actions === 'reopened' ? 'Reopened' :
+                          {fullscreenTask.status === 'not_started' ? 'Not Started' :
+                           fullscreenTask.status === 'in_progress' ? 'In Progress' :
+                           fullscreenTask.status === 'paused' ? 'Paused' :
+                           fullscreenTask.status === 'complete' ? 'Completed' :
+                           fullscreenTask.status === 'reopened' ? 'Reopened' :
                            'Not Started'}
                         </Badge>
                       </div>
@@ -3000,12 +3586,12 @@ export default function Home() {
                     {/* Action Buttons */}
                     <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
                       <div className="flex flex-wrap gap-2">
-                        {(fullscreenTask.card_actions === 'not_started' || !fullscreenTask.card_actions) && (
+                        {(fullscreenTask.status === 'not_started' || !fullscreenTask.status) && (
                           <>
                             <Button
                               onClick={() => {
                                 updateTaskAction(fullscreenTask.task_id, 'in_progress');
-                                setFullscreenTask({ ...fullscreenTask, card_actions: 'in_progress' });
+                                setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
                               }}
                               className="flex-1"
                             >
@@ -3013,8 +3599,8 @@ export default function Home() {
                             </Button>
                             <Button
                               onClick={() => {
-                                updateTaskAction(fullscreenTask.task_id, 'completed');
-                                setFullscreenTask({ ...fullscreenTask, card_actions: 'completed' });
+                                updateTaskAction(fullscreenTask.task_id, 'complete');
+                                setFullscreenTask({ ...fullscreenTask, status: 'complete' });
                               }}
                               variant="outline"
                               className="flex-1"
@@ -3023,12 +3609,12 @@ export default function Home() {
                             </Button>
                           </>
                         )}
-                        {fullscreenTask.card_actions === 'in_progress' && (
+                        {fullscreenTask.status === 'in_progress' && (
                           <>
                             <Button
                               onClick={() => {
                                 updateTaskAction(fullscreenTask.task_id, 'paused');
-                                setFullscreenTask({ ...fullscreenTask, card_actions: 'paused' });
+                                setFullscreenTask({ ...fullscreenTask, status: 'paused' });
                               }}
                               variant="outline"
                               className="flex-1"
@@ -3037,8 +3623,8 @@ export default function Home() {
                             </Button>
                             <Button
                               onClick={() => {
-                                updateTaskAction(fullscreenTask.task_id, 'completed');
-                                setFullscreenTask({ ...fullscreenTask, card_actions: 'completed' });
+                                updateTaskAction(fullscreenTask.task_id, 'complete');
+                                setFullscreenTask({ ...fullscreenTask, status: 'complete' });
                               }}
                               className="flex-1"
                             >
@@ -3046,12 +3632,12 @@ export default function Home() {
                             </Button>
                           </>
                         )}
-                        {fullscreenTask.card_actions === 'paused' && (
+                        {fullscreenTask.status === 'paused' && (
                           <>
                             <Button
                               onClick={() => {
                                 updateTaskAction(fullscreenTask.task_id, 'in_progress');
-                                setFullscreenTask({ ...fullscreenTask, card_actions: 'in_progress' });
+                                setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
                               }}
                               className="flex-1"
                             >
@@ -3059,8 +3645,8 @@ export default function Home() {
                             </Button>
                             <Button
                               onClick={() => {
-                                updateTaskAction(fullscreenTask.task_id, 'completed');
-                                setFullscreenTask({ ...fullscreenTask, card_actions: 'completed' });
+                                updateTaskAction(fullscreenTask.task_id, 'complete');
+                                setFullscreenTask({ ...fullscreenTask, status: 'complete' });
                               }}
                               variant="outline"
                               className="flex-1"
@@ -3069,11 +3655,11 @@ export default function Home() {
                             </Button>
                           </>
                         )}
-                        {(fullscreenTask.card_actions === 'completed' || fullscreenTask.card_actions === 'reopened') && (
+                        {(fullscreenTask.status === 'complete' || fullscreenTask.status === 'reopened') && (
                           <Button
                             onClick={() => {
                               updateTaskAction(fullscreenTask.task_id, 'not_started');
-                              setFullscreenTask({ ...fullscreenTask, card_actions: 'not_started' });
+                              setFullscreenTask({ ...fullscreenTask, status: 'not_started' });
                             }}
                             className="w-full"
                           >
@@ -3174,13 +3760,43 @@ export default function Home() {
                           </div>
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           {selectedCard.tasks.map((task: any) => {
                             const assignedUserIds = (task.assigned_users || []).map((u: any) => u.user_id);
+                            const taskStatus = task.status || 'not_started';
+                            
+                            // Color scheme based on status
+                            const getStatusStyles = (status: string) => {
+                              switch (status) {
+                                case 'complete':
+                                  return {
+                                    border: 'border',
+                                    badge: 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                  };
+                                case 'in_progress':
+                                  return {
+                                    border: 'border',
+                                    badge: 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800'
+                                  };
+                                case 'paused':
+                                  return {
+                                    border: 'border',
+                                    badge: 'bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800'
+                                  };
+                                default: // not_started, reopened
+                                  return {
+                                    border: 'border',
+                                    badge: 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'
+                                  };
+                              }
+                            };
+                            
+                            const statusStyles = getStatusStyles(taskStatus);
+                            
                             return (
                               <Card 
                                 key={task.task_id}
-                                className="cursor-pointer hover:shadow-md transition-all"
+                                className={`cursor-pointer hover:shadow-md transition-all bg-white dark:bg-neutral-900 ${statusStyles.border}`}
                                 onClick={async (e) => {
                                   if ((e.target as HTMLElement).closest('button, [data-radix-popper-content-wrapper]')) return;
                                   if (task.template_id && !taskTemplates[task.template_id]) {
@@ -3191,26 +3807,14 @@ export default function Home() {
                               >
                                 <CardHeader className="pb-3">
                                   <div className="flex items-center justify-between">
-                                    <CardTitle className="text-base flex items-center gap-2">
-                                      {task.status === 'complete' ? '✓' : 
-                                       task.status === 'in_progress' ? '▶' :
-                                       task.status === 'pending' ? '○' : ''}
+                                    <CardTitle className="text-base">
                                       {task.template_name || 'Unnamed Task'}
                                     </CardTitle>
                                     <div className="flex items-center gap-2">
-                                      <Badge
-                                        variant={task.type === 'maintenance' ? 'default' : 'secondary'}
-                                        className={`px-2.5 py-1 ${task.type === 'maintenance' 
-                                          ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200' 
-                                          : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                                        }`}
-                                      >
-                                        {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
-                                      </Badge>
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        className="h-6 w-6 p-0 text-neutral-400 hover:text-red-500 hover:bg-red-50"
+                                        className="h-6 w-6 p-0 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           if (confirm('Remove this task from the turnover?')) {
@@ -3224,15 +3828,73 @@ export default function Home() {
                                       </Button>
                                     </div>
                                   </div>
-                                  <div className="flex items-center justify-between mt-2">
-                                    <CardDescription className="flex-1">
-                                      {task.card_actions === 'not_started' ? 'Not Started' :
-                                       task.card_actions === 'in_progress' ? 'In Progress' :
-                                       task.card_actions === 'paused' ? 'Paused' :
-                                       task.card_actions === 'completed' ? 'Completed' :
-                                       task.card_actions === 'reopened' ? 'Reopened' :
+                                  
+                                  {/* Status & Type Badges */}
+                                  <div className="flex items-center gap-2 mt-2">
+                                    <Badge className={`px-2 py-0.5 text-xs border ${statusStyles.badge}`}>
+                                      {taskStatus === 'complete' ? 'Complete' :
+                                       taskStatus === 'in_progress' ? 'In Progress' :
+                                       taskStatus === 'paused' ? 'Paused' :
+                                       taskStatus === 'reopened' ? 'Reopened' :
                                        'Not Started'}
-                                    </CardDescription>
+                                    </Badge>
+                                    <Badge
+                                      className={`px-2 py-0.5 text-xs border ${task.type === 'maintenance' 
+                                        ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800' 
+                                        : 'bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800'
+                                      }`}
+                                    >
+                                      {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                                    </Badge>
+                                  </div>
+                                  
+                                  {/* Schedule & Assignment Row */}
+                                  <div className="flex items-center justify-between mt-4 pt-3 border-t border-neutral-200 dark:border-neutral-700">
+                                    {/* Date/Time Picker */}
+                                    <div className="flex items-center gap-2">
+                                      <Popover>
+                                        <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                          <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
+                                            {task.scheduled_start 
+                                              ? new Date(task.scheduled_start).toLocaleDateString() 
+                                              : 'Date'}
+                                          </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0" align="start" onClick={(e) => e.stopPropagation()}>
+                                          <Calendar
+                                            mode="single"
+                                            selected={task.scheduled_start ? new Date(task.scheduled_start) : undefined}
+                                            onSelect={(date) => {
+                                              if (date) {
+                                                const existingDate = task.scheduled_start ? new Date(task.scheduled_start) : null;
+                                                if (existingDate) {
+                                                  date.setHours(existingDate.getHours(), existingDate.getMinutes());
+                                                } else {
+                                                  date.setHours(12, 0);
+                                                }
+                                                updateTaskSchedule(task.task_id, date.toISOString());
+                                              }
+                                            }}
+                                          />
+                                        </PopoverContent>
+                                      </Popover>
+                                      <input
+                                        type="time"
+                                        className="h-7 px-2 text-xs border rounded-md bg-background dark:bg-neutral-800 dark:border-neutral-700"
+                                        value={task.scheduled_start 
+                                          ? new Date(task.scheduled_start).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
+                                          : ''
+                                        }
+                                        onClick={(e) => e.stopPropagation()}
+                                        onChange={(e) => {
+                                          e.stopPropagation();
+                                          const [hours, minutes] = e.target.value.split(':').map(Number);
+                                          const date = task.scheduled_start ? new Date(task.scheduled_start) : new Date();
+                                          date.setHours(hours, minutes);
+                                          updateTaskSchedule(task.task_id, date.toISOString());
+                                        }}
+                                      />
+                                    </div>
                                     
                                     {/* Assignment Dropdown */}
                                     <DropdownMenu>
@@ -3555,7 +4217,7 @@ export default function Home() {
             </>
           )}
         </SheetContent>
-      </Sheet>
+      </Sheet>}
 
     </div>
   );

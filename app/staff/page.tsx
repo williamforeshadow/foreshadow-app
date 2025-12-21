@@ -171,7 +171,7 @@ export default function StaffPage() {
         
         const updatedTasks = prev.tasks.map((task: any) => 
           task.task_id === taskId 
-            ? { ...task, card_actions: action, status: result.data.status }
+            ? { ...task, status: action }
             : task
         );
         
@@ -179,21 +179,12 @@ export default function StaffPage() {
         const inProgressCount = updatedTasks.filter((t: any) => t.status === 'in_progress').length;
         const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
         
-        // If this was the first cleaning task, update top-level fields for backward compatibility
-        const firstCleaningTask = updatedTasks.find((t: any) => t.type === 'cleaning');
-        const updatedTask = updatedTasks.find((t: any) => t.task_id === taskId);
-        const shouldUpdateTopLevel = firstCleaningTask && updatedTask && firstCleaningTask.task_id === taskId;
-        
         return { 
           ...prev, 
           tasks: updatedTasks,
           completed_tasks: completedCount,
           tasks_in_progress: inProgressCount,
-          turnover_status: newTurnoverStatus,
-          ...(shouldUpdateTopLevel ? {
-            card_actions: action,
-            status: result.data.status
-          } : {})
+          turnover_status: newTurnoverStatus
         };
       });
 
@@ -205,28 +196,19 @@ export default function StaffPage() {
           if (item.id === selectedCard.id && item.tasks) {
             const updatedTasks = item.tasks.map((task: any) => 
               task.task_id === taskId 
-                ? { ...task, card_actions: action, status: result.data.status }
+                ? { ...task, status: action }
                 : task
             );
             const completedCount = updatedTasks.filter((t: any) => t.status === 'complete').length;
             const inProgressCount = updatedTasks.filter((t: any) => t.status === 'in_progress').length;
             const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
             
-            // If this was the first cleaning task, update top-level fields for backward compatibility
-            const firstCleaningTask = updatedTasks.find((t: any) => t.type === 'cleaning');
-            const updatedTask = updatedTasks.find((t: any) => t.task_id === taskId);
-            const shouldUpdateTopLevel = firstCleaningTask && updatedTask && firstCleaningTask.task_id === taskId;
-            
             return { 
               ...item, 
               tasks: updatedTasks,
               completed_tasks: completedCount,
               tasks_in_progress: inProgressCount,
-              turnover_status: newTurnoverStatus,
-              ...(shouldUpdateTopLevel ? {
-                card_actions: action,
-                status: result.data.status
-              } : {})
+              turnover_status: newTurnoverStatus
             };
           }
           return item;
@@ -644,26 +626,26 @@ export default function StaffPage() {
       case undefined:
         return [
           { value: 'in_progress', label: '▶️ Start', icon: '▶️' },
-          { value: 'completed', label: '✅ Mark Complete', icon: '✅' }
+          { value: 'complete', label: '✅ Mark Complete', icon: '✅' }
         ];
       case 'in_progress':
         return [
           { value: 'paused', label: '⏸️ Pause', icon: '⏸️' },
-          { value: 'completed', label: '✅ Mark Complete', icon: '✅' }
+          { value: 'complete', label: '✅ Mark Complete', icon: '✅' }
         ];
       case 'paused':
         return [
           { value: 'in_progress', label: '▶️ Resume', icon: '▶️' },
-          { value: 'completed', label: '✅ Mark Complete', icon: '✅' }
+          { value: 'complete', label: '✅ Mark Complete', icon: '✅' }
         ];
-      case 'completed':
+      case 'complete':
         return [
           { value: 'not_started', label: '↺ Reopen', icon: '↺' }
         ];
       default:
         return [
           { value: 'in_progress', label: '▶️ Start', icon: '▶️' },
-          { value: 'completed', label: '✅ Mark Complete', icon: '✅' }
+          { value: 'complete', label: '✅ Mark Complete', icon: '✅' }
         ];
     }
   };
@@ -1053,11 +1035,11 @@ export default function StaffPage() {
                             </div>
                           </div>
                           <CardDescription>
-                            {task.card_actions === 'not_started' ? 'Not Started' :
-                             task.card_actions === 'in_progress' ? 'In Progress' :
-                             task.card_actions === 'paused' ? 'Paused' :
-                             task.card_actions === 'completed' ? 'Completed' :
-                             task.card_actions === 'reopened' ? 'Reopened' :
+                            {task.status === 'not_started' ? 'Not Started' :
+                             task.status === 'in_progress' ? 'In Progress' :
+                             task.status === 'paused' ? 'Paused' :
+                             task.status === 'complete' ? 'Completed' :
+                             task.status === 'reopened' ? 'Reopened' :
                              'Not Started'}
                             {task.assigned_staff && ` • ${task.assigned_staff}`}
                           </CardDescription>
@@ -1374,7 +1356,7 @@ export default function StaffPage() {
               return expandedTask ? (
                 <div className="px-6 py-4 border-t border-neutral-200 dark:border-neutral-700">
                   <div className="flex flex-wrap gap-2">
-                    {expandedTask.card_actions === 'not_started' && (
+                    {expandedTask.status === 'not_started' && (
                       <>
                         <Button
                           onClick={() => updateTaskAction(expandedTask.task_id, 'in_progress')}
@@ -1384,7 +1366,7 @@ export default function StaffPage() {
                           Start
                         </Button>
                         <Button
-                          onClick={() => updateTaskAction(expandedTask.task_id, 'completed')}
+                          onClick={() => updateTaskAction(expandedTask.task_id, 'complete')}
                           size="lg"
                           variant="outline"
                           className="flex-1"
@@ -1393,7 +1375,7 @@ export default function StaffPage() {
                         </Button>
                       </>
                     )}
-                    {expandedTask.card_actions === 'in_progress' && (
+                    {expandedTask.status === 'in_progress' && (
                       <>
                         <Button
                           onClick={() => updateTaskAction(expandedTask.task_id, 'paused')}
@@ -1404,7 +1386,7 @@ export default function StaffPage() {
                           Pause
                         </Button>
                         <Button
-                          onClick={() => updateTaskAction(expandedTask.task_id, 'completed')}
+                          onClick={() => updateTaskAction(expandedTask.task_id, 'complete')}
                           size="lg"
                           className="flex-1"
                         >
@@ -1412,7 +1394,7 @@ export default function StaffPage() {
                         </Button>
                       </>
                     )}
-                    {expandedTask.card_actions === 'paused' && (
+                    {expandedTask.status === 'paused' && (
                       <>
                         <Button
                           onClick={() => updateTaskAction(expandedTask.task_id, 'in_progress')}
@@ -1422,7 +1404,7 @@ export default function StaffPage() {
                           Resume
                         </Button>
                         <Button
-                          onClick={() => updateTaskAction(expandedTask.task_id, 'completed')}
+                          onClick={() => updateTaskAction(expandedTask.task_id, 'complete')}
                           size="lg"
                           variant="outline"
                           className="flex-1"
@@ -1431,7 +1413,7 @@ export default function StaffPage() {
                         </Button>
                       </>
                     )}
-                    {(expandedTask.card_actions === 'completed' || expandedTask.card_actions === 'reopened') && (
+                    {(expandedTask.status === 'complete' || expandedTask.status === 'reopened') && (
                       <Button
                         onClick={() => updateTaskAction(expandedTask.task_id, 'not_started')}
                         size="lg"

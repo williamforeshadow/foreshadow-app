@@ -21,14 +21,25 @@ TABLE: turnover_tasks
   reservation_id (uuid)
   template_id (uuid)
   type (text)
-  status (text)
-  assigned_staff (text)
+  status (text) — 'not_started', 'in_progress', 'paused', 'complete', 'reopened'
   scheduled_start (timestamptz)
-  card_actions (text)
   form_metadata (jsonb) — Form responses with labels. Structure: {"field_id": {"label": "Question text", "type": "rating|text|yes-no|checkbox|photo", "value": "answer"}, template_name, property_name}
   completed_at (timestamptz)
   created_at (timestamptz)
   updated_at (timestamptz)
+
+TABLE: task_assignments
+  id (uuid)
+  task_id (uuid) — FK to turnover_tasks
+  user_id (text) — FK to users
+  assigned_at (timestamptz)
+
+TABLE: users
+  id (text) — Primary key
+  name (text)
+  email (text)
+  role (text) — 'superadmin', 'manager', 'staff'
+  avatar (text)
 
 TABLE: templates
   id (uuid)

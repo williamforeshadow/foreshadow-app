@@ -51,9 +51,8 @@ Tasks associated with turnovers (cleanings, maintenance between guests).
 | reservation_id | uuid | FK to reservations |
 | template_id | uuid | FK to templates |
 | type | text | Task type (e.g., 'cleaning', 'maintenance') |
-| status | text | Task status |
+| status | text | Task status: 'not_started', 'in_progress', 'paused', 'complete', 'reopened' |
 | scheduled_start | timestamptz | Scheduled start time |
-| card_actions | text | Action state: 'not_started', 'in_progress', 'paused', 'completed' |
 | form_metadata | jsonb | Form responses with field labels |
 | completed_at | timestamptz | When task was completed |
 | created_at | timestamptz | Record creation time |
@@ -129,7 +128,7 @@ Discussion comments on projects.
 2. **Same-day flips**: Properties where check_out and next check_in are same day
 3. **Staff workload**: JOIN task_assignments and GROUP BY user_id
 4. **Occupancy**: Compare check_in/check_out dates against date ranges
-5. **Overdue tasks**: WHERE card_actions != 'completed' AND scheduled_start < NOW()
+5. **Overdue tasks**: WHERE status != 'complete' AND scheduled_start < NOW()
 6. **Property history**: Filter by property_name with date ranges
 7. **User's assignments**: JOIN task_assignments or project_assignments WHERE user_id = 'xxx'
 8. **Get assignees for a task**: SELECT u.* FROM users u JOIN task_assignments ta ON ta.user_id = u.id WHERE ta.task_id = 'xxx'

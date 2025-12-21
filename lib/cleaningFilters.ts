@@ -13,10 +13,17 @@ export function applyCleaningFilters(items: any[], filters: CleaningFilters): an
       }
     }
     
-    // Card Actions filter - kept for backward compatibility but may not be as useful now
+    // Status filter - filters tasks by their status
     if (filters.cardActions.length > 0) {
-      if (!filters.cardActions.includes(item.card_actions || 'not_started')) {
-        return false;
+      // Check if any task in the item matches the selected statuses
+      const tasks = item.tasks || [];
+      if (tasks.length > 0) {
+        const hasMatchingTask = tasks.some((task: any) => 
+          filters.cardActions.includes(task.status || 'not_started')
+        );
+        if (!hasMatchingTask) {
+          return false;
+        }
       }
     }
     

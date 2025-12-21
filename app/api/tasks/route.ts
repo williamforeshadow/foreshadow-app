@@ -55,8 +55,7 @@ export async function POST(request: Request) {
         reservation_id,
         template_id,
         type: template.type,
-        status: 'not_started',
-        card_actions: 'not_started'
+        status: 'not_started'
       })
       .select('*, templates(name, type)')
       .single();
@@ -75,8 +74,7 @@ export async function POST(request: Request) {
       template_name: newTask.templates?.name || template.name,
       type: newTask.type,
       status: newTask.status,
-      card_actions: newTask.card_actions,
-      assigned_staff: newTask.assigned_staff,
+      assigned_users: [],
       scheduled_start: newTask.scheduled_start,
       form_metadata: newTask.form_metadata,
       completed_at: newTask.completed_at

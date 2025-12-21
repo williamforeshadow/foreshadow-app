@@ -9,14 +9,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Task ID and action are required' }, { status: 400 });
     }
 
-    const allowedActions = ['not_started', 'in_progress', 'paused', 'completed', 'reopened'];
+    const allowedActions = ['not_started', 'in_progress', 'paused', 'complete', 'reopened'];
     if (!allowedActions.includes(action)) {
       return NextResponse.json({ error: 'Invalid action provided' }, { status: 400 });
     }
 
     const { data, error } = await supabase
       .from('turnover_tasks')
-      .update({ card_actions: action })
+      .update({ status: action })
       .eq('id', taskId)
       .select()
       .single();
