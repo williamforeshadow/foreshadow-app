@@ -105,8 +105,21 @@ export default function Home() {
   const [availableTemplates, setAvailableTemplates] = useState<any[]>([]);
   const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
   const [addingTask, setAddingTask] = useState(false);
-  const [showPropertyProjects, setShowPropertyProjects] = useState(false);
+  const [rightPanelView, setRightPanelView] = useState<'tasks' | 'projects'>('tasks'); // Toggle between tasks and projects in turnover detail
   const [fullscreenTask, setFullscreenTask] = useState<any>(null);
+  
+  // Expanded project view within turnovers window (separate from projects window)
+  const [expandedTurnoverProject, setExpandedTurnoverProject] = useState<any>(null);
+  const [turnoverProjectFields, setTurnoverProjectFields] = useState<{
+    title: string;
+    description: string;
+    status: string;
+    priority: string;
+    assigned_staff: string;
+    due_date: string;
+  } | null>(null);
+  const [turnoverDiscussionExpanded, setTurnoverDiscussionExpanded] = useState(false);
+  const [savingTurnoverProject, setSavingTurnoverProject] = useState(false);
   const [expandedProject, setExpandedProject] = useState<any>(null);
   
   // Project comments state
@@ -154,6 +167,13 @@ export default function Home() {
       fetchProjects();
     }
   }, [showProjectsWindow]);
+
+  // Also fetch projects when viewing projects in turnover detail
+  useEffect(() => {
+    if (selectedCard && rightPanelView === 'projects' && projects.length === 0) {
+      fetchProjects();
+    }
+  }, [selectedCard, rightPanelView]);
 
   // Fetch comments when a project is expanded
   useEffect(() => {
@@ -367,6 +387,39 @@ export default function Home() {
       console.error('Error saving project:', err);
     } finally {
       setSavingProjectEdit(false);
+    }
+  };
+
+  // Save project changes from turnovers window (separate from main projects window)
+  const saveTurnoverProjectChanges = async () => {
+    if (!expandedTurnoverProject || !turnoverProjectFields) return;
+    
+    setSavingTurnoverProject(true);
+    try {
+      const res = await fetch(`/api/projects/${expandedTurnoverProject.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: turnoverProjectFields.title,
+          description: turnoverProjectFields.description || null,
+          status: turnoverProjectFields.status,
+          priority: turnoverProjectFields.priority,
+          assigned_staff: turnoverProjectFields.assigned_staff || null,
+          due_date: turnoverProjectFields.due_date || null
+        })
+      });
+      
+      const data = await res.json();
+      if (data.data) {
+        // Update local projects list
+        setProjects(prev => prev.map(p => p.id === expandedTurnoverProject.id ? data.data : p));
+        // Update the expanded turnover project
+        setExpandedTurnoverProject(data.data);
+      }
+    } catch (err) {
+      console.error('Error saving turnover project:', err);
+    } finally {
+      setSavingTurnoverProject(false);
     }
   };
 
@@ -1122,7 +1175,7 @@ export default function Home() {
   const cardsWindowContent = useMemo(() => (
     <div className="flex h-full">
       {/* Left Panel - Cards */}
-      <div className={`${selectedCard ? 'w-1/2 border-r border-neutral-200 dark:border-neutral-700' : 'w-full'} transition-all duration-300 overflow-y-auto p-6 space-y-4`}>
+      <div className={`${selectedCard ? 'w-1/2 border-r border-neutral-200 dark:border-neutral-700' : 'w-full'} transition-all duration-300 overflow-y-auto hide-scrollbar p-6 space-y-4`}>
       {/* Response Display */}
       {response !== null && (
         <div className="space-y-3">
@@ -1321,6 +1374,7 @@ export default function Home() {
                   filters={filters}
                   sortBy={sortBy}
                   onCardClick={setSelectedCard}
+                  compact={!!selectedCard}
                 />
               </div>
             ) : (
@@ -1530,92 +1584,108 @@ export default function Home() {
           ) : (
             /* Turnover Card Detail */
             <div className="flex flex-col h-full">
-              {/* Header */}
-              <div className="sticky top-0 bg-card z-10 border-b border-neutral-200 dark:border-neutral-700 p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-semibold">{selectedCard.property_name}</h2>
-                    {selectedCard.guest_name && (
-                      <div className="flex items-center gap-2 mt-1 text-sm text-neutral-500">
-                        <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                        {selectedCard.guest_name}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => {
-                      setSelectedCard(null);
-                      setShowAddTaskDialog(false);
-                      setFullscreenTask(null);
-                    }}
-                    className="p-2 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                {/* Dates */}
-                <div className="grid grid-cols-1 gap-3">
-                  <div className="flex items-center gap-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                    <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                    <div className="flex-1">
-                      <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Checked out</div>
-                      <div className="text-sm font-semibold text-neutral-900 dark:text-white">
-                        {selectedCard.check_out ? formatDate(selectedCard.check_out) : 'Not set'}
-                      </div>
+              {/* Sticky Header - Property Info + Toggle */}
+              <div className="sticky top-0 bg-card z-10 border-b border-neutral-200 dark:border-neutral-700">
+                {/* Top Row: Property name, Guest, Dates, Occupancy, Close button */}
+                <div className="p-4 pb-3">
+                  <div className="flex items-start justify-between gap-4">
+                    {/* Property & Guest */}
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-lg font-semibold truncate">{selectedCard.property_name}</h2>
+                      {selectedCard.guest_name && (
+                        <div className="flex items-center gap-1.5 mt-0.5 text-sm text-neutral-500">
+                          <svg className="w-3.5 h-3.5 text-purple-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          <span className="truncate">{selectedCard.guest_name}</span>
+                        </div>
+                      )}
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                    <svg className="w-5 h-5 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                    </svg>
-                    <div className="flex-1">
-                      <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Next check in</div>
-                      <div className="text-sm font-semibold text-neutral-900 dark:text-white">
-                        {selectedCard.next_check_in ? formatDate(selectedCard.next_check_in) : 'Not set'}
+                    
+                    {/* Dates & Occupancy - Compact */}
+                    <div className="flex items-center gap-3 text-xs">
+                      <div className="text-center">
+                        <div className="text-neutral-500 dark:text-neutral-400">Out</div>
+                        <div className="font-medium text-red-600 dark:text-red-400">
+                          {selectedCard.check_out ? new Date(selectedCard.check_out).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                        </div>
                       </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                    <svg className={`w-5 h-5 shrink-0 ${
-                      selectedCard.occupancy_status === 'occupied' ? 'text-orange-500' : 'text-neutral-400'
-                    }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                    </svg>
-                    <div className="flex-1">
-                      <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Occupancy</div>
+                      <div className="text-center">
+                        <div className="text-neutral-500 dark:text-neutral-400">Next In</div>
+                        <div className="font-medium text-green-600 dark:text-green-400">
+                          {selectedCard.next_check_in ? new Date(selectedCard.next_check_in).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                        </div>
+                      </div>
                       <Badge 
-                        variant={selectedCard.occupancy_status === 'occupied' ? 'default' : 'outline'}
-                        className={`px-3 py-1 ${
+                        variant="outline"
+                        className={`text-xs px-2 py-0.5 ${
                           selectedCard.occupancy_status === 'occupied' 
-                            ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-300' 
-                            : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300'
+                            ? 'bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300 border-orange-300' 
+                            : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-300'
                         }`}
                       >
                         {selectedCard.occupancy_status === 'occupied' ? 'Occupied' : 'Vacant'}
                       </Badge>
                     </div>
+                    
+                    {/* Close Button */}
+                    <button
+                      onClick={() => {
+                        setSelectedCard(null);
+                        setShowAddTaskDialog(false);
+                        setFullscreenTask(null);
+                        setRightPanelView('tasks');
+                        setExpandedTurnoverProject(null);
+                        setTurnoverProjectFields(null);
+                      }}
+                      className="p-1.5 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors shrink-0"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
+                
+                {/* Toggle Button Row */}
+                <div className="px-4 pb-3">
+                  <div className="flex rounded-lg bg-neutral-100 dark:bg-neutral-800 p-1">
+                    <button
+                      onClick={() => {
+                        setRightPanelView('tasks');
+                        setExpandedTurnoverProject(null);
+                        setTurnoverProjectFields(null);
+                      }}
+                      className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                        rightPanelView === 'tasks'
+                          ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm'
+                          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                      }`}
+                    >
+                      Turnover Tasks ({selectedCard.completed_tasks || 0}/{selectedCard.total_tasks || 0})
+                    </button>
+                    <button
+                      onClick={() => setRightPanelView('projects')}
+                      className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                        rightPanelView === 'projects'
+                          ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm'
+                          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                      }`}
+                    >
+                      Property Projects ({projects.filter(p => p.property_name === selectedCard.property_name).length})
+                    </button>
+                  </div>
+                </div>
+              </div>
 
-                {/* Tasks Section */}
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto hide-scrollbar p-4 space-y-3">
+                {rightPanelView === 'tasks' ? (
+                  /* Tasks View */
+                  <>
                 {selectedCard.tasks && selectedCard.tasks.length > 0 ? (
-                  <div className="space-y-3 mt-6">
+                  <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
-                        Tasks ({selectedCard.completed_tasks || 0}/{selectedCard.total_tasks || 0})
-                      </h3>
                       <div className="text-xs text-neutral-500 dark:text-neutral-400">
                         Click a task to open
                       </div>
@@ -1856,16 +1926,387 @@ export default function Home() {
                     )}
                   </div>
                 )}
+                  </>
+                ) : (
+                  /* Projects View */
+                  <div className="space-y-3">
+                    {expandedTurnoverProject && turnoverProjectFields ? (
+                      /* Expanded Project Detail View */
+                      <div className="space-y-4">
+                        {/* Back button */}
+                        <button
+                          onClick={() => {
+                            setExpandedTurnoverProject(null);
+                            setTurnoverProjectFields(null);
+                          }}
+                          className="flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                          </svg>
+                          Back to Projects
+                        </button>
+
+                        {/* Project Header with pop-out */}
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-semibold text-neutral-900 dark:text-white">{expandedTurnoverProject.title}</h4>
+                          <button
+                            onClick={() => {
+                              setExpandedProject(expandedTurnoverProject);
+                              setEditingProjectFields({
+                                title: expandedTurnoverProject.title,
+                                description: expandedTurnoverProject.description || '',
+                                status: expandedTurnoverProject.status,
+                                priority: expandedTurnoverProject.priority,
+                                assigned_staff: expandedTurnoverProject.project_assignments?.map((a: any) => a.user?.name).filter(Boolean).join(', ') || '',
+                                due_date: expandedTurnoverProject.due_date || ''
+                              });
+                              setShowProjectsWindow(true);
+                              bringToFront('projects');
+                            }}
+                            className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded transition-colors"
+                            title="Open in Projects window"
+                          >
+                            <svg className="w-4 h-4 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </button>
+                        </div>
+
+                        {/* Editable Form */}
+                        <div className="space-y-4">
+                          {/* Title */}
+                          <div className="space-y-1.5">
+                            <label className="text-sm font-medium text-neutral-900 dark:text-white">Title</label>
+                            <Input
+                              value={turnoverProjectFields.title}
+                              onChange={(e) => setTurnoverProjectFields(prev => prev ? {...prev, title: e.target.value} : null)}
+                              placeholder="Project title"
+                            />
+                          </div>
+
+                          {/* Description */}
+                          <div className="space-y-1.5">
+                            <label className="text-sm font-medium text-neutral-900 dark:text-white">Description</label>
+                            <Textarea
+                              value={turnoverProjectFields.description}
+                              onChange={(e) => setTurnoverProjectFields(prev => prev ? {...prev, description: e.target.value} : null)}
+                              placeholder="Project description (optional)"
+                              rows={3}
+                            />
+                          </div>
+
+                          {/* Status & Priority */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                              <label className="text-sm font-medium text-neutral-900 dark:text-white">Status</label>
+                              <Select
+                                value={turnoverProjectFields.status}
+                                onValueChange={(value) => setTurnoverProjectFields(prev => prev ? {...prev, status: value} : null)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="not_started">Not Started</SelectItem>
+                                  <SelectItem value="in_progress">In Progress</SelectItem>
+                                  <SelectItem value="on_hold">On Hold</SelectItem>
+                                  <SelectItem value="complete">Complete</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-sm font-medium text-neutral-900 dark:text-white">Priority</label>
+                              <Select
+                                value={turnoverProjectFields.priority}
+                                onValueChange={(value) => setTurnoverProjectFields(prev => prev ? {...prev, priority: value} : null)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="low">Low</SelectItem>
+                                  <SelectItem value="medium">Medium</SelectItem>
+                                  <SelectItem value="high">High</SelectItem>
+                                  <SelectItem value="urgent">Urgent</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+
+                          {/* Assigned Staff & Due Date */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                              <label className="text-sm font-medium text-neutral-900 dark:text-white">Assigned To</label>
+                              <Input
+                                value={turnoverProjectFields.assigned_staff}
+                                onChange={(e) => setTurnoverProjectFields(prev => prev ? {...prev, assigned_staff: e.target.value} : null)}
+                                placeholder="Staff name (optional)"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-sm font-medium text-neutral-900 dark:text-white">Due Date</label>
+                              <Input
+                                type="date"
+                                value={turnoverProjectFields.due_date}
+                                onChange={(e) => setTurnoverProjectFields(prev => prev ? {...prev, due_date: e.target.value} : null)}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Discussion Section - Collapsible */}
+                          <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+                            <button
+                              onClick={() => setTurnoverDiscussionExpanded(!turnoverDiscussionExpanded)}
+                              className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-neutral-800/50 flex items-center justify-between hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                            >
+                              <span className="font-medium text-sm text-neutral-900 dark:text-white flex items-center gap-2">
+                                <svg className="w-4 h-4 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                </svg>
+                                Discussion
+                                {projectComments.filter((c: any) => c.project_id === expandedTurnoverProject.id).length > 0 && (
+                                  <Badge variant="secondary" className="text-xs ml-1">
+                                    {projectComments.filter((c: any) => c.project_id === expandedTurnoverProject.id).length}
+                                  </Badge>
+                                )}
+                              </span>
+                              <svg 
+                                className={`w-4 h-4 text-neutral-500 transition-transform ${turnoverDiscussionExpanded ? 'rotate-180' : ''}`} 
+                                fill="none" 
+                                stroke="currentColor" 
+                                viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+                            
+                            {turnoverDiscussionExpanded && (
+                              <div className="p-4 border-t border-neutral-200 dark:border-neutral-700">
+                                {/* Comment Input */}
+                                <div className="flex gap-2 mb-3">
+                                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                                    {currentUser.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                                  </div>
+                                  <div className="flex-1">
+                                    <Textarea
+                                      placeholder="Add a comment..."
+                                      rows={2}
+                                      className="resize-none text-sm"
+                                      value={newComment}
+                                      onChange={(e) => setNewComment(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) {
+                                          e.preventDefault();
+                                          // Post comment for turnover project
+                                          if (expandedTurnoverProject) {
+                                            setPostingComment(true);
+                                            fetch('/api/project-comments', {
+                                              method: 'POST',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({
+                                                project_id: expandedTurnoverProject.id,
+                                                user_id: currentUser.id,
+                                                comment_content: newComment.trim()
+                                              })
+                                            })
+                                            .then(res => res.json())
+                                            .then(data => {
+                                              if (data.success && data.data) {
+                                                setProjectComments((prev: any) => [...prev, data.data]);
+                                                setNewComment('');
+                                              }
+                                            })
+                                            .finally(() => setPostingComment(false));
+                                          }
+                                        }
+                                      }}
+                                      disabled={postingComment}
+                                    />
+                                    <p className="text-xs text-neutral-400 mt-1">Press Enter to post</p>
+                                  </div>
+                                </div>
+
+                                {/* Comments List */}
+                                <div className="space-y-3 pt-3 border-t border-neutral-200 dark:border-neutral-700 max-h-48 overflow-y-auto">
+                                  {projectComments.filter((c: any) => c.project_id === expandedTurnoverProject.id).length === 0 ? (
+                                    <p className="text-center text-sm text-neutral-400 py-2">No comments yet</p>
+                                  ) : (
+                                    projectComments
+                                      .filter((c: any) => c.project_id === expandedTurnoverProject.id)
+                                      .map((comment: any) => (
+                                        <div key={comment.id} className="flex gap-2">
+                                          <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
+                                            {comment.users?.avatar || (comment.users?.name || 'U').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-0.5">
+                                              <span className="font-medium text-xs text-neutral-900 dark:text-white">
+                                                {comment.users?.name || 'Unknown'}
+                                              </span>
+                                              <span className="text-xs text-neutral-400">
+                                                {new Date(comment.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                              </span>
+                                            </div>
+                                            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                                              {comment.comment_content}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      ))
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Save Button */}
+                          <Button
+                            onClick={saveTurnoverProjectChanges}
+                            disabled={savingTurnoverProject}
+                            className="w-full"
+                          >
+                            {savingTurnoverProject ? 'Saving...' : 'Save Changes'}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Projects List */
+                      <>
+                        {projects.filter(p => p.property_name === selectedCard.property_name).length > 0 ? (
+                          <>
+                            {projects
+                              .filter(p => p.property_name === selectedCard.property_name)
+                              .map((project: any) => (
+                                <Card 
+                                  key={project.id}
+                                  className="cursor-pointer hover:shadow-md transition-all bg-white dark:bg-neutral-900 border"
+                                  onClick={() => {
+                                    setExpandedTurnoverProject(project);
+                                    setTurnoverProjectFields({
+                                      title: project.title,
+                                      description: project.description || '',
+                                      status: project.status,
+                                      priority: project.priority,
+                                      assigned_staff: project.project_assignments?.map((a: any) => a.user?.name).filter(Boolean).join(', ') || '',
+                                      due_date: project.due_date || ''
+                                    });
+                                    // Fetch comments for this project
+                                    fetchProjectComments(project.id);
+                                  }}
+                                >
+                                  <CardHeader className="pb-2">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <CardTitle className="text-base">{project.title}</CardTitle>
+                                        {/* Pop-out icon to open in Projects window */}
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setExpandedProject(project);
+                                            setEditingProjectFields({
+                                              title: project.title,
+                                              description: project.description || '',
+                                              status: project.status,
+                                              priority: project.priority,
+                                              assigned_staff: project.project_assignments?.map((a: any) => a.user?.name).filter(Boolean).join(', ') || '',
+                                              due_date: project.due_date || ''
+                                            });
+                                            setShowProjectsWindow(true);
+                                            bringToFront('projects');
+                                          }}
+                                          className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded transition-colors"
+                                          title="Open in Projects window"
+                                        >
+                                          <svg className="w-3.5 h-3.5 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                          </svg>
+                                        </button>
+                                      </div>
+                                      <Badge 
+                                        variant="outline"
+                                        className={`text-xs ${
+                                          project.priority === 'urgent' ? 'bg-red-100 text-red-700 border-red-300' :
+                                          project.priority === 'high' ? 'bg-orange-100 text-orange-700 border-orange-300' :
+                                          project.priority === 'medium' ? 'bg-yellow-100 text-yellow-700 border-yellow-300' :
+                                          'bg-neutral-100 text-neutral-600 border-neutral-300'
+                                        }`}
+                                      >
+                                        {project.priority}
+                                      </Badge>
+                                    </div>
+                                    {project.description && (
+                                      <CardDescription className="text-sm line-clamp-2 mt-1">
+                                        {project.description}
+                                      </CardDescription>
+                                    )}
+                                  </CardHeader>
+                                  <CardContent className="pt-0 pb-3">
+                                    <div className="flex items-center justify-between text-xs">
+                                      <Badge 
+                                        variant="outline"
+                                        className={`${
+                                          project.status === 'complete' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' :
+                                          project.status === 'in_progress' ? 'bg-blue-100 text-blue-700 border-blue-300' :
+                                          project.status === 'blocked' ? 'bg-red-100 text-red-700 border-red-300' :
+                                          'bg-neutral-100 text-neutral-600 border-neutral-300'
+                                        }`}
+                                      >
+                                        {project.status === 'not_started' ? 'Not Started' :
+                                         project.status === 'in_progress' ? 'In Progress' :
+                                         project.status === 'complete' ? 'Complete' :
+                                         project.status === 'blocked' ? 'Blocked' : project.status}
+                                      </Badge>
+                                      {project.due_date && (
+                                        <span className="text-neutral-500">
+                                          Due: {new Date(project.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              ))}
+                            <Button
+                              variant="outline"
+                              className="w-full mt-2"
+                              onClick={() => openCreateProjectDialog(selectedCard.property_name)}
+                            >
+                              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                              </svg>
+                              Add Project
+                            </Button>
+                          </>
+                        ) : (
+                          <div className="text-center py-8 text-neutral-500">
+                            <p>No projects for this property yet</p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-3"
+                              onClick={() => openCreateProjectDialog(selectedCard.property_name)}
+                            >
+                              Create Project
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
         </div>
       )}
     </div>
-  ), [response, viewMode, showFilters, filters, sortBy, selectedCard, fullscreenTask, showAddTaskDialog, availableTemplates, taskTemplates, loadingTaskTemplate, users]);
+  ), [response, viewMode, showFilters, filters, sortBy, selectedCard, fullscreenTask, showAddTaskDialog, availableTemplates, taskTemplates, loadingTaskTemplate, users, rightPanelView, projects, expandedTurnoverProject, turnoverProjectFields, turnoverDiscussionExpanded, savingTurnoverProject, projectComments, newComment, postingComment]);
 
+  // Timeline manages its own selection internally - no onCardClick prop needed
   const timelineWindowContent = useMemo(() => (
-    <Timeline onCardClick={setSelectedCard} />
+    <Timeline />
   ), []);
 
   // Group projects by property
@@ -2580,7 +3021,7 @@ export default function Home() {
             setSelectedCard(null);
             setShowAddTaskDialog(false);
             setFullscreenTask(null);
-            setShowPropertyProjects(false);
+            setRightPanelView('tasks');
           }
         }}>
           <DialogContent className={`max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto border-2 ...`}>
@@ -2595,7 +3036,7 @@ export default function Home() {
             setSelectedCard(null);
             setShowAddTaskDialog(false);
             setFullscreenTask(null);
-            setShowPropertyProjects(false);
+            setRightPanelView('tasks');
           }
         }}>
           <SheetContent 
@@ -3202,7 +3643,7 @@ export default function Home() {
                         <div className="mt-6 border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
                           {/* Collapsible Header */}
                           <button
-                            onClick={() => setShowPropertyProjects(!showPropertyProjects)}
+                            onClick={() => setRightPanelView(rightPanelView === 'projects' ? 'tasks' : 'projects')}
                             className="w-full flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-800/50 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
                           >
                             <div className="flex items-center gap-2">
@@ -3217,7 +3658,7 @@ export default function Home() {
                               </Badge>
                             </div>
                             <svg 
-                              className={`w-5 h-5 text-neutral-500 transition-transform duration-200 ${showPropertyProjects ? 'rotate-180' : ''}`} 
+                              className={`w-5 h-5 text-neutral-500 transition-transform duration-200 ${rightPanelView === 'projects' ? 'rotate-180' : ''}`} 
                               fill="none" 
                               stroke="currentColor" 
                               viewBox="0 0 24 24"
@@ -3227,7 +3668,7 @@ export default function Home() {
                           </button>
 
                           {/* Expandable Content */}
-                          {showPropertyProjects && (
+                          {rightPanelView === 'projects' && (
                             <div className="p-4 space-y-3 bg-white dark:bg-neutral-900">
                               {projects.filter(p => p.property_name === selectedCard.property_name).length > 0 ? (
                                 projects
@@ -3490,7 +3931,7 @@ export default function Home() {
           setSelectedCard(null);
           setShowAddTaskDialog(false);
           setFullscreenTask(null);
-          setShowPropertyProjects(false);
+          setRightPanelView('tasks');
         }
       }}>
         <SheetContent
@@ -4084,7 +4525,7 @@ export default function Home() {
                       <div className="mt-6 border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
                         {/* Collapsible Header */}
                         <button
-                          onClick={() => setShowPropertyProjects(!showPropertyProjects)}
+                          onClick={() => setRightPanelView(rightPanelView === 'projects' ? 'tasks' : 'projects')}
                           className="w-full flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-800/50 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
                         >
                           <div className="flex items-center gap-2">
@@ -4099,7 +4540,7 @@ export default function Home() {
                             </Badge>
                           </div>
                           <svg 
-                            className={`w-5 h-5 text-neutral-500 transition-transform duration-200 ${showPropertyProjects ? 'rotate-180' : ''}`} 
+                            className={`w-5 h-5 text-neutral-500 transition-transform duration-200 ${rightPanelView === 'projects' ? 'rotate-180' : ''}`} 
                             fill="none" 
                             stroke="currentColor" 
                             viewBox="0 0 24 24"
@@ -4109,7 +4550,7 @@ export default function Home() {
                         </button>
 
                         {/* Expandable Content */}
-                        {showPropertyProjects && (
+                        {rightPanelView === 'projects' && (
                           <div className="p-4 space-y-3 bg-white dark:bg-neutral-900">
                             {projects.filter(p => p.property_name === selectedCard.property_name).length > 0 ? (
                               projects

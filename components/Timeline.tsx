@@ -5,13 +5,14 @@ import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 
 interface TimelineProps {
-  onCardClick: (card: any) => void;
+  onCardClick?: (card: any) => void; // Optional - for external handling
 }
 
 export default function Timeline({ onCardClick }: TimelineProps) {
   const [reservations, setReservations] = useState<any[]>([]);
   const [properties, setProperties] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedReservation, setSelectedReservation] = useState<any>(null); // Internal selection state
   const [view, setView] = useState<'week' | 'month'>('week');
   const [anchorDate, setAnchorDate] = useState<Date>(() => {
     const today = new Date();
@@ -286,8 +287,12 @@ export default function Timeline({ onCardClick }: TimelineProps) {
                           const { span } = getBlockPosition(startingReservation.check_in, startingReservation.check_out);
                           return (
                             <div
-                              onClick={() => onCardClick(startingReservation)}
-                              className={`absolute border border-white dark:border-neutral-800 rounded px-2 cursor-pointer transition-all duration-150 hover:shadow-lg hover:z-30 text-white text-xs font-medium flex items-center justify-center ${getStatusColor(startingReservation.turnover_status)}`}
+                              onClick={() => {
+                                setSelectedReservation(selectedReservation?.id === startingReservation.id ? null : startingReservation);
+                                // Only call external handler if provided
+                                if (onCardClick) onCardClick(startingReservation);
+                              }}
+                              className={`absolute border-2 rounded px-2 cursor-pointer transition-all duration-150 hover:shadow-lg hover:z-30 text-white text-xs font-medium flex items-center justify-center ${getStatusColor(startingReservation.turnover_status)} ${selectedReservation?.id === startingReservation.id ? 'border-white ring-2 ring-white/50 shadow-lg z-30' : 'border-white/50 dark:border-neutral-800'}`}
                               style={{
                                 left: '4px',
                                 width: span === 1 ? 'calc(100% - 8px)' : `calc(${span * 100}% + ${(span - 1) * 1}px - 8px)`,

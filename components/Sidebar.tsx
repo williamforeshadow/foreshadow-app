@@ -93,6 +93,7 @@ export default function Sidebar() {
                 <Link
                   key={item.path}
                   href={item.path}
+                  prefetch={true}
                   className={`flex items-center ${isOpen ? 'gap-3 px-4' : 'justify-center px-2'} py-3 rounded-lg transition-colors ${
                     isActive
                       ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-white font-semibold'

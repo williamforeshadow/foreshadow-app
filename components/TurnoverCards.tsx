@@ -7,9 +7,10 @@ interface TurnoverCardsProps {
   filters: CleaningFilters;
   sortBy: string;
   onCardClick: (card: any) => void;
+  compact?: boolean; // When true, use fewer columns (for 2-pane view)
 }
 
-export default function TurnoverCards({ data, filters, sortBy, onCardClick }: TurnoverCardsProps) {
+export default function TurnoverCards({ data, filters, sortBy, onCardClick, compact = false }: TurnoverCardsProps) {
   console.log('=== TurnoverCards Render ===');
   console.log('Data received:', data);
   console.log('Data type:', typeof data);
@@ -78,8 +79,13 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick }: Tu
   const filteredItems = items.filter(Boolean);
   console.log('After filter(Boolean), count:', filteredItems.length);
   
+  // Responsive grid - fewer columns in compact mode (2-pane view)
+  const gridClasses = compact
+    ? 'grid grid-cols-1 lg:grid-cols-2 gap-4 auto-rows-fr'
+    : 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 auto-rows-fr';
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 auto-rows-fr">
+    <div className={gridClasses}>
       {filteredItems.map((item, index) => (
         <Card
           key={item.id || index}
