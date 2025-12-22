@@ -136,7 +136,7 @@ export default function MobileTimelineView({ onCardClick }: MobileTimelineViewPr
   return (
     <div className="flex flex-col h-full">
       {/* View Toggle */}
-      <div className="sticky top-14 z-30 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-4 py-2">
+      <div className="sticky top-0 z-30 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-4 py-2">
         <div className="flex gap-2">
           <Button
             variant={view === 'list' ? 'default' : 'outline'}
@@ -160,7 +160,7 @@ export default function MobileTimelineView({ onCardClick }: MobileTimelineViewPr
       {/* Content */}
       {view === 'list' ? (
         // List View - Upcoming Turnovers
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto hide-scrollbar">
           {Object.entries(groupReservationsByDate()).length === 0 ? (
             <div className="flex items-center justify-center h-64">
               <div className="text-neutral-500 dark:text-neutral-400">
@@ -171,7 +171,7 @@ export default function MobileTimelineView({ onCardClick }: MobileTimelineViewPr
             Object.entries(groupReservationsByDate()).map(([dateStr, items]) => (
               <div key={dateStr} className="border-b border-neutral-200 dark:border-neutral-800">
                 {/* Date Header */}
-                <div className="sticky top-[7.5rem] bg-neutral-100 dark:bg-neutral-800 px-4 py-2 z-10">
+                <div className="sticky top-[3rem] bg-neutral-100 dark:bg-neutral-800 px-4 py-2 z-10">
                   <span className="text-sm font-semibold text-neutral-900 dark:text-white">
                     {formatDate(dateStr)}
                   </span>
@@ -222,7 +222,7 @@ export default function MobileTimelineView({ onCardClick }: MobileTimelineViewPr
         // Day View
         <>
           {/* Date Navigation */}
-          <div className="sticky top-[7.5rem] z-20 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-4 py-3 flex items-center justify-between">
+          <div className="sticky top-[3rem] z-20 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-4 py-3 flex items-center justify-between">
             <Button variant="ghost" size="sm" onClick={() => navigateDay(-1)}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -250,7 +250,7 @@ export default function MobileTimelineView({ onCardClick }: MobileTimelineViewPr
           </div>
 
           {/* Reservations for selected date */}
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto hide-scrollbar">
             {(() => {
               const dayReservations = getReservationsForDate(selectedDate);
               

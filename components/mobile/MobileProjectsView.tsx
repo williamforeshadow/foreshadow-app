@@ -101,7 +101,7 @@ export default function MobileProjectsView({
   return (
     <div className="flex flex-col h-full">
       {/* Filter Tabs */}
-      <div className="sticky top-14 z-30 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-4 py-2">
+      <div className="sticky top-0 z-30 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-4 py-2">
         <div className="flex gap-2">
           <Button
             variant={filter === 'all' ? 'default' : 'outline'}
@@ -132,7 +132,7 @@ export default function MobileProjectsView({
       </div>
 
       {/* Actions Bar */}
-      <div className="sticky top-[7.5rem] z-20 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-4 py-2 flex items-center justify-between">
+      <div className="sticky top-[3rem] z-20 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-4 py-2 flex items-center justify-between">
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as any)}
@@ -159,7 +159,7 @@ export default function MobileProjectsView({
       </div>
 
       {/* Projects List */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto hide-scrollbar">
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
             <div className="text-neutral-500 dark:text-neutral-400">Loading projects...</div>

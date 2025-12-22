@@ -2,7 +2,6 @@
 
 import { useState, useEffect, memo, useMemo } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import OpenAI from 'openai';
 import Sidebar from '@/components/Sidebar';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardAction, CardContent, CardFooter } from '@/components/ui/card';
@@ -40,10 +39,9 @@ import { useIsMobile } from '@/lib/useIsMobile';
 import { useAuth } from '@/lib/authContext';
 import { 
   MobileLayout, 
-  MobileCardsView, 
   MobileTimelineView, 
-  MobileQueryView, 
   MobileProjectsView,
+  MobileMyAssignmentsView,
   type MobileTab 
 } from '@/components/mobile';
 
@@ -52,7 +50,7 @@ export default function Home() {
   const isMobile = useIsMobile();
   const { user: currentUser } = useAuth();
   const { users } = useUsers();
-  const [mobileTab, setMobileTab] = useState<MobileTab>('cards');
+  const [mobileTab, setMobileTab] = useState<MobileTab>('assignments');
   
   const [response, setResponse] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +105,7 @@ export default function Home() {
   const [addingTask, setAddingTask] = useState(false);
   const [rightPanelView, setRightPanelView] = useState<'tasks' | 'projects'>('tasks'); // Toggle between tasks and projects in turnover detail
   const [fullscreenTask, setFullscreenTask] = useState<any>(null);
+  const [mobileSelectedTask, setMobileSelectedTask] = useState<any>(null); // Mobile task detail sheet
   
   // Expanded project view within turnovers window (separate from projects window)
   const [expandedTurnoverProject, setExpandedTurnoverProject] = useState<any>(null);
@@ -631,35 +630,37 @@ export default function Home() {
         };
       });
 
-      // Also update the response array (grid view)
-      setResponse((prevResponse: any) => {
-        if (!prevResponse) return prevResponse;
-        
-        const items = Array.isArray(prevResponse) ? prevResponse : [prevResponse];
-        const updatedItems = items.map((item: any) => {
-          if (item.id === selectedCard.id && item.tasks) {
-            const updatedTasks = item.tasks.map((task: any) => 
-              task.task_id === taskId 
-                ? { ...task, status: action }
-                : task
-            );
-            const completedCount = updatedTasks.filter((t: any) => t.status === 'complete').length;
-            const inProgressCount = updatedTasks.filter((t: any) => t.status === 'in_progress').length;
-            const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
-            
-            return { 
-              ...item, 
-              tasks: updatedTasks,
-              completed_tasks: completedCount,
-              tasks_in_progress: inProgressCount,
-              turnover_status: newTurnoverStatus
-            };
-          }
-          return item;
+      // Also update the response array (grid view) - only if selectedCard exists (desktop view)
+      if (selectedCard) {
+        setResponse((prevResponse: any) => {
+          if (!prevResponse) return prevResponse;
+          
+          const items = Array.isArray(prevResponse) ? prevResponse : [prevResponse];
+          const updatedItems = items.map((item: any) => {
+            if (item.id === selectedCard.id && item.tasks) {
+              const updatedTasks = item.tasks.map((task: any) => 
+                task.task_id === taskId 
+                  ? { ...task, status: action }
+                  : task
+              );
+              const completedCount = updatedTasks.filter((t: any) => t.status === 'complete').length;
+              const inProgressCount = updatedTasks.filter((t: any) => t.status === 'in_progress').length;
+              const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
+              
+              return { 
+                ...item, 
+                tasks: updatedTasks,
+                completed_tasks: completedCount,
+                tasks_in_progress: inProgressCount,
+                turnover_status: newTurnoverStatus
+              };
+            }
+            return item;
+          });
+          
+          return Array.isArray(prevResponse) ? updatedItems : updatedItems[0];
         });
-        
-        return Array.isArray(prevResponse) ? updatedItems : updatedItems[0];
-      });
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to update task action');
     }
@@ -825,25 +826,27 @@ export default function Home() {
         return { ...prev, tasks: updatedTasks };
       });
 
-      // Also update in response array
-      setResponse((prevResponse: any) => {
-        if (!prevResponse) return prevResponse;
-        
-        const items = Array.isArray(prevResponse) ? prevResponse : [prevResponse];
-        const updatedItems = items.map((item: any) => {
-          if (item.id === selectedCard.id && item.tasks) {
-            const updatedTasks = item.tasks.map((task: any) => 
-              task.task_id === taskId 
-                ? { ...task, form_metadata: formData }
-                : task
-            );
-            return { ...item, tasks: updatedTasks };
-          }
-          return item;
+      // Also update in response array - only if selectedCard exists (desktop view)
+      if (selectedCard) {
+        setResponse((prevResponse: any) => {
+          if (!prevResponse) return prevResponse;
+          
+          const items = Array.isArray(prevResponse) ? prevResponse : [prevResponse];
+          const updatedItems = items.map((item: any) => {
+            if (item.id === selectedCard.id && item.tasks) {
+              const updatedTasks = item.tasks.map((task: any) => 
+                task.task_id === taskId 
+                  ? { ...task, form_metadata: formData }
+                  : task
+              );
+              return { ...item, tasks: updatedTasks };
+            }
+            return item;
+          });
+          
+          return Array.isArray(prevResponse) ? updatedItems : updatedItems[0];
         });
-        
-        return Array.isArray(prevResponse) ? updatedItems : updatedItems[0];
-      });
+      }
 
       return result;
     } catch (err: any) {
@@ -2833,33 +2836,6 @@ export default function Home() {
     </div>
   ), [projects, loadingProjects, groupedProjects, showProjectDialog, editingProject, projectForm, savingProject, allProperties, expandedProject, projectComments, loadingComments, newComment, postingComment, currentUser, editingProjectFields, savingProjectEdit, discussionExpanded]);
 
-  // Mobile query handlers for MobileQueryView
-  const handleMobileGenerateSQL = async (naturalQuery: string): Promise<string> => {
-    const openai = new OpenAI({ apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY, dangerouslyAllowBrowser: true });
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a SQL expert. Convert natural language to PostgreSQL queries for a property management database. Tables: property_turnovers, cleanings, maintenance_cards, projects, templates. Return ONLY the SQL query, no explanation.`
-        },
-        { role: 'user', content: naturalQuery }
-      ]
-    });
-    return completion.choices[0]?.message?.content || '';
-  };
-
-  const handleMobileExecuteQuery = async (sql: string): Promise<any> => {
-    const res = await fetch('/api/sql-query', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: sql })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Query failed');
-    return data.data;
-  };
-
   // Mobile UI
   if (isMobile) {
     return (
@@ -2868,28 +2844,24 @@ export default function Home() {
           activeTab={mobileTab}
           onTabChange={setMobileTab}
         >
-          {mobileTab === 'cards' && (
-            <MobileCardsView
-              data={response}
-              filters={filters}
-              sortBy={sortBy}
-              onFiltersChange={setFilters}
-              onSortChange={setSortBy}
-              onCardClick={setSelectedCard}
-              onRefresh={() => quickCall('get_property_turnovers')}
-              isLoading={loading}
+          {mobileTab === 'assignments' && (
+            <MobileMyAssignmentsView
+              onTaskClick={async (task: any) => {
+                // Fetch template if needed, then open task detail sheet
+                if (task.template_id && !taskTemplates[task.template_id]) {
+                  await fetchTaskTemplate(task.template_id);
+                }
+                setMobileSelectedTask(task);
+              }}
+              onProjectClick={(project: any) => {
+                // Open project edit dialog
+                openEditProjectDialog(project);
+              }}
             />
           )}
           
           {mobileTab === 'timeline' && (
             <MobileTimelineView onCardClick={setSelectedCard} />
-          )}
-          
-          {mobileTab === 'query' && (
-            <MobileQueryView
-              onGenerateSQL={handleMobileGenerateSQL}
-              onExecuteQuery={handleMobileExecuteQuery}
-            />
           )}
           
           {mobileTab === 'projects' && (
@@ -2902,6 +2874,187 @@ export default function Home() {
             />
           )}
         </MobileLayout>
+
+        {/* Mobile Task Detail - Full Screen Takeover */}
+        {mobileSelectedTask && (
+          <div className="fixed inset-0 z-50 bg-white dark:bg-neutral-900 flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="shrink-0 px-4 pt-4 pb-3 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-lg font-semibold">{mobileSelectedTask.template_name || 'Task'}</h2>
+                <button 
+                  onClick={() => setMobileSelectedTask(null)}
+                  className="p-2 -mr-2 text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-neutral-500 dark:text-neutral-400">{mobileSelectedTask.property_name}</span>
+                <Badge className={mobileSelectedTask.type === 'maintenance' 
+                  ? 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200' 
+                  : 'bg-sky-100 dark:bg-sky-900 text-sky-800 dark:text-sky-200'
+                }>
+                  {mobileSelectedTask.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                </Badge>
+              </div>
+            </div>
+
+            {/* Scrollable Content */}
+            <div 
+              className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar"
+              style={{ overflowAnchor: 'none' }}
+            >
+              <div className="p-4 space-y-4">
+                {/* Status Bar */}
+                <div className="p-3 bg-neutral-50 dark:bg-neutral-800 rounded-lg flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">Status</p>
+                    <Badge className={`${
+                      mobileSelectedTask.status === 'complete' 
+                        ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                        : mobileSelectedTask.status === 'in_progress'
+                        ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                        : mobileSelectedTask.status === 'paused'
+                        ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
+                        : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200'
+                    }`}>
+                      {mobileSelectedTask.status === 'not_started' ? 'Not Started' :
+                       mobileSelectedTask.status === 'in_progress' ? 'In Progress' :
+                       mobileSelectedTask.status === 'paused' ? 'Paused' :
+                       mobileSelectedTask.status === 'complete' ? 'Completed' :
+                       'Not Started'}
+                    </Badge>
+                  </div>
+                  {mobileSelectedTask.guest_name && (
+                    <div className="text-right">
+                      <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">Guest</p>
+                      <p className="text-sm font-medium">{mobileSelectedTask.guest_name}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Template Form */}
+                {mobileSelectedTask.template_id ? (
+                  loadingTaskTemplate === mobileSelectedTask.template_id ? (
+                    <div className="flex items-center justify-center py-8">
+                      <p className="text-neutral-500">Loading form...</p>
+                    </div>
+                  ) : taskTemplates[mobileSelectedTask.template_id] ? (
+                    <DynamicCleaningForm
+                      cleaningId={mobileSelectedTask.task_id}
+                      propertyName={mobileSelectedTask.property_name || ''}
+                      template={taskTemplates[mobileSelectedTask.template_id]}
+                      formMetadata={mobileSelectedTask.form_metadata}
+                      onSave={async (formData) => {
+                        await saveTaskForm(mobileSelectedTask.task_id, formData);
+                      }}
+                    />
+                  ) : (
+                    <p className="text-center text-neutral-500 py-8">
+                      No template configured for this task
+                    </p>
+                  )
+                ) : (
+                  <p className="text-center text-neutral-500 py-8">
+                    No template configured for this task
+                  </p>
+                )}
+
+                {/* Action Buttons */}
+                <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
+                  <div className="flex flex-wrap gap-2">
+                    {(mobileSelectedTask.status === 'not_started' || !mobileSelectedTask.status) && (
+                      <>
+                        <Button
+                          onClick={() => {
+                            updateTaskAction(mobileSelectedTask.task_id, 'in_progress');
+                            setMobileSelectedTask({ ...mobileSelectedTask, status: 'in_progress' });
+                          }}
+                          className="flex-1"
+                        >
+                          Start Task
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            updateTaskAction(mobileSelectedTask.task_id, 'complete');
+                            setMobileSelectedTask({ ...mobileSelectedTask, status: 'complete' });
+                          }}
+                          variant="outline"
+                          className="flex-1"
+                        >
+                          Mark Complete
+                        </Button>
+                      </>
+                    )}
+                    {mobileSelectedTask.status === 'in_progress' && (
+                      <>
+                        <Button
+                          onClick={() => {
+                            updateTaskAction(mobileSelectedTask.task_id, 'paused');
+                            setMobileSelectedTask({ ...mobileSelectedTask, status: 'paused' });
+                          }}
+                          variant="outline"
+                          className="flex-1"
+                        >
+                          Pause
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            updateTaskAction(mobileSelectedTask.task_id, 'complete');
+                            setMobileSelectedTask({ ...mobileSelectedTask, status: 'complete' });
+                          }}
+                          className="flex-1"
+                        >
+                          Complete
+                        </Button>
+                      </>
+                    )}
+                    {mobileSelectedTask.status === 'paused' && (
+                      <>
+                        <Button
+                          onClick={() => {
+                            updateTaskAction(mobileSelectedTask.task_id, 'in_progress');
+                            setMobileSelectedTask({ ...mobileSelectedTask, status: 'in_progress' });
+                          }}
+                          className="flex-1"
+                        >
+                          Resume
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            updateTaskAction(mobileSelectedTask.task_id, 'complete');
+                            setMobileSelectedTask({ ...mobileSelectedTask, status: 'complete' });
+                          }}
+                          variant="outline"
+                          className="flex-1"
+                        >
+                          Complete
+                        </Button>
+                      </>
+                    )}
+                    {(mobileSelectedTask.status === 'complete' || mobileSelectedTask.status === 'reopened') && (
+                      <Button
+                        onClick={() => {
+                          updateTaskAction(mobileSelectedTask.task_id, 'not_started');
+                          setMobileSelectedTask({ ...mobileSelectedTask, status: 'not_started' });
+                        }}
+                        className="w-full"
+                      >
+                        Reopen Task
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Bottom padding for safe area */}
+                <div className="h-8" />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Mobile Dialogs */}
         {/* Project Dialog */}

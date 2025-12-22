@@ -15,9 +15,9 @@ const MobileLayout = memo(function MobileLayout({
   onTabChange,
 }: MobileLayoutProps) {
   return (
-    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
+    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 overflow-auto hide-scrollbar">
       {/* Main Content Area - scrollable, with padding for bottom nav only */}
-      <main className="pb-20 min-h-screen">
+      <main className="pb-20 min-h-screen hide-scrollbar">
         {children}
       </main>
 

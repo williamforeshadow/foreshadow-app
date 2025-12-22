@@ -292,25 +292,23 @@ export default function DynamicCleaningForm({
   };
 
   return (
-    <div className="flex items-center justify-center py-8 px-6">
-      <div className="w-full max-w-lg">
-        {/* Header */}
-        <div className="text-center mb-10">
-          <h3 className="text-xl font-semibold text-neutral-900 dark:text-white">
-            {template.name}
-          </h3>
-          <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-2">
-            {propertyName}
-          </p>
-        </div>
-
-        {/* Dynamic Form */}
-        <form onSubmit={(e) => { e.preventDefault(); saveForm(); }} className="px-2">
-          <div className="space-y-6">
-            {template.fields.map(field => renderField(field))}
-          </div>
-        </form>
+    <div className="w-full">
+      {/* Header */}
+      <div className="text-center mb-6">
+        <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
+          {template.name}
+        </h3>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
+          {propertyName}
+        </p>
       </div>
+
+      {/* Dynamic Form */}
+      <form onSubmit={(e) => { e.preventDefault(); saveForm(); }}>
+        <div className="space-y-5">
+          {template.fields.map(field => renderField(field))}
+        </div>
+      </form>
     </div>
   );
 }

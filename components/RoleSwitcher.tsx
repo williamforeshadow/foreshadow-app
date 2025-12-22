@@ -29,67 +29,9 @@ export default function RoleSwitcher() {
     staff: 'View & complete assigned tasks'
   };
 
-  // Compact mobile version
+  // Mobile: Don't render - role switcher is handled in MobileMyAssignmentsView
   if (isMobile) {
-    return (
-      <div className="fixed top-2 right-2 z-50">
-        {/* Expanded Panel */}
-        {isOpen && (
-          <>
-            {/* Backdrop */}
-            <div 
-              className="fixed inset-0 bg-black/20 dark:bg-black/40" 
-              onClick={() => setIsOpen(false)}
-            />
-            
-            {/* Panel */}
-            <div className={`absolute top-10 right-0 p-3 rounded-lg border shadow-xl ${roleBorderColors[role]} backdrop-blur-md`}>
-              <div className="text-[10px] font-semibold text-neutral-500 dark:text-neutral-400 mb-2 uppercase tracking-wide flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                Switch Role
-              </div>
-              <div className="space-y-1 min-w-[160px]">
-                {roles.map((r) => {
-                  const testUser = TEST_USERS[r];
-                  const isActive = r === role;
-                  return (
-                    <button
-                      key={r}
-                      onClick={() => {
-                        switchUser(r);
-                        setIsOpen(false);
-                      }}
-                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md transition-all text-left ${
-                        isActive
-                          ? 'bg-white dark:bg-neutral-800 shadow ring-1 ring-neutral-900 dark:ring-white'
-                          : 'hover:bg-white/70 dark:hover:bg-neutral-800/70'
-                      }`}
-                    >
-                      <span className="text-base">{testUser.avatar}</span>
-                      <span className="font-medium text-neutral-900 dark:text-white text-xs capitalize">
-                        {r}
-                      </span>
-                      {isActive && (
-                        <span className="text-green-500 text-xs ml-auto">✓</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Compact Toggle Button */}
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          className={`flex items-center gap-1 px-2 py-1 rounded-full shadow-md border text-xs transition-all hover:scale-105 active:scale-95 ${roleBorderColors[role]}`}
-        >
-          <span className="text-sm">{user.avatar}</span>
-          <span className={`w-2 h-2 rounded-full ${roleColors[role]}`} />
-        </button>
-      </div>
-    );
+    return null;
   }
 
   // Desktop version
