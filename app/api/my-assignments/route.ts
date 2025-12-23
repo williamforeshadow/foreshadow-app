@@ -47,6 +47,7 @@ export async function GET(request: Request) {
           type,
           scheduled_start,
           status,
+          form_metadata,
           templates(id, name, type, description)
         `)
         .in('id', taskIds);
@@ -101,6 +102,7 @@ export async function GET(request: Request) {
           description: template?.description,
           scheduled_start: task.scheduled_start,
           status: task.status || 'not_started',
+          form_metadata: task.form_metadata,
           assigned_at: assignment?.assigned_at,
           // Reservation context
           property_name: reservation?.property_name || 'Unknown Property',

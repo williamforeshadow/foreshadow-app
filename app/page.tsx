@@ -106,6 +106,7 @@ export default function Home() {
   const [rightPanelView, setRightPanelView] = useState<'tasks' | 'projects'>('tasks'); // Toggle between tasks and projects in turnover detail
   const [fullscreenTask, setFullscreenTask] = useState<any>(null);
   const [mobileSelectedTask, setMobileSelectedTask] = useState<any>(null); // Mobile task detail sheet
+  const [mobileRefreshTrigger, setMobileRefreshTrigger] = useState(0); // Trigger to refresh mobile assignments
   
   // Expanded project view within turnovers window (separate from projects window)
   const [expandedTurnoverProject, setExpandedTurnoverProject] = useState<any>(null);
@@ -2857,6 +2858,7 @@ export default function Home() {
                 // Open project edit dialog
                 openEditProjectDialog(project);
               }}
+              refreshTrigger={mobileRefreshTrigger}
             />
           )}
           
@@ -2877,13 +2879,19 @@ export default function Home() {
 
         {/* Mobile Task Detail - Full Screen Takeover */}
         {mobileSelectedTask && (
-          <div className="fixed inset-0 z-50 bg-white dark:bg-neutral-900 flex flex-col overflow-hidden">
+          <div 
+            className="fixed inset-0 z-50 bg-white dark:bg-neutral-900 flex flex-col"
+            style={{ height: '100dvh' }}
+          >
             {/* Header */}
             <div className="shrink-0 px-4 pt-4 pb-3 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-lg font-semibold">{mobileSelectedTask.template_name || 'Task'}</h2>
                 <button 
-                  onClick={() => setMobileSelectedTask(null)}
+                  onClick={() => {
+                    setMobileSelectedTask(null);
+                    setMobileRefreshTrigger(prev => prev + 1);
+                  }}
                   className="p-2 -mr-2 text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2904,8 +2912,12 @@ export default function Home() {
 
             {/* Scrollable Content */}
             <div 
-              className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar"
-              style={{ overflowAnchor: 'none' }}
+              className="flex-1 min-h-0 overflow-y-auto overscroll-contain hide-scrollbar"
+              style={{ 
+                overflowAnchor: 'none',
+                WebkitOverflowScrolling: 'touch',
+                transform: 'translate3d(0,0,0)',
+              }}
             >
               <div className="p-4 space-y-4">
                 {/* Status Bar */}

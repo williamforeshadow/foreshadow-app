@@ -21,6 +21,7 @@ interface Task {
   description?: string;
   scheduled_start?: string;
   status: string;
+  form_metadata?: any;
   assigned_at: string;
   property_name: string;
   check_out?: string;
@@ -54,11 +55,13 @@ interface AssignmentsData {
 interface MobileMyAssignmentsViewProps {
   onTaskClick?: (task: Task) => void;
   onProjectClick?: (project: Project) => void;
+  refreshTrigger?: number;
 }
 
 export default function MobileMyAssignmentsView({
   onTaskClick,
   onProjectClick,
+  refreshTrigger,
 }: MobileMyAssignmentsViewProps) {
   const { user, role, switchUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'tasks' | 'projects'>('tasks');
@@ -68,7 +71,7 @@ export default function MobileMyAssignmentsView({
 
   useEffect(() => {
     fetchAssignments();
-  }, [user.id]);
+  }, [user.id, refreshTrigger]);
 
   const fetchAssignments = async () => {
     setLoading(true);

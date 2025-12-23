@@ -175,6 +175,7 @@ export default function DynamicCleaningForm({
                   key={rating}
                   type="button"
                   onClick={() => updateValue(field.id, rating.toString())}
+                  style={{ touchAction: 'manipulation' }}
                   className={`w-12 h-12 rounded-lg border-2 text-sm font-medium transition-all ${
                     value === rating.toString()
                       ? 'bg-emerald-500 border-emerald-500 text-white'
@@ -199,6 +200,7 @@ export default function DynamicCleaningForm({
               <button
                 type="button"
                 onClick={() => updateValue(field.id, 'yes')}
+                style={{ touchAction: 'manipulation' }}
                 className={`flex-1 py-3 px-5 rounded-lg border-2 text-sm font-medium transition-all ${
                   value === 'yes'
                     ? 'bg-emerald-500 border-emerald-500 text-white'
@@ -210,6 +212,7 @@ export default function DynamicCleaningForm({
               <button
                 type="button"
                 onClick={() => updateValue(field.id, 'no')}
+                style={{ touchAction: 'manipulation' }}
                 className={`flex-1 py-3 px-5 rounded-lg border-2 text-sm font-medium transition-all ${
                   value === 'no'
                     ? 'bg-red-500 border-red-500 text-white'
@@ -225,7 +228,10 @@ export default function DynamicCleaningForm({
       case 'checkbox':
         return (
           <Field key={field.id} orientation="horizontal">
-            <label className="flex items-center gap-4 cursor-pointer group p-3 rounded-lg border border-transparent hover:border-neutral-200 dark:hover:border-neutral-700 transition-colors w-full">
+            <label 
+              className="flex items-center gap-4 cursor-pointer group p-3 rounded-lg border border-transparent hover:border-neutral-200 dark:hover:border-neutral-700 transition-colors w-full"
+              style={{ touchAction: 'manipulation' }}
+            >
               <div className={`w-7 h-7 rounded-md border-2 flex items-center justify-center transition-all flex-shrink-0 ${
                 value
                   ? 'bg-emerald-500 border-emerald-500'
