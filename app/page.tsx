@@ -2865,16 +2865,6 @@ export default function Home() {
           {mobileTab === 'timeline' && (
             <MobileTimelineView onCardClick={setSelectedCard} />
           )}
-          
-          {mobileTab === 'projects' && (
-            <MobileProjectsView
-              projects={projects}
-              isLoading={loadingProjects}
-              onRefresh={fetchProjects}
-              onCreateProject={() => openCreateProjectDialog()}
-              onEditProject={openEditProjectDialog}
-            />
-          )}
         </MobileLayout>
 
         {/* Mobile Task Detail - Full Screen Takeover */}

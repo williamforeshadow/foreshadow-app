@@ -88,18 +88,21 @@ export default function Timeline({ onCardClick }: TimelineProps) {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const formatHeaderDate = (date: Date) => {
+  const isToday = (date: Date) => {
     const today = new Date();
-    const isToday = date.toDateString() === today.toDateString();
-    const month = date.getMonth() + 1; // Get month as number (1-12)
+    return date.toDateString() === today.toDateString();
+  };
+
+  const formatHeaderDate = (date: Date, isTodayDate: boolean) => {
+    const month = date.getMonth() + 1;
     const day = date.getDate();
     
     return (
       <div className="text-center">
-        <div className={`text-xs ${isToday ? 'font-bold text-purple-600 dark:text-purple-400' : 'text-neutral-600 dark:text-neutral-400'}`}>
+        <div className={`text-[10px] ${isTodayDate ? 'text-white/80' : 'text-neutral-600 dark:text-neutral-400'}`}>
           {date.toLocaleDateString('en-US', { weekday: 'short' })}
         </div>
-        <div className={`text-sm ${isToday ? 'font-bold text-purple-600 dark:text-purple-400' : 'text-neutral-900 dark:text-white'}`}>
+        <div className={`text-xs ${isTodayDate ? 'text-white font-semibold' : 'text-neutral-900 dark:text-white'}`}>
           {month}/{day}
         </div>
       </div>
@@ -116,43 +119,58 @@ export default function Timeline({ onCardClick }: TimelineProps) {
     const firstVisibleDate = dateRange[0];
     const lastVisibleDate = dateRange[dateRange.length - 1];
     
+    // Helper to compare just the date portion (ignoring time/timezone issues)
+    // This is only for grid cell calculations - actual time data is preserved in reservations
+    const toDateString = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    const compareDates = (d1: Date, d2: Date) => toDateString(d1).localeCompare(toDateString(d2));
+    
     // Case 1: Reservation ends before visible range - don't show
-    if (checkOutDate <= firstVisibleDate) {
-      return { start: -1, span: 0 };
+    if (compareDates(checkOutDate, firstVisibleDate) <= 0) {
+      return { start: -1, span: 0, startsBeforeRange: false, endsAfterRange: false };
     }
     
     // Case 2: Reservation starts after visible range - don't show
-    if (checkInDate > lastVisibleDate) {
-      return { start: -1, span: 0 };
+    if (compareDates(checkInDate, lastVisibleDate) > 0) {
+      return { start: -1, span: 0, startsBeforeRange: false, endsAfterRange: false };
     }
+    
+    // Track if reservation extends beyond visible range
+    const startsBeforeRange = compareDates(checkInDate, firstVisibleDate) < 0;
+    const endsAfterRange = compareDates(checkOutDate, lastVisibleDate) > 0;
     
     // Case 3: Reservation overlaps with visible range
     let startIdx = dateRange.findIndex(d => 
-      d.toDateString() === checkInDate.toDateString()
+      toDateString(d) === toDateString(checkInDate)
     );
     
     // If check-in is before visible range, start from first visible day
-    if (startIdx === -1 && checkInDate < firstVisibleDate) {
+    if (startIdx === -1 && startsBeforeRange) {
       startIdx = 0;
     }
     
     // Still not found? Don't show
     if (startIdx === -1) {
-      return { start: -1, span: 0 };
+      return { start: -1, span: 0, startsBeforeRange: false, endsAfterRange: false };
     }
     
-    // Calculate span from start to check-out or end of visible range
+    // Calculate span from start to check-out (inclusive) or end of visible range
     let span = 0;
     for (let i = startIdx; i < dateRange.length; i++) {
       const currentDate = dateRange[i];
-      if (currentDate < checkOutDate) {
+      // Include the check-out day - compare by date string to avoid timezone issues
+      if (compareDates(currentDate, checkOutDate) <= 0) {
         span++;
       } else {
-        break; // Stop counting once we reach check-out
+        break; // Stop counting after check-out
       }
     }
     
-    return { start: startIdx, span };
+    return { start: startIdx, span, startsBeforeRange, endsAfterRange };
   };
 
   // Use turnover_status for reservation block colors
@@ -184,9 +202,9 @@ export default function Timeline({ onCardClick }: TimelineProps) {
   return (
     <div className="h-full flex flex-col">
       {/* Header with navigation - fixed at top */}
-      <div className="flex-shrink-0 p-6 pb-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-neutral-900 dark:text-white">
+      <div className="flex-shrink-0 px-4 py-3">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
             Property Timeline
           </h2>
           
@@ -238,23 +256,26 @@ export default function Timeline({ onCardClick }: TimelineProps) {
       </div>
 
       {/* Scrollable grid area */}
-      <div className="flex-1 overflow-auto px-6 pb-6">
+      <div className="flex-1 overflow-auto px-4 pb-4">
         <div className="overflow-hidden">
           <div 
             className="grid border border-neutral-200 dark:border-neutral-700 w-full"
             style={{
-              gridTemplateColumns: `200px repeat(${dateRange.length}, minmax(0, 1fr))`
+              gridTemplateColumns: `140px repeat(${dateRange.length}, minmax(0, 1fr))`
             }}
           >
             {/* Header Row - will stick when scrolling */}
-            <div className="bg-neutral-200 dark:bg-neutral-700 p-2 font-semibold text-neutral-900 dark:text-white sticky left-0 top-0 z-20 border-b border-r border-neutral-300 dark:border-neutral-600">
+            <div className="bg-neutral-200 dark:bg-neutral-700 px-2 py-1 text-xs font-semibold text-neutral-900 dark:text-white sticky left-0 top-0 z-20 border-b border-r border-neutral-300 dark:border-neutral-600">
               Property
             </div>
-            {dateRange.map((date, idx) => (
-              <div key={idx} className="bg-neutral-100 dark:bg-neutral-800 p-2 border-b border-r border-neutral-200 dark:border-neutral-700 sticky top-0 z-10">
-                {formatHeaderDate(date)}
-              </div>
-            ))}
+            {dateRange.map((date, idx) => {
+              const isTodayDate = isToday(date);
+              return (
+                <div key={idx} className={`px-1 py-1 border-b border-r border-neutral-200 dark:border-neutral-700 sticky top-0 z-10 ${isTodayDate ? 'bg-emerald-700' : 'bg-neutral-100 dark:bg-neutral-800'}`}>
+                  {formatHeaderDate(date, isTodayDate)}
+                </div>
+              );
+            })}
 
             {/* Property Rows */}
             {properties.map((property) => {
@@ -266,12 +287,13 @@ export default function Timeline({ onCardClick }: TimelineProps) {
                   className="contents"
                 >
                   {/* Property Name */}
-                  <div className="bg-neutral-50 dark:bg-neutral-800 p-2 font-medium text-neutral-900 dark:text-white sticky left-0 z-10 border-b border-r border-neutral-300 dark:border-neutral-600 truncate">
+                  <div className="bg-neutral-50 dark:bg-neutral-800 px-2 py-1 text-xs font-medium text-neutral-900 dark:text-white sticky left-0 z-10 border-b border-r border-neutral-300 dark:border-neutral-600 truncate flex items-center">
                     {property}
                   </div>
                   
                   {/* Date Cells with embedded reservations */}
                   {dateRange.map((date, idx) => {
+                    const isTodayDate = isToday(date);
                     // Only render the block if this is the starting cell
                     const startingReservation = propertyReservations.find(res => {
                       const { start } = getBlockPosition(res.check_in, res.check_out);
@@ -281,10 +303,18 @@ export default function Timeline({ onCardClick }: TimelineProps) {
                     return (
                       <div
                         key={idx}
-                        className="bg-white dark:bg-neutral-900 border-b border-r border-neutral-200 dark:border-neutral-700 h-[48px] relative overflow-visible"
+                        className={`border-b border-r border-neutral-200 dark:border-neutral-700 h-[28px] relative overflow-visible ${isTodayDate ? 'bg-emerald-700/20' : 'bg-white dark:bg-neutral-900'}`}
                       >
                         {startingReservation && (() => {
-                          const { span } = getBlockPosition(startingReservation.check_in, startingReservation.check_out);
+                          const { span, startsBeforeRange, endsAfterRange } = getBlockPosition(startingReservation.check_in, startingReservation.check_out);
+                          
+                          // Build dynamic clip-path based on whether reservation extends beyond visible range
+                          // If starts before range: no left indent (continuation from previous week)
+                          // If ends after range: no right indent (continues to next week)
+                          const leftIndent = startsBeforeRange ? '0px' : '40px';
+                          const rightIndent = endsAfterRange ? '0px' : '40px';
+                          const clipPath = `polygon(${leftIndent} 0%, 100% 0%, calc(100% - ${rightIndent}) 100%, 0% 100%)`;
+                          
                           return (
                             <div
                               onClick={() => {
@@ -292,17 +322,22 @@ export default function Timeline({ onCardClick }: TimelineProps) {
                                 // Only call external handler if provided
                                 if (onCardClick) onCardClick(startingReservation);
                               }}
-                              className={`absolute border-2 rounded px-2 cursor-pointer transition-all duration-150 hover:shadow-lg hover:z-30 text-white text-xs font-medium flex items-center justify-center ${getStatusColor(startingReservation.turnover_status)} ${selectedReservation?.id === startingReservation.id ? 'border-white ring-2 ring-white/50 shadow-lg z-30' : 'border-white/50 dark:border-neutral-800'}`}
+                              className={`absolute cursor-pointer transition-all duration-150 hover:brightness-110 hover:z-30 text-white text-[10px] font-medium flex items-center ${getStatusColor(startingReservation.turnover_status)} ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-white shadow-lg z-30' : ''}`}
                               style={{
-                                left: '4px',
-                                width: span === 1 ? 'calc(100% - 8px)' : `calc(${span * 100}% + ${(span - 1) * 1}px - 8px)`,
-                                top: '6px',
-                                bottom: '6px',
-                                zIndex: 15
+                                left: 0,
+                                top: 0,
+                                bottom: 0,
+                                width: `${span * 100}%`,
+                                zIndex: 15,
+                                clipPath,
+                                filter: 'drop-shadow(1px 0 0 #000) drop-shadow(-1px 0 0 #000) drop-shadow(0 1px 0 #000) drop-shadow(0 -1px 0 #000)',
                               }}
                               title={`${startingReservation.guest_name || 'No guest'} - ${formatDate(new Date(startingReservation.check_in))} to ${formatDate(new Date(startingReservation.check_out))}`}
                             >
-                              <span className="truncate">{startingReservation.guest_name || 'No guest'}</span>
+                              {/* Only show name if this is the start of the reservation (not a continuation) */}
+                              {!startsBeforeRange && (
+                                <span className="truncate" style={{ paddingLeft: '44px', paddingRight: '44px' }}>{startingReservation.guest_name || 'No guest'}</span>
+                              )}
                             </div>
                           );
                         })()}

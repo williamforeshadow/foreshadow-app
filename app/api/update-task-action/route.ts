@@ -21,7 +21,10 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabase
       .from('turnover_tasks')
-      .update({ status: action })
+      .update({ 
+        status: action,
+        updated_at: new Date().toISOString()
+      })
       .eq('id', taskId)
       .select()
       .single();
