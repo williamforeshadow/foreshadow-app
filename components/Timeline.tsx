@@ -99,7 +99,7 @@ export default function Timeline({ onCardClick }: TimelineProps) {
     
     return (
       <div className="text-center">
-        <div className={`text-[10px] ${isTodayDate ? 'text-white/80' : 'text-neutral-600 dark:text-neutral-400'}`}>
+        <div className={`text-[11px] ${isTodayDate ? 'text-white/80' : 'text-neutral-600 dark:text-neutral-400'}`}>
           {date.toLocaleDateString('en-US', { weekday: 'short' })}
         </div>
         <div className={`text-xs ${isTodayDate ? 'text-white font-semibold' : 'text-neutral-900 dark:text-white'}`}>
@@ -261,7 +261,7 @@ export default function Timeline({ onCardClick }: TimelineProps) {
           <div 
             className="grid border border-neutral-200 dark:border-neutral-700 w-full"
             style={{
-              gridTemplateColumns: `140px repeat(${dateRange.length}, minmax(0, 1fr))`
+              gridTemplateColumns: `170px repeat(${dateRange.length}, minmax(0, 1fr))`
             }}
           >
             {/* Header Row - will stick when scrolling */}
@@ -303,17 +303,23 @@ export default function Timeline({ onCardClick }: TimelineProps) {
                     return (
                       <div
                         key={idx}
-                        className={`border-b border-r border-neutral-200 dark:border-neutral-700 h-[28px] relative overflow-visible ${isTodayDate ? 'bg-emerald-700/20' : 'bg-white dark:bg-neutral-900'}`}
+                        className={`border-b border-r border-neutral-200 dark:border-neutral-700 h-[38px] relative overflow-visible ${isTodayDate ? 'bg-emerald-700/20' : 'bg-white dark:bg-neutral-900'}`}
                       >
                         {startingReservation && (() => {
                           const { span, startsBeforeRange, endsAfterRange } = getBlockPosition(startingReservation.check_in, startingReservation.check_out);
                           
-                          // Build dynamic clip-path based on whether reservation extends beyond visible range
-                          // If starts before range: no left indent (continuation from previous week)
-                          // If ends after range: no right indent (continues to next week)
-                          const leftIndent = startsBeforeRange ? '0px' : '40px';
-                          const rightIndent = endsAfterRange ? '0px' : '40px';
-                          const clipPath = `polygon(${leftIndent} 0%, 100% 0%, calc(100% - ${rightIndent}) 100%, 0% 100%)`;
+                          // Calculate actual position and width to create gaps between same-day turnovers
+                          // Check-in: starts 50% into the first cell
+                          // Check-out: ends 50% into the last cell
+                          const leftOffset = startsBeforeRange ? 0 : 50;  // 50% of one cell
+                          const rightOffset = endsAfterRange ? 0 : 50;    // 50% from end of last cell
+                          const totalWidth = (span * 100) - leftOffset - rightOffset;
+                          
+                          // Fixed pixel diagonal for consistent rhombus shape across all reservations
+                          const diagonalPx = 12; // Fixed 12px diagonal - same angle for all
+                          const leftDiagonal = startsBeforeRange ? '0px' : `${diagonalPx}px`;
+                          const rightDiagonal = endsAfterRange ? '0px' : `${diagonalPx}px`;
+                          const clipPath = `polygon(${leftDiagonal} 0%, 100% 0%, calc(100% - ${rightDiagonal}) 100%, 0% 100%)`;
                           
                           return (
                             <div
@@ -322,21 +328,20 @@ export default function Timeline({ onCardClick }: TimelineProps) {
                                 // Only call external handler if provided
                                 if (onCardClick) onCardClick(startingReservation);
                               }}
-                              className={`absolute cursor-pointer transition-all duration-150 hover:brightness-110 hover:z-30 text-white text-[10px] font-medium flex items-center ${getStatusColor(startingReservation.turnover_status)} ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-white shadow-lg z-30' : ''}`}
+                              className={`absolute cursor-pointer transition-all duration-150 hover:brightness-110 hover:z-30 text-white text-[11px] font-medium flex items-center ${getStatusColor(startingReservation.turnover_status)} ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-white shadow-lg z-30' : ''}`}
                               style={{
-                                left: 0,
+                                left: `${leftOffset}%`,
                                 top: 0,
                                 bottom: 0,
-                                width: `${span * 100}%`,
+                                width: `${totalWidth}%`,
                                 zIndex: 15,
                                 clipPath,
-                                filter: 'drop-shadow(1px 0 0 #000) drop-shadow(-1px 0 0 #000) drop-shadow(0 1px 0 #000) drop-shadow(0 -1px 0 #000)',
                               }}
                               title={`${startingReservation.guest_name || 'No guest'} - ${formatDate(new Date(startingReservation.check_in))} to ${formatDate(new Date(startingReservation.check_out))}`}
                             >
                               {/* Only show name if this is the start of the reservation (not a continuation) */}
                               {!startsBeforeRange && (
-                                <span className="truncate" style={{ paddingLeft: '44px', paddingRight: '44px' }}>{startingReservation.guest_name || 'No guest'}</span>
+                                <span className="truncate" style={{ paddingLeft: `${diagonalPx + 6}px`, paddingRight: `${diagonalPx + 6}px` }}>{startingReservation.guest_name || 'No guest'}</span>
                               )}
                             </div>
                           );

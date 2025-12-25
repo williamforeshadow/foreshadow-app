@@ -40,7 +40,6 @@ import { useAuth } from '@/lib/authContext';
 import { 
   MobileLayout, 
   MobileTimelineView, 
-  MobileProjectsView,
   MobileMyAssignmentsView,
   type MobileTab 
 } from '@/components/mobile';
