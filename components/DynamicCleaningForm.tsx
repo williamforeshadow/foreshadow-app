@@ -227,7 +227,7 @@ export default function DynamicCleaningForm({
 
       case 'checkbox':
         return (
-          <Field key={field.id} orientation="horizontal">
+          <Field key={field.id}>
             <label 
               className="flex items-center gap-4 cursor-pointer group p-3 rounded-lg border border-transparent hover:border-neutral-200 dark:hover:border-neutral-700 transition-colors w-full"
               style={{ touchAction: 'manipulation' }}

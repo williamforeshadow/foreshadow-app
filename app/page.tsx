@@ -197,7 +197,7 @@ export default function Home() {
         description: expandedProject.description || '',
         status: expandedProject.status || 'not_started',
         priority: expandedProject.priority || 'medium',
-        assigned_staff: expandedProject.assigned_staff || '',
+        assigned_staff: expandedProject.project_assignments?.[0]?.user_id || '',
         due_date: expandedProject.due_date ? expandedProject.due_date.split('T')[0] : ''
       });
     } else {
@@ -383,7 +383,7 @@ export default function Home() {
           description: editingProjectFields.description || null,
           status: editingProjectFields.status,
           priority: editingProjectFields.priority,
-          assigned_staff: editingProjectFields.assigned_staff || null,
+          assigned_user_ids: editingProjectFields.assigned_staff ? [editingProjectFields.assigned_staff] : [],
           due_date: editingProjectFields.due_date || null
         })
       });
@@ -416,7 +416,7 @@ export default function Home() {
           description: turnoverProjectFields.description || null,
           status: turnoverProjectFields.status,
           priority: turnoverProjectFields.priority,
-          assigned_staff: turnoverProjectFields.assigned_staff || null,
+          assigned_user_ids: turnoverProjectFields.assigned_staff ? [turnoverProjectFields.assigned_staff] : [],
           due_date: turnoverProjectFields.due_date || null
         })
       });
@@ -1974,7 +1974,7 @@ export default function Home() {
                                 description: expandedTurnoverProject.description || '',
                                 status: expandedTurnoverProject.status,
                                 priority: expandedTurnoverProject.priority,
-                                assigned_staff: expandedTurnoverProject.project_assignments?.map((a: any) => a.user?.name).filter(Boolean).join(', ') || '',
+                                assigned_staff: expandedTurnoverProject.project_assignments?.[0]?.user_id || '',
                                 due_date: expandedTurnoverProject.due_date || ''
                               });
                               setShowProjectsWindow(true);
@@ -2058,13 +2058,18 @@ export default function Home() {
                               <Popover open={turnoverStaffOpen} onOpenChange={setTurnoverStaffOpen}>
                                 <PopoverTrigger asChild>
                                   <Button
+                                    type="button"
                                     variant="outline"
                                     role="combobox"
                                     aria-expanded={turnoverStaffOpen}
                                     className="w-full justify-between font-normal"
+                                    onPointerDown={(e) => {
+                                      e.preventDefault();
+                                      setTurnoverStaffOpen(!turnoverStaffOpen);
+                                    }}
                                   >
                                     {turnoverProjectFields.assigned_staff
-                                      ? users.find((user) => user.name === turnoverProjectFields.assigned_staff)?.name || turnoverProjectFields.assigned_staff
+                                      ? users.find((user) => user.id === turnoverProjectFields.assigned_staff)?.name || "Unknown"
                                       : "Select staff..."}
                                     <ChevronsUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                   </Button>
@@ -2089,12 +2094,12 @@ export default function Home() {
                                           <CommandItem
                                             key={user.id}
                                             value={user.name}
-                                            onSelect={(currentValue) => {
-                                              setTurnoverProjectFields(prev => prev ? {...prev, assigned_staff: currentValue} : null);
+                                            onSelect={() => {
+                                              setTurnoverProjectFields(prev => prev ? {...prev, assigned_staff: user.id} : null);
                                               setTurnoverStaffOpen(false);
                                             }}
                                           >
-                                            <CheckIcon className={cn("mr-2 h-4 w-4", turnoverProjectFields.assigned_staff === user.name ? "opacity-100" : "opacity-0")} />
+                                            <CheckIcon className={cn("mr-2 h-4 w-4", turnoverProjectFields.assigned_staff === user.id ? "opacity-100" : "opacity-0")} />
                                             {user.name}
                                           </CommandItem>
                                         ))}
@@ -2249,7 +2254,7 @@ export default function Home() {
                                       description: project.description || '',
                                       status: project.status,
                                       priority: project.priority,
-                                      assigned_staff: project.project_assignments?.map((a: any) => a.user?.name).filter(Boolean).join(', ') || '',
+                                      assigned_staff: project.project_assignments?.[0]?.user_id || '',
                                       due_date: project.due_date || ''
                                     });
                                     // Fetch comments for this project
@@ -2270,7 +2275,7 @@ export default function Home() {
                                               description: project.description || '',
                                               status: project.status,
                                               priority: project.priority,
-                                              assigned_staff: project.project_assignments?.map((a: any) => a.user?.name).filter(Boolean).join(', ') || '',
+                                              assigned_staff: project.project_assignments?.[0]?.user_id || '',
                                               due_date: project.due_date || ''
                                             });
                                             setShowProjectsWindow(true);
@@ -2635,13 +2640,18 @@ export default function Home() {
                   <Popover open={projectStaffOpen} onOpenChange={setProjectStaffOpen}>
                     <PopoverTrigger asChild>
                       <Button
+                        type="button"
                         variant="outline"
                         role="combobox"
                         aria-expanded={projectStaffOpen}
                         className="w-full justify-between font-normal"
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          setProjectStaffOpen(!projectStaffOpen);
+                        }}
                       >
                         {editingProjectFields.assigned_staff
-                          ? users.find((user) => user.name === editingProjectFields.assigned_staff)?.name || editingProjectFields.assigned_staff
+                          ? users.find((user) => user.id === editingProjectFields.assigned_staff)?.name || "Unknown"
                           : "Select staff..."}
                         <ChevronsUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
@@ -2666,12 +2676,12 @@ export default function Home() {
                               <CommandItem
                                 key={user.id}
                                 value={user.name}
-                                onSelect={(currentValue) => {
-                                  setEditingProjectFields(prev => prev ? {...prev, assigned_staff: currentValue} : null);
+                                onSelect={() => {
+                                  setEditingProjectFields(prev => prev ? {...prev, assigned_staff: user.id} : null);
                                   setProjectStaffOpen(false);
                                 }}
                               >
-                                <CheckIcon className={cn("mr-2 h-4 w-4", editingProjectFields.assigned_staff === user.name ? "opacity-100" : "opacity-0")} />
+                                <CheckIcon className={cn("mr-2 h-4 w-4", editingProjectFields.assigned_staff === user.id ? "opacity-100" : "opacity-0")} />
                                 {user.name}
                               </CommandItem>
                             ))}
