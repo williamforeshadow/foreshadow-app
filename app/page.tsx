@@ -17,7 +17,16 @@ import {
   Field,
   FieldLabel,
 } from '@/components/ui/field';
-import { ChevronDownIcon } from 'lucide-react';
+import { ChevronDownIcon, CheckIcon, ChevronsUpDownIcon } from 'lucide-react';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -138,6 +147,10 @@ export default function Home() {
   } | null>(null);
   const [savingProjectEdit, setSavingProjectEdit] = useState(false);
   const [discussionExpanded, setDiscussionExpanded] = useState(false);
+  
+  // Combobox open states for staff assignment
+  const [turnoverStaffOpen, setTurnoverStaffOpen] = useState(false);
+  const [projectStaffOpen, setProjectStaffOpen] = useState(false);
 
   // Window stacking order management
   const bringToFront = (window: 'cards' | 'timeline' | 'projects') => {
@@ -2042,11 +2055,54 @@ export default function Home() {
                           <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1.5">
                               <label className="text-sm font-medium text-neutral-900 dark:text-white">Assigned To</label>
-                              <Input
-                                value={turnoverProjectFields.assigned_staff}
-                                onChange={(e) => setTurnoverProjectFields(prev => prev ? {...prev, assigned_staff: e.target.value} : null)}
-                                placeholder="Staff name (optional)"
-                              />
+                              <Popover open={turnoverStaffOpen} onOpenChange={setTurnoverStaffOpen}>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    aria-expanded={turnoverStaffOpen}
+                                    className="w-full justify-between font-normal"
+                                  >
+                                    {turnoverProjectFields.assigned_staff
+                                      ? users.find((user) => user.name === turnoverProjectFields.assigned_staff)?.name || turnoverProjectFields.assigned_staff
+                                      : "Select staff..."}
+                                    <ChevronsUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[200px] p-0">
+                                  <Command>
+                                    <CommandInput placeholder="Search staff..." />
+                                    <CommandList>
+                                      <CommandEmpty>No staff found.</CommandEmpty>
+                                      <CommandGroup>
+                                        <CommandItem
+                                          value="unassigned"
+                                          onSelect={() => {
+                                            setTurnoverProjectFields(prev => prev ? {...prev, assigned_staff: ''} : null);
+                                            setTurnoverStaffOpen(false);
+                                          }}
+                                        >
+                                          <CheckIcon className={cn("mr-2 h-4 w-4", !turnoverProjectFields.assigned_staff ? "opacity-100" : "opacity-0")} />
+                                          Unassigned
+                                        </CommandItem>
+                                        {users.map((user) => (
+                                          <CommandItem
+                                            key={user.id}
+                                            value={user.name}
+                                            onSelect={(currentValue) => {
+                                              setTurnoverProjectFields(prev => prev ? {...prev, assigned_staff: currentValue} : null);
+                                              setTurnoverStaffOpen(false);
+                                            }}
+                                          >
+                                            <CheckIcon className={cn("mr-2 h-4 w-4", turnoverProjectFields.assigned_staff === user.name ? "opacity-100" : "opacity-0")} />
+                                            {user.name}
+                                          </CommandItem>
+                                        ))}
+                                      </CommandGroup>
+                                    </CommandList>
+                                  </Command>
+                                </PopoverContent>
+                              </Popover>
                             </div>
 
                             <div className="space-y-1.5">
@@ -2576,11 +2632,54 @@ export default function Home() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-neutral-900 dark:text-white">Assigned To</label>
-                  <Input
-                    value={editingProjectFields.assigned_staff}
-                    onChange={(e) => setEditingProjectFields(prev => prev ? {...prev, assigned_staff: e.target.value} : null)}
-                    placeholder="Staff name (optional)"
-                  />
+                  <Popover open={projectStaffOpen} onOpenChange={setProjectStaffOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={projectStaffOpen}
+                        className="w-full justify-between font-normal"
+                      >
+                        {editingProjectFields.assigned_staff
+                          ? users.find((user) => user.name === editingProjectFields.assigned_staff)?.name || editingProjectFields.assigned_staff
+                          : "Select staff..."}
+                        <ChevronsUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[200px] p-0">
+                      <Command>
+                        <CommandInput placeholder="Search staff..." />
+                        <CommandList>
+                          <CommandEmpty>No staff found.</CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem
+                              value="unassigned"
+                              onSelect={() => {
+                                setEditingProjectFields(prev => prev ? {...prev, assigned_staff: ''} : null);
+                                setProjectStaffOpen(false);
+                              }}
+                            >
+                              <CheckIcon className={cn("mr-2 h-4 w-4", !editingProjectFields.assigned_staff ? "opacity-100" : "opacity-0")} />
+                              Unassigned
+                            </CommandItem>
+                            {users.map((user) => (
+                              <CommandItem
+                                key={user.id}
+                                value={user.name}
+                                onSelect={(currentValue) => {
+                                  setEditingProjectFields(prev => prev ? {...prev, assigned_staff: currentValue} : null);
+                                  setProjectStaffOpen(false);
+                                }}
+                              >
+                                <CheckIcon className={cn("mr-2 h-4 w-4", editingProjectFields.assigned_staff === user.name ? "opacity-100" : "opacity-0")} />
+                                {user.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
                 <div className="space-y-2">
