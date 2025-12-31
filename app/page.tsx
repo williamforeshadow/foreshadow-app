@@ -1499,9 +1499,18 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* START TASK VIEW - Only show when not started */}
-                {(fullscreenTask.status === 'not_started' || !fullscreenTask.status) ? (
-                  <div className="flex items-center justify-center py-12">
+                {/* TASK VIEW - Check assignment first, then status */}
+                {!(fullscreenTask.assigned_users || []).some((u: any) => u.user_id === currentUser?.id) ? (
+                  /* NOT ASSIGNED - Block access to task */
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    <Button disabled variant="outline">
+                      Start Task
+                    </Button>
+                    <p className="text-sm text-neutral-500">This task hasn't been assigned</p>
+                  </div>
+                ) : (fullscreenTask.status === 'not_started' || !fullscreenTask.status) ? (
+                  /* ASSIGNED + NOT STARTED - Show Start button */
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
                     <Button
                       onClick={() => {
                         updateTaskAction(fullscreenTask.task_id, 'in_progress');
@@ -1512,7 +1521,7 @@ export default function Home() {
                     </Button>
                   </div>
                 ) : (
-                  /* ACTIVE TASK VIEW - Show form and action buttons */
+                  /* ASSIGNED + ACTIVE - Show form and action buttons */
                   <>
                     {/* Template Form */}
                     {fullscreenTask.template_id ? (
@@ -2981,7 +2990,11 @@ export default function Home() {
                 if (task.template_id && !taskTemplates[task.template_id]) {
                   await fetchTaskTemplate(task.template_id);
                 }
-                setMobileSelectedTask(task);
+                // Add current user to assigned_users since this task came from My Work (they're assigned)
+                setMobileSelectedTask({
+                  ...task,
+                  assigned_users: [{ user_id: currentUser?.id, name: currentUser?.name }]
+                });
               }}
               onProjectClick={(project: any) => {
                 // Open project edit dialog
@@ -2992,7 +3005,17 @@ export default function Home() {
           )}
           
           {mobileTab === 'timeline' && (
-            <MobileTimelineView onCardClick={setSelectedCard} />
+            <MobileTimelineView 
+              onCardClick={setSelectedCard}
+              refreshTrigger={mobileRefreshTrigger}
+              onTaskClick={async (task: any) => {
+                // Fetch template if needed, then open task detail
+                if (task.template_id && !taskTemplates[task.template_id]) {
+                  await fetchTaskTemplate(task.template_id);
+                }
+                setMobileSelectedTask(task);
+              }}
+            />
           )}
         </MobileLayout>
 
@@ -3067,9 +3090,18 @@ export default function Home() {
                   )}
                 </div>
 
-                {/* START TASK VIEW - Only show when not started */}
-                {(mobileSelectedTask.status === 'not_started' || !mobileSelectedTask.status) ? (
-                  <div className="flex items-center justify-center py-12">
+                {/* TASK VIEW - Check assignment first, then status */}
+                {!(mobileSelectedTask.assigned_users || []).some((u: any) => u.user_id === currentUser?.id) ? (
+                  /* NOT ASSIGNED - Block access to task */
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    <Button disabled variant="outline">
+                      Start Task
+                    </Button>
+                    <p className="text-sm text-neutral-500">This task hasn't been assigned</p>
+                  </div>
+                ) : (mobileSelectedTask.status === 'not_started' || !mobileSelectedTask.status) ? (
+                  /* ASSIGNED + NOT STARTED - Show Start button */
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
                     <Button
                       onClick={() => {
                         updateTaskAction(mobileSelectedTask.task_id, 'in_progress');
@@ -3080,7 +3112,7 @@ export default function Home() {
                     </Button>
                   </div>
                 ) : (
-                  /* ACTIVE TASK VIEW - Show form and action buttons */
+                  /* ASSIGNED + ACTIVE - Show form and action buttons */
                   <>
                     {/* Template Form */}
                     {mobileSelectedTask.template_id ? (
@@ -3380,9 +3412,18 @@ export default function Home() {
                         </div>
                       </div>
 
-                      {/* START TASK VIEW - Only show when not started */}
-                      {(fullscreenTask.status === 'not_started' || !fullscreenTask.status) ? (
-                        <div className="flex items-center justify-center py-12">
+                      {/* TASK VIEW - Check assignment first, then status */}
+                      {!(fullscreenTask.assigned_users || []).some((u: any) => u.user_id === currentUser?.id) ? (
+                        /* NOT ASSIGNED - Block access to task */
+                        <div className="flex flex-col items-center justify-center py-12 gap-3">
+                          <Button disabled variant="outline">
+                            Start Task
+                          </Button>
+                          <p className="text-sm text-neutral-500">This task hasn't been assigned</p>
+                        </div>
+                      ) : (fullscreenTask.status === 'not_started' || !fullscreenTask.status) ? (
+                        /* ASSIGNED + NOT STARTED - Show Start button */
+                        <div className="flex flex-col items-center justify-center py-12 gap-3">
                           <Button
                             onClick={() => {
                               updateTaskAction(fullscreenTask.task_id, 'in_progress');
@@ -3393,7 +3434,7 @@ export default function Home() {
                           </Button>
                         </div>
                       ) : (
-                        /* ACTIVE TASK VIEW - Show form and action buttons */
+                        /* ASSIGNED + ACTIVE - Show form and action buttons */
                         <>
                           {/* Template Form */}
                           {fullscreenTask.template_id ? (
@@ -4269,9 +4310,18 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {/* START TASK VIEW - Only show when not started */}
-                    {(fullscreenTask.status === 'not_started' || !fullscreenTask.status) ? (
-                      <div className="flex items-center justify-center py-12">
+                    {/* TASK VIEW - Check assignment first, then status */}
+                    {!(fullscreenTask.assigned_users || []).some((u: any) => u.user_id === currentUser?.id) ? (
+                      /* NOT ASSIGNED - Block access to task */
+                      <div className="flex flex-col items-center justify-center py-12 gap-3">
+                        <Button disabled variant="outline">
+                          Start Task
+                        </Button>
+                        <p className="text-sm text-neutral-500">This task hasn't been assigned</p>
+                      </div>
+                    ) : (fullscreenTask.status === 'not_started' || !fullscreenTask.status) ? (
+                      /* ASSIGNED + NOT STARTED - Show Start button */
+                      <div className="flex flex-col items-center justify-center py-12 gap-3">
                         <Button
                           onClick={() => {
                             updateTaskAction(fullscreenTask.task_id, 'in_progress');
@@ -4282,7 +4332,7 @@ export default function Home() {
                         </Button>
                       </div>
                     ) : (
-                      /* ACTIVE TASK VIEW - Show form and action buttons */
+                      /* ASSIGNED + ACTIVE - Show form and action buttons */
                       <>
                         {/* Template Form */}
                         {fullscreenTask.template_id ? (
