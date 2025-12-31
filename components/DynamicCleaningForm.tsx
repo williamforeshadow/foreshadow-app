@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, memo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Field,
@@ -35,7 +35,7 @@ interface DynamicCleaningFormProps {
   onSave: (formData: any) => Promise<void>;
 }
 
-export default function DynamicCleaningForm({ 
+function DynamicCleaningForm({ 
   cleaningId, 
   propertyName, 
   template, 
@@ -88,9 +88,9 @@ export default function DynamicCleaningForm({
     setFormValues(defaults);
   }, [template, formMetadata]);
 
-  const updateValue = (fieldId: string, value: any) => {
+  const updateValue = useCallback((fieldId: string, value: any) => {
     setFormValues(prev => ({ ...prev, [fieldId]: value }));
-  };
+  }, []);
 
   // Get current form values - exposed for external save
   // Enriched with labels so AI can understand field context
@@ -126,14 +126,39 @@ export default function DynamicCleaningForm({
     }
   };
 
-  // Expose saveForm to parent via ref or callback on mount
+  // Use ref to always have access to latest form values without re-running effect
+  const formValuesRef = useRef(formValues);
+  formValuesRef.current = formValues;
+
+  // Expose saveForm to parent via window - only set up once on mount
   useEffect(() => {
     // Store save function reference for parent to access
-    (window as any).__currentFormSave = saveForm;
+    (window as any).__currentFormSave = async () => {
+      setIsSaving(true);
+      try {
+        const enrichedFields: Record<string, any> = {};
+        template?.fields.forEach(field => {
+          if (field.type === 'separator') return;
+          enrichedFields[field.id] = {
+            label: field.label,
+            type: field.type,
+            value: formValuesRef.current[field.id]
+          };
+        });
+        await onSave({
+          ...enrichedFields,
+          property_name: propertyName,
+          template_id: template?.id,
+          template_name: template?.name
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    };
     return () => {
       delete (window as any).__currentFormSave;
     };
-  }, [formValues]);
+  }, [template, propertyName, onSave]);
 
   if (!template) {
     return (
@@ -228,8 +253,10 @@ export default function DynamicCleaningForm({
       case 'checkbox':
         return (
           <Field key={field.id}>
-            <label 
-              className="flex items-center gap-4 cursor-pointer group p-3 rounded-lg border border-transparent hover:border-neutral-200 dark:hover:border-neutral-700 transition-colors w-full"
+            <button
+              type="button"
+              onClick={() => updateValue(field.id, !value)}
+              className="flex items-center gap-4 cursor-pointer group p-3 rounded-lg border border-transparent hover:border-neutral-200 dark:hover:border-neutral-700 transition-colors w-full text-left"
               style={{ touchAction: 'manipulation' }}
             >
               <div className={`w-7 h-7 rounded-md border-2 flex items-center justify-center transition-all flex-shrink-0 ${
@@ -243,16 +270,10 @@ export default function DynamicCleaningForm({
                   </svg>
                 )}
               </div>
-              <input
-                type="checkbox"
-                checked={value || false}
-                onChange={(e) => updateValue(field.id, e.target.checked)}
-                className="sr-only"
-              />
               <span className="text-sm font-medium text-neutral-900 dark:text-white">
                 {field.label} {field.required && <span className="text-red-500">*</span>}
               </span>
-            </label>
+            </button>
           </Field>
         );
 
@@ -318,3 +339,6 @@ export default function DynamicCleaningForm({
     </div>
   );
 }
+
+// Memoize to prevent re-renders when parent state changes
+export default memo(DynamicCleaningForm);

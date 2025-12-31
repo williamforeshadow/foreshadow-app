@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, memo, useMemo } from 'react';
+import { useState, useEffect, memo, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import Sidebar from '@/components/Sidebar';
 import { Button } from '@/components/ui/button';
@@ -130,6 +130,10 @@ export default function Home() {
   const [savingTurnoverProject, setSavingTurnoverProject] = useState(false);
   const [expandedProject, setExpandedProject] = useState<any>(null);
   
+  // Refs for scroll position preservation
+  const rightPanelRef = useRef<HTMLDivElement>(null);
+  const scrollPositionRef = useRef<number>(0);
+  
   // Project comments state
   const [projectComments, setProjectComments] = useState<any[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
@@ -206,6 +210,18 @@ export default function Home() {
       setEditingProjectFields(null);
     }
   }, [expandedProject?.id]);
+
+  // Restore scroll position after re-renders (runs after every render)
+  useEffect(() => {
+    if (rightPanelRef.current && scrollPositionRef.current > 0) {
+      // Use requestAnimationFrame to ensure DOM has updated
+      requestAnimationFrame(() => {
+        if (rightPanelRef.current) {
+          rightPanelRef.current.scrollTop = scrollPositionRef.current;
+        }
+      });
+    }
+  });
 
   const fetchProjects = async () => {
     setLoadingProjects(true);
@@ -812,7 +828,11 @@ export default function Home() {
     }
   };
 
-  const saveTaskForm = async (taskId: string, formData: any) => {
+  // Use ref to access selectedCard.id without causing re-renders
+  const selectedCardIdRef = useRef<string | null>(null);
+  selectedCardIdRef.current = selectedCard?.id || null;
+
+  const saveTaskForm = useCallback(async (taskId: string, formData: any) => {
     try {
       const response = await fetch('/api/save-task-form', {
         method: 'POST',
@@ -839,14 +859,15 @@ export default function Home() {
         return { ...prev, tasks: updatedTasks };
       });
 
-      // Also update in response array - only if selectedCard exists (desktop view)
-      if (selectedCard) {
+      // Also update in response array using ref to get current selectedCard.id
+      const currentSelectedCardId = selectedCardIdRef.current;
+      if (currentSelectedCardId) {
         setResponse((prevResponse: any) => {
           if (!prevResponse) return prevResponse;
           
           const items = Array.isArray(prevResponse) ? prevResponse : [prevResponse];
           const updatedItems = items.map((item: any) => {
-            if (item.id === selectedCard.id && item.tasks) {
+            if (item.id === currentSelectedCardId && item.tasks) {
               const updatedTasks = item.tasks.map((task: any) => 
                 task.task_id === taskId 
                   ? { ...task, form_metadata: formData }
@@ -867,7 +888,7 @@ export default function Home() {
       setError(err.message || 'Failed to save task form');
       throw err;
     }
-  };
+  }, []);
 
   // Fetch available templates for adding tasks
   const fetchAvailableTemplates = async () => {
@@ -1189,7 +1210,7 @@ export default function Home() {
 
   // Memoize window contents to prevent re-renders when only z-index changes
   const cardsWindowContent = useMemo(() => (
-    <div className="flex h-full">
+    <div className="flex h-full overflow-hidden">
       {/* Left Panel - Cards */}
       <div className={`${selectedCard ? 'w-1/2 border-r border-neutral-200 dark:border-neutral-700' : 'w-full'} transition-all duration-300 overflow-y-auto hide-scrollbar p-6 space-y-4`}>
       {/* Response Display */}
@@ -1407,7 +1428,13 @@ export default function Home() {
 
       {/* Right Panel - Turnover Detail */}
       {selectedCard && (
-        <div className="w-1/2 h-full overflow-y-auto border-l border-neutral-200 dark:border-neutral-700 bg-card">
+        <div 
+          ref={rightPanelRef}
+          className="w-1/2 h-full overflow-y-auto border-l border-neutral-200 dark:border-neutral-700 bg-card"
+          onScroll={(e) => {
+            scrollPositionRef.current = e.currentTarget.scrollTop;
+          }}
+        >
           {fullscreenTask ? (
             /* Task Template View */
             <div className="flex flex-col h-full">
@@ -1440,7 +1467,7 @@ export default function Home() {
               </div>
 
               {/* Content */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="flex-1 p-6 space-y-4">
                 {/* Task Status Bar */}
                 <div className="p-3 bg-neutral-50 dark:bg-neutral-800 rounded-lg flex items-center justify-between">
                   <div>
@@ -1472,118 +1499,112 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Template Form */}
-                {fullscreenTask.template_id ? (
-                  loadingTaskTemplate === fullscreenTask.template_id ? (
-                    <div className="flex items-center justify-center py-8">
-                      <p className="text-neutral-500">Loading form...</p>
-                    </div>
-                  ) : taskTemplates[fullscreenTask.template_id] ? (
-                    <DynamicCleaningForm
-                      cleaningId={fullscreenTask.task_id}
-                      propertyName={selectedCard?.property_name || ''}
-                      template={taskTemplates[fullscreenTask.template_id]}
-                      formMetadata={fullscreenTask.form_metadata}
-                      onSave={async (formData) => {
-                        await saveTaskForm(fullscreenTask.task_id, formData);
+                {/* START TASK VIEW - Only show when not started */}
+                {(fullscreenTask.status === 'not_started' || !fullscreenTask.status) ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Button
+                      onClick={() => {
+                        updateTaskAction(fullscreenTask.task_id, 'in_progress');
+                        setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
                       }}
-                    />
-                  ) : (
-                    <p className="text-center text-neutral-500 py-8">
-                      No template configured for this task
-                    </p>
-                  )
-                ) : (
-                  <p className="text-center text-neutral-500 py-8">
-                    No template configured for this task
-                  </p>
-                )}
-
-                {/* Action Buttons */}
-                <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
-                  <div className="flex flex-wrap gap-2">
-                    {(fullscreenTask.status === 'not_started' || !fullscreenTask.status) && (
-                      <>
-                        <Button
-                          onClick={() => {
-                            updateTaskAction(fullscreenTask.task_id, 'in_progress');
-                            setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
-                          }}
-                          className="flex-1"
-                        >
-                          Start Task
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            updateTaskAction(fullscreenTask.task_id, 'complete');
-                            setFullscreenTask({ ...fullscreenTask, status: 'complete' });
-                          }}
-                          variant="outline"
-                          className="flex-1"
-                        >
-                          Mark Complete
-                        </Button>
-                      </>
-                    )}
-                    {fullscreenTask.status === 'in_progress' && (
-                      <>
-                        <Button
-                          onClick={() => {
-                            updateTaskAction(fullscreenTask.task_id, 'paused');
-                            setFullscreenTask({ ...fullscreenTask, status: 'paused' });
-                          }}
-                          variant="outline"
-                          className="flex-1"
-                        >
-                          Pause
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            updateTaskAction(fullscreenTask.task_id, 'complete');
-                            setFullscreenTask({ ...fullscreenTask, status: 'complete' });
-                          }}
-                          className="flex-1"
-                        >
-                          Complete
-                        </Button>
-                      </>
-                    )}
-                    {fullscreenTask.status === 'paused' && (
-                      <>
-                        <Button
-                          onClick={() => {
-                            updateTaskAction(fullscreenTask.task_id, 'in_progress');
-                            setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
-                          }}
-                          className="flex-1"
-                        >
-                          Resume
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            updateTaskAction(fullscreenTask.task_id, 'complete');
-                            setFullscreenTask({ ...fullscreenTask, status: 'complete' });
-                          }}
-                          variant="outline"
-                          className="flex-1"
-                        >
-                          Complete
-                        </Button>
-                      </>
-                    )}
-                    {(fullscreenTask.status === 'complete' || fullscreenTask.status === 'reopened') && (
-                      <Button
-                        onClick={() => {
-                          updateTaskAction(fullscreenTask.task_id, 'not_started');
-                          setFullscreenTask({ ...fullscreenTask, status: 'not_started' });
-                        }}
-                        className="w-full"
-                      >
-                        Reopen Task
-                      </Button>
-                    )}
+                    >
+                      Start Task
+                    </Button>
                   </div>
-                </div>
+                ) : (
+                  /* ACTIVE TASK VIEW - Show form and action buttons */
+                  <>
+                    {/* Template Form */}
+                    {fullscreenTask.template_id ? (
+                      loadingTaskTemplate === fullscreenTask.template_id ? (
+                        <div className="flex items-center justify-center py-8">
+                          <p className="text-neutral-500">Loading form...</p>
+                        </div>
+                      ) : taskTemplates[fullscreenTask.template_id] ? (
+                        <DynamicCleaningForm
+                          cleaningId={fullscreenTask.task_id}
+                          propertyName={selectedCard?.property_name || ''}
+                          template={taskTemplates[fullscreenTask.template_id]}
+                          formMetadata={fullscreenTask.form_metadata}
+                          onSave={async (formData) => {
+                            await saveTaskForm(fullscreenTask.task_id, formData);
+                          }}
+                        />
+                      ) : (
+                        <p className="text-center text-neutral-500 py-8">
+                          No template configured for this task
+                        </p>
+                      )
+                    ) : (
+                      <p className="text-center text-neutral-500 py-8">
+                        No template configured for this task
+                      </p>
+                    )}
+
+                    {/* Action Buttons - Only show for active tasks */}
+                    <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
+                      <div className="flex flex-wrap gap-2">
+                        {fullscreenTask.status === 'in_progress' && (
+                          <>
+                            <Button
+                              onClick={() => {
+                                updateTaskAction(fullscreenTask.task_id, 'paused');
+                                setFullscreenTask({ ...fullscreenTask, status: 'paused' });
+                              }}
+                              variant="outline"
+                              className="flex-1"
+                            >
+                              Pause
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                updateTaskAction(fullscreenTask.task_id, 'complete');
+                                setFullscreenTask({ ...fullscreenTask, status: 'complete' });
+                              }}
+                              className="flex-1"
+                            >
+                              Complete
+                            </Button>
+                          </>
+                        )}
+                        {fullscreenTask.status === 'paused' && (
+                          <>
+                            <Button
+                              onClick={() => {
+                                updateTaskAction(fullscreenTask.task_id, 'in_progress');
+                                setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
+                              }}
+                              className="flex-1"
+                            >
+                              Resume
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                updateTaskAction(fullscreenTask.task_id, 'complete');
+                                setFullscreenTask({ ...fullscreenTask, status: 'complete' });
+                              }}
+                              variant="outline"
+                              className="flex-1"
+                            >
+                              Complete
+                            </Button>
+                          </>
+                        )}
+                        {(fullscreenTask.status === 'complete' || fullscreenTask.status === 'reopened') && (
+                          <Button
+                            onClick={() => {
+                              updateTaskAction(fullscreenTask.task_id, 'not_started');
+                              setFullscreenTask({ ...fullscreenTask, status: 'not_started' });
+                            }}
+                            className="w-full"
+                          >
+                            Reopen Task
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Footer */}
@@ -3046,118 +3067,112 @@ export default function Home() {
                   )}
                 </div>
 
-                {/* Template Form */}
-                {mobileSelectedTask.template_id ? (
-                  loadingTaskTemplate === mobileSelectedTask.template_id ? (
-                    <div className="flex items-center justify-center py-8">
-                      <p className="text-neutral-500">Loading form...</p>
-                    </div>
-                  ) : taskTemplates[mobileSelectedTask.template_id] ? (
-                    <DynamicCleaningForm
-                      cleaningId={mobileSelectedTask.task_id}
-                      propertyName={mobileSelectedTask.property_name || ''}
-                      template={taskTemplates[mobileSelectedTask.template_id]}
-                      formMetadata={mobileSelectedTask.form_metadata}
-                      onSave={async (formData) => {
-                        await saveTaskForm(mobileSelectedTask.task_id, formData);
+                {/* START TASK VIEW - Only show when not started */}
+                {(mobileSelectedTask.status === 'not_started' || !mobileSelectedTask.status) ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Button
+                      onClick={() => {
+                        updateTaskAction(mobileSelectedTask.task_id, 'in_progress');
+                        setMobileSelectedTask({ ...mobileSelectedTask, status: 'in_progress' });
                       }}
-                    />
-                  ) : (
-                    <p className="text-center text-neutral-500 py-8">
-                      No template configured for this task
-                    </p>
-                  )
-                ) : (
-                  <p className="text-center text-neutral-500 py-8">
-                    No template configured for this task
-                  </p>
-                )}
-
-                {/* Action Buttons */}
-                <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
-                  <div className="flex flex-wrap gap-2">
-                    {(mobileSelectedTask.status === 'not_started' || !mobileSelectedTask.status) && (
-                      <>
-                        <Button
-                          onClick={() => {
-                            updateTaskAction(mobileSelectedTask.task_id, 'in_progress');
-                            setMobileSelectedTask({ ...mobileSelectedTask, status: 'in_progress' });
-                          }}
-                          className="flex-1"
-                        >
-                          Start Task
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            updateTaskAction(mobileSelectedTask.task_id, 'complete');
-                            setMobileSelectedTask({ ...mobileSelectedTask, status: 'complete' });
-                          }}
-                          variant="outline"
-                          className="flex-1"
-                        >
-                          Mark Complete
-                        </Button>
-                      </>
-                    )}
-                    {mobileSelectedTask.status === 'in_progress' && (
-                      <>
-                        <Button
-                          onClick={() => {
-                            updateTaskAction(mobileSelectedTask.task_id, 'paused');
-                            setMobileSelectedTask({ ...mobileSelectedTask, status: 'paused' });
-                          }}
-                          variant="outline"
-                          className="flex-1"
-                        >
-                          Pause
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            updateTaskAction(mobileSelectedTask.task_id, 'complete');
-                            setMobileSelectedTask({ ...mobileSelectedTask, status: 'complete' });
-                          }}
-                          className="flex-1"
-                        >
-                          Complete
-                        </Button>
-                      </>
-                    )}
-                    {mobileSelectedTask.status === 'paused' && (
-                      <>
-                        <Button
-                          onClick={() => {
-                            updateTaskAction(mobileSelectedTask.task_id, 'in_progress');
-                            setMobileSelectedTask({ ...mobileSelectedTask, status: 'in_progress' });
-                          }}
-                          className="flex-1"
-                        >
-                          Resume
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            updateTaskAction(mobileSelectedTask.task_id, 'complete');
-                            setMobileSelectedTask({ ...mobileSelectedTask, status: 'complete' });
-                          }}
-                          variant="outline"
-                          className="flex-1"
-                        >
-                          Complete
-                        </Button>
-                      </>
-                    )}
-                    {(mobileSelectedTask.status === 'complete' || mobileSelectedTask.status === 'reopened') && (
-                      <Button
-                        onClick={() => {
-                          updateTaskAction(mobileSelectedTask.task_id, 'not_started');
-                          setMobileSelectedTask({ ...mobileSelectedTask, status: 'not_started' });
-                        }}
-                        className="w-full"
-                      >
-                        Reopen Task
-                      </Button>
-                    )}
+                    >
+                      Start Task
+                    </Button>
                   </div>
-                </div>
+                ) : (
+                  /* ACTIVE TASK VIEW - Show form and action buttons */
+                  <>
+                    {/* Template Form */}
+                    {mobileSelectedTask.template_id ? (
+                      loadingTaskTemplate === mobileSelectedTask.template_id ? (
+                        <div className="flex items-center justify-center py-8">
+                          <p className="text-neutral-500">Loading form...</p>
+                        </div>
+                      ) : taskTemplates[mobileSelectedTask.template_id] ? (
+                        <DynamicCleaningForm
+                          cleaningId={mobileSelectedTask.task_id}
+                          propertyName={mobileSelectedTask.property_name || ''}
+                          template={taskTemplates[mobileSelectedTask.template_id]}
+                          formMetadata={mobileSelectedTask.form_metadata}
+                          onSave={async (formData) => {
+                            await saveTaskForm(mobileSelectedTask.task_id, formData);
+                          }}
+                        />
+                      ) : (
+                        <p className="text-center text-neutral-500 py-8">
+                          No template configured for this task
+                        </p>
+                      )
+                    ) : (
+                      <p className="text-center text-neutral-500 py-8">
+                        No template configured for this task
+                      </p>
+                    )}
+
+                    {/* Action Buttons - Only show for active tasks */}
+                    <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
+                      <div className="flex flex-wrap gap-2">
+                        {mobileSelectedTask.status === 'in_progress' && (
+                          <>
+                            <Button
+                              onClick={() => {
+                                updateTaskAction(mobileSelectedTask.task_id, 'paused');
+                                setMobileSelectedTask({ ...mobileSelectedTask, status: 'paused' });
+                              }}
+                              variant="outline"
+                              className="flex-1"
+                            >
+                              Pause
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                updateTaskAction(mobileSelectedTask.task_id, 'complete');
+                                setMobileSelectedTask({ ...mobileSelectedTask, status: 'complete' });
+                              }}
+                              className="flex-1"
+                            >
+                              Complete
+                            </Button>
+                          </>
+                        )}
+                        {mobileSelectedTask.status === 'paused' && (
+                          <>
+                            <Button
+                              onClick={() => {
+                                updateTaskAction(mobileSelectedTask.task_id, 'in_progress');
+                                setMobileSelectedTask({ ...mobileSelectedTask, status: 'in_progress' });
+                              }}
+                              className="flex-1"
+                            >
+                              Resume
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                updateTaskAction(mobileSelectedTask.task_id, 'complete');
+                                setMobileSelectedTask({ ...mobileSelectedTask, status: 'complete' });
+                              }}
+                              variant="outline"
+                              className="flex-1"
+                            >
+                              Complete
+                            </Button>
+                          </>
+                        )}
+                        {(mobileSelectedTask.status === 'complete' || mobileSelectedTask.status === 'reopened') && (
+                          <Button
+                            onClick={() => {
+                              updateTaskAction(mobileSelectedTask.task_id, 'not_started');
+                              setMobileSelectedTask({ ...mobileSelectedTask, status: 'not_started' });
+                            }}
+                            className="w-full"
+                          >
+                            Reopen Task
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 {/* Bottom padding for safe area */}
                 <div className="h-8" />
@@ -3365,118 +3380,112 @@ export default function Home() {
                         </div>
                       </div>
 
-                      {/* Template Form */}
-                      {fullscreenTask.template_id ? (
-                        loadingTaskTemplate === fullscreenTask.template_id ? (
-                          <div className="flex items-center justify-center py-8">
-                            <p className="text-neutral-500">Loading form...</p>
-                          </div>
-                        ) : taskTemplates[fullscreenTask.template_id] ? (
-                          <DynamicCleaningForm
-                            cleaningId={fullscreenTask.task_id}
-                            propertyName={selectedCard?.property_name || ''}
-                            template={taskTemplates[fullscreenTask.template_id]}
-                            formMetadata={fullscreenTask.form_metadata}
-                            onSave={async (formData) => {
-                              await saveTaskForm(fullscreenTask.task_id, formData);
+                      {/* START TASK VIEW - Only show when not started */}
+                      {(fullscreenTask.status === 'not_started' || !fullscreenTask.status) ? (
+                        <div className="flex items-center justify-center py-12">
+                          <Button
+                            onClick={() => {
+                              updateTaskAction(fullscreenTask.task_id, 'in_progress');
+                              setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
                             }}
-                          />
-                        ) : (
-                          <p className="text-center text-neutral-500 py-8">
-                            No template configured for this task
-                          </p>
-                        )
-                      ) : (
-                        <p className="text-center text-neutral-500 py-8">
-                          No template configured for this task
-                        </p>
-                      )}
-
-                      {/* Action Buttons */}
-                      <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
-                        <div className="flex flex-wrap gap-2">
-                          {(fullscreenTask.status === 'not_started' || !fullscreenTask.status) && (
-                            <>
-                              <Button
-                                onClick={() => {
-                                  updateTaskAction(fullscreenTask.task_id, 'in_progress');
-                                  setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
-                                }}
-                                className="flex-1"
-                              >
-                                Start Task
-                              </Button>
-                              <Button
-                                onClick={() => {
-                                  updateTaskAction(fullscreenTask.task_id, 'complete');
-                                  setFullscreenTask({ ...fullscreenTask, status: 'complete' });
-                                }}
-                                variant="outline"
-                                className="flex-1"
-                              >
-                                Mark Complete
-                              </Button>
-                            </>
-                          )}
-                          {fullscreenTask.status === 'in_progress' && (
-                            <>
-                              <Button
-                                onClick={() => {
-                                  updateTaskAction(fullscreenTask.task_id, 'paused');
-                                  setFullscreenTask({ ...fullscreenTask, status: 'paused' });
-                                }}
-                                variant="outline"
-                                className="flex-1"
-                              >
-                                Pause
-                              </Button>
-                              <Button
-                                onClick={() => {
-                                  updateTaskAction(fullscreenTask.task_id, 'complete');
-                                  setFullscreenTask({ ...fullscreenTask, status: 'complete' });
-                                }}
-                                className="flex-1"
-                              >
-                                Complete
-                              </Button>
-                            </>
-                          )}
-                          {fullscreenTask.status === 'paused' && (
-                            <>
-                              <Button
-                                onClick={() => {
-                                  updateTaskAction(fullscreenTask.task_id, 'in_progress');
-                                  setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
-                                }}
-                                className="flex-1"
-                              >
-                                Resume
-                              </Button>
-                              <Button
-                                onClick={() => {
-                                  updateTaskAction(fullscreenTask.task_id, 'complete');
-                                  setFullscreenTask({ ...fullscreenTask, status: 'complete' });
-                                }}
-                                variant="outline"
-                                className="flex-1"
-                              >
-                                Complete
-                              </Button>
-                            </>
-                          )}
-                          {(fullscreenTask.status === 'complete' || fullscreenTask.status === 'reopened') && (
-                            <Button
-                              onClick={() => {
-                                updateTaskAction(fullscreenTask.task_id, 'not_started');
-                                setFullscreenTask({ ...fullscreenTask, status: 'not_started' });
-                              }}
-                              className="w-full"
-                            >
-                              Reopen Task
-                            </Button>
-                          )}
+                          >
+                            Start Task
+                          </Button>
                         </div>
-                      </div>
+                      ) : (
+                        /* ACTIVE TASK VIEW - Show form and action buttons */
+                        <>
+                          {/* Template Form */}
+                          {fullscreenTask.template_id ? (
+                            loadingTaskTemplate === fullscreenTask.template_id ? (
+                              <div className="flex items-center justify-center py-8">
+                                <p className="text-neutral-500">Loading form...</p>
+                              </div>
+                            ) : taskTemplates[fullscreenTask.template_id] ? (
+                              <DynamicCleaningForm
+                                cleaningId={fullscreenTask.task_id}
+                                propertyName={selectedCard?.property_name || ''}
+                                template={taskTemplates[fullscreenTask.template_id]}
+                                formMetadata={fullscreenTask.form_metadata}
+                                onSave={async (formData) => {
+                                  await saveTaskForm(fullscreenTask.task_id, formData);
+                                }}
+                              />
+                            ) : (
+                              <p className="text-center text-neutral-500 py-8">
+                                No template configured for this task
+                              </p>
+                            )
+                          ) : (
+                            <p className="text-center text-neutral-500 py-8">
+                              No template configured for this task
+                            </p>
+                          )}
+
+                          {/* Action Buttons - Only show for active tasks */}
+                          <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
+                            <div className="flex flex-wrap gap-2">
+                              {fullscreenTask.status === 'in_progress' && (
+                                <>
+                                  <Button
+                                    onClick={() => {
+                                      updateTaskAction(fullscreenTask.task_id, 'paused');
+                                      setFullscreenTask({ ...fullscreenTask, status: 'paused' });
+                                    }}
+                                    variant="outline"
+                                    className="flex-1"
+                                  >
+                                    Pause
+                                  </Button>
+                                  <Button
+                                    onClick={() => {
+                                      updateTaskAction(fullscreenTask.task_id, 'complete');
+                                      setFullscreenTask({ ...fullscreenTask, status: 'complete' });
+                                    }}
+                                    className="flex-1"
+                                  >
+                                    Complete
+                                  </Button>
+                                </>
+                              )}
+                              {fullscreenTask.status === 'paused' && (
+                                <>
+                                  <Button
+                                    onClick={() => {
+                                      updateTaskAction(fullscreenTask.task_id, 'in_progress');
+                                      setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
+                                    }}
+                                    className="flex-1"
+                                  >
+                                    Resume
+                                  </Button>
+                                  <Button
+                                    onClick={() => {
+                                      updateTaskAction(fullscreenTask.task_id, 'complete');
+                                      setFullscreenTask({ ...fullscreenTask, status: 'complete' });
+                                    }}
+                                    variant="outline"
+                                    className="flex-1"
+                                  >
+                                    Complete
+                                  </Button>
+                                </>
+                              )}
+                              {(fullscreenTask.status === 'complete' || fullscreenTask.status === 'reopened') && (
+                                <Button
+                                  onClick={() => {
+                                    updateTaskAction(fullscreenTask.task_id, 'not_started');
+                                    setFullscreenTask({ ...fullscreenTask, status: 'not_started' });
+                                  }}
+                                  className="w-full"
+                                >
+                                  Reopen Task
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     <SheetFooter className="border-t pt-4">
@@ -4260,118 +4269,112 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {/* Template Form */}
-                    {fullscreenTask.template_id ? (
-                      loadingTaskTemplate === fullscreenTask.template_id ? (
-                        <div className="flex items-center justify-center py-8">
-                          <p className="text-neutral-500">Loading form...</p>
-                        </div>
-                      ) : taskTemplates[fullscreenTask.template_id] ? (
-                        <DynamicCleaningForm
-                          cleaningId={fullscreenTask.task_id}
-                          propertyName={selectedCard?.property_name || ''}
-                          template={taskTemplates[fullscreenTask.template_id]}
-                          formMetadata={fullscreenTask.form_metadata}
-                          onSave={async (formData) => {
-                            await saveTaskForm(fullscreenTask.task_id, formData);
+                    {/* START TASK VIEW - Only show when not started */}
+                    {(fullscreenTask.status === 'not_started' || !fullscreenTask.status) ? (
+                      <div className="flex items-center justify-center py-12">
+                        <Button
+                          onClick={() => {
+                            updateTaskAction(fullscreenTask.task_id, 'in_progress');
+                            setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
                           }}
-                        />
-                      ) : (
-                        <p className="text-center text-neutral-500 py-8">
-                          No template configured for this task
-                        </p>
-                      )
-                    ) : (
-                      <p className="text-center text-neutral-500 py-8">
-                        No template configured for this task
-                      </p>
-                    )}
-
-                    {/* Action Buttons */}
-                    <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
-                      <div className="flex flex-wrap gap-2">
-                        {(fullscreenTask.status === 'not_started' || !fullscreenTask.status) && (
-                          <>
-                            <Button
-                              onClick={() => {
-                                updateTaskAction(fullscreenTask.task_id, 'in_progress');
-                                setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
-                              }}
-                              className="flex-1"
-                            >
-                              Start Task
-                            </Button>
-                            <Button
-                              onClick={() => {
-                                updateTaskAction(fullscreenTask.task_id, 'complete');
-                                setFullscreenTask({ ...fullscreenTask, status: 'complete' });
-                              }}
-                              variant="outline"
-                              className="flex-1"
-                            >
-                              Mark Complete
-                            </Button>
-                          </>
-                        )}
-                        {fullscreenTask.status === 'in_progress' && (
-                          <>
-                            <Button
-                              onClick={() => {
-                                updateTaskAction(fullscreenTask.task_id, 'paused');
-                                setFullscreenTask({ ...fullscreenTask, status: 'paused' });
-                              }}
-                              variant="outline"
-                              className="flex-1"
-                            >
-                              Pause
-                            </Button>
-                            <Button
-                              onClick={() => {
-                                updateTaskAction(fullscreenTask.task_id, 'complete');
-                                setFullscreenTask({ ...fullscreenTask, status: 'complete' });
-                              }}
-                              className="flex-1"
-                            >
-                              Complete
-                            </Button>
-                          </>
-                        )}
-                        {fullscreenTask.status === 'paused' && (
-                          <>
-                            <Button
-                              onClick={() => {
-                                updateTaskAction(fullscreenTask.task_id, 'in_progress');
-                                setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
-                              }}
-                              className="flex-1"
-                            >
-                              Resume
-                            </Button>
-                            <Button
-                              onClick={() => {
-                                updateTaskAction(fullscreenTask.task_id, 'complete');
-                                setFullscreenTask({ ...fullscreenTask, status: 'complete' });
-                              }}
-                              variant="outline"
-                              className="flex-1"
-                            >
-                              Complete
-                            </Button>
-                          </>
-                        )}
-                        {(fullscreenTask.status === 'complete' || fullscreenTask.status === 'reopened') && (
-                          <Button
-                            onClick={() => {
-                              updateTaskAction(fullscreenTask.task_id, 'not_started');
-                              setFullscreenTask({ ...fullscreenTask, status: 'not_started' });
-                            }}
-                            className="w-full"
-                          >
-                            Reopen Task
-                          </Button>
-                        )}
+                        >
+                          Start Task
+                        </Button>
                       </div>
-                    </div>
+                    ) : (
+                      /* ACTIVE TASK VIEW - Show form and action buttons */
+                      <>
+                        {/* Template Form */}
+                        {fullscreenTask.template_id ? (
+                          loadingTaskTemplate === fullscreenTask.template_id ? (
+                            <div className="flex items-center justify-center py-8">
+                              <p className="text-neutral-500">Loading form...</p>
+                            </div>
+                          ) : taskTemplates[fullscreenTask.template_id] ? (
+                            <DynamicCleaningForm
+                              cleaningId={fullscreenTask.task_id}
+                              propertyName={selectedCard?.property_name || ''}
+                              template={taskTemplates[fullscreenTask.template_id]}
+                              formMetadata={fullscreenTask.form_metadata}
+                              onSave={async (formData) => {
+                                await saveTaskForm(fullscreenTask.task_id, formData);
+                              }}
+                            />
+                          ) : (
+                            <p className="text-center text-neutral-500 py-8">
+                              No template configured for this task
+                            </p>
+                          )
+                        ) : (
+                          <p className="text-center text-neutral-500 py-8">
+                            No template configured for this task
+                          </p>
+                        )}
+
+                        {/* Action Buttons - Only show for active tasks */}
+                        <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
+                          <div className="flex flex-wrap gap-2">
+                            {fullscreenTask.status === 'in_progress' && (
+                              <>
+                                <Button
+                                  onClick={() => {
+                                    updateTaskAction(fullscreenTask.task_id, 'paused');
+                                    setFullscreenTask({ ...fullscreenTask, status: 'paused' });
+                                  }}
+                                  variant="outline"
+                                  className="flex-1"
+                                >
+                                  Pause
+                                </Button>
+                                <Button
+                                  onClick={() => {
+                                    updateTaskAction(fullscreenTask.task_id, 'complete');
+                                    setFullscreenTask({ ...fullscreenTask, status: 'complete' });
+                                  }}
+                                  className="flex-1"
+                                >
+                                  Complete
+                                </Button>
+                              </>
+                            )}
+                            {fullscreenTask.status === 'paused' && (
+                              <>
+                                <Button
+                                  onClick={() => {
+                                    updateTaskAction(fullscreenTask.task_id, 'in_progress');
+                                    setFullscreenTask({ ...fullscreenTask, status: 'in_progress' });
+                                  }}
+                                  className="flex-1"
+                                >
+                                  Resume
+                                </Button>
+                                <Button
+                                  onClick={() => {
+                                    updateTaskAction(fullscreenTask.task_id, 'complete');
+                                    setFullscreenTask({ ...fullscreenTask, status: 'complete' });
+                                  }}
+                                  variant="outline"
+                                  className="flex-1"
+                                >
+                                  Complete
+                                </Button>
+                              </>
+                            )}
+                            {(fullscreenTask.status === 'complete' || fullscreenTask.status === 'reopened') && (
+                              <Button
+                                onClick={() => {
+                                  updateTaskAction(fullscreenTask.task_id, 'not_started');
+                                  setFullscreenTask({ ...fullscreenTask, status: 'not_started' });
+                                }}
+                                className="w-full"
+                              >
+                                Reopen Task
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <SheetFooter>

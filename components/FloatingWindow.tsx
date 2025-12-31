@@ -112,8 +112,8 @@ const FloatingWindow = memo(function FloatingWindow({
           </div>
         </div>
 
-        {/* Window Content */}
-        <div className="flex-1 overflow-auto">
+        {/* Window Content - children handle their own overflow */}
+        <div className="flex-1 overflow-hidden">
           {children}
         </div>
       </div>
