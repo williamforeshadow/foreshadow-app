@@ -120,10 +120,14 @@ function MobileTurnoverFilters({
   onSortChange: (s: string) => void;
 }) {
   const statusOptions = [
-    { value: 'not_started', label: 'Not Started' },
-    { value: 'in_progress', label: 'In Progress' },
-    { value: 'complete', label: 'Complete' },
-    { value: 'no_tasks', label: 'No Tasks' },
+    { value: 'not_started', label: 'Not Started', color: 'bg-red-500' },
+    { value: 'in_progress', label: 'In Progress', color: 'bg-yellow-500' },
+    { value: 'complete', label: 'Complete', color: 'bg-emerald-500' },
+  ];
+
+  const occupancyOptions = [
+    { value: 'occupied', label: 'Occupied', color: 'bg-orange-500' },
+    { value: 'vacant', label: 'Vacant', color: 'bg-neutral-400' },
   ];
 
   const sortOptions = [
@@ -133,11 +137,18 @@ function MobileTurnoverFilters({
     { value: 'property-az', label: 'Property Name' },
   ];
 
-  const toggleStatus = (status: string) => {
-    const newStatuses = filters.cleanStatus.includes(status)
-      ? filters.cleanStatus.filter(s => s !== status)
-      : [...filters.cleanStatus, status];
-    onChange({ ...filters, cleanStatus: newStatuses });
+  const toggleTurnoverStatus = (status: string) => {
+    const newStatuses = filters.turnoverStatus.includes(status)
+      ? filters.turnoverStatus.filter(s => s !== status)
+      : [...filters.turnoverStatus, status];
+    onChange({ ...filters, turnoverStatus: newStatuses });
+  };
+
+  const toggleOccupancyStatus = (status: string) => {
+    const newStatuses = filters.occupancyStatus.includes(status)
+      ? filters.occupancyStatus.filter(s => s !== status)
+      : [...filters.occupancyStatus, status];
+    onChange({ ...filters, occupancyStatus: newStatuses });
   };
 
   return (
@@ -156,20 +167,42 @@ function MobileTurnoverFilters({
         </select>
       </div>
 
-      {/* Status Filter */}
+      {/* Turnover Status Filter */}
       <div>
-        <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2 block">Status</label>
+        <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2 block">Turnover Status</label>
         <div className="flex flex-wrap gap-2">
           {statusOptions.map(opt => (
             <button
               key={opt.value}
-              onClick={() => toggleStatus(opt.value)}
-              className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-                filters.cleanStatus.includes(opt.value)
-                  ? 'bg-emerald-500 text-white border-emerald-500'
+              onClick={() => toggleTurnoverStatus(opt.value)}
+              className={`px-3 py-1.5 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
+                filters.turnoverStatus.includes(opt.value)
+                  ? 'bg-purple-500 text-white border-purple-500'
                   : 'bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
               }`}
             >
+              <span className={`w-2 h-2 rounded-full ${opt.color}`} />
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Occupancy Status Filter */}
+      <div>
+        <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2 block">Occupancy Status</label>
+        <div className="flex flex-wrap gap-2">
+          {occupancyOptions.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => toggleOccupancyStatus(opt.value)}
+              className={`px-3 py-1.5 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
+                filters.occupancyStatus.includes(opt.value)
+                  ? 'bg-purple-500 text-white border-purple-500'
+                  : 'bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${opt.color}`} />
               {opt.label}
             </button>
           ))}
@@ -177,11 +210,11 @@ function MobileTurnoverFilters({
       </div>
 
       {/* Clear Filters */}
-      {(filters.cleanStatus.length > 0 || filters.cardActions.length > 0 || filters.staff.length > 0) && (
+      {(filters.turnoverStatus.length > 0 || filters.occupancyStatus.length > 0) && (
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => onChange({ cleanStatus: [], cardActions: [], staff: [] })}
+          onClick={() => onChange({ turnoverStatus: [], occupancyStatus: [] })}
           className="text-xs"
         >
           Clear All Filters

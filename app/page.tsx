@@ -31,6 +31,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuCheckboxItem,
+  DropdownMenuCheckboxItemRight,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -76,11 +77,9 @@ export default function Home() {
   const [isEditingAssignment, setIsEditingAssignment] = useState(false);
   const [assignmentLoading, setAssignmentLoading] = useState(false);
   const [newStaffName, setNewStaffName] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
-    cleanStatus: [] as string[],
-    cardActions: [] as string[],
-    staff: [] as string[]
+    turnoverStatus: [] as string[],
+    occupancyStatus: [] as string[],
   });
   const [sortBy, setSortBy] = useState('status-priority');
   const [showCardsWindow, setShowCardsWindow] = useState(true);
@@ -1169,9 +1168,8 @@ export default function Home() {
 
   const clearAllFilters = () => {
     setFilters({
-      cleanStatus: [],
-      cardActions: [],
-      staff: []
+      turnoverStatus: [],
+      occupancyStatus: [],
     });
   };
 
@@ -1193,7 +1191,7 @@ export default function Home() {
   };
 
   const getActiveFilterCount = () => {
-    return filters.cleanStatus.length + filters.cardActions.length + filters.staff.length;
+    return filters.turnoverStatus.length + filters.occupancyStatus.length;
   };
   
   const formatDate = (dateString: string) => {
@@ -1216,28 +1214,71 @@ export default function Home() {
       {/* Response Display */}
       {response !== null && (
         <div className="space-y-3">
-          {/* Filter and Sort Bar */}
+          {/* Filter Bar */}
           <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className="flex items-center gap-2 text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-                <span className="font-medium">Filters</span>
-                {getActiveFilterCount() > 0 && (
-                  <span className="px-2 py-0.5 bg-purple-600 text-white text-xs rounded-full">
-                    {getActiveFilterCount()}
-                  </span>
-                )}
-                <svg className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
+                {/* Turnover Status Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 gap-2">
+                      Turnover Status
+                      {filters.turnoverStatus.length > 0 && (
+                        <span className="text-muted-foreground">({filters.turnoverStatus.length})</span>
+                      )}
+                      <ChevronDownIcon className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuCheckboxItemRight
+                      checked={filters.turnoverStatus.includes('not_started')}
+                      onCheckedChange={() => toggleFilter('turnoverStatus', 'not_started')}
+                    >
+                      Not Started
+                    </DropdownMenuCheckboxItemRight>
+                    <DropdownMenuCheckboxItemRight
+                      checked={filters.turnoverStatus.includes('in_progress')}
+                      onCheckedChange={() => toggleFilter('turnoverStatus', 'in_progress')}
+                    >
+                      In Progress
+                    </DropdownMenuCheckboxItemRight>
+                    <DropdownMenuCheckboxItemRight
+                      checked={filters.turnoverStatus.includes('complete')}
+                      onCheckedChange={() => toggleFilter('turnoverStatus', 'complete')}
+                    >
+                      Complete
+                    </DropdownMenuCheckboxItemRight>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Occupancy Status Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 gap-2">
+                      Occupancy
+                      {filters.occupancyStatus.length > 0 && (
+                        <span className="text-muted-foreground">({filters.occupancyStatus.length})</span>
+                      )}
+                      <ChevronDownIcon className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuCheckboxItemRight
+                      checked={filters.occupancyStatus.includes('occupied')}
+                      onCheckedChange={() => toggleFilter('occupancyStatus', 'occupied')}
+                    >
+                      Occupied
+                    </DropdownMenuCheckboxItemRight>
+                    <DropdownMenuCheckboxItemRight
+                      checked={filters.occupancyStatus.includes('vacant')}
+                      onCheckedChange={() => toggleFilter('occupancyStatus', 'vacant')}
+                    >
+                      Vacant
+                    </DropdownMenuCheckboxItemRight>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Clear Filters */}
                 {getActiveFilterCount() > 0 && (
                   <button
                     onClick={clearAllFilters}
@@ -1246,133 +1287,8 @@ export default function Home() {
                     Clear All
                   </button>
                 )}
-                
-                {/* Sort Dropdown */}
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-neutral-600 dark:text-neutral-400">Sort by:</span>
-                  <Select value={sortBy} onValueChange={setSortBy}>
-                    <SelectTrigger className="w-[220px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="status-priority">Status Priority</SelectItem>
-                      <SelectItem value="checkin-soonest">Next Check-in: Soonest</SelectItem>
-                      <SelectItem value="checkout-recent">Checkout: Most Recent</SelectItem>
-                      <SelectItem value="checkout-oldest">Checkout: Oldest</SelectItem>
-                      <SelectItem value="property-az">Property Name: A-Z</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
             </div>
-
-            {showFilters && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-3 border-t border-neutral-200 dark:border-neutral-800">
-                {/* Turnover Status */}
-                <div>
-                  <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-2">Turnover Status</h4>
-                  <div className="space-y-1">
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.cleanStatus.includes('not_started')}
-                        onChange={() => toggleFilter('cleanStatus', 'not_started')}
-                        className="rounded border-neutral-300"
-                      />
-                      <span className="text-red-600">Not Started</span>
-                    </label>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.cleanStatus.includes('in_progress')}
-                        onChange={() => toggleFilter('cleanStatus', 'in_progress')}
-                        className="rounded border-neutral-300"
-                      />
-                      <span className="text-yellow-600">In Progress</span>
-                    </label>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.cleanStatus.includes('complete')}
-                        onChange={() => toggleFilter('cleanStatus', 'complete')}
-                        className="rounded border-neutral-300"
-                      />
-                      <span className="text-green-600">Complete</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Card Actions */}
-                <div>
-                  <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-2">Card Actions</h4>
-                  <div className="space-y-1">
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.cardActions.includes('not_started')}
-                        onChange={() => toggleFilter('cardActions', 'not_started')}
-                        className="rounded border-neutral-300"
-                      />
-                      <span>Not Started</span>
-                    </label>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.cardActions.includes('in_progress')}
-                        onChange={() => toggleFilter('cardActions', 'in_progress')}
-                        className="rounded border-neutral-300"
-                      />
-                      <span>In Progress</span>
-                    </label>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.cardActions.includes('paused')}
-                        onChange={() => toggleFilter('cardActions', 'paused')}
-                        className="rounded border-neutral-300"
-                      />
-                      <span>Paused</span>
-                    </label>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.cardActions.includes('complete')}
-                        onChange={() => toggleFilter('cardActions', 'complete')}
-                        className="rounded border-neutral-300"
-                      />
-                      <span>Completed</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Staff */}
-                <div>
-                  <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-2">Staff</h4>
-                  <div className="space-y-1">
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.staff.includes('unassigned')}
-                        onChange={() => toggleFilter('staff', 'unassigned')}
-                        className="rounded border-neutral-300"
-                      />
-                      <span>Unassigned</span>
-                    </label>
-                    {response && getUniqueStaff(Array.isArray(response) ? response : [response]).map(staff => (
-                      <label key={staff} className="flex items-center gap-2 text-sm cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={filters.staff.includes(staff)}
-                          onChange={() => toggleFilter('staff', staff)}
-                          className="rounded border-neutral-300"
-                        />
-                        <span>{staff}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="flex items-center justify-between">
@@ -2396,7 +2312,7 @@ export default function Home() {
         </div>
       )}
     </div>
-  ), [response, viewMode, showFilters, filters, sortBy, selectedCard, fullscreenTask, showAddTaskDialog, availableTemplates, taskTemplates, loadingTaskTemplate, users, rightPanelView, projects, expandedTurnoverProject, turnoverProjectFields, turnoverDiscussionExpanded, savingTurnoverProject, projectComments, newComment, postingComment]);
+  ), [response, viewMode, filters, sortBy, selectedCard, fullscreenTask, showAddTaskDialog, availableTemplates, taskTemplates, loadingTaskTemplate, users, rightPanelView, projects, expandedTurnoverProject, turnoverProjectFields, turnoverDiscussionExpanded, savingTurnoverProject, projectComments, newComment, postingComment]);
 
   // Timeline manages its own selection internally - no onCardClick prop needed
   const timelineWindowContent = useMemo(() => (

@@ -1,44 +1,22 @@
 export interface CleaningFilters {
-  cleanStatus: string[];
-  cardActions: string[];
-  staff: string[];
+  turnoverStatus: string[];
+  occupancyStatus: string[];
 }
 
 export function applyCleaningFilters(items: any[], filters: CleaningFilters): any[] {
   return items.filter(item => {
-    // Clean Status filter - now uses turnover_status
-    if (filters.cleanStatus.length > 0) {
-      if (!filters.cleanStatus.includes(item.turnover_status || 'no_tasks')) {
+    // Turnover Status filter
+    if (filters.turnoverStatus.length > 0) {
+      if (!filters.turnoverStatus.includes(item.turnover_status || 'no_tasks')) {
         return false;
       }
     }
     
-    // Status filter - filters tasks by their status
-    if (filters.cardActions.length > 0) {
-      // Check if any task in the item matches the selected statuses
-      const tasks = item.tasks || [];
-      if (tasks.length > 0) {
-        const hasMatchingTask = tasks.some((task: any) => 
-          filters.cardActions.includes(task.status || 'not_started')
-        );
-        if (!hasMatchingTask) {
-          return false;
-        }
-      }
-    }
-    
-    // Staff filter
-    if (filters.staff.length > 0) {
-      if (filters.staff.includes('unassigned')) {
-        if (item.assigned_staff !== null && item.assigned_staff !== undefined) {
-          if (!filters.staff.includes(item.assigned_staff)) {
-            return false;
-          }
-        }
-      } else {
-        if (!filters.staff.includes(item.assigned_staff || 'unassigned')) {
-          return false;
-        }
+    // Occupancy Status filter
+    if (filters.occupancyStatus.length > 0) {
+      const status = item.occupancy_status === 'occupied' ? 'occupied' : 'vacant';
+      if (!filters.occupancyStatus.includes(status)) {
+        return false;
       }
     }
     

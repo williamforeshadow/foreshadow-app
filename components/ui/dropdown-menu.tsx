@@ -238,6 +238,36 @@ function DropdownMenuSubContent({
   )
 }
 
+// Checkbox item with text on left, checkmark on right, stays open on selection
+function DropdownMenuCheckboxItemRight({
+  className,
+  children,
+  checked,
+  onSelect,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem>) {
+  return (
+    <DropdownMenuPrimitive.CheckboxItem
+      data-slot="dropdown-menu-checkbox-item-right"
+      className={cn(
+        "focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center justify-between gap-2 rounded-sm py-1.5 px-2 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        className
+      )}
+      checked={checked}
+      onSelect={(e) => {
+        e.preventDefault(); // Prevents dropdown from closing
+        onSelect?.(e);
+      }}
+      {...props}
+    >
+      {children}
+      <DropdownMenuPrimitive.ItemIndicator>
+        <CheckIcon className="size-4" />
+      </DropdownMenuPrimitive.ItemIndicator>
+    </DropdownMenuPrimitive.CheckboxItem>
+  )
+}
+
 export {
   DropdownMenu,
   DropdownMenuPortal,
@@ -247,6 +277,7 @@ export {
   DropdownMenuLabel,
   DropdownMenuItem,
   DropdownMenuCheckboxItem,
+  DropdownMenuCheckboxItemRight,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
