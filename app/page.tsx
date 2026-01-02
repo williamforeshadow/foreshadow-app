@@ -3015,6 +3015,10 @@ export default function Home() {
                 }
                 setMobileSelectedTask(task);
               }}
+              onProjectClick={(project: any) => {
+                // Open project edit dialog
+                openEditProjectDialog(project);
+              }}
             />
           )}
         </MobileLayout>
