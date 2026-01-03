@@ -130,7 +130,7 @@ export default function Timeline({ onCardClick }: TimelineProps) {
     const compareDates = (d1: Date, d2: Date) => toDateString(d1).localeCompare(toDateString(d2));
     
     // Case 1: Reservation ends before visible range - don't show
-    if (compareDates(checkOutDate, firstVisibleDate) <= 0) {
+    if (compareDates(checkOutDate, firstVisibleDate) < 0) {
       return { start: -1, span: 0, startsBeforeRange: false, endsAfterRange: false };
     }
     
