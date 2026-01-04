@@ -75,13 +75,52 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
   );
 
   // Sort cards within each property by check_out date (chronological)
+  // and mark each card as active or upcoming
+  const now = new Date();
   sortedProperties.forEach(property => {
     groupedByProperty[property].sort((a, b) => {
       const dateA = a.check_out ? new Date(a.check_out).getTime() : 0;
       const dateB = b.check_out ? new Date(b.check_out).getTime() : 0;
       return dateA - dateB;
     });
+    
+    // Mark each card's timeline status (active = first card with check-in passed)
+    groupedByProperty[property].forEach((item, index) => {
+      const checkIn = item.check_in ? new Date(item.check_in) : null;
+      item._isActive = index === 0 && checkIn && now >= checkIn;
+    });
   });
+
+  // Apply timeline filter if set - filter within each property group
+  if (filters.timeline.length > 0) {
+    sortedProperties.forEach(property => {
+      groupedByProperty[property] = groupedByProperty[property].filter((item) => {
+        // If filtering for 'active' only, keep if card is active
+        if (filters.timeline.includes('active') && !filters.timeline.includes('upcoming')) {
+          return item._isActive;
+        }
+        // If filtering for 'upcoming' only, keep if card is not active
+        if (filters.timeline.includes('upcoming') && !filters.timeline.includes('active')) {
+          return !item._isActive;
+        }
+        // If both selected or neither, show all
+        return true;
+      });
+    });
+  }
+
+  // Filter out properties with no cards after timeline filter
+  const filteredProperties = sortedProperties.filter(
+    property => groupedByProperty[property].length > 0
+  );
+
+  if (filteredProperties.length === 0) {
+    return (
+      <div className="text-center py-12 text-neutral-500 dark:text-neutral-400">
+        No turnovers match the selected filters
+      </div>
+    );
+  }
 
   const formatDate = (dateString: string) => {
     if (!dateString) return null;
@@ -125,7 +164,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
 
   return (
     <div>
-      {sortedProperties.map((propertyName) => (
+      {filteredProperties.map((propertyName) => (
         <div key={propertyName}>
             {/* Property Header with inline separator */}
             <div className="flex items-center gap-3">
@@ -141,7 +180,12 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
             {/* Horizontal Scrollable Row with ScrollArea */}
             <ScrollArea className="w-full whitespace-nowrap">
               <div className="flex gap-4 py-4">
-            {groupedByProperty[propertyName].map((item, index) => (
+            {groupedByProperty[propertyName].map((item, index) => {
+              const now = new Date();
+              const checkIn = item.check_in ? new Date(item.check_in) : null;
+              const isInPlay = index === 0 && checkIn && now >= checkIn;
+              
+              return (
               <Card
                 key={item.id || index}
                 onClick={() => onCardClick(item)}
@@ -186,15 +230,18 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
                        item.turnover_status === 'not_started' ? 'Not Started' :
                        'No Tasks'}
                     </Badge>
-                    <Badge 
-                      className={`px-2.5 py-1 ${
-                        item.occupancy_status === 'occupied' 
-                          ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800'
-                          : 'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
-                      }`}
-                    >
-                      {item.occupancy_status === 'occupied' ? 'Occupied' : 'Vacant'}
-                    </Badge>
+                    {/* Occupancy badge - only show on "in play" cards */}
+                    {isInPlay && (
+                      <Badge 
+                        className={`px-2.5 py-1 ${
+                          item.occupancy_status === 'occupied' 
+                            ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800'
+                            : 'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+                        }`}
+                      >
+                        {item.occupancy_status === 'occupied' ? 'Occupied' : 'Vacant'}
+                      </Badge>
+                    )}
                   </div>
                 </CardContent>
 
@@ -218,7 +265,8 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
                   </div>
                 </CardFooter>
               </Card>
-            ))}
+              );
+            })}
               </div>
               <ScrollBar orientation="horizontal" />
             </ScrollArea>

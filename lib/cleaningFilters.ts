@@ -1,6 +1,7 @@
 export interface CleaningFilters {
   turnoverStatus: string[];
   occupancyStatus: string[];
+  timeline: string[];  // 'active' | 'upcoming'
 }
 
 export function applyCleaningFilters(items: any[], filters: CleaningFilters): any[] {

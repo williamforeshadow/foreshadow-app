@@ -151,6 +151,18 @@ function MobileTurnoverFilters({
     onChange({ ...filters, occupancyStatus: newStatuses });
   };
 
+  const toggleTimeline = (value: string) => {
+    const newValues = filters.timeline.includes(value)
+      ? filters.timeline.filter(v => v !== value)
+      : [...filters.timeline, value];
+    onChange({ ...filters, timeline: newValues });
+  };
+
+  const timelineOptions = [
+    { value: 'active', label: 'Active' },
+    { value: 'upcoming', label: 'Upcoming' },
+  ];
+
   return (
     <div className="space-y-3">
       {/* Sort By */}
@@ -209,12 +221,32 @@ function MobileTurnoverFilters({
         </div>
       </div>
 
+      {/* Timeline Filter */}
+      <div>
+        <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2 block">Timeline</label>
+        <div className="flex flex-wrap gap-2">
+          {timelineOptions.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => toggleTimeline(opt.value)}
+              className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+                filters.timeline.includes(opt.value)
+                  ? 'bg-purple-500 text-white border-purple-500'
+                  : 'bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Clear Filters */}
-      {(filters.turnoverStatus.length > 0 || filters.occupancyStatus.length > 0) && (
+      {(filters.turnoverStatus.length > 0 || filters.occupancyStatus.length > 0 || filters.timeline.length > 0) && (
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => onChange({ turnoverStatus: [], occupancyStatus: [] })}
+          onClick={() => onChange({ turnoverStatus: [], occupancyStatus: [], timeline: [] })}
           className="text-xs"
         >
           Clear All Filters

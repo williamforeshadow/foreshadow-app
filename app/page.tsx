@@ -13,6 +13,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import {
   Field,
   FieldLabel,
@@ -80,12 +81,12 @@ export default function Home() {
   const [filters, setFilters] = useState({
     turnoverStatus: [] as string[],
     occupancyStatus: [] as string[],
+    timeline: [] as string[],
   });
   const [sortBy, setSortBy] = useState('status-priority');
   const [showCardsWindow, setShowCardsWindow] = useState(true);
   const [showTimelineWindow, setShowTimelineWindow] = useState(true);
   const [showProjectsWindow, setShowProjectsWindow] = useState(false);
-  const [backgroundImage, setBackgroundImage] = useState<1 | 2>(1);
   const [activeWindow, setActiveWindow] = useState<'cards' | 'timeline' | 'projects'>('cards');
   const [windowOrder, setWindowOrder] = useState<Array<'cards' | 'timeline' | 'projects'>>(['cards', 'timeline', 'projects']);
   const [projects, setProjects] = useState<any[]>([]);
@@ -154,6 +155,7 @@ export default function Home() {
   // Combobox open states for staff assignment
   const [turnoverStaffOpen, setTurnoverStaffOpen] = useState(false);
   const [projectStaffOpen, setProjectStaffOpen] = useState(false);
+  const [projectDueDateOpen, setProjectDueDateOpen] = useState(false);
 
   // Window stacking order management
   const bringToFront = (window: 'cards' | 'timeline' | 'projects') => {
@@ -201,7 +203,7 @@ export default function Home() {
         status: expandedProject.status || 'not_started',
         priority: expandedProject.priority || 'medium',
         assigned_staff: expandedProject.project_assignments?.[0]?.user_id || '',
-        due_date: expandedProject.due_date ? expandedProject.due_date.split('T')[0] : ''
+        due_date: expandedProject.due_date || ''
       });
     } else {
       setProjectComments([]);
@@ -266,7 +268,7 @@ export default function Home() {
       status: project.status,
       priority: project.priority,
       assigned_staff: project.assigned_staff || '',
-      due_date: project.due_date ? project.due_date.split('T')[0] : ''
+      due_date: project.due_date || ''
     });
     setEditingProject(project);
     setShowProjectDialog(true);
@@ -1170,6 +1172,7 @@ export default function Home() {
     setFilters({
       turnoverStatus: [],
       occupancyStatus: [],
+      timeline: [],
     });
   };
 
@@ -1191,7 +1194,7 @@ export default function Home() {
   };
 
   const getActiveFilterCount = () => {
-    return filters.turnoverStatus.length + filters.occupancyStatus.length;
+    return filters.turnoverStatus.length + filters.occupancyStatus.length + filters.timeline.length;
   };
   
   const formatDate = (dateString: string) => {
@@ -1274,6 +1277,33 @@ export default function Home() {
                       onCheckedChange={() => toggleFilter('occupancyStatus', 'vacant')}
                     >
                       Vacant
+                    </DropdownMenuCheckboxItemRight>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Timeline Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 gap-2">
+                      Timeline
+                      {filters.timeline.length > 0 && (
+                        <span className="text-muted-foreground">({filters.timeline.length})</span>
+                      )}
+                      <ChevronDownIcon className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuCheckboxItemRight
+                      checked={filters.timeline.includes('active')}
+                      onCheckedChange={() => toggleFilter('timeline', 'active')}
+                    >
+                      Active
+                    </DropdownMenuCheckboxItemRight>
+                    <DropdownMenuCheckboxItemRight
+                      checked={filters.timeline.includes('upcoming')}
+                      onCheckedChange={() => toggleFilter('timeline', 'upcoming')}
+                    >
+                      Upcoming
                     </DropdownMenuCheckboxItemRight>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -1567,6 +1597,12 @@ export default function Home() {
                     {/* Dates & Occupancy - Compact */}
                     <div className="flex items-center gap-3 text-xs">
                       <div className="text-center">
+                        <div className="text-neutral-500 dark:text-neutral-400">In</div>
+                        <div className="font-medium text-blue-600 dark:text-blue-400">
+                          {selectedCard.check_in ? new Date(selectedCard.check_in).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                        </div>
+                      </div>
+                      <div className="text-center">
                         <div className="text-neutral-500 dark:text-neutral-400">Out</div>
                         <div className="font-medium text-red-600 dark:text-red-400">
                           {selectedCard.check_out ? new Date(selectedCard.check_out).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
@@ -1578,16 +1614,33 @@ export default function Home() {
                           {selectedCard.next_check_in ? new Date(selectedCard.next_check_in).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                         </div>
                       </div>
-                      <Badge 
-                        variant="outline"
-                        className={`text-xs px-2 py-0.5 ${
-                          selectedCard.occupancy_status === 'occupied' 
-                            ? 'bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300 border-orange-300' 
-                            : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-300'
-                        }`}
-                      >
-                        {selectedCard.occupancy_status === 'occupied' ? 'Occupied' : 'Vacant'}
-                      </Badge>
+                      {(() => {
+                        const checkIn = selectedCard.check_in ? new Date(selectedCard.check_in) : null;
+                        const isUpcoming = checkIn && new Date() < checkIn;
+                        
+                        if (isUpcoming) {
+                          return (
+                            <Badge 
+                              variant="outline"
+                              className="text-xs px-2 py-0.5 bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-300 border-dashed"
+                            >
+                              Upcoming
+                            </Badge>
+                          );
+                        }
+                        return (
+                          <Badge 
+                            variant="outline"
+                            className={`text-xs px-2 py-0.5 ${
+                              selectedCard.occupancy_status === 'occupied' 
+                                ? 'bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300 border-orange-300' 
+                                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-300'
+                            }`}
+                          >
+                            {selectedCard.occupancy_status === 'occupied' ? 'Occupied' : 'Vacant'}
+                          </Badge>
+                        );
+                      })()}
                     </div>
                     
                     {/* Close Button */}
@@ -2486,9 +2539,15 @@ export default function Home() {
         <div className="w-1/2 h-full overflow-y-auto hide-scrollbar border-l border-neutral-200 dark:border-neutral-700 bg-card">
           {/* Header */}
           <div className="sticky top-0 bg-card z-10 border-b border-neutral-200 dark:border-neutral-700 p-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">{expandedProject.property_name}</h2>
-              <div className="flex items-center gap-1">
+            <div className="flex items-center justify-between gap-4">
+              <input
+                type="text"
+                value={editingProjectFields.title}
+                onChange={(e) => setEditingProjectFields(prev => prev ? {...prev, title: e.target.value} : null)}
+                placeholder="Untitled Project"
+                className="text-lg font-semibold bg-transparent border-none outline-none focus:outline-none p-0 flex-1 min-w-0 text-foreground placeholder:text-muted-foreground"
+              />
+              <div className="flex items-center gap-1 flex-shrink-0">
                 <button
                   onClick={() => {
                     if (confirm('Are you sure you want to delete this project?')) {
@@ -2514,25 +2573,115 @@ export default function Home() {
                 </button>
               </div>
             </div>
-            <p className="text-sm text-muted-foreground mt-1">Edit project details and manage discussion</p>
+            <div className="flex items-center gap-3 mt-1">
+              <p className="text-sm text-muted-foreground">{expandedProject.property_name}</p>
+              
+              {/* Status & Priority Badges */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="focus:outline-none">
+                    <Badge 
+                      variant="outline" 
+                      className={cn(
+                        "cursor-pointer hover:opacity-80 transition-opacity border-transparent",
+                        editingProjectFields.status === 'not_started' && "bg-neutral-500 text-white dark:bg-neutral-600",
+                        editingProjectFields.status === 'in_progress' && "bg-blue-500 text-white dark:bg-blue-600",
+                        editingProjectFields.status === 'on_hold' && "bg-amber-500 text-white dark:bg-amber-600",
+                        editingProjectFields.status === 'complete' && "bg-emerald-500 text-white dark:bg-emerald-600"
+                      )}
+                    >
+                      {editingProjectFields.status === 'not_started' && 'Not Started'}
+                      {editingProjectFields.status === 'in_progress' && 'In Progress'}
+                      {editingProjectFields.status === 'on_hold' && 'On Hold'}
+                      {editingProjectFields.status === 'complete' && 'Complete'}
+                    </Badge>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuCheckboxItem
+                    checked={editingProjectFields.status === 'not_started'}
+                    onCheckedChange={() => setEditingProjectFields(prev => prev ? {...prev, status: 'not_started'} : null)}
+                  >
+                    Not Started
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={editingProjectFields.status === 'in_progress'}
+                    onCheckedChange={() => setEditingProjectFields(prev => prev ? {...prev, status: 'in_progress'} : null)}
+                  >
+                    In Progress
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={editingProjectFields.status === 'on_hold'}
+                    onCheckedChange={() => setEditingProjectFields(prev => prev ? {...prev, status: 'on_hold'} : null)}
+                  >
+                    On Hold
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={editingProjectFields.status === 'complete'}
+                    onCheckedChange={() => setEditingProjectFields(prev => prev ? {...prev, status: 'complete'} : null)}
+                  >
+                    Complete
+                  </DropdownMenuCheckboxItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="focus:outline-none">
+                    <Badge 
+                      variant="outline"
+                      className={cn(
+                        "cursor-pointer hover:opacity-80 transition-opacity border-transparent",
+                        editingProjectFields.priority === 'low' && "bg-slate-500 text-white dark:bg-slate-600",
+                        editingProjectFields.priority === 'medium' && "bg-sky-500 text-white dark:bg-sky-600",
+                        editingProjectFields.priority === 'high' && "bg-orange-500 text-white dark:bg-orange-600",
+                        editingProjectFields.priority === 'urgent' && "bg-red-500 text-white dark:bg-red-600"
+                      )}
+                    >
+                      {editingProjectFields.priority === 'low' && 'Low'}
+                      {editingProjectFields.priority === 'medium' && 'Medium'}
+                      {editingProjectFields.priority === 'high' && 'High'}
+                      {editingProjectFields.priority === 'urgent' && 'Urgent'}
+                    </Badge>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuCheckboxItem
+                    checked={editingProjectFields.priority === 'low'}
+                    onCheckedChange={() => setEditingProjectFields(prev => prev ? {...prev, priority: 'low'} : null)}
+                  >
+                    Low
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={editingProjectFields.priority === 'medium'}
+                    onCheckedChange={() => setEditingProjectFields(prev => prev ? {...prev, priority: 'medium'} : null)}
+                  >
+                    Medium
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={editingProjectFields.priority === 'high'}
+                    onCheckedChange={() => setEditingProjectFields(prev => prev ? {...prev, priority: 'high'} : null)}
+                  >
+                    High
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={editingProjectFields.priority === 'urgent'}
+                    onCheckedChange={() => setEditingProjectFields(prev => prev ? {...prev, priority: 'urgent'} : null)}
+                  >
+                    Urgent
+                  </DropdownMenuCheckboxItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
 
           {/* Form Content - Padded Container */}
           <div className="p-6 space-y-6">
-              {/* Title Field */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-neutral-900 dark:text-white">Title</label>
-                <Input
-                  value={editingProjectFields.title}
-                  onChange={(e) => setEditingProjectFields(prev => prev ? {...prev, title: e.target.value} : null)}
-                  placeholder="Project title"
-                />
-              </div>
-
               {/* Description Field */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-neutral-900 dark:text-white">Description</label>
+              <div className="grid w-full gap-3">
+                <Label htmlFor="project-description">Description</Label>
                 <Textarea
+                  id="project-description"
                   value={editingProjectFields.description}
                   onChange={(e) => setEditingProjectFields(prev => prev ? {...prev, description: e.target.value} : null)}
                   placeholder="Project description (optional)"
@@ -2540,208 +2689,184 @@ export default function Home() {
                 />
               </div>
 
-              {/* Status & Priority */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-neutral-900 dark:text-white">Status</label>
-                  <Select
-                    value={editingProjectFields.status}
-                    onValueChange={(value) => setEditingProjectFields(prev => prev ? {...prev, status: value} : null)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="not_started">Not Started</SelectItem>
-                      <SelectItem value="in_progress">In Progress</SelectItem>
-                      <SelectItem value="on_hold">On Hold</SelectItem>
-                      <SelectItem value="complete">Complete</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-neutral-900 dark:text-white">Priority</label>
-                  <Select
-                    value={editingProjectFields.priority}
-                    onValueChange={(value) => setEditingProjectFields(prev => prev ? {...prev, priority: value} : null)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="urgent">Urgent</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Assigned Staff & Due Date */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-neutral-900 dark:text-white">Assigned To</label>
-                  <Popover open={projectStaffOpen} onOpenChange={setProjectStaffOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={projectStaffOpen}
-                        className="w-full justify-between font-normal"
-                        onPointerDown={(e) => {
-                          e.preventDefault();
-                          setProjectStaffOpen(!projectStaffOpen);
-                        }}
-                      >
-                        {editingProjectFields.assigned_staff
-                          ? users.find((user) => user.id === editingProjectFields.assigned_staff)?.name || "Unknown"
-                          : "Select staff..."}
-                        <ChevronsUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[200px] p-0">
-                      <Command>
-                        <CommandInput placeholder="Search staff..." />
-                        <CommandList>
-                          <CommandEmpty>No staff found.</CommandEmpty>
-                          <CommandGroup>
+              {/* Assigned Staff */}
+              <div className="grid w-full gap-3 pt-2">
+                <Label htmlFor="project-assigned-staff">Assigned To</Label>
+                <Popover open={projectStaffOpen} onOpenChange={setProjectStaffOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      id="project-assigned-staff"
+                      aria-expanded={projectStaffOpen}
+                      className="w-full justify-between font-normal"
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        setProjectStaffOpen(!projectStaffOpen);
+                      }}
+                    >
+                      {editingProjectFields.assigned_staff
+                        ? users.find((user) => user.id === editingProjectFields.assigned_staff)?.name || "Unknown"
+                        : "Select staff..."}
+                      <ChevronsUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[200px] p-0">
+                    <Command>
+                      <CommandInput placeholder="Search staff..." />
+                      <CommandList>
+                        <CommandEmpty>No staff found.</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="unassigned"
+                            onSelect={() => {
+                              setEditingProjectFields(prev => prev ? {...prev, assigned_staff: ''} : null);
+                              setProjectStaffOpen(false);
+                            }}
+                          >
+                            <CheckIcon className={cn("mr-2 h-4 w-4", !editingProjectFields.assigned_staff ? "opacity-100" : "opacity-0")} />
+                            Unassigned
+                          </CommandItem>
+                          {users.map((user) => (
                             <CommandItem
-                              value="unassigned"
+                              key={user.id}
+                              value={user.name}
                               onSelect={() => {
-                                setEditingProjectFields(prev => prev ? {...prev, assigned_staff: ''} : null);
+                                setEditingProjectFields(prev => prev ? {...prev, assigned_staff: user.id} : null);
                                 setProjectStaffOpen(false);
                               }}
                             >
-                              <CheckIcon className={cn("mr-2 h-4 w-4", !editingProjectFields.assigned_staff ? "opacity-100" : "opacity-0")} />
-                              Unassigned
+                              <CheckIcon className={cn("mr-2 h-4 w-4", editingProjectFields.assigned_staff === user.id ? "opacity-100" : "opacity-0")} />
+                              {user.name}
                             </CommandItem>
-                            {users.map((user) => (
-                              <CommandItem
-                                key={user.id}
-                                value={user.name}
-                                onSelect={() => {
-                                  setEditingProjectFields(prev => prev ? {...prev, assigned_staff: user.id} : null);
-                                  setProjectStaffOpen(false);
-                                }}
-                              >
-                                <CheckIcon className={cn("mr-2 h-4 w-4", editingProjectFields.assigned_staff === user.id ? "opacity-100" : "opacity-0")} />
-                                {user.name}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Due Date & Time */}
+              <div className="flex gap-4 pt-2">
+                <div className="flex flex-col gap-3">
+                  <Label htmlFor="project-due-date" className="px-1">Date</Label>
+                  <Popover open={projectDueDateOpen} onOpenChange={setProjectDueDateOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        id="project-due-date"
+                        className="w-32 justify-between font-normal"
+                      >
+                        {editingProjectFields.due_date 
+                          ? new Date(editingProjectFields.due_date).toLocaleDateString() 
+                          : "Select date"}
+                        <ChevronDownIcon className="h-4 w-4 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto overflow-hidden p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={editingProjectFields.due_date ? new Date(editingProjectFields.due_date) : undefined}
+                        captionLayout="dropdown"
+                        onSelect={(date) => {
+                          if (date) {
+                            // Preserve existing time or default to noon
+                            const existingTime = editingProjectFields.due_date 
+                              ? editingProjectFields.due_date.split('T')[1] || '12:00:00'
+                              : '12:00:00';
+                            const dateStr = date.toISOString().split('T')[0];
+                            setEditingProjectFields(prev => prev ? {...prev, due_date: `${dateStr}T${existingTime}`} : null);
+                          }
+                          setProjectDueDateOpen(false);
+                        }}
+                      />
                     </PopoverContent>
                   </Popover>
                 </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-neutral-900 dark:text-white">Due Date</label>
+                <div className="flex flex-col gap-3">
+                  <Label htmlFor="project-due-time" className="px-1">Time</Label>
                   <Input
-                    type="date"
-                    value={editingProjectFields.due_date}
-                    onChange={(e) => setEditingProjectFields(prev => prev ? {...prev, due_date: e.target.value} : null)}
+                    type="time"
+                    id="project-due-time"
+                    value={editingProjectFields.due_date ? editingProjectFields.due_date.split('T')[1]?.slice(0, 5) || '12:00' : '12:00'}
+                    onChange={(e) => {
+                      const timeValue = e.target.value;
+                      const existingDate = editingProjectFields.due_date 
+                        ? editingProjectFields.due_date.split('T')[0]
+                        : new Date().toISOString().split('T')[0];
+                      setEditingProjectFields(prev => prev ? {...prev, due_date: `${existingDate}T${timeValue}:00`} : null);
+                    }}
+                    className="w-28 bg-background appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
                   />
                 </div>
               </div>
 
-              {/* Discussion Section - Collapsible */}
-              <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
-                <button
-                  onClick={() => setDiscussionExpanded(!discussionExpanded)}
-                  className="w-full px-6 py-3 bg-neutral-50 dark:bg-neutral-800/50 flex items-center justify-between hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-                >
-                  <h3 className="font-medium text-neutral-900 dark:text-white flex items-center gap-2">
-                    <svg className="w-4 h-4 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                    </svg>
-                    Discussion
-                    {projectComments.length > 0 && (
-                      <Badge variant="secondary" className="text-xs ml-1">
-                        {projectComments.length}
-                      </Badge>
-                    )}
-                  </h3>
-                  <svg 
-                    className={`w-4 h-4 text-neutral-500 transition-transform ${discussionExpanded ? 'rotate-180' : ''}`} 
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                
-                {discussionExpanded && (
-                  <div className="p-6 border-t border-neutral-200 dark:border-neutral-700">
-                    {/* Comment Input */}
-                    <div className="flex gap-3 mb-4">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                        {currentUser.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
-                      </div>
-                      <div className="flex-1">
-                        <Textarea
-                          placeholder="Add a comment... (Press Enter to post)"
-                          rows={2}
-                          className="resize-none"
-                          value={newComment}
-                          onChange={(e) => setNewComment(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) {
-                              e.preventDefault();
-                              postProjectComment();
-                            }
-                          }}
-                          disabled={postingComment}
-                        />
-                        <p className="text-xs text-neutral-400 mt-1">Press Enter to post, Shift+Enter for new line</p>
-                      </div>
+              {/* Comments Section */}
+              <div className="border-t border-neutral-200 dark:border-neutral-700 pt-6">
+                {/* Comments List */}
+                <div className="space-y-4">
+                  {loadingComments ? (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <p className="text-sm">Loading comments...</p>
                     </div>
-
-                    {/* Comments List */}
-                    <div className="space-y-4 pt-4 border-t border-neutral-200 dark:border-neutral-700">
-                      {loadingComments ? (
-                        <div className="text-center py-4 text-neutral-400 dark:text-neutral-500">
-                          <p className="text-sm">Loading comments...</p>
+                  ) : projectComments.length === 0 ? (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <p className="text-sm">No comments yet</p>
+                    </div>
+                  ) : (
+                    projectComments.map((comment: any) => (
+                      <div key={comment.id} className="flex gap-3">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
+                          {comment.users?.avatar || (comment.users?.name || 'U').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
                         </div>
-                      ) : projectComments.length === 0 ? (
-                        <div className="text-center py-4 text-neutral-400 dark:text-neutral-500">
-                          <p className="text-sm">No comments yet</p>
-                          <p className="text-xs mt-1">Start the discussion above</p>
-                        </div>
-                      ) : (
-                        projectComments.map((comment: any) => (
-                          <div key={comment.id} className="flex gap-3">
-                            <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
-                              {comment.users?.avatar || (comment.users?.name || 'U').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-medium text-sm text-neutral-900 dark:text-white">
-                                  {comment.users?.name || 'Unknown User'}
-                                </span>
-                                <span className="text-xs text-neutral-400 dark:text-neutral-500">
-                                  {new Date(comment.created_at).toLocaleDateString('en-US', {
-                                    month: 'short',
-                                    day: 'numeric',
-                                    hour: 'numeric',
-                                    minute: '2-digit'
-                                  })}
-                                </span>
-                              </div>
-                              <p className="text-sm text-neutral-600 dark:text-neutral-400 whitespace-pre-wrap">
-                                {comment.comment_content}
-                              </p>
-                            </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium text-sm">
+                              {comment.users?.name || 'Unknown User'}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(comment.created_at).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit'
+                              })}
+                            </span>
                           </div>
-                        ))
-                      )}
-                    </div>
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                            {comment.comment_content}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Comment Input */}
+                <div className="flex gap-3 mt-6">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
+                    {currentUser.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
                   </div>
-                )}
+                  <div className="flex-1">
+                    <Textarea
+                      placeholder="Add a comment..."
+                      rows={2}
+                      className="resize-none"
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) {
+                          e.preventDefault();
+                          postProjectComment();
+                        }
+                      }}
+                      disabled={postingComment}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Press Enter to post, Shift+Enter for new line</p>
+                  </div>
+                </div>
               </div>
             {/* Save Button */}
             <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
@@ -4086,13 +4211,7 @@ export default function Home() {
 
         {/* Floating Windows Container */}
         <div 
-          className="flex-1 relative overflow-hidden"
-          style={{
-            backgroundImage: `url("/ambientbackground${backgroundImage === 1 ? '' : '2'}.png")`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat'
-          }}
+          className="flex-1 relative overflow-hidden bg-background"
         >
           {/* Turnovers Window */}
           {showCardsWindow && (
@@ -4139,16 +4258,6 @@ export default function Home() {
             </FloatingWindow>
           )}
 
-          {/* Background Toggle Button */}
-          <button
-            onClick={() => setBackgroundImage(prev => prev === 1 ? 2 : 1)}
-            className="absolute bottom-4 left-4 p-2 rounded-full bg-black/20 hover:bg-black/40 backdrop-blur-sm border border-white/10 transition-all duration-200 opacity-40 hover:opacity-100 z-50"
-            title={`Switch to background ${backgroundImage === 1 ? '2' : '1'}`}
-          >
-            <svg className="w-4 h-4 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </button>
 
           {/* AI Chat */}
           <AiChat />
