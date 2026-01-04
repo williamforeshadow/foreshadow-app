@@ -2701,10 +2701,7 @@ export default function Home() {
                       id="project-assigned-staff"
                       aria-expanded={projectStaffOpen}
                       className="w-full justify-between font-normal"
-                      onPointerDown={(e) => {
-                        e.preventDefault();
-                        setProjectStaffOpen(!projectStaffOpen);
-                      }}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       {editingProjectFields.assigned_staff
                         ? users.find((user) => user.id === editingProjectFields.assigned_staff)?.name || "Unknown"
@@ -2712,7 +2709,7 @@ export default function Home() {
                       <ChevronsUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[200px] p-0">
+                  <PopoverContent className="w-[200px] p-0 z-50">
                     <Command>
                       <CommandInput placeholder="Search staff..." />
                       <CommandList>
@@ -2758,6 +2755,7 @@ export default function Home() {
                         variant="outline"
                         id="project-due-date"
                         className="w-32 justify-between font-normal"
+                        onClick={(e) => e.stopPropagation()}
                       >
                         {editingProjectFields.due_date 
                           ? new Date(editingProjectFields.due_date).toLocaleDateString() 
@@ -2765,7 +2763,7 @@ export default function Home() {
                         <ChevronDownIcon className="h-4 w-4 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto overflow-hidden p-0" align="start">
+                    <PopoverContent className="w-auto overflow-hidden p-0 z-50" align="start">
                       <Calendar
                         mode="single"
                         selected={editingProjectFields.due_date ? new Date(editingProjectFields.due_date) : undefined}
@@ -2802,82 +2800,81 @@ export default function Home() {
                   />
                 </div>
               </div>
+          </div>
 
-              {/* Comments Section */}
-              <div className="border-t border-neutral-200 dark:border-neutral-700 pt-6">
-                {/* Comments List */}
-                <div className="space-y-4">
-                  {loadingComments ? (
-                    <div className="text-center py-4 text-muted-foreground">
-                      <p className="text-sm">Loading comments...</p>
+          {/* Comments Section - Sibling to form content for full-width border */}
+          <div className="border-t border-neutral-200 dark:border-neutral-700 p-6">
+            {/* Comments List */}
+            <div className="space-y-8">
+              {loadingComments ? (
+                <div className="text-center py-4 text-muted-foreground">
+                  <p className="text-sm">Loading comments...</p>
+                </div>
+              ) : projectComments.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground">
+                  <p className="text-sm">No comments yet</p>
+                </div>
+              ) : (
+                projectComments.map((comment: any) => (
+                  <div key={comment.id} className="flex gap-3">
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
+                      {comment.users?.avatar || (comment.users?.name || 'U').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
                     </div>
-                  ) : projectComments.length === 0 ? (
-                    <div className="text-center py-4 text-muted-foreground">
-                      <p className="text-sm">No comments yet</p>
-                    </div>
-                  ) : (
-                    projectComments.map((comment: any) => (
-                      <div key={comment.id} className="flex gap-3">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
-                          {comment.users?.avatar || (comment.users?.name || 'U').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium text-sm">
-                              {comment.users?.name || 'Unknown User'}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(comment.created_at).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: 'numeric',
-                                minute: '2-digit'
-                              })}
-                            </span>
-                          </div>
-                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                            {comment.comment_content}
-                          </p>
-                        </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-medium text-sm">
+                          {comment.users?.name || 'Unknown User'}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(comment.created_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit'
+                          })}
+                        </span>
                       </div>
-                    ))
-                  )}
-                </div>
-
-                {/* Comment Input */}
-                <div className="flex gap-3 mt-6">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
-                    {currentUser.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                        {comment.comment_content}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <Textarea
-                      placeholder="Add a comment..."
-                      rows={2}
-                      className="resize-none"
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) {
-                          e.preventDefault();
-                          postProjectComment();
-                        }
-                      }}
-                      disabled={postingComment}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">Press Enter to post, Shift+Enter for new line</p>
-                  </div>
-                </div>
-              </div>
-            {/* Save Button */}
-            <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
-              <Button
-                onClick={saveProjectChanges}
-                disabled={savingProjectEdit}
-                className="w-full"
-              >
-                {savingProjectEdit ? 'Saving...' : 'Save Changes'}
-              </Button>
+                ))
+              )}
             </div>
+
+            {/* Comment Input */}
+            <div className="mt-10">
+              <Textarea
+                placeholder="Add a comment..."
+                rows={1}
+                className="resize-none min-h-[38px]"
+                value={newComment}
+                onChange={(e) => {
+                  setNewComment(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = e.target.scrollHeight + 'px';
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) {
+                    e.preventDefault();
+                    postProjectComment();
+                  }
+                }}
+                disabled={postingComment}
+              />
+            </div>
+          </div>
+
+          {/* Save Button */}
+          <div className="px-6 pb-6">
+            <Button
+              onClick={saveProjectChanges}
+              disabled={savingProjectEdit}
+              className="w-full"
+            >
+              {savingProjectEdit ? 'Saving...' : 'Save Changes'}
+            </Button>
           </div>
         </div>
       )}
