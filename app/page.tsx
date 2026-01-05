@@ -140,6 +140,13 @@ export default function Home() {
   const [newComment, setNewComment] = useState('');
   const [postingComment, setPostingComment] = useState(false);
   
+  // Project attachments state
+  const [projectAttachments, setProjectAttachments] = useState<any[]>([]);
+  const [loadingAttachments, setLoadingAttachments] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [viewingAttachmentIndex, setViewingAttachmentIndex] = useState<number | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
+  
   // Project editing state
   const [editingProjectFields, setEditingProjectFields] = useState<{
     title: string;
@@ -192,10 +199,11 @@ export default function Home() {
     }
   }, [selectedCard, rightPanelView]);
 
-  // Fetch comments when a project is expanded
+  // Fetch comments and attachments when a project is expanded
   useEffect(() => {
     if (expandedProject?.id) {
       fetchProjectComments(expandedProject.id);
+      fetchProjectAttachments(expandedProject.id);
       // Initialize editing fields
       setEditingProjectFields({
         title: expandedProject.title || '',
@@ -207,10 +215,34 @@ export default function Home() {
       });
     } else {
       setProjectComments([]);
+      setProjectAttachments([]);
+      setViewingAttachmentIndex(null);
       setNewComment('');
       setEditingProjectFields(null);
     }
   }, [expandedProject?.id]);
+
+  // Auto-save project changes with debounce
+  useEffect(() => {
+    if (!expandedProject || !editingProjectFields) return;
+    
+    // Don't save on initial load - only when fields actually change
+    const hasChanges = 
+      editingProjectFields.title !== (expandedProject.title || '') ||
+      editingProjectFields.description !== (expandedProject.description || '') ||
+      editingProjectFields.status !== (expandedProject.status || 'not_started') ||
+      editingProjectFields.priority !== (expandedProject.priority || 'medium') ||
+      editingProjectFields.assigned_staff !== (expandedProject.project_assignments?.[0]?.user_id || '') ||
+      editingProjectFields.due_date !== (expandedProject.due_date || '');
+    
+    if (!hasChanges) return;
+    
+    const timeoutId = setTimeout(() => {
+      saveProjectChanges();
+    }, 800); // 800ms debounce
+    
+    return () => clearTimeout(timeoutId);
+  }, [editingProjectFields]);
 
   // Restore scroll position after re-renders (runs after every render)
   useEffect(() => {
@@ -358,6 +390,63 @@ export default function Home() {
     } finally {
       setLoadingComments(false);
     }
+  };
+
+  // Project Attachments functions
+  const fetchProjectAttachments = async (projectId: string) => {
+    setLoadingAttachments(true);
+    try {
+      const res = await fetch(`/api/project-attachments?project_id=${projectId}`);
+      const data = await res.json();
+      if (data.data) {
+        setProjectAttachments(data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching attachments:', err);
+      setProjectAttachments([]);
+    } finally {
+      setLoadingAttachments(false);
+    }
+  };
+
+  const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !expandedProject) return;
+    
+    setUploadingAttachment(true);
+    try {
+      for (const file of Array.from(files)) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('project_id', expandedProject.id);
+        formData.append('uploaded_by', currentUser.id);
+        
+        const res = await fetch('/api/project-attachments', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const data = await res.json();
+        if (data.data) {
+          setProjectAttachments(prev => [data.data, ...prev]);
+        }
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+    } finally {
+      setUploadingAttachment(false);
+      if (attachmentInputRef.current) {
+        attachmentInputRef.current.value = '';
+      }
+    }
+  };
+
+  const navigateAttachment = (direction: 'prev' | 'next') => {
+    if (viewingAttachmentIndex === null) return;
+    const newIndex = direction === 'prev' 
+      ? (viewingAttachmentIndex - 1 + projectAttachments.length) % projectAttachments.length
+      : (viewingAttachmentIndex + 1) % projectAttachments.length;
+    setViewingAttachmentIndex(newIndex);
   };
 
   const postProjectComment = async () => {
@@ -2802,7 +2891,59 @@ export default function Home() {
               </div>
           </div>
 
-          {/* Comments Section - Sibling to form content for full-width border */}
+          {/* Attachments Section */}
+          <div className="border-t border-neutral-200 dark:border-neutral-700 p-6">
+            <div className="flex items-center gap-3 flex-wrap">
+              <input
+                ref={attachmentInputRef}
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                onChange={handleAttachmentUpload}
+                className="hidden"
+              />
+              <Button 
+                variant="outline" 
+                className="gap-2"
+                onClick={() => attachmentInputRef.current?.click()}
+                disabled={uploadingAttachment}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                {uploadingAttachment ? 'Uploading...' : 'Add Attachment'}
+              </Button>
+              
+              {/* Thumbnails */}
+              {loadingAttachments ? (
+                <span className="text-sm text-muted-foreground">Loading...</span>
+              ) : (
+                projectAttachments.map((attachment, index) => (
+                  <div 
+                    key={attachment.id} 
+                    className="relative w-12 h-12 rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700 flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setViewingAttachmentIndex(index);
+                    }}
+                  >
+                    {attachment.file_type === 'image' ? (
+                      <img src={attachment.url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Comments Section */}
           <div className="border-t border-neutral-200 dark:border-neutral-700 p-6">
             {/* Comments List */}
             <div className="space-y-8">
@@ -2866,16 +3007,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Save Button */}
-          <div className="px-6 pb-6">
-            <Button
-              onClick={saveProjectChanges}
-              disabled={savingProjectEdit}
-              className="w-full"
-            >
-              {savingProjectEdit ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </div>
         </div>
       )}
 
@@ -3011,7 +3142,7 @@ export default function Home() {
         </DialogContent>
       </Dialog>
     </div>
-  ), [projects, loadingProjects, groupedProjects, showProjectDialog, editingProject, projectForm, savingProject, allProperties, expandedProject, projectComments, loadingComments, newComment, postingComment, currentUser, editingProjectFields, savingProjectEdit, discussionExpanded]);
+  ), [projects, loadingProjects, groupedProjects, showProjectDialog, editingProject, projectForm, savingProject, allProperties, expandedProject, projectComments, loadingComments, newComment, postingComment, currentUser, editingProjectFields, savingProjectEdit, discussionExpanded, projectAttachments, loadingAttachments, uploadingAttachment]);
 
   // Mobile UI
   if (isMobile) {
@@ -5001,6 +5132,80 @@ export default function Home() {
           )}
         </SheetContent>
       </Sheet>}
+
+      {/* Attachment Lightbox Dialog - at root level for proper state reactivity */}
+      <Dialog 
+        open={viewingAttachmentIndex !== null} 
+        onOpenChange={(open) => {
+          if (!open) setViewingAttachmentIndex(null);
+        }}
+      >
+        <DialogContent className="max-w-none sm:max-w-none w-screen h-screen p-0 border-0 bg-black/95 [&>button]:hidden rounded-none">
+          {/* Hidden title for accessibility */}
+          <DialogTitle className="sr-only">Attachment Viewer</DialogTitle>
+          
+          {viewingAttachmentIndex !== null && projectAttachments[viewingAttachmentIndex] && (
+            <div className="relative w-full h-full">
+              {/* Fixed Header - always at top */}
+              <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 z-20">
+                <span className="text-white/70 text-sm">
+                  {viewingAttachmentIndex + 1} / {projectAttachments.length}
+                </span>
+                <button
+                  onClick={() => setViewingAttachmentIndex(null)}
+                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              {/* Left Arrow - fixed to left edge, vertically centered */}
+              {projectAttachments.length > 1 && (
+                <button
+                  onClick={() => navigateAttachment('prev')}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 z-20 p-3 hover:bg-white/10 rounded-full transition-colors"
+                >
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+              )}
+              
+              {/* Centered content area with padding for controls */}
+              <div className="absolute inset-0 flex items-center justify-center px-20 py-20">
+                {projectAttachments[viewingAttachmentIndex]?.file_type === 'image' ? (
+                  <img 
+                    src={projectAttachments[viewingAttachmentIndex].url} 
+                    alt="" 
+                    className="max-h-full max-w-full object-contain"
+                  />
+                ) : (
+                  <video 
+                    src={projectAttachments[viewingAttachmentIndex]?.url}
+                    controls
+                    autoPlay
+                    className="max-h-full max-w-full"
+                  />
+                )}
+              </div>
+              
+              {/* Right Arrow - fixed to right edge, vertically centered */}
+              {projectAttachments.length > 1 && (
+                <button
+                  onClick={() => navigateAttachment('next')}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 z-20 p-3 hover:bg-white/10 rounded-full transition-colors"
+                >
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
