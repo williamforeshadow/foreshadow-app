@@ -2625,9 +2625,9 @@ export default function Home() {
 
       {/* Right Panel - Project Detail */}
       {expandedProject && editingProjectFields && (
-        <div className="w-1/2 h-full overflow-y-auto hide-scrollbar border-l border-neutral-200 dark:border-neutral-700 bg-card">
-          {/* Header */}
-          <div className="sticky top-0 bg-card z-10 border-b border-neutral-200 dark:border-neutral-700 p-6">
+        <div className="w-1/2 h-full flex flex-col border-l border-neutral-200 dark:border-neutral-700 bg-card">
+          {/* Header - fixed at top */}
+          <div className="flex-shrink-0 bg-card z-10 border-b border-neutral-200 dark:border-neutral-700 p-6">
             <div className="flex items-center justify-between gap-4">
               <input
                 type="text"
@@ -2764,8 +2764,10 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Form Content - Padded Container */}
-          <div className="p-6 space-y-6">
+          {/* Scrollable Content Area */}
+          <div className="flex-1 overflow-y-auto hide-scrollbar min-h-0">
+            {/* Form Content - Padded Container */}
+            <div className="p-6 space-y-6">
               {/* Description Field */}
               <div className="grid w-full gap-3">
                 <Label htmlFor="project-description">Description</Label>
@@ -2891,57 +2893,38 @@ export default function Home() {
               </div>
           </div>
 
-          {/* Attachments Section */}
-          <div className="border-t border-neutral-200 dark:border-neutral-700 p-6">
-            <div className="flex items-center gap-3 flex-wrap">
-              <input
-                ref={attachmentInputRef}
-                type="file"
-                accept="image/*,video/*"
-                multiple
-                onChange={handleAttachmentUpload}
-                className="hidden"
-              />
-              <Button 
-                variant="outline" 
-                className="gap-2"
-                onClick={() => attachmentInputRef.current?.click()}
-                disabled={uploadingAttachment}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                {uploadingAttachment ? 'Uploading...' : 'Add Attachment'}
-              </Button>
-              
-              {/* Thumbnails */}
-              {loadingAttachments ? (
-                <span className="text-sm text-muted-foreground">Loading...</span>
-              ) : (
-                projectAttachments.map((attachment, index) => (
-                  <div 
-                    key={attachment.id} 
-                    className="relative w-12 h-12 rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700 flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setViewingAttachmentIndex(index);
-                    }}
-                  >
-                    {attachment.file_type === 'image' ? (
-                      <img src={attachment.url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
+          {/* Attachments Section - Thumbnails Only (only show if there are attachments) */}
+          {(loadingAttachments || projectAttachments.length > 0) && (
+            <div className="border-t border-neutral-200 dark:border-neutral-700 p-6">
+              <div className="flex items-center gap-3 flex-wrap">
+                {loadingAttachments ? (
+                  <span className="text-sm text-muted-foreground">Loading attachments...</span>
+                ) : (
+                  projectAttachments.map((attachment, index) => (
+                    <div 
+                      key={attachment.id} 
+                      className="relative w-12 h-12 rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700 flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setViewingAttachmentIndex(index);
+                      }}
+                    >
+                      {attachment.file_type === 'image' ? (
+                        <img src={attachment.url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
+                          <svg className="w-5 h-5 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Comments Section */}
           <div className="border-t border-neutral-200 dark:border-neutral-700 p-6">
@@ -2983,13 +2966,17 @@ export default function Home() {
                 ))
               )}
             </div>
+          </div>
+          </div>
+          {/* End Scrollable Content Area */}
 
-            {/* Comment Input */}
-            <div className="mt-10">
+          {/* Comment Input - Sticky at bottom */}
+          <div className="flex-shrink-0 border-t border-neutral-200 dark:border-neutral-700 p-4 bg-card">
+            <div className="flex items-end gap-3">
               <Textarea
                 placeholder="Add a comment..."
                 rows={1}
-                className="resize-none min-h-[38px]"
+                className="resize-none min-h-[38px] flex-1"
                 value={newComment}
                 onChange={(e) => {
                   setNewComment(e.target.value);
@@ -3004,6 +2991,33 @@ export default function Home() {
                 }}
                 disabled={postingComment}
               />
+              {/* Hidden file input */}
+              <input
+                ref={attachmentInputRef}
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                onChange={handleAttachmentUpload}
+                className="hidden"
+              />
+              {/* Paperclip button for attachments */}
+              <button
+                onClick={() => attachmentInputRef.current?.click()}
+                disabled={uploadingAttachment}
+                className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors disabled:opacity-50"
+                title={uploadingAttachment ? 'Uploading...' : 'Add attachment'}
+              >
+                {uploadingAttachment ? (
+                  <svg className="w-5 h-5 text-neutral-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                  </svg>
+                )}
+              </button>
             </div>
           </div>
 
