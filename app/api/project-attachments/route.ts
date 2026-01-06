@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { logProjectActivity } from '@/lib/logProjectActivity';
 
 // Create Supabase client with service role for storage operations
 const supabase = createClient(
@@ -174,6 +175,12 @@ export async function POST(request: Request) {
         { error: dbError.message || 'Failed to save attachment record' },
         { status: 500 }
       );
+    }
+
+    // Log activity
+    if (uploadedBy) {
+      const fileType = isVideo ? 'video' : 'image';
+      await logProjectActivity(projectId, uploadedBy, 'attachment_upload', `uploaded ${fileType}: ${file.name}`, null, publicUrl);
     }
 
     return NextResponse.json({

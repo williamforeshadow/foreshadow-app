@@ -91,6 +91,7 @@ export default function Home() {
   const [windowOrder, setWindowOrder] = useState<Array<'cards' | 'timeline' | 'projects'>>(['cards', 'timeline', 'projects']);
   const [projects, setProjects] = useState<any[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
+  const [projectViews, setProjectViews] = useState<Record<string, string>>({}); // { project_id: last_viewed_at }
   const [showProjectDialog, setShowProjectDialog] = useState(false);
   const [editingProject, setEditingProject] = useState<any>(null);
   const [savingProject, setSavingProject] = useState(false);
@@ -159,6 +160,18 @@ export default function Home() {
   const [savingProjectEdit, setSavingProjectEdit] = useState(false);
   const [discussionExpanded, setDiscussionExpanded] = useState(false);
   
+  // Project time tracking state
+  const [projectTimeEntries, setProjectTimeEntries] = useState<any[]>([]);
+  const [activeTimeEntry, setActiveTimeEntry] = useState<any>(null);
+  const [totalTrackedSeconds, setTotalTrackedSeconds] = useState(0);
+  const [displaySeconds, setDisplaySeconds] = useState(0);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Project activity log state
+  const [projectActivity, setProjectActivity] = useState<any[]>([]);
+  const [loadingActivity, setLoadingActivity] = useState(false);
+  const [activityPopoverOpen, setActivityPopoverOpen] = useState(false);
+  
   // Combobox open states for staff assignment
   const [turnoverStaffOpen, setTurnoverStaffOpen] = useState(false);
   const [projectStaffOpen, setProjectStaffOpen] = useState(false);
@@ -190,7 +203,10 @@ export default function Home() {
     if (showProjectsWindow && projects.length === 0) {
       fetchProjects();
     }
-  }, [showProjectsWindow]);
+    if (showProjectsWindow && currentUser?.id) {
+      fetchProjectViews();
+    }
+  }, [showProjectsWindow, currentUser?.id]);
 
   // Also fetch projects when viewing projects in turnover detail
   useEffect(() => {
@@ -199,11 +215,12 @@ export default function Home() {
     }
   }, [selectedCard, rightPanelView]);
 
-  // Fetch comments and attachments when a project is expanded
+  // Fetch comments, attachments, and time entries when a project is expanded
   useEffect(() => {
     if (expandedProject?.id) {
       fetchProjectComments(expandedProject.id);
       fetchProjectAttachments(expandedProject.id);
+      fetchProjectTimeEntries(expandedProject.id);
       // Initialize editing fields
       setEditingProjectFields({
         title: expandedProject.title || '',
@@ -219,8 +236,39 @@ export default function Home() {
       setViewingAttachmentIndex(null);
       setNewComment('');
       setEditingProjectFields(null);
+      // Reset time tracking state
+      setProjectTimeEntries([]);
+      setActiveTimeEntry(null);
+      setTotalTrackedSeconds(0);
+      setDisplaySeconds(0);
     }
   }, [expandedProject?.id]);
+
+  // Real-time clock update when timer is running
+  useEffect(() => {
+    if (activeTimeEntry) {
+      // Start interval to update display every second
+      timerIntervalRef.current = setInterval(() => {
+        const activeStart = new Date(activeTimeEntry.start_time).getTime();
+        const now = Date.now();
+        const activeSeconds = Math.floor((now - activeStart) / 1000);
+        setDisplaySeconds(totalTrackedSeconds + activeSeconds);
+      }, 1000);
+    } else {
+      // Clear interval when no active timer
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+      setDisplaySeconds(totalTrackedSeconds);
+    }
+
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+    };
+  }, [activeTimeEntry, totalTrackedSeconds]);
 
   // Auto-save project changes with debounce
   useEffect(() => {
@@ -269,6 +317,49 @@ export default function Home() {
     } finally {
       setLoadingProjects(false);
     }
+  };
+
+  const fetchProjectViews = async () => {
+    if (!currentUser?.id) return;
+    try {
+      const response = await fetch(`/api/project-views?user_id=${currentUser.id}`);
+      const result = await response.json();
+      if (response.ok && result.data) {
+        setProjectViews(result.data);
+      }
+    } catch (err) {
+      console.error('Error fetching project views:', err);
+    }
+  };
+
+  const recordProjectView = async (projectId: string) => {
+    if (!currentUser?.id) return;
+    try {
+      await fetch('/api/project-views', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: projectId,
+          user_id: currentUser.id
+        })
+      });
+      // Update local state immediately
+      setProjectViews(prev => ({
+        ...prev,
+        [projectId]: new Date().toISOString()
+      }));
+    } catch (err) {
+      console.error('Error recording project view:', err);
+    }
+  };
+
+  // Check if a project has unread activity for the current user
+  const hasUnreadActivity = (project: any): boolean => {
+    const lastViewed = projectViews[project.id];
+    if (!lastViewed) return true; // Never viewed = new
+    const projectUpdated = new Date(project.updated_at).getTime();
+    const userViewed = new Date(lastViewed).getTime();
+    return projectUpdated > userViewed;
   };
 
   const resetProjectForm = () => {
@@ -449,6 +540,113 @@ export default function Home() {
     setViewingAttachmentIndex(newIndex);
   };
 
+  // Project Time Tracking functions
+  const fetchProjectTimeEntries = async (projectId: string) => {
+    try {
+      const res = await fetch(`/api/project-time-entries?project_id=${projectId}`);
+      const data = await res.json();
+      if (data.data) {
+        setProjectTimeEntries(data.data);
+        setTotalTrackedSeconds(data.totalSeconds || 0);
+        setActiveTimeEntry(data.activeEntry || null);
+        
+        // Calculate display seconds (total + active running time)
+        if (data.activeEntry) {
+          const activeStart = new Date(data.activeEntry.start_time).getTime();
+          const now = Date.now();
+          const activeSeconds = Math.floor((now - activeStart) / 1000);
+          setDisplaySeconds((data.totalSeconds || 0) + activeSeconds);
+        } else {
+          setDisplaySeconds(data.totalSeconds || 0);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching time entries:', err);
+      setProjectTimeEntries([]);
+      setTotalTrackedSeconds(0);
+      setActiveTimeEntry(null);
+      setDisplaySeconds(0);
+    }
+  };
+
+  const startProjectTimer = async () => {
+    if (!expandedProject || !currentUser) return;
+    
+    try {
+      const res = await fetch('/api/project-time-entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: expandedProject.id,
+          user_id: currentUser.id
+        })
+      });
+      
+      const data = await res.json();
+      if (data.data) {
+        setActiveTimeEntry(data.data);
+        setProjectTimeEntries(prev => [data.data, ...prev]);
+      }
+    } catch (err) {
+      console.error('Error starting timer:', err);
+    }
+  };
+
+  const stopProjectTimer = async () => {
+    if (!activeTimeEntry) return;
+    
+    try {
+      const res = await fetch('/api/project-time-entries', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entry_id: activeTimeEntry.id
+        })
+      });
+      
+      const data = await res.json();
+      if (data.data) {
+        // Update the entry in the list
+        setProjectTimeEntries(prev => 
+          prev.map(e => e.id === data.data.id ? data.data : e)
+        );
+        // Calculate new total
+        const entryDuration = Math.floor(
+          (new Date(data.data.end_time).getTime() - new Date(data.data.start_time).getTime()) / 1000
+        );
+        setTotalTrackedSeconds(prev => prev + entryDuration);
+        setActiveTimeEntry(null);
+      }
+    } catch (err) {
+      console.error('Error stopping timer:', err);
+    }
+  };
+
+  // Format seconds to HH:MM:SS
+  const formatTime = (seconds: number) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Fetch project activity log
+  const fetchProjectActivity = async (projectId: string) => {
+    setLoadingActivity(true);
+    try {
+      const res = await fetch(`/api/project-activity?project_id=${projectId}&limit=50`);
+      const data = await res.json();
+      if (data.data) {
+        setProjectActivity(data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching activity:', err);
+      setProjectActivity([]);
+    } finally {
+      setLoadingActivity(false);
+    }
+  };
+
   const postProjectComment = async () => {
     if (!expandedProject || !newComment.trim()) return;
     
@@ -490,7 +688,8 @@ export default function Home() {
           status: editingProjectFields.status,
           priority: editingProjectFields.priority,
           assigned_user_ids: editingProjectFields.assigned_staff ? [editingProjectFields.assigned_staff] : [],
-          due_date: editingProjectFields.due_date || null
+          due_date: editingProjectFields.due_date || null,
+          user_id: currentUser?.id // For activity logging
         })
       });
       
@@ -500,6 +699,8 @@ export default function Home() {
         setProjects(prev => prev.map(p => p.id === expandedProject.id ? data.data : p));
         // Update expanded project
         setExpandedProject(data.data);
+        // Record view so user doesn't see "new" badge for their own changes
+        recordProjectView(expandedProject.id);
       }
     } catch (err) {
       console.error('Error saving project:', err);
@@ -2538,13 +2739,29 @@ export default function Home() {
                     {propertyProjects.map((project: any) => (
                       <Card 
                         key={project.id} 
-                        className={`group w-full gap-4 !p-4 hover:shadow-lg transition-all duration-200 !flex !flex-col cursor-pointer ${
+                        className={`group w-full gap-4 !p-4 hover:shadow-lg transition-all duration-200 !flex !flex-col cursor-pointer relative ${
                           expandedProject?.id === project.id 
                             ? 'ring-1 ring-amber-400/70 shadow-md' 
                             : ''
                         }`}
-                        onClick={() => setExpandedProject(expandedProject?.id === project.id ? null : project)}
+                        onClick={() => {
+                          if (expandedProject?.id === project.id) {
+                            setExpandedProject(null);
+                          } else {
+                            setExpandedProject(project);
+                            recordProjectView(project.id);
+                          }
+                        }}
                       >
+                        {/* New activity badge */}
+                        {hasUnreadActivity(project) && expandedProject?.id !== project.id && (
+                          <Badge 
+                            variant="outline" 
+                            className="absolute -top-2 -right-2 z-10 bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700 text-[10px] px-1.5 py-0"
+                          >
+                            new
+                          </Badge>
+                        )}
                         <CardHeader className="min-h-[4.5rem]">
                           <CardTitle className="text-base leading-tight line-clamp-2">{project.title}</CardTitle>
                           <CardDescription className="line-clamp-2 text-muted-foreground">
@@ -2627,8 +2844,37 @@ export default function Home() {
       {expandedProject && editingProjectFields && (
         <div className="w-1/2 h-full flex flex-col border-l border-neutral-200 dark:border-neutral-700 bg-card">
           {/* Header - fixed at top */}
-          <div className="flex-shrink-0 bg-card z-10 border-b border-neutral-200 dark:border-neutral-700 p-6">
-            <div className="flex items-center justify-between gap-4">
+          <div className="flex-shrink-0 bg-card z-10 border-b border-neutral-200 dark:border-neutral-700 relative">
+            {/* Top right action icons - absolute positioned */}
+            <div className="absolute top-2 right-2 flex gap-0.5">
+              <button
+                onClick={() => {
+                  if (confirm('Are you sure you want to delete this project?')) {
+                    deleteProject(expandedProject);
+                    setExpandedProject(null);
+                  }
+                }}
+                className="p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                title="Delete project"
+              >
+                <svg className="w-3.5 h-3.5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setExpandedProject(null)}
+                className="p-1 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded transition-colors"
+                title="Close"
+              >
+                <svg className="w-3.5 h-3.5 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {/* Header content with consistent spacing */}
+            <div className="flex flex-col space-y-5 px-6 py-6">
+              {/* Title row */}
               <input
                 type="text"
                 value={editingProjectFields.title}
@@ -2636,37 +2882,14 @@ export default function Home() {
                 placeholder="Untitled Project"
                 className="text-lg font-semibold bg-transparent border-none outline-none focus:outline-none p-0 flex-1 min-w-0 text-foreground placeholder:text-muted-foreground"
               />
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button
-                  onClick={() => {
-                    if (confirm('Are you sure you want to delete this project?')) {
-                      deleteProject(expandedProject);
-                      setExpandedProject(null);
-                    }
-                  }}
-                  className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                  title="Delete project"
-                >
-                  <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => setExpandedProject(null)}
-                  className="p-2 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors"
-                  title="Close"
-                >
-                  <svg className="w-5 h-5 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 mt-1">
-              <p className="text-sm text-muted-foreground">{expandedProject.property_name}</p>
               
-              {/* Status & Priority Badges */}
-              <DropdownMenu>
+              {/* Property name & badges row */}
+              <div className="flex items-center justify-between">
+                <p className="text-base text-muted-foreground">{expandedProject.property_name}</p>
+              
+                {/* Status & Priority Badges - pushed to right */}
+                <div className="flex items-center gap-2">
+                  <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button className="focus:outline-none">
                     <Badge 
@@ -2759,15 +2982,96 @@ export default function Home() {
                   >
                     Urgent
                   </DropdownMenuCheckboxItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+
+            {/* Time tracking display in header */}
+            {(displaySeconds > 0 || activeTimeEntry) && (
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {activeTimeEntry ? (
+                  <span className="text-sm text-muted-foreground italic">
+                    In Progress
+                  </span>
+                ) : (
+                  <span className="text-sm text-muted-foreground font-mono">
+                    {formatTime(displaySeconds)}
+                  </span>
+                )}
+              </div>
+            )}
             </div>
           </div>
+
+          {/* Activity History Sheet */}
+          <Sheet open={activityPopoverOpen} onOpenChange={setActivityPopoverOpen}>
+            <SheetContent side="right" className="w-[400px] sm:w-[450px]">
+              <SheetHeader>
+                <SheetTitle>Activity History</SheetTitle>
+                <SheetDescription>
+                  Recent changes and updates to this project
+                </SheetDescription>
+              </SheetHeader>
+              <div className="mt-6 -mx-6 px-6 flex-1 overflow-y-auto">
+                {loadingActivity ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">Loading activity...</p>
+                ) : projectActivity.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">No activity recorded yet</p>
+                ) : (
+                  <div className="space-y-4">
+                    {projectActivity.map((activity: any) => (
+                      <div key={activity.id} className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
+                          {(activity.users?.name || 'U').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm">
+                            <span className="font-medium">{activity.users?.name || 'Unknown'}</span>
+                            {' '}
+                            <span className="text-muted-foreground">{activity.description}</span>
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {new Date(activity.created_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit'
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </SheetContent>
+          </Sheet>
 
           {/* Scrollable Content Area */}
           <div className="flex-1 overflow-y-auto hide-scrollbar min-h-0">
             {/* Form Content - Padded Container */}
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-6 relative">
+              {/* History button - top right of description area */}
+              <button
+                onClick={() => {
+                  setActivityPopoverOpen(true);
+                  if (expandedProject) {
+                    fetchProjectActivity(expandedProject.id);
+                  }
+                }}
+                className="absolute top-4 right-4 p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+                title="View activity history"
+              >
+                <svg className="w-4 h-4 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
+              </button>
+
               {/* Description Field */}
               <div className="grid w-full gap-3">
                 <Label htmlFor="project-description">Description</Label>
@@ -2972,7 +3276,7 @@ export default function Home() {
 
           {/* Comment Input - Sticky at bottom */}
           <div className="flex-shrink-0 border-t border-neutral-200 dark:border-neutral-700 p-4 bg-card">
-            <div className="flex items-end gap-3">
+            <div className="flex items-center gap-2">
               <Textarea
                 placeholder="Add a comment..."
                 rows={1}
@@ -3000,24 +3304,78 @@ export default function Home() {
                 onChange={handleAttachmentUpload}
                 className="hidden"
               />
-              {/* Paperclip button for attachments */}
-              <button
-                onClick={() => attachmentInputRef.current?.click()}
-                disabled={uploadingAttachment}
-                className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors disabled:opacity-50"
-                title={uploadingAttachment ? 'Uploading...' : 'Add attachment'}
-              >
-                {uploadingAttachment ? (
-                  <svg className="w-5 h-5 text-neutral-500 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                  </svg>
-                )}
-              </button>
+              {/* Action buttons - horizontal */}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {/* Timer button with popover */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      className={cn(
+                        "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
+                        activeTimeEntry 
+                          ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400" 
+                          : "hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500"
+                      )}
+                      title="Time tracking"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-3" align="end" side="top">
+                    <div className="flex items-center gap-3">
+                      {/* Clock display */}
+                      <span className="font-mono text-lg font-medium tabular-nums">
+                        {formatTime(displaySeconds)}
+                      </span>
+                      {/* Start/Stop button */}
+                      <button
+                        onClick={activeTimeEntry ? stopProjectTimer : startProjectTimer}
+                        className={cn(
+                          "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
+                          activeTimeEntry
+                            ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50"
+                            : "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50"
+                        )}
+                        title={activeTimeEntry ? 'Stop timer' : 'Start timer'}
+                      >
+                        {activeTimeEntry ? (
+                          // Stop/Pause icon
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <rect x="6" y="4" width="4" height="16" rx="1" />
+                            <rect x="14" y="4" width="4" height="16" rx="1" />
+                          </svg>
+                        ) : (
+                          // Play icon
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                
+                {/* Paperclip button for attachments (smaller) */}
+                <button
+                  onClick={() => attachmentInputRef.current?.click()}
+                  disabled={uploadingAttachment}
+                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors disabled:opacity-50"
+                  title={uploadingAttachment ? 'Uploading...' : 'Add attachment'}
+                >
+                  {uploadingAttachment ? (
+                    <svg className="w-4 h-4 text-neutral-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -3156,7 +3514,7 @@ export default function Home() {
         </DialogContent>
       </Dialog>
     </div>
-  ), [projects, loadingProjects, groupedProjects, showProjectDialog, editingProject, projectForm, savingProject, allProperties, expandedProject, projectComments, loadingComments, newComment, postingComment, currentUser, editingProjectFields, savingProjectEdit, discussionExpanded, projectAttachments, loadingAttachments, uploadingAttachment]);
+  ), [projects, loadingProjects, groupedProjects, showProjectDialog, editingProject, projectForm, savingProject, allProperties, expandedProject, projectComments, loadingComments, newComment, postingComment, currentUser, editingProjectFields, savingProjectEdit, discussionExpanded, projectAttachments, loadingAttachments, uploadingAttachment, activeTimeEntry, displaySeconds, projectActivity, loadingActivity, activityPopoverOpen]);
 
   // Mobile UI
   if (isMobile) {

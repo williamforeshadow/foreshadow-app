@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { logProjectActivity } from '@/lib/logProjectActivity';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -76,6 +77,12 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
+
+    // Log activity
+    const truncatedComment = comment_content.length > 50 
+      ? comment_content.substring(0, 50) + '...' 
+      : comment_content;
+    await logProjectActivity(project_id, user_id, 'comment', `commented "${truncatedComment}"`, null, comment_content);
 
     return NextResponse.json({ success: true, data });
   } catch (err: any) {
