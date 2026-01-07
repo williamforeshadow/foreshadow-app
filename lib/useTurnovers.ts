@@ -55,6 +55,10 @@ export function useTurnovers() {
   // Popover states
   const [turnoverStaffOpen, setTurnoverStaffOpen] = useState(false);
 
+  // Projects state (for projects tab in right panel)
+  const [projects, setProjects] = useState<any[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+
   // Refs
   const rightPanelRef = useRef<HTMLDivElement>(null);
   const scrollPositionRef = useRef<number>(0);
@@ -86,6 +90,29 @@ export function useTurnovers() {
   useEffect(() => {
     fetchTurnovers();
   }, [fetchTurnovers]);
+
+  // Fetch projects
+  const fetchProjects = useCallback(async () => {
+    setLoadingProjects(true);
+    try {
+      const response = await fetch('/api/projects');
+      const result = await response.json();
+      if (response.ok && result.data) {
+        setProjects(result.data);
+      }
+    } catch (err) {
+      console.error('Error fetching projects:', err);
+    } finally {
+      setLoadingProjects(false);
+    }
+  }, []);
+
+  // Fetch projects when switching to projects view
+  useEffect(() => {
+    if (rightPanelView === 'projects' && projects.length === 0) {
+      fetchProjects();
+    }
+  }, [rightPanelView, projects.length, fetchProjects]);
 
   // Filter functions
   const toggleFilter = useCallback((category: keyof CleaningFilters, value: string) => {
@@ -573,9 +600,7 @@ export function useTurnovers() {
   }, []);
 
   // Turnover project save
-  const saveTurnoverProjectChanges = useCallback(async (
-    setProjects: React.Dispatch<React.SetStateAction<any[]>>
-  ) => {
+  const saveTurnoverProjectChanges = useCallback(async () => {
     if (!expandedTurnoverProject || !turnoverProjectFields) return;
 
     setSavingTurnoverProject(true);
@@ -595,7 +620,7 @@ export function useTurnovers() {
 
       const data = await res.json();
       if (data.data) {
-        // Update local projects list (passed from parent)
+        // Update local projects list
         setProjects(prev => prev.map(p => p.id === expandedTurnoverProject.id ? data.data : p));
         // Update the expanded turnover project
         setExpandedTurnoverProject(data.data);
@@ -662,6 +687,11 @@ export function useTurnovers() {
     fetchAvailableTemplates,
     addTaskToCard,
     deleteTaskFromCard,
+
+    // Projects (for projects tab in right panel)
+    projects,
+    loadingProjects,
+    fetchProjects,
 
     // Turnover project state
     expandedTurnoverProject,

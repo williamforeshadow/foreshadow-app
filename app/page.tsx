@@ -2730,22 +2730,14 @@ export default function Home() {
               <TurnoversWindow
                 users={users}
                 currentUser={currentUser}
-                projects={projects}
-                setProjects={setProjects}
-                onOpenProjectInWindow={(project) => {
-                  setExpandedProject(project);
-                  setEditingProjectFields({
-                    title: project.title,
-                    description: project.description || '',
-                    status: project.status,
-                    priority: project.priority,
-                    assigned_staff: project.project_assignments?.[0]?.user_id || '',
-                    due_date: project.due_date || ''
-                  });
+                onOpenProjectInWindow={() => {
                   setShowProjectsWindow(true);
                   bringToFront('projects');
                 }}
-                onCreateProject={(propertyName) => openCreateProjectDialog(propertyName)}
+                onCreateProject={() => {
+                  setShowProjectsWindow(true);
+                  bringToFront('projects');
+                }}
               />
             </FloatingWindow>
           )}

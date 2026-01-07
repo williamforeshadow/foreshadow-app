@@ -42,8 +42,6 @@ interface User {
 interface TurnoversWindowProps {
   users: User[];
   currentUser: any;
-  projects: any[];
-  setProjects: React.Dispatch<React.SetStateAction<any[]>>;
   onOpenProjectInWindow: (project: any) => void;
   onCreateProject: (propertyName?: string) => void;
 }
@@ -51,8 +49,6 @@ interface TurnoversWindowProps {
 function TurnoversWindowContent({
   users,
   currentUser,
-  projects,
-  setProjects,
   onOpenProjectInWindow,
   onCreateProject,
 }: TurnoversWindowProps) {
@@ -99,6 +95,9 @@ function TurnoversWindowContent({
     addTaskToCard,
     deleteTaskFromCard,
 
+    // Projects (for projects tab)
+    projects,
+
     // Turnover project state
     expandedTurnoverProject,
     setExpandedTurnoverProject,
@@ -127,7 +126,7 @@ function TurnoversWindowContent({
   } = useTurnovers();
 
   const handleSaveTurnoverProject = () => {
-    saveTurnoverProjectChanges(setProjects);
+    saveTurnoverProjectChanges();
   };
 
   return (
