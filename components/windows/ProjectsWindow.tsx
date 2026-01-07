@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -337,6 +338,18 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
             <div className="absolute top-2 right-2 flex gap-0.5">
               <button
                 onClick={() => {
+                  fetchProjectActivity(expandedProject.id);
+                  setActivityPopoverOpen(true);
+                }}
+                className="p-1 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded transition-colors"
+                title="Activity History"
+              >
+                <svg className="w-3.5 h-3.5 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => {
                   if (confirm('Are you sure you want to delete this project?')) {
                     deleteProject(expandedProject);
                   }
@@ -493,171 +506,339 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
           </div>
 
           {/* Scrollable content */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {/* Description */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">Description</label>
-              <DebouncedTextarea
-                value={editingProjectFields.description}
-                onChange={(value) => setEditingProjectFields(prev => prev ? {...prev, description: value} : null)}
-                placeholder="Add a description..."
-                rows={3}
-                className="resize-none"
-                delay={150}
-              />
-            </div>
-
-            {/* Assigned & Due Date */}
-            <div className="grid grid-cols-2 gap-4">
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-6 space-y-6">
+              {/* Description */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-muted-foreground">Assigned To</label>
-                <Popover open={projectStaffOpen} onOpenChange={setProjectStaffOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      className="w-full justify-between font-normal"
-                    >
-                      {editingProjectFields.assigned_staff
-                        ? users.find((user) => user.id === editingProjectFields.assigned_staff)?.name || "Unknown"
-                        : "Select staff..."}
-                      <ChevronsUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[200px] p-0">
-                    <Command>
-                      <CommandInput placeholder="Search staff..." />
-                      <CommandList>
-                        <CommandEmpty>No staff found.</CommandEmpty>
-                        <CommandGroup>
-                          <CommandItem
-                            value="unassigned"
-                            onSelect={() => {
-                              setEditingProjectFields(prev => prev ? {...prev, assigned_staff: ''} : null);
-                              setProjectStaffOpen(false);
-                            }}
-                          >
-                            <CheckIcon className={cn("mr-2 h-4 w-4", !editingProjectFields.assigned_staff ? "opacity-100" : "opacity-0")} />
-                            Unassigned
-                          </CommandItem>
-                          {users.map((user) => (
+                <label className="text-sm font-medium text-muted-foreground">Description</label>
+                <DebouncedTextarea
+                  value={editingProjectFields.description}
+                  onChange={(value) => setEditingProjectFields(prev => prev ? {...prev, description: value} : null)}
+                  placeholder="Add a description..."
+                  rows={3}
+                  className="resize-none"
+                  delay={150}
+                />
+              </div>
+
+              {/* Assigned & Due Date */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">Assigned To</label>
+                  <Popover open={projectStaffOpen} onOpenChange={setProjectStaffOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className="w-full justify-between font-normal"
+                      >
+                        {editingProjectFields.assigned_staff
+                          ? users.find((user) => user.id === editingProjectFields.assigned_staff)?.name || "Unknown"
+                          : "Select staff..."}
+                        <ChevronsUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[200px] p-0">
+                      <Command>
+                        <CommandInput placeholder="Search staff..." />
+                        <CommandList>
+                          <CommandEmpty>No staff found.</CommandEmpty>
+                          <CommandGroup>
                             <CommandItem
-                              key={user.id}
-                              value={user.name}
+                              value="unassigned"
                               onSelect={() => {
-                                setEditingProjectFields(prev => prev ? {...prev, assigned_staff: user.id} : null);
+                                setEditingProjectFields(prev => prev ? {...prev, assigned_staff: ''} : null);
                                 setProjectStaffOpen(false);
                               }}
                             >
-                              <CheckIcon className={cn("mr-2 h-4 w-4", editingProjectFields.assigned_staff === user.id ? "opacity-100" : "opacity-0")} />
-                              {user.name}
+                              <CheckIcon className={cn("mr-2 h-4 w-4", !editingProjectFields.assigned_staff ? "opacity-100" : "opacity-0")} />
+                              Unassigned
                             </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                            {users.map((user) => (
+                              <CommandItem
+                                key={user.id}
+                                value={user.name}
+                                onSelect={() => {
+                                  setEditingProjectFields(prev => prev ? {...prev, assigned_staff: user.id} : null);
+                                  setProjectStaffOpen(false);
+                                }}
+                              >
+                                <CheckIcon className={cn("mr-2 h-4 w-4", editingProjectFields.assigned_staff === user.id ? "opacity-100" : "opacity-0")} />
+                                {user.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">Due Date</label>
+                  <Input
+                    type="date"
+                    value={editingProjectFields.due_date}
+                    onChange={(e) => setEditingProjectFields(prev => prev ? {...prev, due_date: e.target.value} : null)}
+                  />
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-muted-foreground">Due Date</label>
-                <Input
-                  type="date"
-                  value={editingProjectFields.due_date}
-                  onChange={(e) => setEditingProjectFields(prev => prev ? {...prev, due_date: e.target.value} : null)}
-                />
-              </div>
+              {/* Save button */}
+              <Button
+                onClick={saveProjectChanges}
+                disabled={savingProjectEdit}
+                className="w-full"
+              >
+                {savingProjectEdit ? 'Saving...' : 'Save Changes'}
+              </Button>
             </div>
+
+            {/* Attachments Section - Thumbnails Only (only show if there are attachments) */}
+            {(loadingAttachments || projectAttachments.length > 0) && (
+              <div className="border-t border-neutral-200 dark:border-neutral-700 p-6">
+                <div className="flex items-center gap-3 flex-wrap">
+                  {loadingAttachments ? (
+                    <span className="text-sm text-muted-foreground">Loading attachments...</span>
+                  ) : (
+                    projectAttachments.map((attachment: any, index: number) => (
+                      <div
+                        key={attachment.id}
+                        className="relative w-12 h-12 rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700 flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setViewingAttachmentIndex(index);
+                        }}
+                      >
+                        {attachment.file_type === 'image' ? (
+                          <img src={attachment.url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
+                            <svg className="w-5 h-5 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Comments Section */}
-            <div className="space-y-3">
-              <button
-                onClick={() => setDiscussionExpanded(!discussionExpanded)}
-                className="flex items-center justify-between w-full text-left"
-              >
-                <span className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  Discussion
-                  {projectComments.length > 0 && (
-                    <Badge variant="secondary" className="text-xs">
-                      {projectComments.length}
-                    </Badge>
-                  )}
-                </span>
-                <svg
-                  className={`w-4 h-4 text-muted-foreground transition-transform ${discussionExpanded ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {discussionExpanded && (
-                <div className="space-y-3 pt-2">
-                  {/* Comment input */}
-                  <div className="flex gap-2">
-                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                      {currentUser?.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() || 'U'}
-                    </div>
-                    <div className="flex-1">
-                      <Textarea
-                        placeholder="Add a comment..."
-                        rows={2}
-                        className="resize-none text-sm"
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) {
-                            e.preventDefault();
-                            postProjectComment();
-                          }
-                        }}
-                        disabled={postingComment}
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">Press Enter to post</p>
-                    </div>
+            <div className="border-t border-neutral-200 dark:border-neutral-700 p-6">
+              <div className="space-y-4">
+                {loadingComments ? (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <p className="text-sm">Loading comments...</p>
                   </div>
-
-                  {/* Comments list */}
-                  <div className="space-y-3 max-h-48 overflow-y-auto">
-                    {projectComments.length === 0 ? (
-                      <p className="text-center text-sm text-muted-foreground py-2">No comments yet</p>
-                    ) : (
-                      projectComments.map((comment: any) => (
-                        <div key={comment.id} className="flex gap-2">
-                          <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
-                            {comment.users?.avatar || (comment.users?.name || 'U').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <span className="font-medium text-xs">{comment.users?.name || 'Unknown'}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {new Date(comment.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                              </span>
-                            </div>
-                            <p className="text-sm text-muted-foreground">{comment.comment_content}</p>
-                          </div>
+                ) : projectComments.length === 0 ? (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <p className="text-sm">No comments yet</p>
+                  </div>
+                ) : (
+                  projectComments.map((comment: any) => (
+                    <div key={comment.id} className="flex gap-3">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
+                        {comment.users?.avatar || (comment.users?.name || 'U').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-medium text-sm">
+                            {comment.users?.name || 'Unknown User'}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(comment.created_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit'
+                            })}
+                          </span>
                         </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                          {comment.comment_content}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
+          </div>
 
-            {/* Save button */}
-            <Button
-              onClick={saveProjectChanges}
-              disabled={savingProjectEdit}
-              className="w-full"
-            >
-              {savingProjectEdit ? 'Saving...' : 'Save Changes'}
-            </Button>
+          {/* Comment Input - Sticky at bottom */}
+          <div className="flex-shrink-0 border-t border-neutral-200 dark:border-neutral-700 p-4 bg-card">
+            <div className="flex items-center gap-2">
+              <Textarea
+                placeholder="Add a comment..."
+                rows={1}
+                className="resize-none min-h-[38px] flex-1"
+                value={newComment}
+                onChange={(e) => {
+                  setNewComment(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = e.target.scrollHeight + 'px';
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) {
+                    e.preventDefault();
+                    postProjectComment();
+                  }
+                }}
+                disabled={postingComment}
+              />
+              {/* Hidden file input */}
+              <input
+                ref={attachmentInputRef}
+                type="file"
+                multiple
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={handleAttachmentUpload}
+              />
+              {/* Paperclip attachment button */}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="flex-shrink-0"
+                onClick={() => attachmentInputRef.current?.click()}
+                disabled={uploadingAttachment}
+              >
+                {uploadingAttachment ? (
+                  <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                  </svg>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       )}
+
+      {/* Activity History Sheet */}
+      <Sheet open={activityPopoverOpen} onOpenChange={setActivityPopoverOpen}>
+        <SheetContent side="right" className="w-[400px] sm:w-[450px]">
+          <SheetHeader>
+            <SheetTitle>Activity History</SheetTitle>
+            <SheetDescription>
+              Recent changes and updates to this project
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 -mx-6 px-6 flex-1 overflow-y-auto">
+            {loadingActivity ? (
+              <p className="text-sm text-muted-foreground text-center py-8">Loading activity...</p>
+            ) : projectActivity.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No activity recorded yet</p>
+            ) : (
+              <div className="space-y-4">
+                {projectActivity.map((activity: any) => (
+                  <div key={activity.id} className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
+                      {(activity.users?.name || 'U').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm">
+                        <span className="font-medium">{activity.users?.name || 'Unknown'}</span>
+                        {' '}
+                        <span className="text-muted-foreground">{activity.description}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {new Date(activity.created_at).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Attachment Lightbox Dialog */}
+      <Dialog
+        open={viewingAttachmentIndex !== null}
+        onOpenChange={(open) => {
+          if (!open) setViewingAttachmentIndex(null);
+        }}
+      >
+        <DialogContent className="max-w-none sm:max-w-none w-screen h-screen p-0 border-0 bg-black/95 [&>button]:hidden rounded-none">
+          <DialogTitle className="sr-only">Attachment Viewer</DialogTitle>
+
+          {viewingAttachmentIndex !== null && projectAttachments[viewingAttachmentIndex] && (
+            <div className="relative w-full h-full">
+              {/* Header */}
+              <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 z-20">
+                <span className="text-white/70 text-sm">
+                  {viewingAttachmentIndex + 1} / {projectAttachments.length}
+                </span>
+                <button
+                  onClick={() => setViewingAttachmentIndex(null)}
+                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Left Arrow */}
+              {projectAttachments.length > 1 && (
+                <button
+                  onClick={() => setViewingAttachmentIndex((viewingAttachmentIndex - 1 + projectAttachments.length) % projectAttachments.length)}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 z-20 p-3 hover:bg-white/10 rounded-full transition-colors"
+                >
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+              )}
+
+              {/* Content */}
+              <div className="absolute inset-0 flex items-center justify-center px-20 py-20">
+                {projectAttachments[viewingAttachmentIndex]?.file_type === 'image' ? (
+                  <img
+                    src={projectAttachments[viewingAttachmentIndex].url}
+                    alt=""
+                    className="max-h-full max-w-full object-contain"
+                  />
+                ) : (
+                  <video
+                    src={projectAttachments[viewingAttachmentIndex]?.url}
+                    controls
+                    autoPlay
+                    className="max-h-full max-w-full"
+                  />
+                )}
+              </div>
+
+              {/* Right Arrow */}
+              {projectAttachments.length > 1 && (
+                <button
+                  onClick={() => setViewingAttachmentIndex((viewingAttachmentIndex + 1) % projectAttachments.length)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 z-20 p-3 hover:bg-white/10 rounded-full transition-colors"
+                >
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Create/Edit Project Dialog */}
       <Dialog open={showProjectDialog} onOpenChange={setShowProjectDialog}>
