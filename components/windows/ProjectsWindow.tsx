@@ -135,6 +135,103 @@ const ProjectCard = memo(function ProjectCard({ project, isSelected, hasUnread, 
   );
 });
 
+// Memoized project list component - won't re-render when detail panel state changes
+interface ProjectListProps {
+  projects: any[];
+  loadingProjects: boolean;
+  groupedProjects: Record<string, any[]>;
+  expandedProjectId: string | null;
+  hasUnreadActivity: (project: any) => boolean;
+  onSelectProject: (project: any) => void;
+  openCreateProjectDialog: (propertyName?: string) => void;
+}
+
+const ProjectList = memo(function ProjectList({
+  projects,
+  loadingProjects,
+  groupedProjects,
+  expandedProjectId,
+  hasUnreadActivity,
+  onSelectProject,
+  openCreateProjectDialog,
+}: ProjectListProps) {
+  return (
+    <div className="p-4 space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between sticky top-0 bg-white dark:bg-neutral-900 z-10 pb-2">
+        <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
+          Property Projects
+        </h3>
+        <Button size="sm" onClick={() => openCreateProjectDialog()}>
+          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          New Project
+        </Button>
+      </div>
+
+      {/* Projects List */}
+      {loadingProjects ? (
+        <div className="flex items-center justify-center py-12">
+          <p className="text-neutral-500">Loading projects...</p>
+        </div>
+      ) : projects.length === 0 ? (
+        <div className="text-center py-12 bg-neutral-50 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
+          <p className="text-neutral-500 dark:text-neutral-400 mb-4">
+            No projects yet. Create your first property project!
+          </p>
+          <Button onClick={() => openCreateProjectDialog()}>
+            Create First Project
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {Object.entries(groupedProjects).sort().map(([propertyName, propertyProjects]) => (
+            <div key={propertyName} className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden shadow-sm">
+              {/* Property Header */}
+              <div className="px-4 py-3 bg-gradient-to-r from-neutral-50 to-neutral-100 dark:from-neutral-800 dark:to-neutral-800/50 border-b border-neutral-200 dark:border-neutral-700">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-neutral-900 dark:text-white">
+                    {propertyName}
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">
+                      {(propertyProjects as any[]).length} project{(propertyProjects as any[]).length !== 1 ? 's' : ''}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={() => openCreateProjectDialog(propertyName)}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Projects Grid */}
+              <div className={`p-4 grid gap-4 auto-rows-fr ${expandedProjectId ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'}`}>
+                {(propertyProjects as any[]).map((project: any) => (
+                  <ProjectCard
+                    key={project.id}
+                    project={project}
+                    isSelected={expandedProjectId === project.id}
+                    hasUnread={hasUnreadActivity(project)}
+                    onSelect={() => onSelectProject(project)}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
 function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   const {
     // Core data
@@ -221,79 +318,15 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     <div className="flex h-full">
       {/* Left Panel - Project List */}
       <div className={`${expandedProject ? 'w-1/2' : 'w-full'} h-full overflow-auto transition-[width] duration-200 ease-out hide-scrollbar`}>
-        <div className="p-4 space-y-4">
-          {/* Header */}
-          <div className="flex items-center justify-between sticky top-0 bg-white dark:bg-neutral-900 z-10 pb-2">
-            <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
-              Property Projects
-            </h3>
-            <Button size="sm" onClick={() => openCreateProjectDialog()}>
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              New Project
-            </Button>
-          </div>
-
-          {/* Projects List */}
-          {loadingProjects ? (
-            <div className="flex items-center justify-center py-12">
-              <p className="text-neutral-500">Loading projects...</p>
-            </div>
-          ) : projects.length === 0 ? (
-            <div className="text-center py-12 bg-neutral-50 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
-              <p className="text-neutral-500 dark:text-neutral-400 mb-4">
-                No projects yet. Create your first property project!
-              </p>
-              <Button onClick={() => openCreateProjectDialog()}>
-                Create First Project
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {Object.entries(groupedProjects).sort().map(([propertyName, propertyProjects]) => (
-                <div key={propertyName} className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden shadow-sm">
-                  {/* Property Header */}
-                  <div className="px-4 py-3 bg-gradient-to-r from-neutral-50 to-neutral-100 dark:from-neutral-800 dark:to-neutral-800/50 border-b border-neutral-200 dark:border-neutral-700">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-semibold text-neutral-900 dark:text-white">
-                        {propertyName}
-                      </h4>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs">
-                          {(propertyProjects as any[]).length} project{(propertyProjects as any[]).length !== 1 ? 's' : ''}
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0"
-                          onClick={() => openCreateProjectDialog(propertyName)}
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                          </svg>
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Projects Grid */}
-                  <div className={`p-4 grid gap-4 auto-rows-fr ${expandedProject ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'}`}>
-                    {(propertyProjects as any[]).map((project: any) => (
-                      <ProjectCard
-                        key={project.id}
-                        project={project}
-                        isSelected={expandedProject?.id === project.id}
-                        hasUnread={hasUnreadActivity(project)}
-                        onSelect={() => handleProjectSelect(project)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <ProjectList
+          projects={projects}
+          loadingProjects={loadingProjects}
+          groupedProjects={groupedProjects}
+          expandedProjectId={expandedProject?.id || null}
+          hasUnreadActivity={hasUnreadActivity}
+          onSelectProject={handleProjectSelect}
+          openCreateProjectDialog={openCreateProjectDialog}
+        />
       </div>
 
       {/* Right Panel - Project Detail */}
