@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 export interface ProjectFormFields {
   title: string;
@@ -543,14 +543,16 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     }
   }, [expandedProject, fetchProjectComments, fetchProjectAttachments, fetchProjectTimeEntries]);
 
-  // Group projects by property
-  const groupedProjects = projects.reduce((acc, project) => {
-    if (!acc[project.property_name]) {
-      acc[project.property_name] = [];
-    }
-    acc[project.property_name].push(project);
-    return acc;
-  }, {} as Record<string, any[]>);
+  // Group projects by property (memoized to prevent recalculation on every render)
+  const groupedProjects = useMemo(() => {
+    return projects.reduce((acc, project) => {
+      if (!acc[project.property_name]) {
+        acc[project.property_name] = [];
+      }
+      acc[project.property_name].push(project);
+      return acc;
+    }, {} as Record<string, any[]>);
+  }, [projects]);
 
   return {
     // Core data
