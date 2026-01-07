@@ -38,7 +38,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useUsers } from '@/lib/useUsers';
-import Timeline from '@/components/Timeline';
+import TimelineWindow from '@/components/windows/TimelineWindow';
 import FloatingWindow from '@/components/FloatingWindow';
 import CleaningForm from '@/components/CleaningForm';
 import DynamicCleaningForm from '@/components/DynamicCleaningForm';
@@ -1000,11 +1000,6 @@ export default function Home() {
   };
 
 
-  // Timeline manages its own selection internally - no onCardClick prop needed
-  const timelineWindowContent = useMemo(() => (
-    <Timeline />
-  ), []);
-
   // Mobile UI
   if (isMobile) {
     return (
@@ -1472,7 +1467,7 @@ export default function Home() {
               onClose={() => setShowTimelineWindow(false)}
               onFocus={() => bringToFront('timeline')}
             >
-              {timelineWindowContent}
+              <TimelineWindow />
             </FloatingWindow>
           )}
 
