@@ -43,6 +43,7 @@ import FloatingWindow from '@/components/FloatingWindow';
 import CleaningForm from '@/components/CleaningForm';
 import DynamicCleaningForm from '@/components/DynamicCleaningForm';
 import TurnoverCards from '@/components/TurnoverCards';
+import TurnoversWindow from '@/components/windows/TurnoversWindow';
 import { AiChat } from '@/components/AiChat';
 
 // Mobile imports
@@ -4724,7 +4725,26 @@ export default function Home() {
               onClose={() => setShowCardsWindow(false)}
               onFocus={() => bringToFront('cards')}
             >
-              {cardsWindowContent}
+              <TurnoversWindow
+                users={users}
+                currentUser={currentUser}
+                projects={projects}
+                setProjects={setProjects}
+                onOpenProjectInWindow={(project) => {
+                  setExpandedProject(project);
+                  setEditingProjectFields({
+                    title: project.title,
+                    description: project.description || '',
+                    status: project.status,
+                    priority: project.priority,
+                    assigned_staff: project.project_assignments?.[0]?.user_id || '',
+                    due_date: project.due_date || ''
+                  });
+                  setShowProjectsWindow(true);
+                  bringToFront('projects');
+                }}
+                onCreateProject={(propertyName) => openCreateProjectDialog(propertyName)}
+              />
             </FloatingWindow>
           )}
 
