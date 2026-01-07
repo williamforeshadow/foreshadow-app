@@ -10,6 +10,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { DebouncedNativeInput, DebouncedTextarea } from '@/components/ui/debounced-input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { ChevronDownIcon, CheckIcon, ChevronsUpDownIcon } from 'lucide-react';
@@ -306,12 +307,13 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
             </div>
 
             <div className="flex flex-col space-y-5 px-6 py-6">
-              <input
+              <DebouncedNativeInput
                 type="text"
                 value={editingProjectFields.title}
-                onChange={(e) => setEditingProjectFields(prev => prev ? {...prev, title: e.target.value} : null)}
+                onChange={(value) => setEditingProjectFields(prev => prev ? {...prev, title: value} : null)}
                 placeholder="Untitled Project"
                 className="text-lg font-semibold bg-transparent border-none outline-none focus:outline-none p-0 flex-1 min-w-0 text-foreground placeholder:text-muted-foreground"
+                delay={150}
               />
 
               <div className="flex items-center justify-between">
@@ -442,12 +444,13 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
             {/* Description */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">Description</label>
-              <Textarea
+              <DebouncedTextarea
                 value={editingProjectFields.description}
-                onChange={(e) => setEditingProjectFields(prev => prev ? {...prev, description: e.target.value} : null)}
+                onChange={(value) => setEditingProjectFields(prev => prev ? {...prev, description: value} : null)}
                 placeholder="Add a description..."
                 rows={3}
                 className="resize-none"
+                delay={150}
               />
             </div>
 
