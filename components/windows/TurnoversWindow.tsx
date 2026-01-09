@@ -31,6 +31,7 @@ import {
 import TurnoverCards from '@/components/TurnoverCards';
 import DynamicCleaningForm from '@/components/DynamicCleaningForm';
 import { useTurnovers } from '@/lib/useTurnovers';
+import { useProjects } from '@/lib/useProjects';
 
 interface User {
   id: string;
@@ -52,6 +53,7 @@ function TurnoversWindowContent({
   onOpenProjectInWindow,
   onCreateProject,
 }: TurnoversWindowProps) {
+  // Turnover/task functionality
   const {
     // Core data
     response,
@@ -95,35 +97,31 @@ function TurnoversWindowContent({
     addTaskToCard,
     deleteTaskFromCard,
 
-    // Projects (for projects tab)
+    // Refs
+    rightPanelRef,
+    scrollPositionRef,
+  } = useTurnovers();
+
+  // Project functionality (shared hook)
+  const {
     projects,
-
-    // Turnover project state
-    expandedTurnoverProject,
-    setExpandedTurnoverProject,
-    turnoverProjectFields,
-    setTurnoverProjectFields,
-    turnoverDiscussionExpanded,
-    setTurnoverDiscussionExpanded,
-    savingTurnoverProject,
-    saveTurnoverProjectChanges,
-
-    // Comments
+    expandedProject: expandedTurnoverProject,
+    setExpandedProject: setExpandedTurnoverProject,
+    editingProjectFields: turnoverProjectFields,
+    setEditingProjectFields: setTurnoverProjectFields,
+    discussionExpanded: turnoverDiscussionExpanded,
+    setDiscussionExpanded: setTurnoverDiscussionExpanded,
+    savingProjectEdit: savingTurnoverProject,
+    saveProjectChanges: saveTurnoverProjectChanges,
     projectComments,
     newComment,
     setNewComment,
     postingComment,
     fetchProjectComments,
-    postComment,
-
-    // Popover states
-    turnoverStaffOpen,
-    setTurnoverStaffOpen,
-
-    // Refs
-    rightPanelRef,
-    scrollPositionRef,
-  } = useTurnovers();
+    postProjectComment: postComment,
+    projectStaffOpen: turnoverStaffOpen,
+    setProjectStaffOpen: setTurnoverStaffOpen,
+  } = useProjects({ currentUser });
 
   const handleSaveTurnoverProject = () => {
     saveTurnoverProjectChanges();
@@ -1064,7 +1062,7 @@ function TurnoversWindowContent({
                                         if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) {
                                           e.preventDefault();
                                           if (expandedTurnoverProject && currentUser) {
-                                            postComment(expandedTurnoverProject.id, currentUser.id, newComment);
+                                            postComment();
                                           }
                                         }
                                       }}

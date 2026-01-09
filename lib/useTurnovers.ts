@@ -4,15 +4,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import type { CleaningFilters } from '@/lib/cleaningFilters';
 
-export interface TurnoverProjectFields {
-  title: string;
-  description: string;
-  status: string;
-  priority: string;
-  assigned_staff: string;
-  due_date: string;
-}
-
 export function useTurnovers() {
   // Core data state
   const [response, setResponse] = useState<any>(null);
@@ -39,25 +30,6 @@ export function useTurnovers() {
   const [availableTemplates, setAvailableTemplates] = useState<any[]>([]);
   const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
   const [addingTask, setAddingTask] = useState(false);
-
-  // Turnover project state (projects shown within turnover detail)
-  const [expandedTurnoverProject, setExpandedTurnoverProject] = useState<any>(null);
-  const [turnoverProjectFields, setTurnoverProjectFields] = useState<TurnoverProjectFields | null>(null);
-  const [turnoverDiscussionExpanded, setTurnoverDiscussionExpanded] = useState(false);
-  const [savingTurnoverProject, setSavingTurnoverProject] = useState(false);
-
-  // Comments state
-  const [projectComments, setProjectComments] = useState<any[]>([]);
-  const [loadingComments, setLoadingComments] = useState(false);
-  const [newComment, setNewComment] = useState('');
-  const [postingComment, setPostingComment] = useState(false);
-
-  // Popover states
-  const [turnoverStaffOpen, setTurnoverStaffOpen] = useState(false);
-
-  // Projects state (for projects tab in right panel)
-  const [projects, setProjects] = useState<any[]>([]);
-  const [loadingProjects, setLoadingProjects] = useState(false);
 
   // Refs
   const rightPanelRef = useRef<HTMLDivElement>(null);
@@ -90,29 +62,6 @@ export function useTurnovers() {
   useEffect(() => {
     fetchTurnovers();
   }, [fetchTurnovers]);
-
-  // Fetch projects
-  const fetchProjects = useCallback(async () => {
-    setLoadingProjects(true);
-    try {
-      const response = await fetch('/api/projects');
-      const result = await response.json();
-      if (response.ok && result.data) {
-        setProjects(result.data);
-      }
-    } catch (err) {
-      console.error('Error fetching projects:', err);
-    } finally {
-      setLoadingProjects(false);
-    }
-  }, []);
-
-  // Fetch projects when switching to projects view
-  useEffect(() => {
-    if (rightPanelView === 'projects' && projects.length === 0) {
-      fetchProjects();
-    }
-  }, [rightPanelView, projects.length, fetchProjects]);
 
   // Filter functions
   const toggleFilter = useCallback((category: keyof CleaningFilters, value: string) => {
@@ -554,92 +503,12 @@ export function useTurnovers() {
     }
   }, [selectedCard]);
 
-  // Project comments
-  const fetchProjectComments = useCallback(async (projectId: string) => {
-    setLoadingComments(true);
-    try {
-      const res = await fetch(`/api/project-comments?project_id=${projectId}`);
-      const data = await res.json();
-      if (data.success && data.data) {
-        setProjectComments(prev => {
-          // Merge with existing comments, avoiding duplicates
-          const existingIds = new Set(prev.map((c: any) => c.id));
-          const newComments = data.data.filter((c: any) => !existingIds.has(c.id));
-          return [...prev, ...newComments];
-        });
-      }
-    } catch (err) {
-      console.error('Error fetching project comments:', err);
-    } finally {
-      setLoadingComments(false);
-    }
-  }, []);
-
-  const postComment = useCallback(async (projectId: string, userId: string, content: string) => {
-    setPostingComment(true);
-    try {
-      const res = await fetch('/api/project-comments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: projectId,
-          user_id: userId,
-          comment_content: content.trim()
-        })
-      });
-      const data = await res.json();
-      if (data.success && data.data) {
-        setProjectComments(prev => [...prev, data.data]);
-        setNewComment('');
-      }
-    } catch (err) {
-      console.error('Error posting comment:', err);
-    } finally {
-      setPostingComment(false);
-    }
-  }, []);
-
-  // Turnover project save
-  const saveTurnoverProjectChanges = useCallback(async () => {
-    if (!expandedTurnoverProject || !turnoverProjectFields) return;
-
-    setSavingTurnoverProject(true);
-    try {
-      const res = await fetch(`/api/projects/${expandedTurnoverProject.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: turnoverProjectFields.title,
-          description: turnoverProjectFields.description || null,
-          status: turnoverProjectFields.status,
-          priority: turnoverProjectFields.priority,
-          assigned_user_ids: turnoverProjectFields.assigned_staff ? [turnoverProjectFields.assigned_staff] : [],
-          due_date: turnoverProjectFields.due_date || null
-        })
-      });
-
-      const data = await res.json();
-      if (data.data) {
-        // Update local projects list
-        setProjects(prev => prev.map(p => p.id === expandedTurnoverProject.id ? data.data : p));
-        // Update the expanded turnover project
-        setExpandedTurnoverProject(data.data);
-      }
-    } catch (err) {
-      console.error('Error saving turnover project:', err);
-    } finally {
-      setSavingTurnoverProject(false);
-    }
-  }, [expandedTurnoverProject, turnoverProjectFields]);
-
   // Close selected card
   const closeSelectedCard = useCallback(() => {
     setSelectedCard(null);
     setShowAddTaskDialog(false);
     setFullscreenTask(null);
     setRightPanelView('tasks');
-    setExpandedTurnoverProject(null);
-    setTurnoverProjectFields(null);
   }, []);
 
   return {
@@ -687,34 +556,6 @@ export function useTurnovers() {
     fetchAvailableTemplates,
     addTaskToCard,
     deleteTaskFromCard,
-
-    // Projects (for projects tab in right panel)
-    projects,
-    loadingProjects,
-    fetchProjects,
-
-    // Turnover project state
-    expandedTurnoverProject,
-    setExpandedTurnoverProject,
-    turnoverProjectFields,
-    setTurnoverProjectFields,
-    turnoverDiscussionExpanded,
-    setTurnoverDiscussionExpanded,
-    savingTurnoverProject,
-    saveTurnoverProjectChanges,
-
-    // Comments
-    projectComments,
-    loadingComments,
-    newComment,
-    setNewComment,
-    postingComment,
-    fetchProjectComments,
-    postComment,
-
-    // Popover states
-    turnoverStaffOpen,
-    setTurnoverStaffOpen,
 
     // Refs
     rightPanelRef,
