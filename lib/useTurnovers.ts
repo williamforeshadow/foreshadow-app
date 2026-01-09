@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import type { CleaningFilters } from '@/lib/cleaningFilters';
+import type { Turnover, Task, TurnoverStatus, TaskTemplate } from '@/lib/types';
+import type { Template } from '@/components/DynamicCleaningForm';
 
 export function useTurnovers() {
   // Core data state
-  const [response, setResponse] = useState<any>(null);
+  const [response, setResponse] = useState<Turnover[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -20,14 +22,14 @@ export function useTurnovers() {
   const [sortBy, setSortBy] = useState('status-priority');
 
   // Selection state
-  const [selectedCard, setSelectedCard] = useState<any>(null);
-  const [fullscreenTask, setFullscreenTask] = useState<any>(null);
+  const [selectedCard, setSelectedCard] = useState<Turnover | null>(null);
+  const [fullscreenTask, setFullscreenTask] = useState<Task | null>(null);
   const [rightPanelView, setRightPanelView] = useState<'tasks' | 'projects'>('tasks');
 
-  // Task state
-  const [taskTemplates, setTaskTemplates] = useState<{[key: string]: any}>({});
+  // Task state - using Template from DynamicCleaningForm
+  const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
   const [loadingTaskTemplate, setLoadingTaskTemplate] = useState<string | null>(null);
-  const [availableTemplates, setAvailableTemplates] = useState<any[]>([]);
+  const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
   const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
   const [addingTask, setAddingTask] = useState(false);
 
@@ -51,8 +53,8 @@ export function useTurnovers() {
       } else {
         setResponse(data);
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch turnovers');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch turnovers');
     } finally {
       setLoading(false);
     }
@@ -86,10 +88,10 @@ export function useTurnovers() {
   }, [filters]);
 
   // Helper to calculate turnover_status
-  const calculateTurnoverStatus = (tasks: any[]) => {
+  const calculateTurnoverStatus = (tasks: Task[]): TurnoverStatus => {
     const total = tasks.length;
-    const completed = tasks.filter((t: any) => t.status === 'complete').length;
-    const inProgress = tasks.filter((t: any) => t.status === 'in_progress').length;
+    const completed = tasks.filter((t) => t.status === 'complete').length;
+    const inProgress = tasks.filter((t) => t.status === 'in_progress').length;
 
     if (total === 0) return 'no_tasks';
     if (completed === total) return 'complete';
@@ -118,17 +120,17 @@ export function useTurnovers() {
       }
 
       // Update the task in selectedCard.tasks array
-      setSelectedCard((prev: any) => {
+      setSelectedCard((prev) => {
         if (!prev || !prev.tasks) return prev;
 
-        const updatedTasks = prev.tasks.map((task: any) =>
+        const updatedTasks = prev.tasks.map((task) =>
           task.task_id === taskId
-            ? { ...task, status: action }
+            ? { ...task, status: action as Task['status'] }
             : task
         );
 
-        const completedCount = updatedTasks.filter((t: any) => t.status === 'complete').length;
-        const inProgressCount = updatedTasks.filter((t: any) => t.status === 'in_progress').length;
+        const completedCount = updatedTasks.filter((t) => t.status === 'complete').length;
+        const inProgressCount = updatedTasks.filter((t) => t.status === 'in_progress').length;
         const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
 
         return {
@@ -141,19 +143,18 @@ export function useTurnovers() {
       });
 
       // Also update the response array
-      setResponse((prevResponse: any) => {
+      setResponse((prevResponse) => {
         if (!prevResponse) return prevResponse;
 
-        const items = Array.isArray(prevResponse) ? prevResponse : [prevResponse];
-        const updatedItems = items.map((item: any) => {
+        return prevResponse.map((item) => {
           if (item.id === selectedCardIdRef.current && item.tasks) {
-            const updatedTasks = item.tasks.map((task: any) =>
+            const updatedTasks = item.tasks.map((task) =>
               task.task_id === taskId
-                ? { ...task, status: action }
+                ? { ...task, status: action as Task['status'] }
                 : task
             );
-            const completedCount = updatedTasks.filter((t: any) => t.status === 'complete').length;
-            const inProgressCount = updatedTasks.filter((t: any) => t.status === 'in_progress').length;
+            const completedCount = updatedTasks.filter((t) => t.status === 'complete').length;
+            const inProgressCount = updatedTasks.filter((t) => t.status === 'in_progress').length;
             const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
 
             return {
@@ -166,11 +167,9 @@ export function useTurnovers() {
           }
           return item;
         });
-
-        return Array.isArray(prevResponse) ? updatedItems : updatedItems[0];
       });
-    } catch (err: any) {
-      setError(err.message || 'Failed to update task action');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update task action');
     }
   }, []);
 
@@ -189,10 +188,10 @@ export function useTurnovers() {
       }
 
       // Update the task in selectedCard
-      setSelectedCard((prev: any) => {
+      setSelectedCard((prev) => {
         if (!prev || !prev.tasks) return prev;
 
-        const updatedTasks = prev.tasks.map((task: any) =>
+        const updatedTasks = prev.tasks.map((task) =>
           task.task_id === taskId
             ? { ...task, assigned_users: result.data?.assigned_users || [] }
             : task
@@ -202,13 +201,12 @@ export function useTurnovers() {
       });
 
       // Update response array
-      setResponse((prevResponse: any) => {
+      setResponse((prevResponse) => {
         if (!prevResponse) return prevResponse;
 
-        const items = Array.isArray(prevResponse) ? prevResponse : [prevResponse];
-        const updatedItems = items.map((item: any) => {
+        return prevResponse.map((item) => {
           if (item.id === selectedCardIdRef.current && item.tasks) {
-            const updatedTasks = item.tasks.map((task: any) =>
+            const updatedTasks = item.tasks.map((task) =>
               task.task_id === taskId
                 ? { ...task, assigned_users: result.data?.assigned_users || [] }
                 : task
@@ -217,11 +215,9 @@ export function useTurnovers() {
           }
           return item;
         });
-
-        return Array.isArray(prevResponse) ? updatedItems : updatedItems[0];
       });
-    } catch (err: any) {
-      setError(err.message || 'Failed to update task assignment');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update task assignment');
     }
   }, []);
 
@@ -240,10 +236,10 @@ export function useTurnovers() {
       }
 
       // Update the task in selectedCard
-      setSelectedCard((prev: any) => {
+      setSelectedCard((prev) => {
         if (!prev || !prev.tasks) return prev;
 
-        const updatedTasks = prev.tasks.map((task: any) =>
+        const updatedTasks = prev.tasks.map((task) =>
           task.task_id === taskId
             ? { ...task, scheduled_start: dateTime }
             : task
@@ -253,13 +249,12 @@ export function useTurnovers() {
       });
 
       // Update response array
-      setResponse((prevResponse: any) => {
+      setResponse((prevResponse) => {
         if (!prevResponse) return prevResponse;
 
-        const items = Array.isArray(prevResponse) ? prevResponse : [prevResponse];
-        const updatedItems = items.map((item: any) => {
+        return prevResponse.map((item) => {
           if (item.id === selectedCardIdRef.current && item.tasks) {
-            const updatedTasks = item.tasks.map((task: any) =>
+            const updatedTasks = item.tasks.map((task) =>
               task.task_id === taskId
                 ? { ...task, scheduled_start: dateTime }
                 : task
@@ -268,11 +263,9 @@ export function useTurnovers() {
           }
           return item;
         });
-
-        return Array.isArray(prevResponse) ? updatedItems : updatedItems[0];
       });
-    } catch (err: any) {
-      setError(err.message || 'Failed to update task schedule');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update task schedule');
     }
   }, []);
 
@@ -292,16 +285,16 @@ export function useTurnovers() {
 
       setTaskTemplates(prev => ({ ...prev, [templateId]: result.template }));
       return result.template;
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error fetching template:', err);
-      setError(err.message || 'Failed to fetch template');
+      setError(err instanceof Error ? err.message : 'Failed to fetch template');
       return null;
     } finally {
       setLoadingTaskTemplate(null);
     }
   }, [taskTemplates]);
 
-  const saveTaskForm = useCallback(async (taskId: string, formData: any) => {
+  const saveTaskForm = useCallback(async (taskId: string, formData: Record<string, unknown>) => {
     try {
       const res = await fetch('/api/save-task-form', {
         method: 'POST',
@@ -316,10 +309,10 @@ export function useTurnovers() {
       }
 
       // Update the task in selectedCard
-      setSelectedCard((prev: any) => {
+      setSelectedCard((prev) => {
         if (!prev || !prev.tasks) return prev;
 
-        const updatedTasks = prev.tasks.map((task: any) =>
+        const updatedTasks = prev.tasks.map((task) =>
           task.task_id === taskId
             ? { ...task, form_metadata: formData }
             : task
@@ -331,13 +324,12 @@ export function useTurnovers() {
       // Update response array
       const currentSelectedCardId = selectedCardIdRef.current;
       if (currentSelectedCardId) {
-        setResponse((prevResponse: any) => {
+        setResponse((prevResponse) => {
           if (!prevResponse) return prevResponse;
 
-          const items = Array.isArray(prevResponse) ? prevResponse : [prevResponse];
-          const updatedItems = items.map((item: any) => {
+          return prevResponse.map((item) => {
             if (item.id === currentSelectedCardId && item.tasks) {
-              const updatedTasks = item.tasks.map((task: any) =>
+              const updatedTasks = item.tasks.map((task) =>
                 task.task_id === taskId
                   ? { ...task, form_metadata: formData }
                   : task
@@ -346,15 +338,13 @@ export function useTurnovers() {
             }
             return item;
           });
-
-          return Array.isArray(prevResponse) ? updatedItems : updatedItems[0];
         });
       }
 
       return result;
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error saving task form:', err);
-      setError(err.message || 'Failed to save task form');
+      setError(err instanceof Error ? err.message : 'Failed to save task form');
       throw err;
     }
   }, []);
@@ -391,10 +381,10 @@ export function useTurnovers() {
         throw new Error(result.error || 'Failed to add task');
       }
 
-      const newTask = result.data;
+      const newTask = result.data as Task;
 
       // Update selectedCard with new task
-      setSelectedCard((prev: any) => {
+      setSelectedCard((prev) => {
         if (!prev) return prev;
 
         const updatedTasks = [...(prev.tasks || []), newTask];
@@ -404,18 +394,17 @@ export function useTurnovers() {
           ...prev,
           tasks: updatedTasks,
           total_tasks: updatedTasks.length,
-          completed_tasks: updatedTasks.filter((t: any) => t.status === 'complete').length,
-          tasks_in_progress: updatedTasks.filter((t: any) => t.status === 'in_progress').length,
+          completed_tasks: updatedTasks.filter((t) => t.status === 'complete').length,
+          tasks_in_progress: updatedTasks.filter((t) => t.status === 'in_progress').length,
           turnover_status: newTurnoverStatus
         };
       });
 
       // Update response array
-      setResponse((prevResponse: any) => {
+      setResponse((prevResponse) => {
         if (!prevResponse) return prevResponse;
 
-        const items = Array.isArray(prevResponse) ? prevResponse : [prevResponse];
-        const updatedItems = items.map((item: any) => {
+        return prevResponse.map((item) => {
           if (item.id === selectedCard.id) {
             const updatedTasks = [...(item.tasks || []), newTask];
             const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
@@ -424,20 +413,18 @@ export function useTurnovers() {
               ...item,
               tasks: updatedTasks,
               total_tasks: updatedTasks.length,
-              completed_tasks: updatedTasks.filter((t: any) => t.status === 'complete').length,
-              tasks_in_progress: updatedTasks.filter((t: any) => t.status === 'in_progress').length,
+              completed_tasks: updatedTasks.filter((t) => t.status === 'complete').length,
+              tasks_in_progress: updatedTasks.filter((t) => t.status === 'in_progress').length,
               turnover_status: newTurnoverStatus
             };
           }
           return item;
         });
-
-        return Array.isArray(prevResponse) ? updatedItems : updatedItems[0];
       });
 
       setShowAddTaskDialog(false);
-    } catch (err: any) {
-      setError(err.message || 'Failed to add task');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add task');
     } finally {
       setAddingTask(false);
     }
@@ -458,48 +445,45 @@ export function useTurnovers() {
       }
 
       // Update selectedCard
-      setSelectedCard((prev: any) => {
+      setSelectedCard((prev) => {
         if (!prev) return prev;
 
-        const updatedTasks = (prev.tasks || []).filter((t: any) => t.task_id !== taskId);
+        const updatedTasks = (prev.tasks || []).filter((t) => t.task_id !== taskId);
         const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
 
         return {
           ...prev,
           tasks: updatedTasks,
           total_tasks: updatedTasks.length,
-          completed_tasks: updatedTasks.filter((t: any) => t.status === 'complete').length,
-          tasks_in_progress: updatedTasks.filter((t: any) => t.status === 'in_progress').length,
+          completed_tasks: updatedTasks.filter((t) => t.status === 'complete').length,
+          tasks_in_progress: updatedTasks.filter((t) => t.status === 'in_progress').length,
           turnover_status: newTurnoverStatus
         };
       });
 
       // Update response array
-      setResponse((prevResponse: any) => {
+      setResponse((prevResponse) => {
         if (!prevResponse) return prevResponse;
 
-        const items = Array.isArray(prevResponse) ? prevResponse : [prevResponse];
-        const updatedItems = items.map((item: any) => {
+        return prevResponse.map((item) => {
           if (item.id === selectedCard.id) {
-            const updatedTasks = (item.tasks || []).filter((t: any) => t.task_id !== taskId);
+            const updatedTasks = (item.tasks || []).filter((t) => t.task_id !== taskId);
             const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
 
             return {
               ...item,
               tasks: updatedTasks,
               total_tasks: updatedTasks.length,
-              completed_tasks: updatedTasks.filter((t: any) => t.status === 'complete').length,
-              tasks_in_progress: updatedTasks.filter((t: any) => t.status === 'in_progress').length,
+              completed_tasks: updatedTasks.filter((t) => t.status === 'complete').length,
+              tasks_in_progress: updatedTasks.filter((t) => t.status === 'in_progress').length,
               turnover_status: newTurnoverStatus
             };
           }
           return item;
         });
-
-        return Array.isArray(prevResponse) ? updatedItems : updatedItems[0];
       });
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete task');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete task');
     }
   }, [selectedCard]);
 

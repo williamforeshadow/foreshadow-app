@@ -3,12 +3,13 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { applyCleaningFilters, type CleaningFilters } from '@/lib/cleaningFilters';
+import type { Turnover } from '@/lib/types';
 
 interface TurnoverCardsProps {
-  data: any[] | null;
+  data: Turnover[] | null;
   filters: CleaningFilters;
   sortBy: string;
-  onCardClick: (card: any) => void;
+  onCardClick: (card: Turnover) => void;
   compact?: boolean;
 }
 
@@ -67,7 +68,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
     }
     acc[propertyName].push(item);
     return acc;
-  }, {} as Record<string, any[]>);
+  }, {} as Record<string, Turnover[]>);
 
   // Sort properties alphabetically and sort cards within each property chronologically
   const sortedProperties = Object.keys(groupedByProperty).sort((a, b) => 
@@ -78,14 +79,14 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
   // and mark each card as active or upcoming
   const now = new Date();
   sortedProperties.forEach(property => {
-    groupedByProperty[property].sort((a, b) => {
+    groupedByProperty[property].sort((a: Turnover, b: Turnover) => {
       const dateA = a.check_out ? new Date(a.check_out).getTime() : 0;
       const dateB = b.check_out ? new Date(b.check_out).getTime() : 0;
       return dateA - dateB;
     });
     
     // Mark each card's timeline status (active = first card with check-in passed)
-    groupedByProperty[property].forEach((item, index) => {
+    groupedByProperty[property].forEach((item: Turnover, index: number) => {
       const checkIn = item.check_in ? new Date(item.check_in) : null;
       item._isActive = index === 0 && checkIn && now >= checkIn;
     });
@@ -94,7 +95,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
   // Apply timeline filter if set - filter within each property group
   if (filters.timeline.length > 0) {
     sortedProperties.forEach(property => {
-      groupedByProperty[property] = groupedByProperty[property].filter((item) => {
+      groupedByProperty[property] = groupedByProperty[property].filter((item: Turnover) => {
         // If filtering for 'active' only, keep if card is active
         if (filters.timeline.includes('active') && !filters.timeline.includes('upcoming')) {
           return item._isActive;
@@ -122,7 +123,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
     );
   }
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | undefined | null) => {
     if (!dateString) return null;
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', { 
@@ -132,7 +133,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
   };
 
   // Get card styling based on status, position, and whether guest has checked in
-  const getCardStyles = (status: string, isFirstInRow: boolean, checkInDate: string | null) => {
+  const getCardStyles = (status: string, isFirstInRow: boolean, checkInDate: string | undefined | null) => {
     const now = new Date();
     
     const checkIn = checkInDate ? new Date(checkInDate) : null;
@@ -180,7 +181,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
             {/* Horizontal Scrollable Row with ScrollArea */}
             <ScrollArea className="w-full whitespace-nowrap">
               <div className="flex gap-4 py-4">
-            {groupedByProperty[propertyName].map((item, index) => {
+            {groupedByProperty[propertyName].map((item: Turnover, index: number) => {
               const now = new Date();
               const checkIn = item.check_in ? new Date(item.check_in) : null;
               const isInPlay = index === 0 && checkIn && now >= checkIn;

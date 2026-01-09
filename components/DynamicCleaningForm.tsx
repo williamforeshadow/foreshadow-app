@@ -10,7 +10,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import PhotoUpload from '@/components/PhotoUpload';
 
-interface FieldDefinition {
+export interface FieldDefinition {
   id: string;
   type: 'rating' | 'yes-no' | 'text' | 'checkbox' | 'photo' | 'photos' | 'separator';
   label: string;
@@ -21,7 +21,7 @@ interface FieldDefinition {
   };
 }
 
-interface Template {
+export interface Template {
   id: string;
   name: string;
   fields: FieldDefinition[];

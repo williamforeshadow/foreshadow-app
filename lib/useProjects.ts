@@ -1,23 +1,26 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import type { 
+  Project, 
+  Comment, 
+  Attachment, 
+  TimeEntry, 
+  ActivityLogEntry,
+  User,
+  ProjectFormFields 
+} from '@/lib/types';
 
-export interface ProjectFormFields {
-  title: string;
-  description: string;
-  status: string;
-  priority: string;
-  assigned_staff: string;
-  due_date: string;
-}
+// Re-export for backward compatibility
+export type { ProjectFormFields } from '@/lib/types';
 
 interface UseProjectsProps {
-  currentUser: any;
+  currentUser: User | null;
 }
 
 export function useProjects({ currentUser }: UseProjectsProps) {
   // Core project data
-  const [projects, setProjects] = useState<any[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [allProperties, setAllProperties] = useState<string[]>([]);
 
@@ -26,7 +29,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
 
   // Create/edit dialog state
   const [showProjectDialog, setShowProjectDialog] = useState(false);
-  const [editingProject, setEditingProject] = useState<any>(null);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [savingProject, setSavingProject] = useState(false);
   const [projectForm, setProjectForm] = useState({
     property_name: '',
@@ -39,33 +42,33 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   });
 
   // Expanded project detail pane
-  const [expandedProject, setExpandedProject] = useState<any>(null);
+  const [expandedProject, setExpandedProject] = useState<Project | null>(null);
   const [editingProjectFields, setEditingProjectFields] = useState<ProjectFormFields | null>(null);
   const [savingProjectEdit, setSavingProjectEdit] = useState(false);
   const [discussionExpanded, setDiscussionExpanded] = useState(false);
 
   // Comments
-  const [projectComments, setProjectComments] = useState<any[]>([]);
+  const [projectComments, setProjectComments] = useState<Comment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [postingComment, setPostingComment] = useState(false);
 
   // Attachments
-  const [projectAttachments, setProjectAttachments] = useState<any[]>([]);
+  const [projectAttachments, setProjectAttachments] = useState<Attachment[]>([]);
   const [loadingAttachments, setLoadingAttachments] = useState(false);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [viewingAttachmentIndex, setViewingAttachmentIndex] = useState<number | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   // Time tracking
-  const [projectTimeEntries, setProjectTimeEntries] = useState<any[]>([]);
-  const [activeTimeEntry, setActiveTimeEntry] = useState<any>(null);
+  const [projectTimeEntries, setProjectTimeEntries] = useState<TimeEntry[]>([]);
+  const [activeTimeEntry, setActiveTimeEntry] = useState<TimeEntry | null>(null);
   const [totalTrackedSeconds, setTotalTrackedSeconds] = useState(0);
   const [displaySeconds, setDisplaySeconds] = useState(0);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Activity log
-  const [projectActivity, setProjectActivity] = useState<any[]>([]);
+  const [projectActivity, setProjectActivity] = useState<ActivityLogEntry[]>([]);
   const [loadingActivity, setLoadingActivity] = useState(false);
   const [activityPopoverOpen, setActivityPopoverOpen] = useState(false);
 
@@ -95,7 +98,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
       const response = await fetch('/api/properties');
       const result = await response.json();
       if (response.ok && result.data) {
-        setAllProperties(result.data.map((p: any) => p.name));
+        setAllProperties(result.data.map((p: { name: string }) => p.name));
       }
     } catch (err) {
       console.error('Error fetching properties:', err);
@@ -138,7 +141,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   }, [currentUser?.id]);
 
   // Check if project has unread activity
-  const hasUnreadActivity = useCallback((project: any): boolean => {
+  const hasUnreadActivity = useCallback((project: Project): boolean => {
     const lastViewed = projectViews[project.id];
     if (!lastViewed) return true;
     const projectUpdated = new Date(project.updated_at).getTime();
@@ -170,7 +173,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   }, [resetProjectForm]);
 
   // Open edit dialog
-  const openEditProjectDialog = useCallback((project: any) => {
+  const openEditProjectDialog = useCallback((project: Project) => {
     setProjectForm({
       property_name: project.property_name,
       title: project.title,
@@ -224,7 +227,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
 
       setShowProjectDialog(false);
       resetProjectForm();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error saving project:', err);
     } finally {
       setSavingProject(false);
@@ -232,7 +235,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   }, [projectForm, editingProject, resetProjectForm]);
 
   // Delete project
-  const deleteProject = useCallback(async (project: any) => {
+  const deleteProject = useCallback(async (project: Project) => {
     if (!confirm(`Delete project "${project.title}"?`)) return;
 
     try {
@@ -249,7 +252,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
       if (expandedProject?.id === project.id) {
         setExpandedProject(null);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error deleting project:', err);
     }
   }, [expandedProject]);
