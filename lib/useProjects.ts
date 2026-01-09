@@ -20,7 +20,7 @@ interface UseProjectsProps {
 
 export function useProjects({ currentUser }: UseProjectsProps) {
   // ============================================================================
-  // Core Project State
+  // Core Project State (SHARED - data that should sync across windows)
   // ============================================================================
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
@@ -30,7 +30,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   const [projectViews, setProjectViews] = useState<Record<string, string>>({});
 
   // ============================================================================
-  // Dialog State (Create/Edit)
+  // Dialog State (Create/Edit) - SHARED since dialog is global
   // ============================================================================
   const [showProjectDialog, setShowProjectDialog] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -45,20 +45,11 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     due_date: ''
   });
 
-  // ============================================================================
-  // Expanded Project Detail State
-  // ============================================================================
-  const [expandedProject, setExpandedProject] = useState<Project | null>(null);
-  const [editingProjectFields, setEditingProjectFields] = useState<ProjectFormFields | null>(null);
+  // Saving state for project edits (shared loading indicator)
   const [savingProjectEdit, setSavingProjectEdit] = useState(false);
-  const [discussionExpanded, setDiscussionExpanded] = useState(false);
-
-  // Popover states
-  const [projectStaffOpen, setProjectStaffOpen] = useState(false);
-  const [projectDueDateOpen, setProjectDueDateOpen] = useState(false);
 
   // ============================================================================
-  // Composed Hooks
+  // Composed Hooks (expose their functions directly for window-level use)
   // ============================================================================
   const comments = useProjectComments({ currentUser });
   const attachments = useProjectAttachments({ currentUser });
@@ -87,8 +78,8 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     try {
       const response = await fetch('/api/properties');
       const result = await response.json();
-      if (response.ok && result.data) {
-        setAllProperties(result.data.map((p: { name: string }) => p.name));
+      if (response.ok && result.properties) {
+        setAllProperties(result.properties);
       }
     } catch (err) {
       console.error('Error fetching properties:', err);
@@ -180,14 +171,17 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   // ============================================================================
   // CRUD Operations
   // ============================================================================
-  const saveProject = useCallback(async () => {
-    if (!projectForm.property_name || !projectForm.title) return;
+  const saveProject = useCallback(async (): Promise<Project | null> => {
+    // Only property_name is required for new projects (title defaults to "New Project")
+    if (!projectForm.property_name) return null;
+    // For editing, title is required
+    if (editingProject && !projectForm.title) return null;
 
     setSavingProject(true);
     try {
       const payload = {
         property_name: projectForm.property_name,
-        title: projectForm.title,
+        title: projectForm.title || 'New Project',
         description: projectForm.description || null,
         status: projectForm.status,
         priority: projectForm.priority,
@@ -219,8 +213,12 @@ export function useProjects({ currentUser }: UseProjectsProps) {
 
       setShowProjectDialog(false);
       resetProjectForm();
+      
+      // Return the created/updated project so caller can use it
+      return result.data as Project;
     } catch (err) {
       console.error('Error saving project:', err);
+      return null;
     } finally {
       setSavingProject(false);
     }
@@ -240,44 +238,49 @@ export function useProjects({ currentUser }: UseProjectsProps) {
       }
 
       setProjects(prev => prev.filter(p => p.id !== project.id));
-      if (expandedProject?.id === project.id) {
-        setExpandedProject(null);
-      }
     } catch (err) {
       console.error('Error deleting project:', err);
     }
-  }, [expandedProject]);
+  }, []);
 
-  const saveProjectChanges = useCallback(async () => {
-    if (!expandedProject || !editingProjectFields || !currentUser) return;
+  // Parameterized save function - accepts project ID and fields from caller
+  // Returns the updated project so caller can update their local state
+  const saveProjectById = useCallback(async (
+    projectId: string, 
+    fields: ProjectFormFields
+  ): Promise<Project | null> => {
+    if (!currentUser) return null;
 
     setSavingProjectEdit(true);
     try {
-      const res = await fetch(`/api/projects/${expandedProject.id}`, {
+      const res = await fetch(`/api/projects/${projectId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: editingProjectFields.title,
-          description: editingProjectFields.description || null,
-          status: editingProjectFields.status,
-          priority: editingProjectFields.priority,
-          assigned_user_ids: editingProjectFields.assigned_staff ? [editingProjectFields.assigned_staff] : [],
-          due_date: editingProjectFields.due_date || null,
+          title: fields.title,
+          description: fields.description || null,
+          status: fields.status,
+          priority: fields.priority,
+          assigned_user_ids: fields.assigned_staff ? [fields.assigned_staff] : [],
+          due_date: fields.due_date || null,
           user_id: currentUser.id
         })
       });
 
       const data = await res.json();
       if (data.data) {
-        setProjects(prev => prev.map(p => p.id === expandedProject.id ? data.data : p));
-        setExpandedProject(data.data);
+        // Update shared projects array
+        setProjects(prev => prev.map(p => p.id === projectId ? data.data : p));
+        return data.data as Project;
       }
+      return null;
     } catch (err) {
       console.error('Error saving project:', err);
+      return null;
     } finally {
       setSavingProjectEdit(false);
     }
-  }, [expandedProject, editingProjectFields, currentUser]);
+  }, [currentUser]);
 
   // ============================================================================
   // Effects
@@ -289,23 +292,6 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     fetchAllProperties();
     fetchProjectViews();
   }, [fetchProjects, fetchAllProperties, fetchProjectViews]);
-
-  // Load project details when expanded
-  useEffect(() => {
-    if (expandedProject) {
-      setEditingProjectFields({
-        title: expandedProject.title,
-        description: expandedProject.description || '',
-        status: expandedProject.status,
-        priority: expandedProject.priority,
-        assigned_staff: expandedProject.project_assignments?.[0]?.user_id || '',
-        due_date: expandedProject.due_date || ''
-      });
-      comments.fetchProjectComments(expandedProject.id);
-      attachments.fetchProjectAttachments(expandedProject.id);
-      timeTracking.fetchProjectTimeEntries(expandedProject.id);
-    }
-  }, [expandedProject, comments.fetchProjectComments, attachments.fetchProjectAttachments, timeTracking.fetchProjectTimeEntries]);
 
   // ============================================================================
   // Computed Values
@@ -324,19 +310,19 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   // Return API
   // ============================================================================
   return {
-    // Core data
+    // Core data (SHARED)
     projects,
     setProjects,
     loadingProjects,
     groupedProjects,
     allProperties,
 
-    // Project views
+    // Project views (SHARED)
     projectViews,
     recordProjectView,
     hasUnreadActivity,
 
-    // Dialog state
+    // Dialog state (SHARED - one dialog for all)
     showProjectDialog,
     setShowProjectDialog,
     editingProject,
@@ -348,56 +334,39 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     saveProject,
     deleteProject,
 
-    // Expanded project
-    expandedProject,
-    setExpandedProject,
-    editingProjectFields,
-    setEditingProjectFields,
+    // Parameterized save function for window-specific use
+    saveProjectById,
     savingProjectEdit,
-    saveProjectChanges,
-    discussionExpanded,
-    setDiscussionExpanded,
 
-    // Comments (from composed hook)
+    // Comments - expose sub-hook functions directly (parameterized by project ID)
     projectComments: comments.projectComments,
     loadingComments: comments.loadingComments,
-    newComment: comments.newComment,
-    setNewComment: comments.setNewComment,
     postingComment: comments.postingComment,
-    postProjectComment: () => expandedProject && comments.postProjectComment(expandedProject.id),
     fetchProjectComments: comments.fetchProjectComments,
+    postProjectComment: comments.postProjectComment,
 
-    // Attachments (from composed hook)
+    // Attachments - expose sub-hook functions directly (parameterized by project ID)
     projectAttachments: attachments.projectAttachments,
     loadingAttachments: attachments.loadingAttachments,
     uploadingAttachment: attachments.uploadingAttachment,
-    viewingAttachmentIndex: attachments.viewingAttachmentIndex,
-    setViewingAttachmentIndex: attachments.setViewingAttachmentIndex,
     attachmentInputRef: attachments.attachmentInputRef,
-    handleAttachmentUpload: (e: React.ChangeEvent<HTMLInputElement>) => 
-      expandedProject && attachments.handleAttachmentUpload(e, expandedProject.id),
+    fetchProjectAttachments: attachments.fetchProjectAttachments,
+    handleAttachmentUpload: attachments.handleAttachmentUpload,
     navigateAttachment: attachments.navigateAttachment,
 
-    // Time tracking (from composed hook)
+    // Time tracking - expose sub-hook functions directly (parameterized by project ID)
     projectTimeEntries: timeTracking.projectTimeEntries,
     activeTimeEntry: timeTracking.activeTimeEntry,
     totalTrackedSeconds: timeTracking.totalTrackedSeconds,
     displaySeconds: timeTracking.displaySeconds,
-    startProjectTimer: () => expandedProject && timeTracking.startProjectTimer(expandedProject.id),
+    fetchProjectTimeEntries: timeTracking.fetchProjectTimeEntries,
+    startProjectTimer: timeTracking.startProjectTimer,
     stopProjectTimer: timeTracking.stopProjectTimer,
     formatTime: timeTracking.formatTime,
 
-    // Activity (from composed hook)
+    // Activity - expose sub-hook functions directly (parameterized by project ID)
     projectActivity: activity.projectActivity,
     loadingActivity: activity.loadingActivity,
-    activityPopoverOpen: activity.activityPopoverOpen,
-    setActivityPopoverOpen: activity.setActivityPopoverOpen,
     fetchProjectActivity: activity.fetchProjectActivity,
-
-    // Popover states
-    projectStaffOpen,
-    setProjectStaffOpen,
-    projectDueDateOpen,
-    setProjectDueDateOpen,
   };
 }

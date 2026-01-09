@@ -187,13 +187,21 @@ export function useTurnovers() {
         throw new Error(result.error || 'Failed to update task assignment');
       }
 
+      // Transform task_assignments to assigned_users format expected by UI
+      const assignedUsers = (result.data?.task_assignments || []).map((ta: { user_id: string; users?: { name?: string; avatar?: string; role?: string } }) => ({
+        user_id: ta.user_id,
+        name: ta.users?.name || '',
+        avatar: ta.users?.avatar || '',
+        role: ta.users?.role || ''
+      }));
+
       // Update the task in selectedCard
       setSelectedCard((prev) => {
         if (!prev || !prev.tasks) return prev;
 
         const updatedTasks = prev.tasks.map((task) =>
           task.task_id === taskId
-            ? { ...task, assigned_users: result.data?.assigned_users || [] }
+            ? { ...task, assigned_users: assignedUsers }
             : task
         );
 
@@ -208,7 +216,7 @@ export function useTurnovers() {
           if (item.id === selectedCardIdRef.current && item.tasks) {
             const updatedTasks = item.tasks.map((task) =>
               task.task_id === taskId
-                ? { ...task, assigned_users: result.data?.assigned_users || [] }
+                ? { ...task, assigned_users: assignedUsers }
                 : task
             );
             return { ...item, tasks: updatedTasks };

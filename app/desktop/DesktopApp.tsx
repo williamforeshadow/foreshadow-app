@@ -5,6 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import { Button } from '@/components/ui/button';
 import { useUsers } from '@/lib/useUsers';
 import { useAuth } from '@/lib/authContext';
+import { useProjects } from '@/lib/useProjects';
 import TimelineWindow from '@/components/windows/TimelineWindow';
 import FloatingWindow from '@/components/FloatingWindow';
 import TurnoversWindow from '@/components/windows/TurnoversWindow';
@@ -15,6 +16,9 @@ export default function DesktopApp() {
   // Hooks
   const { users } = useUsers();
   const { user: currentUser } = useAuth();
+
+  // Shared project state - called once, shared by all windows
+  const projectsHook = useProjects({ currentUser });
 
   // Window visibility state
   const [showCardsWindow, setShowCardsWindow] = useState(true);
@@ -98,8 +102,8 @@ export default function DesktopApp() {
 
         {/* Floating Windows Container */}
         <div className="flex-1 relative overflow-hidden bg-background">
-          {/* Turnovers Window */}
-          {showCardsWindow && (
+          {/* Turnovers Window - Always mounted, visibility controlled by CSS */}
+          <div className={`absolute inset-0 ${showCardsWindow ? '' : 'hidden'}`}>
             <FloatingWindow
               id="cards"
               title="Turnovers"
@@ -112,6 +116,7 @@ export default function DesktopApp() {
               <TurnoversWindow
                 users={users}
                 currentUser={currentUser}
+                projectsHook={projectsHook}
                 onOpenProjectInWindow={() => {
                   setShowProjectsWindow(true);
                   bringToFront('projects');
@@ -122,10 +127,10 @@ export default function DesktopApp() {
                 }}
               />
             </FloatingWindow>
-          )}
+          </div>
 
-          {/* Timeline Window */}
-          {showTimelineWindow && (
+          {/* Timeline Window - Always mounted, visibility controlled by CSS */}
+          <div className={`absolute inset-0 ${showTimelineWindow ? '' : 'hidden'}`}>
             <FloatingWindow
               id="timeline"
               title="Timeline View"
@@ -137,10 +142,10 @@ export default function DesktopApp() {
             >
               <TimelineWindow />
             </FloatingWindow>
-          )}
+          </div>
 
-          {/* Projects Window */}
-          {showProjectsWindow && (
+          {/* Projects Window - Always mounted, visibility controlled by CSS */}
+          <div className={`absolute inset-0 ${showProjectsWindow ? '' : 'hidden'}`}>
             <FloatingWindow
               id="projects"
               title="Property Projects"
@@ -150,9 +155,9 @@ export default function DesktopApp() {
               onClose={() => setShowProjectsWindow(false)}
               onFocus={() => bringToFront('projects')}
             >
-              <ProjectsWindow users={users} currentUser={currentUser} />
+              <ProjectsWindow users={users} currentUser={currentUser} projectsHook={projectsHook} />
             </FloatingWindow>
-          )}
+          </div>
 
           {/* AI Chat */}
           <AiChat />

@@ -1,22 +1,28 @@
 'use client';
 
-import { memo } from 'react';
+import { memo, useState, useCallback, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import TurnoverCards from '@/components/TurnoverCards';
 import { useTurnovers } from '@/lib/useTurnovers';
-import { useProjects } from '@/lib/useProjects';
+import type { useProjects } from '@/lib/useProjects';
+import { useProjectComments } from '@/lib/hooks/useProjectComments';
+import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
+import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
+import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
 import {
   TurnoverFilterBar,
   TaskDetailPanel,
   TurnoverTaskList,
   TurnoverProjectsPanel,
 } from './turnovers';
+import { AttachmentLightbox, ProjectActivitySheet } from './projects';
 import type { Template } from '@/components/DynamicCleaningForm';
-import type { User, Task, Turnover } from '@/lib/types';
+import type { User, Task, Turnover, Project, ProjectFormFields } from '@/lib/types';
 
 interface TurnoversWindowProps {
   users: User[];
   currentUser: User | null;
+  projectsHook: ReturnType<typeof useProjects>;
   onOpenProjectInWindow: (project: any) => void;
   onCreateProject: (propertyName?: string) => void;
 }
@@ -24,6 +30,7 @@ interface TurnoversWindowProps {
 function TurnoversWindowContent({
   users,
   currentUser,
+  projectsHook,
   onOpenProjectInWindow,
   onCreateProject,
 }: TurnoversWindowProps) {
@@ -76,26 +83,104 @@ function TurnoversWindowContent({
     scrollPositionRef,
   } = useTurnovers();
 
-  // Project functionality (shared hook)
+  // ============================================================================
+  // LOCAL instances of sub-hooks (independent from ProjectsWindow)
+  // ============================================================================
+  const commentsHook = useProjectComments({ currentUser });
+  const attachmentsHook = useProjectAttachments({ currentUser });
+  const timeTrackingHook = useProjectTimeTracking({ currentUser });
+  const activityHook = useProjectActivity();
+
+  // ============================================================================
+  // LOCAL UI State for Projects Panel (independent from other windows)
+  // ============================================================================
+  const [expandedProject, setExpandedProject] = useState<Project | null>(null);
+  const [projectFields, setProjectFields] = useState<ProjectFormFields | null>(null);
+  const [newComment, setNewComment] = useState('');
+  const [staffOpen, setStaffOpen] = useState(false);
+  const [viewingAttachmentIndex, setViewingAttachmentIndex] = useState<number | null>(null);
+  const [activitySheetOpen, setActivitySheetOpen] = useState(false);
+
+  // ============================================================================
+  // Reset project state when switching to a different turnover card
+  // ============================================================================
+  useEffect(() => {
+    setExpandedProject(null);
+    setProjectFields(null);
+    setRightPanelView('tasks');
+  }, [selectedCard?.id]);
+
+  // ============================================================================
+  // SHARED data from projectsHook (only core project data and mutations)
+  // ============================================================================
   const {
     projects,
-    expandedProject: expandedTurnoverProject,
-    setExpandedProject: setExpandedTurnoverProject,
-    editingProjectFields: turnoverProjectFields,
-    setEditingProjectFields: setTurnoverProjectFields,
-    discussionExpanded: turnoverDiscussionExpanded,
-    setDiscussionExpanded: setTurnoverDiscussionExpanded,
-    savingProjectEdit: savingTurnoverProject,
-    saveProjectChanges: saveTurnoverProjectChanges,
-    projectComments,
-    newComment,
-    setNewComment,
-    postingComment,
-    fetchProjectComments,
-    postProjectComment: postComment,
-    projectStaffOpen: turnoverStaffOpen,
-    setProjectStaffOpen: setTurnoverStaffOpen,
-  } = useProjects({ currentUser });
+    savingProjectEdit,
+    saveProjectById,
+    deleteProject,
+  } = projectsHook;
+
+  // ============================================================================
+  // Initialize project fields when expanding a project
+  // ============================================================================
+  useEffect(() => {
+    if (expandedProject) {
+      setProjectFields({
+        title: expandedProject.title,
+        description: expandedProject.description || '',
+        status: expandedProject.status,
+        priority: expandedProject.priority,
+        assigned_staff: expandedProject.project_assignments?.[0]?.user_id || '',
+        due_date: expandedProject.due_date || ''
+      });
+      // Use LOCAL hook instances
+      commentsHook.fetchProjectComments(expandedProject.id);
+      attachmentsHook.fetchProjectAttachments(expandedProject.id);
+      timeTrackingHook.fetchProjectTimeEntries(expandedProject.id);
+    }
+  }, [expandedProject?.id]); // Only re-run when project ID changes
+
+  // ============================================================================
+  // Wrapper functions that use LOCAL state with LOCAL hook mutations
+  // ============================================================================
+  const handleSaveProject = useCallback(async () => {
+    if (!expandedProject || !projectFields) return;
+    const updatedProject = await saveProjectById(expandedProject.id, projectFields);
+    if (updatedProject) {
+      setExpandedProject(updatedProject);
+    }
+  }, [expandedProject, projectFields, saveProjectById]);
+
+  const handlePostComment = useCallback(async () => {
+    if (!expandedProject || !newComment.trim()) return;
+    await commentsHook.postProjectComment(expandedProject.id, newComment);
+    setNewComment('');
+  }, [expandedProject, newComment, commentsHook]);
+
+  const handleAttachmentUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (expandedProject) {
+      attachmentsHook.handleAttachmentUpload(e, expandedProject.id);
+    }
+  }, [expandedProject, attachmentsHook]);
+
+  const handleStartTimer = useCallback(() => {
+    if (expandedProject) {
+      timeTrackingHook.startProjectTimer(expandedProject.id);
+    }
+  }, [expandedProject, timeTrackingHook]);
+
+  const handleDeleteProject = useCallback((project: Project) => {
+    deleteProject(project);
+    setExpandedProject(null);
+    setProjectFields(null);
+  }, [deleteProject]);
+
+  const handleOpenActivity = useCallback(() => {
+    if (expandedProject) {
+      activityHook.fetchProjectActivity(expandedProject.id);
+      setActivitySheetOpen(true);
+    }
+  }, [expandedProject, activityHook]);
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -282,8 +367,8 @@ function TurnoversWindowContent({
                     <button
                       onClick={() => {
                         setRightPanelView('tasks');
-                        setExpandedTurnoverProject(null);
-                        setTurnoverProjectFields(null);
+                        setExpandedProject(null);
+                        setProjectFields(null);
                       }}
                       className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
                         rightPanelView === 'tasks'
@@ -331,24 +416,39 @@ function TurnoversWindowContent({
                     projects={projects}
                     users={users}
                     currentUser={currentUser}
-                    expandedProject={expandedTurnoverProject}
-                    projectFields={turnoverProjectFields}
-                    discussionExpanded={turnoverDiscussionExpanded}
-                    savingProject={savingTurnoverProject}
-                    projectComments={projectComments}
-                    newComment={newComment}
-                    postingComment={postingComment}
-                    staffOpen={turnoverStaffOpen}
-                    setExpandedProject={setExpandedTurnoverProject}
-                    setProjectFields={setTurnoverProjectFields}
-                    setDiscussionExpanded={setTurnoverDiscussionExpanded}
-                    setNewComment={setNewComment}
-                    setStaffOpen={setTurnoverStaffOpen}
-                    onSaveProject={saveTurnoverProjectChanges}
-                    onPostComment={postComment}
-                    onFetchComments={fetchProjectComments}
+                    expandedProject={expandedProject}
+                    projectFields={projectFields}
+                    savingProject={savingProjectEdit}
+                    staffOpen={staffOpen}
+                    setExpandedProject={setExpandedProject}
+                    setProjectFields={setProjectFields}
+                    setStaffOpen={setStaffOpen}
+                    onSaveProject={handleSaveProject}
+                    onDeleteProject={handleDeleteProject}
                     onOpenProjectInWindow={onOpenProjectInWindow}
                     onCreateProject={onCreateProject}
+                    // Comments - use LOCAL hook
+                    projectComments={commentsHook.projectComments}
+                    loadingComments={commentsHook.loadingComments}
+                    newComment={newComment}
+                    setNewComment={setNewComment}
+                    postingComment={commentsHook.postingComment}
+                    onPostComment={handlePostComment}
+                    // Attachments - use LOCAL hook
+                    projectAttachments={attachmentsHook.projectAttachments}
+                    loadingAttachments={attachmentsHook.loadingAttachments}
+                    uploadingAttachment={attachmentsHook.uploadingAttachment}
+                    attachmentInputRef={attachmentsHook.attachmentInputRef}
+                    onAttachmentUpload={handleAttachmentUpload}
+                    onViewAttachment={setViewingAttachmentIndex}
+                    // Time tracking - use LOCAL hook
+                    activeTimeEntry={timeTrackingHook.activeTimeEntry}
+                    displaySeconds={timeTrackingHook.displaySeconds}
+                    formatTime={timeTrackingHook.formatTime}
+                    onStartTimer={handleStartTimer}
+                    onStopTimer={timeTrackingHook.stopProjectTimer}
+                    // Activity
+                    onOpenActivity={handleOpenActivity}
                   />
                 )}
               </div>
@@ -356,6 +456,22 @@ function TurnoversWindowContent({
           )}
         </div>
       )}
+
+      {/* Attachment Lightbox - use LOCAL hook */}
+      <AttachmentLightbox
+        attachments={attachmentsHook.projectAttachments}
+        viewingIndex={viewingAttachmentIndex}
+        onClose={() => setViewingAttachmentIndex(null)}
+        onNavigate={setViewingAttachmentIndex}
+      />
+
+      {/* Activity Sheet - use LOCAL hook */}
+      <ProjectActivitySheet
+        open={activitySheetOpen}
+        onOpenChange={setActivitySheetOpen}
+        activities={activityHook.projectActivity}
+        loading={activityHook.loadingActivity}
+      />
     </div>
   );
 }

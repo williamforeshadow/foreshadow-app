@@ -1,21 +1,26 @@
 'use client';
 
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useProjects } from '@/lib/useProjects';
+import type { useProjects } from '@/lib/useProjects';
+import { useProjectComments } from '@/lib/hooks/useProjectComments';
+import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
+import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
+import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
 import {
   ProjectDetailPanel,
   ProjectActivitySheet,
   AttachmentLightbox,
   ProjectFormDialog,
 } from './projects';
-import type { User, Project, Attachment, Comment } from '@/lib/types';
+import type { User, Project, Attachment, Comment, ProjectFormFields } from '@/lib/types';
 
 interface ProjectsWindowProps {
   users: User[];
   currentUser: User | null;
+  projectsHook: ReturnType<typeof useProjects>;
 }
 
 // Memoized project card to prevent re-renders when other cards/state change
@@ -210,7 +215,28 @@ const ProjectList = memo(function ProjectList({
   );
 });
 
-function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
+function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWindowProps) {
+  // ============================================================================
+  // LOCAL instances of sub-hooks (independent from TurnoversWindow)
+  // ============================================================================
+  const commentsHook = useProjectComments({ currentUser });
+  const attachmentsHook = useProjectAttachments({ currentUser });
+  const timeTrackingHook = useProjectTimeTracking({ currentUser });
+  const activityHook = useProjectActivity();
+
+  // ============================================================================
+  // LOCAL UI State (independent from other windows)
+  // ============================================================================
+  const [expandedProject, setExpandedProject] = useState<Project | null>(null);
+  const [editingProjectFields, setEditingProjectFields] = useState<ProjectFormFields | null>(null);
+  const [newComment, setNewComment] = useState('');
+  const [staffOpen, setStaffOpen] = useState(false);
+  const [viewingAttachmentIndex, setViewingAttachmentIndex] = useState<number | null>(null);
+  const [activityPopoverOpen, setActivityPopoverOpen] = useState(false);
+
+  // ============================================================================
+  // SHARED data from projectsHook (only core project data and mutations)
+  // ============================================================================
   const {
     // Core data
     projects,
@@ -222,7 +248,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     recordProjectView,
     hasUnreadActivity,
 
-    // Dialog state
+    // Dialog state (shared - one dialog for creating projects)
     showProjectDialog,
     setShowProjectDialog,
     editingProject,
@@ -233,49 +259,64 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     saveProject,
     deleteProject,
 
-    // Expanded project
-    expandedProject,
-    setExpandedProject,
-    editingProjectFields,
-    setEditingProjectFields,
+    // Saving state
     savingProjectEdit,
-    saveProjectChanges,
+    saveProjectById,
+  } = projectsHook;
 
-    // Comments
-    projectComments,
-    loadingComments,
-    newComment,
-    setNewComment,
-    postingComment,
-    postProjectComment,
+  // ============================================================================
+  // Initialize fields when expanding a project
+  // ============================================================================
+  useEffect(() => {
+    if (expandedProject) {
+      setEditingProjectFields({
+        title: expandedProject.title,
+        description: expandedProject.description || '',
+        status: expandedProject.status,
+        priority: expandedProject.priority,
+        assigned_staff: expandedProject.project_assignments?.[0]?.user_id || '',
+        due_date: expandedProject.due_date || ''
+      });
+      // Use LOCAL hook instances
+      commentsHook.fetchProjectComments(expandedProject.id);
+      attachmentsHook.fetchProjectAttachments(expandedProject.id);
+      timeTrackingHook.fetchProjectTimeEntries(expandedProject.id);
+    }
+  }, [expandedProject?.id]); // Only re-run when project ID changes
 
-    // Attachments
-    projectAttachments,
-    loadingAttachments,
-    uploadingAttachment,
-    viewingAttachmentIndex,
-    setViewingAttachmentIndex,
-    attachmentInputRef,
-    handleAttachmentUpload,
+  // ============================================================================
+  // Wrapper functions that use LOCAL state with LOCAL hook mutations
+  // ============================================================================
+  const handleSaveProject = useCallback(async () => {
+    if (!expandedProject || !editingProjectFields) return;
+    const updatedProject = await saveProjectById(expandedProject.id, editingProjectFields);
+    if (updatedProject) {
+      setExpandedProject(updatedProject);
+    }
+  }, [expandedProject, editingProjectFields, saveProjectById]);
 
-    // Time tracking
-    activeTimeEntry,
-    displaySeconds,
-    startProjectTimer,
-    stopProjectTimer,
-    formatTime,
+  const handlePostComment = useCallback(async () => {
+    if (!expandedProject || !newComment.trim()) return;
+    await commentsHook.postProjectComment(expandedProject.id, newComment);
+    setNewComment('');
+  }, [expandedProject, newComment, commentsHook]);
 
-    // Activity
-    projectActivity,
-    loadingActivity,
-    activityPopoverOpen,
-    setActivityPopoverOpen,
-    fetchProjectActivity,
+  const handleAttachmentUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!expandedProject) return;
+    attachmentsHook.handleAttachmentUpload(e, expandedProject.id);
+  }, [expandedProject, attachmentsHook]);
 
-    // Popover states
-    projectStaffOpen,
-    setProjectStaffOpen,
-  } = useProjects({ currentUser });
+  const handleStartTimer = useCallback(() => {
+    if (!expandedProject) return;
+    timeTrackingHook.startProjectTimer(expandedProject.id);
+  }, [expandedProject, timeTrackingHook]);
+
+  const handleOpenActivity = useCallback(() => {
+    if (expandedProject) {
+      activityHook.fetchProjectActivity(expandedProject.id);
+      setActivityPopoverOpen(true);
+    }
+  }, [expandedProject, activityHook]);
 
   // Memoized handler for project selection
   const handleProjectSelect = useCallback((project: Project) => {
@@ -285,14 +326,16 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       setExpandedProject(project);
       recordProjectView(project.id);
     }
-  }, [expandedProject?.id, setExpandedProject, recordProjectView]);
+  }, [expandedProject?.id, recordProjectView]);
 
-  const handleOpenActivity = useCallback(() => {
-    if (expandedProject) {
-      fetchProjectActivity(expandedProject.id);
-      setActivityPopoverOpen(true);
+  // Handle creating a new project - auto-expands the project after creation
+  const handleCreateProject = useCallback(async () => {
+    const newProject = await saveProject();
+    if (newProject && !editingProject) {
+      // Only auto-expand for new projects, not edits
+      setExpandedProject(newProject);
     }
-  }, [expandedProject, fetchProjectActivity, setActivityPopoverOpen]);
+  }, [saveProject, editingProject]);
 
   return (
     <div className="flex h-full">
@@ -317,43 +360,47 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
           setEditingFields={setEditingProjectFields}
           users={users}
           savingEdit={savingProjectEdit}
-          onSave={saveProjectChanges}
+          onSave={handleSaveProject}
           onDelete={deleteProject}
           onClose={() => setExpandedProject(null)}
           onOpenActivity={handleOpenActivity}
-          comments={projectComments as Comment[]}
-          loadingComments={loadingComments}
+          // Comments - use LOCAL hook
+          comments={commentsHook.projectComments as Comment[]}
+          loadingComments={commentsHook.loadingComments}
           newComment={newComment}
           setNewComment={setNewComment}
-          postingComment={postingComment}
-          onPostComment={postProjectComment}
-          attachments={projectAttachments as Attachment[]}
-          loadingAttachments={loadingAttachments}
-          uploadingAttachment={uploadingAttachment}
-          attachmentInputRef={attachmentInputRef}
+          postingComment={commentsHook.postingComment}
+          onPostComment={handlePostComment}
+          // Attachments - use LOCAL hook
+          attachments={attachmentsHook.projectAttachments as Attachment[]}
+          loadingAttachments={attachmentsHook.loadingAttachments}
+          uploadingAttachment={attachmentsHook.uploadingAttachment}
+          attachmentInputRef={attachmentsHook.attachmentInputRef}
           onAttachmentUpload={handleAttachmentUpload}
           onViewAttachment={setViewingAttachmentIndex}
-          activeTimeEntry={activeTimeEntry}
-          displaySeconds={displaySeconds}
-          formatTime={formatTime}
-          onStartTimer={startProjectTimer}
-          onStopTimer={stopProjectTimer}
-          staffOpen={projectStaffOpen}
-          setStaffOpen={setProjectStaffOpen}
+          // Time tracking - use LOCAL hook
+          activeTimeEntry={timeTrackingHook.activeTimeEntry}
+          displaySeconds={timeTrackingHook.displaySeconds}
+          formatTime={timeTrackingHook.formatTime}
+          onStartTimer={handleStartTimer}
+          onStopTimer={timeTrackingHook.stopProjectTimer}
+          // Popover states
+          staffOpen={staffOpen}
+          setStaffOpen={setStaffOpen}
         />
       )}
 
-      {/* Activity History Sheet */}
+      {/* Activity History Sheet - use LOCAL hook */}
       <ProjectActivitySheet
         open={activityPopoverOpen}
         onOpenChange={setActivityPopoverOpen}
-        activities={projectActivity}
-        loading={loadingActivity}
+        activities={activityHook.projectActivity}
+        loading={activityHook.loadingActivity}
       />
 
-      {/* Attachment Lightbox */}
+      {/* Attachment Lightbox - use LOCAL hook */}
       <AttachmentLightbox
-        attachments={projectAttachments as Attachment[]}
+        attachments={attachmentsHook.projectAttachments as Attachment[]}
         viewingIndex={viewingAttachmentIndex}
         onClose={() => setViewingAttachmentIndex(null)}
         onNavigate={setViewingAttachmentIndex}
@@ -368,7 +415,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
         setFormData={setProjectForm}
         allProperties={allProperties}
         saving={savingProject}
-        onSave={saveProject}
+        onSave={handleCreateProject}
       />
     </div>
   );

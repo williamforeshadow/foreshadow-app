@@ -30,9 +30,10 @@ export function useProjectComments({ currentUser }: UseProjectCommentsProps) {
     }
   }, []);
 
-  // Post a new comment
-  const postProjectComment = useCallback(async (projectId: string) => {
-    if (!projectId || !newComment.trim() || !currentUser) return;
+  // Post a new comment (accepts comment text as parameter for window-independent state)
+  const postProjectComment = useCallback(async (projectId: string, commentText?: string) => {
+    const textToPost = commentText ?? newComment;
+    if (!projectId || !textToPost.trim() || !currentUser) return;
 
     setPostingComment(true);
     try {
@@ -42,14 +43,17 @@ export function useProjectComments({ currentUser }: UseProjectCommentsProps) {
         body: JSON.stringify({
           project_id: projectId,
           user_id: currentUser.id,
-          comment_content: newComment.trim()
+          comment_content: textToPost.trim()
         })
       });
 
       const data = await res.json();
       if (data.success && data.data) {
         setProjectComments(prev => [...prev, data.data]);
-        setNewComment('');
+        // Only clear hook's newComment if we used it
+        if (!commentText) {
+          setNewComment('');
+        }
       }
     } catch (err) {
       console.error('Error posting comment:', err);
