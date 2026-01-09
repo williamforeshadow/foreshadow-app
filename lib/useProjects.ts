@@ -1,15 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { 
   Project, 
-  Comment, 
-  Attachment, 
-  TimeEntry, 
-  ActivityLogEntry,
   User,
   ProjectFormFields 
 } from '@/lib/types';
+import { useProjectComments } from '@/lib/hooks/useProjectComments';
+import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
+import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
+import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
 
 // Re-export for backward compatibility
 export type { ProjectFormFields } from '@/lib/types';
@@ -19,7 +19,9 @@ interface UseProjectsProps {
 }
 
 export function useProjects({ currentUser }: UseProjectsProps) {
-  // Core project data
+  // ============================================================================
+  // Core Project State
+  // ============================================================================
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [allProperties, setAllProperties] = useState<string[]>([]);
@@ -27,7 +29,9 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   // Project views (for "new" badge)
   const [projectViews, setProjectViews] = useState<Record<string, string>>({});
 
-  // Create/edit dialog state
+  // ============================================================================
+  // Dialog State (Create/Edit)
+  // ============================================================================
   const [showProjectDialog, setShowProjectDialog] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [savingProject, setSavingProject] = useState(false);
@@ -41,42 +45,29 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     due_date: ''
   });
 
-  // Expanded project detail pane
+  // ============================================================================
+  // Expanded Project Detail State
+  // ============================================================================
   const [expandedProject, setExpandedProject] = useState<Project | null>(null);
   const [editingProjectFields, setEditingProjectFields] = useState<ProjectFormFields | null>(null);
   const [savingProjectEdit, setSavingProjectEdit] = useState(false);
   const [discussionExpanded, setDiscussionExpanded] = useState(false);
 
-  // Comments
-  const [projectComments, setProjectComments] = useState<Comment[]>([]);
-  const [loadingComments, setLoadingComments] = useState(false);
-  const [newComment, setNewComment] = useState('');
-  const [postingComment, setPostingComment] = useState(false);
-
-  // Attachments
-  const [projectAttachments, setProjectAttachments] = useState<Attachment[]>([]);
-  const [loadingAttachments, setLoadingAttachments] = useState(false);
-  const [uploadingAttachment, setUploadingAttachment] = useState(false);
-  const [viewingAttachmentIndex, setViewingAttachmentIndex] = useState<number | null>(null);
-  const attachmentInputRef = useRef<HTMLInputElement>(null);
-
-  // Time tracking
-  const [projectTimeEntries, setProjectTimeEntries] = useState<TimeEntry[]>([]);
-  const [activeTimeEntry, setActiveTimeEntry] = useState<TimeEntry | null>(null);
-  const [totalTrackedSeconds, setTotalTrackedSeconds] = useState(0);
-  const [displaySeconds, setDisplaySeconds] = useState(0);
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Activity log
-  const [projectActivity, setProjectActivity] = useState<ActivityLogEntry[]>([]);
-  const [loadingActivity, setLoadingActivity] = useState(false);
-  const [activityPopoverOpen, setActivityPopoverOpen] = useState(false);
-
   // Popover states
   const [projectStaffOpen, setProjectStaffOpen] = useState(false);
   const [projectDueDateOpen, setProjectDueDateOpen] = useState(false);
 
-  // Fetch projects
+  // ============================================================================
+  // Composed Hooks
+  // ============================================================================
+  const comments = useProjectComments({ currentUser });
+  const attachments = useProjectAttachments({ currentUser });
+  const timeTracking = useProjectTimeTracking({ currentUser });
+  const activity = useProjectActivity();
+
+  // ============================================================================
+  // Data Fetching
+  // ============================================================================
   const fetchProjects = useCallback(async () => {
     setLoadingProjects(true);
     try {
@@ -92,7 +83,6 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     }
   }, []);
 
-  // Fetch all properties
   const fetchAllProperties = useCallback(async () => {
     try {
       const response = await fetch('/api/properties');
@@ -105,7 +95,6 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     }
   }, []);
 
-  // Fetch project views
   const fetchProjectViews = useCallback(async () => {
     if (!currentUser?.id) return;
     try {
@@ -119,7 +108,9 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     }
   }, [currentUser?.id]);
 
-  // Record project view
+  // ============================================================================
+  // Project Views (Read Tracking)
+  // ============================================================================
   const recordProjectView = useCallback(async (projectId: string) => {
     if (!currentUser?.id) return;
     try {
@@ -140,7 +131,6 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     }
   }, [currentUser?.id]);
 
-  // Check if project has unread activity
   const hasUnreadActivity = useCallback((project: Project): boolean => {
     const lastViewed = projectViews[project.id];
     if (!lastViewed) return true;
@@ -149,7 +139,9 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     return projectUpdated > userViewed;
   }, [projectViews]);
 
-  // Reset form
+  // ============================================================================
+  // Dialog Operations
+  // ============================================================================
   const resetProjectForm = useCallback(() => {
     setProjectForm({
       property_name: '',
@@ -163,7 +155,6 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     setEditingProject(null);
   }, []);
 
-  // Open create dialog
   const openCreateProjectDialog = useCallback((propertyName?: string) => {
     resetProjectForm();
     if (propertyName) {
@@ -172,7 +163,6 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     setShowProjectDialog(true);
   }, [resetProjectForm]);
 
-  // Open edit dialog
   const openEditProjectDialog = useCallback((project: Project) => {
     setProjectForm({
       property_name: project.property_name,
@@ -187,7 +177,9 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     setShowProjectDialog(true);
   }, []);
 
-  // Save project (create or update)
+  // ============================================================================
+  // CRUD Operations
+  // ============================================================================
   const saveProject = useCallback(async () => {
     if (!projectForm.property_name || !projectForm.title) return;
 
@@ -234,7 +226,6 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     }
   }, [projectForm, editingProject, resetProjectForm]);
 
-  // Delete project
   const deleteProject = useCallback(async (project: Project) => {
     if (!confirm(`Delete project "${project.title}"?`)) return;
 
@@ -257,217 +248,6 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     }
   }, [expandedProject]);
 
-  // Fetch comments
-  const fetchProjectComments = useCallback(async (projectId: string) => {
-    setLoadingComments(true);
-    try {
-      const res = await fetch(`/api/project-comments?project_id=${projectId}`);
-      const data = await res.json();
-      if (data.data) {
-        setProjectComments(data.data);
-      }
-    } catch (err) {
-      console.error('Error fetching comments:', err);
-      setProjectComments([]);
-    } finally {
-      setLoadingComments(false);
-    }
-  }, []);
-
-  // Post comment
-  const postProjectComment = useCallback(async () => {
-    if (!expandedProject || !newComment.trim() || !currentUser) return;
-
-    setPostingComment(true);
-    try {
-      const res = await fetch('/api/project-comments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: expandedProject.id,
-          user_id: currentUser.id,
-          comment_content: newComment.trim()
-        })
-      });
-
-      const data = await res.json();
-      if (data.success && data.data) {
-        setProjectComments(prev => [...prev, data.data]);
-        setNewComment('');
-      }
-    } catch (err) {
-      console.error('Error posting comment:', err);
-    } finally {
-      setPostingComment(false);
-    }
-  }, [expandedProject, newComment, currentUser]);
-
-  // Fetch attachments
-  const fetchProjectAttachments = useCallback(async (projectId: string) => {
-    setLoadingAttachments(true);
-    try {
-      const res = await fetch(`/api/project-attachments?project_id=${projectId}`);
-      const data = await res.json();
-      if (data.data) {
-        setProjectAttachments(data.data);
-      }
-    } catch (err) {
-      console.error('Error fetching attachments:', err);
-      setProjectAttachments([]);
-    } finally {
-      setLoadingAttachments(false);
-    }
-  }, []);
-
-  // Handle attachment upload
-  const handleAttachmentUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0 || !expandedProject || !currentUser) return;
-
-    setUploadingAttachment(true);
-    try {
-      for (const file of Array.from(files)) {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('project_id', expandedProject.id);
-        formData.append('uploaded_by', currentUser.id);
-
-        const res = await fetch('/api/project-attachments', {
-          method: 'POST',
-          body: formData
-        });
-
-        const data = await res.json();
-        if (data.data) {
-          setProjectAttachments(prev => [data.data, ...prev]);
-        }
-      }
-    } catch (err) {
-      console.error('Upload error:', err);
-    } finally {
-      setUploadingAttachment(false);
-      if (attachmentInputRef.current) {
-        attachmentInputRef.current.value = '';
-      }
-    }
-  }, [expandedProject, currentUser]);
-
-  // Navigate attachments
-  const navigateAttachment = useCallback((direction: 'prev' | 'next') => {
-    if (viewingAttachmentIndex === null) return;
-    const newIndex = direction === 'prev'
-      ? (viewingAttachmentIndex - 1 + projectAttachments.length) % projectAttachments.length
-      : (viewingAttachmentIndex + 1) % projectAttachments.length;
-    setViewingAttachmentIndex(newIndex);
-  }, [viewingAttachmentIndex, projectAttachments.length]);
-
-  // Fetch time entries
-  const fetchProjectTimeEntries = useCallback(async (projectId: string) => {
-    try {
-      const res = await fetch(`/api/project-time-entries?project_id=${projectId}`);
-      const data = await res.json();
-      if (data.data) {
-        setProjectTimeEntries(data.data);
-        setTotalTrackedSeconds(data.totalSeconds || 0);
-        setActiveTimeEntry(data.activeEntry || null);
-
-        if (data.activeEntry) {
-          const activeStart = new Date(data.activeEntry.start_time).getTime();
-          const now = Date.now();
-          const activeSeconds = Math.floor((now - activeStart) / 1000);
-          setDisplaySeconds((data.totalSeconds || 0) + activeSeconds);
-        } else {
-          setDisplaySeconds(data.totalSeconds || 0);
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching time entries:', err);
-      setProjectTimeEntries([]);
-      setTotalTrackedSeconds(0);
-      setActiveTimeEntry(null);
-      setDisplaySeconds(0);
-    }
-  }, []);
-
-  // Start timer
-  const startProjectTimer = useCallback(async () => {
-    if (!expandedProject || !currentUser) return;
-
-    try {
-      const res = await fetch('/api/project-time-entries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: expandedProject.id,
-          user_id: currentUser.id
-        })
-      });
-
-      const data = await res.json();
-      if (data.data) {
-        setActiveTimeEntry(data.data);
-        setProjectTimeEntries(prev => [data.data, ...prev]);
-      }
-    } catch (err) {
-      console.error('Error starting timer:', err);
-    }
-  }, [expandedProject, currentUser]);
-
-  // Stop timer
-  const stopProjectTimer = useCallback(async () => {
-    if (!activeTimeEntry) return;
-
-    try {
-      const res = await fetch('/api/project-time-entries', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          entry_id: activeTimeEntry.id
-        })
-      });
-
-      const data = await res.json();
-      if (data.data) {
-        setProjectTimeEntries(prev =>
-          prev.map(e => e.id === data.data.id ? data.data : e)
-        );
-        const entryDuration = Math.floor(
-          (new Date(data.data.end_time).getTime() - new Date(data.data.start_time).getTime()) / 1000
-        );
-        setTotalTrackedSeconds(prev => prev + entryDuration);
-        setActiveTimeEntry(null);
-      }
-    } catch (err) {
-      console.error('Error stopping timer:', err);
-    }
-  }, [activeTimeEntry]);
-
-  // Format time
-  const formatTime = useCallback((seconds: number) => {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  }, []);
-
-  // Fetch activity
-  const fetchProjectActivity = useCallback(async (projectId: string) => {
-    setLoadingActivity(true);
-    try {
-      const res = await fetch(`/api/project-activity?project_id=${projectId}&limit=50`);
-      const data = await res.json();
-      if (data.data) {
-        setProjectActivity(data.data);
-      }
-    } catch (err) {
-      console.error('Error fetching activity:', err);
-      setProjectActivity([]);
-    } finally {
-      setLoadingActivity(false);
-    }
-  }, []);
-
-  // Save project changes (inline edit)
   const saveProjectChanges = useCallback(async () => {
     if (!expandedProject || !editingProjectFields || !currentUser) return;
 
@@ -499,29 +279,10 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     }
   }, [expandedProject, editingProjectFields, currentUser]);
 
-  // Timer interval effect
-  useEffect(() => {
-    if (activeTimeEntry) {
-      timerIntervalRef.current = setInterval(() => {
-        const activeStart = new Date(activeTimeEntry.start_time).getTime();
-        const now = Date.now();
-        const activeSeconds = Math.floor((now - activeStart) / 1000);
-        setDisplaySeconds(totalTrackedSeconds + activeSeconds);
-      }, 1000);
-    } else {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null;
-      }
-    }
-
-    return () => {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-      }
-    };
-  }, [activeTimeEntry, totalTrackedSeconds]);
-
+  // ============================================================================
+  // Effects
+  // ============================================================================
+  
   // Auto-load on mount
   useEffect(() => {
     fetchProjects();
@@ -540,13 +301,15 @@ export function useProjects({ currentUser }: UseProjectsProps) {
         assigned_staff: expandedProject.project_assignments?.[0]?.user_id || '',
         due_date: expandedProject.due_date || ''
       });
-      fetchProjectComments(expandedProject.id);
-      fetchProjectAttachments(expandedProject.id);
-      fetchProjectTimeEntries(expandedProject.id);
+      comments.fetchProjectComments(expandedProject.id);
+      attachments.fetchProjectAttachments(expandedProject.id);
+      timeTracking.fetchProjectTimeEntries(expandedProject.id);
     }
-  }, [expandedProject, fetchProjectComments, fetchProjectAttachments, fetchProjectTimeEntries]);
+  }, [expandedProject, comments.fetchProjectComments, attachments.fetchProjectAttachments, timeTracking.fetchProjectTimeEntries]);
 
-  // Group projects by property (memoized to prevent recalculation on every render)
+  // ============================================================================
+  // Computed Values
+  // ============================================================================
   const groupedProjects = useMemo(() => {
     return projects.reduce((acc, project) => {
       if (!acc[project.property_name]) {
@@ -554,9 +317,12 @@ export function useProjects({ currentUser }: UseProjectsProps) {
       }
       acc[project.property_name].push(project);
       return acc;
-    }, {} as Record<string, any[]>);
+    }, {} as Record<string, Project[]>);
   }, [projects]);
 
+  // ============================================================================
+  // Return API
+  // ============================================================================
   return {
     // Core data
     projects,
@@ -592,40 +358,41 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     discussionExpanded,
     setDiscussionExpanded,
 
-    // Comments
-    projectComments,
-    loadingComments,
-    newComment,
-    setNewComment,
-    postingComment,
-    postProjectComment,
-    fetchProjectComments,
+    // Comments (from composed hook)
+    projectComments: comments.projectComments,
+    loadingComments: comments.loadingComments,
+    newComment: comments.newComment,
+    setNewComment: comments.setNewComment,
+    postingComment: comments.postingComment,
+    postProjectComment: () => expandedProject && comments.postProjectComment(expandedProject.id),
+    fetchProjectComments: comments.fetchProjectComments,
 
-    // Attachments
-    projectAttachments,
-    loadingAttachments,
-    uploadingAttachment,
-    viewingAttachmentIndex,
-    setViewingAttachmentIndex,
-    attachmentInputRef,
-    handleAttachmentUpload,
-    navigateAttachment,
+    // Attachments (from composed hook)
+    projectAttachments: attachments.projectAttachments,
+    loadingAttachments: attachments.loadingAttachments,
+    uploadingAttachment: attachments.uploadingAttachment,
+    viewingAttachmentIndex: attachments.viewingAttachmentIndex,
+    setViewingAttachmentIndex: attachments.setViewingAttachmentIndex,
+    attachmentInputRef: attachments.attachmentInputRef,
+    handleAttachmentUpload: (e: React.ChangeEvent<HTMLInputElement>) => 
+      expandedProject && attachments.handleAttachmentUpload(e, expandedProject.id),
+    navigateAttachment: attachments.navigateAttachment,
 
-    // Time tracking
-    projectTimeEntries,
-    activeTimeEntry,
-    totalTrackedSeconds,
-    displaySeconds,
-    startProjectTimer,
-    stopProjectTimer,
-    formatTime,
+    // Time tracking (from composed hook)
+    projectTimeEntries: timeTracking.projectTimeEntries,
+    activeTimeEntry: timeTracking.activeTimeEntry,
+    totalTrackedSeconds: timeTracking.totalTrackedSeconds,
+    displaySeconds: timeTracking.displaySeconds,
+    startProjectTimer: () => expandedProject && timeTracking.startProjectTimer(expandedProject.id),
+    stopProjectTimer: timeTracking.stopProjectTimer,
+    formatTime: timeTracking.formatTime,
 
-    // Activity
-    projectActivity,
-    loadingActivity,
-    activityPopoverOpen,
-    setActivityPopoverOpen,
-    fetchProjectActivity,
+    // Activity (from composed hook)
+    projectActivity: activity.projectActivity,
+    loadingActivity: activity.loadingActivity,
+    activityPopoverOpen: activity.activityPopoverOpen,
+    setActivityPopoverOpen: activity.setActivityPopoverOpen,
+    fetchProjectActivity: activity.fetchProjectActivity,
 
     // Popover states
     projectStaffOpen,
