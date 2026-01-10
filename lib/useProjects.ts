@@ -243,6 +243,42 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     }
   }, []);
 
+  // Create a new project directly for a given property (without dialog)
+  const createProjectForProperty = useCallback(async (propertyName: string): Promise<Project | null> => {
+    setSavingProject(true);
+    try {
+      const payload = {
+        property_name: propertyName,
+        title: 'New Project',
+        description: null,
+        status: 'not_started',
+        priority: 'medium',
+        assigned_staff: null,
+        due_date: null
+      };
+
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create project');
+      }
+
+      setProjects(prev => [...prev, result.data]);
+      return result.data as Project;
+    } catch (err) {
+      console.error('Error creating project:', err);
+      return null;
+    } finally {
+      setSavingProject(false);
+    }
+  }, []);
+
   // Parameterized save function - accepts project ID and fields from caller
   // Returns the updated project so caller can update their local state
   const saveProjectById = useCallback(async (
@@ -333,6 +369,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     openEditProjectDialog,
     saveProject,
     deleteProject,
+    createProjectForProperty,
 
     // Parameterized save function for window-specific use
     saveProjectById,

@@ -7,6 +7,7 @@ import { Textarea } from './textarea';
 interface DebouncedInputProps {
   value: string;
   onChange: (value: string) => void;
+  onBlur?: () => void;
   delay?: number;
   className?: string;
   placeholder?: string;
@@ -24,6 +25,7 @@ interface DebouncedTextareaProps extends DebouncedInputProps {
 export const DebouncedInput = memo(function DebouncedInput({
   value,
   onChange,
+  onBlur,
   delay = 300,
   className,
   placeholder,
@@ -49,11 +51,20 @@ export const DebouncedInput = memo(function DebouncedInput({
     return () => clearTimeout(timer);
   }, [localValue, delay, onChange, value]);
 
+  const handleBlur = useCallback(() => {
+    // Immediately sync value on blur
+    if (localValue !== value) {
+      onChange(localValue);
+    }
+    onBlur?.();
+  }, [localValue, value, onChange, onBlur]);
+
   return (
     <Input
       type={type}
       value={localValue}
       onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={handleBlur}
       className={className}
       placeholder={placeholder}
       id={id}
@@ -66,6 +77,7 @@ export const DebouncedInput = memo(function DebouncedInput({
 export const DebouncedTextarea = memo(function DebouncedTextarea({
   value,
   onChange,
+  onBlur,
   delay = 300,
   className,
   placeholder,
@@ -92,10 +104,19 @@ export const DebouncedTextarea = memo(function DebouncedTextarea({
     return () => clearTimeout(timer);
   }, [localValue, delay, onChange, value]);
 
+  const handleBlur = useCallback(() => {
+    // Immediately sync value on blur
+    if (localValue !== value) {
+      onChange(localValue);
+    }
+    onBlur?.();
+  }, [localValue, value, onChange, onBlur]);
+
   return (
     <Textarea
       value={localValue}
       onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={handleBlur}
       className={className}
       placeholder={placeholder}
       id={id}
@@ -110,6 +131,7 @@ export const DebouncedTextarea = memo(function DebouncedTextarea({
 export const DebouncedNativeInput = memo(function DebouncedNativeInput({
   value,
   onChange,
+  onBlur,
   delay = 300,
   className,
   placeholder,
@@ -133,11 +155,20 @@ export const DebouncedNativeInput = memo(function DebouncedNativeInput({
     return () => clearTimeout(timer);
   }, [localValue, delay, onChange, value]);
 
+  const handleBlur = useCallback(() => {
+    // Immediately sync value on blur
+    if (localValue !== value) {
+      onChange(localValue);
+    }
+    onBlur?.();
+  }, [localValue, value, onChange, onBlur]);
+
   return (
     <input
       type={type}
       value={localValue}
       onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={handleBlur}
       className={className}
       placeholder={placeholder}
       id={id}

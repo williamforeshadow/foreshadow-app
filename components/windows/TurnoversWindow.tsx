@@ -24,7 +24,6 @@ interface TurnoversWindowProps {
   currentUser: User | null;
   projectsHook: ReturnType<typeof useProjects>;
   onOpenProjectInWindow: (project: any) => void;
-  onCreateProject: (propertyName?: string) => void;
 }
 
 function TurnoversWindowContent({
@@ -32,7 +31,6 @@ function TurnoversWindowContent({
   currentUser,
   projectsHook,
   onOpenProjectInWindow,
-  onCreateProject,
 }: TurnoversWindowProps) {
   // Turnover/task functionality
   const {
@@ -181,6 +179,14 @@ function TurnoversWindowContent({
       setActivitySheetOpen(true);
     }
   }, [expandedProject, activityHook]);
+
+  // Create a new project for the current property (without dialog)
+  const handleCreateProjectForTurnover = useCallback(async (propertyName: string) => {
+    const newProject = await projectsHook.createProjectForProperty(propertyName);
+    if (newProject) {
+      setExpandedProject(newProject);
+    }
+  }, [projectsHook]);
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -393,7 +399,7 @@ function TurnoversWindowContent({
               </div>
 
               {/* Scrollable Content */}
-              <div className="flex-1 overflow-y-auto hide-scrollbar p-4 space-y-3">
+              <div className={`flex-1 overflow-y-auto hide-scrollbar ${rightPanelView === 'tasks' ? 'p-4 space-y-3' : ''}`}>
                 {rightPanelView === 'tasks' ? (
                   <TurnoverTaskList
                     selectedCard={selectedCard}
@@ -426,7 +432,7 @@ function TurnoversWindowContent({
                     onSaveProject={handleSaveProject}
                     onDeleteProject={handleDeleteProject}
                     onOpenProjectInWindow={onOpenProjectInWindow}
-                    onCreateProject={onCreateProject}
+                    onCreateProject={handleCreateProjectForTurnover}
                     // Comments - use LOCAL hook
                     projectComments={commentsHook.projectComments}
                     loadingComments={commentsHook.loadingComments}

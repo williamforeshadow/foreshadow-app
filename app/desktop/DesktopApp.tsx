@@ -121,10 +121,6 @@ export default function DesktopApp() {
                   setShowProjectsWindow(true);
                   bringToFront('projects');
                 }}
-                onCreateProject={() => {
-                  setShowProjectsWindow(true);
-                  bringToFront('projects');
-                }}
               />
             </FloatingWindow>
           </div>

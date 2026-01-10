@@ -23,6 +23,7 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import type { Project, User, ProjectFormFields, Comment, Attachment, TimeEntry } from '@/lib/types';
 
 interface ProjectDetailPanelProps {
@@ -94,7 +95,7 @@ export function ProjectDetailPanel({
     <div className="w-1/2 h-full flex flex-col border-l border-neutral-200 dark:border-neutral-700 bg-card">
       {/* Header */}
       <div className="flex-shrink-0 bg-card z-10 border-b border-neutral-200 dark:border-neutral-700 relative">
-        <div className="absolute top-2 right-2 flex gap-0.5">
+        <div className="absolute top-1 right-1 flex gap-0.5">
           <button
             onClick={onOpenActivity}
             className="p-1 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded transition-colors"
@@ -128,11 +129,12 @@ export function ProjectDetailPanel({
           </button>
         </div>
 
-        <div className="flex flex-col space-y-5 px-6 py-6">
+        <div className="flex flex-col space-y-3 px-4 py-3">
           <DebouncedNativeInput
             type="text"
             value={editingFields.title}
             onChange={(value) => setEditingFields(prev => prev ? {...prev, title: value} : null)}
+            onBlur={onSave}
             placeholder="Untitled Project"
             className="text-lg font-semibold bg-transparent border-none outline-none focus:outline-none p-0 flex-1 min-w-0 text-foreground placeholder:text-muted-foreground"
             delay={150}
@@ -163,25 +165,25 @@ export function ProjectDetailPanel({
                 <DropdownMenuContent align="start">
                   <DropdownMenuCheckboxItem
                     checked={editingFields.status === 'not_started'}
-                    onCheckedChange={() => setEditingFields(prev => prev ? {...prev, status: 'not_started'} : null)}
+                    onCheckedChange={() => { setEditingFields(prev => prev ? {...prev, status: 'not_started'} : null); setTimeout(onSave, 0); }}
                   >
                     Not Started
                   </DropdownMenuCheckboxItem>
                   <DropdownMenuCheckboxItem
                     checked={editingFields.status === 'in_progress'}
-                    onCheckedChange={() => setEditingFields(prev => prev ? {...prev, status: 'in_progress'} : null)}
+                    onCheckedChange={() => { setEditingFields(prev => prev ? {...prev, status: 'in_progress'} : null); setTimeout(onSave, 0); }}
                   >
                     In Progress
                   </DropdownMenuCheckboxItem>
                   <DropdownMenuCheckboxItem
                     checked={editingFields.status === 'on_hold'}
-                    onCheckedChange={() => setEditingFields(prev => prev ? {...prev, status: 'on_hold'} : null)}
+                    onCheckedChange={() => { setEditingFields(prev => prev ? {...prev, status: 'on_hold'} : null); setTimeout(onSave, 0); }}
                   >
                     On Hold
                   </DropdownMenuCheckboxItem>
                   <DropdownMenuCheckboxItem
                     checked={editingFields.status === 'complete'}
-                    onCheckedChange={() => setEditingFields(prev => prev ? {...prev, status: 'complete'} : null)}
+                    onCheckedChange={() => { setEditingFields(prev => prev ? {...prev, status: 'complete'} : null); setTimeout(onSave, 0); }}
                   >
                     Complete
                   </DropdownMenuCheckboxItem>
@@ -209,25 +211,25 @@ export function ProjectDetailPanel({
                 <DropdownMenuContent align="start">
                   <DropdownMenuCheckboxItem
                     checked={editingFields.priority === 'low'}
-                    onCheckedChange={() => setEditingFields(prev => prev ? {...prev, priority: 'low'} : null)}
+                    onCheckedChange={() => { setEditingFields(prev => prev ? {...prev, priority: 'low'} : null); setTimeout(onSave, 0); }}
                   >
                     Low
                   </DropdownMenuCheckboxItem>
                   <DropdownMenuCheckboxItem
                     checked={editingFields.priority === 'medium'}
-                    onCheckedChange={() => setEditingFields(prev => prev ? {...prev, priority: 'medium'} : null)}
+                    onCheckedChange={() => { setEditingFields(prev => prev ? {...prev, priority: 'medium'} : null); setTimeout(onSave, 0); }}
                   >
                     Medium
                   </DropdownMenuCheckboxItem>
                   <DropdownMenuCheckboxItem
                     checked={editingFields.priority === 'high'}
-                    onCheckedChange={() => setEditingFields(prev => prev ? {...prev, priority: 'high'} : null)}
+                    onCheckedChange={() => { setEditingFields(prev => prev ? {...prev, priority: 'high'} : null); setTimeout(onSave, 0); }}
                   >
                     High
                   </DropdownMenuCheckboxItem>
                   <DropdownMenuCheckboxItem
                     checked={editingFields.priority === 'urgent'}
-                    onCheckedChange={() => setEditingFields(prev => prev ? {...prev, priority: 'urgent'} : null)}
+                    onCheckedChange={() => { setEditingFields(prev => prev ? {...prev, priority: 'urgent'} : null); setTimeout(onSave, 0); }}
                   >
                     Urgent
                   </DropdownMenuCheckboxItem>
@@ -263,14 +265,15 @@ export function ProjectDetailPanel({
       </div>
 
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="p-6 space-y-6">
+      <ScrollArea className="flex-1 min-h-0">
+        <div className="px-4 py-4 space-y-4">
           {/* Description */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-muted-foreground">Description</label>
             <DebouncedTextarea
               value={editingFields.description}
               onChange={(value) => setEditingFields(prev => prev ? {...prev, description: value} : null)}
+              onBlur={onSave}
               placeholder="Add a description..."
               rows={3}
               className="resize-none"
@@ -306,6 +309,7 @@ export function ProjectDetailPanel({
                           onSelect={() => {
                             setEditingFields(prev => prev ? {...prev, assigned_staff: ''} : null);
                             setStaffOpen(false);
+                            setTimeout(onSave, 0);
                           }}
                         >
                           <CheckIcon className={cn("mr-2 h-4 w-4", !editingFields.assigned_staff ? "opacity-100" : "opacity-0")} />
@@ -318,6 +322,7 @@ export function ProjectDetailPanel({
                             onSelect={() => {
                               setEditingFields(prev => prev ? {...prev, assigned_staff: user.id} : null);
                               setStaffOpen(false);
+                              setTimeout(onSave, 0);
                             }}
                           >
                             <CheckIcon className={cn("mr-2 h-4 w-4", editingFields.assigned_staff === user.id ? "opacity-100" : "opacity-0")} />
@@ -336,25 +341,19 @@ export function ProjectDetailPanel({
               <Input
                 type="date"
                 value={editingFields.due_date}
-                onChange={(e) => setEditingFields(prev => prev ? {...prev, due_date: e.target.value} : null)}
+                onChange={(e) => {
+                  setEditingFields(prev => prev ? {...prev, due_date: e.target.value} : null);
+                  setTimeout(onSave, 0);
+                }}
               />
             </div>
           </div>
-
-          {/* Save button */}
-          <Button
-            onClick={onSave}
-            disabled={savingEdit}
-            className="w-full"
-          >
-            {savingEdit ? 'Saving...' : 'Save Changes'}
-          </Button>
         </div>
 
         {/* Attachments Section - Thumbnails Only (only show if there are attachments) */}
         {(loadingAttachments || attachments.length > 0) && (
-          <div className="border-t border-neutral-200 dark:border-neutral-700 p-6">
-            <div className="flex items-center gap-3 flex-wrap">
+          <div className="border-t border-neutral-200 dark:border-neutral-700">
+            <div className="px-4 py-4 flex items-center gap-3 flex-wrap">
               {loadingAttachments ? (
                 <span className="text-sm text-muted-foreground">Loading attachments...</span>
               ) : (
@@ -385,8 +384,8 @@ export function ProjectDetailPanel({
         )}
 
         {/* Comments Section */}
-        <div className="border-t border-neutral-200 dark:border-neutral-700 p-6">
-          <div className="space-y-4">
+        <div className="border-t border-neutral-200 dark:border-neutral-700">
+          <div className="px-4 py-4 space-y-4">
             {loadingComments ? (
               <div className="text-center py-4 text-muted-foreground">
                 <p className="text-sm">Loading comments...</p>
@@ -424,25 +423,26 @@ export function ProjectDetailPanel({
             )}
           </div>
         </div>
-      </div>
+      </ScrollArea>
 
       {/* Comment Input - Sticky at bottom */}
-      <div className="flex-shrink-0 border-t border-neutral-200 dark:border-neutral-700 p-4 bg-card">
+      <div className="flex-shrink-0 border-t border-neutral-200 dark:border-neutral-700 px-4 py-3 bg-card">
         <div className="flex items-center gap-2">
-          <Textarea
+          <DebouncedTextarea
             placeholder="Add a comment..."
             rows={1}
             className="resize-none min-h-[38px] flex-1"
             value={newComment}
-            onChange={(e) => {
-              setNewComment(e.target.value);
-              e.target.style.height = 'auto';
-              e.target.style.height = e.target.scrollHeight + 'px';
-            }}
+            onChange={setNewComment}
+            delay={50}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) {
-                e.preventDefault();
-                onPostComment();
+              if (e.key === 'Enter' && !e.shiftKey) {
+                const value = (e.target as HTMLTextAreaElement).value.trim();
+                if (value) {
+                  e.preventDefault();
+                  setNewComment(value);
+                  setTimeout(() => onPostComment(), 0);
+                }
               }
             }}
             disabled={postingComment}
