@@ -10,6 +10,7 @@ import TimelineWindow from '@/components/windows/TimelineWindow';
 import FloatingWindow from '@/components/FloatingWindow';
 import TurnoversWindow from '@/components/windows/TurnoversWindow';
 import ProjectsWindow from '@/components/windows/ProjectsWindow';
+import TasksWindow from '@/components/windows/TasksWindow';
 import { AiChat } from '@/components/AiChat';
 
 export default function DesktopApp() {
@@ -24,15 +25,16 @@ export default function DesktopApp() {
   const [showCardsWindow, setShowCardsWindow] = useState(true);
   const [showTimelineWindow, setShowTimelineWindow] = useState(true);
   const [showProjectsWindow, setShowProjectsWindow] = useState(false);
+  const [showTasksWindow, setShowTasksWindow] = useState(false);
 
   // Window stacking order
-  const [windowOrder, setWindowOrder] = useState<Array<'cards' | 'timeline' | 'projects'>>(['cards', 'timeline', 'projects']);
+  const [windowOrder, setWindowOrder] = useState<Array<'cards' | 'timeline' | 'projects' | 'tasks'>>(['cards', 'timeline', 'projects', 'tasks']);
 
-  const bringToFront = (window: 'cards' | 'timeline' | 'projects') => {
+  const bringToFront = (window: 'cards' | 'timeline' | 'projects' | 'tasks') => {
     setWindowOrder(prev => [...prev.filter(w => w !== window), window]);
   };
 
-  const getZIndex = (window: 'cards' | 'timeline' | 'projects') => {
+  const getZIndex = (window: 'cards' | 'timeline' | 'projects' | 'tasks') => {
     return 10 + windowOrder.indexOf(window);
   };
 
@@ -96,6 +98,21 @@ export default function DesktopApp() {
               >
                 Projects
               </Button>
+              <Button
+                onClick={() => {
+                  if (showTasksWindow) {
+                    setShowTasksWindow(false);
+                  } else {
+                    setShowTasksWindow(true);
+                    bringToFront('tasks');
+                  }
+                }}
+                variant="secondary"
+                size="sm"
+                className="px-4 py-2"
+              >
+                Tasks
+              </Button>
             </div>
           </div>
         </div>
@@ -152,6 +169,21 @@ export default function DesktopApp() {
               onFocus={() => bringToFront('projects')}
             >
               <ProjectsWindow users={users} currentUser={currentUser} projectsHook={projectsHook} />
+            </FloatingWindow>
+          </div>
+
+          {/* Tasks Window - Always mounted, visibility controlled by CSS */}
+          <div className={`absolute inset-0 ${showTasksWindow ? '' : 'hidden'}`}>
+            <FloatingWindow
+              id="tasks"
+              title="Tasks"
+              defaultPosition={{ x: 200, y: 120 }}
+              defaultSize={{ width: '70%', height: '80%' }}
+              zIndex={getZIndex('tasks')}
+              onClose={() => setShowTasksWindow(false)}
+              onFocus={() => bringToFront('tasks')}
+            >
+              <TasksWindow />
             </FloatingWindow>
           </div>
 

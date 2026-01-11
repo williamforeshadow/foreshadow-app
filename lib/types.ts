@@ -17,6 +17,8 @@ export interface User {
 export interface AssignedUser {
   user_id: string;
   name: string;
+  avatar?: string;
+  role?: string;
 }
 
 // ============================================================================
