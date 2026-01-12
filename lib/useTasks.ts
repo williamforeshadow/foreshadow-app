@@ -44,11 +44,18 @@ export interface TaskSummary {
 
 export type TimelineFilter = 'active' | 'inactive';
 
+export interface DateRangeFilter {
+  from: Date | null;
+  to: Date | null;
+}
+
 export interface TaskFilters {
   status: TaskStatus[];
   type: TaskType[];
   timeline: TimelineFilter[];
   searchQuery: string;
+  dateRange: DateRangeFilter;
+  scheduledDateRange: DateRangeFilter;
 }
 
 // ============================================================================
@@ -67,7 +74,9 @@ export function useTasks() {
     status: [],
     type: [],
     timeline: [],
-    searchQuery: ''
+    searchQuery: '',
+    dateRange: { from: null, to: null },
+    scheduledDateRange: { from: null, to: null }
   });
 
   // Sort state
@@ -163,6 +172,44 @@ export function useTasks() {
       );
     }
 
+    // Filter by date range (turnover window overlap)
+    if (filters.dateRange.from || filters.dateRange.to) {
+      result = result.filter(task => {
+        const turnoverStart = task.check_out ? new Date(task.check_out) : null;
+        const turnoverEnd = task.next_check_in ? new Date(task.next_check_in) : null;
+        
+        // If task has no turnover window dates, exclude it
+        if (!turnoverStart && !turnoverEnd) return false;
+        
+        const rangeStart = filters.dateRange.from;
+        const rangeEnd = filters.dateRange.to;
+        
+        // Check for overlap: turnoverStart <= rangeEnd AND turnoverEnd >= rangeStart
+        // Handle partial data gracefully
+        const turnoverStartOk = !rangeEnd || !turnoverStart || turnoverStart <= rangeEnd;
+        const turnoverEndOk = !rangeStart || !turnoverEnd || turnoverEnd >= rangeStart;
+        
+        return turnoverStartOk && turnoverEndOk;
+      });
+    }
+
+    // Filter by scheduled date range
+    if (filters.scheduledDateRange.from || filters.scheduledDateRange.to) {
+      result = result.filter(task => {
+        if (!task.scheduled_start) return false;
+        
+        const scheduledDate = new Date(task.scheduled_start);
+        const rangeStart = filters.scheduledDateRange.from;
+        const rangeEnd = filters.scheduledDateRange.to;
+        
+        // Check if scheduled_start falls within range
+        const afterStart = !rangeStart || scheduledDate >= rangeStart;
+        const beforeEnd = !rangeEnd || scheduledDate <= rangeEnd;
+        
+        return afterStart && beforeEnd;
+      });
+    }
+
     // Sort
     result.sort((a, b) => {
       let comparison = 0;
@@ -232,17 +279,30 @@ export function useTasks() {
     setFilters(prev => ({ ...prev, searchQuery: query }));
   }, []);
 
+  const setDateRange = useCallback((dateRange: DateRangeFilter) => {
+    setFilters(prev => ({ ...prev, dateRange }));
+  }, []);
+
+  const setScheduledDateRange = useCallback((scheduledDateRange: DateRangeFilter) => {
+    setFilters(prev => ({ ...prev, scheduledDateRange }));
+  }, []);
+
   const clearFilters = useCallback(() => {
     setFilters({
       status: [],
       type: [],
       timeline: [],
-      searchQuery: ''
+      searchQuery: '',
+      dateRange: { from: null, to: null },
+      scheduledDateRange: { from: null, to: null }
     });
   }, []);
 
   const getActiveFilterCount = useCallback(() => {
-    return filters.status.length + filters.type.length + filters.timeline.length + (filters.searchQuery ? 1 : 0);
+    const dateFilterActive = filters.dateRange.from || filters.dateRange.to ? 1 : 0;
+    const scheduledFilterActive = filters.scheduledDateRange.from || filters.scheduledDateRange.to ? 1 : 0;
+    return filters.status.length + filters.type.length + filters.timeline.length + 
+           (filters.searchQuery ? 1 : 0) + dateFilterActive + scheduledFilterActive;
   }, [filters]);
 
   // ============================================================================
@@ -279,6 +339,8 @@ export function useTasks() {
     toggleTypeFilter,
     toggleTimelineFilter,
     setSearchQuery,
+    setDateRange,
+    setScheduledDateRange,
     clearFilters,
     getActiveFilterCount,
 

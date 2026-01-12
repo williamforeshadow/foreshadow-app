@@ -1,8 +1,16 @@
 'use client';
 
+import { format } from 'date-fns';
+import { CalendarIcon } from 'lucide-react';
+import type { DateRange } from 'react-day-picker';
+
 import { Input } from '@/components/ui/input';
-import type { TaskFilters, TaskSummary, TimelineFilter } from '@/lib/useTasks';
+import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import type { TaskFilters, TaskSummary, TimelineFilter, DateRangeFilter } from '@/lib/useTasks';
 import type { TaskStatus, TaskType } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 interface TaskFilterBarProps {
   filters: TaskFilters;
@@ -13,6 +21,8 @@ interface TaskFilterBarProps {
   toggleTypeFilter: (type: TaskType) => void;
   toggleTimelineFilter: (timeline: TimelineFilter) => void;
   setSearchQuery: (query: string) => void;
+  setDateRange: (dateRange: DateRangeFilter) => void;
+  setScheduledDateRange: (dateRange: DateRangeFilter) => void;
   clearFilters: () => void;
   getActiveFilterCount: () => number;
   setSortBy: (sortBy: 'created_at' | 'scheduled_start' | 'property_name' | 'status') => void;
@@ -27,10 +37,37 @@ export function TaskFilterBar({
   toggleTypeFilter,
   toggleTimelineFilter,
   setSearchQuery,
+  setDateRange,
+  setScheduledDateRange,
   clearFilters,
   getActiveFilterCount,
   setSortBy,
 }: TaskFilterBarProps) {
+  // Convert internal dateRange to react-day-picker DateRange format
+  const calendarDateRange: DateRange | undefined = 
+    filters.dateRange.from || filters.dateRange.to
+      ? { from: filters.dateRange.from ?? undefined, to: filters.dateRange.to ?? undefined }
+      : undefined;
+
+  const handleDateRangeSelect = (range: DateRange | undefined) => {
+    setDateRange({
+      from: range?.from ?? null,
+      to: range?.to ?? null
+    });
+  };
+
+  // Convert internal scheduledDateRange to react-day-picker DateRange format
+  const calendarScheduledRange: DateRange | undefined = 
+    filters.scheduledDateRange.from || filters.scheduledDateRange.to
+      ? { from: filters.scheduledDateRange.from ?? undefined, to: filters.scheduledDateRange.to ?? undefined }
+      : undefined;
+
+  const handleScheduledDateRangeSelect = (range: DateRange | undefined) => {
+    setScheduledDateRange({
+      from: range?.from ?? null,
+      to: range?.to ?? null
+    });
+  };
   return (
     <div className="flex-shrink-0 p-4 border-b border-neutral-200 dark:border-neutral-700 space-y-3">
       {/* Search and summary row */}
@@ -127,6 +164,104 @@ export function TaskFilterBar({
             </button>
           ))}
         </div>
+
+        <div className="w-px h-4 bg-neutral-200 dark:bg-neutral-700" />
+
+        {/* Turnover Date Range Filter */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                'h-7 px-2.5 text-xs font-normal justify-start',
+                !calendarDateRange && 'text-neutral-500',
+                calendarDateRange && 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-neutral-900 dark:border-white'
+              )}
+            >
+              <CalendarIcon className="mr-1.5 h-3 w-3" />
+              {calendarDateRange?.from ? (
+                calendarDateRange.to ? (
+                  <>
+                    {format(calendarDateRange.from, 'MMM d')} – {format(calendarDateRange.to, 'MMM d')}
+                  </>
+                ) : (
+                  format(calendarDateRange.from, 'MMM d')
+                )
+              ) : (
+                'Turnover dates'
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="range"
+              defaultMonth={calendarDateRange?.from}
+              selected={calendarDateRange}
+              onSelect={handleDateRangeSelect}
+              numberOfMonths={2}
+            />
+            {calendarDateRange && (
+              <div className="p-2 border-t border-neutral-200 dark:border-neutral-700">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-xs"
+                  onClick={() => setDateRange({ from: null, to: null })}
+                >
+                  Clear dates
+                </Button>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
+
+        {/* Scheduled Date Range Filter */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                'h-7 px-2.5 text-xs font-normal justify-start',
+                !calendarScheduledRange && 'text-neutral-500',
+                calendarScheduledRange && 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-neutral-900 dark:border-white'
+              )}
+            >
+              <CalendarIcon className="mr-1.5 h-3 w-3" />
+              {calendarScheduledRange?.from ? (
+                calendarScheduledRange.to ? (
+                  <>
+                    {format(calendarScheduledRange.from, 'MMM d')} – {format(calendarScheduledRange.to, 'MMM d')}
+                  </>
+                ) : (
+                  format(calendarScheduledRange.from, 'MMM d')
+                )
+              ) : (
+                'Scheduled dates'
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="range"
+              defaultMonth={calendarScheduledRange?.from}
+              selected={calendarScheduledRange}
+              onSelect={handleScheduledDateRangeSelect}
+              numberOfMonths={2}
+            />
+            {calendarScheduledRange && (
+              <div className="p-2 border-t border-neutral-200 dark:border-neutral-700">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-xs"
+                  onClick={() => setScheduledDateRange({ from: null, to: null })}
+                >
+                  Clear dates
+                </Button>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
 
         {getActiveFilterCount() > 0 && (
           <>

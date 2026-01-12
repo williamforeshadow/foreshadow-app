@@ -23,6 +23,8 @@ function TasksWindowContent({}: TasksWindowProps) {
     toggleTypeFilter,
     toggleTimelineFilter,
     setSearchQuery,
+    setDateRange,
+    setScheduledDateRange,
     clearFilters,
     getActiveFilterCount,
     sortBy,
@@ -45,6 +47,8 @@ function TasksWindowContent({}: TasksWindowProps) {
           toggleTypeFilter={toggleTypeFilter}
           toggleTimelineFilter={toggleTimelineFilter}
           setSearchQuery={setSearchQuery}
+          setDateRange={setDateRange}
+          setScheduledDateRange={setScheduledDateRange}
           clearFilters={clearFilters}
           getActiveFilterCount={getActiveFilterCount}
           setSortBy={setSortBy}
@@ -82,6 +86,7 @@ function TasksWindowContent({}: TasksWindowProps) {
                 <div className="w-24">Status</div>
                 <div className="w-24 text-right">Scheduled</div>
                 <div className="w-24">Assigned</div>
+                <div className="w-28">Guest</div>
               </div>
 
               {/* Task rows */}

@@ -119,6 +119,11 @@ export const TaskRowItem = memo(function TaskRowItem({
           <span className="text-xs text-neutral-400">Unassigned</span>
         )}
       </div>
+
+      {/* Guest name */}
+      <div className="w-28 text-xs text-neutral-600 dark:text-neutral-300 truncate">
+        {task.guest_name || '—'}
+      </div>
     </div>
   );
 });
