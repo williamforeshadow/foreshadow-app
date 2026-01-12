@@ -190,7 +190,7 @@ export function ProjectFormDialog({
           </Button>
           <Button
             onClick={onSave}
-            disabled={saving || !formData.property_name || (editingProject && !formData.title)}
+            disabled={saving || !formData.property_name || (!!editingProject && !formData.title)}
           >
             {saving ? 'Creating...' : editingProject ? 'Update' : 'Create'}
           </Button>
