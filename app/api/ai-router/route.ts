@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
+// Lazy initialization to avoid build-time errors
+let openai: OpenAI | null = null;
+
+function getOpenAI() {
+  if (!openai) {
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY!,
+    });
+  }
+  return openai;
+}
 
 // FULL detailed schema summary (this MUST exist for SQL generation)
 const DATABASE_SCHEMA_SUMMARY = `
@@ -87,7 +95,7 @@ export async function POST(req: NextRequest) {
     //
     // STEP 1 — Router decides WHICH TOOL to use
     //
-    const router = await openai.chat.completions.create({
+    const router = await getOpenAI().chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
@@ -127,7 +135,7 @@ Respond ONLY in JSON:
       const snapshotRes = await fetch(`${baseUrl}/api/ops-snapshot`);
       const snapshot = await snapshotRes.json();
 
-      const interpretation = await openai.chat.completions.create({
+      const interpretation = await getOpenAI().chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
@@ -151,7 +159,7 @@ Respond ONLY in JSON:
     // TOOL 2 — SQL GENERATION
     //
     if (routerDecision.tool === "sql_tool") {
-      const sqlGen = await openai.chat.completions.create({
+      const sqlGen = await getOpenAI().chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
@@ -204,7 +212,7 @@ Rules:
       const sqlData = await sqlRes.json();
 
       // Interpret SQL results
-      const interpretation = await openai.chat.completions.create({
+      const interpretation = await getOpenAI().chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
@@ -228,7 +236,7 @@ Rules:
     //
     // TOOL 3 — NONE
     //
-    const fallback = await openai.chat.completions.create({
+    const fallback = await getOpenAI().chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: "You are a helpful assistant inside Foreshadow." },
