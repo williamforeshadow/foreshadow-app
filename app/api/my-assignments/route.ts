@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     }
 
     // Fetch the actual tasks with their templates
-    const taskIds = taskAssignments?.map(ta => ta.task_id) || [];
+    const taskIds = taskAssignments?.map((ta: any) => ta.task_id) || [];
     let tasks: any[] = [];
     
     if (taskIds.length > 0) {
@@ -57,7 +57,7 @@ export async function GET(request: Request) {
 
       // Get reservation IDs to fetch property info
       const reservationIds = taskData
-        ?.map(t => t.reservation_id)
+        ?.map((t: any) => t.reservation_id)
         .filter(Boolean) as string[];
 
       // Fetch reservation info
@@ -69,7 +69,7 @@ export async function GET(request: Request) {
           .in('id', reservationIds);
 
         if (!reservationsError && reservations) {
-          reservationsMap = reservations.reduce((acc, r) => {
+          reservationsMap = reservations.reduce((acc: any, r: any) => {
             acc[r.id] = r;
             return acc;
           }, {} as { [key: string]: any });
@@ -77,13 +77,13 @@ export async function GET(request: Request) {
       }
 
       // Create a map of assignments
-      const assignmentMap = taskAssignments?.reduce((acc, ta) => {
+      const assignmentMap = taskAssignments?.reduce((acc: any, ta: any) => {
         acc[ta.task_id] = ta;
         return acc;
       }, {} as { [key: string]: any }) || {};
 
       // Transform tasks
-      tasks = taskData?.map(task => {
+      tasks = taskData?.map((task: any) => {
         const template = task.templates as any;
         const reservation = task.reservation_id ? reservationsMap[task.reservation_id] : null;
         const assignment = assignmentMap[task.id];
@@ -136,7 +136,7 @@ export async function GET(request: Request) {
     }
 
     // Transform projects
-    const projects = projectAssignments?.map(pa => {
+    const projects = projectAssignments?.map((pa: any) => {
       const project = pa.property_projects as any;
       if (!project) return null;
       
