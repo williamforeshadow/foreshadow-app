@@ -4,7 +4,8 @@ import { createClient } from "@supabase/supabase-js";
 
 // Lazy initialization to avoid build-time errors
 let anthropic: Anthropic | null = null;
-let supabase: ReturnType<typeof createClient> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let supabase: any = null;
 
 function getAnthropic() {
   if (!anthropic) {
