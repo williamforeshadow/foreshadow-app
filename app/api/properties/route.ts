@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 // GET unique properties from reservations
 export async function GET() {
   try {
     // Fetch from get_property_turnovers to get all properties
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .rpc('get_property_turnovers');
 
     if (error) {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 // POST bulk update property assignments for a template
 export async function POST(request: Request) {
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     }
 
     // Step 1: Delete all existing assignments for this template
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await getSupabaseServer()
       .from('property_templates')
       .delete()
       .eq('template_id', template_id);
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
         enabled: true
       }));
 
-      const { error: insertError } = await supabase
+      const { error: insertError } = await getSupabaseServer()
         .from('property_templates')
         .insert(assignments);
 

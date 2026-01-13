@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 // GET all templates
 export async function GET() {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .from('templates')
       .select('*')
       .order('created_at', { ascending: false });
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .from('templates')
       .insert({
         name,

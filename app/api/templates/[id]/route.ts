@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 // GET single template
 export async function GET(
@@ -9,7 +9,7 @@ export async function GET(
   const { id } = await params;
   
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .from('templates')
       .select('*')
       .eq('id', id)
@@ -56,7 +56,7 @@ export async function PUT(
       );
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .from('templates')
       .update({
         name,
@@ -93,7 +93,7 @@ export async function DELETE(
   const { id } = await params;
   
   try {
-    const { error } = await supabase
+    const { error } = await getSupabaseServer()
       .from('templates')
       .delete()
       .eq('id', id);

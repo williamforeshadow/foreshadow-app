@@ -245,7 +245,7 @@ export async function POST(req: NextRequest) {
     
     if (user_id) {
       // Fetch last N messages for this user (sliding window)
-      const { data: recentMessages, error: historyError } = await supabase
+      const { data: recentMessages, error: historyError } = await getSupabase()
         .from("ai_chat_messages")
         .select("role, content")
         .eq("user_id", user_id)

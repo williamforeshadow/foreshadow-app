@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 // GET all property-template assignments
 export async function GET() {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .from('property_templates')
       .select('*');
 
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
     // Use upsert to handle both insert and update
     // The unique constraint is now on (property_name, template_id)
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .from('property_templates')
       .upsert({
         property_name,
@@ -80,7 +80,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const { error } = await supabase
+    const { error } = await getSupabaseServer()
       .from('property_templates')
       .delete()
       .eq('property_name', property_name);
