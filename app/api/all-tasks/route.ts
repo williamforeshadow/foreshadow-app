@@ -64,7 +64,7 @@ export async function GET(request: Request) {
 
     // Group reservations by property for efficient lookup
     const reservationsByProperty: Record<string, Array<{ id: string; check_in: string; check_out: string }>> = {};
-    allReservations?.forEach(r => {
+    allReservations?.forEach((r: { id: string; property_name: string; check_in: string; check_out: string }) => {
       if (!reservationsByProperty[r.property_name]) {
         reservationsByProperty[r.property_name] = [];
       }
@@ -93,7 +93,7 @@ export async function GET(request: Request) {
     };
 
     // Transform the data to flatten nested structures
-    const transformedTasks = tasks?.map(task => {
+    const transformedTasks = tasks?.map((task: any) => {
       const template = task.templates as any;
       const reservation = task.reservations as any;
       const assignments = (task.task_assignments || []) as any[];
@@ -133,7 +133,7 @@ export async function GET(request: Request) {
     // Filter by property name if provided (post-query since it's in a join)
     let filteredTasks = transformedTasks;
     if (propertyName) {
-      filteredTasks = transformedTasks.filter(t => 
+      filteredTasks = transformedTasks.filter((t: any) => 
         t.property_name.toLowerCase().includes(propertyName.toLowerCase())
       );
     }
@@ -141,12 +141,12 @@ export async function GET(request: Request) {
     // Calculate summary stats
     const summary = {
       total: filteredTasks.length,
-      not_started: filteredTasks.filter(t => t.status === 'not_started').length,
-      in_progress: filteredTasks.filter(t => t.status === 'in_progress').length,
-      complete: filteredTasks.filter(t => t.status === 'complete').length,
+      not_started: filteredTasks.filter((t: any) => t.status === 'not_started').length,
+      in_progress: filteredTasks.filter((t: any) => t.status === 'in_progress').length,
+      complete: filteredTasks.filter((t: any) => t.status === 'complete').length,
       by_type: {
-        cleaning: filteredTasks.filter(t => t.type === 'cleaning').length,
-        maintenance: filteredTasks.filter(t => t.type === 'maintenance').length
+        cleaning: filteredTasks.filter((t: any) => t.type === 'cleaning').length,
+        maintenance: filteredTasks.filter((t: any) => t.type === 'maintenance').length
       }
     };
 
