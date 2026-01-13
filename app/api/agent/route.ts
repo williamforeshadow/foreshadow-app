@@ -254,7 +254,7 @@ export async function POST(req: NextRequest) {
 
       if (!historyError && recentMessages) {
         // Reverse to get chronological order (oldest first)
-        conversationHistory = recentMessages.reverse().map((msg) => ({
+        conversationHistory = recentMessages.reverse().map((msg: { role: string; content: string }) => ({
           role: msg.role as "user" | "assistant",
           content: msg.content,
         }));
