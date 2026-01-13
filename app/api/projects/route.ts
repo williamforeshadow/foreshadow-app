@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     // If filtering by user_id, filter projects that have this user assigned
     let filteredData = data;
     if (userId && data) {
-      filteredData = data.filter(project => 
+      filteredData = data.filter((project: any) => 
         project.project_assignments?.some((a: any) => a.user_id === userId)
       );
     }
