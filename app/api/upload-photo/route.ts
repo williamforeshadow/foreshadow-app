@@ -1,11 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-// Create Supabase client with service role for storage operations
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 export async function POST(request: Request) {
   try {
@@ -47,8 +41,8 @@ export async function POST(request: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Upload to Supabase Storage
-    const { data, error } = await supabase.storage
+    // Upload to getSupabaseServer() Storage
+    const { data, error } = await getSupabaseServer().storage
       .from('cleaning-photos')
       .upload(fileName, buffer, {
         contentType: file.type,
@@ -56,7 +50,7 @@ export async function POST(request: Request) {
       });
 
     if (error) {
-      console.error('Supabase storage error:', error);
+      console.error('getSupabaseServer() storage error:', error);
       return NextResponse.json(
         { error: error.message || 'Failed to upload photo' },
         { status: 500 }
@@ -64,7 +58,7 @@ export async function POST(request: Request) {
     }
 
     // Get public URL
-    const { data: { publicUrl } } = supabase.storage
+    const { data: { publicUrl } } = getSupabaseServer().storage
       .from('cleaning-photos')
       .getPublicUrl(fileName);
 
@@ -95,7 +89,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const { error } = await supabase.storage
+    const { error } = await getSupabaseServer().storage
       .from('cleaning-photos')
       .remove([fileName]);
 

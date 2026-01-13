@@ -1,11 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseServer } from '@/lib/supabaseServer';
 import { logProjectActivity } from '@/lib/logProjectActivity';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 // GET - Get a single project with assignments
 export async function GET(
@@ -15,7 +10,7 @@ export async function GET(
   try {
     const { id } = await params;
 
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .from('property_projects')
       .select(`
         *,
@@ -62,7 +57,7 @@ export async function PUT(
     const { title, description, status, priority, assigned_user_ids, due_date, user_id } = body;
 
     // Fetch current project to compare for activity logging
-    const { data: oldProject } = await supabase
+    const { data: oldProject } = await getSupabaseServer()
       .from('property_projects')
       .select(`
         *,
@@ -80,7 +75,7 @@ export async function PUT(
     if (priority !== undefined) updateData.priority = priority;
     if (due_date !== undefined) updateData.due_date = due_date;
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await getSupabaseServer()
       .from('property_projects')
       .update(updateData)
       .eq('id', id);
@@ -97,7 +92,7 @@ export async function PUT(
       const userIds: string[] = Array.isArray(assigned_user_ids) ? assigned_user_ids : (assigned_user_ids ? [assigned_user_ids] : []);
 
       // Delete existing assignments
-      const { error: deleteError } = await supabase
+      const { error: deleteError } = await getSupabaseServer()
         .from('project_assignments')
         .delete()
         .eq('project_id', id);
@@ -113,7 +108,7 @@ export async function PUT(
           user_id: userId
         }));
 
-        const { error: insertError } = await supabase
+        const { error: insertError } = await getSupabaseServer()
           .from('project_assignments')
           .insert(assignments);
 
@@ -124,7 +119,7 @@ export async function PUT(
     }
 
     // Fetch updated project with assignments
-    const { data, error: fetchError } = await supabase
+    const { data, error: fetchError } = await getSupabaseServer()
       .from('property_projects')
       .select(`
         *,
@@ -212,7 +207,7 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    const { error } = await supabase
+    const { error } = await getSupabaseServer()
       .from('property_projects')
       .delete()
       .eq('id', id);

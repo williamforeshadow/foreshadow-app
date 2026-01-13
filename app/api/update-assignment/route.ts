@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,7 +14,7 @@ export async function POST(request: NextRequest) {
 
     // Update the assigned_staff field in cleanings table
     // staffName can be null to unassign
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .from('cleanings')
       .update({ assigned_staff: staffName })
       .eq('id', cleaningId)

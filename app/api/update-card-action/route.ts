@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,7 +22,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update the card_actions field in cleanings table
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .from('cleanings')
       .update({ card_actions: action })
       .eq('id', cleaningId)
@@ -48,7 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch the complete card data with recalculated property_clean_status
-    const { data: cardData, error: cardError } = await supabase
+    const { data: cardData, error: cardError } = await getSupabaseServer()
       .rpc('get_property_turnovers')
       .eq('id', cleaningId)
       .single();

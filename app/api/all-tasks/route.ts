@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 // GET - Fetch all tasks with related data
 export async function GET(request: Request) {
@@ -15,7 +10,7 @@ export async function GET(request: Request) {
     const propertyName = searchParams.get('property_name');
 
     // Fetch tasks with related data
-    let query = supabase
+    let query = getSupabaseServer()
       .from('turnover_tasks')
       .select(`
         id,
@@ -54,7 +49,7 @@ export async function GET(request: Request) {
 
     // Fetch all reservations to compute next_check_in for each task
     // We need property_name and check_in to find the next reservation
-    const { data: allReservations, error: reservationsError } = await supabase
+    const { data: allReservations, error: reservationsError } = await getSupabaseServer()
       .from('reservations')
       .select('id, property_name, check_in, check_out')
       .order('check_in', { ascending: true });

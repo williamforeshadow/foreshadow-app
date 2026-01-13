@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 // GET - Fetch activity log for a project
 export async function GET(request: Request) {
@@ -18,7 +13,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'project_id is required' }, { status: 400 });
     }
 
-    const { data, error, count } = await supabase
+    const { data, error, count } = await getSupabaseServer()
       .from('project_activity_log')
       .select(`
         *,
@@ -57,7 +52,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .from('project_activity_log')
       .insert({
         project_id,
@@ -95,7 +90,7 @@ export async function logProjectActivity(
   newValue?: string
 ) {
   try {
-    const { error } = await supabase
+    const { error } = await getSupabaseServer()
       .from('project_activity_log')
       .insert({
         project_id: projectId,

@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 // POST - Add a new task to a turnover card
 export async function POST(request: Request) {
@@ -20,7 +15,7 @@ export async function POST(request: Request) {
     }
 
     // Get template details
-    const { data: template, error: templateError } = await supabase
+    const { data: template, error: templateError } = await getSupabaseServer()
       .from('templates')
       .select('id, name, type')
       .eq('id', template_id)
@@ -34,7 +29,7 @@ export async function POST(request: Request) {
     }
 
     // Check if this task already exists for this reservation
-    const { data: existing } = await supabase
+    const { data: existing } = await getSupabaseServer()
       .from('turnover_tasks')
       .select('id')
       .eq('reservation_id', reservation_id)
@@ -49,7 +44,7 @@ export async function POST(request: Request) {
     }
 
     // Insert new task
-    const { data: newTask, error: insertError } = await supabase
+    const { data: newTask, error: insertError } = await getSupabaseServer()
       .from('turnover_tasks')
       .insert({
         reservation_id,
@@ -95,7 +90,7 @@ export async function POST(request: Request) {
 // GET - Get all templates for adding tasks
 export async function GET() {
   try {
-    const { data: templates, error } = await supabase
+    const { data: templates, error } = await getSupabaseServer()
       .from('templates')
       .select('id, name, type')
       .order('type', { ascending: true })

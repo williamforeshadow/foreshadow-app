@@ -1,11 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseServer } from '@/lib/supabaseServer';
 import { logProjectActivity } from '@/lib/logProjectActivity';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 // Helper to format seconds to HH:MM:SS
 function formatDuration(seconds: number): string {
@@ -23,7 +18,7 @@ export async function GET(request: Request) {
     const userId = searchParams.get('user_id');
     const activeOnly = searchParams.get('active') === 'true';
 
-    let query = supabase
+    let query = getSupabaseServer()
       .from('project_time_entries')
       .select(`
         *,
@@ -93,7 +88,7 @@ export async function POST(request: Request) {
     }
 
     // Check if user already has an active timer on this project
-    const { data: existingActive } = await supabase
+    const { data: existingActive } = await getSupabaseServer()
       .from('project_time_entries')
       .select('id')
       .eq('project_id', project_id)
@@ -109,7 +104,7 @@ export async function POST(request: Request) {
     }
 
     // Create new time entry with start_time
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .from('project_time_entries')
       .insert({
         project_id,
@@ -146,7 +141,7 @@ export async function PUT(request: Request) {
 
     // If entry_id provided, stop that specific entry
     if (entry_id) {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabaseServer()
         .from('project_time_entries')
         .update({ end_time: new Date().toISOString() })
         .eq('id', entry_id)
@@ -186,7 +181,7 @@ export async function PUT(request: Request) {
       );
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .from('project_time_entries')
       .update({ end_time: new Date().toISOString() })
       .eq('project_id', project_id)
@@ -233,7 +228,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'entry_id is required' }, { status: 400 });
     }
 
-    const { error } = await supabase
+    const { error } = await getSupabaseServer()
       .from('project_time_entries')
       .delete()
       .eq('id', entryId);

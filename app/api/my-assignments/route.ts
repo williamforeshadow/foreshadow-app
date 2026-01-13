@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 // GET - Fetch all tasks and projects assigned to a specific user
 export async function GET(request: Request) {
@@ -20,7 +15,7 @@ export async function GET(request: Request) {
     }
 
     // Fetch task assignments for this user
-    const { data: taskAssignments, error: tasksError } = await supabase
+    const { data: taskAssignments, error: tasksError } = await getSupabaseServer()
       .from('task_assignments')
       .select('task_id, assigned_at')
       .eq('user_id', userId);
@@ -38,7 +33,7 @@ export async function GET(request: Request) {
     let tasks: any[] = [];
     
     if (taskIds.length > 0) {
-      const { data: taskData, error: taskDataError } = await supabase
+      const { data: taskData, error: taskDataError } = await getSupabaseServer()
         .from('turnover_tasks')
         .select(`
           id,
@@ -68,7 +63,7 @@ export async function GET(request: Request) {
       // Fetch reservation info
       let reservationsMap: { [key: string]: any } = {};
       if (reservationIds.length > 0) {
-        const { data: reservations, error: reservationsError } = await supabase
+        const { data: reservations, error: reservationsError } = await getSupabaseServer()
           .from('reservations')
           .select('id, property_name, guest_name, check_in, check_out')
           .in('id', reservationIds);
@@ -114,7 +109,7 @@ export async function GET(request: Request) {
     }
 
     // Fetch projects assigned to this user
-    const { data: projectAssignments, error: projectsError } = await supabase
+    const { data: projectAssignments, error: projectsError } = await getSupabaseServer()
       .from('project_assignments')
       .select(`
         project_id,

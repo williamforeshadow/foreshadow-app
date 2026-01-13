@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 // GET - List all property projects with assignees
 export async function GET(request: Request) {
@@ -13,7 +8,7 @@ export async function GET(request: Request) {
     const propertyName = searchParams.get('property_name');
     const userId = searchParams.get('user_id'); // For "My Assignments" filtering
 
-    let query = supabase
+    let query = getSupabaseServer()
       .from('property_projects')
       .select(`
         *,
@@ -76,8 +71,8 @@ export async function POST(request: Request) {
     }
 
     // Insert the project
-    console.log('Inserting into Supabase...');
-    const { data: project, error } = await supabase
+    console.log('Inserting into getSupabaseServer()...');
+    const { data: project, error } = await getSupabaseServer()
       .from('property_projects')
       .insert({
         property_name,
@@ -91,7 +86,7 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
-      console.error('Supabase error:', error);
+      console.error('getSupabaseServer() error:', error);
       return NextResponse.json(
         { error: error.message },
         { status: 500 }
@@ -107,7 +102,7 @@ export async function POST(request: Request) {
         user_id: userId
       }));
 
-      const { error: assignError } = await supabase
+      const { error: assignError } = await getSupabaseServer()
         .from('project_assignments')
         .insert(assignments);
 
@@ -118,7 +113,7 @@ export async function POST(request: Request) {
     }
 
     // Fetch the project with assignments
-    const { data: fullProject, error: fetchError } = await supabase
+    const { data: fullProject, error: fetchError } = await getSupabaseServer()
       .from('property_projects')
       .select(`
         *,

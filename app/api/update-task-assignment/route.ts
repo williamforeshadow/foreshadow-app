@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 // POST - Update task assignments (replaces all existing assignments)
 export async function POST(request: Request) {
@@ -19,7 +14,7 @@ export async function POST(request: Request) {
     const assigneeIds: string[] = Array.isArray(userIds) ? userIds : (userIds ? [userIds] : []);
 
     // Delete existing assignments for this task
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await getSupabaseServer()
       .from('task_assignments')
       .delete()
       .eq('task_id', taskId);
@@ -36,7 +31,7 @@ export async function POST(request: Request) {
         user_id: userId
       }));
 
-      const { error: insertError } = await supabase
+      const { error: insertError } = await getSupabaseServer()
         .from('task_assignments')
         .insert(assignments);
 
@@ -47,7 +42,7 @@ export async function POST(request: Request) {
     }
 
     // Fetch the updated task with assignments
-    const { data: task, error: fetchError } = await supabase
+    const { data: task, error: fetchError } = await getSupabaseServer()
       .from('turnover_tasks')
       .select(`
         *,
@@ -81,7 +76,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'task_id is required' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .from('task_assignments')
       .select(`
         user_id,

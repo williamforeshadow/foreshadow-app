@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 export async function GET(request: Request) {
   try {
@@ -12,7 +7,7 @@ export async function GET(request: Request) {
     const staff = searchParams.get('staff');
     const priority = searchParams.get('priority');
 
-    let query = supabase
+    let query = getSupabaseServer()
       .from('maintenance_cards')
       .select('*')
       .order('created_at', { ascending: false });
@@ -62,7 +57,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .from('maintenance_cards')
       .insert({
         property_name: property_name || null,

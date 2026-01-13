@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 // GET - Fetch all project views for a user (to determine which have unread activity)
 export async function GET(request: Request) {
@@ -16,7 +11,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'user_id is required' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .from('project_views')
       .select('project_id, last_viewed_at')
       .eq('user_id', userId);
@@ -53,7 +48,7 @@ export async function POST(request: Request) {
     }
 
     // Upsert: insert if not exists, update timestamp if exists
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .from('project_views')
       .upsert(
         {

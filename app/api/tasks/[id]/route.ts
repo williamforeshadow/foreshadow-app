@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 // DELETE - Remove a task from a turnover card
 export async function DELETE(
@@ -22,7 +17,7 @@ export async function DELETE(
     }
 
     // Delete the task
-    const { error } = await supabase
+    const { error } = await getSupabaseServer()
       .from('turnover_tasks')
       .delete()
       .eq('id', id);

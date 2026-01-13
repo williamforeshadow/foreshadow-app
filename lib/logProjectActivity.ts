@@ -1,9 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 export async function logProjectActivity(
   projectId: string,
@@ -14,7 +9,7 @@ export async function logProjectActivity(
   newValue?: string | null
 ) {
   try {
-    const { error } = await supabase
+    const { error } = await getSupabaseServer()
       .from('project_activity_log')
       .insert({
         project_id: projectId,

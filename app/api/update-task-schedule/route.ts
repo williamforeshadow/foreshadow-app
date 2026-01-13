@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 export async function POST(request: Request) {
   try {
@@ -14,7 +9,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseServer()
       .from('turnover_tasks')
       .update({ 
         scheduled_start: scheduledStart,
@@ -25,7 +20,7 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
-      console.error('Supabase error:', error);
+      console.error('getSupabaseServer() error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 

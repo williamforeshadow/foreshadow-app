@@ -1,15 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // needs access to RPC
-);
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 export async function GET(req: NextRequest) {
   try {
     // Call the RPC
-    const { data, error } = await supabase.rpc("get_operational_snapshot");
+    const { data, error } = await getSupabaseServer().rpc("get_operational_snapshot");
 
     if (error) {
       return NextResponse.json(
