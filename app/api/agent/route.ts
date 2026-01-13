@@ -2,17 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 
-// Debug: Log if API key is present
-console.log("ANTHROPIC_API_KEY present:", !!process.env.ANTHROPIC_API_KEY);
+// Lazy initialization to avoid build-time errors
+let anthropic: Anthropic | null = null;
+let supabase: ReturnType<typeof createClient> | null = null;
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || "",
-});
+function getAnthropic() {
+  if (!anthropic) {
+    anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY || "",
+    });
+  }
+  return anthropic;
+}
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabase() {
+  if (!supabase) {
+    supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+  }
+  return supabase;
+}
 
 // Sliding window memory: number of message exchanges to remember
 const MEMORY_WINDOW = 10;
@@ -195,7 +206,7 @@ Guidelines:
 async function saveAssistantMessage(userId: string | undefined, content: string, metadata: object = {}) {
   if (!userId) return;
   try {
-    await supabase.from("ai_chat_messages").insert({
+    await getSupabase().from("ai_chat_messages").insert({
       user_id: userId,
       role: "assistant",
       content,
@@ -249,7 +260,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Save the current user message
-      await supabase.from("ai_chat_messages").insert({
+      await getSupabase().from("ai_chat_messages").insert({
         user_id,
         role: "user",
         content: prompt,
@@ -263,7 +274,7 @@ export async function POST(req: NextRequest) {
     ];
 
     // Step 1: Ask Claude to determine if we need data and generate SQL
-    const analysisResponse = await anthropic.messages.create({
+    const analysisResponse = await getAnthropic().messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1024,
       messages,
@@ -324,13 +335,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Execute query
-    const { data, error } = await supabase.rpc("execute_dynamic_sql", {
+    const { data, error } = await getSupabase().rpc("execute_dynamic_sql", {
       sql_query: sql,
     });
 
     if (error) {
       // Let Claude interpret the error
-      const errorResponse = await anthropic.messages.create({
+      const errorResponse = await getAnthropic().messages.create({
         model: "claude-sonnet-4-20250514",
         max_tokens: 512,
         messages: [
@@ -362,7 +373,7 @@ Please explain what went wrong and suggest how the user might rephrase their que
     }
 
     // Step 3: Interpret the results
-    const interpretResponse = await anthropic.messages.create({
+    const interpretResponse = await getAnthropic().messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1024,
       messages: [
