@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { TaskStatus, TaskType, AssignedUser } from '@/lib/types';
+import type { Template } from '@/components/DynamicCleaningForm';
 
 // ============================================================================
 // Types
@@ -56,6 +57,7 @@ export interface TaskFilters {
   searchQuery: string;
   dateRange: DateRangeFilter;
   scheduledDateRange: DateRangeFilter;
+  assignedUsers: string[];
 }
 
 // ============================================================================
@@ -73,10 +75,11 @@ export function useTasks() {
   const [filters, setFilters] = useState<TaskFilters>({
     status: [],
     type: [],
-    timeline: [],
+    timeline: ['active'],
     searchQuery: '',
     dateRange: { from: null, to: null },
-    scheduledDateRange: { from: null, to: null }
+    scheduledDateRange: { from: null, to: null },
+    assignedUsers: [],
   });
 
   // Sort state
@@ -85,6 +88,10 @@ export function useTasks() {
 
   // Selection state
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
+
+  // Template state (for DynamicCleaningForm)
+  const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
+  const [loadingTaskTemplate, setLoadingTaskTemplate] = useState<string | null>(null);
 
   // ============================================================================
   // Data Fetching
@@ -210,6 +217,13 @@ export function useTasks() {
       });
     }
 
+    // Filter by assigned users
+    if (filters.assignedUsers.length > 0) {
+      result = result.filter(task =>
+        task.assigned_users.some(u => filters.assignedUsers.includes(u.user_id))
+      );
+    }
+
     // Sort
     result.sort((a, b) => {
       let comparison = 0;
@@ -287,6 +301,15 @@ export function useTasks() {
     setFilters(prev => ({ ...prev, scheduledDateRange }));
   }, []);
 
+  const toggleAssignedUserFilter = useCallback((userId: string) => {
+    setFilters(prev => ({
+      ...prev,
+      assignedUsers: prev.assignedUsers.includes(userId)
+        ? prev.assignedUsers.filter(id => id !== userId)
+        : [...prev.assignedUsers, userId]
+    }));
+  }, []);
+
   const clearFilters = useCallback(() => {
     setFilters({
       status: [],
@@ -294,15 +317,17 @@ export function useTasks() {
       timeline: [],
       searchQuery: '',
       dateRange: { from: null, to: null },
-      scheduledDateRange: { from: null, to: null }
+      scheduledDateRange: { from: null, to: null },
+      assignedUsers: [],
     });
   }, []);
 
   const getActiveFilterCount = useCallback(() => {
     const dateFilterActive = filters.dateRange.from || filters.dateRange.to ? 1 : 0;
     const scheduledFilterActive = filters.scheduledDateRange.from || filters.scheduledDateRange.to ? 1 : 0;
+    const assignedFilterActive = filters.assignedUsers.length > 0 ? 1 : 0;
     return filters.status.length + filters.type.length + filters.timeline.length + 
-           (filters.searchQuery ? 1 : 0) + dateFilterActive + scheduledFilterActive;
+           (filters.searchQuery ? 1 : 0) + dateFilterActive + scheduledFilterActive + assignedFilterActive;
   }, [filters]);
 
   // ============================================================================
@@ -319,6 +344,88 @@ export function useTasks() {
       prev?.task_id === taskId ? { ...prev, ...updates } : prev
     );
   }, []);
+
+  // ============================================================================
+  // Template Actions
+  // ============================================================================
+
+  const fetchTaskTemplate = useCallback(async (templateId: string) => {
+    // Return cached template if available
+    if (taskTemplates[templateId]) {
+      return taskTemplates[templateId];
+    }
+
+    setLoadingTaskTemplate(templateId);
+    try {
+      const res = await fetch(`/api/templates/${templateId}`);
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result.error || 'Failed to fetch template');
+      }
+
+      setTaskTemplates(prev => ({ ...prev, [templateId]: result.template }));
+      return result.template;
+    } catch (err) {
+      console.error('Error fetching template:', err);
+      return null;
+    } finally {
+      setLoadingTaskTemplate(null);
+    }
+  }, [taskTemplates]);
+
+  const saveTaskForm = useCallback(async (taskId: string, formData: Record<string, unknown>) => {
+    try {
+      const res = await fetch('/api/save-task-form', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, formData })
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result.error || 'Failed to save task form');
+      }
+
+      // Update task in local state
+      updateTaskInState(taskId, { form_metadata: formData });
+
+      return result;
+    } catch (err) {
+      console.error('Error saving task form:', err);
+      throw err;
+    }
+  }, [updateTaskInState]);
+
+  const updateTaskStatus = useCallback(async (taskId: string, newStatus: TaskStatus) => {
+    try {
+      // Save form data if there's a form open
+      if ((window as any).__currentFormSave) {
+        await (window as any).__currentFormSave();
+      }
+
+      const res = await fetch('/api/update-task-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, action: newStatus })
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result.error || 'Failed to update task status');
+      }
+
+      // Update task in local state
+      updateTaskInState(taskId, { status: newStatus });
+
+      return result;
+    } catch (err) {
+      console.error('Error updating task status:', err);
+      throw err;
+    }
+  }, [updateTaskInState]);
 
   // ============================================================================
   // Return API
@@ -341,6 +448,7 @@ export function useTasks() {
     setSearchQuery,
     setDateRange,
     setScheduledDateRange,
+    toggleAssignedUserFilter,
     clearFilters,
     getActiveFilterCount,
 
@@ -356,6 +464,13 @@ export function useTasks() {
 
     // Actions
     updateTaskInState,
+
+    // Template functionality
+    taskTemplates,
+    loadingTaskTemplate,
+    fetchTaskTemplate,
+    saveTaskForm,
+    updateTaskStatus,
   };
 }
 

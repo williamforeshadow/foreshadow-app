@@ -10,19 +10,31 @@ function ScrollArea({
   children,
   ...props
 }: React.ComponentProps<typeof ScrollAreaPrimitive.Root>) {
+  // Separate ScrollBar children from content children
+  const scrollBars: React.ReactNode[] = []
+  const content: React.ReactNode[] = []
+
+  React.Children.forEach(children, (child) => {
+    if (React.isValidElement(child) && child.type === ScrollBar) {
+      scrollBars.push(child)
+    } else {
+      content.push(child)
+    }
+  })
+
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
-      className={cn("relative", className)}
+      className={cn("relative overflow-hidden", className)}
       {...props}
     >
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
         className="focus-visible:ring-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1"
       >
-        {children}
+        {content}
       </ScrollAreaPrimitive.Viewport>
-      <ScrollBar />
+      {scrollBars}
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
   )

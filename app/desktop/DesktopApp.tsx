@@ -46,11 +46,7 @@ export default function DesktopApp() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Fixed Header */}
         <div className="flex-shrink-0 p-4 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-neutral-900 dark:text-white">
-              Property Management Dashboard
-            </h1>
-            
+          <div className="flex items-center justify-end">
             {/* Window Controls */}
             <div className="flex gap-2">
               <Button
@@ -183,7 +179,7 @@ export default function DesktopApp() {
               onClose={() => setShowTasksWindow(false)}
               onFocus={() => bringToFront('tasks')}
             >
-              <TasksWindow />
+              <TasksWindow currentUser={currentUser} users={users} />
             </FloatingWindow>
           </div>
 

@@ -1,7 +1,8 @@
 'use client';
 
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
 import { useTasks } from '@/lib/useTasks';
+import type { User } from '@/lib/types';
 import {
   TaskRowItem,
   TaskFilterBar,
@@ -9,10 +10,11 @@ import {
 } from './tasks';
 
 interface TasksWindowProps {
-  // Add props as needed when you build out functionality
+  currentUser: User | null;
+  users: User[];
 }
 
-function TasksWindowContent({}: TasksWindowProps) {
+function TasksWindowContent({ currentUser, users }: TasksWindowProps) {
   const {
     tasks,
     summary,
@@ -25,37 +27,53 @@ function TasksWindowContent({}: TasksWindowProps) {
     setSearchQuery,
     setDateRange,
     setScheduledDateRange,
+    toggleAssignedUserFilter,
     clearFilters,
     getActiveFilterCount,
     sortBy,
     setSortBy,
     selectedTask,
     setSelectedTask,
+    // Template functionality
+    taskTemplates,
+    loadingTaskTemplate,
+    fetchTaskTemplate,
+    saveTaskForm,
+    updateTaskStatus,
   } = useTasks();
+
+  // Fetch template when a task with template_id is selected
+  useEffect(() => {
+    if (selectedTask?.template_id) {
+      fetchTaskTemplate(selectedTask.template_id);
+    }
+  }, [selectedTask?.template_id, fetchTaskTemplate]);
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Main Content */}
-      <div className={`${selectedTask ? 'w-1/2 border-r border-neutral-200 dark:border-neutral-700' : 'w-full'} flex flex-col transition-all duration-300`}>
+      {/* Main Content - container resizes, content stays full width via min-w-max */}
+      <div className={`${selectedTask ? 'w-1/2' : 'w-full'} flex flex-col min-w-0`}>
         {/* Header with filters */}
         <TaskFilterBar
           filters={filters}
           summary={summary}
           taskCount={tasks.length}
           sortBy={sortBy}
+          users={users}
           toggleStatusFilter={toggleStatusFilter}
           toggleTypeFilter={toggleTypeFilter}
           toggleTimelineFilter={toggleTimelineFilter}
           setSearchQuery={setSearchQuery}
           setDateRange={setDateRange}
           setScheduledDateRange={setScheduledDateRange}
+          toggleAssignedUserFilter={toggleAssignedUserFilter}
           clearFilters={clearFilters}
           getActiveFilterCount={getActiveFilterCount}
           setSortBy={setSortBy}
         />
 
         {/* Task List */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-scroll">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <p className="text-neutral-500 dark:text-neutral-400">Loading tasks...</p>
@@ -76,7 +94,7 @@ function TasksWindowContent({}: TasksWindowProps) {
               </p>
             </div>
           ) : (
-            <div>
+            <div className="min-w-max">
               {/* Column headers */}
               <div className="flex items-center gap-6 px-4 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 sticky top-0">
                 <div className="w-2" />
@@ -105,12 +123,20 @@ function TasksWindowContent({}: TasksWindowProps) {
         </div>
       </div>
 
-      {/* Detail Panel */}
+      {/* Detail Panel - flex sibling so scrollbar stays accessible */}
       {selectedTask && (
-        <TaskDetailPanel
-          task={selectedTask}
-          onClose={() => setSelectedTask(null)}
-        />
+        <div className="w-1/2 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex-shrink-0">
+          <TaskDetailPanel
+            task={selectedTask}
+            currentUser={currentUser}
+            taskTemplates={taskTemplates}
+            loadingTaskTemplate={loadingTaskTemplate}
+            onClose={() => setSelectedTask(null)}
+            onUpdateStatus={updateTaskStatus}
+            onSaveForm={saveTaskForm}
+            setTask={setSelectedTask}
+          />
+        </div>
       )}
     </div>
   );

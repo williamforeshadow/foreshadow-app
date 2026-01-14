@@ -1,15 +1,17 @@
 'use client';
 
+import { useState } from 'react';
 import { format } from 'date-fns';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Check, ChevronsUpDown } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import type { TaskFilters, TaskSummary, TimelineFilter, DateRangeFilter } from '@/lib/useTasks';
-import type { TaskStatus, TaskType } from '@/lib/types';
+import type { TaskStatus, TaskType, User } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 interface TaskFilterBarProps {
@@ -17,12 +19,14 @@ interface TaskFilterBarProps {
   summary: TaskSummary | null;
   taskCount: number;
   sortBy: string;
+  users: User[];
   toggleStatusFilter: (status: TaskStatus) => void;
   toggleTypeFilter: (type: TaskType) => void;
   toggleTimelineFilter: (timeline: TimelineFilter) => void;
   setSearchQuery: (query: string) => void;
   setDateRange: (dateRange: DateRangeFilter) => void;
   setScheduledDateRange: (dateRange: DateRangeFilter) => void;
+  toggleAssignedUserFilter: (userId: string) => void;
   clearFilters: () => void;
   getActiveFilterCount: () => number;
   setSortBy: (sortBy: 'created_at' | 'scheduled_start' | 'property_name' | 'status') => void;
@@ -33,16 +37,19 @@ export function TaskFilterBar({
   summary,
   taskCount,
   sortBy,
+  users,
   toggleStatusFilter,
   toggleTypeFilter,
   toggleTimelineFilter,
   setSearchQuery,
   setDateRange,
   setScheduledDateRange,
+  toggleAssignedUserFilter,
   clearFilters,
   getActiveFilterCount,
   setSortBy,
 }: TaskFilterBarProps) {
+  const [staffOpen, setStaffOpen] = useState(false);
   // Convert internal dateRange to react-day-picker DateRange format
   const calendarDateRange: DateRange | undefined = 
     filters.dateRange.from || filters.dateRange.to
@@ -260,6 +267,50 @@ export function TaskFilterBar({
                 </Button>
               </div>
             )}
+          </PopoverContent>
+        </Popover>
+
+        {/* Assigned Staff Filter */}
+        <Popover open={staffOpen} onOpenChange={setStaffOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              className={cn(
+                'h-7 px-2.5 text-xs font-normal justify-between min-w-[120px]',
+                filters.assignedUsers.length === 0 && 'text-neutral-500',
+                filters.assignedUsers.length > 0 && 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-neutral-900 dark:border-white'
+              )}
+            >
+              {filters.assignedUsers.length === 0
+                ? "Assigned to"
+                : filters.assignedUsers.length === 1
+                  ? users.find((user) => user.id === filters.assignedUsers[0])?.name || "1 selected"
+                  : `${filters.assignedUsers.length} selected`}
+              <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[180px] p-0" align="start">
+            <Command>
+              <CommandInput placeholder="Search staff..." className="h-8 text-xs" />
+              <CommandList>
+                <CommandEmpty>No staff found.</CommandEmpty>
+                <CommandGroup>
+                  {users.map((user) => (
+                    <CommandItem
+                      key={user.id}
+                      value={user.name}
+                      onSelect={() => {
+                        toggleAssignedUserFilter(user.id);
+                      }}
+                    >
+                      <Check className={cn("mr-2 h-3 w-3", filters.assignedUsers.includes(user.id) ? "opacity-100" : "opacity-0")} />
+                      {user.name}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
           </PopoverContent>
         </Popover>
 
