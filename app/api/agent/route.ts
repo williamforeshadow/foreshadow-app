@@ -27,7 +27,7 @@ function getSupabase() {
 }
 
 // Sliding window memory: number of message exchanges to remember
-const MEMORY_WINDOW = 10;
+const MEMORY_WINDOW = 15;
 
 const DATABASE_SCHEMA = `
 ## DATABASE SCHEMA
@@ -153,9 +153,7 @@ Discussion comments on projects.
 - To get user names for assignments, JOIN with the users table
 `;
 
-const SYSTEM_PROMPT = `You are Claude, an AI assistant made by Anthropic, integrated into Foreshadow - a vacation rental property management application. Your job is to answer questions about operations, properties, tasks, and projects by querying the database.
-
-If asked about yourself, you are Claude (specifically Claude Sonnet), created by Anthropic. Do not claim to be any other AI model.
+const SYSTEM_PROMPT = `You are an AI assistant integrated into Foreshadow - a vacation rental property management application. Your job is to answer questions about operations, properties, tasks, projects and more by querying the database.
 
 ${DATABASE_SCHEMA}
 
@@ -191,7 +189,7 @@ If the question is conversational or doesn't need data:
 - Join tables as needed to get complete information
 - Return relevant columns, not always SELECT *`;
 
-const INTERPRETATION_PROMPT = `You are Claude, an AI assistant made by Anthropic, integrated into Foreshadow - a vacation rental property management app.
+const INTERPRETATION_PROMPT = `You are an AI assistant integrated into Foreshadow - a vacation rental property management app.
 
 The user asked a question and we ran a SQL query to get data. Now interpret the results in clear, helpful natural language.
 
@@ -274,9 +272,9 @@ export async function POST(req: NextRequest) {
       { role: "user", content: prompt },
     ];
 
-    // Step 1: Ask Claude to determine if we need data and generate SQL
+    // Step 1: Ask to determine if we need data and generate SQL
     const analysisResponse = await getAnthropic().messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-opus-4-20250514",
       max_tokens: 1024,
       messages,
       system: SYSTEM_PROMPT,
@@ -343,7 +341,7 @@ export async function POST(req: NextRequest) {
     if (error) {
       // Let Claude interpret the error
       const errorResponse = await getAnthropic().messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-opus-4-20250514",
         max_tokens: 512,
         messages: [
           {
@@ -375,7 +373,7 @@ Please explain what went wrong and suggest how the user might rephrase their que
 
     // Step 3: Interpret the results
     const interpretResponse = await getAnthropic().messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-opus-4-20250514",
       max_tokens: 1024,
       messages: [
         {
