@@ -23,7 +23,7 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import type { Project, User, ProjectFormFields, Comment, Attachment, TimeEntry } from '@/lib/types';
 
 interface ProjectDetailPanelProps {
@@ -158,7 +158,7 @@ export function ProjectDetailPanel({
                         editingFields.status === 'complete' && "bg-emerald-500 text-white"
                       )}
                     >
-                      {editingFields.status?.replace('_', ' ') || 'not started'}
+                      {(editingFields.status?.replace('_', ' ') || 'not started').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                     </Badge>
                   </button>
                 </DropdownMenuTrigger>
@@ -204,7 +204,7 @@ export function ProjectDetailPanel({
                         editingFields.priority === 'urgent' && "bg-red-500 text-white"
                       )}
                     >
-                      {editingFields.priority}
+                      {editingFields.priority ? editingFields.priority.charAt(0).toUpperCase() + editingFields.priority.slice(1) : 'Low'}
                     </Badge>
                   </button>
                 </DropdownMenuTrigger>
@@ -423,6 +423,7 @@ export function ProjectDetailPanel({
             )}
           </div>
         </div>
+        <ScrollBar />
       </ScrollArea>
 
       {/* Comment Input - Sticky at bottom */}

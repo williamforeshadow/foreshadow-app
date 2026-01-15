@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useState, useCallback, useEffect } from 'react';
+import { memo, useState, useCallback, useEffect, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import TurnoverCards from '@/components/TurnoverCards';
 import { useTurnovers } from '@/lib/useTurnovers';
@@ -99,6 +99,14 @@ function TurnoversWindowContent({
   const [viewingAttachmentIndex, setViewingAttachmentIndex] = useState<number | null>(null);
   const [activitySheetOpen, setActivitySheetOpen] = useState(false);
 
+  // Ref to track the latest project fields (avoids stale closure issues)
+  const projectFieldsRef = useRef<ProjectFormFields | null>(null);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    projectFieldsRef.current = projectFields;
+  }, [projectFields]);
+
   // ============================================================================
   // Reset project state when switching to a different turnover card
   // ============================================================================
@@ -129,7 +137,7 @@ function TurnoversWindowContent({
         status: expandedProject.status,
         priority: expandedProject.priority,
         assigned_staff: expandedProject.project_assignments?.[0]?.user_id || '',
-        due_date: expandedProject.due_date || ''
+        due_date: expandedProject.due_date ? expandedProject.due_date.split('T')[0] : ''
       });
       // Use LOCAL hook instances
       commentsHook.fetchProjectComments(expandedProject.id);
@@ -142,12 +150,13 @@ function TurnoversWindowContent({
   // Wrapper functions that use LOCAL state with LOCAL hook mutations
   // ============================================================================
   const handleSaveProject = useCallback(async () => {
-    if (!expandedProject || !projectFields) return;
-    const updatedProject = await saveProjectById(expandedProject.id, projectFields);
+    const currentFields = projectFieldsRef.current;
+    if (!expandedProject || !currentFields) return;
+    const updatedProject = await saveProjectById(expandedProject.id, currentFields);
     if (updatedProject) {
       setExpandedProject(updatedProject);
     }
-  }, [expandedProject, projectFields, saveProjectById]);
+  }, [expandedProject, saveProjectById]);
 
   const handlePostComment = useCallback(async () => {
     if (!expandedProject || !newComment.trim()) return;

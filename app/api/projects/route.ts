@@ -7,6 +7,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const propertyName = searchParams.get('property_name');
     const userId = searchParams.get('user_id'); // For "My Assignments" filtering
+    const viewerUserId = searchParams.get('viewer_user_id'); // For unread comment count
 
     let query = getSupabaseServer()
       .from('property_projects')
@@ -43,7 +44,48 @@ export async function GET(request: Request) {
       );
     }
 
-    return NextResponse.json({ data: filteredData });
+    // Calculate unread comment counts if viewerUserId is provided
+    let unreadCounts: Record<string, number> = {};
+    if (viewerUserId) {
+      // Fetch project views for the viewer
+      const { data: viewsData } = await getSupabaseServer()
+        .from('project_views')
+        .select('project_id, last_viewed_at')
+        .eq('user_id', viewerUserId);
+      
+      const viewsMap: Record<string, string> = {};
+      (viewsData || []).forEach((view: any) => {
+        viewsMap[view.project_id] = view.last_viewed_at;
+      });
+
+      // Fetch all comments
+      const { data: allComments } = await getSupabaseServer()
+        .from('project_comments')
+        .select('project_id, user_id, created_at');
+
+      // Calculate unread counts (comments not by current user, after last view)
+      (allComments || []).forEach((comment: any) => {
+        const lastViewed = viewsMap[comment.project_id];
+        const isOwnComment = comment.user_id === viewerUserId;
+        const isUnread = !isOwnComment && (!lastViewed || new Date(comment.created_at) > new Date(lastViewed));
+        
+        if (isUnread) {
+          unreadCounts[comment.project_id] = (unreadCounts[comment.project_id] || 0) + 1;
+        }
+      });
+    }
+
+    // Transform to flatten user data in assignments and add unread count
+    const transformedData = filteredData?.map((project: any) => ({
+      ...project,
+      unread_comment_count: unreadCounts[project.id] || 0,
+      project_assignments: project.project_assignments?.map((a: any) => ({
+        ...a,
+        user: a.users || null, // Map users to user for frontend
+      })) || [],
+    })) || [];
+
+    return NextResponse.json({ data: transformedData });
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || 'Failed to fetch projects' },
@@ -132,8 +174,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, data: project });
     }
 
-    console.log('Success! Created project with assignments:', fullProject);
-    return NextResponse.json({ success: true, data: fullProject });
+    // Transform to flatten user data in assignments
+    const transformedProject = {
+      ...fullProject,
+      project_assignments: fullProject.project_assignments?.map((a: any) => ({
+        ...a,
+        user: a.users || null, // Map users to user for frontend
+      })) || [],
+    };
+
+    console.log('Success! Created project with assignments:', transformedProject);
+    return NextResponse.json({ success: true, data: transformedProject });
   } catch (err: any) {
     console.error('Caught error:', err);
     return NextResponse.json(

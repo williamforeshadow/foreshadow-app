@@ -28,8 +28,15 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Transform to flatten user data
+    const transformedData = data?.map((activity: any) => ({
+      ...activity,
+      user_name: activity.users?.name || null,
+      action: activity.description, // Map description to action for frontend
+    })) || [];
+
     return NextResponse.json({
-      data,
+      data: transformedData,
       total: count,
       hasMore: (offset + limit) < (count || 0)
     });

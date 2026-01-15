@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useCallback, useState, useEffect } from 'react';
+import { memo, useCallback, useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -27,25 +27,24 @@ interface ProjectsWindowProps {
 interface ProjectCardProps {
   project: Project;
   isSelected: boolean;
-  hasUnread: boolean;
+  unreadCount: number;
   onSelect: () => void;
 }
 
-const ProjectCard = memo(function ProjectCard({ project, isSelected, hasUnread, onSelect }: ProjectCardProps) {
+const ProjectCard = memo(function ProjectCard({ project, isSelected, unreadCount, onSelect }: ProjectCardProps) {
   return (
     <Card
-      className={`group w-full gap-4 !p-4 hover:shadow-lg transition-shadow duration-150 !flex !flex-col cursor-pointer relative ${
+      className={`group w-[280px] gap-4 !p-4 hover:shadow-lg transition-shadow duration-150 !flex !flex-col cursor-pointer relative ${
         isSelected ? 'ring-1 ring-amber-400/70 shadow-md' : ''
       }`}
       onClick={onSelect}
     >
-      {/* New activity badge */}
-      {hasUnread && !isSelected && (
+      {/* Unread comments badge */}
+      {unreadCount > 0 && !isSelected && (
         <Badge
-          variant="outline"
-          className="absolute -top-2 -right-2 z-10 bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700 text-[10px] px-1.5 py-0"
+          className="absolute -top-2 -right-2 z-10 bg-red-500 text-white border-transparent text-[10px] px-1.5 py-0 min-w-[18px] text-center"
         >
-          new
+          {unreadCount}
         </Badge>
       )}
       <CardHeader className="min-h-[4.5rem]">
@@ -58,25 +57,29 @@ const ProjectCard = memo(function ProjectCard({ project, isSelected, hasUnread, 
       <CardContent className="flex-grow">
         <div className="flex w-full items-center justify-between">
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Status badge first */}
             <Badge
-              className={`px-2.5 py-1 ${
-                project.priority === 'urgent' ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800' :
-                project.priority === 'high' ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800' :
-                project.priority === 'medium' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' :
-                'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+              variant="outline"
+              className={`px-2 py-0.5 text-xs border-transparent ${
+                project.status === 'complete' ? 'bg-emerald-500 text-white' :
+                project.status === 'in_progress' ? 'bg-blue-500 text-white' :
+                project.status === 'on_hold' ? 'bg-amber-500 text-white' :
+                'bg-neutral-500 text-white'
               }`}
             >
-              {project.priority}
+              {(project.status?.replace('_', ' ') || 'not started').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
             </Badge>
+            {/* Priority badge second */}
             <Badge
-              className={`px-2.5 py-1 ${
-                project.status === 'complete' ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800' :
-                project.status === 'in_progress' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' :
-                project.status === 'on_hold' ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800' :
-                'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+              variant="outline"
+              className={`px-2 py-0.5 text-xs border-transparent ${
+                project.priority === 'urgent' ? 'bg-red-500 text-white' :
+                project.priority === 'high' ? 'bg-orange-500 text-white' :
+                project.priority === 'medium' ? 'bg-sky-500 text-white' :
+                'bg-slate-500 text-white'
               }`}
             >
-              {project.status?.replace('_', ' ') || 'not started'}
+              {project.priority ? project.priority.charAt(0).toUpperCase() + project.priority.slice(1) : 'Low'}
             </Badge>
           </div>
         </div>
@@ -87,14 +90,31 @@ const ProjectCard = memo(function ProjectCard({ project, isSelected, hasUnread, 
           <div className="h-px w-full bg-border/60" />
         </div>
         <div className="flex w-full justify-between text-xs text-muted-foreground/60">
-          <div className="flex items-center gap-2">
-            {project.assigned_staff && (
-              <div className="flex h-[27px] items-center justify-center gap-1 rounded-xl border border-border/20 bg-[var(--mix-card-33-bg)] px-2 py-1">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <span className="max-w-[80px] truncate">{project.assigned_staff}</span>
+          {/* Assigned Users Avatars */}
+          <div className="flex items-center">
+            {project.project_assignments && project.project_assignments.length > 0 ? (
+              <div className="flex items-center">
+                {project.project_assignments.slice(0, 3).map((assignment, index) => (
+                  <div
+                    key={assignment.user_id}
+                    className="w-6 h-6 rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-[10px] font-medium text-neutral-600 dark:text-neutral-300 border-2 border-card"
+                    style={{ marginLeft: index > 0 ? '-6px' : '0' }}
+                    title={assignment.user?.name || 'Unknown'}
+                  >
+                    {(assignment.user?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                  </div>
+                ))}
+                {project.project_assignments.length > 3 && (
+                  <div
+                    className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-semibold text-muted-foreground border-2 border-card"
+                    style={{ marginLeft: '-6px' }}
+                  >
+                    +{project.project_assignments.length - 3}
+                  </div>
+                )}
               </div>
+            ) : (
+              <div className="w-6 h-6" />
             )}
           </div>
           {project.due_date && (
@@ -121,7 +141,7 @@ interface ProjectListProps {
   loadingProjects: boolean;
   groupedProjects: Record<string, Project[]>;
   expandedProjectId: string | null;
-  hasUnreadActivity: (project: Project) => boolean;
+  getUnreadCommentCount: (project: Project) => number;
   onSelectProject: (project: Project) => void;
   openCreateProjectDialog: (propertyName?: string) => void;
 }
@@ -131,7 +151,7 @@ const ProjectList = memo(function ProjectList({
   loadingProjects,
   groupedProjects,
   expandedProjectId,
-  hasUnreadActivity,
+  getUnreadCommentCount,
   onSelectProject,
   openCreateProjectDialog,
 }: ProjectListProps) {
@@ -196,13 +216,13 @@ const ProjectList = memo(function ProjectList({
               </div>
 
               {/* Property Projects Grid */}
-              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-4 flex flex-wrap gap-4">
                 {propertyProjects.map((project) => (
                   <ProjectCard
                     key={project.id}
                     project={project}
                     isSelected={expandedProjectId === project.id}
-                    hasUnread={hasUnreadActivity(project)}
+                    unreadCount={getUnreadCommentCount(project)}
                     onSelect={() => onSelectProject(project)}
                   />
                 ))}
@@ -234,6 +254,14 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
   const [viewingAttachmentIndex, setViewingAttachmentIndex] = useState<number | null>(null);
   const [activityPopoverOpen, setActivityPopoverOpen] = useState(false);
 
+  // Ref to track the latest editing fields (avoids stale closure issues)
+  const editingFieldsRef = useRef<ProjectFormFields | null>(null);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    editingFieldsRef.current = editingProjectFields;
+  }, [editingProjectFields]);
+
   // ============================================================================
   // SHARED data from projectsHook (only core project data and mutations)
   // ============================================================================
@@ -246,7 +274,7 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
 
     // Project views
     recordProjectView,
-    hasUnreadActivity,
+    getUnreadCommentCount,
 
     // Dialog state (shared - one dialog for creating projects)
     showProjectDialog,
@@ -275,7 +303,7 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
         status: expandedProject.status,
         priority: expandedProject.priority,
         assigned_staff: expandedProject.project_assignments?.[0]?.user_id || '',
-        due_date: expandedProject.due_date || ''
+        due_date: expandedProject.due_date ? expandedProject.due_date.split('T')[0] : ''
       });
       // Use LOCAL hook instances
       commentsHook.fetchProjectComments(expandedProject.id);
@@ -288,12 +316,13 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
   // Wrapper functions that use LOCAL state with LOCAL hook mutations
   // ============================================================================
   const handleSaveProject = useCallback(async () => {
-    if (!expandedProject || !editingProjectFields) return;
-    const updatedProject = await saveProjectById(expandedProject.id, editingProjectFields);
+    const currentFields = editingFieldsRef.current;
+    if (!expandedProject || !currentFields) return;
+    const updatedProject = await saveProjectById(expandedProject.id, currentFields);
     if (updatedProject) {
       setExpandedProject(updatedProject);
     }
-  }, [expandedProject, editingProjectFields, saveProjectById]);
+  }, [expandedProject, saveProjectById]);
 
   const handlePostComment = useCallback(async () => {
     if (!expandedProject || !newComment.trim()) return;
@@ -346,7 +375,7 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
           loadingProjects={loadingProjects}
           groupedProjects={groupedProjects}
           expandedProjectId={expandedProject?.id || null}
-          hasUnreadActivity={hasUnreadActivity}
+          getUnreadCommentCount={getUnreadCommentCount}
           onSelectProject={handleProjectSelect}
           openCreateProjectDialog={openCreateProjectDialog}
         />

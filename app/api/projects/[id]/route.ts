@@ -37,7 +37,16 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ data });
+    // Transform to flatten user data in assignments
+    const transformedData = {
+      ...data,
+      project_assignments: data.project_assignments?.map((a: any) => ({
+        ...a,
+        user: a.users || null, // Map users to user for frontend
+      })) || [],
+    };
+
+    return NextResponse.json({ data: transformedData });
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || 'Failed to fetch project' },
@@ -190,7 +199,16 @@ export async function PUT(
       }
     }
 
-    return NextResponse.json({ success: true, data });
+    // Transform to flatten user data in assignments
+    const transformedData = {
+      ...data,
+      project_assignments: data?.project_assignments?.map((a: any) => ({
+        ...a,
+        user: a.users || null, // Map users to user for frontend
+      })) || [],
+    };
+
+    return NextResponse.json({ success: true, data: transformedData });
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || 'Failed to update project' },

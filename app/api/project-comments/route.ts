@@ -31,7 +31,14 @@ export async function GET(request: Request) {
       );
     }
 
-    return NextResponse.json({ data });
+    // Transform to flatten user data
+    const transformedData = data?.map((comment: any) => ({
+      ...comment,
+      user_name: comment.users?.name || null,
+      user_avatar: comment.users?.avatar || null,
+    })) || [];
+
+    return NextResponse.json({ data: transformedData });
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || 'Failed to fetch comments' },
@@ -79,7 +86,14 @@ export async function POST(request: Request) {
       : comment_content;
     await logProjectActivity(project_id, user_id, 'comment', `commented "${truncatedComment}"`, null, comment_content);
 
-    return NextResponse.json({ success: true, data });
+    // Transform to flatten user data
+    const transformedData = {
+      ...data,
+      user_name: data.users?.name || null,
+      user_avatar: data.users?.avatar || null,
+    };
+
+    return NextResponse.json({ success: true, data: transformedData });
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || 'Failed to create comment' },

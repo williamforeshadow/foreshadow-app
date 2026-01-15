@@ -62,7 +62,10 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   const fetchProjects = useCallback(async () => {
     setLoadingProjects(true);
     try {
-      const response = await fetch('/api/projects');
+      const url = currentUser?.id 
+        ? `/api/projects?viewer_user_id=${currentUser.id}` 
+        : '/api/projects';
+      const response = await fetch(url);
       const result = await response.json();
       if (response.ok && result.data) {
         setProjects(result.data);
@@ -72,7 +75,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     } finally {
       setLoadingProjects(false);
     }
-  }, []);
+  }, [currentUser?.id]);
 
   const fetchAllProperties = useCallback(async () => {
     try {
@@ -117,18 +120,26 @@ export function useProjects({ currentUser }: UseProjectsProps) {
         ...prev,
         [projectId]: new Date().toISOString()
       }));
+      // Clear the unread count locally so badge disappears immediately
+      setProjects(prev => prev.map(p => 
+        p.id === projectId 
+          ? { ...p, unread_comment_count: 0 } as any
+          : p
+      ));
     } catch (err) {
       console.error('Error recording project view:', err);
     }
   }, [currentUser?.id]);
 
+  // Get unread comment count from the project data (calculated by API)
+  const getUnreadCommentCount = useCallback((project: Project): number => {
+    return (project as any).unread_comment_count || 0;
+  }, []);
+
+  // Legacy function for backward compatibility - now based on unread comments
   const hasUnreadActivity = useCallback((project: Project): boolean => {
-    const lastViewed = projectViews[project.id];
-    if (!lastViewed) return true;
-    const projectUpdated = new Date(project.updated_at).getTime();
-    const userViewed = new Date(lastViewed).getTime();
-    return projectUpdated > userViewed;
-  }, [projectViews]);
+    return getUnreadCommentCount(project) > 0;
+  }, [getUnreadCommentCount]);
 
   // ============================================================================
   // Dialog Operations
@@ -357,6 +368,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     projectViews,
     recordProjectView,
     hasUnreadActivity,
+    getUnreadCommentCount,
 
     // Dialog state (SHARED - one dialog for all)
     showProjectDialog,
