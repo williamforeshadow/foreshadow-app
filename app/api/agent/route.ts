@@ -187,7 +187,13 @@ If the question is conversational or doesn't need data:
 - For "tomorrow" use CURRENT_DATE + 1
 - For "this week" use date_trunc('week', CURRENT_DATE)
 - Join tables as needed to get complete information
-- Return relevant columns, not always SELECT *`;
+- Return relevant columns, not always SELECT *
+
+## CRITICAL SAFETY RULE
+If a question asks about real events, records, tasks, properties, projects or history,
+and you do not retrieve data from the database,
+you MUST say that no data is available.
+You are NEVER allowed to infer, assume, or fabricate operational details.`;
 
 const INTERPRETATION_PROMPT = `You are an AI assistant integrated into Foreshadow - a vacation rental property management app.
 
