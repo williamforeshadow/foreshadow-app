@@ -82,7 +82,7 @@ export function TurnoverFilterBar({
                 checked={filters.occupancyStatus.includes('vacant')}
                 onCheckedChange={() => toggleFilter('occupancyStatus', 'vacant')}
               >
-                Vacant
+                Out
               </DropdownMenuCheckboxItemRight>
             </DropdownMenuContent>
           </DropdownMenu>

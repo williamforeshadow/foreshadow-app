@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { applyCleaningFilters, type CleaningFilters } from '@/lib/cleaningFilters';
+import FlagCheckeredIcon from '@/components/ui/FlagCheckeredIcon';
 import type { Turnover } from '@/lib/types';
 
 interface TurnoverCardsProps {
@@ -34,19 +35,18 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
   }
 
   // Filter to active turnovers only - exclude completely past ones
-  // A turnover is "active" if checkout OR next_check_in is today or in the future
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // A turnover is "active" from check_in to next_check_in, down to the minute
+  const now = new Date();
   
   items = items.filter(item => {
     const checkOut = item.check_out ? new Date(item.check_out) : null;
     const nextCheckIn = item.next_check_in ? new Date(item.next_check_in) : null;
     
-    // Keep if checkout is today or future (guest still there or leaving today)
-    if (checkOut && checkOut >= today) return true;
+    // Keep if checkout is now or future (guest still there or leaving soon)
+    if (checkOut && checkOut >= now) return true;
     
-    // Keep if next check-in is today or future, or no next booking yet
-    if (!nextCheckIn || nextCheckIn >= today) return true;
+    // Keep if next check-in is now or future, or no next booking yet
+    if (!nextCheckIn || nextCheckIn >= now) return true;
     
     // Both dates are in the past - this turnover is complete, hide it
     return false;
@@ -77,7 +77,6 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
 
   // Sort cards within each property by check_out date (chronological)
   // and mark each card as active or upcoming
-  const now = new Date();
   sortedProperties.forEach(property => {
     groupedByProperty[property].sort((a: Turnover, b: Turnover) => {
       const dateA = a.check_out ? new Date(a.check_out).getTime() : 0;
@@ -215,22 +214,6 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
 
                 <CardContent className="flex-grow">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Badge 
-                      className={`px-2.5 py-1 ${
-                        item.turnover_status === 'complete' 
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
-                          : item.turnover_status === 'in_progress'
-                          ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800'
-                          : item.turnover_status === 'not_started'
-                          ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800'
-                          : 'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
-                      }`}
-                    >
-                      {item.turnover_status === 'complete' ? 'Complete' :
-                       item.turnover_status === 'in_progress' ? 'In Progress' :
-                       item.turnover_status === 'not_started' ? 'Not Started' :
-                       'No Tasks'}
-                    </Badge>
                     {/* Occupancy badge - only show on "in play" cards */}
                     {isInPlay && (
                       <Badge 
@@ -240,7 +223,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
                             : 'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
                         }`}
                       >
-                        {item.occupancy_status === 'occupied' ? 'Occupied' : 'Vacant'}
+                        {item.occupancy_status === 'occupied' ? 'Occupied' : 'Out'}
                       </Badge>
                     )}
                   </div>
@@ -258,9 +241,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
                       <span>{formatDate(item.check_out) || 'Out'}</span>
                     </div>
                     <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-border/20 bg-[var(--mix-card-33-bg)] px-2 py-1 transition-all duration-150 hover:border-border hover:bg-[var(--mix-card-50-bg)] ${!item.next_check_in ? 'opacity-40' : ''}`}>
-                      <svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                      </svg>
+                      <FlagCheckeredIcon className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400" />
                       <span>{formatDate(item.next_check_in) || 'In'}</span>
                     </div>
                   </div>
