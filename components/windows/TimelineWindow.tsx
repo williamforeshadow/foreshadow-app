@@ -1,9 +1,20 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from '@/components/ui/hover-card';
 import { useTimeline } from '@/lib/useTimeline';
+import { getActiveTurnoverForProperty, getTurnoverStatusColor } from '@/lib/turnoverUtils';
+import type { Project } from '@/lib/types';
 
-export default function TimelineWindow() {
+interface TimelineWindowProps {
+  projects: Project[];
+}
+
+export default function TimelineWindow({ projects }: TimelineWindowProps) {
   const {
     properties,
     loading,
@@ -19,7 +30,6 @@ export default function TimelineWindow() {
     isToday,
     getReservationsForProperty,
     getBlockPosition,
-    getStatusColor,
   } = useTimeline();
 
   const formatHeaderDate = (date: Date, isTodayDate: boolean) => {
@@ -129,15 +139,91 @@ export default function TimelineWindow() {
             {/* Property Rows */}
             {properties.map((property) => {
               const propertyReservations = getReservationsForProperty(property);
+              const activeTurnover = getActiveTurnoverForProperty(propertyReservations);
 
               return (
                 <div
                   key={property}
                   className="contents"
                 >
-                  {/* Property Name */}
-                  <div className="bg-neutral-50 dark:bg-neutral-800 px-2 py-1 text-xs font-medium text-neutral-900 dark:text-white sticky left-0 z-10 border-b border-r border-neutral-300 dark:border-neutral-600 truncate flex items-center">
-                    {property}
+                  {/* Property Name with Status Indicator */}
+                  <div className="bg-neutral-50 dark:bg-neutral-800 px-2 py-1 text-xs font-medium text-neutral-900 dark:text-white sticky left-0 z-10 border-b border-r border-neutral-300 dark:border-neutral-600 flex items-center relative">
+                    <span className="truncate pr-6">{property}</span>
+                    {activeTurnover && (() => {
+                      const propertyProjects = projects.filter(p => p.property_name === activeTurnover.property_name);
+                      
+                      return (
+                        <HoverCard openDelay={100} closeDelay={200}>
+                          <HoverCardTrigger asChild>
+                            <div className="absolute right-0 top-0 bottom-0 w-10 flex items-center justify-center cursor-default">
+                              <div 
+                                className={`w-2.5 h-2.5 rounded-full ${getTurnoverStatusColor(activeTurnover.turnover_status)}`}
+                              />
+                            </div>
+                          </HoverCardTrigger>
+                          <HoverCardContent side="right" align="start" className="w-64 p-0">
+                            {/* Header */}
+                            <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
+                              <p className="text-xs font-medium">{property}</p>
+                            </div>
+                            
+                            {/* Tasks Section */}
+                            <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
+                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                                Tasks ({activeTurnover.tasks?.length || 0})
+                              </p>
+                              <div className="space-y-1 max-h-32 overflow-y-auto">
+                                {activeTurnover.tasks && activeTurnover.tasks.length > 0 ? (
+                                  activeTurnover.tasks.map((task) => (
+                                    <div key={task.task_id} className="flex items-center justify-between gap-2 py-1">
+                                      <span className="truncate text-xs">{task.template_name || task.type}</span>
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${
+                                        task.status === 'complete' 
+                                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                          : task.status === 'in_progress'
+                                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                          : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400'
+                                      }`}>
+                                        {task.status?.replace('_', ' ')}
+                                      </span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="text-xs text-muted-foreground">No tasks</p>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {/* Projects Section */}
+                            <div className="px-3 py-2">
+                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                                Projects ({propertyProjects.length})
+                              </p>
+                              <div className="space-y-1 max-h-32 overflow-y-auto">
+                                {propertyProjects.length > 0 ? (
+                                  propertyProjects.map((project) => (
+                                    <div key={project.id} className="flex items-center justify-between gap-2 py-1">
+                                      <span className="truncate text-xs">{project.title}</span>
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${
+                                        project.status === 'complete' 
+                                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                          : project.status === 'in_progress'
+                                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                          : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400'
+                                      }`}>
+                                        {project.status?.replace('_', ' ')}
+                                      </span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="text-xs text-muted-foreground">No projects</p>
+                                )}
+                              </div>
+                            </div>
+                          </HoverCardContent>
+                        </HoverCard>
+                      );
+                    })()}
                   </div>
 
                   {/* Date Cells with embedded reservations */}
@@ -173,7 +259,7 @@ export default function TimelineWindow() {
                               onClick={() => {
                                 setSelectedReservation(selectedReservation?.id === startingReservation.id ? null : startingReservation);
                               }}
-                              className={`absolute cursor-pointer transition-all duration-150 hover:brightness-110 hover:z-30 text-white text-[11px] font-medium flex items-center ${getStatusColor(startingReservation.turnover_status)} ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-white shadow-lg z-30' : ''}`}
+                              className={`absolute cursor-pointer transition-all duration-150 hover:brightness-110 hover:z-30 text-white text-[11px] font-medium flex items-center bg-neutral-500 hover:bg-neutral-600 ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-white shadow-lg z-30' : ''}`}
                               style={{
                                 left: `${leftOffset}%`,
                                 top: 0,
