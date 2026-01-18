@@ -170,7 +170,7 @@ export default function TimelineWindow({ projects }: TimelineWindowProps) {
                             {/* Tasks Section */}
                             <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
                               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                                Tasks ({activeTurnover.tasks?.length || 0})
+                                Active Turnover: ({activeTurnover.completed_tasks || 0}/{activeTurnover.total_tasks || 0})
                               </p>
                               <div className="space-y-1 max-h-32 overflow-y-auto">
                                 {activeTurnover.tasks && activeTurnover.tasks.length > 0 ? (
