@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   HoverCard,
@@ -8,13 +9,228 @@ import {
 } from '@/components/ui/hover-card';
 import { useTimeline } from '@/lib/useTimeline';
 import { getActiveTurnoverForProperty, getTurnoverStatusColor } from '@/lib/turnoverUtils';
-import type { Project } from '@/lib/types';
+import { useProjectComments } from '@/lib/hooks/useProjectComments';
+import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
+import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
+import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
+import { FloatingWindow } from './timeline';
+import { AttachmentLightbox, ProjectActivitySheet } from './projects';
+import type { Project, Task, User, ProjectFormFields } from '@/lib/types';
+import type { useProjects } from '@/lib/useProjects';
+import type { Template } from '@/components/DynamicCleaningForm';
 
 interface TimelineWindowProps {
   projects: Project[];
+  users: User[];
+  currentUser: User | null;
+  projectsHook: ReturnType<typeof useProjects>;
 }
 
-export default function TimelineWindow({ projects }: TimelineWindowProps) {
+// Type for what's being viewed in the floating window
+type FloatingWindowData = {
+  type: 'task' | 'project';
+  item: Task | Project;
+  propertyName: string;
+} | null;
+
+export default function TimelineWindow({
+  projects,
+  users,
+  currentUser,
+  projectsHook,
+}: TimelineWindowProps) {
+  // State for the floating window
+  const [floatingData, setFloatingData] = useState<FloatingWindowData>(null);
+
+  // ============================================================================
+  // LOCAL instances of sub-hooks for projects (independent from other windows)
+  // ============================================================================
+  const commentsHook = useProjectComments({ currentUser });
+  const attachmentsHook = useProjectAttachments({ currentUser });
+  const timeTrackingHook = useProjectTimeTracking({ currentUser });
+  const activityHook = useProjectActivity();
+
+  // ============================================================================
+  // LOCAL UI State for Projects (independent from other windows)
+  // ============================================================================
+  const [projectFields, setProjectFields] = useState<ProjectFormFields | null>(null);
+  const [newComment, setNewComment] = useState('');
+  const [staffOpen, setStaffOpen] = useState(false);
+  const [viewingAttachmentIndex, setViewingAttachmentIndex] = useState<number | null>(null);
+  const [activitySheetOpen, setActivitySheetOpen] = useState(false);
+
+  // ============================================================================
+  // Task state
+  // ============================================================================
+  const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
+  const [loadingTaskTemplate, setLoadingTaskTemplate] = useState<string | null>(null);
+  const [localTask, setLocalTask] = useState<Task | null>(null);
+
+  // Ref to track the latest project fields (avoids stale closure issues)
+  const projectFieldsRef = useRef<ProjectFormFields | null>(null);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    projectFieldsRef.current = projectFields;
+  }, [projectFields]);
+
+  // ============================================================================
+  // Initialize project fields when opening a project in floating window
+  // ============================================================================
+  // Compute the item ID based on type (tasks use task_id, projects use id)
+  const floatingItemId = floatingData?.type === 'task'
+    ? (floatingData?.item as Task)?.task_id
+    : (floatingData?.item as Project)?.id;
+
+  useEffect(() => {
+    if (floatingData?.type === 'project') {
+      const project = floatingData.item as Project;
+      setProjectFields({
+        title: project.title,
+        description: project.description || '',
+        status: project.status,
+        priority: project.priority,
+        assigned_staff: project.project_assignments?.[0]?.user_id || '',
+        due_date: project.due_date ? project.due_date.split('T')[0] : ''
+      });
+      commentsHook.fetchProjectComments(project.id);
+      attachmentsHook.fetchProjectAttachments(project.id);
+      timeTrackingHook.fetchProjectTimeEntries(project.id);
+    } else if (floatingData?.type === 'task') {
+      const task = floatingData.item as Task;
+      setLocalTask(task);
+      // Fetch template if needed
+      if (task.template_id && !taskTemplates[task.template_id]) {
+        fetchTaskTemplate(task.template_id);
+      }
+    } else {
+      setProjectFields(null);
+      setLocalTask(null);
+    }
+  }, [floatingData?.type, floatingItemId]);
+
+  // ============================================================================
+  // Task functions
+  // ============================================================================
+  const fetchTaskTemplate = useCallback(async (templateId: string) => {
+    if (taskTemplates[templateId]) {
+      return taskTemplates[templateId];
+    }
+
+    setLoadingTaskTemplate(templateId);
+    try {
+      const res = await fetch(`/api/templates/${templateId}`);
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result.error || 'Failed to fetch template');
+      }
+
+      setTaskTemplates(prev => ({ ...prev, [templateId]: result.template }));
+      return result.template;
+    } catch (err) {
+      console.error('Error fetching template:', err);
+      return null;
+    } finally {
+      setLoadingTaskTemplate(null);
+    }
+  }, [taskTemplates]);
+
+  const handleUpdateTaskStatus = useCallback(async (taskId: string, action: string) => {
+    try {
+      const res = await fetch('/api/update-task-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, action })
+      });
+
+      if (!res.ok) {
+        const result = await res.json();
+        throw new Error(result.error || 'Failed to update task action');
+      }
+
+      // Update local task state
+      setLocalTask(prev => prev ? { ...prev, status: action as Task['status'] } : null);
+    } catch (err) {
+      console.error('Error updating task status:', err);
+    }
+  }, []);
+
+  const handleSaveTaskForm = useCallback(async (taskId: string, formData: Record<string, unknown>) => {
+    try {
+      const res = await fetch('/api/save-task-form', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, formData })
+      });
+
+      if (!res.ok) {
+        const result = await res.json();
+        throw new Error(result.error || 'Failed to save task form');
+      }
+
+      // Update local task state
+      setLocalTask(prev => prev ? { ...prev, form_metadata: formData } : null);
+    } catch (err) {
+      console.error('Error saving task form:', err);
+      throw err;
+    }
+  }, []);
+
+  // ============================================================================
+  // Project wrapper functions
+  // ============================================================================
+  const handleSaveProject = useCallback(async () => {
+    const currentFields = projectFieldsRef.current;
+    if (floatingData?.type !== 'project' || !currentFields) return;
+    const project = floatingData.item as Project;
+    const updatedProject = await projectsHook.saveProjectById(project.id, currentFields);
+    if (updatedProject) {
+      setFloatingData(prev => prev ? { ...prev, item: updatedProject } : null);
+    }
+  }, [floatingData, projectsHook]);
+
+  const handlePostComment = useCallback(async () => {
+    if (floatingData?.type !== 'project' || !newComment.trim()) return;
+    const project = floatingData.item as Project;
+    await commentsHook.postProjectComment(project.id, newComment);
+    setNewComment('');
+  }, [floatingData, newComment, commentsHook]);
+
+  const handleAttachmentUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (floatingData?.type === 'project') {
+      const project = floatingData.item as Project;
+      attachmentsHook.handleAttachmentUpload(e, project.id);
+    }
+  }, [floatingData, attachmentsHook]);
+
+  const handleStartTimer = useCallback(() => {
+    if (floatingData?.type === 'project') {
+      const project = floatingData.item as Project;
+      timeTrackingHook.startProjectTimer(project.id);
+    }
+  }, [floatingData, timeTrackingHook]);
+
+  const handleDeleteProject = useCallback((project: Project) => {
+    projectsHook.deleteProject(project);
+    setFloatingData(null);
+    setProjectFields(null);
+  }, [projectsHook]);
+
+  const handleOpenActivity = useCallback(() => {
+    if (floatingData?.type === 'project') {
+      const project = floatingData.item as Project;
+      activityHook.fetchProjectActivity(project.id);
+      setActivitySheetOpen(true);
+    }
+  }, [floatingData, activityHook]);
+
+  const handleCloseFloatingWindow = useCallback(() => {
+    setFloatingData(null);
+    setProjectFields(null);
+    setLocalTask(null);
+  }, []);
+
   const {
     properties,
     loading,
@@ -172,20 +388,33 @@ export default function TimelineWindow({ projects }: TimelineWindowProps) {
                               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                                 Active Turnover: ({activeTurnover.completed_tasks || 0}/{activeTurnover.total_tasks || 0})
                               </p>
-                              <div className="space-y-1 max-h-32 overflow-y-auto">
+                              <div className="space-y-0.5 max-h-32 overflow-y-auto">
                                 {activeTurnover.tasks && activeTurnover.tasks.length > 0 ? (
                                   activeTurnover.tasks.map((task) => (
-                                    <div key={task.task_id} className="flex items-center justify-between gap-2 py-1">
+                                    <div 
+                                      key={task.task_id} 
+                                      className="flex items-center justify-between gap-2 py-1.5 px-1.5 -mx-1.5 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                                      onClick={() => setFloatingData({
+                                        type: 'task',
+                                        item: task,
+                                        propertyName: activeTurnover.property_name,
+                                      })}
+                                    >
                                       <span className="truncate text-xs">{task.template_name || task.type}</span>
-                                      <span className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${
-                                        task.status === 'complete' 
-                                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                          : task.status === 'in_progress'
-                                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                          : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400'
-                                      }`}>
-                                        {task.status?.replace('_', ' ')}
-                                      </span>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${
+                                          task.status === 'complete' 
+                                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                            : task.status === 'in_progress'
+                                            ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                            : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400'
+                                        }`}>
+                                          {task.status?.replace('_', ' ')}
+                                        </span>
+                                        <svg className="w-3 h-3 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                        </svg>
+                                      </div>
                                     </div>
                                   ))
                                 ) : (
@@ -199,20 +428,33 @@ export default function TimelineWindow({ projects }: TimelineWindowProps) {
                               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                                 Projects ({propertyProjects.length})
                               </p>
-                              <div className="space-y-1 max-h-32 overflow-y-auto">
+                              <div className="space-y-0.5 max-h-32 overflow-y-auto">
                                 {propertyProjects.length > 0 ? (
                                   propertyProjects.map((project) => (
-                                    <div key={project.id} className="flex items-center justify-between gap-2 py-1">
+                                    <div 
+                                      key={project.id} 
+                                      className="flex items-center justify-between gap-2 py-1.5 px-1.5 -mx-1.5 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                                      onClick={() => setFloatingData({
+                                        type: 'project',
+                                        item: project,
+                                        propertyName: activeTurnover.property_name,
+                                      })}
+                                    >
                                       <span className="truncate text-xs">{project.title}</span>
-                                      <span className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${
-                                        project.status === 'complete' 
-                                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                          : project.status === 'in_progress'
-                                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                          : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400'
-                                      }`}>
-                                        {project.status?.replace('_', ' ')}
-                                      </span>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${
+                                          project.status === 'complete' 
+                                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                            : project.status === 'in_progress'
+                                            ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                            : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400'
+                                        }`}>
+                                          {project.status?.replace('_', ' ')}
+                                        </span>
+                                        <svg className="w-3 h-3 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                        </svg>
+                                      </div>
                                     </div>
                                   ))
                                 ) : (
@@ -287,6 +529,70 @@ export default function TimelineWindow({ projects }: TimelineWindowProps) {
           </div>
         </div>
       </div>
+
+      {/* Floating Window */}
+      {floatingData && (
+        <FloatingWindow
+          type={floatingData.type}
+          item={floatingData.type === 'task' ? localTask || floatingData.item : floatingData.item}
+          propertyName={floatingData.propertyName}
+          onClose={handleCloseFloatingWindow}
+          // Task props
+          currentUser={currentUser}
+          taskTemplates={taskTemplates}
+          loadingTaskTemplate={loadingTaskTemplate}
+          onUpdateTaskStatus={handleUpdateTaskStatus}
+          onSaveTaskForm={handleSaveTaskForm}
+          setLocalTask={setLocalTask}
+          // Project props
+          users={users}
+          projectFields={projectFields}
+          setProjectFields={setProjectFields}
+          savingProject={projectsHook.savingProjectEdit}
+          onSaveProject={handleSaveProject}
+          onDeleteProject={handleDeleteProject}
+          onOpenActivity={handleOpenActivity}
+          // Comments
+          projectComments={commentsHook.projectComments}
+          loadingComments={commentsHook.loadingComments}
+          newComment={newComment}
+          setNewComment={setNewComment}
+          postingComment={commentsHook.postingComment}
+          onPostComment={handlePostComment}
+          // Attachments
+          projectAttachments={attachmentsHook.projectAttachments}
+          loadingAttachments={attachmentsHook.loadingAttachments}
+          uploadingAttachment={attachmentsHook.uploadingAttachment}
+          attachmentInputRef={attachmentsHook.attachmentInputRef}
+          onAttachmentUpload={handleAttachmentUpload}
+          onViewAttachment={(index) => setViewingAttachmentIndex(index)}
+          // Time tracking
+          activeTimeEntry={timeTrackingHook.activeTimeEntry}
+          displaySeconds={timeTrackingHook.displaySeconds}
+          formatTime={timeTrackingHook.formatTime}
+          onStartTimer={handleStartTimer}
+          onStopTimer={timeTrackingHook.stopProjectTimer}
+          // Popover states
+          staffOpen={staffOpen}
+          setStaffOpen={setStaffOpen}
+        />
+      )}
+
+      {/* Attachment Lightbox */}
+      <AttachmentLightbox
+        attachments={attachmentsHook.projectAttachments}
+        viewingIndex={viewingAttachmentIndex}
+        onClose={() => setViewingAttachmentIndex(null)}
+        onNavigate={setViewingAttachmentIndex}
+      />
+
+      {/* Activity Sheet */}
+      <ProjectActivitySheet
+        open={activitySheetOpen}
+        onOpenChange={setActivitySheetOpen}
+        activities={activityHook.projectActivity}
+        loading={activityHook.loadingActivity}
+      />
     </div>
   );
 }
