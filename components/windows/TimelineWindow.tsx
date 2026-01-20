@@ -15,6 +15,8 @@ import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
 import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
 import { FloatingWindow } from './timeline';
 import { AttachmentLightbox, ProjectActivitySheet } from './projects';
+import AssignmentIcon from '@/components/icons/AssignmentIcon';
+import HammerIcon from '@/components/icons/HammerIcon';
 import type { Project, Task, User, ProjectFormFields } from '@/lib/types';
 import type { useProjects } from '@/lib/useProjects';
 import type { Template } from '@/components/DynamicCleaningForm';
@@ -336,7 +338,7 @@ export default function TimelineWindow({
           <div
             className="grid border border-neutral-200 dark:border-neutral-700 w-full"
             style={{
-              gridTemplateColumns: `170px repeat(${dateRange.length}, minmax(0, 1fr))`
+              gridTemplateColumns: `200px repeat(${dateRange.length}, minmax(0, 1fr))`
             }}
           >
             {/* Header Row - will stick when scrolling */}
@@ -364,17 +366,32 @@ export default function TimelineWindow({
                 >
                   {/* Property Name with Status Indicator */}
                   <div className="bg-neutral-50 dark:bg-neutral-800 px-2 py-1 text-xs font-medium text-neutral-900 dark:text-white sticky left-0 z-10 border-b border-r border-neutral-300 dark:border-neutral-600 flex items-center relative">
-                    <span className="truncate pr-6">{property}</span>
+                    <span className="truncate pr-24">{property}</span>
                     {activeTurnover && (() => {
                       const propertyProjects = projects.filter(p => p.property_name === activeTurnover.property_name);
                       
                       return (
                         <HoverCard openDelay={100} closeDelay={200}>
                           <HoverCardTrigger asChild>
-                            <div className="absolute right-0 top-0 bottom-0 w-10 flex items-center justify-center cursor-default">
+                            <div className="absolute right-0 top-0 bottom-0 w-28 flex items-center justify-end gap-1.5 pr-2 cursor-default">
+                              {/* Status badge */}
                               <div 
-                                className={`w-2.5 h-2.5 rounded-full ${getTurnoverStatusColor(activeTurnover.turnover_status)}`}
+                                className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${getTurnoverStatusColor(activeTurnover.turnover_status)}`}
                               />
+                              {/* Tasks icon + count - always show */}
+                              <div className="flex items-center gap-0.5 text-neutral-500 dark:text-neutral-400">
+                                <AssignmentIcon size={12} />
+                                <span className="text-[10px] font-medium w-3 text-right">
+                                  {activeTurnover.tasks?.filter(t => t.status !== 'complete').length || 0}
+                                </span>
+                              </div>
+                              {/* Projects icon + count - always show */}
+                              <div className="flex items-center gap-0.5 text-neutral-500 dark:text-neutral-400">
+                                <HammerIcon size={12} />
+                                <span className="text-[10px] font-medium w-3 text-right">
+                                  {propertyProjects.filter(p => p.status !== 'complete').length}
+                                </span>
+                              </div>
                             </div>
                           </HoverCardTrigger>
                           <HoverCardContent side="right" align="start" className="w-64 p-0">
