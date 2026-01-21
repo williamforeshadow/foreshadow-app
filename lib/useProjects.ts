@@ -4,8 +4,32 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { 
   Project, 
   User,
-  ProjectFormFields 
+  ProjectFormFields,
+  ProjectStatus,
+  ProjectPriority 
 } from '@/lib/types';
+
+// View mode type for project grouping
+export type ProjectViewMode = 'property' | 'status' | 'priority';
+
+// Labels for display
+export const STATUS_LABELS: Record<ProjectStatus, string> = {
+  'not_started': 'Not Started',
+  'in_progress': 'In Progress',
+  'on_hold': 'On Hold',
+  'complete': 'Complete'
+};
+
+export const PRIORITY_LABELS: Record<ProjectPriority, string> = {
+  'urgent': 'Urgent',
+  'high': 'High',
+  'medium': 'Medium',
+  'low': 'Low'
+};
+
+// Ordered arrays for consistent column order
+export const STATUS_ORDER: ProjectStatus[] = ['not_started', 'in_progress', 'on_hold', 'complete'];
+export const PRIORITY_ORDER: ProjectPriority[] = ['urgent', 'high', 'medium', 'low'];
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
@@ -25,6 +49,9 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [allProperties, setAllProperties] = useState<string[]>([]);
+  
+  // View mode for kanban-style grouping
+  const [viewMode, setViewMode] = useState<ProjectViewMode>('property');
 
   // Project views (for "new" badge)
   const [projectViews, setProjectViews] = useState<Record<string, string>>({});
@@ -353,6 +380,22 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     }, {} as Record<string, Project[]>);
   }, [projects]);
 
+  // Group projects by status (for kanban view)
+  const groupedByStatus = useMemo(() => {
+    return STATUS_ORDER.reduce((acc, status) => {
+      acc[status] = projects.filter(p => p.status === status);
+      return acc;
+    }, {} as Record<ProjectStatus, Project[]>);
+  }, [projects]);
+
+  // Group projects by priority (for kanban view)
+  const groupedByPriority = useMemo(() => {
+    return PRIORITY_ORDER.reduce((acc, priority) => {
+      acc[priority] = projects.filter(p => p.priority === priority);
+      return acc;
+    }, {} as Record<ProjectPriority, Project[]>);
+  }, [projects]);
+
   // ============================================================================
   // Return API
   // ============================================================================
@@ -362,7 +405,13 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     setProjects,
     loadingProjects,
     groupedProjects,
+    groupedByStatus,
+    groupedByPriority,
     allProperties,
+    
+    // View mode
+    viewMode,
+    setViewMode,
 
     // Project views (SHARED)
     projectViews,

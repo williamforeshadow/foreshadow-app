@@ -5,6 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { useProjects } from '@/lib/useProjects';
+import { 
+  STATUS_LABELS, 
+  PRIORITY_LABELS, 
+  STATUS_ORDER, 
+  PRIORITY_ORDER,
+  type ProjectViewMode 
+} from '@/lib/useProjects';
+import type { ProjectStatus, ProjectPriority } from '@/lib/types';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
@@ -34,7 +42,7 @@ interface ProjectCardProps {
 const ProjectCard = memo(function ProjectCard({ project, isSelected, unreadCount, onSelect }: ProjectCardProps) {
   return (
     <Card
-      className={`group w-[280px] gap-4 !p-4 hover:shadow-lg transition-shadow duration-150 !flex !flex-col cursor-pointer relative ${
+      className={`group w-full gap-4 !p-4 hover:shadow-lg transition-shadow duration-150 !flex !flex-col cursor-pointer relative ${
         isSelected ? 'ring-1 ring-amber-400/70 shadow-md' : ''
       }`}
       onClick={onSelect}
@@ -140,34 +148,90 @@ interface ProjectListProps {
   projects: Project[];
   loadingProjects: boolean;
   groupedProjects: Record<string, Project[]>;
+  groupedByStatus: Record<ProjectStatus, Project[]>;
+  groupedByPriority: Record<ProjectPriority, Project[]>;
+  viewMode: ProjectViewMode;
+  setViewMode: (mode: ProjectViewMode) => void;
   expandedProjectId: string | null;
   getUnreadCommentCount: (project: Project) => number;
   onSelectProject: (project: Project) => void;
   openCreateProjectDialog: (propertyName?: string) => void;
 }
 
+// Status column colors for kanban
+const STATUS_COLORS: Record<ProjectStatus, string> = {
+  'not_started': 'bg-neutral-100 dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600',
+  'in_progress': 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700',
+  'on_hold': 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700',
+  'complete': 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700'
+};
+
+const STATUS_HEADER_COLORS: Record<ProjectStatus, string> = {
+  'not_started': 'bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200',
+  'in_progress': 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-100',
+  'on_hold': 'bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-100',
+  'complete': 'bg-emerald-200 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-100'
+};
+
+// Priority column colors for kanban
+const PRIORITY_COLORS: Record<ProjectPriority, string> = {
+  'urgent': 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700',
+  'high': 'bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700',
+  'medium': 'bg-sky-50 dark:bg-sky-900/20 border-sky-300 dark:border-sky-700',
+  'low': 'bg-slate-50 dark:bg-slate-900/20 border-slate-300 dark:border-slate-700'
+};
+
+const PRIORITY_HEADER_COLORS: Record<ProjectPriority, string> = {
+  'urgent': 'bg-red-200 dark:bg-red-800 text-red-800 dark:text-red-100',
+  'high': 'bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-100',
+  'medium': 'bg-sky-200 dark:bg-sky-800 text-sky-800 dark:text-sky-100',
+  'low': 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
+};
+
 const ProjectList = memo(function ProjectList({
   projects,
   loadingProjects,
   groupedProjects,
+  groupedByStatus,
+  groupedByPriority,
+  viewMode,
+  setViewMode,
   expandedProjectId,
   getUnreadCommentCount,
   onSelectProject,
   openCreateProjectDialog,
 }: ProjectListProps) {
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-4 h-full flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between sticky top-0 bg-white dark:bg-neutral-900 z-10 pb-2">
         <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
           Property Projects
         </h3>
-        <Button size="sm" onClick={() => openCreateProjectDialog()}>
-          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          New Project
-        </Button>
+        <div className="flex items-center gap-3">
+          {/* View Mode Toggle */}
+          <div className="flex bg-neutral-100 dark:bg-neutral-800 rounded-lg p-0.5">
+            {(['property', 'status', 'priority'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  viewMode === mode
+                    ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm'
+                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                }`}
+              >
+                {mode === 'property' ? 'Property' : mode === 'status' ? 'Status' : 'Priority'}
+              </button>
+            ))}
+          </div>
+          <Button size="sm" onClick={() => openCreateProjectDialog()}>
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            New Project
+          </Button>
+        </div>
       </div>
 
       {/* Projects List */}
@@ -184,7 +248,8 @@ const ProjectList = memo(function ProjectList({
             Create First Project
           </Button>
         </div>
-      ) : (
+      ) : viewMode === 'property' ? (
+        // Property View - Original grouped by property
         <div className="space-y-4">
           {Object.entries(groupedProjects).sort().map(([propertyName, propertyProjects]) => (
             <div key={propertyName} className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden shadow-sm">
@@ -218,14 +283,97 @@ const ProjectList = memo(function ProjectList({
               {/* Property Projects Grid */}
               <div className="p-4 flex flex-wrap gap-4">
                 {propertyProjects.map((project) => (
-                  <ProjectCard
-                    key={project.id}
-                    project={project}
-                    isSelected={expandedProjectId === project.id}
-                    unreadCount={getUnreadCommentCount(project)}
-                    onSelect={() => onSelectProject(project)}
-                  />
+                  <div key={project.id} className="w-[280px]">
+                    <ProjectCard
+                      project={project}
+                      isSelected={expandedProjectId === project.id}
+                      unreadCount={getUnreadCommentCount(project)}
+                      onSelect={() => onSelectProject(project)}
+                    />
+                  </div>
                 ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : viewMode === 'status' ? (
+        // Status Kanban View
+        <div className="flex-1 flex gap-4 overflow-x-auto pb-4 min-h-0">
+          {STATUS_ORDER.map((status) => (
+            <div 
+              key={status} 
+              className={`flex-shrink-0 w-[300px] flex flex-col rounded-xl border-2 ${STATUS_COLORS[status]} overflow-hidden`}
+            >
+              {/* Column Header */}
+              <div className={`px-4 py-3 ${STATUS_HEADER_COLORS[status]}`}>
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-sm">
+                    {STATUS_LABELS[status]}
+                  </h4>
+                  <Badge variant="secondary" className="text-xs bg-white/50 dark:bg-black/20">
+                    {groupedByStatus[status]?.length || 0}
+                  </Badge>
+                </div>
+              </div>
+              
+              {/* Column Content */}
+              <div className="flex-1 p-3 space-y-3 overflow-y-auto">
+                {groupedByStatus[status]?.length === 0 ? (
+                  <div className="text-center py-8 text-neutral-400 dark:text-neutral-500 text-sm">
+                    No projects
+                  </div>
+                ) : (
+                  groupedByStatus[status]?.map((project) => (
+                    <ProjectCard
+                      key={project.id}
+                      project={project}
+                      isSelected={expandedProjectId === project.id}
+                      unreadCount={getUnreadCommentCount(project)}
+                      onSelect={() => onSelectProject(project)}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        // Priority Kanban View
+        <div className="flex-1 flex gap-4 overflow-x-auto pb-4 min-h-0">
+          {PRIORITY_ORDER.map((priority) => (
+            <div 
+              key={priority} 
+              className={`flex-shrink-0 w-[300px] flex flex-col rounded-xl border-2 ${PRIORITY_COLORS[priority]} overflow-hidden`}
+            >
+              {/* Column Header */}
+              <div className={`px-4 py-3 ${PRIORITY_HEADER_COLORS[priority]}`}>
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-sm">
+                    {PRIORITY_LABELS[priority]}
+                  </h4>
+                  <Badge variant="secondary" className="text-xs bg-white/50 dark:bg-black/20">
+                    {groupedByPriority[priority]?.length || 0}
+                  </Badge>
+                </div>
+              </div>
+              
+              {/* Column Content */}
+              <div className="flex-1 p-3 space-y-3 overflow-y-auto">
+                {groupedByPriority[priority]?.length === 0 ? (
+                  <div className="text-center py-8 text-neutral-400 dark:text-neutral-500 text-sm">
+                    No projects
+                  </div>
+                ) : (
+                  groupedByPriority[priority]?.map((project) => (
+                    <ProjectCard
+                      key={project.id}
+                      project={project}
+                      isSelected={expandedProjectId === project.id}
+                      unreadCount={getUnreadCommentCount(project)}
+                      onSelect={() => onSelectProject(project)}
+                    />
+                  ))
+                )}
               </div>
             </div>
           ))}
@@ -270,7 +418,13 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
     projects,
     loadingProjects,
     groupedProjects,
+    groupedByStatus,
+    groupedByPriority,
     allProperties,
+    
+    // View mode
+    viewMode,
+    setViewMode,
 
     // Project views
     recordProjectView,
@@ -374,6 +528,10 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
           projects={projects}
           loadingProjects={loadingProjects}
           groupedProjects={groupedProjects}
+          groupedByStatus={groupedByStatus}
+          groupedByPriority={groupedByPriority}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
           expandedProjectId={expandedProject?.id || null}
           getUnreadCommentCount={getUnreadCommentCount}
           onSelectProject={handleProjectSelect}
