@@ -121,7 +121,7 @@ export async function GET(request: Request) {
           description,
           status,
           priority,
-          due_date,
+          scheduled_start,
           created_at
         )
       `)

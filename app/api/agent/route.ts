@@ -111,7 +111,7 @@ Capital/renovation projects for properties.
 | description | text | Project description |
 | status | text | 'not_started', 'in_progress', 'on_hold', 'complete' |
 | priority | text | 'low', 'medium', 'high', 'urgent' |
-| due_date | timestamptz | Project due date |
+| scheduled_start | timestamptz | Project scheduled start date |
 | created_at | timestamptz | Record creation time |
 | updated_at | timestamptz | Last update time |
 

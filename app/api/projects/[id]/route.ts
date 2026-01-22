@@ -63,7 +63,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, description, status, priority, assigned_user_ids, due_date, user_id } = body;
+    const { title, description, status, priority, assigned_user_ids, scheduled_start, user_id } = body;
 
     // Fetch current project to compare for activity logging
     const { data: oldProject } = await getSupabaseServer()
@@ -82,7 +82,7 @@ export async function PUT(
     if (description !== undefined) updateData.description = description;
     if (status !== undefined) updateData.status = status;
     if (priority !== undefined) updateData.priority = priority;
-    if (due_date !== undefined) updateData.due_date = due_date;
+    if (scheduled_start !== undefined) updateData.scheduled_start = scheduled_start;
 
     const { error: updateError } = await getSupabaseServer()
       .from('property_projects')
@@ -179,10 +179,10 @@ export async function PUT(
       if (description !== undefined && description !== oldProject.description) {
         await logProjectActivity(id, user_id, 'description_change', 'updated the description', oldProject.description, description);
       }
-      // Due date change
-      if (due_date !== undefined && due_date !== oldProject.due_date) {
-        const formattedDate = due_date ? new Date(due_date).toLocaleDateString() : 'none';
-        await logProjectActivity(id, user_id, 'due_date_change', `changed due date to "${formattedDate}"`, oldProject.due_date, due_date);
+      // Scheduled start change
+      if (scheduled_start !== undefined && scheduled_start !== oldProject.scheduled_start) {
+        const formattedDate = scheduled_start ? new Date(scheduled_start).toLocaleDateString() : 'none';
+        await logProjectActivity(id, user_id, 'scheduled_start_change', `changed scheduled start to "${formattedDate}"`, oldProject.scheduled_start, scheduled_start);
       }
       // Assignment change
       if (assigned_user_ids !== undefined) {

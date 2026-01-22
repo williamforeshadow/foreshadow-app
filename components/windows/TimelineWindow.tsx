@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   HoverCard,
@@ -13,7 +13,7 @@ import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
 import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
-import { FloatingWindow } from './timeline';
+import { FloatingWindow, ScheduledItemsCell } from './timeline';
 import { AttachmentLightbox, ProjectActivitySheet } from './projects';
 import AssignmentIcon from '@/components/icons/AssignmentIcon';
 import HammerIcon from '@/components/icons/HammerIcon';
@@ -93,7 +93,7 @@ export default function TimelineWindow({
         status: project.status,
         priority: project.priority,
         assigned_staff: project.project_assignments?.[0]?.user_id || '',
-        due_date: project.due_date ? project.due_date.split('T')[0] : ''
+        scheduled_start: project.scheduled_start ? project.scheduled_start.split('T')[0] : ''
       });
       commentsHook.fetchProjectComments(project.id);
       attachmentsHook.fetchProjectAttachments(project.id);
@@ -248,7 +248,26 @@ export default function TimelineWindow({
     isToday,
     getReservationsForProperty,
     getBlockPosition,
+    reservations,
   } = useTimeline();
+
+  // Extract all tasks with scheduled_start from reservations, tagged with property_name
+  const allScheduledTasks = useMemo(() => {
+    const tasks: (Task & { property_name: string })[] = [];
+    reservations.forEach((res: any) => {
+      (res.tasks || []).forEach((task: Task) => {
+        if (task.scheduled_start) {
+          tasks.push({ ...task, property_name: res.property_name });
+        }
+      });
+    });
+    return tasks;
+  }, [reservations]);
+
+  // Filter projects that have scheduled_start
+  const scheduledProjects = useMemo(() => {
+    return projects.filter(p => p.scheduled_start);
+  }, [projects]);
 
   const formatHeaderDate = (date: Date, isTodayDate: boolean) => {
     const month = date.getMonth() + 1;
@@ -394,88 +413,84 @@ export default function TimelineWindow({
                               </div>
                             </div>
                           </HoverCardTrigger>
-                          <HoverCardContent side="right" align="start" className="w-64 p-0">
+                          <HoverCardContent side="right" align="start" className="w-72 p-0">
                             {/* Header */}
                             <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
-                              <p className="text-xs font-medium">{property}</p>
+                              <p className="text-sm font-medium">{property}</p>
                             </div>
                             
                             {/* Tasks Section */}
                             <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
-                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                                 Active Turnover: ({activeTurnover.completed_tasks || 0}/{activeTurnover.total_tasks || 0})
                               </p>
-                              <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                              <div className="space-y-0.5 max-h-40 overflow-y-auto subtle-scrollbar">
                                 {activeTurnover.tasks && activeTurnover.tasks.length > 0 ? (
                                   activeTurnover.tasks.map((task) => (
                                     <div 
                                       key={task.task_id} 
-                                      className="flex items-center justify-between gap-2 py-1.5 px-1.5 -mx-1.5 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                                      className="flex items-center justify-between gap-2 py-2 px-2 -mx-2 rounded cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 border-l-2 border-transparent hover:border-blue-500 transition-colors"
                                       onClick={() => setFloatingData({
                                         type: 'task',
                                         item: task,
                                         propertyName: activeTurnover.property_name,
                                       })}
                                     >
-                                      <span className="truncate text-xs">{task.template_name || task.type}</span>
-                                      <div className="flex items-center gap-1.5">
-                                        <span className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${
-                                          task.status === 'complete' 
-                                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                            : task.status === 'in_progress'
-                                            ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                            : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400'
-                                        }`}>
-                                          {task.status?.replace('_', ' ')}
-                                        </span>
-                                        <svg className="w-3 h-3 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                        </svg>
-                                      </div>
+                                      <span className="truncate text-sm">{task.template_name || task.type}</span>
+                                      <span className={`text-[11px] px-1.5 py-0.5 rounded flex-shrink-0 ${
+                                        task.status === 'complete' 
+                                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                          : task.status === 'in_progress'
+                                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                          : task.status === 'paused'
+                                          ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                                          : task.status === 'reopened'
+                                          ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                                          : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                      }`}>
+                                        {task.status?.replace('_', ' ')}
+                                      </span>
                                     </div>
                                   ))
                                 ) : (
-                                  <p className="text-xs text-muted-foreground">No tasks</p>
+                                  <p className="text-sm text-muted-foreground">No tasks</p>
                                 )}
                               </div>
                             </div>
                             
                             {/* Projects Section */}
                             <div className="px-3 py-2">
-                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                                 Projects ({propertyProjects.length})
                               </p>
-                              <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                              <div className="space-y-0.5 max-h-40 overflow-y-auto subtle-scrollbar">
                                 {propertyProjects.length > 0 ? (
                                   propertyProjects.map((project) => (
                                     <div 
                                       key={project.id} 
-                                      className="flex items-center justify-between gap-2 py-1.5 px-1.5 -mx-1.5 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                                      className="flex items-center justify-between gap-2 py-2 px-2 -mx-2 rounded cursor-pointer hover:bg-amber-50 dark:hover:bg-amber-900/20 border-l-2 border-transparent hover:border-amber-500 transition-colors"
                                       onClick={() => setFloatingData({
                                         type: 'project',
                                         item: project,
                                         propertyName: activeTurnover.property_name,
                                       })}
                                     >
-                                      <span className="truncate text-xs">{project.title}</span>
-                                      <div className="flex items-center gap-1.5">
-                                        <span className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${
-                                          project.status === 'complete' 
-                                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                            : project.status === 'in_progress'
-                                            ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                            : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400'
-                                        }`}>
-                                          {project.status?.replace('_', ' ')}
-                                        </span>
-                                        <svg className="w-3 h-3 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                        </svg>
-                                      </div>
+                                      <span className="truncate text-sm">{project.title}</span>
+                                      <span className={`text-[11px] px-1.5 py-0.5 rounded flex-shrink-0 ${
+                                        project.status === 'complete' 
+                                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                          : project.status === 'in_progress'
+                                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                          : project.status === 'on_hold'
+                                          ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                                          : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                      }`}>
+                                        {project.status?.replace('_', ' ')}
+                                      </span>
                                     </div>
                                   ))
                                 ) : (
-                                  <p className="text-xs text-muted-foreground">No projects</p>
+                                  <p className="text-sm text-muted-foreground">No projects</p>
                                 )}
                               </div>
                             </div>
@@ -537,6 +552,24 @@ export default function TimelineWindow({
                             </div>
                           );
                         })()}
+                        
+                        {/* Scheduled tasks/projects icons */}
+                        <ScheduledItemsCell
+                          propertyName={property}
+                          date={date}
+                          tasks={allScheduledTasks}
+                          projects={scheduledProjects}
+                          onTaskClick={(task) => setFloatingData({
+                            type: 'task',
+                            item: task,
+                            propertyName: property,
+                          })}
+                          onProjectClick={(project) => setFloatingData({
+                            type: 'project',
+                            item: project,
+                            propertyName: property,
+                          })}
+                        />
                       </div>
                     );
                   })}

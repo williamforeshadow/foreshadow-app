@@ -42,7 +42,7 @@ interface Project {
   description?: string;
   status: string;
   priority: string;
-  due_date?: string;
+  scheduled_start?: string;
   created_at: string;
   assigned_at: string;
 }
@@ -348,12 +348,12 @@ export default function MobileMyAssignmentsView({
                           )}
                         </div>
 
-                        {project.due_date && (
+                        {project.scheduled_start && (
                           <div className="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400 mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
-                            <span>Due: {formatDate(project.due_date)}</span>
+                            <span>Start: {formatDate(project.scheduled_start)}</span>
                           </div>
                         )}
                       </CardHeader>

@@ -137,7 +137,7 @@ function TurnoversWindowContent({
         status: expandedProject.status,
         priority: expandedProject.priority,
         assigned_staff: expandedProject.project_assignments?.[0]?.user_id || '',
-        due_date: expandedProject.due_date ? expandedProject.due_date.split('T')[0] : ''
+        scheduled_start: expandedProject.scheduled_start ? expandedProject.scheduled_start.split('T')[0] : ''
       });
       // Use LOCAL hook instances
       commentsHook.fetchProjectComments(expandedProject.id);

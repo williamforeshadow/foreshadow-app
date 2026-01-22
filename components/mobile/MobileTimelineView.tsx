@@ -431,7 +431,7 @@ export default function MobileTimelineView({ onCardClick, onTaskClick, onProject
                                           const projectStatus = project.status || 'not_started';
                                           const statusStyles = getProjectStatusStyles(projectStatus);
                                           const priorityStyles = getPriorityStyles(project.priority);
-                                          const dueDate = formatScheduledDate(project.due_date);
+                                          const dueDate = formatScheduledDate(project.scheduled_start);
                                           
                                           return (
                                             <Card 

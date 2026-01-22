@@ -113,9 +113,9 @@ function ProjectCard({
              project.status === 'complete' ? 'Complete' :
              project.status === 'on_hold' ? 'On Hold' : project.status}
           </Badge>
-          {project.due_date && (
+          {project.scheduled_start && (
             <span className="text-neutral-500">
-              Due: {new Date(project.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              Start: {new Date(project.scheduled_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
             </span>
           )}
         </div>

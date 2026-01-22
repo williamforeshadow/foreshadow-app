@@ -125,16 +125,16 @@ const ProjectCard = memo(function ProjectCard({ project, isSelected, unreadCount
               <div className="w-6 h-6" />
             )}
           </div>
-          {project.due_date && (
+          {project.scheduled_start && (
             <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-border/20 bg-[var(--mix-card-33-bg)] px-2 py-1 ${
-              new Date(project.due_date) < new Date() ? 'text-red-500' :
-              new Date(project.due_date) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) ? 'text-amber-500' :
+              new Date(project.scheduled_start) < new Date() ? 'text-red-500' :
+              new Date(project.scheduled_start) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) ? 'text-amber-500' :
               ''
             }`}>
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              <span>{new Date(project.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+              <span>{new Date(project.scheduled_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
             </div>
           )}
         </div>
@@ -457,7 +457,7 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
         status: expandedProject.status,
         priority: expandedProject.priority,
         assigned_staff: expandedProject.project_assignments?.[0]?.user_id || '',
-        due_date: expandedProject.due_date ? expandedProject.due_date.split('T')[0] : ''
+        scheduled_start: expandedProject.scheduled_start ? expandedProject.scheduled_start.split('T')[0] : ''
       });
       // Use LOCAL hook instances
       commentsHook.fetchProjectComments(expandedProject.id);

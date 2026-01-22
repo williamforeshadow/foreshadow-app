@@ -194,6 +194,41 @@ a {
   display: none;
 }
 
+/* Subtle scrollbar utility */
+.subtle-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
+}
+
+.subtle-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.subtle-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.subtle-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 2px;
+}
+
+.subtle-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.dark .subtle-scrollbar {
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.dark .subtle-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.dark .subtle-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
 /* Hide body scrollbar on mobile */
 @media (max-width: 768px) {
   html, body {

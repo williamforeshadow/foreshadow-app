@@ -173,11 +173,11 @@ export function ProjectFormDialog({
               </div>
 
               <div className="space-y-2">
-                <Label>Due Date</Label>
+                <Label>Scheduled Start</Label>
                 <Input
                   type="date"
-                  value={formData.due_date}
-                  onChange={(e) => setFormData(prev => ({ ...prev, due_date: e.target.value }))}
+                  value={formData.scheduled_start}
+                  onChange={(e) => setFormData(prev => ({ ...prev, scheduled_start: e.target.value }))}
                 />
               </div>
             </>

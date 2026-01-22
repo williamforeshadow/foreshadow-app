@@ -39,7 +39,6 @@ export interface Task {
   assigned_staff?: string;
   scheduled_start?: string | null;
   scheduled_date?: string;
-  due_date?: string;
   form_metadata?: Record<string, unknown>;
   guest_name?: string;
 }
@@ -107,7 +106,7 @@ export interface Project {
   assigned_staff?: string;
   assigned_user_ids?: string[];
   project_assignments?: Array<{ user_id: string; user?: User }>;
-  due_date?: string;
+  scheduled_start?: string;
   created_at: string;
   updated_at: string;
 }
@@ -119,7 +118,7 @@ export interface ProjectFormData {
   status: string;
   priority: string;
   assigned_staff: string;
-  due_date: string;
+  scheduled_start: string;
 }
 
 export interface ProjectFormFields {
@@ -128,7 +127,7 @@ export interface ProjectFormFields {
   status: string;
   priority: string;
   assigned_staff: string;
-  due_date: string;
+  scheduled_start: string;
 }
 
 // ============================================================================

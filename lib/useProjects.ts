@@ -69,7 +69,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     status: 'not_started',
     priority: 'medium',
     assigned_staff: '',
-    due_date: ''
+    scheduled_start: ''
   });
 
   // Saving state for project edits (shared loading indicator)
@@ -179,7 +179,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
       status: 'not_started',
       priority: 'medium',
       assigned_staff: '',
-      due_date: ''
+      scheduled_start: ''
     });
     setEditingProject(null);
   }, []);
@@ -200,7 +200,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
       status: project.status,
       priority: project.priority,
       assigned_staff: project.assigned_staff || '',
-      due_date: project.due_date || ''
+      scheduled_start: project.scheduled_start || ''
     });
     setEditingProject(project);
     setShowProjectDialog(true);
@@ -224,7 +224,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
         status: projectForm.status,
         priority: projectForm.priority,
         assigned_staff: projectForm.assigned_staff || null,
-        due_date: projectForm.due_date ? new Date(projectForm.due_date).toISOString() : null
+        scheduled_start: projectForm.scheduled_start ? new Date(projectForm.scheduled_start).toISOString() : null
       };
 
       const url = editingProject
@@ -292,7 +292,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
         status: 'not_started',
         priority: 'medium',
         assigned_staff: null,
-        due_date: null
+        scheduled_start: null
       };
 
       const response = await fetch('/api/projects', {
@@ -336,7 +336,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
           status: fields.status,
           priority: fields.priority,
           assigned_user_ids: fields.assigned_staff ? [fields.assigned_staff] : [],
-          due_date: fields.due_date || null,
+          scheduled_start: fields.scheduled_start || null,
           user_id: currentUser.id
         })
       });
