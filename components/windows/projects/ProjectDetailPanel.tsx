@@ -265,7 +265,7 @@ export function ProjectDetailPanel({
       </div>
 
       {/* Scrollable content */}
-      <ScrollArea className="flex-1 min-h-0">
+      <ScrollArea className="flex-1 min-h-0 overscroll-contain">
         <div className="px-4 py-4 space-y-4">
           {/* Description */}
           <div className="space-y-2">

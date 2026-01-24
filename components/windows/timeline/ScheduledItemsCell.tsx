@@ -94,20 +94,16 @@ export function ScheduledItemsCell({
     <div className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 z-20">
       {/* Tasks Icon with HoverCard */}
       {scheduledTasks.length > 0 && (
-        <HoverCard openDelay={100} closeDelay={200}>
+        <HoverCard openDelay={0} closeDelay={0}>
           <HoverCardTrigger asChild>
             <div className="flex items-center justify-center w-4 h-4 rounded bg-blue-500/80 text-white cursor-pointer hover:bg-blue-600">
               <AssignmentIcon size={10} />
             </div>
           </HoverCardTrigger>
-          <HoverCardContent side="top" align="start" className="w-72 p-0">
-            <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
-              <p className="text-sm font-medium">{formatDateHeader(date)}</p>
-              <p className="text-xs text-muted-foreground">{propertyName}</p>
-            </div>
+          <HoverCardContent side="right" align="start" sideOffset={-8} className="w-72 p-0">
             <div className="px-3 py-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                Scheduled Tasks ({scheduledTasks.length})
+              <p className="text-xs font-semibold text-muted-foreground mb-2">
+                Scheduled Tasks ({scheduledTasks.length}) — {formatDateHeader(date)}
               </p>
               <div className="space-y-0.5 max-h-40 overflow-y-auto subtle-scrollbar">
                 {scheduledTasks.map((task) => (
@@ -130,20 +126,16 @@ export function ScheduledItemsCell({
 
       {/* Projects Icon with HoverCard */}
       {scheduledProjects.length > 0 && (
-        <HoverCard openDelay={100} closeDelay={200}>
+        <HoverCard openDelay={0} closeDelay={0}>
           <HoverCardTrigger asChild>
             <div className="flex items-center justify-center w-4 h-4 rounded bg-amber-500/80 text-white cursor-pointer hover:bg-amber-600">
               <HammerIcon size={10} />
             </div>
           </HoverCardTrigger>
-          <HoverCardContent side="top" align="start" className="w-72 p-0">
-            <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
-              <p className="text-sm font-medium">{formatDateHeader(date)}</p>
-              <p className="text-xs text-muted-foreground">{propertyName}</p>
-            </div>
+          <HoverCardContent side="right" align="start" sideOffset={-8} className="w-72 p-0">
             <div className="px-3 py-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                Scheduled Projects ({scheduledProjects.length})
+              <p className="text-xs font-semibold text-muted-foreground mb-2">
+                Scheduled Projects ({scheduledProjects.length}) — {formatDateHeader(date)}
               </p>
               <div className="space-y-0.5 max-h-40 overflow-y-auto subtle-scrollbar">
                 {scheduledProjects.map((project) => (

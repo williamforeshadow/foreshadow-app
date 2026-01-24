@@ -390,7 +390,7 @@ export default function TimelineWindow({
                       const propertyProjects = projects.filter(p => p.property_name === activeTurnover.property_name);
                       
                       return (
-                        <HoverCard openDelay={100} closeDelay={200}>
+                        <HoverCard openDelay={0} closeDelay={0}>
                           <HoverCardTrigger asChild>
                             <div className="absolute right-0 top-0 bottom-0 w-28 flex items-center justify-end gap-1.5 pr-2 cursor-default">
                               {/* Status badge */}
@@ -413,7 +413,7 @@ export default function TimelineWindow({
                               </div>
                             </div>
                           </HoverCardTrigger>
-                          <HoverCardContent side="right" align="start" className="w-72 p-0">
+                          <HoverCardContent side="right" align="start" sideOffset={-8} className="w-72 p-0">
                             {/* Header */}
                             <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
                               <p className="text-sm font-medium">{property}</p>

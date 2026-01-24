@@ -63,7 +63,7 @@ export function TaskDetailPanel({
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-6 space-y-4">
+      <div className="flex-1 p-6 space-y-4 overflow-auto overscroll-contain">
         {/* Task Status Bar */}
         <div className="p-3 bg-neutral-50 dark:bg-neutral-800 rounded-lg flex items-center justify-between">
           <div>

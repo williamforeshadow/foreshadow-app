@@ -181,6 +181,7 @@ export function FloatingWindow({
         width: size.width,
         height: size.height,
       }}
+      onWheel={(e) => e.stopPropagation()}
     >
       {/* Draggable Header */}
       <div
@@ -205,7 +206,7 @@ export function FloatingWindow({
       </div>
       
       {/* Content - Render the appropriate detail panel */}
-      <div className="flex-1 overflow-hidden [&>div]:h-full [&>div]:w-full [&>div]:border-l-0">
+      <div className="flex-1 overflow-auto overscroll-contain [&>div]:h-full [&>div]:w-full [&>div]:border-l-0">
         {type === 'task' ? (
           <TaskDetailPanel
             task={item as Task}
