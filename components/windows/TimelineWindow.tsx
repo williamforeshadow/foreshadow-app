@@ -512,7 +512,7 @@ export default function TimelineWindow({
                     return (
                       <div
                         key={idx}
-                        className={`border-b border-r border-neutral-200 dark:border-neutral-700 h-[38px] relative overflow-visible ${isTodayDate ? 'bg-emerald-700/20' : 'bg-white dark:bg-neutral-900'}`}
+                        className={`border-b border-r border-neutral-200 dark:border-neutral-700 h-[30px] relative overflow-visible ${isTodayDate ? 'bg-emerald-700/20' : 'bg-white dark:bg-neutral-900'}`}
                       >
                         {startingReservation && (() => {
                           const { span, startsBeforeRange, endsAfterRange } = getBlockPosition(startingReservation.check_in, startingReservation.check_out);
@@ -559,6 +559,7 @@ export default function TimelineWindow({
                           date={date}
                           tasks={allScheduledTasks}
                           projects={scheduledProjects}
+                          viewMode={view}
                           onTaskClick={(task) => setFloatingData({
                             type: 'task',
                             item: task,

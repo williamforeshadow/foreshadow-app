@@ -5,7 +5,7 @@ import { useState } from 'react';
 interface UserAvatarProps {
   src?: string | null;
   name: string;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
 }
 
@@ -14,6 +14,7 @@ export function UserAvatar({ src, name, size = 'md', className = '' }: UserAvata
 
   // Size mappings
   const sizeClasses = {
+    xs: 'w-4 h-4 text-[8px]',
     sm: 'w-6 h-6 text-xs',
     md: 'w-8 h-8 text-sm',
     lg: 'w-10 h-10 text-base',
