@@ -8,7 +8,7 @@ import { UserAvatar } from '@/components/ui/user-avatar';
 import Link from 'next/link';
 
 export default function ProfilePage() {
-  const { user, authUser, loading, refreshUser } = useAuth();
+  const { user, loading, refreshUser } = useAuth();
   const [name, setName] = useState('');
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -33,7 +33,7 @@ export default function ProfilePage() {
     );
   }
 
-  if (!user || !authUser) {
+  if (!user) {
     router.push('/login');
     return null;
   }
@@ -60,7 +60,7 @@ export default function ProfilePage() {
     try {
       // Create unique filename
       const fileExt = file.name.split('.').pop();
-      const fileName = `${authUser.id}/${Date.now()}.${fileExt}`;
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
 
       // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
@@ -81,7 +81,7 @@ export default function ProfilePage() {
       const { error: updateError } = await supabase
         .from('users')
         .update({ avatar: publicUrl, updated_at: new Date().toISOString() })
-        .eq('id', authUser.id);
+        .eq('id', user.id);
 
       if (updateError) throw updateError;
 
@@ -112,7 +112,7 @@ export default function ProfilePage() {
       const { error: updateError } = await supabase
         .from('users')
         .update({ name: name.trim(), updated_at: new Date().toISOString() })
-        .eq('id', authUser.id);
+        .eq('id', user.id);
 
       if (updateError) throw updateError;
 
