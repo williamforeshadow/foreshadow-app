@@ -13,7 +13,7 @@ import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
 import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
-import { FloatingWindow, ScheduledItemsCell } from './timeline';
+import { FloatingWindow, ScheduledItemsCell, DayKanban } from './timeline';
 import { AttachmentLightbox, ProjectActivitySheet } from './projects';
 import AssignmentIcon from '@/components/icons/AssignmentIcon';
 import HammerIcon from '@/components/icons/HammerIcon';
@@ -43,6 +43,9 @@ export default function TimelineWindow({
 }: TimelineWindowProps) {
   // State for the floating window
   const [floatingData, setFloatingData] = useState<FloatingWindowData>(null);
+  
+  // State for kanban view
+  const [kanbanDate, setKanbanDate] = useState<Date | null>(null);
 
   // ============================================================================
   // LOCAL instances of sub-hooks for projects (independent from other windows)
@@ -367,7 +370,15 @@ export default function TimelineWindow({
             {dateRange.map((date, idx) => {
               const isTodayDate = isToday(date);
               return (
-                <div key={idx} className={`px-1 py-1 border-b border-r border-neutral-200 dark:border-neutral-700 sticky top-0 z-10 ${isTodayDate ? 'bg-emerald-700' : 'bg-neutral-100 dark:bg-neutral-800'}`}>
+                <div 
+                  key={idx} 
+                  className={`px-1 py-1 border-b border-r border-neutral-200 dark:border-neutral-700 sticky top-0 z-10 cursor-pointer transition-colors ${
+                    isTodayDate 
+                      ? 'bg-emerald-700 hover:bg-emerald-600' 
+                      : 'bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                  }`}
+                  onClick={() => setKanbanDate(date)}
+                >
                   {formatHeaderDate(date, isTodayDate)}
                 </div>
               );
@@ -644,6 +655,33 @@ export default function TimelineWindow({
         activities={activityHook.projectActivity}
         loading={activityHook.loadingActivity}
       />
+
+      {/* Day Kanban */}
+      {kanbanDate && (
+        <DayKanban
+          date={kanbanDate}
+          tasks={allScheduledTasks}
+          projects={scheduledProjects}
+          users={users as any}
+          onClose={() => setKanbanDate(null)}
+          onTaskClick={(task, propertyName) => {
+            setKanbanDate(null);
+            setFloatingData({
+              type: 'task',
+              item: task,
+              propertyName,
+            });
+          }}
+          onProjectClick={(project, propertyName) => {
+            setKanbanDate(null);
+            setFloatingData({
+              type: 'project',
+              item: project,
+              propertyName,
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

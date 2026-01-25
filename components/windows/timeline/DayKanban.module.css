@@ -1,0 +1,373 @@
+/* ==========================================================================
+   Day Kanban - Based on ROI UI Kanban Board
+   ========================================================================== */
+
+/* Root / Container */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 72rem;
+  height: 80vh;
+  background-color: #171717; /* neutral-900 */
+  border-radius: var(--radius);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #404040; /* neutral-700 */
+  background-color: #171717; /* match container */
+}
+
+.headerContent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.headerTitle {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.01em;
+  color: #fafafa; /* neutral-50 */
+}
+
+.headerSubtitle {
+  font-size: 0.875rem;
+  color: #a3a3a3; /* neutral-400 */
+  margin: 0;
+}
+
+.closeButton {
+  opacity: 0.5;
+  transition: opacity 150ms ease;
+}
+
+.closeButton:hover {
+  opacity: 1;
+}
+
+/* Board Layout */
+.board {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  gap: 1rem;
+  padding: 1rem;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background-color: #0a0a0a; /* neutral-950 - near black */
+}
+
+.emptyState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  color: #a3a3a3; /* neutral-400 */
+  font-size: 0.875rem;
+}
+
+/* Columns */
+.column {
+  display: flex;
+  flex-direction: column;
+  width: 288px;
+  flex-shrink: 0;
+  background-color: #262626; /* neutral-800 */
+  border-radius: var(--radius);
+  border: 1px solid #404040; /* neutral-700 */
+}
+
+.columnHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #404040; /* neutral-700 */
+  background-color: #1f1f1f; /* slightly darker than column */
+}
+
+.columnHeaderInfo {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.columnTitle {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #fafafa; /* neutral-50 */
+}
+
+.columnRole {
+  font-size: 0.75rem;
+  color: #a3a3a3; /* neutral-400 */
+  text-transform: capitalize;
+}
+
+.columnCount {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.5rem;
+  border-radius: 9999px;
+  background-color: #404040; /* neutral-700 */
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #a3a3a3; /* neutral-400 */
+}
+
+.columnContent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  transition: background-color 0.15s ease;
+}
+
+.columnOver {
+  background-color: #333333; /* Highlight when dragging over */
+}
+
+/* Unassigned Column Avatar Placeholder */
+.unassignedAvatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background-color: #404040; /* neutral-700 */
+  border: 1px dashed #525252; /* neutral-600 */
+  color: #a3a3a3; /* neutral-400 */
+  font-size: 0.75rem;
+}
+
+/* Cards */
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background-color: #373737; /* neutral-700ish - lighter than column */
+  border-radius: var(--radius);
+  cursor: grab;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  border: 1px solid #525252; /* neutral-600 */
+  user-select: none;
+}
+
+.card:hover {
+  background-color: #424242; /* slightly lighter on hover */
+}
+
+.card:active {
+  cursor: grabbing;
+}
+
+.cardDragging {
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+  background-color: #454545;
+  cursor: grabbing;
+  transform: scale(1.02);
+}
+
+.cardTask {
+  /* Task indicator - no colored border */
+}
+
+.cardProject {
+  /* Project indicator - no colored border */
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.cardIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: calc(var(--radius) - 2px);
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.cardIconTask {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: #2563eb;
+}
+
+.cardIconProject {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+.cardContent {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.cardTitle {
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.4;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: #fafafa; /* neutral-50 */
+}
+
+.cardProperty {
+  font-size: 0.75rem;
+  color: #a3a3a3; /* neutral-400 */
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+/* Status Badges */
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: calc(var(--radius) - 2px);
+  font-size: 0.625rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.statusNotStarted {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #dc2626;
+}
+
+.statusInProgress {
+  background-color: rgba(234, 179, 8, 0.15);
+  color: #ca8a04;
+}
+
+.statusOnHold,
+.statusPaused {
+  background-color: rgba(249, 115, 22, 0.15);
+  color: #ea580c;
+}
+
+.statusComplete {
+  background-color: rgba(34, 197, 94, 0.15);
+  color: #16a34a;
+}
+
+.statusReopened {
+  background-color: rgba(168, 85, 247, 0.15);
+  color: #9333ea;
+}
+
+.cardType {
+  font-size: 0.625rem;
+  color: #737373; /* neutral-500 */
+}
+
+/* Scrollbar Styling */
+.columnContent::-webkit-scrollbar {
+  width: 4px;
+}
+
+.columnContent::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.columnContent::-webkit-scrollbar-thumb {
+  background-color: #525252; /* neutral-600 */
+  border-radius: 2px;
+}
+
+.columnContent::-webkit-scrollbar-thumb:hover {
+  background-color: #737373; /* neutral-500 */
+}
+
+/* Dark mode adjustments */
+:global(.dark) .cardIconTask {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+:global(.dark) .cardIconProject {
+  background-color: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
+
+:global(.dark) .statusNotStarted {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+:global(.dark) .statusInProgress {
+  background-color: rgba(234, 179, 8, 0.2);
+  color: #facc15;
+}
+
+:global(.dark) .statusOnHold,
+:global(.dark) .statusPaused {
+  background-color: rgba(249, 115, 22, 0.2);
+  color: #fb923c;
+}
+
+:global(.dark) .statusComplete {
+  background-color: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+}
+
+:global(.dark) .statusReopened {
+  background-color: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+}
