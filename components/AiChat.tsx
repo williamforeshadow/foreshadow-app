@@ -47,7 +47,7 @@ export function AiChat() {
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!inputValue.trim() || isLoading) return;
+    if (!inputValue.trim() || isLoading || !user) return;
 
     const userMessage = inputValue.trim();
     const userMsgId = `user-${Date.now()}`;
