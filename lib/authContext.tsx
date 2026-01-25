@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { createSupabaseClient } from '@/lib/supabaseAuth';
-import { User } from '@supabase/supabase-js';
 
 export type Role = 'superadmin' | 'manager' | 'staff';
 
@@ -16,10 +15,10 @@ export interface AppUser {
 
 interface AuthContextType {
   user: AppUser | null;
-  authUser: User | null;
+  allUsers: AppUser[];
   role: Role | null;
   loading: boolean;
-  signOut: () => Promise<void>;
+  switchUser: (userId: string) => void;
   refreshUser: () => Promise<void>;
   // Permission helpers
   canManageUsers: boolean;
@@ -44,80 +43,87 @@ const getPermissions = (r: Role | null) => ({
   canManageProjects: r === 'superadmin' || r === 'manager',
 });
 
+const SELECTED_USER_KEY = 'foreshadow_selected_user';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [authUser, setAuthUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
+  const [allUsers, setAllUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createSupabaseClient();
 
-  const fetchAppUser = async (userId: string) => {
+  const fetchAllUsers = async () => {
     try {
       const { data, error } = await supabase
         .from('users')
         .select('*')
-        .eq('id', userId)
-        .single();
+        .order('name');
 
       if (!error && data) {
-        setAppUser(data as AppUser);
+        setAllUsers(data as AppUser[]);
+        return data as AppUser[];
       } else {
-        console.error('Error fetching app user:', error);
-        setAppUser(null);
+        console.error('Error fetching users:', error);
+        return [];
       }
     } catch (err) {
-      console.error('Error fetching app user:', err);
-      setAppUser(null);
+      console.error('Error fetching users:', err);
+      return [];
+    }
+  };
+
+  const switchUser = (userId: string) => {
+    const selectedUser = allUsers.find(u => u.id === userId);
+    if (selectedUser) {
+      setAppUser(selectedUser);
+      localStorage.setItem(SELECTED_USER_KEY, userId);
     }
   };
 
   const refreshUser = async () => {
-    if (authUser?.id) {
-      await fetchAppUser(authUser.id);
+    const users = await fetchAllUsers();
+    if (appUser) {
+      const refreshedUser = users.find(u => u.id === appUser.id);
+      if (refreshedUser) {
+        setAppUser(refreshedUser);
+      }
     }
   };
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setAuthUser(session?.user ?? null);
-      if (session?.user) {
-        fetchAppUser(session.user.id).finally(() => setLoading(false));
-      } else {
-        setLoading(false);
-      }
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setAuthUser(session?.user ?? null);
-        if (session?.user) {
-          await fetchAppUser(session.user.id);
-        } else {
-          setAppUser(null);
+    const init = async () => {
+      const users = await fetchAllUsers();
+      
+      // Check for previously selected user
+      const savedUserId = localStorage.getItem(SELECTED_USER_KEY);
+      
+      if (savedUserId) {
+        const savedUser = users.find(u => u.id === savedUserId);
+        if (savedUser) {
+          setAppUser(savedUser);
+        } else if (users.length > 0) {
+          setAppUser(users[0]);
         }
-        setLoading(false);
+      } else if (users.length > 0) {
+        // Default to first user
+        setAppUser(users[0]);
+        localStorage.setItem(SELECTED_USER_KEY, users[0].id);
       }
-    );
+      
+      setLoading(false);
+    };
 
-    return () => subscription.unsubscribe();
+    init();
   }, []);
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setAppUser(null);
-    setAuthUser(null);
-  };
 
   const role = appUser?.role ?? null;
 
   return (
     <AuthContext.Provider value={{
       user: appUser,
-      authUser,
+      allUsers,
       role,
       loading,
-      signOut,
+      switchUser,
       refreshUser,
       ...getPermissions(role),
     }}>
@@ -133,35 +139,3 @@ export function useAuth() {
   }
   return context;
 }
-
-// ============================================
-// DEVELOPMENT ONLY: Role Switcher for Testing
-// ============================================
-// Keep these test users for development/testing purposes
-// You can use the RoleSwitcher component to switch between them
-
-export const TEST_USERS = {
-  superadmin: {
-    id: 'test-superadmin-001',
-    name: 'Sarah Admin',
-    email: 'sarah@foreshadow.dev',
-    role: 'superadmin' as const,
-    avatar: '👑'
-  },
-  manager: {
-    id: 'test-manager-001',
-    name: 'Mike Manager',
-    email: 'mike@foreshadow.dev',
-    role: 'manager' as const,
-    avatar: '📋'
-  },
-  staff: {
-    id: 'test-staff-001',
-    name: 'Sam Staff',
-    email: 'sam@foreshadow.dev',
-    role: 'staff' as const,
-    avatar: '🧹'
-  }
-} as const;
-
-export type TestUser = typeof TEST_USERS[Role];

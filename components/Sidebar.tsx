@@ -18,7 +18,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(true);
-  const { user, role, canEditTemplates, signOut } = useAuth();
+  const { user, allUsers, role, canEditTemplates, switchUser } = useAuth();
 
   const allNavItems = [
     {
@@ -185,35 +185,47 @@ export default function Sidebar() {
                     <ModeToggle />
                   </div>
                 </div>
-                
-                <DropdownMenuSeparator />
-                
-                {/* Sign Out */}
-                <DropdownMenuItem 
-                  onClick={async () => {
-                    await signOut();
-                    router.push('/login');
-                  }}
-                  className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
-                >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
-                  Sign Out
-                </DropdownMenuItem>
+
+                {/* Switch User */}
+                {allUsers.length > 1 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <div className="px-3 py-2">
+                      <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2">Switch User</p>
+                      <div className="space-y-1 max-h-40 overflow-y-auto">
+                        {allUsers.map((u) => (
+                          <button
+                            key={u.id}
+                            onClick={() => switchUser(u.id)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left text-sm transition-colors ${
+                              u.id === user?.id 
+                                ? 'bg-primary/10 text-primary' 
+                                : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                            }`}
+                          >
+                            <UserAvatar src={u.avatar} name={u.name} size="sm" />
+                            <div className="flex-1 min-w-0">
+                              <p className="truncate font-medium">{u.name}</p>
+                              <p className="text-xs text-neutral-500 capitalize">{u.role}</p>
+                            </div>
+                            {u.id === user?.id && (
+                              <svg className="w-4 h-4 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
             <div className={`${isOpen ? 'px-4' : 'px-2'} py-4`}>
-              <button
-                onClick={() => router.push('/login')}
-                className={`w-full flex items-center ${isOpen ? 'gap-3 justify-start' : 'justify-center'} py-2 px-3 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-all`}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                </svg>
-                {isOpen && <span className="font-medium">Sign In</span>}
-              </button>
+              <div className="flex items-center justify-center">
+                <ModeToggle />
+              </div>
             </div>
           )}
         </div>
