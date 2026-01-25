@@ -71,7 +71,7 @@ export default function MobileMyAssignmentsView({
   onProjectClick,
   refreshTrigger,
 }: MobileMyAssignmentsViewProps) {
-  const { user, role, loading: authLoading, signOut } = useAuth();
+  const { user, role, loading: authLoading } = useAuth();
   const [data, setData] = useState<AssignmentsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -433,8 +433,8 @@ export default function MobileMyAssignmentsView({
           
           {/* Sign Out */}
           <DropdownMenuItem 
-            onClick={async () => {
-              await signOut();
+            onClick={() => {
+              localStorage.removeItem('foreshadow_selected_user');
               router.push('/login');
             }}
             className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
