@@ -1,8 +1,145 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createSupabaseClient } from '@/lib/supabaseAuth';
+import { User } from '@supabase/supabase-js';
 
-// Define your test users
+export type Role = 'superadmin' | 'manager' | 'staff';
+
+export interface AppUser {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  avatar?: string;
+}
+
+interface AuthContextType {
+  user: AppUser | null;
+  authUser: User | null;
+  role: Role | null;
+  loading: boolean;
+  signOut: () => Promise<void>;
+  refreshUser: () => Promise<void>;
+  // Permission helpers
+  canManageUsers: boolean;
+  canEditTemplates: boolean;
+  canViewAllTasks: boolean;
+  canEditTasks: boolean;
+  canViewAllProperties: boolean;
+  canEditProperties: boolean;
+  canManageProjects: boolean;
+}
+
+const AuthContext = createContext<AuthContextType | null>(null);
+
+// Define permissions per role
+const getPermissions = (r: Role | null) => ({
+  canManageUsers: r === 'superadmin',
+  canEditTemplates: r === 'superadmin' || r === 'manager',
+  canViewAllTasks: r === 'superadmin' || r === 'manager',
+  canEditTasks: r === 'superadmin' || r === 'manager',
+  canViewAllProperties: r === 'superadmin' || r === 'manager',
+  canEditProperties: r === 'superadmin',
+  canManageProjects: r === 'superadmin' || r === 'manager',
+});
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [appUser, setAppUser] = useState<AppUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const supabase = createSupabaseClient();
+
+  const fetchAppUser = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (!error && data) {
+        setAppUser(data as AppUser);
+      } else {
+        console.error('Error fetching app user:', error);
+        setAppUser(null);
+      }
+    } catch (err) {
+      console.error('Error fetching app user:', err);
+      setAppUser(null);
+    }
+  };
+
+  const refreshUser = async () => {
+    if (authUser?.id) {
+      await fetchAppUser(authUser.id);
+    }
+  };
+
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setAuthUser(session?.user ?? null);
+      if (session?.user) {
+        fetchAppUser(session.user.id).finally(() => setLoading(false));
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        setAuthUser(session?.user ?? null);
+        if (session?.user) {
+          await fetchAppUser(session.user.id);
+        } else {
+          setAppUser(null);
+        }
+        setLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    setAppUser(null);
+    setAuthUser(null);
+  };
+
+  const role = appUser?.role ?? null;
+
+  return (
+    <AuthContext.Provider value={{
+      user: appUser,
+      authUser,
+      role,
+      loading,
+      signOut,
+      refreshUser,
+      ...getPermissions(role),
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}
+
+// ============================================
+// DEVELOPMENT ONLY: Role Switcher for Testing
+// ============================================
+// Keep these test users for development/testing purposes
+// You can use the RoleSwitcher component to switch between them
+
 export const TEST_USERS = {
   superadmin: {
     id: 'test-superadmin-001',
@@ -27,98 +164,4 @@ export const TEST_USERS = {
   }
 } as const;
 
-export type Role = 'superadmin' | 'manager' | 'staff';
 export type TestUser = typeof TEST_USERS[Role];
-
-interface AuthContextType {
-  user: TestUser;
-  role: Role;
-  switchUser: (role: Role) => void;
-  // Permission helpers
-  canManageUsers: boolean;
-  canEditTemplates: boolean;
-  canViewAllTasks: boolean;
-  canEditTasks: boolean;
-  canViewAllProperties: boolean;
-  canEditProperties: boolean;
-  canManageProjects: boolean;
-}
-
-const AuthContext = createContext<AuthContextType | null>(null);
-
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [currentRole, setCurrentRole] = useState<Role>('superadmin');
-  const [isHydrated, setIsHydrated] = useState(false);
-
-  // Persist role selection in localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem('dev-auth-role');
-    if (saved && (saved === 'superadmin' || saved === 'manager' || saved === 'staff')) {
-      setCurrentRole(saved);
-    }
-    setIsHydrated(true);
-  }, []);
-
-  const switchUser = (role: Role) => {
-    setCurrentRole(role);
-    localStorage.setItem('dev-auth-role', role);
-  };
-
-  const user = TEST_USERS[currentRole];
-
-  // Define permissions per role
-  const permissions = {
-    superadmin: {
-      canManageUsers: true,
-      canEditTemplates: true,
-      canViewAllTasks: true,
-      canEditTasks: true,
-      canViewAllProperties: true,
-      canEditProperties: true,
-      canManageProjects: true,
-    },
-    manager: {
-      canManageUsers: false,
-      canEditTemplates: true,
-      canViewAllTasks: true,
-      canEditTasks: true,
-      canViewAllProperties: true,
-      canEditProperties: false,
-      canManageProjects: true,
-    },
-    staff: {
-      canManageUsers: false,
-      canEditTemplates: false,
-      canViewAllTasks: false,
-      canEditTasks: false,
-      canViewAllProperties: false,
-      canEditProperties: false,
-      canManageProjects: false,
-    }
-  };
-
-  // Avoid hydration mismatch by not rendering until client-side
-  if (!isHydrated) {
-    return null;
-  }
-
-  return (
-    <AuthContext.Provider value={{
-      user,
-      role: currentRole,
-      switchUser,
-      ...permissions[currentRole]
-    }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-}
-

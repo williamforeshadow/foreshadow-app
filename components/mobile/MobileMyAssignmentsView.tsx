@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAuth, TEST_USERS, Role } from '@/lib/authContext';
+import { useAuth } from '@/lib/authContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,6 +17,8 @@ import {
   CarouselItem,
   type CarouselApi,
 } from '@/components/ui/carousel';
+import { useRouter } from 'next/navigation';
+import { UserAvatar } from '@/components/ui/user-avatar';
 
 interface Task {
   task_id: string;
@@ -69,16 +71,19 @@ export default function MobileMyAssignmentsView({
   onProjectClick,
   refreshTrigger,
 }: MobileMyAssignmentsViewProps) {
-  const { user, role, switchUser } = useAuth();
+  const { user, role, loading: authLoading, signOut } = useAuth();
   const [data, setData] = useState<AssignmentsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [carouselApi, setCarouselApi] = useState<CarouselApi>();
   const [activeSlide, setActiveSlide] = useState(0);
+  const router = useRouter();
 
   useEffect(() => {
-    fetchAssignments();
-  }, [user.id, refreshTrigger]);
+    if (user?.id) {
+      fetchAssignments();
+    }
+  }, [user?.id, refreshTrigger]);
 
   // Handle carousel slide changes
   useEffect(() => {
@@ -95,6 +100,8 @@ export default function MobileMyAssignmentsView({
   }, [carouselApi]);
 
   const fetchAssignments = async () => {
+    if (!user?.id) return;
+    
     setLoading(true);
     setError(null);
     
@@ -157,6 +164,33 @@ export default function MobileMyAssignmentsView({
     return status.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
   };
 
+  // Show loading while auth is loading
+  if (authLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64">
+        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-neutral-500 dark:text-neutral-400">Loading...</p>
+      </div>
+    );
+  }
+
+  // Not logged in
+  if (!user) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 px-4">
+        <div className="w-12 h-12 mb-3 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
+          <svg className="w-6 h-6 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+        </div>
+        <p className="text-neutral-600 dark:text-neutral-400 font-medium mb-3">Sign in to see your assignments</p>
+        <Button onClick={() => router.push('/login')}>
+          Sign In
+        </Button>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-64">
@@ -184,7 +218,12 @@ export default function MobileMyAssignmentsView({
 
   const tasks = data?.tasks || [];
   const projects = data?.projects || [];
-  const summary = data?.summary;
+
+  const roleColors: Record<string, string> = {
+    superadmin: 'bg-purple-500',
+    manager: 'bg-blue-500',
+    staff: 'bg-emerald-500'
+  };
 
   return (
     <div className="flex flex-col h-full relative">
@@ -366,29 +405,45 @@ export default function MobileMyAssignmentsView({
         </Carousel>
       </div>
 
-      {/* Floating Role Switcher - Bottom Right */}
+      {/* Floating User Menu - Bottom Right */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="fixed bottom-20 right-4 z-40 w-12 h-12 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-lg flex items-center justify-center text-xl hover:scale-105 transition-transform">
-            {user.avatar}
+          <button className="fixed bottom-20 right-4 z-40 w-12 h-12 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-lg flex items-center justify-center hover:scale-105 transition-transform overflow-hidden">
+            <UserAvatar src={user.avatar} name={user.name} size="xl" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
-          {(Object.keys(TEST_USERS) as Role[]).map((r) => (
-            <DropdownMenuItem 
-              key={r} 
-              onClick={() => switchUser(r)}
-              className={role === r ? 'bg-neutral-100 dark:bg-neutral-800' : ''}
-            >
-              <span className="mr-2">{TEST_USERS[r].avatar}</span>
-              <span className="flex-1">{TEST_USERS[r].name}</span>
-              {role === r && (
-                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              )}
-            </DropdownMenuItem>
-          ))}
+        <DropdownMenuContent align="end" className="w-56">
+          {/* User Info */}
+          <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
+            <p className="font-medium text-sm text-neutral-900 dark:text-white">{user.name}</p>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">{user.email}</p>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className={`w-2 h-2 rounded-full ${roleColors[role || 'staff']}`} />
+              <span className="text-xs text-neutral-500 capitalize">{role}</span>
+            </div>
+          </div>
+          
+          {/* Edit Profile */}
+          <DropdownMenuItem onClick={() => router.push('/profile')}>
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            Edit Profile
+          </DropdownMenuItem>
+          
+          {/* Sign Out */}
+          <DropdownMenuItem 
+            onClick={async () => {
+              await signOut();
+              router.push('/login');
+            }}
+            className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Sign Out
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

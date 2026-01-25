@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/lib/authContext";
-import RoleSwitcher from "@/components/RoleSwitcher";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -54,7 +53,6 @@ export default function RootLayout({
         >
           <AuthProvider>
             {children}
-            <RoleSwitcher />
           </AuthProvider>
         </ThemeProvider>
       </body>
