@@ -17,6 +17,8 @@ import { FloatingWindow, ScheduledItemsCell, DayKanban } from './timeline';
 import { AttachmentLightbox, ProjectActivitySheet } from './projects';
 import AssignmentIcon from '@/components/icons/AssignmentIcon';
 import HammerIcon from '@/components/icons/HammerIcon';
+import Rhombus16FilledIcon from '@/components/icons/Rhombus16FilledIcon';
+import RectangleStackIcon from '@/components/icons/RectangleStackIcon';
 import type { Project, Task, User, ProjectFormFields } from '@/lib/types';
 import type { useProjects } from '@/lib/useProjects';
 import type { Template } from '@/components/DynamicCleaningForm';
@@ -44,8 +46,11 @@ export default function TimelineWindow({
   // State for the floating window
   const [floatingData, setFloatingData] = useState<FloatingWindowData>(null);
   
-  // State for kanban view
-  const [kanbanDate, setKanbanDate] = useState<Date | null>(null);
+  // State for view mode (grid vs kanban)
+  const [viewMode, setViewMode] = useState<'grid' | 'kanban'>('grid');
+  
+  // State for kanban - use current date as default when in kanban view mode
+  const [kanbanDate, setKanbanDate] = useState<Date>(new Date());
 
   // ============================================================================
   // LOCAL instances of sub-hooks for projects (independent from other windows)
@@ -303,29 +308,75 @@ export default function TimelineWindow({
       {/* Header with navigation - fixed at top */}
       <div className="flex-shrink-0 px-4 py-3">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
-            Property Timeline
-          </h2>
+          {/* View Mode Icons */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 rounded transition-colors ${
+                viewMode === 'grid' 
+                  ? 'bg-neutral-200 dark:bg-neutral-700 text-neutral-900 dark:text-white' 
+                  : 'text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-700 dark:hover:text-neutral-300'
+              }`}
+              title="Grid View"
+            >
+              <Rhombus16FilledIcon size={18} />
+            </button>
+            <button
+              onClick={() => setViewMode('kanban')}
+              className={`p-1.5 rounded transition-colors ${
+                viewMode === 'kanban' 
+                  ? 'bg-neutral-200 dark:bg-neutral-700 text-neutral-900 dark:text-white' 
+                  : 'text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-700 dark:hover:text-neutral-300'
+              }`}
+              title="Kanban View"
+            >
+              <RectangleStackIcon size={18} />
+            </button>
+          </div>
 
           <div className="flex items-center gap-4">
             {/* Navigation Controls */}
             <div className="flex items-center gap-2">
               <Button
-                onClick={goToPrevious}
+                onClick={() => {
+                  if (viewMode === 'grid') {
+                    goToPrevious();
+                  } else {
+                    // In kanban mode, go to previous day
+                    const newDate = new Date(kanbanDate);
+                    newDate.setDate(newDate.getDate() - 1);
+                    setKanbanDate(newDate);
+                  }
+                }}
                 variant="outline"
                 size="sm"
               >
                 ← Prev
               </Button>
               <Button
-                onClick={goToToday}
+                onClick={() => {
+                  if (viewMode === 'grid') {
+                    goToToday();
+                  } else {
+                    setKanbanDate(new Date());
+                  }
+                }}
                 variant="outline"
                 size="sm"
               >
                 Today
               </Button>
               <Button
-                onClick={goToNext}
+                onClick={() => {
+                  if (viewMode === 'grid') {
+                    goToNext();
+                  } else {
+                    // In kanban mode, go to next day
+                    const newDate = new Date(kanbanDate);
+                    newDate.setDate(newDate.getDate() + 1);
+                    setKanbanDate(newDate);
+                  }
+                }}
                 variant="outline"
                 size="sm"
               >
@@ -333,28 +384,31 @@ export default function TimelineWindow({
               </Button>
             </div>
 
-            {/* View Toggle */}
-            <div className="flex gap-2">
-              <Button
-                onClick={() => setView('week')}
-                variant={view === 'week' ? 'default' : 'outline'}
-                size="sm"
-              >
-                Week
-              </Button>
-              <Button
-                onClick={() => setView('month')}
-                variant={view === 'month' ? 'default' : 'outline'}
-                size="sm"
-              >
-                Month
-              </Button>
-            </div>
+            {/* View Toggle - only show in grid mode */}
+            {viewMode === 'grid' && (
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => setView('week')}
+                  variant={view === 'week' ? 'default' : 'outline'}
+                  size="sm"
+                >
+                  Week
+                </Button>
+                <Button
+                  onClick={() => setView('month')}
+                  variant={view === 'month' ? 'default' : 'outline'}
+                  size="sm"
+                >
+                  Month
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Scrollable grid area */}
+      {/* Content Area - Grid or Kanban based on viewMode */}
+      {viewMode === 'grid' ? (
       <div className="flex-1 overflow-auto px-4 pb-4">
         <div className="overflow-hidden">
           <div
@@ -377,7 +431,10 @@ export default function TimelineWindow({
                       ? 'bg-emerald-700 hover:bg-emerald-600' 
                       : 'bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700'
                   }`}
-                  onClick={() => setKanbanDate(date)}
+                  onClick={() => {
+                    setKanbanDate(date);
+                    setViewMode('kanban');
+                  }}
                 >
                   {formatHeaderDate(date, isTodayDate)}
                 </div>
@@ -591,6 +648,33 @@ export default function TimelineWindow({
           </div>
         </div>
       </div>
+      ) : (
+        /* Full-screen Kanban View */
+        <div className="flex-1 overflow-hidden">
+          <DayKanban
+            date={kanbanDate}
+            tasks={allScheduledTasks}
+            projects={scheduledProjects}
+            users={users as any}
+            onClose={() => setViewMode('grid')}
+            onTaskClick={(task, propertyName) => {
+              setFloatingData({
+                type: 'task',
+                item: task,
+                propertyName,
+              });
+            }}
+            onProjectClick={(project, propertyName) => {
+              setFloatingData({
+                type: 'project',
+                item: project,
+                propertyName,
+              });
+            }}
+            isFullScreen
+          />
+        </div>
+      )}
 
       {/* Floating Window */}
       {floatingData && (
@@ -656,32 +740,6 @@ export default function TimelineWindow({
         loading={activityHook.loadingActivity}
       />
 
-      {/* Day Kanban */}
-      {kanbanDate && (
-        <DayKanban
-          date={kanbanDate}
-          tasks={allScheduledTasks}
-          projects={scheduledProjects}
-          users={users as any}
-          onClose={() => setKanbanDate(null)}
-          onTaskClick={(task, propertyName) => {
-            setKanbanDate(null);
-            setFloatingData({
-              type: 'task',
-              item: task,
-              propertyName,
-            });
-          }}
-          onProjectClick={(project, propertyName) => {
-            setKanbanDate(null);
-            setFloatingData({
-              type: 'project',
-              item: project,
-              propertyName,
-            });
-          }}
-        />
-      )}
     </div>
   );
 }

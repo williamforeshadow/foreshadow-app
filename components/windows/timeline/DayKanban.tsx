@@ -1,10 +1,15 @@
 'use client';
 
-import { useMemo, useState, useCallback } from 'react';
-import { X } from 'lucide-react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
+import { X, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { Button } from '@/components/ui/button';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import AssignmentIcon from '@/components/icons/AssignmentIcon';
 import HammerIcon from '@/components/icons/HammerIcon';
 import type { Task, Project } from '@/lib/types';
@@ -39,6 +44,7 @@ interface DayKanbanProps {
   onTaskClick?: (task: Task, propertyName: string) => void;
   onProjectClick?: (project: Project, propertyName: string) => void;
   onAssignmentChange?: (itemType: 'task' | 'project', itemId: string, newUserId: string | null) => void;
+  isFullScreen?: boolean;
 }
 
 // Helper to check if two dates are the same day
@@ -85,6 +91,7 @@ export function DayKanban({
   onTaskClick,
   onProjectClick,
   onAssignmentChange,
+  isFullScreen = false,
 }: DayKanbanProps) {
   // Filter tasks and projects for this specific day
   const dayTasks = useMemo(() => {
@@ -219,13 +226,184 @@ export function DayKanban({
     return grouped;
   }, [items, columns]);
 
-  // Filter to only show columns with items
+  // Track which columns are actively shown (persistent - don't remove when emptied)
+  const [activeColumnIds, setActiveColumnIds] = useState<Set<string>>(() => {
+    // Initialize with columns that have items + always include unassigned
+    const initial = new Set<string>(['unassigned']);
+    items.forEach(item => {
+      initial.add(item.columnId);
+    });
+    return initial;
+  });
+
+  // Update active columns when items change (add new columns, but don't remove empty ones)
+  useEffect(() => {
+    setActiveColumnIds(prev => {
+      const newSet = new Set(prev);
+      // Always ensure unassigned is included
+      newSet.add('unassigned');
+      // Add any columns that have items
+      items.forEach(item => {
+        newSet.add(item.columnId);
+      });
+      return newSet;
+    });
+  }, [items]);
+
+  // Visible columns based on activeColumnIds, sorted with unassigned first
   const visibleColumns = useMemo(() => {
-    return columns.filter(col => (itemsByColumn[col.id]?.length || 0) > 0);
-  }, [columns, itemsByColumn]);
+    const cols = columns.filter(col => activeColumnIds.has(col.id));
+    // Sort: unassigned first, then alphabetically by name
+    return cols.sort((a, b) => {
+      if (a.id === 'unassigned') return -1;
+      if (b.id === 'unassigned') return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [columns, activeColumnIds]);
+
+  // Users not yet added as columns (for the "+" dropdown)
+  const availableUsers = useMemo(() => {
+    return users.filter(user => !activeColumnIds.has(user.id));
+  }, [users, activeColumnIds]);
+
+  // Add a user column
+  const addUserColumn = useCallback((userId: string) => {
+    setActiveColumnIds(prev => new Set([...prev, userId]));
+  }, []);
 
   const totalItems = dayTasks.length + dayProjects.length;
 
+  // Render the kanban board content (shared between modal and full-screen)
+  const renderKanbanContent = () => (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+      accessibility={{ announcements }}
+    >
+      <div className={isFullScreen ? styles.boardFullScreen : styles.board}>
+        {/* Columns */}
+        {visibleColumns.map(column => (
+          <div key={column.id} className={styles.column}>
+            {/* Column Header */}
+            <div className={styles.columnHeader}>
+              {column.user ? (
+                <UserAvatar
+                  src={column.user.avatar}
+                  name={column.user.name}
+                  size="sm"
+                />
+              ) : (
+                <div className={styles.unassignedAvatar}>?</div>
+              )}
+              <div className={styles.columnHeaderInfo}>
+                <p className={styles.columnTitle}>
+                  {column.user?.name || 'Unassigned'}
+                </p>
+                {column.user && (
+                  <p className={styles.columnRole}>{column.user.role}</p>
+                )}
+              </div>
+              <span className={styles.columnCount}>
+                {itemsByColumn[column.id]?.length || 0}
+              </span>
+            </div>
+
+            {/* Column Cards - Sortable Context */}
+            <SortableContext
+              items={itemsByColumn[column.id]?.map(i => i.id) || []}
+              strategy={verticalListSortingStrategy}
+            >
+              <DroppableColumn columnId={column.id}>
+                {itemsByColumn[column.id]?.map((item) => (
+                  <SortableKanbanCard
+                    key={item.id}
+                    item={item}
+                    onTaskClick={onTaskClick}
+                    onProjectClick={onProjectClick}
+                  />
+                ))}
+              </DroppableColumn>
+            </SortableContext>
+          </div>
+        ))}
+
+        {/* Add User Column Button */}
+        {availableUsers.length > 0 && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className={styles.addColumnButton} title="Add user column">
+                <Plus className="w-5 h-5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className={styles.addColumnPopover} align="start">
+              <p className={styles.addColumnTitle}>Add User Column</p>
+              <div className={styles.addColumnList}>
+                {availableUsers.map(user => (
+                  <button
+                    key={user.id}
+                    className={styles.addColumnItem}
+                    onClick={() => addUserColumn(user.id)}
+                  >
+                    <UserAvatar
+                      src={user.avatar}
+                      name={user.name}
+                      size="sm"
+                    />
+                    <div className={styles.addColumnItemInfo}>
+                      <span className={styles.addColumnItemName}>{user.name}</span>
+                      <span className={styles.addColumnItemRole}>{user.role}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
+
+        {/* Empty state only if no columns at all */}
+        {visibleColumns.length === 0 && (
+          <div className={styles.emptyState}>
+            No items scheduled for this day
+          </div>
+        )}
+      </div>
+
+      {/* Drag Overlay */}
+      <DragOverlay>
+        {activeItem ? (
+          <KanbanCardContent
+            item={activeItem}
+            isDragging
+          />
+        ) : null}
+      </DragOverlay>
+    </DndContext>
+  );
+
+  // Full-screen mode - no overlay, embedded in parent
+  if (isFullScreen) {
+    return (
+      <div className={styles.containerFullScreen}>
+        {/* Header for full-screen */}
+        <div className={styles.headerFullScreen}>
+          <div className={styles.headerContent}>
+            <h2 className={styles.headerTitle}>{formatDateHeader(date)}</h2>
+            <p className={styles.headerSubtitle}>
+              {totalItems} item{totalItems !== 1 ? 's' : ''} scheduled
+              {dayTasks.length > 0 && ` • ${dayTasks.length} task${dayTasks.length !== 1 ? 's' : ''}`}
+              {dayProjects.length > 0 && ` • ${dayProjects.length} project${dayProjects.length !== 1 ? 's' : ''}`}
+            </p>
+          </div>
+        </div>
+        {renderKanbanContent()}
+      </div>
+    );
+  }
+
+  // Modal mode - with overlay
   return (
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.container} onClick={(e) => e.stopPropagation()}>
@@ -243,79 +421,7 @@ export function DayKanban({
             <X className="w-5 h-5" />
           </Button>
         </div>
-
-        {/* Kanban Board with DnD Context */}
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-          accessibility={{ announcements }}
-        >
-          <div className={styles.board}>
-            {visibleColumns.length === 0 ? (
-              <div className={styles.emptyState}>
-                No items scheduled for this day
-              </div>
-            ) : (
-              visibleColumns.map(column => (
-                <div key={column.id} className={styles.column}>
-                  {/* Column Header */}
-                  <div className={styles.columnHeader}>
-                    {column.user ? (
-                      <UserAvatar
-                        src={column.user.avatar}
-                        name={column.user.name}
-                        size="sm"
-                      />
-                    ) : (
-                      <div className={styles.unassignedAvatar}>?</div>
-                    )}
-                    <div className={styles.columnHeaderInfo}>
-                      <p className={styles.columnTitle}>
-                        {column.user?.name || 'Unassigned'}
-                      </p>
-                      {column.user && (
-                        <p className={styles.columnRole}>{column.user.role}</p>
-                      )}
-                    </div>
-                    <span className={styles.columnCount}>
-                      {itemsByColumn[column.id]?.length || 0}
-                    </span>
-                  </div>
-
-                  {/* Column Cards - Sortable Context */}
-                  <SortableContext
-                    items={itemsByColumn[column.id]?.map(i => i.id) || []}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <DroppableColumn columnId={column.id}>
-                      {itemsByColumn[column.id]?.map((item) => (
-                        <SortableKanbanCard
-                          key={item.id}
-                          item={item}
-                          onTaskClick={onTaskClick}
-                          onProjectClick={onProjectClick}
-                        />
-                      ))}
-                    </DroppableColumn>
-                  </SortableContext>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Drag Overlay */}
-          <DragOverlay>
-            {activeItem ? (
-              <KanbanCardContent
-                item={activeItem}
-                isDragging
-              />
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+        {renderKanbanContent()}
       </div>
     </div>
   );
