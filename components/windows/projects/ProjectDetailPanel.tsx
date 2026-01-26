@@ -92,7 +92,7 @@ export function ProjectDetailPanel({
   setStaffOpen,
 }: ProjectDetailPanelProps) {
   return (
-    <div className="w-1/2 h-full flex flex-col border-l border-neutral-200 dark:border-neutral-700 bg-card">
+    <div className="w-full h-full flex flex-col bg-card">
       {/* Header */}
       <div className="flex-shrink-0 bg-card z-10 border-b border-neutral-200 dark:border-neutral-700 relative">
         <div className="absolute top-1 right-1 flex gap-0.5">

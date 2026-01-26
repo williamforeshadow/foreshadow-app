@@ -201,6 +201,17 @@ export function DayKanban({
     }
   }, [items, onAssignmentChange]);
 
+  // Check if an item can be moved to a target column
+  // Prevents duplicates when a task/project has multiple assignees
+  const canMoveToColumn = useCallback((item: DraggableKanbanItem, targetColumnId: string): boolean => {
+    // Check if target column already has an item with the same originalItemId
+    const targetColumnItems = items.filter(i => i.columnId === targetColumnId);
+    const hasDuplicate = targetColumnItems.some(
+      i => i.originalItemId === item.originalItemId && i.id !== item.id
+    );
+    return !hasDuplicate;
+  }, [items]);
+
   // Use the kanban dnd hook
   const {
     activeItem,
@@ -215,6 +226,7 @@ export function DayKanban({
     enabled: true,
     onDataChange: setItems,
     onColumnChange: handleColumnChange,
+    canMoveToColumn,
   });
 
   // Group items by column for rendering

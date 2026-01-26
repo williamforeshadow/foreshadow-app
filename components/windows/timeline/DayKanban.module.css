@@ -74,7 +74,7 @@
   gap: 1rem;
   padding: 1rem;
   min-height: 0;
-  overflow-x: auto;
+  overflow-x: scroll;
   overflow-y: hidden;
   background-color: #0a0a0a; /* neutral-950 - near black */
 }
@@ -106,7 +106,7 @@
   gap: 1rem;
   padding: 1rem;
   min-height: 0;
-  overflow-x: auto;
+  overflow-x: scroll;
   overflow-y: hidden;
   background-color: #0a0a0a; /* neutral-950 - near black */
 }
@@ -364,6 +364,28 @@
 }
 
 .columnContent::-webkit-scrollbar-thumb:hover {
+  background-color: #737373; /* neutral-500 */
+}
+
+/* Horizontal Scrollbar for Board */
+.board::-webkit-scrollbar,
+.boardFullScreen::-webkit-scrollbar {
+  height: 6px;
+}
+
+.board::-webkit-scrollbar-track,
+.boardFullScreen::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.board::-webkit-scrollbar-thumb,
+.boardFullScreen::-webkit-scrollbar-thumb {
+  background-color: #525252; /* neutral-600 */
+  border-radius: 3px;
+}
+
+.board::-webkit-scrollbar-thumb:hover,
+.boardFullScreen::-webkit-scrollbar-thumb:hover {
   background-color: #737373; /* neutral-500 */
 }
 

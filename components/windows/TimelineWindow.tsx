@@ -13,8 +13,9 @@ import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
 import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
-import { FloatingWindow, ScheduledItemsCell, DayKanban } from './timeline';
-import { AttachmentLightbox, ProjectActivitySheet } from './projects';
+import { ScheduledItemsCell, DayKanban } from './timeline';
+import { AttachmentLightbox, ProjectActivitySheet, ProjectDetailPanel } from './projects';
+import { TaskDetailPanel } from './turnovers';
 import AssignmentIcon from '@/components/icons/AssignmentIcon';
 import HammerIcon from '@/components/icons/HammerIcon';
 import Rhombus16FilledIcon from '@/components/icons/Rhombus16FilledIcon';
@@ -304,10 +305,10 @@ export default function TimelineWindow({
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col relative">
       {/* Header with navigation - fixed at top */}
       <div className="flex-shrink-0 px-4 py-3">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-4 mb-2">
           {/* View Mode Icons */}
           <div className="flex items-center gap-1">
             <button
@@ -650,7 +651,7 @@ export default function TimelineWindow({
       </div>
       ) : (
         /* Full-screen Kanban View */
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1">
           <DayKanban
             date={kanbanDate}
             tasks={allScheduledTasks}
@@ -676,52 +677,65 @@ export default function TimelineWindow({
         </div>
       )}
 
-      {/* Floating Window */}
+      {/* Right Panel Overlay - Detail View */}
       {floatingData && (
-        <FloatingWindow
-          type={floatingData.type}
-          item={floatingData.type === 'task' ? localTask || floatingData.item : floatingData.item}
-          propertyName={floatingData.propertyName}
-          onClose={handleCloseFloatingWindow}
-          // Task props
-          currentUser={currentUser}
-          taskTemplates={taskTemplates}
-          loadingTaskTemplate={loadingTaskTemplate}
-          onUpdateTaskStatus={handleUpdateTaskStatus}
-          onSaveTaskForm={handleSaveTaskForm}
-          setLocalTask={setLocalTask}
-          // Project props
-          users={users}
-          projectFields={projectFields}
-          setProjectFields={setProjectFields}
-          savingProject={projectsHook.savingProjectEdit}
-          onSaveProject={handleSaveProject}
-          onDeleteProject={handleDeleteProject}
-          onOpenActivity={handleOpenActivity}
-          // Comments
-          projectComments={commentsHook.projectComments}
-          loadingComments={commentsHook.loadingComments}
-          newComment={newComment}
-          setNewComment={setNewComment}
-          postingComment={commentsHook.postingComment}
-          onPostComment={handlePostComment}
-          // Attachments
-          projectAttachments={attachmentsHook.projectAttachments}
-          loadingAttachments={attachmentsHook.loadingAttachments}
-          uploadingAttachment={attachmentsHook.uploadingAttachment}
-          attachmentInputRef={attachmentsHook.attachmentInputRef}
-          onAttachmentUpload={handleAttachmentUpload}
-          onViewAttachment={(index) => setViewingAttachmentIndex(index)}
-          // Time tracking
-          activeTimeEntry={timeTrackingHook.activeTimeEntry}
-          displaySeconds={timeTrackingHook.displaySeconds}
-          formatTime={timeTrackingHook.formatTime}
-          onStartTimer={handleStartTimer}
-          onStopTimer={timeTrackingHook.stopProjectTimer}
-          // Popover states
-          staffOpen={staffOpen}
-          setStaffOpen={setStaffOpen}
-        />
+        <div 
+          className="absolute top-0 right-0 h-full w-[30%] min-w-[320px] bg-card border-l border-neutral-200 dark:border-neutral-700 shadow-xl z-30 overflow-y-auto"
+          onWheel={(e) => e.stopPropagation()}
+        >
+          {floatingData.type === 'task' ? (
+            <TaskDetailPanel
+              task={localTask || floatingData.item as Task}
+              propertyName={floatingData.propertyName}
+              currentUser={currentUser}
+              taskTemplates={taskTemplates}
+              loadingTaskTemplate={loadingTaskTemplate}
+              onClose={handleCloseFloatingWindow}
+              onUpdateStatus={handleUpdateTaskStatus}
+              onSaveForm={handleSaveTaskForm}
+              setTask={setLocalTask}
+            />
+          ) : projectFields ? (
+            <ProjectDetailPanel
+              project={floatingData.item as Project}
+              users={users}
+              editingFields={projectFields}
+              setEditingFields={setProjectFields}
+              savingEdit={projectsHook.savingProjectEdit}
+              onSave={handleSaveProject}
+              onDelete={handleDeleteProject}
+              onClose={handleCloseFloatingWindow}
+              onOpenActivity={handleOpenActivity}
+              // Comments
+              comments={commentsHook.projectComments}
+              loadingComments={commentsHook.loadingComments}
+              newComment={newComment}
+              setNewComment={setNewComment}
+              postingComment={commentsHook.postingComment}
+              onPostComment={handlePostComment}
+              // Attachments
+              attachments={attachmentsHook.projectAttachments}
+              loadingAttachments={attachmentsHook.loadingAttachments}
+              uploadingAttachment={attachmentsHook.uploadingAttachment}
+              attachmentInputRef={attachmentsHook.attachmentInputRef}
+              onAttachmentUpload={handleAttachmentUpload}
+              onViewAttachment={(index) => setViewingAttachmentIndex(index)}
+              // Time tracking
+              activeTimeEntry={timeTrackingHook.activeTimeEntry}
+              displaySeconds={timeTrackingHook.displaySeconds}
+              formatTime={timeTrackingHook.formatTime}
+              onStartTimer={handleStartTimer}
+              onStopTimer={timeTrackingHook.stopProjectTimer}
+              // Popover states
+              staffOpen={staffOpen}
+              setStaffOpen={setStaffOpen}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-neutral-500">Loading project...</p>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Attachment Lightbox */}

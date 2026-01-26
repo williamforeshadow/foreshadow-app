@@ -86,12 +86,13 @@ type UseKanbanDndOptions<
   onDragStart?: (event: DragStartEvent) => void;
   onDragEnd?: (event: DragEndEvent) => void;
   onDragOver?: (event: DragOverEvent) => void;
+  canMoveToColumn?: (item: T, targetColumnId: string) => boolean;
 };
 
 export function useKanbanDnd<
   T extends KanbanItemProps = KanbanItemProps,
   C extends KanbanColumnDataProps = KanbanColumnDataProps,
->({ data, columns, enabled, onDataChange, onColumnChange, onDragStart, onDragEnd, onDragOver }: UseKanbanDndOptions<T, C>) {
+>({ data, columns, enabled, onDataChange, onColumnChange, onDragStart, onDragEnd, onDragOver, canMoveToColumn }: UseKanbanDndOptions<T, C>) {
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const lastCrossGroupMoveRef = useRef<string | null>(null);
   const isUpdatingRef = useRef(false);
@@ -139,6 +140,11 @@ export function useKanbanDnd<
           const draggedGroupId = getItemGroupId(draggedItem);
 
           if (overGroupId && draggedGroupId !== overGroupId) {
+            // Check if move is allowed (e.g., prevent duplicates)
+            if (canMoveToColumn && !canMoveToColumn(draggedItem, overGroupId)) {
+              return; // Block the move
+            }
+
             const moveKey = `${activeId}:${overGroupId}`;
             if (lastCrossGroupMoveRef.current === moveKey) {
               return;
@@ -168,7 +174,7 @@ export function useKanbanDnd<
 
       onDragOver?.(event);
     },
-    [data, columns, enabled, onDataChange, onColumnChange, onDragOver]
+    [data, columns, enabled, onDataChange, onColumnChange, onDragOver, canMoveToColumn]
   );
 
   const handleDragEnd = useCallback(
