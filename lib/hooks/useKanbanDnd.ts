@@ -96,6 +96,7 @@ export function useKanbanDnd<
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const lastCrossGroupMoveRef = useRef<string | null>(null);
   const isUpdatingRef = useRef(false);
+  const originalColumnRef = useRef<string | null>(null); // Track original column for persistence
 
   const activeItem = useMemo(() => data.find((item) => item.id === activeItemId) ?? null, [data, activeItemId]);
 
@@ -117,9 +118,12 @@ export function useKanbanDnd<
       setActiveItemId(activeId);
       lastCrossGroupMoveRef.current = null;
       isUpdatingRef.current = false;
+      // Store the original column when drag starts
+      const item = data.find((i) => i.id === activeId);
+      originalColumnRef.current = item ? getItemGroupId(item) : null;
       onDragStart?.(event);
     },
-    [onDragStart]
+    [data, onDragStart]
   );
 
   const handleDragOver = useCallback(
@@ -156,13 +160,11 @@ export function useKanbanDnd<
             const activeIndex = newData.findIndex((item) => item.id === activeId);
             const finalIndex = getCrossGroupInsertIndex(overId, data, columns, overGroupId, activeIndex);
 
-            const oldColumnId = draggedGroupId;
             newData[activeIndex] = applyGroupChange(newData[activeIndex], overGroupId);
 
             onDataChange(arrayMove(newData, activeIndex, finalIndex));
-            
-            // Notify about column change for persistence
-            onColumnChange?.(activeId, oldColumnId, overGroupId);
+            // Note: onColumnChange is called in handleDragEnd, not here
+            // This allows dragging across multiple columns without intermediate persistence
 
             queueMicrotask(() => {
               isUpdatingRef.current = false;
@@ -174,16 +176,29 @@ export function useKanbanDnd<
 
       onDragOver?.(event);
     },
-    [data, columns, enabled, onDataChange, onColumnChange, onDragOver, canMoveToColumn]
+    [data, columns, enabled, onDataChange, onDragOver, canMoveToColumn]
   );
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
 
+      // Get the final column of the dragged item before resetting state
+      const draggedItem = data.find((item) => item.id === active.id);
+      const finalColumnId = draggedItem ? getItemGroupId(draggedItem) : null;
+      const originalColumnId = originalColumnRef.current;
+
+      // Reset state
       setActiveItemId(null);
       lastCrossGroupMoveRef.current = null;
       isUpdatingRef.current = false;
+      originalColumnRef.current = null;
+
+      // Notify about column change only if it actually changed (persistence happens here)
+      if (originalColumnId && finalColumnId && originalColumnId !== finalColumnId) {
+        onColumnChange?.(active.id as string, originalColumnId, finalColumnId);
+      }
+
       onDragEnd?.(event);
 
       if (!over || active.id === over.id) {
@@ -199,7 +214,7 @@ export function useKanbanDnd<
 
       onDataChange(arrayMove(data, oldIndex, newIndex));
     },
-    [data, onDataChange, onDragEnd]
+    [data, onDataChange, onColumnChange, onDragEnd]
   );
 
   const announcements: Announcements = useMemo(
