@@ -54,6 +54,28 @@ export default function TimelineWindow({
   const [kanbanDate, setKanbanDate] = useState<Date>(new Date());
 
   // ============================================================================
+  // Timeline hook (needed early for fetchReservations)
+  // ============================================================================
+  const {
+    properties,
+    loading,
+    selectedReservation,
+    setSelectedReservation,
+    view,
+    setView,
+    dateRange,
+    goToPrevious,
+    goToNext,
+    goToToday,
+    formatDate,
+    isToday,
+    getReservationsForProperty,
+    getBlockPosition,
+    reservations,
+    setReservations,
+  } = useTimeline();
+
+  // ============================================================================
   // LOCAL instances of sub-hooks for projects (independent from other windows)
   // ============================================================================
   const commentsHook = useProjectComments({ currentUser });
@@ -242,23 +264,77 @@ export default function TimelineWindow({
     setLocalTask(null);
   }, []);
 
-  const {
-    properties,
-    loading,
-    selectedReservation,
-    setSelectedReservation,
-    view,
-    setView,
-    dateRange,
-    goToPrevious,
-    goToNext,
-    goToToday,
-    formatDate,
-    isToday,
-    getReservationsForProperty,
-    getBlockPosition,
-    reservations,
-  } = useTimeline();
+  // Handle assignment changes from kanban drag/drop
+  const handleKanbanAssignmentChange = useCallback(async (
+    itemType: 'task' | 'project',
+    itemId: string,
+    newUserId: string | null
+  ) => {
+    try {
+      if (itemType === 'task') {
+        // Update task assignment
+        const res = await fetch('/api/update-task-assignment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            taskId: itemId,
+            userIds: newUserId ? [newUserId] : []
+          })
+        });
+        
+        if (!res.ok) {
+          const result = await res.json();
+          throw new Error(result.error || 'Failed to update task assignment');
+        }
+        
+        // Optimistic update: update the task's assignments in local state
+        const assignedUser = users.find((u: any) => u.id === newUserId);
+        setReservations(prev => prev.map(reservation => ({
+          ...reservation,
+          tasks: (reservation.tasks || []).map((task: Task) => 
+            task.task_id === itemId
+              ? {
+                  ...task,
+                  assigned_users: newUserId 
+                    ? [{ 
+                        user_id: newUserId, 
+                        name: assignedUser?.name || '',
+                        avatar: assignedUser?.avatar || '',
+                        role: assignedUser?.role || ''
+                      }]
+                    : []
+                }
+              : task
+          )
+        })));
+      } else {
+        // Update project assignment
+        const res = await fetch(`/api/projects/${itemId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assigned_user_ids: newUserId ? [newUserId] : [],
+            user_id: currentUser?.id // for activity logging
+          })
+        });
+        
+        const result = await res.json();
+        
+        if (!res.ok) {
+          throw new Error(result.error || 'Failed to update project assignment');
+        }
+        
+        // Update the shared projects state (same pattern as saveProjectById)
+        if (result.data) {
+          projectsHook.setProjects(prev => 
+            prev.map(p => p.id === itemId ? result.data : p)
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Error updating assignment:', err);
+    }
+  }, [currentUser?.id, projectsHook, setReservations, users]);
 
   // Extract all tasks with scheduled_start from reservations, tagged with property_name
   const allScheduledTasks = useMemo(() => {
@@ -651,7 +727,7 @@ export default function TimelineWindow({
       </div>
       ) : (
         /* Full-screen Kanban View */
-        <div className="flex-1">
+        <div className="flex-1 overflow-hidden">
           <DayKanban
             date={kanbanDate}
             tasks={allScheduledTasks}
@@ -672,6 +748,7 @@ export default function TimelineWindow({
                 propertyName,
               });
             }}
+            onAssignmentChange={handleKanbanAssignmentChange}
             isFullScreen
           />
         </div>

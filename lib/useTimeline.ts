@@ -177,6 +177,7 @@ export function useTimeline() {
   return {
     // State
     reservations,
+    setReservations,
     properties,
     loading,
     selectedReservation,
