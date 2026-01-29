@@ -15,6 +15,7 @@ import HammerIcon from '@/components/icons/HammerIcon';
 import type { Task, Project } from '@/lib/types';
 import type { AppUser } from '@/lib/useUsers';
 import styles from './DayKanban.module.css';
+import { DynamicBoard, type DynamicBoardFilters } from './DynamicBoard';
 
 // DnD Kit imports
 import {
@@ -45,6 +46,12 @@ interface DayKanbanProps {
   onProjectClick?: (project: Project, propertyName: string) => void;
   onAssignmentChange?: (itemType: 'task' | 'project', itemId: string, newUserId: string | null) => void;
   isFullScreen?: boolean;
+  /** All tasks for dynamic board filtering (optional - falls back to scheduled tasks) */
+  allTasks?: (Task & { property_name: string })[];
+  /** All projects for dynamic board filtering (optional - falls back to scheduled projects) */
+  allProjects?: Project[];
+  /** All property names for filtering */
+  properties?: string[];
 }
 
 // Helper to check if two dates are the same day
@@ -92,6 +99,9 @@ export function DayKanban({
   onProjectClick,
   onAssignmentChange,
   isFullScreen = false,
+  allTasks,
+  allProjects,
+  properties = [],
 }: DayKanbanProps) {
   // Filter tasks and projects for this specific day
   const dayTasks = useMemo(() => {
@@ -108,6 +118,14 @@ export function DayKanban({
     });
   }, [projects, date]);
 
+  // State for dynamic board filters
+  const [dynamicBoardFilters, setDynamicBoardFilters] = useState<DynamicBoardFilters | null>(null);
+  
+  // Format date for dynamic board
+  const kanbanDateStr = useMemo(() => {
+    return date.toISOString().split('T')[0];
+  }, [date]);
+
   // Build columns array for dnd-kit
   const columns: KanbanColumn[] = useMemo(() => {
     const cols: KanbanColumn[] = users.map(user => ({
@@ -115,13 +133,145 @@ export function DayKanban({
       name: user.name,
       user,
     }));
-    // Add unassigned column
-    cols.push({ id: 'unassigned', name: 'Unassigned' });
+    // Add dynamic-board column (replaces unassigned)
+    cols.push({ id: 'dynamic-board', name: 'Dynamic Board' });
     return cols;
   }, [users]);
 
-  // Transform tasks/projects into flat draggable items array
-  const initialItems = useMemo(() => {
+  // Filter items for dynamic board based on filters
+  const dynamicBoardItems = useMemo(() => {
+    const results: DraggableKanbanItem[] = [];
+    const tasksToFilter = allTasks || tasks;
+    const projectsToFilter = allProjects || projects;
+    
+    // Use default filters if none set
+    const filters = dynamicBoardFilters || {
+      itemType: 'all' as const,
+      properties: [],
+      statuses: [],
+      priorities: [],
+      assignees: [],
+      dateRange: { start: kanbanDateStr, end: kanbanDateStr },
+      searchQuery: '',
+      showUnassignedOnly: true,
+    };
+
+    // Filter tasks
+    if (filters.itemType === 'all' || filters.itemType === 'tasks') {
+      tasksToFilter.forEach(task => {
+        // Search query
+        if (filters.searchQuery) {
+          const query = filters.searchQuery.toLowerCase();
+          const matchesSearch = 
+            task.template_name?.toLowerCase().includes(query) ||
+            task.property_name?.toLowerCase().includes(query) ||
+            task.guest_name?.toLowerCase().includes(query);
+          if (!matchesSearch) return;
+        }
+
+        // Property filter
+        if (filters.properties.length > 0 && !filters.properties.includes(task.property_name || '')) {
+          return;
+        }
+
+        // Status filter
+        if (filters.statuses.length > 0 && !filters.statuses.includes(task.status)) {
+          return;
+        }
+
+        // Assignee filter (when not showing unassigned only)
+        if (filters.assignees.length > 0 && !filters.showUnassignedOnly) {
+          const taskAssigneeIds = task.assigned_users?.map(u => u.user_id) || [];
+          const hasMatchingAssignee = filters.assignees.some(id => taskAssigneeIds.includes(id));
+          if (!hasMatchingAssignee) return;
+        }
+
+        // Unassigned only filter
+        if (filters.showUnassignedOnly && task.assigned_users && task.assigned_users.length > 0) {
+          return;
+        }
+
+        // Date range filter
+        if (filters.dateRange.start || filters.dateRange.end) {
+          const taskDate = task.scheduled_start?.split('T')[0];
+          if (!taskDate) return;
+          if (filters.dateRange.start && taskDate < filters.dateRange.start) return;
+          if (filters.dateRange.end && taskDate > filters.dateRange.end) return;
+        }
+
+        results.push({
+          id: `task-${task.task_id}-dynamic`,
+          columnId: 'dynamic-board',
+          type: 'task',
+          data: task as Task & { property_name: string },
+          originalItemId: task.task_id,
+        });
+      });
+    }
+
+    // Filter projects
+    if (filters.itemType === 'all' || filters.itemType === 'projects') {
+      projectsToFilter.forEach(project => {
+        // Search query
+        if (filters.searchQuery) {
+          const query = filters.searchQuery.toLowerCase();
+          const matchesSearch = 
+            project.title?.toLowerCase().includes(query) ||
+            project.property_name?.toLowerCase().includes(query) ||
+            project.description?.toLowerCase().includes(query);
+          if (!matchesSearch) return;
+        }
+
+        // Property filter
+        if (filters.properties.length > 0 && !filters.properties.includes(project.property_name)) {
+          return;
+        }
+
+        // Status filter
+        if (filters.statuses.length > 0 && !filters.statuses.includes(project.status)) {
+          return;
+        }
+
+        // Priority filter
+        if (filters.priorities.length > 0 && !filters.priorities.includes(project.priority)) {
+          return;
+        }
+
+        // Assignee filter (when not showing unassigned only)
+        if (filters.assignees.length > 0 && !filters.showUnassignedOnly) {
+          const projectAssigneeIds = project.assigned_user_ids || [];
+          const hasMatchingAssignee = filters.assignees.some(id => projectAssigneeIds.includes(id));
+          if (!hasMatchingAssignee) return;
+        }
+
+        // Unassigned only filter
+        if (filters.showUnassignedOnly && project.assigned_user_ids && project.assigned_user_ids.length > 0) {
+          return;
+        }
+
+        // Date range filter
+        if (filters.dateRange.start || filters.dateRange.end) {
+          const projectDate = project.scheduled_start?.split('T')[0];
+          if (!projectDate) return;
+          if (filters.dateRange.start && projectDate < filters.dateRange.start) return;
+          if (filters.dateRange.end && projectDate > filters.dateRange.end) return;
+        }
+
+        results.push({
+          id: `project-${project.id}-dynamic`,
+          columnId: 'dynamic-board',
+          type: 'project',
+          data: project,
+          originalItemId: project.id,
+        });
+      });
+    }
+
+    return results;
+  }, [allTasks, allProjects, tasks, projects, dynamicBoardFilters, kanbanDateStr]);
+
+  // Transform tasks/projects into flat draggable items array (for user columns only)
+  const userColumnItems = useMemo(() => {
     const items: DraggableKanbanItem[] = [];
     
     // Add tasks - if assigned to multiple users, only show once per unique assignment
@@ -141,15 +291,8 @@ export function DayKanban({
             });
           }
         });
-      } else {
-        items.push({
-          id: `task-${task.task_id}-unassigned`,
-          columnId: 'unassigned',
-          type: 'task',
-          data: task,
-          originalItemId: task.task_id,
-        });
       }
+      // Note: Unassigned items are now handled by dynamicBoardItems
     });
 
     // Add projects
@@ -170,19 +313,17 @@ export function DayKanban({
             });
           }
         });
-      } else {
-        items.push({
-          id: `project-${project.id}-unassigned`,
-          columnId: 'unassigned',
-          type: 'project',
-          data: project,
-          originalItemId: project.id,
-        });
       }
+      // Note: Unassigned items are now handled by dynamicBoardItems
     });
 
     return items;
   }, [dayTasks, dayProjects]);
+
+  // Combine user column items with dynamic board items
+  const initialItems = useMemo(() => {
+    return [...userColumnItems, ...dynamicBoardItems];
+  }, [userColumnItems, dynamicBoardItems]);
 
   // Local state for drag operations
   const [items, setItems] = useState<DraggableKanbanItem[]>(initialItems);
@@ -196,7 +337,8 @@ export function DayKanban({
   const handleColumnChange = useCallback((itemId: string, oldColumnId: string, newColumnId: string) => {
     const item = items.find(i => i.id === itemId);
     if (item && onAssignmentChange) {
-      const newUserId = newColumnId === 'unassigned' ? null : newColumnId;
+      // dynamic-board means unassigned
+      const newUserId = newColumnId === 'dynamic-board' ? null : newColumnId;
       onAssignmentChange(item.type, item.originalItemId, newUserId);
     }
   }, [items, onAssignmentChange]);
@@ -240,8 +382,8 @@ export function DayKanban({
 
   // Track which columns are actively shown (persistent - don't remove when emptied)
   const [activeColumnIds, setActiveColumnIds] = useState<Set<string>>(() => {
-    // Initialize with columns that have items + always include unassigned
-    const initial = new Set<string>(['unassigned']);
+    // Initialize with columns that have items + always include dynamic-board
+    const initial = new Set<string>(['dynamic-board']);
     items.forEach(item => {
       initial.add(item.columnId);
     });
@@ -252,8 +394,8 @@ export function DayKanban({
   useEffect(() => {
     setActiveColumnIds(prev => {
       const newSet = new Set(prev);
-      // Always ensure unassigned is included
-      newSet.add('unassigned');
+      // Always ensure dynamic-board is included
+      newSet.add('dynamic-board');
       // Add any columns that have items
       items.forEach(item => {
         newSet.add(item.columnId);
@@ -262,13 +404,13 @@ export function DayKanban({
     });
   }, [items]);
 
-  // Visible columns based on activeColumnIds, sorted with unassigned first
+  // Visible columns based on activeColumnIds, sorted with dynamic-board first
   const visibleColumns = useMemo(() => {
     const cols = columns.filter(col => activeColumnIds.has(col.id));
-    // Sort: unassigned first, then alphabetically by name
+    // Sort: dynamic-board first, then alphabetically by name
     return cols.sort((a, b) => {
-      if (a.id === 'unassigned') return -1;
-      if (b.id === 'unassigned') return 1;
+      if (a.id === 'dynamic-board') return -1;
+      if (b.id === 'dynamic-board') return 1;
       return a.name.localeCompare(b.name);
     });
   }, [columns, activeColumnIds]);
@@ -285,6 +427,22 @@ export function DayKanban({
 
   const totalItems = dayTasks.length + dayProjects.length;
 
+  // Render card helper for DynamicBoard
+  const renderDynamicBoardCard = useCallback((cardItem: { id: string; type: 'task' | 'project'; task?: Task; project?: Project }) => {
+    // Find the actual draggable item
+    const item = items.find(i => i.originalItemId === cardItem.id && i.columnId === 'dynamic-board');
+    if (!item) return null;
+    
+    return (
+      <SortableKanbanCard
+        key={item.id}
+        item={item}
+        onTaskClick={onTaskClick}
+        onProjectClick={onProjectClick}
+      />
+    );
+  }, [items, onTaskClick, onProjectClick]);
+
   // Render the kanban board content (shared between modal and full-screen)
   const renderKanbanContent = () => (
     <DndContext
@@ -297,50 +455,74 @@ export function DayKanban({
     >
       <div className={isFullScreen ? styles.boardFullScreen : styles.board}>
         {/* Columns */}
-        {visibleColumns.map(column => (
-          <div key={column.id} className={styles.column}>
-            {/* Column Header */}
-            <div className={styles.columnHeader}>
-              {column.user ? (
-                <UserAvatar
-                  src={column.user.avatar}
-                  name={column.user.name}
-                  size="sm"
-                />
-              ) : (
-                <div className={styles.unassignedAvatar}>?</div>
-              )}
-              <div className={styles.columnHeaderInfo}>
-                <p className={styles.columnTitle}>
-                  {column.user?.name || 'Unassigned'}
-                </p>
-                {column.user && (
-                  <p className={styles.columnRole}>{column.user.role}</p>
-                )}
-              </div>
-              <span className={styles.columnCount}>
-                {itemsByColumn[column.id]?.length || 0}
-              </span>
-            </div>
+        {visibleColumns.map(column => {
+          // Special handling for dynamic-board column
+          if (column.id === 'dynamic-board') {
+            return (
+              <DynamicBoard
+                key={column.id}
+                allTasks={(allTasks || tasks) as Task[]}
+                allProjects={allProjects || projects}
+                properties={properties}
+                users={users}
+                kanbanDate={kanbanDateStr}
+                columnItems={itemsByColumn[column.id]?.map(i => ({ 
+                  id: i.originalItemId, 
+                  type: i.type 
+                })) || []}
+                renderCard={renderDynamicBoardCard}
+                onFiltersChange={setDynamicBoardFilters}
+                initialFilters={dynamicBoardFilters || undefined}
+              />
+            );
+          }
 
-            {/* Column Cards - Sortable Context */}
-            <SortableContext
-              items={itemsByColumn[column.id]?.map(i => i.id) || []}
-              strategy={verticalListSortingStrategy}
-            >
-              <DroppableColumn columnId={column.id}>
-                {itemsByColumn[column.id]?.map((item) => (
-                  <SortableKanbanCard
-                    key={item.id}
-                    item={item}
-                    onTaskClick={onTaskClick}
-                    onProjectClick={onProjectClick}
+          // Regular user columns
+          return (
+            <div key={column.id} className={styles.column}>
+              {/* Column Header */}
+              <div className={styles.columnHeader}>
+                {column.user ? (
+                  <UserAvatar
+                    src={column.user.avatar}
+                    name={column.user.name}
+                    size="sm"
                   />
-                ))}
-              </DroppableColumn>
-            </SortableContext>
-          </div>
-        ))}
+                ) : (
+                  <div className={styles.unassignedAvatar}>?</div>
+                )}
+                <div className={styles.columnHeaderInfo}>
+                  <p className={styles.columnTitle}>
+                    {column.user?.name || 'Unassigned'}
+                  </p>
+                  {column.user && (
+                    <p className={styles.columnRole}>{column.user.role}</p>
+                  )}
+                </div>
+                <span className={styles.columnCount}>
+                  {itemsByColumn[column.id]?.length || 0}
+                </span>
+              </div>
+
+              {/* Column Cards - Sortable Context */}
+              <SortableContext
+                items={itemsByColumn[column.id]?.map(i => i.id) || []}
+                strategy={verticalListSortingStrategy}
+              >
+                <DroppableColumn columnId={column.id}>
+                  {itemsByColumn[column.id]?.map((item) => (
+                    <SortableKanbanCard
+                      key={item.id}
+                      item={item}
+                      onTaskClick={onTaskClick}
+                      onProjectClick={onProjectClick}
+                    />
+                  ))}
+                </DroppableColumn>
+              </SortableContext>
+            </div>
+          );
+        })}
 
         {/* Add User Column Button */}
         {availableUsers.length > 0 && (

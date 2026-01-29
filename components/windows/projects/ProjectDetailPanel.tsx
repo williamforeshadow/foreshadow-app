@@ -59,6 +59,8 @@ interface ProjectDetailPanelProps {
   // Popover states
   staffOpen: boolean;
   setStaffOpen: (open: boolean) => void;
+  // Optional turnover navigation
+  onShowTurnover?: () => void;
 }
 
 export function ProjectDetailPanel({
@@ -90,6 +92,7 @@ export function ProjectDetailPanel({
   onStopTimer,
   staffOpen,
   setStaffOpen,
+  onShowTurnover,
 }: ProjectDetailPanelProps) {
   return (
     <div className="w-full h-full flex flex-col bg-card">
@@ -478,6 +481,19 @@ export function ProjectDetailPanel({
           </Button>
         </div>
       </div>
+
+      {/* Footer */}
+      {onShowTurnover && (
+        <div className="flex-shrink-0 border-t border-neutral-200 dark:border-neutral-700 p-4">
+          <Button
+            variant="outline"
+            onClick={onShowTurnover}
+            className="w-full"
+          >
+            Active Turnover
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

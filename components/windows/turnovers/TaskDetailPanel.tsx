@@ -16,6 +16,7 @@ interface TaskDetailPanelProps {
   onUpdateStatus: (taskId: string, status: string) => void;
   onSaveForm: (taskId: string, formData: Record<string, unknown>) => Promise<void>;
   setTask: (task: Task) => void;
+  onShowTurnover?: () => void;
 }
 
 export function TaskDetailPanel({
@@ -28,6 +29,7 @@ export function TaskDetailPanel({
   onUpdateStatus,
   onSaveForm,
   setTask,
+  onShowTurnover,
 }: TaskDetailPanelProps) {
   const isAssigned = (task.assigned_users || []).some((u) => u.user_id === currentUser?.id);
   const isNotStarted = task.status === 'not_started' || !task.status;
@@ -213,15 +215,17 @@ export function TaskDetailPanel({
       </div>
 
       {/* Footer */}
-      <div className="border-t border-neutral-200 dark:border-neutral-700 p-4">
-        <Button
-          variant="outline"
-          onClick={onClose}
-          className="w-full"
-        >
-          Back to Tasks
-        </Button>
-      </div>
+      {onShowTurnover && (
+        <div className="border-t border-neutral-200 dark:border-neutral-700 p-4">
+          <Button
+            variant="outline"
+            onClick={onShowTurnover}
+            className="w-full"
+          >
+            Active Turnover
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

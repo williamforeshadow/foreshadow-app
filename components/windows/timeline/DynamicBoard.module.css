@@ -1,0 +1,321 @@
+/* ==========================================================================
+   Dynamic Board - Filterable Kanban Column
+   ========================================================================== */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  flex-shrink: 0;
+  background-color: #1a1a2e; /* Distinct purple-tinted dark */
+  border-radius: var(--radius);
+  border: 1px solid #3d3d5c; /* Purple-tinted border */
+  overflow: hidden;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #3d3d5c;
+  background-color: #16162b; /* Darker header */
+  flex-wrap: wrap;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #e0e0ff; /* Light purple tint */
+}
+
+.countBadge {
+  font-size: 0.625rem;
+  padding: 0.125rem 0.375rem;
+  background-color: #3d3d5c;
+  color: #a0a0d0;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+/* Search */
+.searchContainer {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background-color: #262640;
+  border-radius: calc(var(--radius) - 2px);
+  border: 1px solid transparent;
+  transition: border-color 0.15s ease;
+}
+
+.searchContainer:focus-within {
+  border-color: #5c5c8a;
+}
+
+.searchInput {
+  background: transparent !important;
+  border: none !important;
+  height: auto !important;
+  padding: 0 !important;
+  font-size: 0.75rem;
+  color: #e0e0ff;
+  width: 80px;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.searchInput::placeholder {
+  color: #6b6b99;
+}
+
+.clearSearch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.125rem;
+  color: #6b6b99;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.clearSearch:hover {
+  color: #a0a0d0;
+}
+
+/* Filter Button */
+.filterButton {
+  position: relative;
+  padding: 0.25rem 0.375rem !important;
+  height: auto !important;
+  color: #a0a0d0;
+}
+
+.filterButton:hover {
+  color: #e0e0ff;
+  background-color: #262640;
+}
+
+.filterButtonActive {
+  color: #818cf8 !important; /* Indigo accent */
+  background-color: rgba(129, 140, 248, 0.1) !important;
+}
+
+.filterBadge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  font-size: 0.5625rem;
+  font-weight: 600;
+  color: white;
+  background-color: #818cf8;
+  border-radius: 9999px;
+}
+
+/* Filter Panel */
+.filterPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding: 0.75rem;
+  background-color: #16162b;
+  border-bottom: 1px solid #3d3d5c;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.filterGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.filterLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: #6b6b99;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Filter Chips */
+.filterChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.filterChip {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: #a0a0d0;
+  background-color: #262640;
+  border: 1px solid #3d3d5c;
+  border-radius: calc(var(--radius) - 2px);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filterChip:hover {
+  background-color: #2d2d4a;
+  border-color: #5c5c8a;
+}
+
+.filterChipActive {
+  color: white;
+  background-color: #4f46e5; /* Indigo */
+  border-color: #4f46e5;
+}
+
+.filterChipActive:hover {
+  background-color: #4338ca;
+  border-color: #4338ca;
+}
+
+/* Date Inputs */
+.dateInputs {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.dateInput {
+  flex: 1;
+  padding: 0.25rem 0.375rem;
+  font-size: 0.6875rem;
+  color: #e0e0ff;
+  background-color: #262640;
+  border: 1px solid #3d3d5c;
+  border-radius: calc(var(--radius) - 2px);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.dateInput:focus {
+  border-color: #818cf8;
+}
+
+.dateInput::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+  cursor: pointer;
+}
+
+.dateSeparator {
+  font-size: 0.6875rem;
+  color: #6b6b99;
+}
+
+/* Dropdown Trigger */
+.dropdownTrigger {
+  width: 100%;
+  justify-content: space-between;
+  font-size: 0.6875rem !important;
+  height: auto !important;
+  padding: 0.25rem 0.5rem !important;
+  color: #a0a0d0;
+  background-color: #262640 !important;
+  border-color: #3d3d5c !important;
+}
+
+.dropdownTrigger:hover {
+  background-color: #2d2d4a !important;
+  border-color: #5c5c8a !important;
+}
+
+.dropdownContent {
+  background-color: #1a1a2e !important;
+  border-color: #3d3d5c !important;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Reset Button */
+.resetButton {
+  align-self: flex-start;
+  font-size: 0.6875rem !important;
+  color: #6b6b99;
+  margin-top: 0.25rem;
+}
+
+.resetButton:hover {
+  color: #a0a0d0;
+  background-color: #262640;
+}
+
+/* Content Area */
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  transition: background-color 0.15s ease;
+}
+
+.contentOver {
+  background-color: rgba(79, 70, 229, 0.1); /* Indigo tint when dragging over */
+}
+
+/* Empty State */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 2rem 1rem;
+  text-align: center;
+}
+
+.emptyState p {
+  color: #6b6b99;
+  font-size: 0.8125rem;
+  margin: 0;
+}
+
+/* Scrollbar Styling */
+.content::-webkit-scrollbar,
+.filterPanel::-webkit-scrollbar {
+  width: 4px;
+}
+
+.content::-webkit-scrollbar-track,
+.filterPanel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.content::-webkit-scrollbar-thumb,
+.filterPanel::-webkit-scrollbar-thumb {
+  background-color: #3d3d5c;
+  border-radius: 2px;
+}
+
+.content::-webkit-scrollbar-thumb:hover,
+.filterPanel::-webkit-scrollbar-thumb:hover {
+  background-color: #5c5c8a;
+}
