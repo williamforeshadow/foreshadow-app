@@ -501,21 +501,22 @@ export default function TimelineWindow({
   }, []);
 
   // ============================================================================
-  // Show turnover handler - called when clicking "Active Turnover" button
+  // Show turnover handler - called when clicking "Associated Turnover" button
   // ============================================================================
   const handleShowTurnover = useCallback(() => {
-    if (!floatingData) return;
+    if (!floatingData || floatingData.type !== 'task') return;
     
-    // Find the active turnover for this property from reservations
-    const propertyReservations = reservations.filter(
-      (r: Turnover) => r.property_name === floatingData.propertyName
+    const task = floatingData.item as Task;
+    
+    // Find the turnover that contains this task
+    const associatedTurnover = reservations.find((r: Turnover) => 
+      r.tasks?.some((t: Task) => t.task_id === task.task_id)
     );
-    const activeTurnover = getActiveTurnoverForProperty(propertyReservations);
     
-    if (activeTurnover) {
+    if (associatedTurnover) {
       setFloatingData({
         type: 'turnover',
-        item: activeTurnover,
+        item: associatedTurnover,
         propertyName: floatingData.propertyName,
       });
       setTurnoverRightPanelView('tasks');
@@ -1146,7 +1147,6 @@ export default function TimelineWindow({
               // Popover states
               staffOpen={staffOpen}
               setStaffOpen={setStaffOpen}
-              onShowTurnover={handleShowTurnover}
             />
           ) : floatingData.type === 'turnover' ? (
             /* Turnover Detail Panel */

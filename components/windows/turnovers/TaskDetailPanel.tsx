@@ -222,7 +222,7 @@ export function TaskDetailPanel({
             onClick={onShowTurnover}
             className="w-full"
           >
-            Active Turnover
+            Associated Turnover
           </Button>
         </div>
       )}
