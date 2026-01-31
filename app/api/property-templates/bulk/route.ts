@@ -5,7 +5,7 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { template_id, property_names } = body;
+    const { template_id, property_names, automation_config } = body;
 
     if (!template_id || !Array.isArray(property_names)) {
       return NextResponse.json(
@@ -32,7 +32,9 @@ export async function POST(request: Request) {
       const assignments = property_names.map(property_name => ({
         property_name,
         template_id,
-        enabled: true
+        enabled: true,
+        // Include automation_config if provided (applies to all properties in bulk)
+        ...(automation_config !== undefined && { automation_config })
       }));
 
       const { error: insertError } = await getSupabaseServer()

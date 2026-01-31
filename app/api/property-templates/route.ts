@@ -28,7 +28,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { property_name, template_id, enabled = true } = body;
+    const { property_name, template_id, enabled = true, automation_config } = body;
 
     if (!property_name || !template_id) {
       return NextResponse.json(
@@ -37,15 +37,28 @@ export async function POST(request: Request) {
       );
     }
 
+    // Build the upsert payload
+    const upsertPayload: {
+      property_name: string;
+      template_id: string;
+      enabled: boolean;
+      automation_config?: object | null;
+    } = {
+      property_name,
+      template_id,
+      enabled
+    };
+
+    // Only include automation_config if it was provided in the request
+    if (automation_config !== undefined) {
+      upsertPayload.automation_config = automation_config;
+    }
+
     // Use upsert to handle both insert and update
     // The unique constraint is now on (property_name, template_id)
     const { data, error } = await getSupabaseServer()
       .from('property_templates')
-      .upsert({
-        property_name,
-        template_id,
-        enabled
-      }, {
+      .upsert(upsertPayload, {
         onConflict: 'property_name,template_id'
       })
       .select()
@@ -72,6 +85,7 @@ export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const property_name = searchParams.get('property_name');
+    const template_id = searchParams.get('template_id');
 
     if (!property_name) {
       return NextResponse.json(
@@ -80,10 +94,18 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const { error } = await getSupabaseServer()
+    // Build query - can delete specific template or all for property
+    let query = getSupabaseServer()
       .from('property_templates')
       .delete()
       .eq('property_name', property_name);
+    
+    // If template_id is provided, only delete that specific assignment
+    if (template_id) {
+      query = query.eq('template_id', template_id);
+    }
+
+    const { error } = await query;
 
     if (error) {
       return NextResponse.json(

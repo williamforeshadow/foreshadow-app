@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Sidebar from '@/components/Sidebar';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -27,6 +27,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import AutomationsView from '@/components/templates/AutomationsView';
 
 interface Template {
   id: string;
@@ -61,28 +62,16 @@ const FIELD_TYPE_OPTIONS: { value: FieldType; label: string }[] = [
   { value: 'separator', label: 'Section Separator' },
 ];
 
-interface PropertyAssignment {
-  id?: string;
-  property_name: string;
-  template_id: string | null;
-  enabled?: boolean;
-}
-
 export default function TemplatesPage() {
-  const [activeView, setActiveView] = useState<'templates' | 'assignments'>('templates');
+  const [activeView, setActiveView] = useState<'templates' | 'automations'>('templates');
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [fields, setFields] = useState<FieldDefinition[]>([]);
   
-  // Property assignments state
+  // Properties state (for automations view)
   const [properties, setProperties] = useState<string[]>([]);
-  const [assignments, setAssignments] = useState<PropertyAssignment[]>([]);
-  const [loadingAssignments, setLoadingAssignments] = useState(false);
-  const [savingAssignment, setSavingAssignment] = useState<string | null>(null);
-  const [configuringTemplate, setConfiguringTemplate] = useState<Template | null>(null);
-  const [selectedProperties, setSelectedProperties] = useState<string[]>([]);
   
   // Simple form state for template editor
   const [formName, setFormName] = useState('');
@@ -96,9 +85,8 @@ export default function TemplatesPage() {
   }, []);
 
   useEffect(() => {
-    if (activeView === 'assignments') {
+    if (activeView === 'automations') {
       fetchProperties();
-      fetchAssignments();
     }
   }, [activeView]);
 
@@ -126,88 +114,6 @@ export default function TemplatesPage() {
       }
     } catch (err) {
       console.error('Error fetching properties:', err);
-    }
-  };
-
-  const fetchAssignments = async () => {
-    setLoadingAssignments(true);
-    try {
-      const res = await fetch('/api/property-templates');
-      const data = await res.json();
-      if (data.assignments) {
-        setAssignments(data.assignments);
-      }
-    } catch (err) {
-      console.error('Error fetching assignments:', err);
-    } finally {
-      setLoadingAssignments(false);
-    }
-  };
-
-  const saveAssignment = async (propertyName: string, templateId: string | null) => {
-    setSavingAssignment(propertyName);
-    try {
-      const res = await fetch('/api/property-templates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          property_name: propertyName,
-          template_id: templateId
-        })
-      });
-
-      if (!res.ok) throw new Error('Failed to save assignment');
-      
-      // Refresh assignments
-      await fetchAssignments();
-    } catch (err) {
-      console.error('Error saving assignment:', err);
-      alert('Failed to save template assignment');
-    } finally {
-      setSavingAssignment(null);
-    }
-  };
-
-  const getAssignedTemplate = (propertyName: string): string | null => {
-    const assignment = assignments.find(a => a.property_name === propertyName);
-    return assignment?.template_id || null;
-  };
-
-  const getAssignedProperties = (templateId: string): string[] => {
-    return assignments
-      .filter(a => a.template_id === templateId && a.enabled)
-      .map(a => a.property_name);
-  };
-
-  const openConfigureDialog = (template: Template) => {
-    setConfiguringTemplate(template);
-    const assigned = getAssignedProperties(template.id);
-    setSelectedProperties(assigned);
-  };
-
-  const saveTemplateAssignments = async () => {
-    if (!configuringTemplate) return;
-
-    setSavingAssignment(configuringTemplate.id);
-    try {
-      const res = await fetch('/api/property-templates/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          template_id: configuringTemplate.id,
-          property_names: selectedProperties
-        })
-      });
-
-      if (!res.ok) throw new Error('Failed to save assignments');
-      
-      await fetchAssignments();
-      setConfiguringTemplate(null);
-    } catch (err) {
-      console.error('Error saving assignments:', err);
-      alert('Failed to save property assignments');
-    } finally {
-      setSavingAssignment(null);
     }
   };
 
@@ -351,12 +257,12 @@ export default function TemplatesPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold text-neutral-900 dark:text-white">
-                Cleaning Templates
+                Templates & Automations
               </h1>
               <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
                 {activeView === 'templates' 
-                  ? 'Create and manage cleaning form templates'
-                  : 'Assign templates to properties'}
+                  ? 'Create and manage task templates'
+                  : 'Configure property automations'}
               </p>
             </div>
             {activeView === 'templates' && (
@@ -376,11 +282,11 @@ export default function TemplatesPage() {
               Templates
             </Button>
             <Button
-              onClick={() => setActiveView('assignments')}
-              variant={activeView === 'assignments' ? 'default' : 'outline'}
+              onClick={() => setActiveView('automations')}
+              variant={activeView === 'automations' ? 'default' : 'outline'}
               size="sm"
             >
-              Property Assignments
+              Automations
             </Button>
           </div>
         </div>
@@ -397,7 +303,7 @@ export default function TemplatesPage() {
               ) : templates.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-neutral-500 dark:text-neutral-400 mb-4">
-                    No templates yet. Create your first cleaning template!
+                    No templates yet. Create your first task template!
                   </p>
                   <Button onClick={openCreateDialog}>
                     Create Template
@@ -406,144 +312,60 @@ export default function TemplatesPage() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {templates.map((template) => (
-                <Card key={template.id}>
-                  <CardHeader>
-                    <CardTitle>{template.name}</CardTitle>
-                    {template.description && (
-                      <CardDescription>{template.description}</CardDescription>
-                    )}
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
-                        <Badge 
-                          variant={template.type === 'maintenance' ? 'default' : 'secondary'}
-                          className={template.type === 'maintenance' 
-                            ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-300' 
-                            : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-300'
-                          }
-                        >
-                          {template.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
-                        </Badge>
-                        <Badge variant="secondary">
-                          {template.fields.length} field{template.fields.length !== 1 ? 's' : ''}
-                        </Badge>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={() => openEditDialog(template)}
-                          variant="outline"
-                          size="sm"
-                          className="flex-1"
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          onClick={() => deleteTemplate(template.id)}
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900"
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                    <Card key={template.id}>
+                      <CardHeader>
+                        <CardTitle>{template.name}</CardTitle>
+                        {template.description && (
+                          <CardDescription>{template.description}</CardDescription>
+                        )}
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
+                            <Badge 
+                              variant={template.type === 'maintenance' ? 'default' : 'secondary'}
+                              className={template.type === 'maintenance' 
+                                ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-300' 
+                                : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-300'
+                              }
+                            >
+                              {template.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                            </Badge>
+                            <Badge variant="secondary">
+                              {template.fields.length} field{template.fields.length !== 1 ? 's' : ''}
+                            </Badge>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => openEditDialog(template)}
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              onClick={() => deleteTemplate(template.id)}
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900"
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               )}
             </>
           ) : (
-            // Template Assignments View (Template-centric)
-            <>
-              {loading || loadingAssignments ? (
-                <div className="text-center py-12 text-neutral-500">
-                  Loading template assignments...
-                </div>
-              ) : templates.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-neutral-500 dark:text-neutral-400">
-                    No templates found. Create a template first to assign it to properties.
-                  </p>
-                </div>
-              ) : (
-                <div className="max-w-4xl mx-auto space-y-4">
-                  <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg p-4">
-                    <p className="text-sm text-blue-800 dark:text-blue-200">
-                      Configure which properties should automatically get tasks from each template. When a reservation is created for an assigned property, tasks will be auto-generated.
-                    </p>
-                  </div>
-
-                  {templates.map((template) => {
-                    const assignedProps = getAssignedProperties(template.id);
-                    const isSaving = savingAssignment === template.id;
-                    
-                    return (
-                      <Card key={template.id}>
-                        <CardHeader>
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <CardTitle className="flex items-center gap-2">
-                                {template.name}
-                                <Badge 
-                                  variant={template.type === 'maintenance' ? 'default' : 'secondary'}
-                                  className={template.type === 'maintenance' 
-                                    ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-300' 
-                                    : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-300'
-                                  }
-                                >
-                                  {template.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
-                                </Badge>
-                              </CardTitle>
-                              {template.description && (
-                                <CardDescription>{template.description}</CardDescription>
-                              )}
-                            </div>
-                            <Button
-                              onClick={() => openConfigureDialog(template)}
-                              disabled={isSaving}
-                              size="sm"
-                            >
-                              {isSaving ? 'Saving...' : 'Configure Properties'}
-                            </Button>
-                          </div>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-neutral-600 dark:text-neutral-400">
-                              Assigned to:
-                            </span>
-                            {assignedProps.length === 0 ? (
-                              <Badge variant="outline" className="text-neutral-500">
-                                No properties
-                              </Badge>
-                            ) : assignedProps.length === properties.length ? (
-                              <Badge variant="default">
-                                All properties ({assignedProps.length})
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary">
-                                {assignedProps.length} {assignedProps.length === 1 ? 'property' : 'properties'}
-                              </Badge>
-                            )}
-                          </div>
-                          {assignedProps.length > 0 && assignedProps.length < 10 && (
-                            <div className="mt-2 flex flex-wrap gap-1">
-                              {assignedProps.map(prop => (
-                                <Badge key={prop} variant="outline" className="text-xs">
-                                  {prop}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
-              )}
-            </>
+            // Automations View
+            <AutomationsView
+              templates={templates}
+              properties={properties}
+            />
           )}
         </div>
       </div>
@@ -635,7 +457,7 @@ export default function TemplatesPage() {
                 {fields.length === 0 ? (
                   <div className="text-center py-8 border-2 border-dashed border-neutral-300 dark:border-neutral-600 rounded-lg">
                     <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                      No fields yet. Click "Add Field" to get started.
+                      No fields yet. Click &quot;Add Field&quot; to get started.
                     </p>
                   </div>
                 ) : (
@@ -723,94 +545,6 @@ export default function TemplatesPage() {
           </form>
         </DialogContent>
       </Dialog>
-
-      {/* Configure Template Properties Dialog */}
-      <Dialog open={!!configuringTemplate} onOpenChange={(open) => !open && setConfiguringTemplate(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Configure Properties for "{configuringTemplate?.name}"</DialogTitle>
-            <DialogDescription>
-              Select which properties should automatically get tasks from this template when reservations are created.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            {properties.length === 0 ? (
-              <div className="text-center py-8 text-neutral-500">
-                No properties found. Properties will appear here once you have reservations.
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between p-3 bg-neutral-50 dark:bg-neutral-800 rounded-lg">
-                  <span className="text-sm font-medium">
-                    {selectedProperties.length === properties.length 
-                      ? 'All properties selected' 
-                      : `${selectedProperties.length} of ${properties.length} selected`}
-                  </span>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedProperties(properties)}
-                    >
-                      Select All
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedProperties([])}
-                    >
-                      Clear All
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[400px] overflow-y-auto p-2">
-                  {properties.map((property) => {
-                    const isSelected = selectedProperties.includes(property);
-                    return (
-                      <label
-                        key={property}
-                        className="flex items-center gap-2 p-3 border rounded-lg cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedProperties([...selectedProperties, property]);
-                            } else {
-                              setSelectedProperties(selectedProperties.filter(p => p !== property));
-                            }
-                          }}
-                          className="rounded border-neutral-300"
-                        />
-                        <span className="text-sm font-medium">{property}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setConfiguringTemplate(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={saveTemplateAssignments}
-              disabled={savingAssignment === configuringTemplate?.id}
-            >
-              {savingAssignment === configuringTemplate?.id ? 'Saving...' : 'Save Assignments'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
-

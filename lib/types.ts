@@ -199,6 +199,96 @@ export interface ApiResponse<T> {
 }
 
 // ============================================================================
+// Automation Types
+// ============================================================================
+
+/** Trigger types for task automation */
+export type AutomationTriggerType = 'turnover' | 'occupancy' | 'vacancy' | 'recurring';
+
+/** Schedule type - when to schedule relative to an event */
+export type AutomationScheduleType = 'on' | 'before' | 'after';
+
+/** Reference point for scheduling */
+export type AutomationScheduleRelativeTo = 'check_out' | 'next_check_in';
+
+/** Schedule configuration for automation */
+export interface AutomationScheduleConfig {
+  enabled: boolean;
+  type: AutomationScheduleType;
+  relative_to: AutomationScheduleRelativeTo;
+  days_offset: number;
+}
+
+/** Same-day turnover override configuration */
+export interface AutomationSameDayConfig {
+  enabled: boolean;
+  schedule: Omit<AutomationScheduleConfig, 'enabled'>;
+}
+
+/** Auto-assignment configuration */
+export interface AutomationAutoAssignConfig {
+  enabled: boolean;
+  user_ids: string[];
+}
+
+/** Full automation configuration stored in property_templates.automation_config */
+export interface AutomationConfig {
+  enabled: boolean;
+  trigger_type: AutomationTriggerType;
+  schedule: AutomationScheduleConfig;
+  same_day_override: AutomationSameDayConfig;
+  auto_assign: AutomationAutoAssignConfig;
+  preset_id?: string | null;
+}
+
+/** Automation preset - reusable automation configuration */
+export interface AutomationPreset {
+  id: string;
+  name: string;
+  description?: string | null;
+  trigger_type: AutomationTriggerType;
+  config: Omit<AutomationConfig, 'enabled' | 'trigger_type' | 'preset_id'>;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Property template assignment with automation config */
+export interface PropertyTemplateAssignment {
+  id: string;
+  property_name: string;
+  template_id: string;
+  enabled: boolean;
+  automation_config?: AutomationConfig | null;
+}
+
+/** Default automation config factory */
+export function createDefaultAutomationConfig(): AutomationConfig {
+  return {
+    enabled: false,
+    trigger_type: 'turnover',
+    schedule: {
+      enabled: false,
+      type: 'on',
+      relative_to: 'check_out',
+      days_offset: 0,
+    },
+    same_day_override: {
+      enabled: true,
+      schedule: {
+        type: 'on',
+        relative_to: 'check_out',
+        days_offset: 0,
+      },
+    },
+    auto_assign: {
+      enabled: false,
+      user_ids: [],
+    },
+    preset_id: null,
+  };
+}
+
+// ============================================================================
 // Filter Types (re-export from cleaningFilters for convenience)
 // ============================================================================
 
