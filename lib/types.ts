@@ -217,6 +217,7 @@ export interface AutomationScheduleConfig {
   type: AutomationScheduleType;
   relative_to: AutomationScheduleRelativeTo;
   days_offset: number;
+  time: string; // 24-hour format, e.g., "10:00", "14:30"
 }
 
 /** Same-day turnover override configuration */
@@ -271,6 +272,7 @@ export function createDefaultAutomationConfig(): AutomationConfig {
       type: 'on',
       relative_to: 'check_out',
       days_offset: 0,
+      time: '10:00',
     },
     same_day_override: {
       enabled: true,
@@ -278,6 +280,7 @@ export function createDefaultAutomationConfig(): AutomationConfig {
         type: 'on',
         relative_to: 'check_out',
         days_offset: 0,
+        time: '10:00',
       },
     },
     auto_assign: {

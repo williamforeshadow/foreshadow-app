@@ -443,55 +443,65 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                 </button>
               </div>
 
-              {config.schedule.enabled && (
-                <div className="grid grid-cols-3 gap-3 pt-2">
-                  <Field>
-                    <FieldLabel className="text-xs">When</FieldLabel>
-                    <Select
-                      value={config.schedule.type}
-                      onValueChange={(value) => updateScheduleFn('type', value as AutomationScheduleType)}
-                    >
-                      <SelectTrigger className="h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="on">On</SelectItem>
-                        <SelectItem value="before">Before</SelectItem>
-                        <SelectItem value="after">After</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
+                    {config.schedule.enabled && (
+                      <div className="grid grid-cols-4 gap-3 pt-2">
+                        <Field>
+                          <FieldLabel className="text-xs">When</FieldLabel>
+                          <Select
+                            value={config.schedule.type}
+                            onValueChange={(value) => updateScheduleFn('type', value as AutomationScheduleType)}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="on">On</SelectItem>
+                              <SelectItem value="before">Before</SelectItem>
+                              <SelectItem value="after">After</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </Field>
 
-                  {config.schedule.type !== 'on' && (
-                    <Field>
-                      <FieldLabel className="text-xs">Days</FieldLabel>
-                      <Input
-                        type="number"
-                        min={0}
-                        value={config.schedule.days_offset}
-                        onChange={(e) => updateScheduleFn('days_offset', parseInt(e.target.value) || 0)}
-                        className="h-9"
-                      />
-                    </Field>
-                  )}
+                        {config.schedule.type !== 'on' && (
+                          <Field>
+                            <FieldLabel className="text-xs">Days</FieldLabel>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={config.schedule.days_offset}
+                              onChange={(e) => updateScheduleFn('days_offset', parseInt(e.target.value) || 0)}
+                              className="h-9"
+                            />
+                          </Field>
+                        )}
 
-                  <Field>
-                    <FieldLabel className="text-xs">Relative to</FieldLabel>
-                    <Select
-                      value={config.schedule.relative_to}
-                      onValueChange={(value) => updateScheduleFn('relative_to', value as AutomationScheduleRelativeTo)}
-                    >
-                      <SelectTrigger className="h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="check_out">Check Out</SelectItem>
-                        <SelectItem value="next_check_in">Next Check In</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                </div>
-              )}
+                        <Field>
+                          <FieldLabel className="text-xs">Relative to</FieldLabel>
+                          <Select
+                            value={config.schedule.relative_to}
+                            onValueChange={(value) => updateScheduleFn('relative_to', value as AutomationScheduleRelativeTo)}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="check_out">Check Out</SelectItem>
+                              <SelectItem value="next_check_in">Next Check In</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </Field>
+
+                        <Field>
+                          <FieldLabel className="text-xs">Time</FieldLabel>
+                          <Input
+                            type="time"
+                            value={config.schedule.time || '10:00'}
+                            onChange={(e) => updateScheduleFn('time', e.target.value)}
+                            className="h-9"
+                          />
+                        </Field>
+                      </div>
+                    )}
             </div>
 
             {/* Same-Day Override */}
@@ -534,55 +544,65 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                 </button>
               </div>
 
-              {config.same_day_override.enabled && (
-                <div className="grid grid-cols-3 gap-3 pt-2">
-                  <Field>
-                    <FieldLabel className="text-xs">When</FieldLabel>
-                    <Select
-                      value={config.same_day_override.schedule.type}
-                      onValueChange={(value) => updateSameDayFn('type', value as AutomationScheduleType)}
-                    >
-                      <SelectTrigger className="h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="on">On</SelectItem>
-                        <SelectItem value="before">Before</SelectItem>
-                        <SelectItem value="after">After</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
+                    {config.same_day_override.enabled && (
+                      <div className="grid grid-cols-4 gap-3 pt-2">
+                        <Field>
+                          <FieldLabel className="text-xs">When</FieldLabel>
+                          <Select
+                            value={config.same_day_override.schedule.type}
+                            onValueChange={(value) => updateSameDayFn('type', value as AutomationScheduleType)}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="on">On</SelectItem>
+                              <SelectItem value="before">Before</SelectItem>
+                              <SelectItem value="after">After</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </Field>
 
-                  {config.same_day_override.schedule.type !== 'on' && (
-                    <Field>
-                      <FieldLabel className="text-xs">Days</FieldLabel>
-                      <Input
-                        type="number"
-                        min={0}
-                        value={config.same_day_override.schedule.days_offset}
-                        onChange={(e) => updateSameDayFn('days_offset', parseInt(e.target.value) || 0)}
-                        className="h-9"
-                      />
-                    </Field>
-                  )}
+                        {config.same_day_override.schedule.type !== 'on' && (
+                          <Field>
+                            <FieldLabel className="text-xs">Days</FieldLabel>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={config.same_day_override.schedule.days_offset}
+                              onChange={(e) => updateSameDayFn('days_offset', parseInt(e.target.value) || 0)}
+                              className="h-9"
+                            />
+                          </Field>
+                        )}
 
-                  <Field>
-                    <FieldLabel className="text-xs">Relative to</FieldLabel>
-                    <Select
-                      value={config.same_day_override.schedule.relative_to}
-                      onValueChange={(value) => updateSameDayFn('relative_to', value as AutomationScheduleRelativeTo)}
-                    >
-                      <SelectTrigger className="h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="check_out">Check Out</SelectItem>
-                        <SelectItem value="next_check_in">Next Check In</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                </div>
-              )}
+                        <Field>
+                          <FieldLabel className="text-xs">Relative to</FieldLabel>
+                          <Select
+                            value={config.same_day_override.schedule.relative_to}
+                            onValueChange={(value) => updateSameDayFn('relative_to', value as AutomationScheduleRelativeTo)}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="check_out">Check Out</SelectItem>
+                              <SelectItem value="next_check_in">Next Check In</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </Field>
+
+                        <Field>
+                          <FieldLabel className="text-xs">Time</FieldLabel>
+                          <Input
+                            type="time"
+                            value={config.same_day_override.schedule.time || '10:00'}
+                            onChange={(e) => updateSameDayFn('time', e.target.value)}
+                            className="h-9"
+                          />
+                        </Field>
+                      </div>
+                    )}
             </div>
 
             {/* Auto-Assign */}
