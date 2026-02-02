@@ -140,7 +140,36 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
   // Open edit dialog
   const openEditDialog = (assignment: PropertyTemplateAssignment) => {
     setEditingAssignment(assignment);
-    const config = assignment.automation_config || createDefaultAutomationConfig();
+    const defaults = createDefaultAutomationConfig();
+    const saved = assignment.automation_config;
+    
+    // Deep merge with defaults to ensure all nested fields exist
+    const config: AutomationConfig = saved ? {
+      enabled: saved.enabled ?? defaults.enabled,
+      trigger_type: saved.trigger_type ?? defaults.trigger_type,
+      schedule: {
+        enabled: saved.schedule?.enabled ?? defaults.schedule.enabled,
+        type: saved.schedule?.type ?? defaults.schedule.type,
+        relative_to: saved.schedule?.relative_to ?? defaults.schedule.relative_to,
+        days_offset: saved.schedule?.days_offset ?? defaults.schedule.days_offset,
+        time: saved.schedule?.time ?? defaults.schedule.time,
+      },
+      same_day_override: {
+        enabled: saved.same_day_override?.enabled ?? defaults.same_day_override.enabled,
+        schedule: {
+          type: saved.same_day_override?.schedule?.type ?? defaults.same_day_override.schedule.type,
+          relative_to: saved.same_day_override?.schedule?.relative_to ?? defaults.same_day_override.schedule.relative_to,
+          days_offset: saved.same_day_override?.schedule?.days_offset ?? defaults.same_day_override.schedule.days_offset,
+          time: saved.same_day_override?.schedule?.time ?? defaults.same_day_override.schedule.time,
+        },
+      },
+      auto_assign: {
+        enabled: saved.auto_assign?.enabled ?? defaults.auto_assign.enabled,
+        user_ids: saved.auto_assign?.user_ids ?? defaults.auto_assign.user_ids,
+      },
+      preset_id: saved.preset_id ?? null,
+    } : defaults;
+    
     setAutomationConfig(config);
   };
 

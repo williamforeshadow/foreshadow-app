@@ -189,8 +189,15 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
               <Card
                 key={item.id || index}
                 onClick={() => onCardClick(item)}
-                className={`group cursor-pointer hover:shadow-xl transition-all duration-200 !flex !flex-col !p-4 gap-4 flex-shrink-0 ${cardWidth} ${getCardStyles(item.turnover_status || 'no_tasks', index === 0, item.check_in)}`}
+                className={`group cursor-pointer hover:shadow-xl transition-all duration-200 !flex !flex-col !p-4 gap-4 flex-shrink-0 ${cardWidth} ${getCardStyles(item.turnover_status || 'no_tasks', index === 0, item.check_in)} relative overflow-hidden`}
               >
+                {/* Turnover Stamp */}
+                <img 
+                  src="/Turnover.png" 
+                  alt="" 
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-20 h-20 rotate-[-12deg] pointer-events-none select-none"
+                />
+                
                 <CardHeader className="min-h-[3rem]">
                   <CardDescription className="line-clamp-1 text-sm font-medium">
                     {item.guest_name || 'No Guest'}
