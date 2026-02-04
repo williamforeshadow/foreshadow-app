@@ -61,6 +61,11 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [newAutomationConfig, setNewAutomationConfig] = useState<AutomationConfig | null>(null);
 
+  // Bulk edit state
+  const [bulkEditMode, setBulkEditMode] = useState(false);
+  const [selectedProperties, setSelectedProperties] = useState<Set<string>>(new Set());
+  const [showBulkAddDialog, setShowBulkAddDialog] = useState(false);
+
   // Fetch data on mount
   useEffect(() => {
     fetchData();
@@ -307,6 +312,66 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
     } finally {
       setSaving(false);
     }
+  };
+
+  // Open bulk add dialog
+  const openBulkAddDialog = () => {
+    setSelectedTemplateId('');
+    const defaultConfig = createDefaultAutomationConfig();
+    defaultConfig.enabled = true;
+    setNewAutomationConfig(defaultConfig);
+    setShowBulkAddDialog(true);
+  };
+
+  // Save bulk automation to multiple properties
+  const saveBulkAutomation = async () => {
+    if (selectedProperties.size === 0 || !selectedTemplateId || !newAutomationConfig) return;
+
+    setSaving(true);
+    try {
+      const promises = Array.from(selectedProperties).map(propertyName =>
+        fetch('/api/property-templates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            property_name: propertyName,
+            template_id: selectedTemplateId,
+            enabled: true,
+            automation_config: newAutomationConfig,
+          }),
+        })
+      );
+
+      const results = await Promise.all(promises);
+      const failed = results.filter(r => !r.ok).length;
+
+      if (failed > 0) {
+        alert(`Applied to ${selectedProperties.size - failed} properties. ${failed} failed.`);
+      }
+
+      await fetchData();
+      setShowBulkAddDialog(false);
+      setSelectedProperties(new Set());
+      setBulkEditMode(false);
+      setSelectedTemplateId('');
+      setNewAutomationConfig(null);
+    } catch (err) {
+      console.error('Error creating bulk automation:', err);
+      alert('Failed to create automations for some properties');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Toggle property selection for bulk edit
+  const togglePropertySelection = (property: string) => {
+    const newSelected = new Set(selectedProperties);
+    if (newSelected.has(property)) {
+      newSelected.delete(property);
+    } else {
+      newSelected.add(property);
+    }
+    setSelectedProperties(newSelected);
   };
 
   // Delete automation
@@ -749,8 +814,27 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
       {/* Left Panel - Properties List */}
       <div className="w-80 border-r border-neutral-200 dark:border-neutral-700 overflow-y-auto">
         <div className="p-4 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
-          <h3 className="font-medium text-sm text-neutral-700 dark:text-neutral-300">Properties</h3>
-          <p className="text-xs text-neutral-500 mt-1">{properties.length} properties</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-medium text-sm text-neutral-700 dark:text-neutral-300">Properties</h3>
+              <p className="text-xs text-neutral-500 mt-1">
+                {bulkEditMode && selectedProperties.size > 0 
+                  ? `${selectedProperties.size} selected`
+                  : `${properties.length} properties`
+                }
+              </p>
+            </div>
+            <Button 
+              size="sm" 
+              variant={bulkEditMode ? "default" : "outline"}
+              onClick={() => {
+                setBulkEditMode(!bulkEditMode);
+                setSelectedProperties(new Set());
+              }}
+            >
+              {bulkEditMode ? 'Done' : 'Bulk Edit'}
+            </Button>
+          </div>
         </div>
         
         <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
@@ -758,40 +842,116 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
             const automationCount = getAutomationCount(property);
             const totalAssignments = assignmentsByProperty[property]?.length || 0;
             const isSelected = selectedProperty === property;
+            const isBulkSelected = selectedProperties.has(property);
             
             return (
-              <button
+              <div
                 key={property}
-                onClick={() => setSelectedProperty(property)}
-                className={`w-full text-left p-4 transition-colors ${
-                  isSelected 
-                    ? 'bg-purple-50 dark:bg-purple-900/20 border-l-4 border-purple-500' 
-                    : 'hover:bg-neutral-50 dark:hover:bg-neutral-800 border-l-4 border-transparent'
+                onClick={() => bulkEditMode ? togglePropertySelection(property) : setSelectedProperty(property)}
+                className={`w-full text-left p-4 transition-colors cursor-pointer flex items-center gap-3 ${
+                  bulkEditMode
+                    ? isBulkSelected
+                      ? 'bg-purple-50 dark:bg-purple-900/20 border-l-4 border-purple-500'
+                      : 'hover:bg-neutral-50 dark:hover:bg-neutral-800 border-l-4 border-transparent'
+                    : isSelected 
+                      ? 'bg-purple-50 dark:bg-purple-900/20 border-l-4 border-purple-500' 
+                      : 'hover:bg-neutral-50 dark:hover:bg-neutral-800 border-l-4 border-transparent'
                 }`}
               >
-                <div className="font-medium text-sm truncate">{property}</div>
-                <div className="flex items-center gap-2 mt-1">
-                  {automationCount > 0 ? (
-                    <Badge className="bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 text-xs">
-                      {automationCount} automation{automationCount !== 1 ? 's' : ''}
-                    </Badge>
-                  ) : totalAssignments > 0 ? (
-                    <Badge variant="outline" className="text-xs text-neutral-500">
-                      {totalAssignments} template{totalAssignments !== 1 ? 's' : ''} (no automation)
-                    </Badge>
-                  ) : (
-                    <span className="text-xs text-neutral-400">No templates</span>
-                  )}
+                {bulkEditMode && (
+                  <input
+                    type="checkbox"
+                    checked={isBulkSelected}
+                    onChange={() => togglePropertySelection(property)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-4 h-4 rounded border-neutral-300 text-purple-600 focus:ring-purple-500"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm truncate">{property}</div>
+                  <div className="flex items-center gap-2 mt-1">
+                    {automationCount > 0 ? (
+                      <Badge className="bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 text-xs">
+                        {automationCount} automation{automationCount !== 1 ? 's' : ''}
+                      </Badge>
+                    ) : totalAssignments > 0 ? (
+                      <Badge variant="outline" className="text-xs text-neutral-500">
+                        {totalAssignments} template{totalAssignments !== 1 ? 's' : ''} (no automation)
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-neutral-400">No templates</span>
+                    )}
+                  </div>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
       </div>
 
-      {/* Right Panel - Property Detail */}
+      {/* Right Panel - Property Detail or Bulk Selection */}
       <div className="flex-1 overflow-y-auto">
-        {selectedProperty ? (
+        {bulkEditMode ? (
+          // BULK MODE VIEW
+          <div className="p-6">
+            <div className="flex items-start justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold">
+                  {selectedProperties.size > 0 
+                    ? `Add Template Automation for ${selectedProperties.size} Selected Properties`
+                    : 'Select Properties'}
+                </h2>
+                <p className="text-sm text-neutral-500 mt-1">
+                  {selectedProperties.size > 0 
+                    ? Array.from(selectedProperties).slice(0, 3).join(', ') + (selectedProperties.size > 3 ? `, and ${selectedProperties.size - 3} more` : '')
+                    : 'Check properties on the left to apply bulk automation'}
+                </p>
+              </div>
+              {selectedProperties.size > 0 && (
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setSelectedProperties(new Set())}>
+                    Clear Selection
+                  </Button>
+                  <Button variant="outline" onClick={() => setSelectedProperties(new Set(properties))}>
+                    Select All
+                  </Button>
+                </div>
+              )}
+            </div>
+            
+            {selectedProperties.size === 0 ? (
+              <div className="text-center py-12 border-2 border-dashed border-neutral-200 dark:border-neutral-700 rounded-lg">
+                <p className="text-neutral-500">No properties selected.</p>
+                <p className="text-sm text-neutral-400 mt-1">Use the checkboxes on the left to select properties for bulk automation.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Selected properties summary */}
+                <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <p className="text-sm font-medium text-purple-700 dark:text-purple-300 mb-2">
+                    Selected Properties ({selectedProperties.size}):
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {Array.from(selectedProperties).map(prop => (
+                      <Badge 
+                        key={prop} 
+                        variant="secondary"
+                        className="bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
+                      >
+                        {prop}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                <Button onClick={openBulkAddDialog} className="w-full" size="lg">
+                  Add or Edit Template Automation to {selectedProperties.size} Properties
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : selectedProperty ? (
+          // SINGLE PROPERTY VIEW
           <div className="p-6">
             {/* Property Header */}
             <div className="flex items-start justify-between mb-6">
@@ -1010,6 +1170,70 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
             </Button>
             <Button onClick={saveAsPreset} disabled={saving || !presetName.trim()}>
               {saving ? 'Saving...' : 'Save Preset'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Add/Edit Template Dialog */}
+      <Dialog open={showBulkAddDialog} onOpenChange={setShowBulkAddDialog}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add or Edit Template Automation</DialogTitle>
+            <DialogDescription>
+              Configure automation for {selectedProperties.size} selected properties
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            {/* Selected properties summary */}
+            <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+              <p className="text-sm font-medium text-purple-700 dark:text-purple-300">
+                Applying to {selectedProperties.size} properties:
+              </p>
+              <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                {Array.from(selectedProperties).join(', ')}
+              </p>
+            </div>
+
+            {/* Template Selection */}
+            <Field>
+              <FieldLabel>Select Template</FieldLabel>
+              <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a template..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {templates.map((template) => (
+                    <SelectItem key={template.id} value={template.id}>
+                      <span className="flex items-center gap-2">
+                        {template.name}
+                        <Badge variant="outline" className="text-xs">
+                          {template.type}
+                        </Badge>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                This template will be added or edited to all selected properties
+              </FieldDescription>
+            </Field>
+
+            {/* Automation Config */}
+            {selectedTemplateId && newAutomationConfig && renderAutomationForm(newAutomationConfig, true)}
+          </div>
+
+          <DialogFooter className="mt-6">
+            <Button type="button" variant="outline" onClick={() => setShowBulkAddDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={saveBulkAutomation} 
+              disabled={saving || !selectedTemplateId}
+            >
+              {saving ? 'Saving...' : `Apply to ${selectedProperties.size} Properties`}
             </Button>
           </DialogFooter>
         </DialogContent>
