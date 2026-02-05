@@ -232,12 +232,48 @@ export interface AutomationAutoAssignConfig {
   user_ids: string[];
 }
 
+// ============================================================================
+// Occupancy Period Automation Types
+// ============================================================================
+
+/** Comparison operators for occupancy duration conditions */
+export type OccupancyDurationOperator = 
+  | 'gte'     // greater than or equal to
+  | 'eq'      // is equal to
+  | 'gt'      // is greater than
+  | 'lt'      // is less than
+  | 'lte'     // is less than or equal to
+  | 'between'; // is between
+
+/** Occupancy duration condition for determining which stays get the task */
+export interface OccupancyDurationCondition {
+  operator: OccupancyDurationOperator;
+  days: number;
+  days_end?: number; // Only used for 'between' operator
+}
+
+/** Occupancy schedule configuration - when to schedule within the stay */
+export interface OccupancyScheduleConfig {
+  enabled: boolean;
+  day_of_occupancy: number; // Schedule on Nth full day of occupancy
+  time: string; // Time of day in 24-hour format
+  repeat: {
+    enabled: boolean;
+    interval_days: number; // Repeat every N days
+  };
+}
+
 /** Full automation configuration stored in property_templates.automation_config */
 export interface AutomationConfig {
   enabled: boolean;
   trigger_type: AutomationTriggerType;
+  // Turnover-specific config
   schedule: AutomationScheduleConfig;
   same_day_override: AutomationSameDayConfig;
+  // Occupancy-specific config
+  occupancy_condition?: OccupancyDurationCondition;
+  occupancy_schedule?: OccupancyScheduleConfig;
+  // Shared config
   auto_assign: AutomationAutoAssignConfig;
   preset_id?: string | null;
 }
@@ -267,6 +303,7 @@ export function createDefaultAutomationConfig(): AutomationConfig {
   return {
     enabled: false,
     trigger_type: 'turnover',
+    // Turnover-specific defaults
     schedule: {
       enabled: false,
       type: 'on',
@@ -283,6 +320,21 @@ export function createDefaultAutomationConfig(): AutomationConfig {
         time: '10:00',
       },
     },
+    // Occupancy-specific defaults
+    occupancy_condition: {
+      operator: 'gte',
+      days: 7,
+    },
+    occupancy_schedule: {
+      enabled: false,
+      day_of_occupancy: 1,
+      time: '10:00',
+      repeat: {
+        enabled: false,
+        interval_days: 7,
+      },
+    },
+    // Shared defaults
     auto_assign: {
       enabled: false,
       user_ids: [],

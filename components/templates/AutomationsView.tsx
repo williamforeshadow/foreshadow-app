@@ -26,6 +26,7 @@ import {
   type AutomationPreset,
   type PropertyTemplateAssignment,
   type User,
+  type OccupancyDurationOperator,
   createDefaultAutomationConfig,
 } from '@/lib/types';
 
@@ -172,6 +173,21 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
         enabled: saved.auto_assign?.enabled ?? defaults.auto_assign.enabled,
         user_ids: saved.auto_assign?.user_ids ?? defaults.auto_assign.user_ids,
       },
+      // Occupancy-specific fields
+      occupancy_condition: {
+        operator: saved.occupancy_condition?.operator ?? defaults.occupancy_condition!.operator,
+        days: saved.occupancy_condition?.days ?? defaults.occupancy_condition!.days,
+        days_end: saved.occupancy_condition?.days_end,
+      },
+      occupancy_schedule: {
+        enabled: saved.occupancy_schedule?.enabled ?? defaults.occupancy_schedule!.enabled,
+        day_of_occupancy: saved.occupancy_schedule?.day_of_occupancy ?? defaults.occupancy_schedule!.day_of_occupancy,
+        time: saved.occupancy_schedule?.time ?? defaults.occupancy_schedule!.time,
+        repeat: {
+          enabled: saved.occupancy_schedule?.repeat?.enabled ?? defaults.occupancy_schedule!.repeat.enabled,
+          interval_days: saved.occupancy_schedule?.repeat?.interval_days ?? defaults.occupancy_schedule!.repeat.interval_days,
+        },
+      },
       preset_id: saved.preset_id ?? null,
     } : defaults;
     
@@ -250,6 +266,62 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
     setNewAutomationConfig({
       ...newAutomationConfig,
       auto_assign: { ...newAutomationConfig.auto_assign, [field]: value }
+    });
+  };
+
+  // Occupancy condition update helpers
+  const updateOccupancyCondition = (field: string, value: unknown) => {
+    if (!automationConfig) return;
+    setAutomationConfig({
+      ...automationConfig,
+      occupancy_condition: { ...automationConfig.occupancy_condition!, [field]: value }
+    });
+  };
+
+  const updateNewOccupancyCondition = (field: string, value: unknown) => {
+    if (!newAutomationConfig) return;
+    setNewAutomationConfig({
+      ...newAutomationConfig,
+      occupancy_condition: { ...newAutomationConfig.occupancy_condition!, [field]: value }
+    });
+  };
+
+  // Occupancy schedule update helpers
+  const updateOccupancySchedule = (field: string, value: unknown) => {
+    if (!automationConfig) return;
+    setAutomationConfig({
+      ...automationConfig,
+      occupancy_schedule: { ...automationConfig.occupancy_schedule!, [field]: value }
+    });
+  };
+
+  const updateNewOccupancySchedule = (field: string, value: unknown) => {
+    if (!newAutomationConfig) return;
+    setNewAutomationConfig({
+      ...newAutomationConfig,
+      occupancy_schedule: { ...newAutomationConfig.occupancy_schedule!, [field]: value }
+    });
+  };
+
+  const updateOccupancyRepeat = (field: string, value: unknown) => {
+    if (!automationConfig?.occupancy_schedule) return;
+    setAutomationConfig({
+      ...automationConfig,
+      occupancy_schedule: {
+        ...automationConfig.occupancy_schedule,
+        repeat: { ...automationConfig.occupancy_schedule.repeat, [field]: value }
+      }
+    });
+  };
+
+  const updateNewOccupancyRepeat = (field: string, value: unknown) => {
+    if (!newAutomationConfig?.occupancy_schedule) return;
+    setNewAutomationConfig({
+      ...newAutomationConfig,
+      occupancy_schedule: {
+        ...newAutomationConfig.occupancy_schedule,
+        repeat: { ...newAutomationConfig.occupancy_schedule.repeat, [field]: value }
+      }
     });
   };
 
@@ -472,50 +544,117 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
 
     return (
       <div className="space-y-6">
-        {/* Enable Automation Toggle */}
-        <div className="flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-800 rounded-lg">
-          <div>
-            <div className="font-medium">Enable Auto-generation</div>
-            <div className="text-sm text-neutral-500">Automatically create tasks when turnover occurs</div>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={config.enabled}
-            onClick={() => updateConfigFn('enabled', !config.enabled)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-              config.enabled ? 'bg-purple-600' : 'bg-neutral-300 dark:bg-neutral-600'
-            }`}
+        {/* Trigger Type - Always visible, selected first */}
+        <Field>
+          <FieldLabel>Trigger Type</FieldLabel>
+          <Select
+            value={config.trigger_type}
+            onValueChange={(value) => updateConfigFn('trigger_type', value as AutomationTriggerType)}
           >
-            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-              config.enabled ? 'translate-x-6' : 'translate-x-1'
-            }`} />
-          </button>
-        </div>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="turnover">Turnover Association</SelectItem>
+              <SelectItem value="occupancy">Occupancy Period</SelectItem>
+              <SelectItem value="vacancy" disabled>Vacancy Period (coming soon)</SelectItem>
+              <SelectItem value="recurring" disabled>Recurring (coming soon)</SelectItem>
+            </SelectContent>
+          </Select>
+          <FieldDescription>When should this task be generated?</FieldDescription>
+        </Field>
+
+        {/* Enable Automation Toggle - different UI based on trigger type */}
+        {config.trigger_type === 'turnover' && (
+          <div className="flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-800 rounded-lg">
+            <div>
+              <div className="font-medium">Enable Auto-generation</div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={config.enabled}
+              onClick={() => updateConfigFn('enabled', !config.enabled)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                config.enabled ? 'bg-purple-600' : 'bg-neutral-300 dark:bg-neutral-600'
+              }`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                config.enabled ? 'translate-x-6' : 'translate-x-1'
+              }`} />
+            </button>
+          </div>
+        )}
+
+        {config.trigger_type === 'occupancy' && (
+          <div className="border rounded-lg p-4 space-y-4 bg-neutral-50 dark:bg-neutral-800">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-medium">Enable Auto-generation</div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={config.enabled}
+                onClick={() => updateConfigFn('enabled', !config.enabled)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  config.enabled ? 'bg-purple-600' : 'bg-neutral-300 dark:bg-neutral-600'
+                }`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  config.enabled ? 'translate-x-6' : 'translate-x-1'
+                }`} />
+              </button>
+            </div>
+            
+            {config.enabled && config.occupancy_condition && (
+              <div className="flex items-center gap-2 flex-wrap pt-2">
+                <span className="text-sm text-neutral-600 dark:text-neutral-400">If occupancy period is</span>
+                <Select
+                  value={config.occupancy_condition.operator}
+                  onValueChange={(value) => (isNew ? updateNewOccupancyCondition : updateOccupancyCondition)('operator', value as OccupancyDurationOperator)}
+                >
+                  <SelectTrigger className="w-44 h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gte">greater than or equal to</SelectItem>
+                    <SelectItem value="eq">equal to</SelectItem>
+                    <SelectItem value="gt">greater than</SelectItem>
+                    <SelectItem value="lt">less than</SelectItem>
+                    <SelectItem value="lte">less than or equal to</SelectItem>
+                    <SelectItem value="between">between</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  min={1}
+                  value={config.occupancy_condition.days}
+                  onChange={(e) => (isNew ? updateNewOccupancyCondition : updateOccupancyCondition)('days', parseInt(e.target.value) || 1)}
+                  className="w-20 h-9"
+                />
+                {config.occupancy_condition.operator === 'between' && (
+                  <>
+                    <span className="text-sm text-neutral-600 dark:text-neutral-400">and</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={config.occupancy_condition.days_end || config.occupancy_condition.days + 1}
+                      onChange={(e) => (isNew ? updateNewOccupancyCondition : updateOccupancyCondition)('days_end', parseInt(e.target.value) || 1)}
+                      className="w-20 h-9"
+                    />
+                  </>
+                )}
+                <span className="text-sm text-neutral-600 dark:text-neutral-400">days</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {config.enabled && (
           <>
-            {/* Trigger Type */}
-            <Field>
-              <FieldLabel>Trigger Type</FieldLabel>
-              <Select
-                value={config.trigger_type}
-                onValueChange={(value) => updateConfigFn('trigger_type', value as AutomationTriggerType)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="turnover">Turnover Association</SelectItem>
-                  <SelectItem value="occupancy" disabled>Occupancy Period (coming soon)</SelectItem>
-                  <SelectItem value="vacancy" disabled>Vacancy Period (coming soon)</SelectItem>
-                  <SelectItem value="recurring" disabled>Recurring (coming soon)</SelectItem>
-                </SelectContent>
-              </Select>
-              <FieldDescription>When should this task be generated?</FieldDescription>
-            </Field>
-
-            {/* Schedule Configuration */}
+            {/* TURNOVER-SPECIFIC: Schedule Configuration */}
+            {config.trigger_type === 'turnover' && (
             <div className="border rounded-lg p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -597,8 +736,10 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                       </div>
                     )}
             </div>
+            )}
 
-            {/* Same-Day Override */}
+            {/* TURNOVER-SPECIFIC: Same-Day Override */}
+            {config.trigger_type === 'turnover' && (
             <div className="border rounded-lg p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -698,8 +839,97 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                       </div>
                     )}
             </div>
+            )}
 
-            {/* Auto-Assign */}
+            {/* OCCUPANCY-SPECIFIC: Schedule Configuration */}
+            {config.trigger_type === 'occupancy' && config.occupancy_schedule && (() => {
+              const occSchedule = config.occupancy_schedule!;
+              return (
+              <div className="border rounded-lg p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-sm">Auto-Scheduling</div>
+                    <div className="text-xs text-neutral-500">Schedule task during occupancy period</div>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={occSchedule.enabled}
+                    onClick={() => (isNew ? updateNewOccupancySchedule : updateOccupancySchedule)('enabled', !occSchedule.enabled)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      occSchedule.enabled ? 'bg-purple-600' : 'bg-neutral-300 dark:bg-neutral-600'
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      occSchedule.enabled ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+
+                {occSchedule.enabled && (
+                  <div className="space-y-4 pt-2">
+                    {/* Day of occupancy */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm text-neutral-600 dark:text-neutral-400">Schedule task on day</span>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={occSchedule.day_of_occupancy}
+                        onChange={(e) => (isNew ? updateNewOccupancySchedule : updateOccupancySchedule)('day_of_occupancy', parseInt(e.target.value) || 1)}
+                        className="w-20 h-9"
+                      />
+                      <span className="text-sm text-neutral-600 dark:text-neutral-400">of occupancy at</span>
+                      <Input
+                        type="time"
+                        value={occSchedule.time || '10:00'}
+                        onChange={(e) => (isNew ? updateNewOccupancySchedule : updateOccupancySchedule)('time', e.target.value)}
+                        className="w-32 h-9"
+                      />
+                    </div>
+
+                    {/* Repeat scheduling */}
+                    <div className="border-t pt-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium text-sm">Repeat Scheduling</div>
+                          <div className="text-xs text-neutral-500">Create recurring tasks during the stay</div>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={occSchedule.repeat.enabled}
+                          onClick={() => (isNew ? updateNewOccupancyRepeat : updateOccupancyRepeat)('enabled', !occSchedule.repeat.enabled)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            occSchedule.repeat.enabled ? 'bg-purple-600' : 'bg-neutral-300 dark:bg-neutral-600'
+                          }`}
+                        >
+                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            occSchedule.repeat.enabled ? 'translate-x-6' : 'translate-x-1'
+                          }`} />
+                        </button>
+                      </div>
+
+                      {occSchedule.repeat.enabled && (
+                        <div className="flex items-center gap-2 flex-wrap pt-3">
+                          <span className="text-sm text-neutral-600 dark:text-neutral-400">Repeats every</span>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={occSchedule.repeat.interval_days}
+                            onChange={(e) => (isNew ? updateNewOccupancyRepeat : updateOccupancyRepeat)('interval_days', parseInt(e.target.value) || 1)}
+                            className="w-20 h-9"
+                          />
+                          <span className="text-sm text-neutral-600 dark:text-neutral-400">day(s)</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              );
+            })()}
+
+            {/* Auto-Assign (shared for all trigger types) */}
             <div className="border rounded-lg p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
