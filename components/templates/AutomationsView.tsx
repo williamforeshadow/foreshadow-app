@@ -20,15 +20,12 @@ import {
 } from '@/components/ui/select';
 import {
   type AutomationConfig,
-  type AutomationTriggerType,
-  type AutomationScheduleType,
-  type AutomationScheduleRelativeTo,
   type AutomationPreset,
   type PropertyTemplateAssignment,
   type User,
-  type OccupancyDurationOperator,
   createDefaultAutomationConfig,
 } from '@/lib/types';
+import AutomationConfigForm from './AutomationConfigForm';
 
 interface Template {
   id: string;
@@ -188,6 +185,22 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
           interval_days: saved.occupancy_schedule?.repeat?.interval_days ?? defaults.occupancy_schedule!.repeat.interval_days,
         },
       },
+      // Vacancy-specific fields
+      vacancy_condition: {
+        operator: saved.vacancy_condition?.operator ?? defaults.vacancy_condition!.operator,
+        days: saved.vacancy_condition?.days ?? defaults.vacancy_condition!.days,
+        days_end: saved.vacancy_condition?.days_end,
+      },
+      vacancy_schedule: {
+        enabled: saved.vacancy_schedule?.enabled ?? defaults.vacancy_schedule!.enabled,
+        day_of_vacancy: saved.vacancy_schedule?.day_of_vacancy ?? defaults.vacancy_schedule!.day_of_vacancy,
+        time: saved.vacancy_schedule?.time ?? defaults.vacancy_schedule!.time,
+        repeat: {
+          enabled: saved.vacancy_schedule?.repeat?.enabled ?? defaults.vacancy_schedule!.repeat.enabled,
+          interval_days: saved.vacancy_schedule?.repeat?.interval_days ?? defaults.vacancy_schedule!.repeat.interval_days,
+        },
+        max_days_ahead: saved.vacancy_schedule?.max_days_ahead ?? defaults.vacancy_schedule!.max_days_ahead,
+      },
       preset_id: saved.preset_id ?? null,
     } : defaults;
     
@@ -201,128 +214,6 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
     defaultConfig.enabled = true; // Enable by default when adding
     setNewAutomationConfig(defaultConfig);
     setShowAddDialog(true);
-  };
-
-  // Config update helpers
-  const updateConfig = <K extends keyof AutomationConfig>(key: K, value: AutomationConfig[K]) => {
-    if (!automationConfig) return;
-    setAutomationConfig({ ...automationConfig, [key]: value });
-  };
-
-  const updateSchedule = (field: string, value: unknown) => {
-    if (!automationConfig) return;
-    setAutomationConfig({
-      ...automationConfig,
-      schedule: { ...automationConfig.schedule, [field]: value }
-    });
-  };
-
-  const updateSameDaySchedule = (field: string, value: unknown) => {
-    if (!automationConfig) return;
-    setAutomationConfig({
-      ...automationConfig,
-      same_day_override: {
-        ...automationConfig.same_day_override,
-        schedule: { ...automationConfig.same_day_override.schedule, [field]: value }
-      }
-    });
-  };
-
-  const updateAutoAssign = (field: string, value: unknown) => {
-    if (!automationConfig) return;
-    setAutomationConfig({
-      ...automationConfig,
-      auto_assign: { ...automationConfig.auto_assign, [field]: value }
-    });
-  };
-
-  // New automation config helpers
-  const updateNewConfig = <K extends keyof AutomationConfig>(key: K, value: AutomationConfig[K]) => {
-    if (!newAutomationConfig) return;
-    setNewAutomationConfig({ ...newAutomationConfig, [key]: value });
-  };
-
-  const updateNewSchedule = (field: string, value: unknown) => {
-    if (!newAutomationConfig) return;
-    setNewAutomationConfig({
-      ...newAutomationConfig,
-      schedule: { ...newAutomationConfig.schedule, [field]: value }
-    });
-  };
-
-  const updateNewSameDaySchedule = (field: string, value: unknown) => {
-    if (!newAutomationConfig) return;
-    setNewAutomationConfig({
-      ...newAutomationConfig,
-      same_day_override: {
-        ...newAutomationConfig.same_day_override,
-        schedule: { ...newAutomationConfig.same_day_override.schedule, [field]: value }
-      }
-    });
-  };
-
-  const updateNewAutoAssign = (field: string, value: unknown) => {
-    if (!newAutomationConfig) return;
-    setNewAutomationConfig({
-      ...newAutomationConfig,
-      auto_assign: { ...newAutomationConfig.auto_assign, [field]: value }
-    });
-  };
-
-  // Occupancy condition update helpers
-  const updateOccupancyCondition = (field: string, value: unknown) => {
-    if (!automationConfig) return;
-    setAutomationConfig({
-      ...automationConfig,
-      occupancy_condition: { ...automationConfig.occupancy_condition!, [field]: value }
-    });
-  };
-
-  const updateNewOccupancyCondition = (field: string, value: unknown) => {
-    if (!newAutomationConfig) return;
-    setNewAutomationConfig({
-      ...newAutomationConfig,
-      occupancy_condition: { ...newAutomationConfig.occupancy_condition!, [field]: value }
-    });
-  };
-
-  // Occupancy schedule update helpers
-  const updateOccupancySchedule = (field: string, value: unknown) => {
-    if (!automationConfig) return;
-    setAutomationConfig({
-      ...automationConfig,
-      occupancy_schedule: { ...automationConfig.occupancy_schedule!, [field]: value }
-    });
-  };
-
-  const updateNewOccupancySchedule = (field: string, value: unknown) => {
-    if (!newAutomationConfig) return;
-    setNewAutomationConfig({
-      ...newAutomationConfig,
-      occupancy_schedule: { ...newAutomationConfig.occupancy_schedule!, [field]: value }
-    });
-  };
-
-  const updateOccupancyRepeat = (field: string, value: unknown) => {
-    if (!automationConfig?.occupancy_schedule) return;
-    setAutomationConfig({
-      ...automationConfig,
-      occupancy_schedule: {
-        ...automationConfig.occupancy_schedule,
-        repeat: { ...automationConfig.occupancy_schedule.repeat, [field]: value }
-      }
-    });
-  };
-
-  const updateNewOccupancyRepeat = (field: string, value: unknown) => {
-    if (!newAutomationConfig?.occupancy_schedule) return;
-    setNewAutomationConfig({
-      ...newAutomationConfig,
-      occupancy_schedule: {
-        ...newAutomationConfig.occupancy_schedule,
-        repeat: { ...newAutomationConfig.occupancy_schedule.repeat, [field]: value }
-      }
-    });
   };
 
   // Save existing automation config
@@ -498,35 +389,6 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
     }
   };
 
-  // Load preset
-  const loadPreset = (preset: AutomationPreset, isNew: boolean = false) => {
-    const config = isNew ? newAutomationConfig : automationConfig;
-    const setConfig = isNew ? setNewAutomationConfig : setAutomationConfig;
-    
-    if (!config) return;
-    setConfig({
-      ...config,
-      trigger_type: preset.trigger_type,
-      schedule: preset.config.schedule,
-      same_day_override: preset.config.same_day_override,
-      auto_assign: preset.config.auto_assign,
-      preset_id: preset.id,
-    });
-  };
-
-  // Toggle user assignment
-  const toggleUserAssignment = (userId: string, isNew: boolean = false) => {
-    const config = isNew ? newAutomationConfig : automationConfig;
-    const updateFn = isNew ? updateNewAutoAssign : updateAutoAssign;
-    
-    if (!config) return;
-    const currentIds = config.auto_assign.user_ids;
-    const newIds = currentIds.includes(userId)
-      ? currentIds.filter(id => id !== userId)
-      : [...currentIds, userId];
-    updateFn('user_ids', newIds);
-  };
-
   if (loading) {
     return (
       <div className="text-center py-12 text-neutral-500">
@@ -534,510 +396,6 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
       </div>
     );
   }
-
-  // Render automation config form (reusable for both edit and add dialogs)
-  const renderAutomationForm = (config: AutomationConfig, isNew: boolean = false) => {
-    const updateConfigFn = isNew ? updateNewConfig : updateConfig;
-    const updateScheduleFn = isNew ? updateNewSchedule : updateSchedule;
-    const updateSameDayFn = isNew ? updateNewSameDaySchedule : updateSameDaySchedule;
-    const updateAutoAssignFn = isNew ? updateNewAutoAssign : updateAutoAssign;
-
-    return (
-      <div className="space-y-6">
-        {/* Trigger Type - Always visible, selected first */}
-        <Field>
-          <FieldLabel>Trigger Type</FieldLabel>
-          <Select
-            value={config.trigger_type}
-            onValueChange={(value) => updateConfigFn('trigger_type', value as AutomationTriggerType)}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="turnover">Turnover Association</SelectItem>
-              <SelectItem value="occupancy">Occupancy Period</SelectItem>
-              <SelectItem value="vacancy" disabled>Vacancy Period (coming soon)</SelectItem>
-              <SelectItem value="recurring" disabled>Recurring (coming soon)</SelectItem>
-            </SelectContent>
-          </Select>
-          <FieldDescription>When should this task be generated?</FieldDescription>
-        </Field>
-
-        {/* Enable Automation Toggle - different UI based on trigger type */}
-        {config.trigger_type === 'turnover' && (
-          <div className="flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-800 rounded-lg">
-            <div>
-              <div className="font-medium">Enable Auto-generation</div>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={config.enabled}
-              onClick={() => updateConfigFn('enabled', !config.enabled)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                config.enabled ? 'bg-purple-600' : 'bg-neutral-300 dark:bg-neutral-600'
-              }`}
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                config.enabled ? 'translate-x-6' : 'translate-x-1'
-              }`} />
-            </button>
-          </div>
-        )}
-
-        {config.trigger_type === 'occupancy' && (
-          <div className="border rounded-lg p-4 space-y-4 bg-neutral-50 dark:bg-neutral-800">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium">Enable Auto-generation</div>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={config.enabled}
-                onClick={() => updateConfigFn('enabled', !config.enabled)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  config.enabled ? 'bg-purple-600' : 'bg-neutral-300 dark:bg-neutral-600'
-                }`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  config.enabled ? 'translate-x-6' : 'translate-x-1'
-                }`} />
-              </button>
-            </div>
-            
-            {config.enabled && config.occupancy_condition && (
-              <div className="flex items-center gap-2 flex-wrap pt-2">
-                <span className="text-sm text-neutral-600 dark:text-neutral-400">If occupancy period is</span>
-                <Select
-                  value={config.occupancy_condition.operator}
-                  onValueChange={(value) => (isNew ? updateNewOccupancyCondition : updateOccupancyCondition)('operator', value as OccupancyDurationOperator)}
-                >
-                  <SelectTrigger className="w-44 h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="gte">greater than or equal to</SelectItem>
-                    <SelectItem value="eq">equal to</SelectItem>
-                    <SelectItem value="gt">greater than</SelectItem>
-                    <SelectItem value="lt">less than</SelectItem>
-                    <SelectItem value="lte">less than or equal to</SelectItem>
-                    <SelectItem value="between">between</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="number"
-                  min={1}
-                  value={config.occupancy_condition.days}
-                  onChange={(e) => (isNew ? updateNewOccupancyCondition : updateOccupancyCondition)('days', parseInt(e.target.value) || 1)}
-                  className="w-20 h-9"
-                />
-                {config.occupancy_condition.operator === 'between' && (
-                  <>
-                    <span className="text-sm text-neutral-600 dark:text-neutral-400">and</span>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={config.occupancy_condition.days_end || config.occupancy_condition.days + 1}
-                      onChange={(e) => (isNew ? updateNewOccupancyCondition : updateOccupancyCondition)('days_end', parseInt(e.target.value) || 1)}
-                      className="w-20 h-9"
-                    />
-                  </>
-                )}
-                <span className="text-sm text-neutral-600 dark:text-neutral-400">days</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {config.enabled && (
-          <>
-            {/* TURNOVER-SPECIFIC: Schedule Configuration */}
-            {config.trigger_type === 'turnover' && (
-            <div className="border rounded-lg p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-medium text-sm">Auto-Scheduling</div>
-                  <div className="text-xs text-neutral-500">Automatically set task scheduled time</div>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={config.schedule.enabled}
-                  onClick={() => updateScheduleFn('enabled', !config.schedule.enabled)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    config.schedule.enabled ? 'bg-purple-600' : 'bg-neutral-300 dark:bg-neutral-600'
-                  }`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    config.schedule.enabled ? 'translate-x-6' : 'translate-x-1'
-                  }`} />
-                </button>
-              </div>
-
-                    {config.schedule.enabled && (
-                      <div className="grid grid-cols-4 gap-3 pt-2">
-                        <Field>
-                          <FieldLabel className="text-xs">When</FieldLabel>
-                          <Select
-                            value={config.schedule.type}
-                            onValueChange={(value) => updateScheduleFn('type', value as AutomationScheduleType)}
-                          >
-                            <SelectTrigger className="h-9">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="on">On</SelectItem>
-                              <SelectItem value="before">Before</SelectItem>
-                              <SelectItem value="after">After</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </Field>
-
-                        {config.schedule.type !== 'on' && (
-                          <Field>
-                            <FieldLabel className="text-xs">Days</FieldLabel>
-                            <Input
-                              type="number"
-                              min={0}
-                              value={config.schedule.days_offset}
-                              onChange={(e) => updateScheduleFn('days_offset', parseInt(e.target.value) || 0)}
-                              className="h-9"
-                            />
-                          </Field>
-                        )}
-
-                        <Field>
-                          <FieldLabel className="text-xs">Relative to</FieldLabel>
-                          <Select
-                            value={config.schedule.relative_to}
-                            onValueChange={(value) => updateScheduleFn('relative_to', value as AutomationScheduleRelativeTo)}
-                          >
-                            <SelectTrigger className="h-9">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="check_out">Check Out</SelectItem>
-                              <SelectItem value="next_check_in">Next Check In</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </Field>
-
-                        <Field>
-                          <FieldLabel className="text-xs">Time</FieldLabel>
-                          <Input
-                            type="time"
-                            value={config.schedule.time || '10:00'}
-                            onChange={(e) => updateScheduleFn('time', e.target.value)}
-                            className="h-9"
-                          />
-                        </Field>
-                      </div>
-                    )}
-            </div>
-            )}
-
-            {/* TURNOVER-SPECIFIC: Same-Day Override */}
-            {config.trigger_type === 'turnover' && (
-            <div className="border rounded-lg p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-medium text-sm">Same-Day Turnover Override</div>
-                  <div className="text-xs text-neutral-500">Different scheduling when check-out and next check-in are same day</div>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={config.same_day_override.enabled}
-                  onClick={() => {
-                    if (isNew && newAutomationConfig) {
-                      setNewAutomationConfig({
-                        ...newAutomationConfig,
-                        same_day_override: {
-                          ...newAutomationConfig.same_day_override,
-                          enabled: !newAutomationConfig.same_day_override.enabled
-                        }
-                      });
-                    } else if (automationConfig) {
-                      setAutomationConfig({
-                        ...automationConfig,
-                        same_day_override: {
-                          ...automationConfig.same_day_override,
-                          enabled: !automationConfig.same_day_override.enabled
-                        }
-                      });
-                    }
-                  }}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    config.same_day_override.enabled ? 'bg-purple-600' : 'bg-neutral-300 dark:bg-neutral-600'
-                  }`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    config.same_day_override.enabled ? 'translate-x-6' : 'translate-x-1'
-                  }`} />
-                </button>
-              </div>
-
-                    {config.same_day_override.enabled && (
-                      <div className="grid grid-cols-4 gap-3 pt-2">
-                        <Field>
-                          <FieldLabel className="text-xs">When</FieldLabel>
-                          <Select
-                            value={config.same_day_override.schedule.type}
-                            onValueChange={(value) => updateSameDayFn('type', value as AutomationScheduleType)}
-                          >
-                            <SelectTrigger className="h-9">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="on">On</SelectItem>
-                              <SelectItem value="before">Before</SelectItem>
-                              <SelectItem value="after">After</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </Field>
-
-                        {config.same_day_override.schedule.type !== 'on' && (
-                          <Field>
-                            <FieldLabel className="text-xs">Days</FieldLabel>
-                            <Input
-                              type="number"
-                              min={0}
-                              value={config.same_day_override.schedule.days_offset}
-                              onChange={(e) => updateSameDayFn('days_offset', parseInt(e.target.value) || 0)}
-                              className="h-9"
-                            />
-                          </Field>
-                        )}
-
-                        <Field>
-                          <FieldLabel className="text-xs">Relative to</FieldLabel>
-                          <Select
-                            value={config.same_day_override.schedule.relative_to}
-                            onValueChange={(value) => updateSameDayFn('relative_to', value as AutomationScheduleRelativeTo)}
-                          >
-                            <SelectTrigger className="h-9">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="check_out">Check Out</SelectItem>
-                              <SelectItem value="next_check_in">Next Check In</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </Field>
-
-                        <Field>
-                          <FieldLabel className="text-xs">Time</FieldLabel>
-                          <Input
-                            type="time"
-                            value={config.same_day_override.schedule.time || '10:00'}
-                            onChange={(e) => updateSameDayFn('time', e.target.value)}
-                            className="h-9"
-                          />
-                        </Field>
-                      </div>
-                    )}
-            </div>
-            )}
-
-            {/* OCCUPANCY-SPECIFIC: Schedule Configuration */}
-            {config.trigger_type === 'occupancy' && config.occupancy_schedule && (() => {
-              const occSchedule = config.occupancy_schedule!;
-              return (
-              <div className="border rounded-lg p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium text-sm">Auto-Scheduling</div>
-                    <div className="text-xs text-neutral-500">Schedule task during occupancy period</div>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={occSchedule.enabled}
-                    onClick={() => (isNew ? updateNewOccupancySchedule : updateOccupancySchedule)('enabled', !occSchedule.enabled)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      occSchedule.enabled ? 'bg-purple-600' : 'bg-neutral-300 dark:bg-neutral-600'
-                    }`}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      occSchedule.enabled ? 'translate-x-6' : 'translate-x-1'
-                    }`} />
-                  </button>
-                </div>
-
-                {occSchedule.enabled && (
-                  <div className="space-y-4 pt-2">
-                    {/* Day of occupancy */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm text-neutral-600 dark:text-neutral-400">Schedule task on day</span>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={occSchedule.day_of_occupancy}
-                        onChange={(e) => (isNew ? updateNewOccupancySchedule : updateOccupancySchedule)('day_of_occupancy', parseInt(e.target.value) || 1)}
-                        className="w-20 h-9"
-                      />
-                      <span className="text-sm text-neutral-600 dark:text-neutral-400">of occupancy at</span>
-                      <Input
-                        type="time"
-                        value={occSchedule.time || '10:00'}
-                        onChange={(e) => (isNew ? updateNewOccupancySchedule : updateOccupancySchedule)('time', e.target.value)}
-                        className="w-32 h-9"
-                      />
-                    </div>
-
-                    {/* Repeat scheduling */}
-                    <div className="border-t pt-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium text-sm">Repeat Scheduling</div>
-                          <div className="text-xs text-neutral-500">Create recurring tasks during the stay</div>
-                        </div>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={occSchedule.repeat.enabled}
-                          onClick={() => (isNew ? updateNewOccupancyRepeat : updateOccupancyRepeat)('enabled', !occSchedule.repeat.enabled)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                            occSchedule.repeat.enabled ? 'bg-purple-600' : 'bg-neutral-300 dark:bg-neutral-600'
-                          }`}
-                        >
-                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            occSchedule.repeat.enabled ? 'translate-x-6' : 'translate-x-1'
-                          }`} />
-                        </button>
-                      </div>
-
-                      {occSchedule.repeat.enabled && (
-                        <div className="flex items-center gap-2 flex-wrap pt-3">
-                          <span className="text-sm text-neutral-600 dark:text-neutral-400">Repeats every</span>
-                          <Input
-                            type="number"
-                            min={1}
-                            value={occSchedule.repeat.interval_days}
-                            onChange={(e) => (isNew ? updateNewOccupancyRepeat : updateOccupancyRepeat)('interval_days', parseInt(e.target.value) || 1)}
-                            className="w-20 h-9"
-                          />
-                          <span className="text-sm text-neutral-600 dark:text-neutral-400">day(s)</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-              );
-            })()}
-
-            {/* Auto-Assign (shared for all trigger types) */}
-            <div className="border rounded-lg p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-medium text-sm">Auto-Assign Users</div>
-                  <div className="text-xs text-neutral-500">Automatically assign users to generated tasks</div>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={config.auto_assign.enabled}
-                  onClick={() => updateAutoAssignFn('enabled', !config.auto_assign.enabled)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    config.auto_assign.enabled ? 'bg-purple-600' : 'bg-neutral-300 dark:bg-neutral-600'
-                  }`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    config.auto_assign.enabled ? 'translate-x-6' : 'translate-x-1'
-                  }`} />
-                </button>
-              </div>
-
-              {config.auto_assign.enabled && (
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                  {users.map((user) => {
-                    const isSelected = config.auto_assign.user_ids.includes(user.id);
-                    return (
-                      <label
-                        key={user.id}
-                        className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
-                          isSelected 
-                            ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-300 dark:border-purple-700' 
-                            : 'hover:bg-neutral-50 dark:hover:bg-neutral-800'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleUserAssignment(user.id, isNew)}
-                          className="rounded border-neutral-300"
-                        />
-                        <span className="text-lg">{user.avatar || '👤'}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{user.name}</div>
-                          <div className="text-xs text-neutral-500 truncate">{user.role}</div>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Preset Actions (only for edit dialog) */}
-            {!isNew && (
-              <div className="flex items-center gap-2 pt-4 border-t">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowPresetDialog(true)}
-                >
-                  Save as Preset
-                </Button>
-                {presets.length > 0 && (
-                  <Select onValueChange={(presetId) => {
-                    const preset = presets.find(p => p.id === presetId);
-                    if (preset) loadPreset(preset, false);
-                  }}>
-                    <SelectTrigger className="w-48 h-9">
-                      <SelectValue placeholder="Load preset..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {presets.map((preset) => (
-                        <SelectItem key={preset.id} value={preset.id}>
-                          {preset.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            )}
-
-            {/* Preset Actions for new dialog */}
-            {isNew && presets.length > 0 && (
-              <div className="flex items-center gap-2 pt-4 border-t">
-                <Select onValueChange={(presetId) => {
-                  const preset = presets.find(p => p.id === presetId);
-                  if (preset) loadPreset(preset, true);
-                }}>
-                  <SelectTrigger className="w-48 h-9">
-                    <SelectValue placeholder="Load preset..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {presets.map((preset) => (
-                      <SelectItem key={preset.id} value={preset.id}>
-                        {preset.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    );
-  };
 
   return (
     <div className="flex h-full -m-6">
@@ -1306,7 +664,16 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
             </DialogDescription>
           </DialogHeader>
 
-          {automationConfig && renderAutomationForm(automationConfig, false)}
+          {automationConfig && (
+            <AutomationConfigForm
+              config={automationConfig}
+              onChange={setAutomationConfig}
+              users={users}
+              presets={presets}
+              isNew={false}
+              onSavePreset={() => setShowPresetDialog(true)}
+            />
+          )}
 
           <DialogFooter className="mt-6">
             <Button type="button" variant="outline" onClick={() => setEditingAssignment(null)}>
@@ -1358,7 +725,15 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
             </Field>
 
             {/* Automation Config */}
-            {selectedTemplateId && newAutomationConfig && renderAutomationForm(newAutomationConfig, true)}
+            {selectedTemplateId && newAutomationConfig && (
+              <AutomationConfigForm
+                config={newAutomationConfig}
+                onChange={setNewAutomationConfig}
+                users={users}
+                presets={presets}
+                isNew={true}
+              />
+            )}
           </div>
 
           <DialogFooter className="mt-6">
@@ -1452,7 +827,15 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
             </Field>
 
             {/* Automation Config */}
-            {selectedTemplateId && newAutomationConfig && renderAutomationForm(newAutomationConfig, true)}
+            {selectedTemplateId && newAutomationConfig && (
+              <AutomationConfigForm
+                config={newAutomationConfig}
+                onChange={setNewAutomationConfig}
+                users={users}
+                presets={presets}
+                isNew={true}
+              />
+            )}
           </div>
 
           <DialogFooter className="mt-6">

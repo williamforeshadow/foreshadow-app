@@ -263,6 +263,29 @@ export interface OccupancyScheduleConfig {
   };
 }
 
+// ============================================================================
+// Vacancy Period Automation Types
+// ============================================================================
+
+/** Vacancy duration condition for determining which vacancy periods get the task */
+export interface VacancyDurationCondition {
+  operator: OccupancyDurationOperator; // Reuse same operators
+  days: number;
+  days_end?: number; // Only used for 'between' operator
+}
+
+/** Vacancy schedule configuration - when to schedule during vacancy */
+export interface VacancyScheduleConfig {
+  enabled: boolean;
+  day_of_vacancy: number; // Schedule on Nth full day of vacancy
+  time: string; // Time of day in 24-hour format
+  repeat: {
+    enabled: boolean;
+    interval_days: number; // Repeat every N days
+  };
+  max_days_ahead: number; // Cap for generating tasks when next_check_in is unknown
+}
+
 /** Full automation configuration stored in property_templates.automation_config */
 export interface AutomationConfig {
   enabled: boolean;
@@ -273,6 +296,9 @@ export interface AutomationConfig {
   // Occupancy-specific config
   occupancy_condition?: OccupancyDurationCondition;
   occupancy_schedule?: OccupancyScheduleConfig;
+  // Vacancy-specific config
+  vacancy_condition?: VacancyDurationCondition;
+  vacancy_schedule?: VacancyScheduleConfig;
   // Shared config
   auto_assign: AutomationAutoAssignConfig;
   preset_id?: string | null;
@@ -333,6 +359,21 @@ export function createDefaultAutomationConfig(): AutomationConfig {
         enabled: false,
         interval_days: 7,
       },
+    },
+    // Vacancy-specific defaults
+    vacancy_condition: {
+      operator: 'gte',
+      days: 7,
+    },
+    vacancy_schedule: {
+      enabled: false,
+      day_of_vacancy: 1,
+      time: '10:00',
+      repeat: {
+        enabled: false,
+        interval_days: 7,
+      },
+      max_days_ahead: 90,
     },
     // Shared defaults
     auto_assign: {
