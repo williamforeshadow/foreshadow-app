@@ -103,21 +103,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if this task already exists for this reservation
-    const { data: existing } = await supabase
-      .from('turnover_tasks')
-      .select('id')
-      .eq('reservation_id', reservation_id)
-      .eq('template_id', template_id)
-      .single();
-
-    if (existing) {
-      return NextResponse.json(
-        { error: 'This task already exists for this turnover' },
-        { status: 409 }
-      );
-    }
-
     // Get reservation details for scheduling calculation
     const { data: reservation, error: reservationError } = await supabase
       .from('reservations')

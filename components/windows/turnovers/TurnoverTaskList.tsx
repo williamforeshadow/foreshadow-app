@@ -53,19 +53,13 @@ function getStatusStyles(status: string) {
 
 function AddTaskDialog({
   templates,
-  existingTaskTemplateIds,
   onSelect,
   onClose,
 }: {
   templates: TaskTemplateBasic[];
-  existingTaskTemplateIds: string[];
   onSelect: (templateId: string) => void;
   onClose: () => void;
 }) {
-  const availableTemplates = templates.filter(
-    template => !existingTaskTemplateIds.includes(template.id)
-  );
-
   return (
     <div className="mt-3 p-4 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-neutral-50 dark:bg-neutral-800">
       <div className="flex items-center justify-between mb-3">
@@ -75,7 +69,7 @@ function AddTaskDialog({
 
       {templates.length > 0 ? (
         <div className="space-y-2 max-h-48 overflow-y-auto">
-          {availableTemplates.map((template) => (
+          {templates.map((template) => (
             <button
               key={template.id}
               className="w-full p-3 text-left border border-neutral-200 dark:border-neutral-700 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
@@ -109,7 +103,6 @@ export function TurnoverTaskList({
   fetchTaskTemplate,
 }: TurnoverTaskListProps) {
   const tasks = selectedCard.tasks || [];
-  const existingTaskTemplateIds = tasks.map(t => t.template_id).filter(Boolean) as string[];
 
   const handleAddTaskClick = () => {
     onFetchTemplates();
@@ -132,7 +125,6 @@ export function TurnoverTaskList({
         {showAddTaskDialog && (
           <AddTaskDialog
             templates={availableTemplates}
-            existingTaskTemplateIds={[]}
             onSelect={onAddTask}
             onClose={() => setShowAddTaskDialog(false)}
           />
@@ -300,7 +292,6 @@ export function TurnoverTaskList({
       {showAddTaskDialog && (
         <AddTaskDialog
           templates={availableTemplates}
-          existingTaskTemplateIds={existingTaskTemplateIds}
           onSelect={onAddTask}
           onClose={() => setShowAddTaskDialog(false)}
         />
