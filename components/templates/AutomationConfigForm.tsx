@@ -23,6 +23,7 @@ import {
   type AutomationPreset,
   type User,
   type OccupancyDurationOperator,
+  type RecurringIntervalUnit,
 } from '@/lib/types';
 
 // ============================================================================
@@ -253,6 +254,11 @@ export default function AutomationConfigForm({
     });
   };
 
+  // ---- Recurring helpers ----
+  const updateRecurringSchedule = (field: string, value: unknown) => {
+    onChange({ ...config, recurring_schedule: { ...config.recurring_schedule!, [field]: value } });
+  };
+
   // ---- Vacancy helpers ----
   const updateVacancyCondition = (field: string, value: unknown) => {
     onChange({ ...config, vacancy_condition: { ...config.vacancy_condition!, [field]: value } });
@@ -312,7 +318,7 @@ export default function AutomationConfigForm({
             <SelectItem value="turnover">Turnover Association</SelectItem>
             <SelectItem value="occupancy">Occupancy Period</SelectItem>
             <SelectItem value="vacancy">Vacancy Period</SelectItem>
-            <SelectItem value="recurring" disabled>Recurring (coming soon)</SelectItem>
+            <SelectItem value="recurring">Recurring</SelectItem>
           </SelectContent>
         </Select>
         <FieldDescription>When should this task be generated?</FieldDescription>
@@ -371,6 +377,18 @@ export default function AutomationConfigForm({
               onUpdate={updateVacancyCondition}
             />
           )}
+        </div>
+      )}
+
+      {/* ================================================================
+          Enable Auto-generation — Recurring (with schedule)
+          ================================================================ */}
+      {config.trigger_type === 'recurring' && (
+        <div className="flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-800 rounded-lg">
+          <div>
+            <div className="font-medium">Enable Auto-generation</div>
+          </div>
+          <Toggle checked={config.enabled} onChange={() => updateConfig('enabled', !config.enabled)} />
         </div>
       )}
 
@@ -574,6 +592,60 @@ export default function AutomationConfigForm({
                 </div>
               )}
             </>
+          )}
+
+          {/* RECURRING: Schedule Configuration */}
+          {config.trigger_type === 'recurring' && config.recurring_schedule && (
+            <div className="border rounded-lg p-4 space-y-4">
+              <div className="font-medium text-sm">Recurring Schedule</div>
+              <div className="text-xs text-neutral-500">Configure when this task starts and how often it repeats</div>
+
+              <div className="space-y-4 pt-2">
+                {/* Start date and time */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm text-neutral-600 dark:text-neutral-400">Starting on</span>
+                  <Input
+                    type="date"
+                    value={config.recurring_schedule.start_date}
+                    onChange={(e) => updateRecurringSchedule('start_date', e.target.value)}
+                    className="w-44 h-9"
+                  />
+                  <span className="text-sm text-neutral-600 dark:text-neutral-400">at</span>
+                  <Input
+                    type="time"
+                    value={config.recurring_schedule.time}
+                    onChange={(e) => updateRecurringSchedule('time', e.target.value)}
+                    className="w-32 h-9"
+                  />
+                </div>
+
+                {/* Repeat interval */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm text-neutral-600 dark:text-neutral-400">Repeats every</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={config.recurring_schedule.interval_value}
+                    onChange={(e) => updateRecurringSchedule('interval_value', parseInt(e.target.value) || 1)}
+                    className="w-20 h-9"
+                  />
+                  <Select
+                    value={config.recurring_schedule.interval_unit}
+                    onValueChange={(value) => updateRecurringSchedule('interval_unit', value as RecurringIntervalUnit)}
+                  >
+                    <SelectTrigger className="w-32 h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="days">day(s)</SelectItem>
+                      <SelectItem value="weeks">week(s)</SelectItem>
+                      <SelectItem value="months">month(s)</SelectItem>
+                      <SelectItem value="years">year(s)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* ================================================================

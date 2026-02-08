@@ -286,6 +286,21 @@ export interface VacancyScheduleConfig {
   max_days_ahead: number; // Cap for generating tasks when next_check_in is unknown
 }
 
+// ============================================================================
+// Recurring Automation Types
+// ============================================================================
+
+/** Interval unit for recurring schedules */
+export type RecurringIntervalUnit = 'days' | 'weeks' | 'months' | 'years';
+
+/** Recurring schedule configuration */
+export interface RecurringScheduleConfig {
+  start_date: string; // ISO date string, e.g. "2026-03-01"
+  time: string; // 24-hour format, e.g. "10:00"
+  interval_value: number; // Every N...
+  interval_unit: RecurringIntervalUnit; // ...days/weeks/months/years
+}
+
 /** Full automation configuration stored in property_templates.automation_config */
 export interface AutomationConfig {
   enabled: boolean;
@@ -299,6 +314,8 @@ export interface AutomationConfig {
   // Vacancy-specific config
   vacancy_condition?: VacancyDurationCondition;
   vacancy_schedule?: VacancyScheduleConfig;
+  // Recurring-specific config
+  recurring_schedule?: RecurringScheduleConfig;
   // Shared config
   auto_assign: AutomationAutoAssignConfig;
   preset_id?: string | null;
@@ -374,6 +391,13 @@ export function createDefaultAutomationConfig(): AutomationConfig {
         interval_days: 7,
       },
       max_days_ahead: 90,
+    },
+    // Recurring-specific defaults
+    recurring_schedule: {
+      start_date: new Date().toISOString().split('T')[0], // Today
+      time: '10:00',
+      interval_value: 1,
+      interval_unit: 'months',
     },
     // Shared defaults
     auto_assign: {

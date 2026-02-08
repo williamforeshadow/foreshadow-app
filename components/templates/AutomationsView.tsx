@@ -201,6 +201,13 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
         },
         max_days_ahead: saved.vacancy_schedule?.max_days_ahead ?? defaults.vacancy_schedule!.max_days_ahead,
       },
+      // Recurring-specific fields
+      recurring_schedule: {
+        start_date: saved.recurring_schedule?.start_date ?? defaults.recurring_schedule!.start_date,
+        time: saved.recurring_schedule?.time ?? defaults.recurring_schedule!.time,
+        interval_value: saved.recurring_schedule?.interval_value ?? defaults.recurring_schedule!.interval_value,
+        interval_unit: saved.recurring_schedule?.interval_unit ?? defaults.recurring_schedule!.interval_unit,
+      },
       preset_id: saved.preset_id ?? null,
     } : defaults;
     
