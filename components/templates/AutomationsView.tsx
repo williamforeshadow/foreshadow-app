@@ -246,14 +246,18 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
         }),
       });
 
-      if (!res.ok) throw new Error('Failed to save automation config');
+      if (!res.ok) {
+        const errData = await res.json();
+        console.error('Save error details:', errData);
+        throw new Error(errData.error || 'Failed to save automation config');
+      }
 
       await fetchData();
       setEditingAssignment(null);
       setAutomationConfig(null);
     } catch (err) {
       console.error('Error saving automation config:', err);
-      alert('Failed to save automation configuration');
+      alert(err instanceof Error ? err.message : 'Failed to save automation configuration');
     } finally {
       setSaving(false);
     }
