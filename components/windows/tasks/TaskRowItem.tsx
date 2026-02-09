@@ -7,6 +7,7 @@ import type { TaskStatus, TaskType } from '@/lib/types';
 
 // Status badge styles
 export const statusStyles: Record<TaskStatus, string> = {
+  contingent: 'bg-neutral-50 text-neutral-400 dark:bg-neutral-900 dark:text-neutral-500 border border-dashed border-neutral-300 dark:border-neutral-600',
   not_started: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400',
   in_progress: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400',
   paused: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-400',

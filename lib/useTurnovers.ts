@@ -89,9 +89,11 @@ export function useTurnovers() {
 
   // Helper to calculate turnover_status
   const calculateTurnoverStatus = (tasks: Task[]): TurnoverStatus => {
-    const total = tasks.length;
-    const completed = tasks.filter((t) => t.status === 'complete').length;
-    const inProgress = tasks.filter((t) => t.status === 'in_progress').length;
+    // Exclude contingent tasks from turnover status calculation
+    const activeTasks = tasks.filter((t) => t.status !== 'contingent');
+    const total = activeTasks.length;
+    const completed = activeTasks.filter((t) => t.status === 'complete').length;
+    const inProgress = activeTasks.filter((t) => t.status === 'in_progress').length;
 
     if (total === 0) return 'no_tasks';
     if (completed === total) return 'complete';

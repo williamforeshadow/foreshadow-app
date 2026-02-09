@@ -55,6 +55,8 @@ export function getTurnoverStatusColor(status: string): string {
       return 'bg-yellow-500';
     case 'complete':
       return 'bg-green-500';
+    case 'contingent':
+      return 'bg-neutral-300';
     case 'no_tasks':
     default:
       return 'bg-neutral-400';

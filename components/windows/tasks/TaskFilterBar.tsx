@@ -138,7 +138,7 @@ export function TaskFilterBar({
 
         {/* Status filters */}
         <div className="flex items-center gap-1">
-          {(['not_started', 'in_progress', 'complete'] as TaskStatus[]).map(status => (
+          {(['contingent', 'not_started', 'in_progress', 'complete'] as TaskStatus[]).map(status => (
             <button
               key={status}
               onClick={() => toggleStatusFilter(status)}

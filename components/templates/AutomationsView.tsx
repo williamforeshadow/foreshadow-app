@@ -208,6 +208,12 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
         interval_value: saved.recurring_schedule?.interval_value ?? defaults.recurring_schedule!.interval_value,
         interval_unit: saved.recurring_schedule?.interval_unit ?? defaults.recurring_schedule!.interval_unit,
       },
+      // Contingent tasks config
+      contingent: {
+        enabled: saved.contingent?.enabled ?? defaults.contingent!.enabled,
+        auto_approve_enabled: saved.contingent?.auto_approve_enabled ?? defaults.contingent!.auto_approve_enabled,
+        auto_approve_days: saved.contingent?.auto_approve_days ?? defaults.contingent!.auto_approve_days,
+      },
       preset_id: saved.preset_id ?? null,
     } : defaults;
     

@@ -25,7 +25,7 @@ export interface AssignedUser {
 // Task Types
 // ============================================================================
 
-export type TaskStatus = 'not_started' | 'in_progress' | 'paused' | 'complete' | 'reopened';
+export type TaskStatus = 'contingent' | 'not_started' | 'in_progress' | 'paused' | 'complete' | 'reopened';
 export type TaskType = 'cleaning' | 'maintenance';
 
 export interface Task {
@@ -301,6 +301,13 @@ export interface RecurringScheduleConfig {
   interval_unit: RecurringIntervalUnit; // ...days/weeks/months/years
 }
 
+/** Contingent tasks configuration */
+export interface ContingentTasksConfig {
+  enabled: boolean;
+  auto_approve_enabled: boolean;
+  auto_approve_days: number; // Approve N days before scheduled date
+}
+
 /** Full automation configuration stored in property_templates.automation_config */
 export interface AutomationConfig {
   enabled: boolean;
@@ -316,6 +323,8 @@ export interface AutomationConfig {
   vacancy_schedule?: VacancyScheduleConfig;
   // Recurring-specific config
   recurring_schedule?: RecurringScheduleConfig;
+  // Contingent tasks config
+  contingent?: ContingentTasksConfig;
   // Shared config
   auto_assign: AutomationAutoAssignConfig;
   preset_id?: string | null;
@@ -398,6 +407,12 @@ export function createDefaultAutomationConfig(): AutomationConfig {
       time: '10:00',
       interval_value: 1,
       interval_unit: 'months',
+    },
+    // Contingent tasks defaults
+    contingent: {
+      enabled: false,
+      auto_approve_enabled: false,
+      auto_approve_days: 7,
     },
     // Shared defaults
     auto_assign: {

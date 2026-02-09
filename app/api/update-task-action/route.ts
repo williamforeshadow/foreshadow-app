@@ -9,7 +9,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Task ID and action are required' }, { status: 400 });
     }
 
-    const allowedActions = ['not_started', 'in_progress', 'paused', 'complete', 'reopened'];
+    const allowedActions = ['contingent', 'not_started', 'in_progress', 'paused', 'complete', 'reopened'];
     if (!allowedActions.includes(action)) {
       return NextResponse.json({ error: 'Invalid action provided' }, { status: 400 });
     }

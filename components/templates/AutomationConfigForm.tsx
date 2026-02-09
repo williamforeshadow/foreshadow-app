@@ -25,6 +25,7 @@ import {
   type OccupancyDurationOperator,
   type RecurringIntervalUnit,
 } from '@/lib/types';
+import ContingentTasksConfig from './ContingentTasksConfig';
 
 // ============================================================================
 // Props
@@ -646,6 +647,16 @@ export default function AutomationConfigForm({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* ================================================================
+              Contingent Tasks (shared for all trigger types)
+              ================================================================ */}
+          {config.contingent && (
+            <ContingentTasksConfig
+              config={config.contingent}
+              onChange={(contingent) => updateConfig('contingent', contingent)}
+            />
           )}
 
           {/* ================================================================

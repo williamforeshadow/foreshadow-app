@@ -15,7 +15,8 @@ import {
   Clock,
   Pause,
   RotateCcw,
-  Layers
+  Layers,
+  FileText
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -96,6 +97,7 @@ const getDefaultFilters = (kanbanDate: string): DynamicBoardFilters => ({
 // =============================================================================
 
 const TASK_STATUSES: { value: TaskStatus; label: string; icon: React.ReactNode }[] = [
+  { value: 'contingent', label: 'Contingent', icon: <FileText className="h-3 w-3 text-neutral-400" /> },
   { value: 'not_started', label: 'Not Started', icon: <AlertCircle className="h-3 w-3 text-red-500" /> },
   { value: 'in_progress', label: 'In Progress', icon: <Clock className="h-3 w-3 text-yellow-500" /> },
   { value: 'paused', label: 'Paused', icon: <Pause className="h-3 w-3 text-orange-500" /> },

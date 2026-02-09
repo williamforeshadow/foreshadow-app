@@ -242,11 +242,12 @@ export function useTasks() {
           break;
         case 'status':
           const statusOrder: Record<TaskStatus, number> = {
-            'not_started': 0,
-            'in_progress': 1,
-            'paused': 2,
-            'reopened': 3,
-            'complete': 4
+            'contingent': 0,
+            'not_started': 1,
+            'in_progress': 2,
+            'paused': 3,
+            'reopened': 4,
+            'complete': 5
           };
           comparison = statusOrder[a.status] - statusOrder[b.status];
           break;

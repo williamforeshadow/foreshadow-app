@@ -32,6 +32,7 @@ export function TaskDetailPanel({
   onShowTurnover,
 }: TaskDetailPanelProps) {
   const isAssigned = (task.assigned_users || []).some((u) => u.user_id === currentUser?.id);
+  const isContingent = task.status === 'contingent';
   const isNotStarted = task.status === 'not_started' || !task.status;
 
   return (
@@ -78,6 +79,8 @@ export function TaskDetailPanel({
                   ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
                   : task.status === 'paused'
                   ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
+                  : task.status === 'contingent'
+                  ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 border border-dashed border-neutral-300 dark:border-neutral-600'
                   : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200'
               }`}
             >
@@ -86,6 +89,7 @@ export function TaskDetailPanel({
                task.status === 'paused' ? 'Paused' :
                task.status === 'complete' ? 'Completed' :
                task.status === 'reopened' ? 'Reopened' :
+               task.status === 'contingent' ? 'Contingent' :
                'Not Started'}
             </Badge>
           </div>
@@ -98,7 +102,23 @@ export function TaskDetailPanel({
         </div>
 
         {/* TASK VIEW - Check assignment first, then status */}
-        {!isAssigned ? (
+        {isContingent ? (
+          /* CONTINGENT - Show approve button */
+          <div className="flex flex-col items-center justify-center py-12 gap-3">
+            <div className="text-center mb-2">
+              <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">This task is contingent</p>
+              <p className="text-xs text-neutral-500 mt-1">Approve it to make it active and visible to staff</p>
+            </div>
+            <Button
+              onClick={() => {
+                onUpdateStatus(task.task_id, 'not_started');
+                setTask({ ...task, status: 'not_started' });
+              }}
+            >
+              Approve Task
+            </Button>
+          </div>
+        ) : !isAssigned ? (
           /* NOT ASSIGNED - Block access to task */
           <div className="flex flex-col items-center justify-center py-12 gap-3">
             <Button disabled variant="outline">
