@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -105,6 +106,17 @@ export function TurnoverTaskList({
   fetchTaskTemplate,
 }: TurnoverTaskListProps) {
   const tasks = selectedCard.tasks || [];
+  const [showContingent, setShowContingent] = useState(false);
+
+  const sortBySchedule = (a: Task, b: Task) => {
+    if (!a.scheduled_start && !b.scheduled_start) return 0;
+    if (!a.scheduled_start) return 1;
+    if (!b.scheduled_start) return -1;
+    return new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime();
+  };
+
+  const approvedTasks = tasks.filter(t => t.status !== 'contingent').sort(sortBySchedule);
+  const contingentTasks = tasks.filter(t => t.status === 'contingent').sort(sortBySchedule);
 
   const handleAddTaskClick = () => {
     onFetchTemplates();
@@ -135,16 +147,7 @@ export function TurnoverTaskList({
     );
   }
 
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="text-xs text-neutral-500 dark:text-neutral-400">
-          Click a task to open
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        {tasks.map((task) => {
+  const renderTaskCard = (task: Task) => {
           const assignedUserIds = (task.assigned_users || []).map((u) => u.user_id);
           const taskStatus = task.status || 'not_started';
           const statusStyles = getStatusStyles(taskStatus);
@@ -278,8 +281,43 @@ export function TurnoverTaskList({
               </CardHeader>
             </Card>
           );
-        })}
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-neutral-500 dark:text-neutral-400">
+          Click a task to open
+        </div>
       </div>
+
+      {/* Approved Tasks */}
+      <div className="space-y-4">
+        {approvedTasks.map((task) => renderTaskCard(task))}
+      </div>
+
+      {/* Contingent Tasks Section */}
+      {contingentTasks.length > 0 && (
+        <>
+          <div className="border-t border-neutral-200 dark:border-neutral-700 pt-3">
+            <button
+              onClick={() => setShowContingent(!showContingent)}
+              className="w-full text-left text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 flex items-center gap-2"
+            >
+              <svg className={`h-4 w-4 transition-transform ${showContingent ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              Show {contingentTasks.length} contingent task{contingentTasks.length !== 1 ? 's' : ''}
+            </button>
+          </div>
+
+          {showContingent && (
+            <div className="space-y-4">
+              {contingentTasks.map((task) => renderTaskCard(task))}
+            </div>
+          )}
+        </>
+      )}
 
       {/* Add Task Button */}
       <Button

@@ -203,19 +203,26 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
                     {item.guest_name || 'No Guest'}
                   </CardDescription>
                   <CardAction>
-                    {item.total_tasks > 0 && (
-                      <Badge 
-                        className={`font-semibold px-2.5 py-1 ${
-                          item.turnover_status === 'complete' 
-                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
-                            : item.turnover_status === 'in_progress'
-                            ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800'
-                            : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800'
-                        }`}
-                      >
-                        {item.completed_tasks || 0}/{item.total_tasks}
-                      </Badge>
-                    )}
+                    {(() => {
+                      const approvedTasks = (item.tasks || []).filter(t => t.status !== 'contingent');
+                      const total = approvedTasks.length;
+                      const done = approvedTasks.filter(t => t.status === 'complete').length;
+                      const inProg = approvedTasks.some(t => t.status === 'in_progress' || t.status === 'complete');
+                      if (total === 0) return null;
+                      return (
+                        <Badge 
+                          className={`font-semibold px-2.5 py-1 ${
+                            done === total
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                              : inProg
+                              ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800'
+                              : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800'
+                          }`}
+                        >
+                          {done}/{total}
+                        </Badge>
+                      );
+                    })()}
                   </CardAction>
                 </CardHeader>
 
