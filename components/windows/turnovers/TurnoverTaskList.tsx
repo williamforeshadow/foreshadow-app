@@ -292,7 +292,7 @@ export function TurnoverTaskList({
       </div>
 
       {/* Approved Tasks */}
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         {approvedTasks.map((task) => renderTaskCard(task))}
       </div>
 
@@ -312,7 +312,7 @@ export function TurnoverTaskList({
           </div>
 
           {showContingent && (
-            <div className="space-y-4">
+            <div className="flex flex-col gap-4">
               {contingentTasks.map((task) => renderTaskCard(task))}
             </div>
           )}
