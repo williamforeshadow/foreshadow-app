@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/tooltip/tooltip';
 import AssignmentIcon from '@/components/icons/AssignmentIcon';
 import HammerIcon from '@/components/icons/HammerIcon';
+import { cn } from '@/lib/utils';
 import type { Task, Project } from '@/lib/types';
 
 interface ScheduledItemsCellProps {
@@ -168,6 +169,18 @@ export function ScheduledItemsCell({
       isSameDay(new Date(t.scheduled_start), date)
   );
 
+  // Split tasks into approved vs contingent for icon styling
+  const approvedTasks = scheduledTasks.filter(t => t.status !== 'contingent');
+  const contingentTasks = scheduledTasks.filter(t => t.status === 'contingent');
+
+  // Determine icon variant: approved-only, contingent-only, or mixed
+  const taskIconVariant: 'approved' | 'mixed' | 'contingent' =
+    approvedTasks.length > 0 && contingentTasks.length > 0
+      ? 'mixed'
+      : contingentTasks.length > 0
+        ? 'contingent'
+        : 'approved';
+
   // Filter projects scheduled for this property + date
   const scheduledProjects = projects.filter(
     (p) =>
@@ -196,7 +209,18 @@ export function ScheduledItemsCell({
           <>
             <HoverCard openDelay={0} closeDelay={0}>
               <HoverCardTrigger asChild>
-                <div className="flex items-center justify-center w-6 h-6 rounded bg-blue-500/80 text-white cursor-pointer hover:bg-blue-600">
+                <div
+                  className={cn(
+                    "flex items-center justify-center w-6 h-6 rounded cursor-pointer transition-colors",
+                    taskIconVariant === 'approved' && "bg-blue-500/80 text-white hover:bg-blue-600",
+                    taskIconVariant === 'contingent' && "border-[1.5px] border-dashed border-blue-400/70 text-blue-400 bg-blue-400/10 hover:bg-blue-400/20",
+                    taskIconVariant === 'mixed' && "text-white hover:brightness-110",
+                  )}
+                  style={taskIconVariant === 'mixed' ? {
+                    background: 'linear-gradient(135deg, rgba(59,130,246,0.8) 50%, rgba(147,197,253,0.15) 50%)',
+                    border: '1.5px dashed rgba(96,165,250,0.6)',
+                  } : undefined}
+                >
                   <AssignmentIcon size={14} />
                 </div>
               </HoverCardTrigger>
@@ -209,10 +233,22 @@ export function ScheduledItemsCell({
                     {scheduledTasks.map((task) => (
                       <div
                         key={task.task_id}
-                        className="flex items-center justify-between gap-2 py-2 px-2 -mx-2 rounded cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 border-l-2 border-transparent hover:border-blue-500 transition-colors"
+                        className={cn(
+                          "flex items-center justify-between gap-2 py-2 px-2 -mx-2 rounded cursor-pointer transition-colors",
+                          task.status === 'contingent'
+                            ? "border-l-2 border-dashed border-blue-400/50 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 text-muted-foreground"
+                            : "border-l-2 border-transparent hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                        )}
                         onClick={() => onTaskClick?.(task)}
                       >
-                        <span className="truncate text-sm">{task.template_name || task.type}</span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="truncate text-sm">{task.template_name || task.type}</span>
+                          {task.status === 'contingent' && (
+                            <span className="text-[10px] px-1 py-0.5 rounded bg-blue-100/50 dark:bg-blue-900/20 text-blue-500/70 dark:text-blue-400/60 whitespace-nowrap flex-shrink-0">
+                              contingent
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-0.5 flex-shrink-0">
                           {task.assigned_users?.slice(0, 3).map((user) => (
                             <UserAvatar

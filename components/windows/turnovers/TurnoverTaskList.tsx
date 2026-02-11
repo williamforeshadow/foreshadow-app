@@ -164,43 +164,42 @@ export function TurnoverTaskList({
               }}
             >
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">{task.template_name || 'Unnamed Task'}</CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (confirm('Remove this task from the turnover?')) {
-                        onDeleteTask(task.task_id);
-                      }
-                    }}
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </Button>
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="text-base truncate">{task.template_name || 'Unnamed Task'}</CardTitle>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Badge className={`px-2 py-0.5 text-xs border ${statusStyles.badge}`}>
+                      {taskStatus === 'complete' ? 'Complete' :
+                       taskStatus === 'in_progress' ? 'In Progress' :
+                       taskStatus === 'paused' ? 'Paused' :
+                       taskStatus === 'reopened' ? 'Reopened' :
+                       taskStatus === 'contingent' ? 'Contingent' :
+                       'Not Started'}
+                    </Badge>
+                    <Badge className={`px-2 py-0.5 text-xs border ${task.type === 'maintenance'
+                      ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                      : 'bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800'
+                    }`}>
+                      {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm('Remove this task from the turnover?')) {
+                          onDeleteTask(task.task_id);
+                        }
+                      }}
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2 mt-2">
-                  <Badge className={`px-2 py-0.5 text-xs border ${statusStyles.badge}`}>
-                    {taskStatus === 'complete' ? 'Complete' :
-                     taskStatus === 'in_progress' ? 'In Progress' :
-                     taskStatus === 'paused' ? 'Paused' :
-                     taskStatus === 'reopened' ? 'Reopened' :
-                     taskStatus === 'contingent' ? 'Contingent' :
-                     'Not Started'}
-                  </Badge>
-                  <Badge className={`px-2 py-0.5 text-xs border ${task.type === 'maintenance'
-                    ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                    : 'bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800'
-                  }`}>
-                    {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
-                  </Badge>
-                </div>
-
-                <div className="flex items-center justify-between mt-4 pt-3 border-t border-neutral-200 dark:border-neutral-700">
+                <div className="flex items-center justify-between mt-3">
                   <div className="flex items-center gap-2">
                     <Popover>
                       <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -247,7 +246,11 @@ export function TurnoverTaskList({
                         {assignedUserIds.length > 0 ? (
                           <span className="flex items-center gap-1">
                             {(task.assigned_users || []).slice(0, 2).map((u) => (
-                              <span key={u.user_id} title={u.name}>{u.avatar || '👤'}</span>
+                              u.avatar ? (
+                                <img key={u.user_id} src={u.avatar} alt={u.name} title={u.name} className="h-5 w-5 rounded-full object-cover" />
+                              ) : (
+                                <span key={u.user_id} title={u.name} className="h-5 w-5 rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-[10px]">👤</span>
+                              )
                             ))}
                             {assignedUserIds.length > 2 && <span className="text-neutral-500">+{assignedUserIds.length - 2}</span>}
                           </span>
@@ -270,7 +273,11 @@ export function TurnoverTaskList({
                             onUpdateAssignment(task.task_id, newIds);
                           }}
                         >
-                          <span className="mr-2">{user.avatar}</span>
+                          {user.avatar ? (
+                            <img src={user.avatar} alt={user.name} className="mr-2 h-5 w-5 rounded-full object-cover" />
+                          ) : (
+                            <span className="mr-2">👤</span>
+                          )}
                           {user.name}
                           <span className="ml-auto text-xs text-neutral-400">{user.role}</span>
                         </DropdownMenuCheckboxItem>
@@ -285,12 +292,6 @@ export function TurnoverTaskList({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="text-xs text-neutral-500 dark:text-neutral-400">
-          Click a task to open
-        </div>
-      </div>
-
       {/* Approved Tasks */}
       <div className="flex flex-col gap-4">
         {approvedTasks.map((task) => renderTaskCard(task))}
@@ -299,7 +300,7 @@ export function TurnoverTaskList({
       {/* Contingent Tasks Section */}
       {contingentTasks.length > 0 && (
         <>
-          <div className="border-t border-neutral-200 dark:border-neutral-700 pt-3">
+          <div className="border-t border-neutral-200 dark:border-neutral-700 !mt-6 pt-4">
             <button
               onClick={() => setShowContingent(!showContingent)}
               className="w-full text-left text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 flex items-center gap-2"
