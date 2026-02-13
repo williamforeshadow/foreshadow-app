@@ -73,6 +73,7 @@ export default function TimelineWindow({
     getBlockPosition,
     reservations,
     setReservations,
+    recurringTasks,
   } = useTimeline();
 
   // ============================================================================
@@ -670,16 +671,21 @@ export default function TimelineWindow({
     }
   }, [currentUser?.id, projectsHook, setReservations, users]);
 
-  // Extract ALL tasks from reservations, tagged with property_name (for DynamicBoard)
+  // Extract ALL tasks from reservations + recurring tasks, tagged with property_name
   const allTasksWithProperty = useMemo(() => {
     const tasks: (Task & { property_name: string })[] = [];
+    // Tasks from reservations (turnover, occupancy, vacancy triggers)
     reservations.forEach((res: any) => {
       (res.tasks || []).forEach((task: Task) => {
         tasks.push({ ...task, property_name: res.property_name });
       });
     });
+    // Recurring tasks (property-level, no reservation)
+    recurringTasks.forEach((task: any) => {
+      tasks.push({ ...task, property_name: task.property_name });
+    });
     return tasks;
-  }, [reservations]);
+  }, [reservations, recurringTasks]);
 
   // Extract tasks with scheduled_start (for kanban user columns)
   const allScheduledTasks = useMemo(() => {

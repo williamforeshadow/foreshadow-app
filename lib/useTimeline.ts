@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 
 export function useTimeline() {
   const [reservations, setReservations] = useState<any[]>([]);
+  const [recurringTasks, setRecurringTasks] = useState<any[]>([]);
   const [properties, setProperties] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedReservation, setSelectedReservation] = useState<any>(null);
@@ -34,19 +35,63 @@ export function useTimeline() {
     generateDateRange();
   }, [generateDateRange]);
 
-  // Fetch reservations on mount
+  // Fetch reservations + recurring tasks on mount
   const fetchReservations = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .rpc('get_property_turnovers');
+      // Fetch reservations (turnovers) and recurring tasks in parallel
+      const [turnoversResult, recurringResult] = await Promise.all([
+        supabase.rpc('get_property_turnovers'),
+        supabase
+          .from('turnover_tasks')
+          .select(`
+            id,
+            property_name,
+            template_id,
+            type,
+            status,
+            scheduled_start,
+            form_metadata,
+            completed_at,
+            created_at,
+            updated_at,
+            templates(id, name, type),
+            task_assignments(user_id, users(id, name, avatar, role))
+          `)
+          .is('reservation_id', null)
+          .order('scheduled_start', { ascending: true }),
+      ]);
 
-      if (error) throw error;
+      if (turnoversResult.error) throw turnoversResult.error;
 
-      setReservations(data || []);
+      const turnoversData = turnoversResult.data || [];
+      setReservations(turnoversData);
 
-      // Get unique properties, sorted alphabetically
-      const uniqueProps = Array.from(new Set(data?.map((r: any) => r.property_name) || []))
+      // Transform recurring tasks to match the Task shape
+      const recurringData = (recurringResult.data || []).map((t: any) => ({
+        task_id: t.id,
+        template_id: t.template_id,
+        template_name: t.templates?.name || 'Unnamed Task',
+        type: t.type || t.templates?.type || 'cleaning',
+        status: t.status || 'not_started',
+        scheduled_start: t.scheduled_start,
+        form_metadata: t.form_metadata,
+        completed_at: t.completed_at,
+        property_name: t.property_name,
+        is_recurring: true,
+        assigned_users: (t.task_assignments || []).map((a: any) => ({
+          user_id: a.user_id,
+          name: a.users?.name || '',
+          avatar: a.users?.avatar || '',
+          role: a.users?.role || '',
+        })),
+      }));
+      setRecurringTasks(recurringData);
+
+      // Get unique properties from both turnovers AND recurring tasks, sorted alphabetically
+      const turnoverProps = turnoversData.map((r: any) => r.property_name);
+      const recurringProps = recurringData.map((t: any) => t.property_name);
+      const uniqueProps = Array.from(new Set([...turnoverProps, ...recurringProps]))
         .filter(Boolean)
         .sort();
       setProperties(uniqueProps as string[]);
@@ -178,6 +223,7 @@ export function useTimeline() {
     // State
     reservations,
     setReservations,
+    recurringTasks,
     properties,
     loading,
     selectedReservation,

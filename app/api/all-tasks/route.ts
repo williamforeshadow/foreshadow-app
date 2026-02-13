@@ -15,6 +15,7 @@ export async function GET(request: Request) {
       .select(`
         id,
         reservation_id,
+        property_name,
         template_id,
         type,
         status,
@@ -98,9 +99,11 @@ export async function GET(request: Request) {
       const reservation = task.reservations as any;
       const assignments = (task.task_assignments || []) as any[];
 
-      const propertyName = reservation?.property_name || 'Unknown Property';
+      // Use property_name from the task directly (now always populated),
+      // fall back to reservation for legacy rows
+      const propName = task.property_name || reservation?.property_name || 'Unknown Property';
       const checkOut = reservation?.check_out || null;
-      const nextCheckIn = findNextCheckIn(propertyName, checkOut);
+      const nextCheckIn = findNextCheckIn(propName, checkOut);
 
       return {
         task_id: task.id,
@@ -114,12 +117,14 @@ export async function GET(request: Request) {
         completed_at: task.completed_at,
         created_at: task.created_at,
         updated_at: task.updated_at,
-        // Reservation context
-        property_name: propertyName,
-        guest_name: reservation?.guest_name,
-        check_in: reservation?.check_in,
+        // Reservation context (may be null for recurring tasks)
+        property_name: propName,
+        guest_name: reservation?.guest_name || null,
+        check_in: reservation?.check_in || null,
         check_out: checkOut,
         next_check_in: nextCheckIn,
+        // Recurring flag
+        is_recurring: task.reservation_id === null,
         // Assigned users
         assigned_users: assignments.map(a => ({
           user_id: a.user_id,
