@@ -294,21 +294,25 @@ export default function StaffPage() {
     return Array.from(new Set(staff)).sort();
   };
 
-  const fetchTaskTemplate = async (templateId: string) => {
-    if (taskTemplates[templateId]) {
-      return taskTemplates[templateId];
+  const fetchTaskTemplate = async (templateId: string, propertyName?: string) => {
+    const cacheKey = propertyName ? `${templateId}__${propertyName}` : templateId;
+    if (taskTemplates[cacheKey]) {
+      return taskTemplates[cacheKey];
     }
 
     setLoadingTaskTemplate(templateId);
     try {
-      const response = await fetch(`/api/templates/${templateId}`);
+      const url = propertyName
+        ? `/api/templates/${templateId}?property_name=${encodeURIComponent(propertyName)}`
+        : `/api/templates/${templateId}`;
+      const response = await fetch(url);
       const result = await response.json();
 
       if (!response.ok) {
         throw new Error(result.error || 'Failed to fetch template');
       }
 
-      setTaskTemplates(prev => ({ ...prev, [templateId]: result.template }));
+      setTaskTemplates(prev => ({ ...prev, [cacheKey]: result.template }));
       return result.template;
     } catch (err: any) {
       console.error('Error fetching template:', err);
