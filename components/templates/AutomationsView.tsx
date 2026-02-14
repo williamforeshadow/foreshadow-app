@@ -50,6 +50,7 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
   const [loading, setLoading] = useState(true);
 
   // UI state
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedProperty, setSelectedProperty] = useState<string | null>(null);
   const [editingAssignment, setEditingAssignment] = useState<PropertyTemplateAssignment | null>(null);
   const [automationConfig, setAutomationConfig] = useState<AutomationConfig | null>(null);
@@ -142,6 +143,13 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
 
   // Get assignments for selected property
   const selectedPropertyAssignments = selectedProperty ? assignmentsByProperty[selectedProperty] || [] : [];
+
+  // Filter properties by search query
+  const filteredProperties = useMemo(() => {
+    if (!searchQuery.trim()) return properties;
+    const q = searchQuery.toLowerCase();
+    return properties.filter(p => p.toLowerCase().includes(q));
+  }, [properties, searchQuery]);
 
   // Get templates not yet assigned to selected property
   const availableTemplates = useMemo(() => {
@@ -494,7 +502,7 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
               <p className="text-xs text-neutral-500 mt-1">
                 {bulkEditMode && selectedProperties.size > 0 
                   ? `${selectedProperties.size} selected`
-                  : `${properties.length} properties`
+                  : `${filteredProperties.length} properties`
                 }
               </p>
             </div>
@@ -509,10 +517,16 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
               {bulkEditMode ? 'Done' : 'Bulk Edit'}
             </Button>
           </div>
+          <Input
+            placeholder="Search properties..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="mt-3 h-8 text-sm"
+          />
         </div>
         
         <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
-          {properties.map((property) => {
+          {filteredProperties.map((property) => {
             const automationCount = getAutomationCount(property);
             const totalAssignments = assignmentsByProperty[property]?.length || 0;
             const isSelected = selectedProperty === property;
@@ -541,21 +555,17 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                     className="w-4 h-4 rounded border-neutral-300 text-purple-600 focus:ring-purple-500"
                   />
                 )}
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
                   <div className="font-medium text-sm truncate">{property}</div>
-                  <div className="flex items-center gap-2 mt-1">
-                    {automationCount > 0 ? (
-                      <Badge className="bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 text-xs">
-                        {automationCount} automation{automationCount !== 1 ? 's' : ''}
-                      </Badge>
-                    ) : totalAssignments > 0 ? (
-                      <Badge variant="outline" className="text-xs text-neutral-500">
-                        {totalAssignments} template{totalAssignments !== 1 ? 's' : ''} (no automation)
-                      </Badge>
-                    ) : (
-                      <span className="text-xs text-neutral-400">No templates</span>
-                    )}
-                  </div>
+                  {automationCount > 0 ? (
+                    <Badge className="bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 text-xs shrink-0">
+                      {automationCount}
+                    </Badge>
+                  ) : totalAssignments > 0 ? (
+                    <Badge variant="outline" className="text-xs text-neutral-500 shrink-0">
+                      {totalAssignments}
+                    </Badge>
+                  ) : null}
                 </div>
               </div>
             );
