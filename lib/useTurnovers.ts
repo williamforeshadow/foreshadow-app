@@ -279,21 +279,27 @@ export function useTurnovers() {
     }
   }, []);
 
-  const fetchTaskTemplate = useCallback(async (templateId: string) => {
-    if (taskTemplates[templateId]) {
-      return taskTemplates[templateId];
+  const fetchTaskTemplate = useCallback(async (templateId: string, propertyName?: string) => {
+    // Cache key includes property name so property-level overrides are handled correctly
+    const cacheKey = propertyName ? `${templateId}__${propertyName}` : templateId;
+
+    if (taskTemplates[cacheKey]) {
+      return taskTemplates[cacheKey];
     }
 
     setLoadingTaskTemplate(templateId);
     try {
-      const res = await fetch(`/api/templates/${templateId}`);
+      const url = propertyName
+        ? `/api/templates/${templateId}?property_name=${encodeURIComponent(propertyName)}`
+        : `/api/templates/${templateId}`;
+      const res = await fetch(url);
       const result = await res.json();
 
       if (!res.ok) {
         throw new Error(result.error || 'Failed to fetch template');
       }
 
-      setTaskTemplates(prev => ({ ...prev, [templateId]: result.template }));
+      setTaskTemplates(prev => ({ ...prev, [cacheKey]: result.template }));
       return result.template;
     } catch (err) {
       console.error('Error fetching template:', err);

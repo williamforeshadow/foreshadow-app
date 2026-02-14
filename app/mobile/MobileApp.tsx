@@ -77,8 +77,10 @@ export default function MobileApp() {
           <MobileMyAssignmentsView
             onTaskClick={async (task: any) => {
               // Fetch template if needed, then open task detail sheet
-              if (task.template_id && !taskTemplates[task.template_id]) {
-                await fetchTaskTemplate(task.template_id);
+              const propName = task.property_name;
+              const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
+              if (task.template_id && !taskTemplates[cacheKey]) {
+                await fetchTaskTemplate(task.template_id, propName);
               }
               // Add current user to assigned_users since this task came from My Work (they're assigned)
               setMobileSelectedTask({
@@ -99,8 +101,10 @@ export default function MobileApp() {
             refreshTrigger={mobileRefreshTrigger}
             onTaskClick={async (task: any) => {
               // Fetch template if needed, then open task detail
-              if (task.template_id && !taskTemplates[task.template_id]) {
-                await fetchTaskTemplate(task.template_id);
+              const propName = task.property_name;
+              const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
+              if (task.template_id && !taskTemplates[cacheKey]) {
+                await fetchTaskTemplate(task.template_id, propName);
               }
               setMobileSelectedTask(task);
             }}
@@ -212,11 +216,11 @@ export default function MobileApp() {
                       <div className="flex items-center justify-center py-8">
                         <p className="text-neutral-500">Loading form...</p>
                       </div>
-                    ) : taskTemplates[mobileSelectedTask.template_id] ? (
+                    ) : (taskTemplates[`${mobileSelectedTask.template_id}__${mobileSelectedTask.property_name}`] || taskTemplates[mobileSelectedTask.template_id]) ? (
                       <DynamicCleaningForm
                         cleaningId={mobileSelectedTask.task_id}
                         propertyName={mobileSelectedTask.property_name || ''}
-                        template={taskTemplates[mobileSelectedTask.template_id]}
+                        template={taskTemplates[`${mobileSelectedTask.template_id}__${mobileSelectedTask.property_name}`] || taskTemplates[mobileSelectedTask.template_id]}
                         formMetadata={mobileSelectedTask.form_metadata}
                         onSave={async (formData) => {
                           await saveTaskForm(mobileSelectedTask.task_id, formData);

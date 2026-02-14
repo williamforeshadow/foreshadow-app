@@ -341,6 +341,43 @@ export interface AutomationPreset {
   updated_at: string;
 }
 
+// ============================================================================
+// Template Modifier Types (Property-level overrides)
+// ============================================================================
+
+/** Field override configuration stored in property_templates.field_overrides */
+export interface FieldOverrides {
+  /** Extra fields to append to the base template */
+  additional_fields: FieldOverrideEntry[];
+  /** IDs of base template fields to hide for this property */
+  removed_field_ids: string[];
+  /** Per-field label/required overrides keyed by field ID */
+  modified_fields: Record<string, FieldModification>;
+}
+
+/** A single additional field added per-property */
+export interface FieldOverrideEntry {
+  id: string;
+  type: 'rating' | 'yes-no' | 'text' | 'checkbox' | 'photo' | 'photos' | 'separator';
+  label: string;
+  required: boolean;
+}
+
+/** Partial modifications applied to an existing base template field */
+export interface FieldModification {
+  label?: string;
+  required?: boolean;
+}
+
+/** Factory for an empty FieldOverrides object */
+export function createDefaultFieldOverrides(): FieldOverrides {
+  return {
+    additional_fields: [],
+    removed_field_ids: [],
+    modified_fields: {},
+  };
+}
+
 /** Property template assignment with automation config */
 export interface PropertyTemplateAssignment {
   id: string;
@@ -348,6 +385,7 @@ export interface PropertyTemplateAssignment {
   template_id: string;
   enabled: boolean;
   automation_config?: AutomationConfig | null;
+  field_overrides?: FieldOverrides | null;
 }
 
 /** Default automation config factory */

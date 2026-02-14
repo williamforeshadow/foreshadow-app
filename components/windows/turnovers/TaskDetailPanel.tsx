@@ -35,6 +35,11 @@ export function TaskDetailPanel({
   const isContingent = task.status === 'contingent';
   const isNotStarted = task.status === 'not_started' || !task.status;
 
+  // Resolve the template from cache using property-aware key first, then fallback
+  const resolvedTemplate = task.template_id
+    ? (taskTemplates[`${task.template_id}__${propertyName}`] || taskTemplates[task.template_id])
+    : undefined;
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -147,11 +152,11 @@ export function TaskDetailPanel({
                 <div className="flex items-center justify-center py-8">
                   <p className="text-neutral-500">Loading form...</p>
                 </div>
-              ) : taskTemplates[task.template_id] ? (
+              ) : resolvedTemplate ? (
                 <DynamicCleaningForm
                   cleaningId={task.task_id}
                   propertyName={propertyName}
-                  template={taskTemplates[task.template_id]}
+                  template={resolvedTemplate}
                   formMetadata={task.form_metadata}
                   onSave={async (formData) => {
                     await onSaveForm(task.task_id, formData);

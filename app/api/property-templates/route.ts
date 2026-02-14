@@ -28,7 +28,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { property_name, template_id, enabled = true, automation_config } = body;
+    const { property_name, template_id, enabled = true, automation_config, field_overrides } = body;
 
     if (!property_name || !template_id) {
       return NextResponse.json(
@@ -43,6 +43,7 @@ export async function POST(request: Request) {
       template_id: string;
       enabled: boolean;
       automation_config?: object | null;
+      field_overrides?: object | null;
     } = {
       property_name,
       template_id,
@@ -52,6 +53,11 @@ export async function POST(request: Request) {
     // Only include automation_config if it was provided in the request
     if (automation_config !== undefined) {
       upsertPayload.automation_config = automation_config;
+    }
+
+    // Only include field_overrides if it was provided in the request
+    if (field_overrides !== undefined) {
+      upsertPayload.field_overrides = field_overrides;
     }
 
     // Use upsert to handle both insert and update

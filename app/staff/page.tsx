@@ -992,9 +992,11 @@ export default function StaffPage() {
                           const newExpandedId = expandedTaskId === task.task_id ? null : task.task_id;
                           setExpandedTaskId(newExpandedId);
                           
-                          // Fetch template if expanding and template exists
-                          if (newExpandedId && task.template_id && !taskTemplates[task.template_id]) {
-                            await fetchTaskTemplate(task.template_id);
+                          // Fetch template if expanding and template exists (with property context)
+                          const propName = selectedCard?.property_name;
+                          const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
+                          if (newExpandedId && task.template_id && !taskTemplates[cacheKey!]) {
+                            await fetchTaskTemplate(task.template_id, propName);
                           }
                         }}
                       >
@@ -1179,11 +1181,11 @@ export default function StaffPage() {
                                   <div className="flex items-center justify-center py-4">
                                     <p className="text-sm text-neutral-500">Loading form...</p>
                                   </div>
-                                ) : taskTemplates[task.template_id] ? (
+                                ) : (taskTemplates[`${task.template_id}__${selectedCard.property_name}`] || taskTemplates[task.template_id]) ? (
                                   <DynamicCleaningForm
                                     cleaningId={task.task_id}
                                     propertyName={selectedCard.property_name}
-                                    template={taskTemplates[task.template_id]}
+                                    template={taskTemplates[`${task.template_id}__${selectedCard.property_name}`] || taskTemplates[task.template_id]}
                                     formMetadata={task.form_metadata}
                                     onSave={async (formData) => {
                                       await saveTaskForm(task.task_id, formData);

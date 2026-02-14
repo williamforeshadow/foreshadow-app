@@ -32,6 +32,11 @@ export function TaskDetailPanel({
   const isAssigned = task.assigned_users.some((u) => u.user_id === currentUser?.id);
   const isNotStarted = task.status === 'not_started' || !task.status;
 
+  // Resolve template using property-aware cache key first, then fallback
+  const resolvedTemplate = task.template_id
+    ? (taskTemplates[`${task.template_id}__${task.property_name}`] || taskTemplates[task.template_id])
+    : undefined;
+
   return (
     <div className="flex flex-col h-full">
       {/* Consolidated Header */}
@@ -184,11 +189,11 @@ export function TaskDetailPanel({
                 <div className="flex items-center justify-center py-8">
                   <p className="text-neutral-500">Loading form...</p>
                 </div>
-              ) : taskTemplates[task.template_id] ? (
+              ) : resolvedTemplate ? (
                 <DynamicCleaningForm
                   cleaningId={task.task_id}
                   propertyName={task.property_name}
-                  template={taskTemplates[task.template_id]}
+                  template={resolvedTemplate}
                   formMetadata={task.form_metadata}
                   onSave={async (formData) => {
                     await onSaveForm(task.task_id, formData);

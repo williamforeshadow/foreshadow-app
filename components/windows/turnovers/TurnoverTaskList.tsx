@@ -36,7 +36,7 @@ interface TurnoverTaskListProps {
   onUpdateAssignment: (taskId: string, userIds: string[]) => void;
   onAddTask: (templateId: string) => void;
   onFetchTemplates: () => void;
-  fetchTaskTemplate: (templateId: string) => Promise<void>;
+  fetchTaskTemplate: (templateId: string, propertyName?: string) => Promise<void>;
 }
 
 function getStatusStyles(status: string) {
@@ -157,8 +157,10 @@ export function TurnoverTaskList({
               key={task.task_id}
               className={`cursor-pointer hover:shadow-md transition-all bg-white dark:bg-neutral-900 ${statusStyles.border}`}
               onClick={async () => {
-                if (task.template_id && !taskTemplates[task.template_id]) {
-                  await fetchTaskTemplate(task.template_id);
+                const propName = selectedCard.property_name;
+                const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
+                if (task.template_id && !taskTemplates[cacheKey!]) {
+                  await fetchTaskTemplate(task.template_id, propName);
                 }
                 onTaskClick(task);
               }}

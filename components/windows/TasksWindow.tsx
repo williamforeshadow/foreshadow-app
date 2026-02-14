@@ -42,12 +42,12 @@ function TasksWindowContent({ currentUser, users }: TasksWindowProps) {
     updateTaskStatus,
   } = useTasks();
 
-  // Fetch template when a task with template_id is selected
+  // Fetch template when a task with template_id is selected (with property context)
   useEffect(() => {
     if (selectedTask?.template_id) {
-      fetchTaskTemplate(selectedTask.template_id);
+      fetchTaskTemplate(selectedTask.template_id, selectedTask.property_name);
     }
-  }, [selectedTask?.template_id, fetchTaskTemplate]);
+  }, [selectedTask?.template_id, selectedTask?.property_name, fetchTaskTemplate]);
 
   return (
     <div className="flex h-full overflow-hidden">

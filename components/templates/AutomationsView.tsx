@@ -22,10 +22,13 @@ import {
   type AutomationConfig,
   type AutomationPreset,
   type PropertyTemplateAssignment,
+  type FieldOverrides,
   type User,
   createDefaultAutomationConfig,
+  createDefaultFieldOverrides,
 } from '@/lib/types';
 import AutomationConfigForm from './AutomationConfigForm';
+import FieldOverridesEditor from './FieldOverridesEditor';
 
 interface Template {
   id: string;
@@ -63,6 +66,13 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
   const [bulkEditMode, setBulkEditMode] = useState(false);
   const [selectedProperties, setSelectedProperties] = useState<Set<string>>(new Set());
   const [showBulkAddDialog, setShowBulkAddDialog] = useState(false);
+
+  // Field overrides (template modifier) state
+  const [showFieldOverridesDialog, setShowFieldOverridesDialog] = useState(false);
+  const [fieldOverridesAssignment, setFieldOverridesAssignment] = useState<PropertyTemplateAssignment | null>(null);
+  const [fieldOverrides, setFieldOverrides] = useState<FieldOverrides>(createDefaultFieldOverrides());
+  const [baseTemplateFields, setBaseTemplateFields] = useState<any[]>([]);
+  const [loadingBaseFields, setLoadingBaseFields] = useState(false);
 
   // Fetch data on mount
   useEffect(() => {
@@ -406,6 +416,65 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
     }
   };
 
+  // Open field overrides dialog
+  const openFieldOverridesDialog = async (assignment: PropertyTemplateAssignment) => {
+    setFieldOverridesAssignment(assignment);
+    setFieldOverrides(assignment.field_overrides ?? createDefaultFieldOverrides());
+    setLoadingBaseFields(true);
+    setShowFieldOverridesDialog(true);
+
+    try {
+      // Fetch the base template fields (without property overrides)
+      const res = await fetch(`/api/templates/${assignment.template_id}`);
+      const data = await res.json();
+      setBaseTemplateFields(data.template?.fields ?? []);
+    } catch (err) {
+      console.error('Error fetching base template fields:', err);
+      setBaseTemplateFields([]);
+    } finally {
+      setLoadingBaseFields(false);
+    }
+  };
+
+  // Save field overrides
+  const saveFieldOverrides = async () => {
+    if (!fieldOverridesAssignment) return;
+
+    // Check if overrides are empty — save null to keep it clean
+    const hasOverrides =
+      fieldOverrides.additional_fields.length > 0 ||
+      fieldOverrides.removed_field_ids.length > 0 ||
+      Object.keys(fieldOverrides.modified_fields).length > 0;
+
+    setSaving(true);
+    try {
+      const res = await fetch('/api/property-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          property_name: fieldOverridesAssignment.property_name,
+          template_id: fieldOverridesAssignment.template_id,
+          enabled: fieldOverridesAssignment.enabled,
+          field_overrides: hasOverrides ? fieldOverrides : null,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to save template customizations');
+      }
+
+      await fetchData();
+      setShowFieldOverridesDialog(false);
+      setFieldOverridesAssignment(null);
+    } catch (err) {
+      console.error('Error saving field overrides:', err);
+      alert(err instanceof Error ? err.message : 'Failed to save template customizations');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="text-center py-12 text-neutral-500">
@@ -583,6 +652,12 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                   const template = getTemplate(assignment.template_id);
                   const config = assignment.automation_config;
                   const hasAutomation = config?.enabled;
+                  const hasOverrides = !!(
+                    assignment.field_overrides &&
+                    (assignment.field_overrides.additional_fields?.length > 0 ||
+                      assignment.field_overrides.removed_field_ids?.length > 0 ||
+                      Object.keys(assignment.field_overrides.modified_fields ?? {}).length > 0)
+                  );
 
                   return (
                     <Card key={assignment.id} className={hasAutomation ? 'border-purple-200 dark:border-purple-800' : ''}>
@@ -600,6 +675,14 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                               >
                                 {template?.type || 'unknown'}
                               </Badge>
+                              {hasOverrides && (
+                                <Badge 
+                                  variant="outline"
+                                  className="bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 text-xs"
+                                >
+                                  Customized
+                                </Badge>
+                              )}
                             </CardTitle>
                             
                             {/* Status indicators */}
@@ -617,6 +700,14 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                           </div>
                           
                           <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-amber-700 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-900/20"
+                              onClick={() => openFieldOverridesDialog(assignment)}
+                            >
+                              Customize
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline"
@@ -864,6 +955,56 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
               disabled={saving || !selectedTemplateId}
             >
               {saving ? 'Saving...' : `Apply to ${selectedProperties.size} Properties`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Field Overrides (Customize Template) Dialog */}
+      <Dialog open={showFieldOverridesDialog} onOpenChange={(open) => {
+        if (!open) {
+          setShowFieldOverridesDialog(false);
+          setFieldOverridesAssignment(null);
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Customize Template for this Property</DialogTitle>
+            <DialogDescription>
+              {fieldOverridesAssignment?.property_name} → {fieldOverridesAssignment && getTemplate(fieldOverridesAssignment.template_id)?.name}
+              <br />
+              <span className="text-xs text-neutral-400 mt-1 block">
+                Hide, rename, or add fields specific to this property. Changes here only affect this property — the base template stays the same for all other properties.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingBaseFields ? (
+            <div className="flex items-center justify-center py-8">
+              <p className="text-neutral-500">Loading template fields...</p>
+            </div>
+          ) : baseTemplateFields.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-neutral-500">This template has no fields defined yet.</p>
+              <p className="text-xs text-neutral-400 mt-1">Add fields to the base template first, then customize per-property here.</p>
+            </div>
+          ) : (
+            <FieldOverridesEditor
+              baseFields={baseTemplateFields}
+              overrides={fieldOverrides}
+              onChange={setFieldOverrides}
+            />
+          )}
+
+          <DialogFooter className="mt-6">
+            <Button type="button" variant="outline" onClick={() => {
+              setShowFieldOverridesDialog(false);
+              setFieldOverridesAssignment(null);
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={saveFieldOverrides} disabled={saving}>
+              {saving ? 'Saving...' : 'Save Customizations'}
             </Button>
           </DialogFooter>
         </DialogContent>

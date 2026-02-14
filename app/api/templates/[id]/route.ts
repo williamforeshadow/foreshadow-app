@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { mergeTemplateFields } from '@/lib/templateUtils';
 
 // GET single template
+// Optional query param: ?property_name=X  →  merges property-level field_overrides
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const { searchParams } = new URL(request.url);
+  const propertyName = searchParams.get('property_name');
   
   try {
     const { data, error } = await getSupabaseServer()
@@ -27,6 +31,20 @@ export async function GET(
         { error: 'Template not found' },
         { status: 404 }
       );
+    }
+
+    // If a property_name is supplied, look up field_overrides and merge
+    if (propertyName) {
+      const { data: ptRow } = await getSupabaseServer()
+        .from('property_templates')
+        .select('field_overrides')
+        .eq('template_id', id)
+        .eq('property_name', propertyName)
+        .maybeSingle();
+
+      if (ptRow?.field_overrides) {
+        data.fields = mergeTemplateFields(data.fields ?? [], ptRow.field_overrides);
+      }
     }
 
     return NextResponse.json({ template: data });

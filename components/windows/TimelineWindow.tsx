@@ -152,9 +152,11 @@ export default function TimelineWindow({
     } else if (floatingData?.type === 'task') {
       const task = floatingData.item as Task;
       setLocalTask(task);
-      // Fetch template if needed
-      if (task.template_id && !taskTemplates[task.template_id]) {
-        fetchTaskTemplate(task.template_id);
+      // Fetch template if needed (with property context for overrides)
+      const propName = floatingData.propertyName || task.property_name;
+      const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
+      if (task.template_id && !taskTemplates[cacheKey!]) {
+        fetchTaskTemplate(task.template_id, propName);
       }
     } else {
       setProjectFields(null);
@@ -165,21 +167,26 @@ export default function TimelineWindow({
   // ============================================================================
   // Task functions
   // ============================================================================
-  const fetchTaskTemplate = useCallback(async (templateId: string) => {
-    if (taskTemplates[templateId]) {
-      return taskTemplates[templateId];
+  const fetchTaskTemplate = useCallback(async (templateId: string, propertyName?: string) => {
+    const cacheKey = propertyName ? `${templateId}__${propertyName}` : templateId;
+
+    if (taskTemplates[cacheKey]) {
+      return taskTemplates[cacheKey];
     }
 
     setLoadingTaskTemplate(templateId);
     try {
-      const res = await fetch(`/api/templates/${templateId}`);
+      const url = propertyName
+        ? `/api/templates/${templateId}?property_name=${encodeURIComponent(propertyName)}`
+        : `/api/templates/${templateId}`;
+      const res = await fetch(url);
       const result = await res.json();
 
       if (!res.ok) {
         throw new Error(result.error || 'Failed to fetch template');
       }
 
-      setTaskTemplates(prev => ({ ...prev, [templateId]: result.template }));
+      setTaskTemplates(prev => ({ ...prev, [cacheKey]: result.template }));
       return result.template;
     } catch (err) {
       console.error('Error fetching template:', err);
@@ -439,8 +446,10 @@ export default function TimelineWindow({
       propertyName: floatingData.propertyName,
     });
     setLocalTask(task);
-    if (task.template_id && !taskTemplates[task.template_id]) {
-      fetchTaskTemplate(task.template_id);
+    const propName = floatingData?.propertyName || task.property_name;
+    const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
+    if (task.template_id && !taskTemplates[cacheKey!]) {
+      fetchTaskTemplate(task.template_id, propName);
     }
   }, [floatingData, taskTemplates, fetchTaskTemplate]);
 
