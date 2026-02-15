@@ -45,18 +45,17 @@ interface AutomationConfigFormProps {
 // ============================================================================
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
-  const bgColor = checked
-    ? 'bg-neutral-900 dark:bg-white'
-    : 'bg-neutral-300 dark:bg-neutral-600';
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       onClick={onChange}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${bgColor}`}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+        checked ? 'bg-neutral-900 dark:bg-neutral-400' : 'bg-neutral-300 dark:bg-neutral-600'
+      }`}
     >
-      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+      <span className={`inline-block h-4 w-4 transform rounded-full bg-white dark:bg-neutral-900 transition-transform ${
         checked ? 'translate-x-6' : 'translate-x-1'
       }`} />
     </button>
@@ -302,7 +301,7 @@ export default function AutomationConfigForm({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-8">
       {/* ================================================================
           Trigger Type
           ================================================================ */}
@@ -322,7 +321,6 @@ export default function AutomationConfigForm({
             <SelectItem value="recurring">Recurring</SelectItem>
           </SelectContent>
         </Select>
-        <FieldDescription>When should this task be generated?</FieldDescription>
       </Field>
 
       {/* ================================================================
@@ -331,7 +329,7 @@ export default function AutomationConfigForm({
       {config.trigger_type === 'turnover' && (
         <div className="flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-800 rounded-lg">
           <div>
-            <div className="font-medium">Enable Auto-generation</div>
+            <div className="font-medium text-sm">Enable Auto-generation</div>
           </div>
           <Toggle checked={config.enabled} onChange={() => updateConfig('enabled', !config.enabled)} />
         </div>
@@ -344,7 +342,7 @@ export default function AutomationConfigForm({
         <div className="border rounded-lg p-4 space-y-4 bg-neutral-50 dark:bg-neutral-800">
           <div className="flex items-center justify-between">
             <div>
-              <div className="font-medium">Enable Auto-generation</div>
+              <div className="font-medium text-sm">Enable Auto-generation</div>
             </div>
             <Toggle checked={config.enabled} onChange={() => updateConfig('enabled', !config.enabled)} />
           </div>
@@ -366,7 +364,7 @@ export default function AutomationConfigForm({
         <div className="border rounded-lg p-4 space-y-4 bg-neutral-50 dark:bg-neutral-800">
           <div className="flex items-center justify-between">
             <div>
-              <div className="font-medium">Enable Auto-generation</div>
+              <div className="font-medium text-sm">Enable Auto-generation</div>
             </div>
             <Toggle checked={config.enabled} onChange={() => updateConfig('enabled', !config.enabled)} />
           </div>
@@ -387,7 +385,7 @@ export default function AutomationConfigForm({
       {config.trigger_type === 'recurring' && (
         <div className="flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-800 rounded-lg">
           <div>
-            <div className="font-medium">Enable Auto-generation</div>
+            <div className="font-medium text-sm">Enable Auto-generation</div>
           </div>
           <Toggle checked={config.enabled} onChange={() => updateConfig('enabled', !config.enabled)} />
         </div>
@@ -685,7 +683,17 @@ export default function AutomationConfigForm({
                         onChange={() => toggleUserAssignment(user.id)}
                         className="w-4 h-4 rounded border-neutral-300"
                       />
-                      <span className="text-lg">{user.avatar || '👤'}</span>
+                      {user.avatar ? (
+                        <img
+                          src={user.avatar}
+                          alt={user.name}
+                          className="w-8 h-8 rounded-full object-cover"
+                        />
+                      ) : (
+                        <span className="w-8 h-8 rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-xs font-medium text-neutral-600 dark:text-neutral-300">
+                          {user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                        </span>
+                      )}
                       <div>
                         <div className="text-sm font-medium">{user.name}</div>
                         <div className="text-xs text-neutral-500">{user.role}</div>

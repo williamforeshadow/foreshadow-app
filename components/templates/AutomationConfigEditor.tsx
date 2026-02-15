@@ -238,12 +238,20 @@ export default function AutomationConfigEditor({
         style={{ width: '100%', maxWidth: '48rem' }}
         className="px-8 py-10 flex-1 overflow-y-auto"
       >
-        <h1 className="text-2xl font-semibold text-neutral-900 dark:text-white mb-2">
-          Configure Automation
-        </h1>
-        <p className="text-sm text-neutral-500 mb-10">
-          {propertyName} → {templateName}
-        </p>
+        <div className="pb-4">
+          <h1 className="text-2xl font-semibold text-neutral-900 dark:text-white">
+            Configure Automation
+          </h1>
+        </div>
+        <div className="pb-2">
+          <p className="text-base text-neutral-500">
+            {propertyName} — {templateName}
+          </p>
+        </div>
+
+        <hr className="border-neutral-200 dark:border-neutral-800 my-6" />
+
+        <div className="pt-4" />
 
         {automationConfig && (
           <AutomationConfigForm

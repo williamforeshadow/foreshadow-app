@@ -150,15 +150,12 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
   // Open add dialog
   const openAddDialog = () => {
     setSelectedTemplateId('');
-    const defaultConfig = createDefaultAutomationConfig();
-    defaultConfig.enabled = true; // Enable by default when adding
-    setNewAutomationConfig(defaultConfig);
     setShowAddDialog(true);
   };
 
-  // Save new automation
+  // Save new automation (adds template with auto-generation off by default)
   const saveNewAutomation = async () => {
-    if (!selectedProperty || !selectedTemplateId || !newAutomationConfig) return;
+    if (!selectedProperty || !selectedTemplateId) return;
 
     setSaving(true);
     try {
@@ -169,7 +166,7 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
           property_name: selectedProperty,
           template_id: selectedTemplateId,
           enabled: true,
-          automation_config: newAutomationConfig,
+          automation_config: createDefaultAutomationConfig(),
         }),
       });
 
@@ -178,7 +175,6 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
       await fetchData();
       setShowAddDialog(false);
       setSelectedTemplateId('');
-      setNewAutomationConfig(null);
     } catch (err) {
       console.error('Error creating automation:', err);
       alert('Failed to create automation');
@@ -524,45 +520,31 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6">
-            {/* Template Selection */}
-            <Field>
-              <FieldLabel>Select Template</FieldLabel>
-              <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a template..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableTemplates.map((template) => (
-                    <SelectItem key={template.id} value={template.id}>
-                      <span className="flex items-center gap-2">
-                        {template.name}
-                        <Badge variant="outline" className="text-xs">
-                          {template.type}
-                        </Badge>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {availableTemplates.length === 0 && (
-                <FieldDescription className="text-amber-600">
-                  All templates are already assigned to this property.
-                </FieldDescription>
-              )}
-            </Field>
-
-            {/* Automation Config */}
-            {selectedTemplateId && newAutomationConfig && (
-              <AutomationConfigForm
-                config={newAutomationConfig}
-                onChange={setNewAutomationConfig}
-                users={users}
-                presets={presets}
-                isNew={true}
-              />
+          <Field>
+            <FieldLabel>Select Template</FieldLabel>
+            <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a template..." />
+              </SelectTrigger>
+              <SelectContent>
+                {availableTemplates.map((template) => (
+                  <SelectItem key={template.id} value={template.id}>
+                    <span className="flex items-center gap-2">
+                      {template.name}
+                      <Badge variant="outline" className="text-xs">
+                        {template.type}
+                      </Badge>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {availableTemplates.length === 0 && (
+              <FieldDescription className="text-amber-600">
+                All templates are already assigned to this property.
+              </FieldDescription>
             )}
-          </div>
+          </Field>
 
           <DialogFooter className="mt-6">
             <Button type="button" variant="outline" onClick={() => setShowAddDialog(false)}>
