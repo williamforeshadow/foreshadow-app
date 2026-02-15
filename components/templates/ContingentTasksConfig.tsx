@@ -15,7 +15,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
       aria-checked={checked}
       onClick={onChange}
       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-        checked ? 'bg-purple-600' : 'bg-neutral-300 dark:bg-neutral-600'
+        checked ? 'bg-neutral-900 dark:bg-white' : 'bg-neutral-300 dark:bg-neutral-600'
       }`}
     >
       <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -71,7 +71,7 @@ export default function ContingentTasksConfig({ config, onChange }: ContingentTa
           </div>
 
           {config.auto_approve_enabled && (
-            <div className="flex items-center gap-2 flex-wrap pl-4 border-l-2 border-purple-200 dark:border-purple-800">
+            <div className="flex items-center gap-2 flex-wrap pl-4 border-l-2 border-neutral-200 dark:border-neutral-700">
               <span className="text-sm text-neutral-600 dark:text-neutral-400">Approve</span>
               <Input
                 type="number"

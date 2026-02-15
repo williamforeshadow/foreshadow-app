@@ -44,9 +44,9 @@ interface AutomationConfigFormProps {
 // Reusable Toggle Component
 // ============================================================================
 
-function Toggle({ checked, onChange, color = 'purple' }: { checked: boolean; onChange: () => void; color?: string }) {
+function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   const bgColor = checked
-    ? color === 'purple' ? 'bg-purple-600' : 'bg-blue-600'
+    ? 'bg-neutral-900 dark:bg-white'
     : 'bg-neutral-300 dark:bg-neutral-600';
   return (
     <button
@@ -479,7 +479,7 @@ export default function AutomationConfigForm({
                     </div>
 
                     {config.same_day_override.enabled && (
-                      <div className="flex items-center gap-2 flex-wrap pt-2 pl-4 border-l-2 border-purple-200 dark:border-purple-800">
+                      <div className="flex items-center gap-2 flex-wrap pt-2 pl-4 border-l-2 border-neutral-200 dark:border-neutral-700">
                         <Select
                           value={config.same_day_override.schedule.type}
                           onValueChange={(value) => updateSameDaySchedule('type', value as AutomationScheduleType)}
@@ -683,7 +683,7 @@ export default function AutomationConfigForm({
                         type="checkbox"
                         checked={config.auto_assign.user_ids.includes(user.id)}
                         onChange={() => toggleUserAssignment(user.id)}
-                        className="w-4 h-4 rounded border-neutral-300 text-purple-600 focus:ring-purple-500"
+                        className="w-4 h-4 rounded border-neutral-300"
                       />
                       <span className="text-lg">{user.avatar || '👤'}</span>
                       <div>

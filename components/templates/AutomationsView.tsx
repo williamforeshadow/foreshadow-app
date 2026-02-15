@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -22,13 +23,10 @@ import {
   type AutomationConfig,
   type AutomationPreset,
   type PropertyTemplateAssignment,
-  type FieldOverrides,
   type User,
   createDefaultAutomationConfig,
-  createDefaultFieldOverrides,
 } from '@/lib/types';
 import AutomationConfigForm from './AutomationConfigForm';
-import FieldOverridesEditor from './FieldOverridesEditor';
 
 interface Template {
   id: string;
@@ -43,6 +41,8 @@ interface AutomationsViewProps {
 }
 
 export default function AutomationsView({ templates, properties }: AutomationsViewProps) {
+  const router = useRouter();
+
   // Data state
   const [assignments, setAssignments] = useState<PropertyTemplateAssignment[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -52,11 +52,7 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProperty, setSelectedProperty] = useState<string | null>(null);
-  const [editingAssignment, setEditingAssignment] = useState<PropertyTemplateAssignment | null>(null);
-  const [automationConfig, setAutomationConfig] = useState<AutomationConfig | null>(null);
   const [saving, setSaving] = useState(false);
-  const [showPresetDialog, setShowPresetDialog] = useState(false);
-  const [presetName, setPresetName] = useState('');
   
   // Add new automation state
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -67,13 +63,6 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
   const [bulkEditMode, setBulkEditMode] = useState(false);
   const [selectedProperties, setSelectedProperties] = useState<Set<string>>(new Set());
   const [showBulkAddDialog, setShowBulkAddDialog] = useState(false);
-
-  // Field overrides (template modifier) state
-  const [showFieldOverridesDialog, setShowFieldOverridesDialog] = useState(false);
-  const [fieldOverridesAssignment, setFieldOverridesAssignment] = useState<PropertyTemplateAssignment | null>(null);
-  const [fieldOverrides, setFieldOverrides] = useState<FieldOverrides>(createDefaultFieldOverrides());
-  const [baseTemplateFields, setBaseTemplateFields] = useState<any[]>([]);
-  const [loadingBaseFields, setLoadingBaseFields] = useState(false);
 
   // Fetch data on mount
   useEffect(() => {
@@ -158,86 +147,6 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
     return templates.filter(t => !assignedTemplateIds.includes(t.id));
   }, [templates, selectedProperty, selectedPropertyAssignments]);
 
-  // Open edit dialog
-  const openEditDialog = (assignment: PropertyTemplateAssignment) => {
-    setEditingAssignment(assignment);
-    const defaults = createDefaultAutomationConfig();
-    const saved = assignment.automation_config;
-    
-    // Deep merge with defaults to ensure all nested fields exist
-    const config: AutomationConfig = saved ? {
-      enabled: saved.enabled ?? defaults.enabled,
-      trigger_type: saved.trigger_type ?? defaults.trigger_type,
-      schedule: {
-        enabled: saved.schedule?.enabled ?? defaults.schedule.enabled,
-        type: saved.schedule?.type ?? defaults.schedule.type,
-        relative_to: saved.schedule?.relative_to ?? defaults.schedule.relative_to,
-        days_offset: saved.schedule?.days_offset ?? defaults.schedule.days_offset,
-        time: saved.schedule?.time ?? defaults.schedule.time,
-      },
-      same_day_override: {
-        enabled: saved.same_day_override?.enabled ?? defaults.same_day_override.enabled,
-        schedule: {
-          type: saved.same_day_override?.schedule?.type ?? defaults.same_day_override.schedule.type,
-          relative_to: saved.same_day_override?.schedule?.relative_to ?? defaults.same_day_override.schedule.relative_to,
-          days_offset: saved.same_day_override?.schedule?.days_offset ?? defaults.same_day_override.schedule.days_offset,
-          time: saved.same_day_override?.schedule?.time ?? defaults.same_day_override.schedule.time,
-        },
-      },
-      auto_assign: {
-        enabled: saved.auto_assign?.enabled ?? defaults.auto_assign.enabled,
-        user_ids: saved.auto_assign?.user_ids ?? defaults.auto_assign.user_ids,
-      },
-      // Occupancy-specific fields
-      occupancy_condition: {
-        operator: saved.occupancy_condition?.operator ?? defaults.occupancy_condition!.operator,
-        days: saved.occupancy_condition?.days ?? defaults.occupancy_condition!.days,
-        days_end: saved.occupancy_condition?.days_end,
-      },
-      occupancy_schedule: {
-        enabled: saved.occupancy_schedule?.enabled ?? defaults.occupancy_schedule!.enabled,
-        day_of_occupancy: saved.occupancy_schedule?.day_of_occupancy ?? defaults.occupancy_schedule!.day_of_occupancy,
-        time: saved.occupancy_schedule?.time ?? defaults.occupancy_schedule!.time,
-        repeat: {
-          enabled: saved.occupancy_schedule?.repeat?.enabled ?? defaults.occupancy_schedule!.repeat.enabled,
-          interval_days: saved.occupancy_schedule?.repeat?.interval_days ?? defaults.occupancy_schedule!.repeat.interval_days,
-        },
-      },
-      // Vacancy-specific fields
-      vacancy_condition: {
-        operator: saved.vacancy_condition?.operator ?? defaults.vacancy_condition!.operator,
-        days: saved.vacancy_condition?.days ?? defaults.vacancy_condition!.days,
-        days_end: saved.vacancy_condition?.days_end,
-      },
-      vacancy_schedule: {
-        enabled: saved.vacancy_schedule?.enabled ?? defaults.vacancy_schedule!.enabled,
-        day_of_vacancy: saved.vacancy_schedule?.day_of_vacancy ?? defaults.vacancy_schedule!.day_of_vacancy,
-        time: saved.vacancy_schedule?.time ?? defaults.vacancy_schedule!.time,
-        repeat: {
-          enabled: saved.vacancy_schedule?.repeat?.enabled ?? defaults.vacancy_schedule!.repeat.enabled,
-          interval_days: saved.vacancy_schedule?.repeat?.interval_days ?? defaults.vacancy_schedule!.repeat.interval_days,
-        },
-        max_days_ahead: saved.vacancy_schedule?.max_days_ahead ?? defaults.vacancy_schedule!.max_days_ahead,
-      },
-      // Recurring-specific fields
-      recurring_schedule: {
-        start_date: saved.recurring_schedule?.start_date ?? defaults.recurring_schedule!.start_date,
-        time: saved.recurring_schedule?.time ?? defaults.recurring_schedule!.time,
-        interval_value: saved.recurring_schedule?.interval_value ?? defaults.recurring_schedule!.interval_value,
-        interval_unit: saved.recurring_schedule?.interval_unit ?? defaults.recurring_schedule!.interval_unit,
-      },
-      // Contingent tasks config
-      contingent: {
-        enabled: saved.contingent?.enabled ?? defaults.contingent!.enabled,
-        auto_approve_enabled: saved.contingent?.auto_approve_enabled ?? defaults.contingent!.auto_approve_enabled,
-        auto_approve_days: saved.contingent?.auto_approve_days ?? defaults.contingent!.auto_approve_days,
-      },
-      preset_id: saved.preset_id ?? null,
-    } : defaults;
-    
-    setAutomationConfig(config);
-  };
-
   // Open add dialog
   const openAddDialog = () => {
     setSelectedTemplateId('');
@@ -245,40 +154,6 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
     defaultConfig.enabled = true; // Enable by default when adding
     setNewAutomationConfig(defaultConfig);
     setShowAddDialog(true);
-  };
-
-  // Save existing automation config
-  const saveAutomationConfig = async () => {
-    if (!editingAssignment || !automationConfig) return;
-
-    setSaving(true);
-    try {
-      const res = await fetch('/api/property-templates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          property_name: editingAssignment.property_name,
-          template_id: editingAssignment.template_id,
-          enabled: editingAssignment.enabled,
-          automation_config: automationConfig,
-        }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        console.error('Save error details:', errData);
-        throw new Error(errData.error || 'Failed to save automation config');
-      }
-
-      await fetchData();
-      setEditingAssignment(null);
-      setAutomationConfig(null);
-    } catch (err) {
-      console.error('Error saving automation config:', err);
-      alert(err instanceof Error ? err.message : 'Failed to save automation configuration');
-    } finally {
-      setSaving(false);
-    }
   };
 
   // Save new automation
@@ -389,100 +264,6 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
     }
   };
 
-  // Save as preset
-  const saveAsPreset = async () => {
-    if (!automationConfig || !presetName.trim()) return;
-
-    setSaving(true);
-    try {
-      const res = await fetch('/api/automation-presets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: presetName,
-          trigger_type: automationConfig.trigger_type,
-          config: {
-            schedule: automationConfig.schedule,
-            same_day_override: automationConfig.same_day_override,
-            auto_assign: automationConfig.auto_assign,
-          },
-        }),
-      });
-
-      if (!res.ok) throw new Error('Failed to save preset');
-
-      const data = await res.json();
-      setPresets([data.preset, ...presets]);
-      setShowPresetDialog(false);
-      setPresetName('');
-      setAutomationConfig({ ...automationConfig, preset_id: data.preset.id });
-    } catch (err) {
-      console.error('Error saving preset:', err);
-      alert('Failed to save preset');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Open field overrides dialog
-  const openFieldOverridesDialog = async (assignment: PropertyTemplateAssignment) => {
-    setFieldOverridesAssignment(assignment);
-    setFieldOverrides(assignment.field_overrides ?? createDefaultFieldOverrides());
-    setLoadingBaseFields(true);
-    setShowFieldOverridesDialog(true);
-
-    try {
-      // Fetch the base template fields (without property overrides)
-      const res = await fetch(`/api/templates/${assignment.template_id}`);
-      const data = await res.json();
-      setBaseTemplateFields(data.template?.fields ?? []);
-    } catch (err) {
-      console.error('Error fetching base template fields:', err);
-      setBaseTemplateFields([]);
-    } finally {
-      setLoadingBaseFields(false);
-    }
-  };
-
-  // Save field overrides
-  const saveFieldOverrides = async () => {
-    if (!fieldOverridesAssignment) return;
-
-    // Check if overrides are empty — save null to keep it clean
-    const hasOverrides =
-      fieldOverrides.additional_fields.length > 0 ||
-      fieldOverrides.removed_field_ids.length > 0 ||
-      Object.keys(fieldOverrides.modified_fields).length > 0;
-
-    setSaving(true);
-    try {
-      const res = await fetch('/api/property-templates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          property_name: fieldOverridesAssignment.property_name,
-          template_id: fieldOverridesAssignment.template_id,
-          enabled: fieldOverridesAssignment.enabled,
-          field_overrides: hasOverrides ? fieldOverrides : null,
-        }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Failed to save template customizations');
-      }
-
-      await fetchData();
-      setShowFieldOverridesDialog(false);
-      setFieldOverridesAssignment(null);
-    } catch (err) {
-      console.error('Error saving field overrides:', err);
-      alert(err instanceof Error ? err.message : 'Failed to save template customizations');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="text-center py-12 text-neutral-500">
@@ -539,10 +320,10 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                 className={`w-full text-left p-4 transition-colors cursor-pointer flex items-center gap-3 ${
                   bulkEditMode
                     ? isBulkSelected
-                      ? 'bg-purple-50 dark:bg-purple-900/20 border-l-4 border-purple-500'
+                      ? 'bg-neutral-100 dark:bg-neutral-800 border-l-4 border-neutral-900 dark:border-white'
                       : 'hover:bg-neutral-50 dark:hover:bg-neutral-800 border-l-4 border-transparent'
                     : isSelected 
-                      ? 'bg-purple-50 dark:bg-purple-900/20 border-l-4 border-purple-500' 
+                      ? 'bg-neutral-100 dark:bg-neutral-800 border-l-4 border-neutral-900 dark:border-white' 
                       : 'hover:bg-neutral-50 dark:hover:bg-neutral-800 border-l-4 border-transparent'
                 }`}
               >
@@ -552,13 +333,13 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                     checked={isBulkSelected}
                     onChange={() => togglePropertySelection(property)}
                     onClick={(e) => e.stopPropagation()}
-                    className="w-4 h-4 rounded border-neutral-300 text-purple-600 focus:ring-purple-500"
+                    className="w-4 h-4 rounded border-neutral-300"
                   />
                 )}
                 <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
                   <div className="font-medium text-sm truncate">{property}</div>
                   {automationCount > 0 ? (
-                    <Badge className="bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 text-xs shrink-0">
+                    <Badge variant="secondary" className="text-xs shrink-0">
                       {automationCount}
                     </Badge>
                   ) : totalAssignments > 0 ? (
@@ -611,8 +392,8 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
             ) : (
               <div className="space-y-4">
                 {/* Selected properties summary */}
-                <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
-                  <p className="text-sm font-medium text-purple-700 dark:text-purple-300 mb-2">
+                <div className="p-4 bg-neutral-50 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                  <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
                     Selected Properties ({selectedProperties.size}):
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -620,7 +401,6 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                       <Badge 
                         key={prop} 
                         variant="secondary"
-                        className="bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
                       >
                         {prop}
                       </Badge>
@@ -636,14 +416,11 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
           </div>
         ) : selectedProperty ? (
           // SINGLE PROPERTY VIEW
-          <div className="p-6">
+          <div className="px-6 pt-4">
             {/* Property Header */}
-            <div className="flex items-start justify-between mb-6">
+            <div className="flex items-start justify-between mb-4">
               <div>
                 <h2 className="text-xl font-semibold">{selectedProperty}</h2>
-                <p className="text-sm text-neutral-500 mt-1">
-                  {selectedPropertyAssignments.length} template{selectedPropertyAssignments.length !== 1 ? 's' : ''} configured
-                </p>
               </div>
               <Button onClick={openAddDialog} disabled={availableTemplates.length === 0}>
                 + Add Template
@@ -657,11 +434,9 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                 <p className="text-sm text-neutral-400 mt-1">Click &quot;Add Template&quot; to configure task automations.</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="flex flex-col gap-4">
                 {selectedPropertyAssignments.map((assignment) => {
                   const template = getTemplate(assignment.template_id);
-                  const config = assignment.automation_config;
-                  const hasAutomation = config?.enabled;
                   const hasOverrides = !!(
                     assignment.field_overrides &&
                     (assignment.field_overrides.additional_fields?.length > 0 ||
@@ -670,95 +445,62 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                   );
 
                   return (
-                    <Card key={assignment.id} className={hasAutomation ? 'border-purple-200 dark:border-purple-800' : ''}>
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <CardTitle className="text-base flex items-center gap-2">
-                              {template?.name || 'Unknown Template'}
-                              <Badge 
-                                variant="secondary"
-                                className={template?.type === 'maintenance' 
-                                  ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200' 
-                                  : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                                }
-                              >
-                                {template?.type || 'unknown'}
+                    <Card
+                      key={assignment.id}
+                      className="cursor-pointer hover:border-neutral-400 dark:hover:border-neutral-500 transition-colors"
+                      onClick={() =>
+                        router.push(
+                          `/templates/automation/configure?property=${encodeURIComponent(assignment.property_name)}&template=${encodeURIComponent(assignment.template_id)}`
+                        )
+                      }
+                    >
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-base flex items-center gap-2 truncate">
+                            {template?.name || 'Unknown Template'}
+                            <Badge 
+                              variant={template?.type === 'maintenance' ? 'default' : 'secondary'}
+                              className={template?.type === 'maintenance' 
+                                ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-300' 
+                                : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-300'
+                              }
+                            >
+                              {template?.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                            </Badge>
+                            {hasOverrides && (
+                              <Badge variant="outline" className="text-xs">
+                                Customized
                               </Badge>
-                              {hasOverrides && (
-                                <Badge 
-                                  variant="outline"
-                                  className="bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 text-xs"
-                                >
-                                  Customized
-                                </Badge>
-                              )}
-                            </CardTitle>
-                            
-                            {/* Status indicators */}
-                            <div className="flex items-center gap-3 mt-2 text-xs">
-                              <span className={`flex items-center gap-1 ${hasAutomation ? 'text-purple-600 dark:text-purple-400' : 'text-neutral-400'}`}>
-                                {hasAutomation ? '✓' : '○'} Auto-gen
-                              </span>
-                              <span className={`flex items-center gap-1 ${config?.schedule.enabled ? 'text-purple-600 dark:text-purple-400' : 'text-neutral-400'}`}>
-                                {config?.schedule.enabled ? '✓' : '○'} Schedule
-                              </span>
-                              <span className={`flex items-center gap-1 ${config?.auto_assign.enabled ? 'text-purple-600 dark:text-purple-400' : 'text-neutral-400'}`}>
-                                {config?.auto_assign.enabled ? '✓' : '○'} Assign
-                              </span>
-                            </div>
-                          </div>
+                            )}
+                          </CardTitle>
                           
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 shrink-0">
                             <Button
                               size="sm"
                               variant="outline"
-                              className="text-amber-700 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-900/20"
-                              onClick={() => openFieldOverridesDialog(assignment)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(
+                                  `/templates/automation/fields?property=${encodeURIComponent(assignment.property_name)}&template=${encodeURIComponent(assignment.template_id)}`
+                                );
+                              }}
                             >
-                              Customize
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openEditDialog(assignment)}
-                            >
-                              Edit
+                              Property Fields
                             </Button>
                             <Button
                               size="sm"
                               variant="ghost"
                               className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                              onClick={() => deleteAutomation(assignment)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteAutomation(assignment);
+                              }}
                             >
                               Remove
                             </Button>
                           </div>
                         </div>
                       </CardHeader>
-                      
-                      {hasAutomation && config && (
-                        <CardContent className="pt-0 border-t border-neutral-100 dark:border-neutral-800">
-                          <div className="flex flex-wrap gap-4 text-xs text-neutral-600 dark:text-neutral-400 pt-3">
-                            <div>
-                              <span className="font-medium">Trigger:</span> {config.trigger_type}
-                            </div>
-                            {config.schedule.enabled && (
-                              <div>
-                                <span className="font-medium">Schedule:</span>{' '}
-                                {config.schedule.type === 'on' ? 'On' : `${config.schedule.days_offset}d ${config.schedule.type}`}{' '}
-                                {config.schedule.relative_to.replace('_', ' ')}
-                              </div>
-                            )}
-                            {config.auto_assign.enabled && config.auto_assign.user_ids.length > 0 && (
-                              <div>
-                                <span className="font-medium">Auto-assign:</span>{' '}
-                                {config.auto_assign.user_ids.length} user(s)
-                              </div>
-                            )}
-                          </div>
-                        </CardContent>
-                      )}
                     </Card>
                   );
                 })}
@@ -771,38 +513,6 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
           </div>
         )}
       </div>
-
-      {/* Edit Automation Dialog */}
-      <Dialog open={!!editingAssignment} onOpenChange={(open) => !open && setEditingAssignment(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Automation</DialogTitle>
-            <DialogDescription>
-              {editingAssignment?.property_name} → {editingAssignment && getTemplate(editingAssignment.template_id)?.name}
-            </DialogDescription>
-          </DialogHeader>
-
-          {automationConfig && (
-            <AutomationConfigForm
-              config={automationConfig}
-              onChange={setAutomationConfig}
-              users={users}
-              presets={presets}
-              isNew={false}
-              onSavePreset={() => setShowPresetDialog(true)}
-            />
-          )}
-
-          <DialogFooter className="mt-6">
-            <Button type="button" variant="outline" onClick={() => setEditingAssignment(null)}>
-              Cancel
-            </Button>
-            <Button onClick={saveAutomationConfig} disabled={saving}>
-              {saving ? 'Saving...' : 'Save'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Add Template Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
@@ -868,36 +578,6 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
         </DialogContent>
       </Dialog>
 
-      {/* Save Preset Dialog */}
-      <Dialog open={showPresetDialog} onOpenChange={setShowPresetDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Save Automation Preset</DialogTitle>
-            <DialogDescription>
-              Save this configuration as a reusable preset.
-            </DialogDescription>
-          </DialogHeader>
-
-          <Field>
-            <FieldLabel>Preset Name</FieldLabel>
-            <Input
-              value={presetName}
-              onChange={(e) => setPresetName(e.target.value)}
-              placeholder="e.g., Standard Turnover Cleaning"
-            />
-          </Field>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPresetDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={saveAsPreset} disabled={saving || !presetName.trim()}>
-              {saving ? 'Saving...' : 'Save Preset'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Bulk Add/Edit Template Dialog */}
       <Dialog open={showBulkAddDialog} onOpenChange={setShowBulkAddDialog}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
@@ -910,11 +590,11 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
 
           <div className="space-y-6">
             {/* Selected properties summary */}
-            <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
-              <p className="text-sm font-medium text-purple-700 dark:text-purple-300">
+            <div className="p-3 bg-neutral-50 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
+              <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
                 Applying to {selectedProperties.size} properties:
               </p>
-              <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
                 {Array.from(selectedProperties).join(', ')}
               </p>
             </div>
@@ -965,56 +645,6 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
               disabled={saving || !selectedTemplateId}
             >
               {saving ? 'Saving...' : `Apply to ${selectedProperties.size} Properties`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Field Overrides (Customize Template) Dialog */}
-      <Dialog open={showFieldOverridesDialog} onOpenChange={(open) => {
-        if (!open) {
-          setShowFieldOverridesDialog(false);
-          setFieldOverridesAssignment(null);
-        }
-      }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Customize Template for this Property</DialogTitle>
-            <DialogDescription>
-              {fieldOverridesAssignment?.property_name} → {fieldOverridesAssignment && getTemplate(fieldOverridesAssignment.template_id)?.name}
-              <br />
-              <span className="text-xs text-neutral-400 mt-1 block">
-                Hide, rename, or add fields specific to this property. Changes here only affect this property — the base template stays the same for all other properties.
-              </span>
-            </DialogDescription>
-          </DialogHeader>
-
-          {loadingBaseFields ? (
-            <div className="flex items-center justify-center py-8">
-              <p className="text-neutral-500">Loading template fields...</p>
-            </div>
-          ) : baseTemplateFields.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-neutral-500">This template has no fields defined yet.</p>
-              <p className="text-xs text-neutral-400 mt-1">Add fields to the base template first, then customize per-property here.</p>
-            </div>
-          ) : (
-            <FieldOverridesEditor
-              baseFields={baseTemplateFields}
-              overrides={fieldOverrides}
-              onChange={setFieldOverrides}
-            />
-          )}
-
-          <DialogFooter className="mt-6">
-            <Button type="button" variant="outline" onClick={() => {
-              setShowFieldOverridesDialog(false);
-              setFieldOverridesAssignment(null);
-            }}>
-              Cancel
-            </Button>
-            <Button onClick={saveFieldOverrides} disabled={saving}>
-              {saving ? 'Saving...' : 'Save Customizations'}
             </Button>
           </DialogFooter>
         </DialogContent>

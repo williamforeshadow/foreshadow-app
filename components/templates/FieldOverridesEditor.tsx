@@ -254,7 +254,7 @@ export default function FieldOverridesEditor({
             {additionalFields.map((field, index) => (
               <div
                 key={field.id}
-                className="flex items-center gap-3 p-3 rounded-lg border bg-purple-50 dark:bg-purple-900/10 border-purple-200 dark:border-purple-800"
+                className="flex items-center gap-3 p-3 rounded-lg border bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700"
               >
                 {/* Label input */}
                 <div className="flex-1 min-w-0">
