@@ -26,7 +26,7 @@ import {
   type User,
   createDefaultAutomationConfig,
 } from '@/lib/types';
-import AutomationConfigForm from './AutomationConfigForm';
+
 
 interface Template {
   id: string;
@@ -187,49 +187,18 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
   const openBulkAddDialog = () => {
     setSelectedTemplateId('');
     const defaultConfig = createDefaultAutomationConfig();
-    defaultConfig.enabled = true;
+    defaultConfig.enabled = false;
     setNewAutomationConfig(defaultConfig);
     setShowBulkAddDialog(true);
   };
 
-  // Save bulk automation to multiple properties
-  const saveBulkAutomation = async () => {
-    if (selectedProperties.size === 0 || !selectedTemplateId || !newAutomationConfig) return;
+  // Navigate to bulk configure page
+  const saveBulkAutomation = () => {
+    if (selectedProperties.size === 0 || !selectedTemplateId) return;
 
-    setSaving(true);
-    try {
-      const promises = Array.from(selectedProperties).map(propertyName =>
-        fetch('/api/property-templates', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            property_name: propertyName,
-            template_id: selectedTemplateId,
-            enabled: true,
-            automation_config: newAutomationConfig,
-          }),
-        })
-      );
-
-      const results = await Promise.all(promises);
-      const failed = results.filter(r => !r.ok).length;
-
-      if (failed > 0) {
-        alert(`Applied to ${selectedProperties.size - failed} properties. ${failed} failed.`);
-      }
-
-      await fetchData();
-      setShowBulkAddDialog(false);
-      setSelectedProperties(new Set());
-      setBulkEditMode(false);
-      setSelectedTemplateId('');
-      setNewAutomationConfig(null);
-    } catch (err) {
-      console.error('Error creating bulk automation:', err);
-      alert('Failed to create automations for some properties');
-    } finally {
-      setSaving(false);
-    }
+    const propertiesParam = encodeURIComponent(Array.from(selectedProperties).join(','));
+    setShowBulkAddDialog(false);
+    router.push(`/templates/automation/bulk-configure?properties=${propertiesParam}&template=${encodeURIComponent(selectedTemplateId)}`);
   };
 
   // Toggle property selection for bulk edit
@@ -602,20 +571,9 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                 </SelectContent>
               </Select>
               <FieldDescription>
-                This template will be added or edited to all selected properties
+                This template will be added to all selected properties with default settings
               </FieldDescription>
             </Field>
-
-            {/* Automation Config */}
-            {selectedTemplateId && newAutomationConfig && (
-              <AutomationConfigForm
-                config={newAutomationConfig}
-                onChange={setNewAutomationConfig}
-                users={users}
-                presets={presets}
-                isNew={true}
-              />
-            )}
           </div>
 
           <DialogFooter className="mt-6">
@@ -624,9 +582,9 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
             </Button>
             <Button 
               onClick={saveBulkAutomation} 
-              disabled={saving || !selectedTemplateId}
+              disabled={!selectedTemplateId}
             >
-              {saving ? 'Saving...' : `Apply to ${selectedProperties.size} Properties`}
+              {`Configure for ${selectedProperties.size} Properties`}
             </Button>
           </DialogFooter>
         </DialogContent>

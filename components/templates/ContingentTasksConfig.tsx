@@ -2,6 +2,7 @@
 
 import { Input } from '@/components/ui/input';
 import type { ContingentTasksConfig as ContingentConfig } from '@/lib/types';
+import InfoTooltip from './InfoTooltip';
 
 // ============================================================================
 // Reusable Toggle (matching AutomationConfigForm style)
@@ -46,44 +47,45 @@ export default function ContingentTasksConfig({ config, onChange }: ContingentTa
   return (
     <div className="border rounded-lg p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex items-center gap-2">
           <div className="font-medium text-sm">Generate as Contingent</div>
-          <div className="text-xs text-neutral-500">
-            Tasks are created as drafts and must be approved before becoming active
-          </div>
+          <InfoTooltip text="Tasks are created as drafts and must be approved before becoming active" />
         </div>
         <Toggle checked={config.enabled} onChange={() => update('enabled', !config.enabled)} />
       </div>
 
       {config.enabled && (
-        <div className="space-y-4 pt-2 border-t">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="font-medium text-sm">Auto-Approve</div>
-              <div className="text-xs text-neutral-500">
-                Automatically approve contingent tasks as they approach their scheduled date
-              </div>
-            </div>
-            <Toggle
-              checked={config.auto_approve_enabled}
-              onChange={() => update('auto_approve_enabled', !config.auto_approve_enabled)}
-            />
+        <>
+          <div className="py-3">
+            <hr className="border-neutral-200 dark:border-neutral-800" />
           </div>
-
-          {config.auto_approve_enabled && (
-            <div className="flex items-center gap-2 flex-wrap pl-4 border-l-2 border-neutral-200 dark:border-neutral-700">
-              <span className="text-sm text-neutral-600 dark:text-neutral-400">Approve</span>
-              <Input
-                type="number"
-                min={0}
-                value={config.auto_approve_days}
-                onChange={(e) => update('auto_approve_days', parseInt(e.target.value) || 0)}
-                className="w-20 h-9"
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="font-medium text-sm">Auto-Approve</div>
+                <InfoTooltip text="Automatically approve contingent tasks as they approach their scheduled date" />
+              </div>
+              <Toggle
+                checked={config.auto_approve_enabled}
+                onChange={() => update('auto_approve_enabled', !config.auto_approve_enabled)}
               />
-              <span className="text-sm text-neutral-600 dark:text-neutral-400">day(s) before scheduled date</span>
             </div>
-          )}
-        </div>
+
+            {config.auto_approve_enabled && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm text-neutral-600 dark:text-neutral-400">Approve</span>
+                <Input
+                  type="number"
+                  min={0}
+                  value={config.auto_approve_days}
+                  onChange={(e) => update('auto_approve_days', parseInt(e.target.value) || 0)}
+                  className="w-20 h-9"
+                />
+                <span className="text-sm text-neutral-600 dark:text-neutral-400">day(s) before scheduled date</span>
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

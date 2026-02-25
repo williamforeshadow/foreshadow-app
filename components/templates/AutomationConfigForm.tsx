@@ -26,6 +26,7 @@ import {
   type RecurringIntervalUnit,
 } from '@/lib/types';
 import ContingentTasksConfig from './ContingentTasksConfig';
+import InfoTooltip from './InfoTooltip';
 
 // ============================================================================
 // Props
@@ -141,9 +142,9 @@ function PeriodScheduleUI({
   return (
     <div className="border rounded-lg p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex items-center gap-2">
           <div className="font-medium text-sm">Auto-Scheduling</div>
-          <div className="text-xs text-neutral-500">Schedule task during {label} period</div>
+          <InfoTooltip text={`Schedule task during ${label} period`} />
         </div>
         <Toggle checked={schedule.enabled} onChange={() => onUpdateField('enabled', !schedule.enabled)} />
       </div>
@@ -170,11 +171,14 @@ function PeriodScheduleUI({
           </div>
 
           {/* Repeat scheduling */}
-          <div className="border-t pt-4">
+          <div className="py-3">
+            <hr className="border-neutral-200 dark:border-neutral-800" />
+          </div>
+          <div>
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex items-center gap-2">
                 <div className="font-medium text-sm">Repeat Scheduling</div>
-                <div className="text-xs text-neutral-500">Create recurring tasks during the {label}</div>
+                <InfoTooltip text={`Create recurring tasks during the ${label}`} />
               </div>
               <Toggle checked={schedule.repeat.enabled} onChange={() => onUpdateRepeat('enabled', !schedule.repeat.enabled)} />
             </div>
@@ -400,9 +404,9 @@ export default function AutomationConfigForm({
           {config.trigger_type === 'turnover' && (
             <div className="border rounded-lg p-4 space-y-4">
               <div className="flex items-center justify-between">
-                <div>
+                <div className="flex items-center gap-2">
                   <div className="font-medium text-sm">Auto-Scheduling</div>
-                  <div className="text-xs text-neutral-500">Automatically set task scheduled time</div>
+                  <InfoTooltip text="Automatically set task scheduled time" />
                 </div>
                 <Toggle checked={config.schedule.enabled} onChange={() => updateSchedule('enabled', !config.schedule.enabled)} />
               </div>
@@ -461,11 +465,14 @@ export default function AutomationConfigForm({
                   </div>
 
                   {/* Same-day override */}
-                  <div className="border-t pt-4">
+                  <div className="py-3">
+                    <hr className="border-neutral-200 dark:border-neutral-800" />
+                  </div>
+                  <div>
                     <div className="flex items-center justify-between mb-3">
-                      <div>
+                      <div className="flex items-center gap-2">
                         <div className="font-medium text-sm">Same-Day Turnover Override</div>
-                        <div className="text-xs text-neutral-500">Different schedule when checkout & next check-in are same day</div>
+                        <InfoTooltip text="Different schedule when checkout & next check-in are same day" />
                       </div>
                       <Toggle
                         checked={config.same_day_override.enabled}
@@ -477,7 +484,7 @@ export default function AutomationConfigForm({
                     </div>
 
                     {config.same_day_override.enabled && (
-                      <div className="flex items-center gap-2 flex-wrap pt-2 pl-4 border-l-2 border-neutral-200 dark:border-neutral-700">
+                      <div className="flex items-center gap-2 flex-wrap pt-2">
                         <Select
                           value={config.same_day_override.schedule.type}
                           onValueChange={(value) => updateSameDaySchedule('type', value as AutomationScheduleType)}
@@ -573,9 +580,9 @@ export default function AutomationConfigForm({
               {/* Vacancy-specific: Max days ahead */}
               {config.vacancy_schedule.enabled && (
                 <div className="border rounded-lg p-4 space-y-2">
-                  <div className="font-medium text-sm">Task Generation Limit</div>
-                  <div className="text-xs text-neutral-500">
-                    When there is no upcoming booking, limit how far ahead tasks are generated
+                  <div className="flex items-center gap-2">
+                    <div className="font-medium text-sm">Task Generation Limit</div>
+                    <InfoTooltip text="When there is no upcoming booking, limit how far ahead tasks are generated" />
                   </div>
                   <div className="flex items-center gap-2 flex-wrap pt-2">
                     <span className="text-sm text-neutral-600 dark:text-neutral-400">Generate tasks up to</span>
@@ -596,10 +603,12 @@ export default function AutomationConfigForm({
           {/* RECURRING: Schedule Configuration */}
           {config.trigger_type === 'recurring' && config.recurring_schedule && (
             <div className="border rounded-lg p-4 space-y-4">
-              <div className="font-medium text-sm">Recurring Schedule</div>
-              <div className="text-xs text-neutral-500">Configure when this task starts and how often it repeats</div>
+              <div className="flex items-center gap-2">
+                <div className="font-medium text-sm">Recurring Schedule</div>
+                <InfoTooltip text="Configure when this task starts and how often it repeats" />
+              </div>
 
-              <div className="space-y-4 pt-2">
+              <div className="flex flex-col gap-6 pt-2">
                 {/* Start date and time */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm text-neutral-600 dark:text-neutral-400">Starting on</span>
@@ -662,9 +671,9 @@ export default function AutomationConfigForm({
               ================================================================ */}
           <div className="border rounded-lg p-4 space-y-4">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex items-center gap-2">
                 <div className="font-medium text-sm">Auto-Assign Users</div>
-                <div className="text-xs text-neutral-500">Automatically assign users to generated tasks</div>
+                <InfoTooltip text="Automatically assign users to generated tasks" />
               </div>
               <Toggle checked={config.auto_assign.enabled} onChange={() => updateAutoAssign('enabled', !config.auto_assign.enabled)} />
             </div>
