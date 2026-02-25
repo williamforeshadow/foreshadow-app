@@ -224,6 +224,7 @@ export function useTimeline() {
     reservations,
     setReservations,
     recurringTasks,
+    setRecurringTasks,
     properties,
     loading,
     selectedReservation,

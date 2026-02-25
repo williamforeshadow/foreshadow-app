@@ -74,6 +74,7 @@ export default function TimelineWindow({
     reservations,
     setReservations,
     recurringTasks,
+    setRecurringTasks,
   } = useTimeline();
 
   // ============================================================================
@@ -209,12 +210,25 @@ export default function TimelineWindow({
         throw new Error(result.error || 'Failed to update task action');
       }
 
-      // Update local task state
+      // Update local task state (for the currently open panel)
       setLocalTask(prev => prev ? { ...prev, status: action as Task['status'] } : null);
+
+      // Persist status into turnover/occupancy/vacancy tasks nested inside reservations
+      setReservations((prev: any[]) => prev.map((r: any) => ({
+        ...r,
+        tasks: (r.tasks || []).map((t: any) =>
+          t.task_id === taskId ? { ...t, status: action } : t
+        ),
+      })));
+
+      // Persist status into recurring tasks
+      setRecurringTasks((prev: any[]) => prev.map((t: any) =>
+        t.task_id === taskId ? { ...t, status: action } : t
+      ));
     } catch (err) {
       console.error('Error updating task status:', err);
     }
-  }, []);
+  }, [setReservations, setRecurringTasks]);
 
   const handleSaveTaskForm = useCallback(async (taskId: string, formData: Record<string, unknown>) => {
     try {
@@ -1126,7 +1140,11 @@ export default function TimelineWindow({
               onUpdateStatus={handleUpdateTaskStatus}
               onSaveForm={handleSaveTaskForm}
               setTask={setLocalTask}
-              onShowTurnover={handleShowTurnover}
+              onShowTurnover={
+                (localTask || floatingData.item as any)?.is_recurring
+                  ? undefined
+                  : handleShowTurnover
+              }
             />
           ) : floatingData.type === 'project' && projectFields ? (
             <ProjectDetailPanel
