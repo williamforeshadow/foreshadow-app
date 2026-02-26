@@ -151,7 +151,7 @@ export function DayKanban({
       statuses: [],
       priorities: [],
       assignees: [],
-      dateRange: { start: kanbanDateStr, end: kanbanDateStr },
+      date: null as string | null,
       searchQuery: '',
       showUnassignedOnly: true,
     };
@@ -191,12 +191,14 @@ export function DayKanban({
           return;
         }
 
-        // Date range filter
-        if (filters.dateRange.start || filters.dateRange.end) {
-          const taskDate = task.scheduled_start?.split('T')[0];
-          if (!taskDate) return;
-          if (filters.dateRange.start && taskDate < filters.dateRange.start) return;
-          if (filters.dateRange.end && taskDate > filters.dateRange.end) return;
+        // Date filter: show items matching the selected date, or only unscheduled if no date
+        const taskDate = task.scheduled_start?.split('T')[0];
+        if (filters.date) {
+          // A date is selected: show only items for that exact date
+          if (taskDate !== filters.date) return;
+        } else {
+          // No date selected: show only unscheduled items
+          if (taskDate) return;
         }
 
         results.push({
@@ -249,12 +251,14 @@ export function DayKanban({
           return;
         }
 
-        // Date range filter
-        if (filters.dateRange.start || filters.dateRange.end) {
-          const projectDate = project.scheduled_start?.split('T')[0];
-          if (!projectDate) return;
-          if (filters.dateRange.start && projectDate < filters.dateRange.start) return;
-          if (filters.dateRange.end && projectDate > filters.dateRange.end) return;
+        // Date filter: show items matching the selected date, or only unscheduled if no date
+        const projectDate = project.scheduled_start?.split('T')[0];
+        if (filters.date) {
+          // A date is selected: show only items for that exact date
+          if (projectDate !== filters.date) return;
+        } else {
+          // No date selected: show only unscheduled items
+          if (projectDate) return;
         }
 
         results.push({

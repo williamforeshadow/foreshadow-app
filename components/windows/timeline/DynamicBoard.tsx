@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { 
   Filter, 
@@ -29,6 +29,11 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import type { Task, Project, TaskStatus, ProjectStatus, ProjectPriority, User as UserType } from '@/lib/types';
 import styles from './DynamicBoard.module.css';
@@ -43,10 +48,7 @@ export interface DynamicBoardFilters {
   statuses: string[];
   priorities: ProjectPriority[];
   assignees: string[]; // user IDs
-  dateRange: {
-    start: string | null;
-    end: string | null;
-  };
+  date: string | null; // Single date filter — shows items for this date + unscheduled items
   searchQuery: string;
   showUnassignedOnly: boolean;
 }
@@ -84,10 +86,7 @@ const getDefaultFilters = (kanbanDate: string): DynamicBoardFilters => ({
   statuses: [],
   priorities: [],
   assignees: [],
-  dateRange: {
-    start: kanbanDate,
-    end: kanbanDate,
-  },
+  date: null, // null = show unscheduled items only (no date filter)
   searchQuery: '',
   showUnassignedOnly: true, // Default to showing unassigned items
 });
@@ -145,13 +144,21 @@ export function DynamicBoard({
 
   const [showFilterPanel, setShowFilterPanel] = useState(false);
 
-  // Update filters and notify parent
+  // Track current filters in a ref so callbacks always have the latest value
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+
+  // Notify parent on mount so it knows the initial filters
+  useEffect(() => {
+    onFiltersChange?.(filtersRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Update filters and notify parent directly (only called from event handlers)
   const updateFilters = useCallback((updates: Partial<DynamicBoardFilters>) => {
-    setFilters(prev => {
-      const newFilters = { ...prev, ...updates };
-      onFiltersChange?.(newFilters);
-      return newFilters;
-    });
+    const newFilters = { ...filtersRef.current, ...updates };
+    setFilters(newFilters);
+    onFiltersChange?.(newFilters);
   }, [onFiltersChange]);
 
   // Reset to defaults
@@ -167,6 +174,9 @@ export function DynamicBoard({
   // ---------------------------------------------------------------------------
   // Active Filter Count (for badge)
   // ---------------------------------------------------------------------------
+  // State for calendar popover
+  const [calendarOpen, setCalendarOpen] = useState(false);
+
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (filters.itemType !== 'all') count++;
@@ -176,7 +186,6 @@ export function DynamicBoard({
     if (filters.assignees.length > 0) count++;
     if (filters.searchQuery) count++;
     if (!filters.showUnassignedOnly) count++; // Non-default
-    // Date range is always active by default, so don't count it
     return count;
   }, [filters]);
 
@@ -237,6 +246,55 @@ export function DynamicBoard({
               <span className={styles.filterBadge}>{activeFilterCount}</span>
             )}
           </Button>
+
+          {/* Calendar Date Picker */}
+          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(styles.filterButton, filters.date && styles.filterButtonActive)}
+              >
+                <Calendar className="h-3.5 w-3.5" />
+                {filters.date && (
+                  <span className={styles.filterBadge}>1</span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className={styles.calendarPopover} align="end" sideOffset={4}>
+              <div className={styles.calendarPopoverContent}>
+                <label className={styles.filterLabel}>
+                  <Calendar className="h-3 w-3" /> Filter by Date
+                </label>
+                <input
+                  type="date"
+                  value={filters.date || ''}
+                  onChange={(e) => {
+                    updateFilters({ date: e.target.value || null });
+                  }}
+                  className={styles.dateInput}
+                />
+                {filters.date && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      updateFilters({ date: null });
+                    }}
+                    className={styles.clearDateButton}
+                  >
+                    <X className="h-3 w-3 mr-1" />
+                    Clear Date
+                  </Button>
+                )}
+                <p className={styles.calendarHint}>
+                  {filters.date 
+                    ? `Showing items for ${filters.date}`
+                    : 'Showing unscheduled items only'}
+                </p>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
@@ -284,32 +342,6 @@ export function DynamicBoard({
               >
                 All Items
               </button>
-            </div>
-          </div>
-
-          {/* Date Range */}
-          <div className={styles.filterGroup}>
-            <label className={styles.filterLabel}>
-              <Calendar className="h-3 w-3" /> Date Range
-            </label>
-            <div className={styles.dateInputs}>
-              <input
-                type="date"
-                value={filters.dateRange.start || ''}
-                onChange={(e) => updateFilters({ 
-                  dateRange: { ...filters.dateRange, start: e.target.value || null } 
-                })}
-                className={styles.dateInput}
-              />
-              <span className={styles.dateSeparator}>to</span>
-              <input
-                type="date"
-                value={filters.dateRange.end || ''}
-                onChange={(e) => updateFilters({ 
-                  dateRange: { ...filters.dateRange, end: e.target.value || null } 
-                })}
-                className={styles.dateInput}
-              />
             </div>
           </div>
 

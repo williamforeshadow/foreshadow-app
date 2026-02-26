@@ -252,6 +252,40 @@
   overflow-y: auto;
 }
 
+/* Calendar Popover */
+.calendarPopover {
+  background-color: #1a1a2e !important;
+  border-color: #3d3d5c !important;
+  padding: 0 !important;
+  min-width: 200px;
+}
+
+.calendarPopoverContent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+}
+
+.clearDateButton {
+  font-size: 0.6875rem !important;
+  color: #a0a0d0;
+  padding: 0.25rem 0.5rem !important;
+  height: auto !important;
+  align-self: flex-start;
+}
+
+.clearDateButton:hover {
+  color: #e0e0ff;
+  background-color: #262640;
+}
+
+.calendarHint {
+  font-size: 0.625rem;
+  color: #6b6b99;
+  margin: 0;
+}
+
 /* Reset Button */
 .resetButton {
   align-self: flex-start;
