@@ -337,12 +337,23 @@ export function ProjectDetailPanel({
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">Scheduled Start</label>
+              <label className="text-sm font-medium text-muted-foreground">Scheduled Date</label>
               <Input
                 type="date"
-                value={editingFields.scheduled_start}
+                value={editingFields.scheduled_date}
                 onChange={(e) => {
-                  setEditingFields(prev => prev ? {...prev, scheduled_start: e.target.value} : null);
+                  setEditingFields(prev => prev ? {...prev, scheduled_date: e.target.value} : null);
+                  setTimeout(onSave, 0);
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-muted-foreground">Scheduled Time</label>
+              <Input
+                type="time"
+                value={editingFields.scheduled_time}
+                onChange={(e) => {
+                  setEditingFields(prev => prev ? {...prev, scheduled_time: e.target.value} : null);
                   setTimeout(onSave, 0);
                 }}
               />

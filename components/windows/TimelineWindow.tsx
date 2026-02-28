@@ -145,7 +145,8 @@ export default function TimelineWindow({
         status: project.status,
         priority: project.priority,
         assigned_staff: project.project_assignments?.[0]?.user_id || '',
-        scheduled_start: project.scheduled_start ? project.scheduled_start.split('T')[0] : ''
+        scheduled_date: project.scheduled_date || '',
+        scheduled_time: project.scheduled_time || ''
       });
       commentsHook.fetchProjectComments(project.id);
       attachmentsHook.fetchProjectAttachments(project.id);
@@ -301,12 +302,12 @@ export default function TimelineWindow({
     }
   }, [floatingData, setReservations]);
 
-  const updateTurnoverTaskSchedule = useCallback(async (taskId: string, dateTime: string | null) => {
+  const updateTurnoverTaskSchedule = useCallback(async (taskId: string, scheduledDate: string | null, scheduledTime: string | null) => {
     try {
       const res = await fetch('/api/update-task-schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId, scheduledStart: dateTime })
+        body: JSON.stringify({ taskId, scheduledDate, scheduledTime })
       });
 
       const result = await res.json();
@@ -316,7 +317,7 @@ export default function TimelineWindow({
       setReservations(prev => prev.map(reservation => ({
         ...reservation,
         tasks: (reservation.tasks || []).map((task: Task) => 
-          task.task_id === taskId ? { ...task, scheduled_start: dateTime } : task
+          task.task_id === taskId ? { ...task, scheduled_date: scheduledDate, scheduled_time: scheduledTime } : task
         )
       })));
 
@@ -330,7 +331,7 @@ export default function TimelineWindow({
             item: {
               ...turnover,
               tasks: turnover.tasks.map(task => 
-                task.task_id === taskId ? { ...task, scheduled_start: dateTime } : task
+                task.task_id === taskId ? { ...task, scheduled_date: scheduledDate, scheduled_time: scheduledTime } : task
               )
             }
           };
@@ -567,7 +568,8 @@ export default function TimelineWindow({
         status: expandedProjectInTurnover.status,
         priority: expandedProjectInTurnover.priority,
         assigned_staff: expandedProjectInTurnover.project_assignments?.[0]?.user_id || '',
-        scheduled_start: expandedProjectInTurnover.scheduled_start ? expandedProjectInTurnover.scheduled_start.split('T')[0] : ''
+        scheduled_date: expandedProjectInTurnover.scheduled_date || '',
+        scheduled_time: expandedProjectInTurnover.scheduled_time || ''
       });
       turnoverCommentsHook.fetchProjectComments(expandedProjectInTurnover.id);
       turnoverAttachmentsHook.fetchProjectAttachments(expandedProjectInTurnover.id);
@@ -622,77 +624,146 @@ export default function TimelineWindow({
     }
   }, [projectsHook]);
 
-  // Handle assignment changes from kanban drag/drop
-  const handleKanbanAssignmentChange = useCallback(async (
+  // Handle column moves from kanban drag/drop (assignment + schedule changes, atomically)
+  const handleKanbanColumnMove = useCallback(async (
     itemType: 'task' | 'project',
     itemId: string,
-    newUserId: string | null
+    changes: {
+      assigneeId?: string | null;
+      scheduledDate?: string | null;
+      scheduledTime?: string | null;
+    }
   ) => {
     try {
       if (itemType === 'task') {
-        // Update task assignment
-        const res = await fetch('/api/update-task-assignment', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            taskId: itemId,
-            userIds: newUserId ? [newUserId] : []
-          })
-        });
-        
-        if (!res.ok) {
-          const result = await res.json();
-          throw new Error(result.error || 'Failed to update task assignment');
+        // Fire applicable API calls in parallel
+        const apiCalls: Promise<Response>[] = [];
+
+        if (changes.assigneeId !== undefined) {
+          apiCalls.push(
+            fetch('/api/update-task-assignment', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                taskId: itemId,
+                userIds: changes.assigneeId ? [changes.assigneeId] : []
+              })
+            })
+          );
         }
-        
-        // Optimistic update: update the task's assignments in local state
-        const assignedUser = users.find((u: any) => u.id === newUserId);
+
+        if (changes.scheduledDate !== undefined) {
+          apiCalls.push(
+            fetch('/api/update-task-schedule', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                taskId: itemId,
+                scheduledDate: changes.scheduledDate,
+                scheduledTime: changes.scheduledTime !== undefined ? changes.scheduledTime : undefined
+              })
+            })
+          );
+        }
+
+        const results = await Promise.all(apiCalls);
+        for (const res of results) {
+          if (!res.ok) {
+            const result = await res.json();
+            throw new Error(result.error || 'Failed to update task');
+          }
+        }
+
+        // Single atomic state update for tasks in reservations
+        const assignedUser = changes.assigneeId
+          ? users.find((u: any) => u.id === changes.assigneeId)
+          : null;
+
         setReservations(prev => prev.map(reservation => ({
           ...reservation,
-          tasks: (reservation.tasks || []).map((task: Task) => 
-            task.task_id === itemId
-              ? {
-                  ...task,
-                  assigned_users: newUserId 
-                    ? [{ 
-                        user_id: newUserId, 
-                        name: assignedUser?.name || '',
-                        avatar: assignedUser?.avatar || '',
-                        role: assignedUser?.role || ''
-                      }]
-                    : []
-                }
-              : task
-          )
+          tasks: (reservation.tasks || []).map((task: Task) => {
+            if (task.task_id !== itemId) return task;
+            const updated = { ...task };
+            if (changes.scheduledDate !== undefined) {
+              updated.scheduled_date = changes.scheduledDate;
+            }
+            if (changes.scheduledTime !== undefined) {
+              updated.scheduled_time = changes.scheduledTime;
+            }
+            if (changes.assigneeId !== undefined) {
+              updated.assigned_users = changes.assigneeId
+                ? [{
+                    user_id: changes.assigneeId,
+                    name: assignedUser?.name || '',
+                    avatar: assignedUser?.avatar || '',
+                    role: assignedUser?.role || ''
+                  }]
+                : [];
+            }
+            return updated;
+          })
         })));
+
+        // Also update recurring tasks
+        setRecurringTasks((prev: any[]) => prev.map((t: any) => {
+          if (t.task_id !== itemId) return t;
+          const updated = { ...t };
+          if (changes.scheduledDate !== undefined) {
+            updated.scheduled_date = changes.scheduledDate;
+          }
+          if (changes.scheduledTime !== undefined) {
+            updated.scheduled_time = changes.scheduledTime;
+          }
+          if (changes.assigneeId !== undefined) {
+            updated.assigned_users = changes.assigneeId
+              ? [{
+                  user_id: changes.assigneeId,
+                  name: assignedUser?.name || '',
+                  avatar: assignedUser?.avatar || '',
+                  role: assignedUser?.role || ''
+                }]
+              : [];
+          }
+          return updated;
+        }));
+
       } else {
-        // Update project assignment
+        // Project: build update payload with whatever changed
+        const projectPayload: Record<string, any> = {
+          user_id: currentUser?.id
+        };
+        if (changes.assigneeId !== undefined) {
+          projectPayload.assigned_user_ids = changes.assigneeId ? [changes.assigneeId] : [];
+        }
+        if (changes.scheduledDate !== undefined) {
+          projectPayload.scheduled_date = changes.scheduledDate;
+        }
+        if (changes.scheduledTime !== undefined) {
+          projectPayload.scheduled_time = changes.scheduledTime;
+        }
+
         const res = await fetch(`/api/projects/${itemId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            assigned_user_ids: newUserId ? [newUserId] : [],
-            user_id: currentUser?.id // for activity logging
-          })
+          body: JSON.stringify(projectPayload)
         });
-        
+
         const result = await res.json();
-        
+
         if (!res.ok) {
-          throw new Error(result.error || 'Failed to update project assignment');
+          throw new Error(result.error || 'Failed to update project');
         }
-        
-        // Update the shared projects state (same pattern as saveProjectById)
+
         if (result.data) {
-          projectsHook.setProjects(prev => 
+          projectsHook.setProjects(prev =>
             prev.map(p => p.id === itemId ? result.data : p)
           );
         }
       }
     } catch (err) {
-      console.error('Error updating assignment:', err);
+      console.error('Error updating column move:', err);
     }
-  }, [currentUser?.id, projectsHook, setReservations, users]);
+  }, [currentUser?.id, projectsHook, setReservations, setRecurringTasks, users]);
 
   // Extract ALL tasks from reservations + recurring tasks, tagged with property_name
   const allTasksWithProperty = useMemo(() => {
@@ -710,14 +781,14 @@ export default function TimelineWindow({
     return tasks;
   }, [reservations, recurringTasks]);
 
-  // Extract tasks with scheduled_start (for kanban user columns)
+  // Extract tasks with scheduled_date (for kanban user columns)
   const allScheduledTasks = useMemo(() => {
-    return allTasksWithProperty.filter(task => task.scheduled_start);
+    return allTasksWithProperty.filter(task => task.scheduled_date);
   }, [allTasksWithProperty]);
 
-  // Filter projects that have scheduled_start
+  // Filter projects that have scheduled_date
   const scheduledProjects = useMemo(() => {
-    return projects.filter(p => p.scheduled_start);
+    return projects.filter(p => p.scheduled_date);
   }, [projects]);
 
   const formatHeaderDate = (date: Date, isTodayDate: boolean) => {
@@ -1114,7 +1185,7 @@ export default function TimelineWindow({
                 propertyName,
               });
             }}
-            onAssignmentChange={handleKanbanAssignmentChange}
+            onColumnMove={handleKanbanColumnMove}
             allTasks={allTasksWithProperty}
             allProjects={projects}
             properties={properties}

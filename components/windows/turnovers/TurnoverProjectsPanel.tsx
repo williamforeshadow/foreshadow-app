@@ -113,9 +113,10 @@ function ProjectCard({
              project.status === 'complete' ? 'Complete' :
              project.status === 'on_hold' ? 'On Hold' : project.status}
           </Badge>
-          {project.scheduled_start && (
+          {project.scheduled_date && (
             <span className="text-neutral-500">
-              Start: {new Date(project.scheduled_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              Start: {new Date(project.scheduled_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              {project.scheduled_time && ` @ ${project.scheduled_time.slice(0, 5)}`}
             </span>
           )}
         </div>

@@ -24,22 +24,23 @@ interface AutomationConfig {
 }
 
 /**
- * Calculate scheduled_start timestamp based on automation config and reservation dates
+ * Calculate scheduled date and time based on automation config and reservation dates.
+ * Returns { date: 'YYYY-MM-DD', time: 'HH:MM' } or { date: null, time: null }.
  */
-function calculateScheduledStart(
+function calculateSchedule(
   config: AutomationScheduleConfig,
   checkOut: string | null,
   nextCheckIn: string | null
-): string | null {
-  if (!config.enabled) return null;
+): { date: string | null; time: string | null } {
+  if (!config.enabled) return { date: null, time: null };
 
   // Determine the base date based on relative_to
   const baseDateStr = config.relative_to === 'check_out' ? checkOut : nextCheckIn;
-  if (!baseDateStr) return null;
+  if (!baseDateStr) return { date: null, time: null };
 
   // Parse the base date (handle ISO string or date-only string)
   const baseDate = new Date(baseDateStr);
-  if (isNaN(baseDate.getTime())) return null;
+  if (isNaN(baseDate.getTime())) return { date: null, time: null };
 
   // Apply days offset
   let targetDate = new Date(baseDate);
@@ -50,12 +51,16 @@ function calculateScheduledStart(
   }
   // 'on' means same day, no offset needed
 
-  // Apply time (24-hour format like "10:00" or "14:30")
-  const time = config.time || '10:00';
-  const [hours, minutes] = time.split(':').map(Number);
-  targetDate.setHours(hours, minutes, 0, 0);
+  // Extract date as YYYY-MM-DD
+  const y = targetDate.getFullYear();
+  const m = String(targetDate.getMonth() + 1).padStart(2, '0');
+  const d = String(targetDate.getDate()).padStart(2, '0');
+  const dateStr = `${y}-${m}-${d}`;
 
-  return targetDate.toISOString();
+  // Time from config (24-hour format like "10:00" or "14:30")
+  const timeStr = config.time || '10:00';
+
+  return { date: dateStr, time: timeStr };
 }
 
 /**
@@ -127,27 +132,31 @@ export async function POST(request: Request) {
 
     const automationConfig = propertyTemplate?.automation_config as AutomationConfig | null;
 
-    // Calculate scheduled_start if automation is configured
-    let scheduledStart: string | null = null;
+    // Calculate scheduled date/time if automation is configured
+    let scheduledDate: string | null = null;
+    let scheduledTime: string | null = null;
     let assignUserIds: string[] = [];
 
     if (automationConfig?.enabled && automationConfig.schedule.enabled) {
       const isSameDay = isSameDayTurnover(reservation.check_out, reservation.next_check_in);
       
+      let schedule: { date: string | null; time: string | null };
       // Use same-day override config if applicable
       if (isSameDay && automationConfig.same_day_override.enabled) {
-        scheduledStart = calculateScheduledStart(
+        schedule = calculateSchedule(
           { ...automationConfig.same_day_override.schedule, enabled: true },
           reservation.check_out,
           reservation.next_check_in
         );
       } else {
-        scheduledStart = calculateScheduledStart(
+        schedule = calculateSchedule(
           automationConfig.schedule,
           reservation.check_out,
           reservation.next_check_in
         );
       }
+      scheduledDate = schedule.date;
+      scheduledTime = schedule.time;
     }
 
     // Get auto-assign user IDs if configured
@@ -155,7 +164,7 @@ export async function POST(request: Request) {
       assignUserIds = automationConfig.auto_assign.user_ids || [];
     }
 
-    // Insert new task with calculated scheduled_start
+    // Insert new task with calculated schedule
     const { data: newTask, error: insertError } = await supabase
       .from('turnover_tasks')
       .insert({
@@ -163,7 +172,8 @@ export async function POST(request: Request) {
         template_id,
         type: template.type,
         status: 'not_started',
-        scheduled_start: scheduledStart
+        scheduled_date: scheduledDate,
+        scheduled_time: scheduledTime
       })
       .select('*, templates(name, type)')
       .single();
@@ -208,7 +218,8 @@ export async function POST(request: Request) {
       type: newTask.type,
       status: newTask.status,
       assigned_users: assignedUsers,
-      scheduled_start: newTask.scheduled_start,
+      scheduled_date: newTask.scheduled_date,
+      scheduled_time: newTask.scheduled_time,
       form_metadata: newTask.form_metadata,
       completed_at: newTask.completed_at
     };

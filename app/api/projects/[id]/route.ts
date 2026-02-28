@@ -63,7 +63,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, description, status, priority, assigned_user_ids, scheduled_start, user_id } = body;
+    const { title, description, status, priority, assigned_user_ids, scheduled_date, scheduled_time, user_id } = body;
 
     // Fetch current project to compare for activity logging
     const { data: oldProject } = await getSupabaseServer()
@@ -82,7 +82,8 @@ export async function PUT(
     if (description !== undefined) updateData.description = description;
     if (status !== undefined) updateData.status = status;
     if (priority !== undefined) updateData.priority = priority;
-    if (scheduled_start !== undefined) updateData.scheduled_start = scheduled_start;
+    if (scheduled_date !== undefined) updateData.scheduled_date = scheduled_date;
+    if (scheduled_time !== undefined) updateData.scheduled_time = scheduled_time;
 
     const { error: updateError } = await getSupabaseServer()
       .from('property_projects')
@@ -179,10 +180,14 @@ export async function PUT(
       if (description !== undefined && description !== oldProject.description) {
         await logProjectActivity(id, user_id, 'description_change', 'updated the description', oldProject.description, description);
       }
-      // Scheduled start change
-      if (scheduled_start !== undefined && scheduled_start !== oldProject.scheduled_start) {
-        const formattedDate = scheduled_start ? new Date(scheduled_start).toLocaleDateString() : 'none';
-        await logProjectActivity(id, user_id, 'scheduled_start_change', `changed scheduled start to "${formattedDate}"`, oldProject.scheduled_start, scheduled_start);
+      // Scheduled date/time change
+      if (scheduled_date !== undefined && scheduled_date !== oldProject.scheduled_date) {
+        const formattedDate = scheduled_date || 'none';
+        await logProjectActivity(id, user_id, 'scheduled_date_change', `changed scheduled date to "${formattedDate}"`, oldProject.scheduled_date, scheduled_date);
+      }
+      if (scheduled_time !== undefined && scheduled_time !== oldProject.scheduled_time) {
+        const formattedTime = scheduled_time || 'none';
+        await logProjectActivity(id, user_id, 'scheduled_time_change', `changed scheduled time to "${formattedTime}"`, oldProject.scheduled_time, scheduled_time);
       }
       // Assignment change
       if (assigned_user_ids !== undefined) {

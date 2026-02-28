@@ -69,7 +69,8 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     status: 'not_started',
     priority: 'medium',
     assigned_staff: '',
-    scheduled_start: ''
+    scheduled_date: '',
+    scheduled_time: ''
   });
 
   // Saving state for project edits (shared loading indicator)
@@ -179,7 +180,8 @@ export function useProjects({ currentUser }: UseProjectsProps) {
       status: 'not_started',
       priority: 'medium',
       assigned_staff: '',
-      scheduled_start: ''
+      scheduled_date: '',
+      scheduled_time: ''
     });
     setEditingProject(null);
   }, []);
@@ -200,7 +202,8 @@ export function useProjects({ currentUser }: UseProjectsProps) {
       status: project.status,
       priority: project.priority,
       assigned_staff: project.assigned_staff || '',
-      scheduled_start: project.scheduled_start || ''
+      scheduled_date: project.scheduled_date || '',
+      scheduled_time: project.scheduled_time || ''
     });
     setEditingProject(project);
     setShowProjectDialog(true);
@@ -224,7 +227,8 @@ export function useProjects({ currentUser }: UseProjectsProps) {
         status: projectForm.status,
         priority: projectForm.priority,
         assigned_staff: projectForm.assigned_staff || null,
-        scheduled_start: projectForm.scheduled_start ? new Date(projectForm.scheduled_start).toISOString() : null
+        scheduled_date: projectForm.scheduled_date || null,
+        scheduled_time: projectForm.scheduled_time || null
       };
 
       const url = editingProject
@@ -292,7 +296,8 @@ export function useProjects({ currentUser }: UseProjectsProps) {
         status: 'not_started',
         priority: 'medium',
         assigned_staff: null,
-        scheduled_start: null
+        scheduled_date: null,
+        scheduled_time: null
       };
 
       const response = await fetch('/api/projects', {
@@ -336,7 +341,8 @@ export function useProjects({ currentUser }: UseProjectsProps) {
           status: fields.status,
           priority: fields.priority,
           assigned_user_ids: fields.assigned_staff ? [fields.assigned_staff] : [],
-          scheduled_start: fields.scheduled_start || null,
+          scheduled_date: fields.scheduled_date || null,
+          scheduled_time: fields.scheduled_time || null,
           user_id: currentUser.id
         })
       });

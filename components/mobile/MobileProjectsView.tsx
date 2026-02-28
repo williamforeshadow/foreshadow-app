@@ -12,7 +12,8 @@ interface Project {
   status: string;
   priority: string;
   assigned_staff?: string;
-  scheduled_start?: string;
+  scheduled_date?: string;
+  scheduled_time?: string;
   created_at: string;
 }
 
@@ -32,7 +33,7 @@ export default function MobileProjectsView({
   onEditProject,
 }: MobileProjectsViewProps) {
   const [filter, setFilter] = useState<'all' | 'active' | 'complete'>('all');
-  const [sortBy, setSortBy] = useState<'scheduled_start' | 'priority' | 'created'>('priority');
+  const [sortBy, setSortBy] = useState<'scheduled_date' | 'priority' | 'created'>('priority');
 
   const filteredProjects = projects.filter(p => {
     if (filter === 'active') return p.status !== 'complete';
@@ -41,10 +42,10 @@ export default function MobileProjectsView({
   });
 
   const sortedProjects = [...filteredProjects].sort((a, b) => {
-    if (sortBy === 'scheduled_start') {
-      if (!a.scheduled_start) return 1;
-      if (!b.scheduled_start) return -1;
-      return new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime();
+    if (sortBy === 'scheduled_date') {
+      if (!a.scheduled_date) return 1;
+      if (!b.scheduled_date) return -1;
+      return a.scheduled_date.localeCompare(b.scheduled_date);
     }
     if (sortBy === 'priority') {
       const order = { urgent: 0, high: 1, medium: 2, low: 3 };
@@ -79,7 +80,8 @@ export default function MobileProjectsView({
 
   const formatDueDate = (dateString?: string) => {
     if (!dateString) return null;
-    const date = new Date(dateString);
+    // dateString is YYYY-MM-DD
+    const date = new Date(dateString + 'T00:00:00');
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const dueDate = new Date(date);
@@ -139,7 +141,7 @@ export default function MobileProjectsView({
           className="text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-900 px-2 py-1"
         >
           <option value="priority">Sort: Priority</option>
-          <option value="scheduled_start">Sort: Start Date</option>
+          <option value="scheduled_date">Sort: Start Date</option>
           <option value="created">Sort: Newest</option>
         </select>
 
@@ -177,7 +179,7 @@ export default function MobileProjectsView({
         ) : (
           <div className="p-4 space-y-3">
             {sortedProjects.map((project) => {
-              const dueInfo = formatDueDate(project.scheduled_start);
+              const dueInfo = formatDueDate(project.scheduled_date);
               
               return (
                 <div

@@ -90,7 +90,7 @@ export const TaskRowItem = memo(function TaskRowItem({
 
       {/* Scheduled/Due date */}
       <div className="w-24 text-xs text-neutral-500 dark:text-neutral-400 text-right shrink-0">
-        {task.scheduled_start ? formatDate(task.scheduled_start) : '—'}
+        {task.scheduled_date ? formatDate(task.scheduled_date) : '—'}
       </div>
 
       {/* Assigned users */}

@@ -50,7 +50,8 @@ export function useTimeline() {
             template_id,
             type,
             status,
-            scheduled_start,
+            scheduled_date,
+            scheduled_time,
             form_metadata,
             completed_at,
             created_at,
@@ -59,7 +60,7 @@ export function useTimeline() {
             task_assignments(user_id, users(id, name, avatar, role))
           `)
           .is('reservation_id', null)
-          .order('scheduled_start', { ascending: true }),
+          .order('scheduled_date', { ascending: true, nullsFirst: false }),
       ]);
 
       if (turnoversResult.error) throw turnoversResult.error;
@@ -74,7 +75,8 @@ export function useTimeline() {
         template_name: t.templates?.name || 'Unnamed Task',
         type: t.type || t.templates?.type || 'cleaning',
         status: t.status || 'not_started',
-        scheduled_start: t.scheduled_start,
+        scheduled_date: t.scheduled_date,
+        scheduled_time: t.scheduled_time,
         form_metadata: t.form_metadata,
         completed_at: t.completed_at,
         property_name: t.property_name,

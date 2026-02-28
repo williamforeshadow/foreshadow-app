@@ -29,7 +29,7 @@ interface TaskFilterBarProps {
   toggleAssignedUserFilter: (userId: string) => void;
   clearFilters: () => void;
   getActiveFilterCount: () => number;
-  setSortBy: (sortBy: 'created_at' | 'scheduled_start' | 'property_name' | 'status') => void;
+  setSortBy: (sortBy: 'created_at' | 'scheduled_date' | 'property_name' | 'status') => void;
 }
 
 export function TaskFilterBar({
@@ -330,11 +330,11 @@ export function TaskFilterBar({
         <div className="ml-auto">
           <select
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as 'created_at' | 'scheduled_start' | 'property_name' | 'status')}
+            onChange={(e) => setSortBy(e.target.value as 'created_at' | 'scheduled_date' | 'property_name' | 'status')}
             className="text-xs bg-transparent border border-neutral-200 dark:border-neutral-700 rounded px-2 py-1 text-neutral-600 dark:text-neutral-300"
           >
             <option value="created_at">Newest first</option>
-            <option value="scheduled_start">By schedule</option>
+            <option value="scheduled_date">By schedule</option>
             <option value="property_name">By property</option>
             <option value="status">By status</option>
           </select>

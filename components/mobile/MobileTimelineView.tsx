@@ -138,14 +138,18 @@ export default function MobileTimelineView({ onCardClick, onTaskClick, onProject
   // Helper to format scheduled date/time
   const formatScheduledDate = (dateString?: string) => {
     if (!dateString) return null;
-    const date = new Date(dateString);
+    // dateString is YYYY-MM-DD
+    const date = new Date(dateString + 'T00:00:00');
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const formatScheduledTime = (dateString?: string) => {
-    if (!dateString) return null;
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  const formatScheduledTime = (timeString?: string) => {
+    if (!timeString) return null;
+    // timeString is HH:MM or HH:MM:SS
+    const [h, m] = timeString.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const hour12 = h % 12 || 12;
+    return `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
   };
 
   // Helper to get project status badge styles
@@ -351,8 +355,8 @@ export default function MobileTimelineView({ onCardClick, onTaskClick, onProject
                                           const taskStatus = task.status || 'not_started';
                                           const statusStyles = getTaskStatusStyles(taskStatus);
                                           const assignedUsers = task.assigned_users || [];
-                                          const scheduledDate = formatScheduledDate(task.scheduled_start);
-                                          const scheduledTime = formatScheduledTime(task.scheduled_start);
+                                          const scheduledDate = formatScheduledDate(task.scheduled_date);
+                                          const scheduledTime = formatScheduledTime(task.scheduled_time);
                                           
                                           return (
                                             <Card 
@@ -431,7 +435,7 @@ export default function MobileTimelineView({ onCardClick, onTaskClick, onProject
                                           const projectStatus = project.status || 'not_started';
                                           const statusStyles = getProjectStatusStyles(projectStatus);
                                           const priorityStyles = getPriorityStyles(project.priority);
-                                          const dueDate = formatScheduledDate(project.scheduled_start);
+                                          const dueDate = formatScheduledDate(project.scheduled_date);
                                           
                                           return (
                                             <Card 

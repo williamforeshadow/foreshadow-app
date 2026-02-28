@@ -161,12 +161,15 @@ export function ScheduledItemsCell({
   onTaskClick,
   onProjectClick,
 }: ScheduledItemsCellProps) {
+  // Format the cell date as YYYY-MM-DD for direct string comparison
+  const cellDateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
   // Filter tasks scheduled for this property + date
   const scheduledTasks = tasks.filter(
     (t) =>
       t.property_name === propertyName &&
-      t.scheduled_start &&
-      isSameDay(new Date(t.scheduled_start), date)
+      t.scheduled_date &&
+      t.scheduled_date === cellDateStr
   );
 
   // Split tasks into approved vs contingent for icon styling
@@ -185,8 +188,8 @@ export function ScheduledItemsCell({
   const scheduledProjects = projects.filter(
     (p) =>
       p.property_name === propertyName &&
-      p.scheduled_start &&
-      isSameDay(new Date(p.scheduled_start), date)
+      p.scheduled_date &&
+      p.scheduled_date === cellDateStr
   );
 
   // Nothing scheduled? Don't render anything

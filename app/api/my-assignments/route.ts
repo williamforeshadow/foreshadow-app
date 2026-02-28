@@ -40,7 +40,8 @@ export async function GET(request: Request) {
           reservation_id,
           template_id,
           type,
-          scheduled_start,
+          scheduled_date,
+          scheduled_time,
           status,
           form_metadata,
           templates(id, name, type, description)
@@ -95,7 +96,8 @@ export async function GET(request: Request) {
           template_name: template?.name || 'Unnamed Task',
           type: task.type || template?.type || 'cleaning',
           description: template?.description,
-          scheduled_start: task.scheduled_start,
+          scheduled_date: task.scheduled_date,
+          scheduled_time: task.scheduled_time,
           status: task.status || 'not_started',
           form_metadata: task.form_metadata,
           assigned_at: assignment?.assigned_at,
@@ -121,7 +123,8 @@ export async function GET(request: Request) {
           description,
           status,
           priority,
-          scheduled_start,
+          scheduled_date,
+          scheduled_time,
           created_at
         )
       `)

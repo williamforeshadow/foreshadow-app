@@ -231,12 +231,12 @@ export function useTurnovers() {
     }
   }, []);
 
-  const updateTaskSchedule = useCallback(async (taskId: string, dateTime: string | null) => {
+  const updateTaskSchedule = useCallback(async (taskId: string, scheduledDate: string | null, scheduledTime: string | null) => {
     try {
       const res = await fetch('/api/update-task-schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId, scheduledStart: dateTime })
+        body: JSON.stringify({ taskId, scheduledDate, scheduledTime })
       });
 
       const result = await res.json();
@@ -251,7 +251,7 @@ export function useTurnovers() {
 
         const updatedTasks = prev.tasks.map((task) =>
           task.task_id === taskId
-            ? { ...task, scheduled_start: dateTime }
+            ? { ...task, scheduled_date: scheduledDate, scheduled_time: scheduledTime }
             : task
         );
 
@@ -266,7 +266,7 @@ export function useTurnovers() {
           if (item.id === selectedCardIdRef.current && item.tasks) {
             const updatedTasks = item.tasks.map((task) =>
               task.task_id === taskId
-                ? { ...task, scheduled_start: dateTime }
+                ? { ...task, scheduled_date: scheduledDate, scheduled_time: scheduledTime }
                 : task
             );
             return { ...item, tasks: updatedTasks };

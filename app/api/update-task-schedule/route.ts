@@ -3,7 +3,7 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 
 export async function POST(request: Request) {
   try {
-    const { taskId, scheduledStart } = await request.json();
+    const { taskId, scheduledDate, scheduledTime } = await request.json();
 
     if (!taskId) {
       return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
@@ -12,7 +12,8 @@ export async function POST(request: Request) {
     const { data, error } = await getSupabaseServer()
       .from('turnover_tasks')
       .update({ 
-        scheduled_start: scheduledStart,
+        scheduled_date: scheduledDate ?? null,
+        scheduled_time: scheduledTime ?? null,
         updated_at: new Date().toISOString()
       })
       .eq('id', taskId)

@@ -323,12 +323,12 @@ export default function StaffPage() {
     }
   };
 
-  const updateTaskSchedule = async (taskId: string, dateTime: string | null) => {
+  const updateTaskSchedule = async (taskId: string, scheduledDate: string | null, scheduledTime: string | null) => {
     try {
       const response = await fetch('/api/update-task-schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId, scheduledStart: dateTime })
+        body: JSON.stringify({ taskId, scheduledDate, scheduledTime })
       });
 
       const result = await response.json();
@@ -343,7 +343,7 @@ export default function StaffPage() {
         
         const updatedTasks = prev.tasks.map((task: any) => 
           task.task_id === taskId 
-            ? { ...task, scheduled_start: dateTime }
+            ? { ...task, scheduled_date: scheduledDate, scheduled_time: scheduledTime }
             : task
         );
         
@@ -358,7 +358,7 @@ export default function StaffPage() {
           if (item.id === selectedCard.id && item.tasks) {
             const updatedTasks = item.tasks.map((task: any) => 
               task.task_id === taskId 
-                ? { ...task, scheduled_start: dateTime }
+                ? { ...task, scheduled_date: scheduledDate, scheduled_time: scheduledTime }
                 : task
             );
             return { ...item, tasks: updatedTasks };
@@ -1136,8 +1136,8 @@ export default function StaffPage() {
                                       className="w-40 justify-between font-normal"
                                       size="sm"
                                     >
-                                      {task.scheduled_start 
-                                        ? new Date(task.scheduled_start).toLocaleDateString() 
+                                      {task.scheduled_date 
+                                        ? new Date(task.scheduled_date + 'T00:00:00').toLocaleDateString() 
                                         : "Select date"}
                                       <ChevronDownIcon className="h-4 w-4" />
                                     </Button>
@@ -1145,16 +1145,15 @@ export default function StaffPage() {
                                   <PopoverContent className="w-auto p-0" align="start">
                                     <Calendar
                                       mode="single"
-                                      selected={task.scheduled_start ? new Date(task.scheduled_start) : undefined}
+                                      selected={task.scheduled_date ? new Date(task.scheduled_date + 'T00:00:00') : undefined}
                                       onSelect={(date) => {
                                         if (date) {
-                                          const timeStr = task.scheduled_start 
-                                            ? new Date(task.scheduled_start).toTimeString().slice(0, 5) 
-                                            : '09:00';
-                                          const dateStr = date.toISOString().split('T')[0];
-                                          updateTaskSchedule(task.task_id, `${dateStr}T${timeStr}:00`);
+                                          const y = date.getFullYear();
+                                          const m = String(date.getMonth() + 1).padStart(2, '0');
+                                          const d = String(date.getDate()).padStart(2, '0');
+                                          updateTaskSchedule(task.task_id, `${y}-${m}-${d}`, task.scheduled_time || null);
                                         } else {
-                                          updateTaskSchedule(task.task_id, null);
+                                          updateTaskSchedule(task.task_id, null, null);
                                         }
                                       }}
                                     />
@@ -1163,15 +1162,10 @@ export default function StaffPage() {
                                 
                                 <Input
                                   type="time"
-                                  value={task.scheduled_start ? new Date(task.scheduled_start).toTimeString().slice(0, 5) : ""}
+                                  value={task.scheduled_time ? task.scheduled_time.slice(0, 5) : ""}
                                   onChange={(e) => {
-                                    if (task.scheduled_start) {
-                                      const dateStr = new Date(task.scheduled_start).toISOString().split('T')[0];
-                                      updateTaskSchedule(task.task_id, `${dateStr}T${e.target.value}:00`);
-                                    } else {
-                                      const today = new Date().toISOString().split('T')[0];
-                                      updateTaskSchedule(task.task_id, `${today}T${e.target.value}:00`);
-                                    }
+                                    const newTime = e.target.value || null;
+                                    updateTaskSchedule(task.task_id, task.scheduled_date || null, newTime);
                                   }}
                                   className="w-32"
                                 />

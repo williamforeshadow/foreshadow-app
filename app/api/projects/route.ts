@@ -102,7 +102,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     console.log('Request body:', JSON.stringify(body, null, 2));
     
-    const { property_name, title, description, status, priority, assigned_user_ids, scheduled_start } = body;
+    const { property_name, title, description, status, priority, assigned_user_ids, scheduled_date, scheduled_time } = body;
 
     if (!property_name || !title) {
       console.log('Validation failed: missing property_name or title');
@@ -122,7 +122,8 @@ export async function POST(request: Request) {
         description: description || null,
         status: status || 'not_started',
         priority: priority || 'medium',
-        scheduled_start: scheduled_start || null
+        scheduled_date: scheduled_date || null,
+        scheduled_time: scheduled_time || null
       })
       .select()
       .single();

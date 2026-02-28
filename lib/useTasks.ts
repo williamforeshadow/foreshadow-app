@@ -15,7 +15,8 @@ export interface TaskRow {
   template_name: string;
   type: TaskType;
   status: TaskStatus;
-  scheduled_start: string | null;
+  scheduled_date: string | null;
+  scheduled_time: string | null;
   form_metadata: Record<string, unknown> | null;
   completed_at: string | null;
   created_at: string;
@@ -83,7 +84,7 @@ export function useTasks() {
   });
 
   // Sort state
-  const [sortBy, setSortBy] = useState<'created_at' | 'scheduled_start' | 'property_name' | 'status'>('created_at');
+  const [sortBy, setSortBy] = useState<'created_at' | 'scheduled_date' | 'property_name' | 'status'>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // Selection state
@@ -203,13 +204,13 @@ export function useTasks() {
     // Filter by scheduled date range
     if (filters.scheduledDateRange.from || filters.scheduledDateRange.to) {
       result = result.filter(task => {
-        if (!task.scheduled_start) return false;
+        if (!task.scheduled_date) return false;
         
-        const scheduledDate = new Date(task.scheduled_start);
+        const scheduledDate = new Date(task.scheduled_date + 'T00:00:00');
         const rangeStart = filters.scheduledDateRange.from;
         const rangeEnd = filters.scheduledDateRange.to;
         
-        // Check if scheduled_start falls within range
+        // Check if scheduled_date falls within range
         const afterStart = !rangeStart || scheduledDate >= rangeStart;
         const beforeEnd = !rangeEnd || scheduledDate <= rangeEnd;
         
@@ -232,9 +233,9 @@ export function useTasks() {
         case 'created_at':
           comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
           break;
-        case 'scheduled_start':
-          const aDate = a.scheduled_start ? new Date(a.scheduled_start).getTime() : 0;
-          const bDate = b.scheduled_start ? new Date(b.scheduled_start).getTime() : 0;
+        case 'scheduled_date':
+          const aDate = a.scheduled_date ? new Date(a.scheduled_date + 'T00:00:00').getTime() : 0;
+          const bDate = b.scheduled_date ? new Date(b.scheduled_date + 'T00:00:00').getTime() : 0;
           comparison = aDate - bDate;
           break;
         case 'property_name':

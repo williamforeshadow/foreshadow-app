@@ -27,7 +27,8 @@ interface Task {
   template_name: string;
   type: 'cleaning' | 'maintenance';
   description?: string;
-  scheduled_start?: string;
+  scheduled_date?: string;
+  scheduled_time?: string;
   status: string;
   form_metadata?: any;
   assigned_at: string;
@@ -44,7 +45,8 @@ interface Project {
   description?: string;
   status: string;
   priority: string;
-  scheduled_start?: string;
+  scheduled_date?: string;
+  scheduled_time?: string;
   created_at: string;
   assigned_at: string;
 }
@@ -150,14 +152,18 @@ export default function MobileMyAssignmentsView({
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return null;
-    const date = new Date(dateString);
+    // dateString is YYYY-MM-DD
+    const date = new Date(dateString + 'T00:00:00');
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const formatTime = (dateString?: string) => {
-    if (!dateString) return null;
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  const formatTime = (timeString?: string) => {
+    if (!timeString) return null;
+    // timeString is HH:MM or HH:MM:SS
+    const [h, m] = timeString.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const hour12 = h % 12 || 12;
+    return `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
   };
 
   const formatStatusLabel = (status: string) => {
@@ -314,12 +320,12 @@ export default function MobileMyAssignmentsView({
 
                         <div className="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400 mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
                           <div className="flex items-center gap-1">
-                            {task.scheduled_start ? (
+                            {task.scheduled_date ? (
                               <>
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                 </svg>
-                                <span>{formatDate(task.scheduled_start)}{formatTime(task.scheduled_start) ? `, ${formatTime(task.scheduled_start)}` : ''}</span>
+                                <span>{formatDate(task.scheduled_date)}{formatTime(task.scheduled_time) ? `, ${formatTime(task.scheduled_time)}` : ''}</span>
                               </>
                             ) : (
                               <span className="text-neutral-400">No schedule</span>
@@ -387,12 +393,12 @@ export default function MobileMyAssignmentsView({
                           )}
                         </div>
 
-                        {project.scheduled_start && (
+                        {project.scheduled_date && (
                           <div className="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400 mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
-                            <span>Start: {formatDate(project.scheduled_start)}</span>
+                            <span>Start: {formatDate(project.scheduled_date)}{formatTime(project.scheduled_time) ? ` @ ${formatTime(project.scheduled_time)}` : ''}</span>
                           </div>
                         )}
                       </CardHeader>

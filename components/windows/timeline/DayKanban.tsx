@@ -44,7 +44,11 @@ interface DayKanbanProps {
   onClose: () => void;
   onTaskClick?: (task: Task, propertyName: string) => void;
   onProjectClick?: (project: Project, propertyName: string) => void;
-  onAssignmentChange?: (itemType: 'task' | 'project', itemId: string, newUserId: string | null) => void;
+  onColumnMove?: (itemType: 'task' | 'project', itemId: string, changes: {
+    assigneeId?: string | null;      // string = set, null = clear, undefined = no change
+    scheduledDate?: string | null;   // YYYY-MM-DD string = set, null = clear, undefined = no change
+    scheduledTime?: string | null;   // HH:MM string = set, null = clear, undefined = no change
+  }) => void;
   isFullScreen?: boolean;
   /** All tasks for dynamic board filtering (optional - falls back to scheduled tasks) */
   allTasks?: (Task & { property_name: string })[];
@@ -97,34 +101,37 @@ export function DayKanban({
   onClose,
   onTaskClick,
   onProjectClick,
-  onAssignmentChange,
+  onColumnMove,
   isFullScreen = false,
   allTasks,
   allProjects,
   properties = [],
 }: DayKanbanProps) {
+  // Format date as YYYY-MM-DD string (use local date, not UTC, to avoid timezone shifts)
+  const kanbanDateStr = useMemo(() => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, [date]);
+
   // Filter tasks and projects for this specific day
   const dayTasks = useMemo(() => {
     return tasks.filter(task => {
-      if (!task.scheduled_start) return false;
-      return isSameDay(new Date(task.scheduled_start), date);
+      if (!task.scheduled_date) return false;
+      return task.scheduled_date === kanbanDateStr;
     });
-  }, [tasks, date]);
+  }, [tasks, kanbanDateStr]);
 
   const dayProjects = useMemo(() => {
     return projects.filter(project => {
-      if (!project.scheduled_start) return false;
-      return isSameDay(new Date(project.scheduled_start), date);
+      if (!project.scheduled_date) return false;
+      return project.scheduled_date === kanbanDateStr;
     });
-  }, [projects, date]);
+  }, [projects, kanbanDateStr]);
 
   // State for dynamic board filters
   const [dynamicBoardFilters, setDynamicBoardFilters] = useState<DynamicBoardFilters | null>(null);
-  
-  // Format date for dynamic board
-  const kanbanDateStr = useMemo(() => {
-    return date.toISOString().split('T')[0];
-  }, [date]);
 
   // Build columns array for dnd-kit
   const columns: KanbanColumn[] = useMemo(() => {
@@ -192,13 +199,12 @@ export function DayKanban({
         }
 
         // Date filter: show items matching the selected date, or only unscheduled if no date
-        const taskDate = task.scheduled_start?.split('T')[0];
         if (filters.date) {
           // A date is selected: show only items for that exact date
-          if (taskDate !== filters.date) return;
+          if (task.scheduled_date !== filters.date) return;
         } else {
           // No date selected: show only unscheduled items
-          if (taskDate) return;
+          if (task.scheduled_date) return;
         }
 
         results.push({
@@ -252,13 +258,12 @@ export function DayKanban({
         }
 
         // Date filter: show items matching the selected date, or only unscheduled if no date
-        const projectDate = project.scheduled_start?.split('T')[0];
         if (filters.date) {
           // A date is selected: show only items for that exact date
-          if (projectDate !== filters.date) return;
+          if (project.scheduled_date !== filters.date) return;
         } else {
           // No date selected: show only unscheduled items
-          if (projectDate) return;
+          if (project.scheduled_date) return;
         }
 
         results.push({
@@ -337,15 +342,49 @@ export function DayKanban({
     setItems(initialItems);
   }, [initialItems]);
 
-  // Handle column change (assignment change)
+  // Handle column change (assignment + schedule changes on drag between columns)
   const handleColumnChange = useCallback((itemId: string, oldColumnId: string, newColumnId: string) => {
     const item = items.find(i => i.id === itemId);
-    if (item && onAssignmentChange) {
-      // dynamic-board means unassigned
-      const newUserId = newColumnId === 'dynamic-board' ? null : newColumnId;
-      onAssignmentChange(item.type, item.originalItemId, newUserId);
+    if (!item) return;
+
+    const fromDynamic = oldColumnId === 'dynamic-board';
+    const toDynamic = newColumnId === 'dynamic-board';
+    // Extract existing scheduled_time to preserve it across date changes
+    const existingTime = (item.data as any).scheduled_time as string | null | undefined;
+
+    if (fromDynamic && !toDynamic) {
+      // Dynamic board → Assignee board
+      // Change assignee to the target user + change date to the kanban day view date
+      // Preserve existing scheduled_time
+      onColumnMove?.(item.type, item.originalItemId, {
+        assigneeId: newColumnId,
+        scheduledDate: kanbanDateStr,
+        scheduledTime: existingTime ?? undefined,
+      });
+    } else if (!fromDynamic && toDynamic) {
+      // Assignee board → Dynamic board
+      // Only change the date — do NOT touch the assignee
+      const dynamicDate = dynamicBoardFilters?.date || null;
+      if (dynamicDate) {
+        // Dynamic board has a date selected — reschedule to that date, preserve time
+        onColumnMove?.(item.type, item.originalItemId, {
+          scheduledDate: dynamicDate,
+          scheduledTime: existingTime ?? undefined,
+        });
+      } else {
+        // Dynamic board has no date selected (showing unscheduled) — unschedule it
+        onColumnMove?.(item.type, item.originalItemId, {
+          scheduledDate: null,
+          scheduledTime: null,
+        });
+      }
+    } else {
+      // Assignee board → Assignee board (just change assignee, no date change)
+      onColumnMove?.(item.type, item.originalItemId, {
+        assigneeId: newColumnId,
+      });
     }
-  }, [items, onAssignmentChange]);
+  }, [items, onColumnMove, kanbanDateStr, dynamicBoardFilters, buildScheduledStart]);
 
   // Check if an item can be moved to a target column
   // Prevents duplicates when a task/project has multiple assignees

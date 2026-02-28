@@ -32,7 +32,7 @@ interface TurnoverTaskListProps {
   setShowAddTaskDialog: (show: boolean) => void;
   onTaskClick: (task: Task) => void;
   onDeleteTask: (taskId: string) => void;
-  onUpdateSchedule: (taskId: string, date: string) => void;
+  onUpdateSchedule: (taskId: string, scheduledDate: string | null, scheduledTime: string | null) => void;
   onUpdateAssignment: (taskId: string, userIds: string[]) => void;
   onAddTask: (templateId: string) => void;
   onFetchTemplates: () => void;
@@ -109,10 +109,16 @@ export function TurnoverTaskList({
   const [showContingent, setShowContingent] = useState(false);
 
   const sortBySchedule = (a: Task, b: Task) => {
-    if (!a.scheduled_start && !b.scheduled_start) return 0;
-    if (!a.scheduled_start) return 1;
-    if (!b.scheduled_start) return -1;
-    return new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime();
+    if (!a.scheduled_date && !b.scheduled_date) return 0;
+    if (!a.scheduled_date) return 1;
+    if (!b.scheduled_date) return -1;
+    const dateCompare = a.scheduled_date.localeCompare(b.scheduled_date);
+    if (dateCompare !== 0) return dateCompare;
+    // Same date — compare by time
+    if (!a.scheduled_time && !b.scheduled_time) return 0;
+    if (!a.scheduled_time) return 1;
+    if (!b.scheduled_time) return -1;
+    return a.scheduled_time.localeCompare(b.scheduled_time);
   };
 
   const approvedTasks = tasks.filter(t => t.status !== 'contingent').sort(sortBySchedule);
@@ -206,22 +212,20 @@ export function TurnoverTaskList({
                     <Popover>
                       <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
                         <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
-                          {task.scheduled_start ? new Date(task.scheduled_start).toLocaleDateString() : 'Date'}
+                          {task.scheduled_date ? new Date(task.scheduled_date + 'T00:00:00').toLocaleDateString() : 'Date'}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start" onClick={(e) => e.stopPropagation()}>
                         <Calendar
                           mode="single"
-                          selected={task.scheduled_start ? new Date(task.scheduled_start) : undefined}
+                          selected={task.scheduled_date ? new Date(task.scheduled_date + 'T00:00:00') : undefined}
                           onSelect={(date) => {
                             if (date) {
-                              const existingDate = task.scheduled_start ? new Date(task.scheduled_start) : null;
-                              if (existingDate) {
-                                date.setHours(existingDate.getHours(), existingDate.getMinutes());
-                              } else {
-                                date.setHours(12, 0);
-                              }
-                              onUpdateSchedule(task.task_id, date.toISOString());
+                              const y = date.getFullYear();
+                              const m = String(date.getMonth() + 1).padStart(2, '0');
+                              const d = String(date.getDate()).padStart(2, '0');
+                              const newDate = `${y}-${m}-${d}`;
+                              onUpdateSchedule(task.task_id, newDate, task.scheduled_time || null);
                             }
                           }}
                         />
@@ -230,14 +234,12 @@ export function TurnoverTaskList({
                     <input
                       type="time"
                       className="h-7 px-2 text-xs border rounded-md bg-background dark:bg-neutral-800 dark:border-neutral-700"
-                      value={task.scheduled_start ? new Date(task.scheduled_start).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : ''}
+                      value={task.scheduled_time ? task.scheduled_time.slice(0, 5) : ''}
                       onClick={(e) => e.stopPropagation()}
                       onChange={(e) => {
                         e.stopPropagation();
-                        const [hours, minutes] = e.target.value.split(':').map(Number);
-                        const date = task.scheduled_start ? new Date(task.scheduled_start) : new Date();
-                        date.setHours(hours, minutes);
-                        onUpdateSchedule(task.task_id, date.toISOString());
+                        const newTime = e.target.value || null; // "HH:MM" or null
+                        onUpdateSchedule(task.task_id, task.scheduled_date || null, newTime);
                       }}
                     />
                   </div>

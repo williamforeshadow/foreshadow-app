@@ -62,7 +62,8 @@ export default function MobileApp() {
         status: 'not_started',
         priority: 'medium',
         assigned_staff: '',
-        scheduled_start: ''
+        scheduled_date: '',
+        scheduled_time: ''
       });
     }
   };
@@ -392,11 +393,19 @@ export default function MobileApp() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">Scheduled Start</label>
+              <label className="block text-sm font-medium mb-2">Scheduled Date</label>
               <Input
                 type="date"
-                value={projectForm.scheduled_start}
-                onChange={(e) => setProjectForm({...projectForm, scheduled_start: e.target.value})}
+                value={projectForm.scheduled_date}
+                onChange={(e) => setProjectForm({...projectForm, scheduled_date: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Scheduled Time</label>
+              <Input
+                type="time"
+                value={projectForm.scheduled_time}
+                onChange={(e) => setProjectForm({...projectForm, scheduled_time: e.target.value})}
               />
             </div>
           </div>
