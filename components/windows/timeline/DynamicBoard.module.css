@@ -5,7 +5,7 @@
 .container {
   display: flex;
   flex-direction: column;
-  width: 320px;
+  width: 288px;
   flex-shrink: 0;
   background-color: #1a1a2e; /* Distinct purple-tinted dark */
   border-radius: var(--radius);

@@ -29,11 +29,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import type { Task, Project, TaskStatus, ProjectStatus, ProjectPriority, User as UserType } from '@/lib/types';
 import styles from './DynamicBoard.module.css';
@@ -143,10 +138,15 @@ export function DynamicBoard({
   }));
 
   const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [propertySearch, setPropertySearch] = useState('');
+  const [assigneeSearch, setAssigneeSearch] = useState('');
 
   // Track current filters in a ref so callbacks always have the latest value
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
+
+  // Ref for the hidden date input so we can trigger its native picker
+  const dateInputRef = useRef<HTMLInputElement>(null);
 
   // Notify parent on mount so it knows the initial filters
   useEffect(() => {
@@ -174,9 +174,6 @@ export function DynamicBoard({
   // ---------------------------------------------------------------------------
   // Active Filter Count (for badge)
   // ---------------------------------------------------------------------------
-  // State for calendar popover
-  const [calendarOpen, setCalendarOpen] = useState(false);
-
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (filters.itemType !== 'all') count++;
@@ -247,54 +244,46 @@ export function DynamicBoard({
             )}
           </Button>
 
-          {/* Calendar Date Picker */}
-          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={cn(styles.filterButton, filters.date && styles.filterButtonActive)}
-              >
-                <Calendar className="h-3.5 w-3.5" />
-                {filters.date && (
-                  <span className={styles.filterBadge}>1</span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className={styles.calendarPopover} align="end" sideOffset={4}>
-              <div className={styles.calendarPopoverContent}>
-                <label className={styles.filterLabel}>
-                  <Calendar className="h-3 w-3" /> Filter by Date
-                </label>
-                <input
-                  type="date"
-                  value={filters.date || ''}
-                  onChange={(e) => {
-                    updateFilters({ date: e.target.value || null });
-                  }}
-                  className={styles.dateInput}
-                />
-                {filters.date && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      updateFilters({ date: null });
-                    }}
-                    className={styles.clearDateButton}
-                  >
-                    <X className="h-3 w-3 mr-1" />
-                    Clear Date
-                  </Button>
-                )}
-                <p className={styles.calendarHint}>
-                  {filters.date 
-                    ? `Showing items for ${filters.date}`
-                    : 'Showing unscheduled items only'}
-                </p>
-              </div>
-            </PopoverContent>
-          </Popover>
+          {/* Calendar Date Picker — native input, no popover */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+            <input
+              ref={dateInputRef}
+              type="date"
+              value={filters.date || ''}
+              onChange={(e) => {
+                updateFilters({ date: e.target.value || null });
+              }}
+              style={{
+                position: 'absolute',
+                width: 0,
+                height: 0,
+                opacity: 0,
+                pointerEvents: 'none',
+              }}
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => dateInputRef.current?.showPicker?.()}
+              className={cn(styles.filterButton, filters.date && styles.filterButtonActive)}
+            >
+              <Calendar className="h-3.5 w-3.5" />
+            </Button>
+            {filters.date && (
+              <>
+                <span style={{ fontSize: '0.6875rem', color: '#a0a0d0', whiteSpace: 'nowrap' }}>
+                  {filters.date}
+                </span>
+                <button
+                  onClick={() => updateFilters({ date: null })}
+                  className={styles.clearSearch}
+                  title="Clear date"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -350,7 +339,7 @@ export function DynamicBoard({
             <label className={styles.filterLabel}>
               <Home className="h-3 w-3" /> Properties
             </label>
-            <DropdownMenu>
+            <DropdownMenu onOpenChange={(open) => { if (!open) setPropertySearch(''); }}>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className={styles.dropdownTrigger}>
                   {filters.properties.length === 0 
@@ -360,21 +349,44 @@ export function DynamicBoard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className={styles.dropdownContent}>
-                {properties.map(prop => (
-                  <DropdownMenuCheckboxItem
-                    key={prop}
-                    checked={filters.properties.includes(prop)}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        updateFilters({ properties: [...filters.properties, prop] });
-                      } else {
-                        updateFilters({ properties: filters.properties.filter(p => p !== prop) });
-                      }
-                    }}
-                  >
-                    {prop}
-                  </DropdownMenuCheckboxItem>
-                ))}
+                <div className="px-2 py-1.5">
+                  <div className={styles.searchContainer}>
+                    <Search className="h-3 w-3 text-neutral-500" />
+                    <input
+                      type="text"
+                      placeholder="Search properties..."
+                      value={propertySearch}
+                      onChange={(e) => setPropertySearch(e.target.value)}
+                      className={styles.searchInput}
+                      style={{ width: '100%' }}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    />
+                    {propertySearch && (
+                      <button onClick={() => setPropertySearch('')} className={styles.clearSearch}>
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <DropdownMenuSeparator />
+                {properties
+                  .filter(prop => prop.toLowerCase().includes(propertySearch.toLowerCase()))
+                  .map(prop => (
+                    <DropdownMenuCheckboxItem
+                      key={prop}
+                      checked={filters.properties.includes(prop)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          updateFilters({ properties: [...filters.properties, prop] });
+                        } else {
+                          updateFilters({ properties: filters.properties.filter(p => p !== prop) });
+                        }
+                      }}
+                    >
+                      {prop}
+                    </DropdownMenuCheckboxItem>
+                  ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -469,7 +481,7 @@ export function DynamicBoard({
               <label className={styles.filterLabel}>
                 <User className="h-3 w-3" /> Assignees
               </label>
-              <DropdownMenu>
+              <DropdownMenu onOpenChange={(open) => { if (!open) setAssigneeSearch(''); }}>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className={styles.dropdownTrigger}>
                     {filters.assignees.length === 0 
@@ -479,21 +491,44 @@ export function DynamicBoard({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className={styles.dropdownContent}>
-                  {users.map(user => (
-                    <DropdownMenuCheckboxItem
-                      key={user.id}
-                      checked={filters.assignees.includes(user.id)}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          updateFilters({ assignees: [...filters.assignees, user.id] });
-                        } else {
-                          updateFilters({ assignees: filters.assignees.filter(a => a !== user.id) });
-                        }
-                      }}
-                    >
-                      {user.name}
-                    </DropdownMenuCheckboxItem>
-                  ))}
+                  <div className="px-2 py-1.5">
+                    <div className={styles.searchContainer}>
+                      <Search className="h-3 w-3 text-neutral-500" />
+                      <input
+                        type="text"
+                        placeholder="Search assignees..."
+                        value={assigneeSearch}
+                        onChange={(e) => setAssigneeSearch(e.target.value)}
+                        className={styles.searchInput}
+                        style={{ width: '100%' }}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      />
+                      {assigneeSearch && (
+                        <button onClick={() => setAssigneeSearch('')} className={styles.clearSearch}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <DropdownMenuSeparator />
+                  {users
+                    .filter(user => user.name.toLowerCase().includes(assigneeSearch.toLowerCase()))
+                    .map(user => (
+                      <DropdownMenuCheckboxItem
+                        key={user.id}
+                        checked={filters.assignees.includes(user.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            updateFilters({ assignees: [...filters.assignees, user.id] });
+                          } else {
+                            updateFilters({ assignees: filters.assignees.filter(a => a !== user.id) });
+                          }
+                        }}
+                      >
+                        {user.name}
+                      </DropdownMenuCheckboxItem>
+                    ))}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>

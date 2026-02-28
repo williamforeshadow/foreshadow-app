@@ -384,7 +384,7 @@ export function DayKanban({
         assigneeId: newColumnId,
       });
     }
-  }, [items, onColumnMove, kanbanDateStr, dynamicBoardFilters, buildScheduledStart]);
+  }, [items, onColumnMove, kanbanDateStr, dynamicBoardFilters]);
 
   // Check if an item can be moved to a target column
   // Prevents duplicates when a task/project has multiple assignees
@@ -751,6 +751,22 @@ function KanbanCardContent({
   const task = isTask ? (item.data as Task & { property_name: string }) : null;
   const project = !isTask ? (item.data as Project) : null;
 
+  // Collect assignees from task or project
+  const assignees: { id: string; name: string; avatar?: string }[] = [];
+  if (isTask && task?.assigned_users) {
+    task.assigned_users.forEach(u => {
+      assignees.push({ id: u.user_id, name: u.name, avatar: u.avatar });
+    });
+  } else if (!isTask && project?.project_assignments) {
+    project.project_assignments.forEach(a => {
+      assignees.push({
+        id: a.user_id,
+        name: a.user?.name || '?',
+        avatar: a.user?.avatar,
+      });
+    });
+  }
+
   const getStatusClass = (status: string | undefined) => {
     switch (status) {
       case 'complete': return styles.statusComplete;
@@ -794,9 +810,66 @@ function KanbanCardContent({
         <span className={cn(styles.statusBadge, getStatusClass(isTask ? task?.status : project?.status))}>
           {(isTask ? task?.status : project?.status)?.replace('_', ' ')}
         </span>
-        <span className={styles.cardType}>
-          {isTask ? 'Task' : 'Project'}
-        </span>
+        {/* Assignee avatars */}
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          {assignees.length > 0 ? (
+            <>
+              {assignees.slice(0, 3).map((user, index) => (
+                <div
+                  key={user.id}
+                  style={{
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    backgroundColor: '#404040',
+                    border: '2px solid #373737',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.5rem',
+                    fontWeight: 600,
+                    color: '#a3a3a3',
+                    marginLeft: index > 0 ? '-6px' : '0',
+                    overflow: 'hidden',
+                    flexShrink: 0,
+                  }}
+                  title={user.name}
+                >
+                  {user.avatar ? (
+                    <img
+                      src={user.avatar}
+                      alt={user.name}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+                  )}
+                </div>
+              ))}
+              {assignees.length > 3 && (
+                <div
+                  style={{
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    backgroundColor: '#525252',
+                    border: '2px solid #373737',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.5rem',
+                    fontWeight: 600,
+                    color: '#a3a3a3',
+                    marginLeft: '-6px',
+                    flexShrink: 0,
+                  }}
+                >
+                  +{assignees.length - 3}
+                </div>
+              )}
+            </>
+          ) : null}
+        </div>
       </div>
     </div>
   );
