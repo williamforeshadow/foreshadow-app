@@ -329,9 +329,33 @@ export function DayKanban({
     return items;
   }, [dayTasks, dayProjects]);
 
-  // Combine user column items with dynamic board items
+  // Combine user column items with dynamic board items, sorted by scheduled_time within each column
   const initialItems = useMemo(() => {
-    return [...userColumnItems, ...dynamicBoardItems];
+    const combined = [...userColumnItems, ...dynamicBoardItems];
+
+    // Group items by column
+    const byColumn = new Map<string, DraggableKanbanItem[]>();
+    combined.forEach(item => {
+      const list = byColumn.get(item.columnId) || [];
+      list.push(item);
+      byColumn.set(item.columnId, list);
+    });
+
+    // Sort each column's items: no time first (top), then earliest → latest
+    byColumn.forEach(columnItems => {
+      columnItems.sort((a, b) => {
+        const timeA = (a.data as any).scheduled_time as string | null | undefined;
+        const timeB = (b.data as any).scheduled_time as string | null | undefined;
+
+        if (!timeA && !timeB) return 0;
+        if (!timeA) return -1; // no time → top
+        if (!timeB) return 1;  // no time → top
+        return timeA.localeCompare(timeB); // "08:00" < "14:00"
+      });
+    });
+
+    // Flatten back
+    return Array.from(byColumn.values()).flat();
   }, [userColumnItems, dynamicBoardItems]);
 
   // Local state for drag operations
@@ -807,9 +831,24 @@ function KanbanCardContent({
 
       {/* Card Footer */}
       <div className={styles.cardFooter}>
-        <span className={cn(styles.statusBadge, getStatusClass(isTask ? task?.status : project?.status))}>
-          {(isTask ? task?.status : project?.status)?.replace('_', ' ')}
-        </span>
+        {/* Status + Time grouped left */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+          <span className={cn(styles.statusBadge, getStatusClass(isTask ? task?.status : project?.status))}>
+            {(isTask ? task?.status : project?.status)?.replace('_', ' ')}
+          </span>
+          {(() => {
+            const time = isTask ? task?.scheduled_time : project?.scheduled_time;
+            if (!time) return null;
+            const [h, m] = time.split(':').map(Number);
+            const ampm = h >= 12 ? 'pm' : 'am';
+            const h12 = h % 12 || 12;
+            return (
+              <span style={{ fontSize: '0.625rem', color: '#a3a3a3', whiteSpace: 'nowrap' }}>
+                {h12}:{String(m).padStart(2, '0')}{ampm}
+              </span>
+            );
+          })()}
+        </div>
         {/* Assignee avatars */}
         <div style={{ display: 'flex', alignItems: 'center' }}>
           {assignees.length > 0 ? (
