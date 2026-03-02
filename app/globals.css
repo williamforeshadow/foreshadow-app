@@ -175,6 +175,85 @@ a {
   }
 }
 
+/* ============================================================
+   Liquid Glass Utilities
+   ============================================================ */
+
+/* Subtle mesh gradient background that glass elements blur against */
+.glass-bg {
+  background:
+    radial-gradient(ellipse at 20% 50%, oklch(0.92 0.03 200 / 0.4) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, oklch(0.93 0.04 150 / 0.3) 0%, transparent 50%),
+    radial-gradient(ellipse at 60% 80%, oklch(0.94 0.03 280 / 0.25) 0%, transparent 50%),
+    var(--background);
+}
+
+.dark .glass-bg {
+  background:
+    radial-gradient(ellipse at 20% 50%, oklch(0.25 0.03 200 / 0.3) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, oklch(0.22 0.04 150 / 0.25) 0%, transparent 50%),
+    radial-gradient(ellipse at 60% 80%, oklch(0.20 0.03 280 / 0.2) 0%, transparent 50%),
+    var(--background);
+}
+
+/* Base glass card surface */
+.glass-card {
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.04),
+    0 4px 16px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.dark .glass-card {
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.2),
+    0 4px 16px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Glass panel (filter bar, header) */
+.glass-panel {
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.03),
+    0 2px 8px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.dark .glass-panel {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.15),
+    0 2px 8px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* Sheen overlay pseudo-element (add to element with `relative overflow-hidden`) */
+.glass-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(255, 255, 255, 0.05) 40%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+.dark .glass-sheen::after {
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.02) 40%,
+    transparent 100%
+  );
+}
+
 /* Mobile safe areas for notches and home indicators */
 .safe-area-top {
   padding-top: env(safe-area-inset-top);

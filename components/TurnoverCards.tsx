@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, CardAction } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { applyCleaningFilters, type CleaningFilters } from '@/lib/cleaningFilters';
 import FlagCheckeredIcon from '@/components/ui/FlagCheckeredIcon';
@@ -164,40 +163,41 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
     });
   };
 
-  // Get card styling based on status, position, occupancy, and whether guest has checked in
+  // Get glass card styling based on status, position, occupancy, and whether guest has checked in
   const getCardStyles = (status: string, isFirstInRow: boolean, checkInDate: string | undefined | null, occupancyStatus: string | undefined, isPast?: boolean) => {
-    // Past turnovers — muted grey, solid border
+    const glassBase = 'glass-card glass-sheen';
+
+    // Past turnovers — muted frosted glass
     if (isPast) {
-      return 'bg-neutral-50/80 dark:bg-neutral-900/80 border border-neutral-200 dark:border-neutral-700 opacity-75';
+      return `${glassBase} bg-white/30 dark:bg-white/[0.04] border border-neutral-300/40 dark:border-white/10 opacity-70`;
     }
 
     const now = new Date();
-    
     const checkIn = checkInDate ? new Date(checkInDate) : null;
     const hasCheckedIn = checkIn && now >= checkIn;
-    
-    // Inactive (upcoming) — grey dotted
+
+    // Inactive (upcoming) — neutral glass, dashed border
     if (!isFirstInRow || !hasCheckedIn) {
-      return 'bg-neutral-50 dark:bg-neutral-900 border border-dashed border-neutral-300 dark:border-neutral-600';
+      return `${glassBase} bg-white/35 dark:bg-white/[0.05] border border-dashed border-neutral-300/50 dark:border-white/10`;
     }
-    
-    // Active + Occupied — blue (guest still in property)
+
+    // Active + Occupied — blue-tinted glass
     if (occupancyStatus === 'occupied') {
-      return 'bg-blue-50/80 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900';
+      return `${glassBase} bg-blue-100/40 dark:bg-blue-500/[0.08] border border-blue-300/40 dark:border-blue-400/20`;
     }
-    
-    // Active + Out — status-dependent (red/yellow/green)
+
+    // Active + Out — status-dependent tinted glass
     switch (status) {
       case 'not_started':
-        return 'bg-red-50/80 dark:bg-red-950/30 border-red-200 dark:border-red-900';
+        return `${glassBase} bg-red-100/40 dark:bg-red-500/[0.08] border border-red-300/40 dark:border-red-400/20`;
       case 'in_progress':
-        return 'bg-yellow-50/80 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-900';
+        return `${glassBase} bg-amber-100/40 dark:bg-amber-500/[0.08] border border-amber-300/40 dark:border-amber-400/20`;
       case 'complete':
-        return 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900';
+        return `${glassBase} bg-emerald-100/40 dark:bg-emerald-500/[0.08] border border-emerald-300/40 dark:border-emerald-400/20`;
       case 'no_tasks':
-        return 'bg-neutral-50/80 dark:bg-neutral-800/30 border-neutral-200 dark:border-neutral-700';
+        return `${glassBase} bg-white/35 dark:bg-white/[0.05] border border-neutral-300/30 dark:border-white/10`;
       default:
-        return 'bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700';
+        return `${glassBase} bg-white/40 dark:bg-white/[0.06] border border-neutral-300/30 dark:border-white/10`;
     }
   };
 
@@ -213,7 +213,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
       <Card
         key={item.id}
         onClick={() => onCardClick(item)}
-        className={`group cursor-pointer hover:shadow-xl transition-all duration-200 !flex !flex-col !p-4 gap-4 flex-shrink-0 ${cardWidth} ${getCardStyles(item.turnover_status || 'no_tasks', isFirstInRow, item.check_in, item.occupancy_status, isPast)} relative overflow-hidden`}
+        className={`group cursor-pointer hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ease-out !flex !flex-col !p-4 gap-4 flex-shrink-0 ${cardWidth} ${getCardStyles(item.turnover_status || 'no_tasks', isFirstInRow, item.check_in, item.occupancy_status, isPast)} relative overflow-hidden rounded-2xl`}
       >
         {/* Turnover Stamp */}
         <img 
@@ -232,7 +232,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
                 [item.property_name]: Math.max((prev[item.property_name] || 1) - 1, 0),
               }));
             }}
-            className="absolute top-1.5 right-1.5 z-10 p-0.5 rounded-md text-neutral-300 hover:text-neutral-500 dark:text-neutral-600 dark:hover:text-neutral-400 hover:bg-neutral-200/50 dark:hover:bg-neutral-700/50 transition-colors"
+            className="absolute top-1.5 right-1.5 z-10 p-0.5 rounded-md text-neutral-400 hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300 hover:bg-white/40 dark:hover:bg-white/10 backdrop-blur-sm transition-colors"
             title="Hide"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -254,12 +254,12 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
               if (total === 0) return null;
               return (
                 <Badge 
-                  className={`font-semibold px-2.5 py-1 ${
+                  className={`font-semibold px-2.5 py-1 backdrop-blur-sm ${
                     done === total
-                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-300/40 dark:border-emerald-500/25'
                       : inProg
-                      ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800'
-                      : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800'
+                      ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-300/40 dark:border-amber-500/25'
+                      : 'bg-red-500/15 text-red-700 dark:text-red-300 border-red-300/40 dark:border-red-500/25'
                   }`}
                 >
                   {done}/{total}
@@ -274,10 +274,10 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
             {/* Occupancy badge - only show on "in play" cards */}
             {isInPlay && (
               <Badge 
-                className={`px-2.5 py-1 ${
+                className={`px-2.5 py-1 backdrop-blur-sm ${
                   item.occupancy_status === 'occupied' 
-                    ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800'
-                    : 'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+                    ? 'bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-300/40 dark:border-orange-500/25'
+                    : 'bg-white/30 dark:bg-white/10 text-neutral-600 dark:text-neutral-400 border-neutral-300/30 dark:border-white/10'
                 }`}
               >
                 {item.occupancy_status === 'occupied' ? 'Occupied' : 'Out'}
@@ -288,16 +288,16 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
 
         <CardFooter className="mt-auto flex flex-col gap-2">
           <div className="w-full py-1">
-            <div className="h-px w-full bg-border/60" />
+            <div className="h-px w-full bg-neutral-400/20 dark:bg-white/10" />
           </div>
           <div className="flex w-full justify-between text-xs text-muted-foreground/60">
-            <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-border/20 bg-[var(--mix-card-33-bg)] px-2 py-1 transition-all duration-150 hover:border-border hover:bg-[var(--mix-card-50-bg)] ${!item.check_out ? 'opacity-40' : ''}`}>
+            <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-white/20 dark:border-white/10 bg-white/25 dark:bg-white/[0.06] backdrop-blur-sm px-2 py-1 transition-all duration-150 hover:bg-white/40 dark:hover:bg-white/10 ${!item.check_out ? 'opacity-40' : ''}`}>
               <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
               <span>{formatDate(item.check_out) || 'Out'}</span>
             </div>
-            <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-border/20 bg-[var(--mix-card-33-bg)] px-2 py-1 transition-all duration-150 hover:border-border hover:bg-[var(--mix-card-50-bg)] ${!item.next_check_in ? 'opacity-40' : ''}`}>
+            <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-white/20 dark:border-white/10 bg-white/25 dark:bg-white/[0.06] backdrop-blur-sm px-2 py-1 transition-all duration-150 hover:bg-white/40 dark:hover:bg-white/10 ${!item.next_check_in ? 'opacity-40' : ''}`}>
               <FlagCheckeredIcon className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400" />
               <span>{formatDate(item.next_check_in) || 'In'}</span>
             </div>
@@ -323,8 +323,8 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
               <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 shrink-0">
                 {propertyName}
               </h3>
-              <Separator className="flex-1" />
-              <span className="text-xs text-muted-foreground shrink-0">
+              <div className="flex-1 h-px bg-neutral-300/30 dark:bg-white/10" />
+              <span className="text-xs text-neutral-500/70 dark:text-neutral-400/60 shrink-0">
                 {groupedByProperty[propertyName].length} turnover{groupedByProperty[propertyName].length !== 1 ? 's' : ''}
               </span>
             </div>
@@ -337,10 +337,10 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
                   <button
                     onClick={() => loadOnePast(propertyName)}
                     disabled={!hasMorePast}
-                    className={`flex-shrink-0 flex items-center justify-center w-8 rounded-lg transition-all ${
+                    className={`flex-shrink-0 flex items-center justify-center w-8 rounded-xl transition-all ${
                       hasMorePast
-                        ? 'hover:bg-neutral-100 dark:hover:bg-neutral-800 cursor-pointer text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300'
-                        : 'text-neutral-200 dark:text-neutral-700 cursor-default'
+                        ? 'hover:bg-white/40 dark:hover:bg-white/10 hover:backdrop-blur-sm cursor-pointer text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300'
+                        : 'text-neutral-300/50 dark:text-neutral-700/50 cursor-default'
                     }`}
                     title={hasMorePast ? `Load previous turnover (${pastPool.length - shownPastCount} more)` : 'No more past turnovers'}
                   >

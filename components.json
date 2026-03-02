@@ -19,6 +19,7 @@
     "hooks": "@/hooks"
   },
   "registries": {
-    "@roiui": "https://roiui.com/r/{name}.json"
+    "@roiui": "https://roiui.com/r/{name}.json",
+    "@einui": "https://ui.eindev.ir/r/{name}.json"
   }
 }

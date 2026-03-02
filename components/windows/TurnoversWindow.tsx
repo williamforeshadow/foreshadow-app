@@ -199,9 +199,9 @@ function TurnoversWindowContent({
   }, [projectsHook]);
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full overflow-hidden glass-bg">
       {/* Left Panel - Cards */}
-      <div className={`${selectedCard ? 'w-1/2 border-r border-neutral-200 dark:border-neutral-700' : 'w-full'} transition-all duration-300 overflow-y-auto hide-scrollbar p-6 space-y-4`}>
+      <div className={`${selectedCard ? 'w-1/2 border-r border-neutral-200/30 dark:border-white/10' : 'w-full'} transition-all duration-300 overflow-y-auto hide-scrollbar p-6 space-y-4`}>
         {/* Response Display */}
         {response !== null && (
           <div className="space-y-3">
@@ -217,23 +217,23 @@ function TurnoversWindowContent({
               <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
                 Turnovers: {Array.isArray(response) ? response.length : 1} total
               </p>
-              <div className="flex gap-2">
+              <div className="flex gap-1 p-1 rounded-xl bg-white/30 dark:bg-white/[0.06] backdrop-blur-sm border border-white/20 dark:border-white/10">
                 <button
                   onClick={() => setViewMode('cards')}
-                  className={`px-3 py-1 text-xs font-medium rounded ${
+                  className={`px-3 py-1 text-xs font-medium rounded-lg transition-all duration-200 ${
                     viewMode === 'cards'
-                      ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900'
-                      : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
+                      ? 'bg-white/70 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
+                      : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/30 dark:hover:bg-white/10'
                   }`}
                 >
                   Cards
                 </button>
                 <button
                   onClick={() => setViewMode('json')}
-                  className={`px-3 py-1 text-xs font-medium rounded ${
+                  className={`px-3 py-1 text-xs font-medium rounded-lg transition-all duration-200 ${
                     viewMode === 'json'
-                      ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900'
-                      : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
+                      ? 'bg-white/70 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
+                      : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/30 dark:hover:bg-white/10'
                   }`}
                 >
                   JSON
@@ -277,7 +277,7 @@ function TurnoversWindowContent({
       {selectedCard && (
         <div
           ref={rightPanelRef}
-          className="w-1/2 h-full overflow-y-auto border-l border-neutral-200 dark:border-neutral-700 bg-card"
+          className="w-1/2 h-full overflow-y-auto border-l border-white/20 dark:border-white/10 bg-white/30 dark:bg-white/[0.03] backdrop-blur-xl"
           onScroll={(e) => {
             scrollPositionRef.current = e.currentTarget.scrollTop;
           }}
@@ -299,7 +299,7 @@ function TurnoversWindowContent({
             /* Turnover Card Detail */
             <div className="flex flex-col h-full">
               {/* Sticky Header - Property Info + Toggle */}
-              <div className="sticky top-0 bg-card z-10 border-b border-neutral-200 dark:border-neutral-700">
+              <div className="sticky top-0 bg-white/40 dark:bg-white/[0.04] backdrop-blur-2xl z-10 border-b border-white/20 dark:border-white/10">
                 {/* Top Row: Property name, Guest, Dates, Occupancy, Close button */}
                 <div className="p-4 pb-3">
                   <div className="flex items-start justify-between gap-4">
@@ -344,7 +344,7 @@ function TurnoversWindowContent({
                           return (
                             <Badge
                               variant="outline"
-                              className="text-xs px-2 py-0.5 bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-300 border-dashed"
+                              className="text-xs px-2 py-0.5 bg-white/25 dark:bg-white/[0.06] text-neutral-600 dark:text-neutral-400 border-white/30 dark:border-white/10 border-dashed backdrop-blur-sm"
                             >
                               Upcoming
                             </Badge>
@@ -353,10 +353,10 @@ function TurnoversWindowContent({
                         return (
                           <Badge
                             variant="outline"
-                            className={`text-xs px-2 py-0.5 ${
+                            className={`text-xs px-2 py-0.5 backdrop-blur-sm ${
                               selectedCard.occupancy_status === 'occupied'
-                                ? 'bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300 border-orange-300'
-                                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-300'
+                                ? 'bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-300/40 dark:border-orange-500/25'
+                                : 'bg-white/25 dark:bg-white/[0.06] text-neutral-600 dark:text-neutral-400 border-white/30 dark:border-white/10'
                             }`}
                           >
                             {selectedCard.occupancy_status === 'occupied' ? 'Occupied' : 'Vacant'}
@@ -368,7 +368,7 @@ function TurnoversWindowContent({
                     {/* Close Button */}
                     <button
                       onClick={closeSelectedCard}
-                      className="p-1.5 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors shrink-0"
+                      className="p-1.5 hover:bg-white/40 dark:hover:bg-white/10 rounded-lg transition-colors shrink-0"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -379,27 +379,27 @@ function TurnoversWindowContent({
 
                 {/* Toggle Button Row */}
                 <div className="px-4 pb-3">
-                  <div className="flex rounded-lg bg-neutral-100 dark:bg-neutral-800 p-1">
+                  <div className="flex rounded-xl bg-white/20 dark:bg-white/[0.05] backdrop-blur-sm border border-white/20 dark:border-white/10 p-1">
                     <button
                       onClick={() => {
                         setRightPanelView('tasks');
                         setExpandedProject(null);
                         setProjectFields(null);
                       }}
-                      className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                      className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
                         rightPanelView === 'tasks'
-                          ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm'
-                          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                          ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
+                          : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/20 dark:hover:bg-white/10'
                       }`}
                     >
                       Turnover Tasks ({selectedCard.completed_tasks || 0}/{selectedCard.total_tasks || 0})
                     </button>
                     <button
                       onClick={() => setRightPanelView('projects')}
-                      className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                      className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
                         rightPanelView === 'projects'
-                          ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm'
-                          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                          ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
+                          : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/20 dark:hover:bg-white/10'
                       }`}
                     >
                       Property Projects ({projects.filter(p => p.property_name === selectedCard.property_name).length})
