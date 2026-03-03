@@ -181,19 +181,22 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
       return `${glassBase} bg-white/35 dark:bg-white/[0.05] border border-dashed border-neutral-300/50 dark:border-white/10`;
     }
 
-    // Active + Occupied — blue-tinted glass
+    // Active + Occupied — deep indigo glass (dense, "someone's in there")
     if (occupancyStatus === 'occupied') {
-      return `${glassBase} bg-blue-100/40 dark:bg-blue-500/[0.08] border border-blue-300/40 dark:border-blue-400/20`;
+      return `${glassBase} bg-indigo-200/40 dark:bg-indigo-400/[0.10] border border-indigo-300/40 dark:border-indigo-400/20`;
     }
 
-    // Active + Out — status-dependent tinted glass
+    // Active + Out — monochrome blue scheme + red accent for not_started
     switch (status) {
       case 'not_started':
-        return `${glassBase} bg-red-100/40 dark:bg-red-500/[0.08] border border-red-300/40 dark:border-red-400/20`;
+        // Red — the only warm accent, demands attention
+        return `${glassBase} bg-red-100/35 dark:bg-red-500/[0.07] border border-red-300/35 dark:border-red-400/15`;
       case 'in_progress':
-        return `${glassBase} bg-amber-100/40 dark:bg-amber-500/[0.08] border border-amber-300/40 dark:border-amber-400/20`;
+        // Medium blue — actively being worked on
+        return `${glassBase} bg-blue-100/40 dark:bg-blue-500/[0.08] border border-blue-300/40 dark:border-blue-400/20`;
       case 'complete':
-        return `${glassBase} bg-emerald-100/40 dark:bg-emerald-500/[0.08] border border-emerald-300/40 dark:border-emerald-400/20`;
+        // Very light sky blue — done, receding into background
+        return `${glassBase} bg-sky-50/35 dark:bg-sky-500/[0.04] border border-sky-200/30 dark:border-sky-400/10`;
       case 'no_tasks':
         return `${glassBase} bg-white/35 dark:bg-white/[0.05] border border-neutral-300/30 dark:border-white/10`;
       default:
@@ -256,10 +259,10 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
                 <Badge 
                   className={`font-semibold px-2.5 py-1 backdrop-blur-sm ${
                     done === total
-                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-300/40 dark:border-emerald-500/25'
+                      ? 'bg-sky-500/12 text-sky-600 dark:text-sky-300 border-sky-300/30 dark:border-sky-500/20'
                       : inProg
-                      ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-300/40 dark:border-amber-500/25'
-                      : 'bg-red-500/15 text-red-700 dark:text-red-300 border-red-300/40 dark:border-red-500/25'
+                      ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-300/35 dark:border-blue-500/25'
+                      : 'bg-red-500/15 text-red-700 dark:text-red-300 border-red-300/35 dark:border-red-500/20'
                   }`}
                 >
                   {done}/{total}
@@ -276,7 +279,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
               <Badge 
                 className={`px-2.5 py-1 backdrop-blur-sm ${
                   item.occupancy_status === 'occupied' 
-                    ? 'bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-300/40 dark:border-orange-500/25'
+                    ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-300/35 dark:border-indigo-500/20'
                     : 'bg-white/30 dark:bg-white/10 text-neutral-600 dark:text-neutral-400 border-neutral-300/30 dark:border-white/10'
                 }`}
               >
@@ -292,7 +295,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
           </div>
           <div className="flex w-full justify-between text-xs text-muted-foreground/60">
             <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-white/20 dark:border-white/10 bg-white/25 dark:bg-white/[0.06] backdrop-blur-sm px-2 py-1 transition-all duration-150 hover:bg-white/40 dark:hover:bg-white/10 ${!item.check_out ? 'opacity-40' : ''}`}>
-              <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 text-blue-400 dark:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
               <span>{formatDate(item.check_out) || 'Out'}</span>

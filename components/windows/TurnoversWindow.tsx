@@ -308,7 +308,7 @@ function TurnoversWindowContent({
                       <h2 className="text-lg font-semibold truncate">{selectedCard.property_name}</h2>
                       {selectedCard.guest_name && (
                         <div className="flex items-center gap-1.5 mt-0.5 text-sm text-neutral-500">
-                          <svg className="w-3.5 h-3.5 text-purple-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-3.5 h-3.5 text-blue-400 dark:text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                           </svg>
                           <span className="truncate">{selectedCard.guest_name}</span>
@@ -326,13 +326,13 @@ function TurnoversWindowContent({
                       </div>
                       <div className="text-center">
                         <div className="text-neutral-500 dark:text-neutral-400">Out</div>
-                        <div className="font-medium text-red-600 dark:text-red-400">
+                        <div className="font-medium text-blue-500 dark:text-blue-400">
                           {selectedCard.check_out ? new Date(selectedCard.check_out).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                         </div>
                       </div>
                       <div className="text-center">
                         <div className="text-neutral-500 dark:text-neutral-400">Next In</div>
-                        <div className="font-medium text-green-600 dark:text-green-400">
+                        <div className="font-medium text-sky-600 dark:text-sky-400">
                           {selectedCard.next_check_in ? new Date(selectedCard.next_check_in).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                         </div>
                       </div>
@@ -355,7 +355,7 @@ function TurnoversWindowContent({
                             variant="outline"
                             className={`text-xs px-2 py-0.5 backdrop-blur-sm ${
                               selectedCard.occupancy_status === 'occupied'
-                                ? 'bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-300/40 dark:border-orange-500/25'
+                                ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-300/35 dark:border-indigo-500/20'
                                 : 'bg-white/25 dark:bg-white/[0.06] text-neutral-600 dark:text-neutral-400 border-white/30 dark:border-white/10'
                             }`}
                           >
