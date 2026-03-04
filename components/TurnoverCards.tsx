@@ -179,7 +179,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
 
     // Inactive (upcoming) — neutral glass, dashed border
     if (!isFirstInRow || !hasCheckedIn) {
-      return `${glassBase} bg-white/55 dark:bg-white/[0.08] border border-dashed border-neutral-300/50 dark:border-white/12`;
+      return `${glassBase} bg-white/55 dark:bg-white/[0.08] border border-dashed border-neutral-400/70 dark:border-white/30`;
     }
 
     // Active cards — color by turnover status only
@@ -216,13 +216,6 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
         onClick={() => onCardClick(item)}
         className={`group cursor-pointer hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ease-out !flex !flex-col !p-4 gap-4 ${needsAttention ? 'w-full' : `flex-shrink-0 ${cardWidth}`} ${getCardStyles(status, isFirstInRow, item.check_in, isPast, needsAttention)} relative overflow-hidden rounded-2xl`}
       >
-        {/* Turnover Stamp */}
-        <img 
-          src="/Turnover.png" 
-          alt="" 
-          className="absolute right-2 top-1/2 -translate-y-1/2 w-20 h-20 rotate-[-12deg] pointer-events-none select-none"
-        />
-
         {/* Dismiss button for past cards */}
         {isPast && (
           <button
@@ -253,10 +246,14 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
               const done = approvedTasks.filter(t => t.status === 'complete').length;
               const inProg = approvedTasks.some(t => t.status === 'in_progress' || t.status === 'complete');
               if (total === 0) return null;
+              // Inactive / past cards get neutral grey badges
+              const isInactive = !isInPlay || isPast;
               return (
                 <Badge 
                   className={`font-semibold px-2.5 py-1 backdrop-blur-sm ${
-                    done === total
+                    isInactive
+                      ? 'bg-neutral-500/12 text-neutral-500 dark:text-neutral-400 border-neutral-300/30 dark:border-white/10'
+                      : done === total
                       ? 'bg-teal-500/15 text-teal-600 dark:text-teal-300 border-teal-300/30 dark:border-teal-500/20'
                       : inProg
                       ? 'bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-300/35 dark:border-orange-500/25'
