@@ -355,7 +355,7 @@ function TurnoversWindowContent({
                             variant="outline"
                             className={`text-xs px-2 py-0.5 backdrop-blur-sm ${
                               selectedCard.occupancy_status === 'occupied'
-                                ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-300/35 dark:border-indigo-500/20'
+                                ? 'bg-white/30 dark:bg-white/10 text-neutral-700 dark:text-neutral-300 border-neutral-300/30 dark:border-white/10'
                                 : 'bg-white/25 dark:bg-white/[0.06] text-neutral-600 dark:text-neutral-400 border-white/30 dark:border-white/10'
                             }`}
                           >

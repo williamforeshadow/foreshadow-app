@@ -198,19 +198,19 @@ a {
 
 /* Base glass card surface */
 .glass-card {
-  backdrop-filter: blur(20px) saturate(1.5);
-  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
   box-shadow:
     0 1px 1px rgba(0, 0, 0, 0.04),
     0 4px 16px rgba(0, 0, 0, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 .dark .glass-card {
   box-shadow:
     0 1px 1px rgba(0, 0, 0, 0.2),
     0 4px 16px rgba(0, 0, 0, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
 }
 
 /* Glass panel (filter bar, header) */
@@ -252,6 +252,77 @@ a {
     rgba(255, 255, 255, 0.02) 40%,
     transparent 100%
   );
+}
+
+/* ============================================================
+   Liquid Animated Border (occupied cards)
+   A conic-gradient rotates around the card perimeter.
+   Card sits inside a wrapper; the 2.5px padding gap reveals
+   the spinning gradient as a flowing, reflective border.
+   ============================================================ */
+
+@property --liquid-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes liquid-spin {
+  to {
+    --liquid-angle: 360deg;
+  }
+}
+
+.liquid-border {
+  --liquid-hue: 270;          /* overridden per-card via inline style */
+  position: relative;
+  padding: 1px;
+  border-radius: 1rem;
+  background: conic-gradient(
+    from var(--liquid-angle),
+    transparent 0%,
+    oklch(0.72 0.20 var(--liquid-hue)) 6%,
+    oklch(0.84 0.14 var(--liquid-hue)) 12%,
+    oklch(0.92 0.06 var(--liquid-hue) / 0.5) 18%,
+    transparent 25%,
+    transparent 100%
+  );
+  animation: liquid-spin 14s linear infinite;
+  box-shadow:
+    0 0 10px oklch(0.72 0.14 var(--liquid-hue) / 0.25),
+    0 0 4px oklch(0.80 0.10 var(--liquid-hue) / 0.15);
+}
+
+.dark .liquid-border {
+  background: conic-gradient(
+    from var(--liquid-angle),
+    transparent 0%,
+    oklch(0.52 0.22 var(--liquid-hue)) 6%,
+    oklch(0.64 0.18 var(--liquid-hue)) 12%,
+    oklch(0.74 0.10 var(--liquid-hue) / 0.5) 18%,
+    transparent 25%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 12px oklch(0.55 0.18 var(--liquid-hue) / 0.3),
+    0 0 4px oklch(0.60 0.14 var(--liquid-hue) / 0.2);
+}
+
+/* Opaque backing that hides the gradient through the card center.
+   Sits between the spinning gradient (z:auto) and the card (z:2). */
+.liquid-border::after {
+  content: '';
+  position: absolute;
+  inset: 1px;                          /* match wrapper padding */
+  border-radius: calc(1rem - 0.5px);   /* slightly tighter than wrapper */
+  background: var(--background);
+  z-index: 1;
+}
+
+/* Card inside sits above the opaque backing */
+.liquid-border > * {
+  position: relative;
+  z-index: 2;
 }
 
 /* Mobile safe areas for notches and home indicators */

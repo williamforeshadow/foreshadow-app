@@ -163,13 +163,14 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
     });
   };
 
-  // Get glass card styling based on status, position, occupancy, and whether guest has checked in
-  const getCardStyles = (status: string, isFirstInRow: boolean, checkInDate: string | undefined | null, occupancyStatus: string | undefined, isPast?: boolean) => {
+  // Get glass card styling based on status, position, and whether guest has checked in
+  // Color is driven purely by turnover status (shimmer handles occupancy signal)
+  const getCardStyles = (status: string, isFirstInRow: boolean, checkInDate: string | undefined | null, isPast?: boolean, hasLiquidBorder?: boolean) => {
     const glassBase = 'glass-card glass-sheen';
 
     // Past turnovers — muted frosted glass
     if (isPast) {
-      return `${glassBase} bg-white/30 dark:bg-white/[0.04] border border-neutral-300/40 dark:border-white/10 opacity-70`;
+      return `${glassBase} bg-white/50 dark:bg-white/[0.07] border border-neutral-300/40 dark:border-white/10 opacity-75`;
     }
 
     const now = new Date();
@@ -178,29 +179,22 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
 
     // Inactive (upcoming) — neutral glass, dashed border
     if (!isFirstInRow || !hasCheckedIn) {
-      return `${glassBase} bg-white/35 dark:bg-white/[0.05] border border-dashed border-neutral-300/50 dark:border-white/10`;
+      return `${glassBase} bg-white/55 dark:bg-white/[0.08] border border-dashed border-neutral-300/50 dark:border-white/12`;
     }
 
-    // Active + Occupied — deep indigo glass (dense, "someone's in there")
-    if (occupancyStatus === 'occupied') {
-      return `${glassBase} bg-indigo-200/40 dark:bg-indigo-400/[0.10] border border-indigo-300/40 dark:border-indigo-400/20`;
-    }
-
-    // Active + Out — monochrome blue scheme + red accent for not_started
+    // Active cards — color by turnover status only
+    // When liquid border is present, card border is transparent (the shimmer IS the border)
     switch (status) {
       case 'not_started':
-        // Red — the only warm accent, demands attention
-        return `${glassBase} bg-red-100/35 dark:bg-red-500/[0.07] border border-red-300/35 dark:border-red-400/15`;
+        return `${glassBase} bg-red-50/55 dark:bg-red-500/[0.10] border ${hasLiquidBorder ? 'border-transparent' : 'border-red-300/40 dark:border-red-400/18'}`;
       case 'in_progress':
-        // Medium blue — actively being worked on
-        return `${glassBase} bg-blue-100/40 dark:bg-blue-500/[0.08] border border-blue-300/40 dark:border-blue-400/20`;
+        return `${glassBase} bg-orange-50/55 dark:bg-orange-400/[0.10] border ${hasLiquidBorder ? 'border-transparent' : 'border-orange-300/35 dark:border-orange-400/18'}`;
       case 'complete':
-        // Very light sky blue — done, receding into background
-        return `${glassBase} bg-sky-50/35 dark:bg-sky-500/[0.04] border border-sky-200/30 dark:border-sky-400/10`;
+        return `${glassBase} bg-teal-50/55 dark:bg-teal-500/[0.08] border border-teal-200/35 dark:border-teal-400/14`;
       case 'no_tasks':
-        return `${glassBase} bg-white/35 dark:bg-white/[0.05] border border-neutral-300/30 dark:border-white/10`;
+        return `${glassBase} bg-white/55 dark:bg-white/[0.08] border border-neutral-300/35 dark:border-white/12`;
       default:
-        return `${glassBase} bg-white/40 dark:bg-white/[0.06] border border-neutral-300/30 dark:border-white/10`;
+        return `${glassBase} bg-white/60 dark:bg-white/[0.09] border border-neutral-300/35 dark:border-white/12`;
     }
   };
 
@@ -211,12 +205,16 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
   const renderCard = (item: Turnover, isFirstInRow: boolean, isPast: boolean) => {
     const checkIn = item.check_in ? new Date(item.check_in) : null;
     const isInPlay = isFirstInRow && checkIn && now >= checkIn && !isPast;
+    const isOut = isInPlay && item.occupancy_status !== 'occupied';
+    const status = item.turnover_status || 'no_tasks';
+    // Cards that are out and not yet complete need attention → liquid border
+    const needsAttention = isOut && (status === 'not_started' || status === 'in_progress');
 
-    return (
+    const card = (
       <Card
-        key={item.id}
+        key={needsAttention ? undefined : item.id}
         onClick={() => onCardClick(item)}
-        className={`group cursor-pointer hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ease-out !flex !flex-col !p-4 gap-4 flex-shrink-0 ${cardWidth} ${getCardStyles(item.turnover_status || 'no_tasks', isFirstInRow, item.check_in, item.occupancy_status, isPast)} relative overflow-hidden rounded-2xl`}
+        className={`group cursor-pointer hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ease-out !flex !flex-col !p-4 gap-4 ${needsAttention ? 'w-full' : `flex-shrink-0 ${cardWidth}`} ${getCardStyles(status, isFirstInRow, item.check_in, isPast, needsAttention)} relative overflow-hidden rounded-2xl`}
       >
         {/* Turnover Stamp */}
         <img 
@@ -259,9 +257,9 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
                 <Badge 
                   className={`font-semibold px-2.5 py-1 backdrop-blur-sm ${
                     done === total
-                      ? 'bg-sky-500/12 text-sky-600 dark:text-sky-300 border-sky-300/30 dark:border-sky-500/20'
+                      ? 'bg-teal-500/15 text-teal-600 dark:text-teal-300 border-teal-300/30 dark:border-teal-500/20'
                       : inProg
-                      ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-300/35 dark:border-blue-500/25'
+                      ? 'bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-300/35 dark:border-orange-500/25'
                       : 'bg-red-500/15 text-red-700 dark:text-red-300 border-red-300/35 dark:border-red-500/20'
                   }`}
                 >
@@ -279,7 +277,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
               <Badge 
                 className={`px-2.5 py-1 backdrop-blur-sm ${
                   item.occupancy_status === 'occupied' 
-                    ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-300/35 dark:border-indigo-500/20'
+                    ? 'bg-white/35 dark:bg-white/10 text-neutral-700 dark:text-neutral-300 border-neutral-300/30 dark:border-white/10'
                     : 'bg-white/30 dark:bg-white/10 text-neutral-600 dark:text-neutral-400 border-neutral-300/30 dark:border-white/10'
                 }`}
               >
@@ -308,6 +306,22 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
         </CardFooter>
       </Card>
     );
+
+    // Active + out + incomplete cards get the animated liquid border wrapper
+    if (needsAttention) {
+      const liquidHue = status === 'not_started' ? 25 : 55; // red or orange
+      return (
+        <div
+          key={item.id}
+          className={`liquid-border flex-shrink-0 ${cardWidth}`}
+          style={{ '--liquid-hue': liquidHue } as React.CSSProperties}
+        >
+          {card}
+        </div>
+      );
+    }
+
+    return card;
   };
 
   return (
