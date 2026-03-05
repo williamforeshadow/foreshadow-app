@@ -214,7 +214,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
       <Card
         key={needsAttention ? undefined : item.id}
         onClick={() => onCardClick(item)}
-        className={`group cursor-pointer hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ease-out !flex !flex-col !p-4 gap-4 ${needsAttention ? 'w-full' : `flex-shrink-0 ${cardWidth}`} ${getCardStyles(status, isFirstInRow, item.check_in, isPast, needsAttention)} relative overflow-hidden rounded-2xl`}
+        className={`group cursor-pointer hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ease-out !flex !flex-col !p-4 gap-4 ${needsAttention ? 'w-full' : `flex-shrink-0 ${cardWidth}`} ${getCardStyles(status, isFirstInRow, item.check_in, isPast, !!needsAttention)} relative overflow-hidden rounded-2xl`}
       >
         {/* Dismiss button for past cards */}
         {isPast && (
