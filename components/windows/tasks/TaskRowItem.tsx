@@ -3,7 +3,7 @@
 import { memo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import type { TaskRow } from '@/lib/useTasks';
-import type { TaskStatus, TaskType } from '@/lib/types';
+import type { TaskStatus } from '@/lib/types';
 
 // Status badge styles
 export const statusStyles: Record<TaskStatus, string> = {
@@ -15,11 +15,8 @@ export const statusStyles: Record<TaskStatus, string> = {
   reopened: 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-400',
 };
 
-// Type badge styles
-export const typeStyles: Record<TaskType, string> = {
-  cleaning: 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-400',
-  maintenance: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400',
-};
+// Neutral department badge style (all departments use the same style)
+export const departmentBadgeStyle = 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300';
 
 interface TaskRowItemProps {
   task: TaskRow;
@@ -74,10 +71,10 @@ export const TaskRowItem = memo(function TaskRowItem({
         {formatDate(task.check_out)} | {formatDate(task.next_check_in)}
       </div>
 
-      {/* Type badge */}
+      {/* Department badge */}
       <div className="w-24">
-        <Badge variant="outline" className={`text-xs ${typeStyles[task.type]}`}>
-          {task.type}
+        <Badge variant="outline" className={`text-xs ${departmentBadgeStyle}`}>
+          {task.department_name || task.type}
         </Badge>
       </div>
 

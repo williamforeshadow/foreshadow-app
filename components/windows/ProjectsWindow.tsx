@@ -89,6 +89,15 @@ const ProjectCard = memo(function ProjectCard({ project, isSelected, unreadCount
             >
               {project.priority ? project.priority.charAt(0).toUpperCase() + project.priority.slice(1) : 'Low'}
             </Badge>
+            {/* Department badge */}
+            {project.department_name && (
+              <Badge
+                variant="outline"
+                className="px-2 py-0.5 text-xs bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300 dark:border-neutral-600"
+              >
+                {project.department_name}
+              </Badge>
+            )}
           </div>
         </div>
       </CardContent>
@@ -457,6 +466,7 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
         status: expandedProject.status,
         priority: expandedProject.priority,
         assigned_staff: expandedProject.project_assignments?.[0]?.user_id || '',
+        department_id: expandedProject.department_id || '',
         scheduled_date: expandedProject.scheduled_date || '',
         scheduled_time: expandedProject.scheduled_time || ''
       });

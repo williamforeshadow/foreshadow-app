@@ -49,6 +49,7 @@ export function useTimeline() {
             property_name,
             template_id,
             type,
+            department_id,
             status,
             scheduled_date,
             scheduled_time,
@@ -56,7 +57,8 @@ export function useTimeline() {
             completed_at,
             created_at,
             updated_at,
-            templates(id, name, type),
+            templates(id, name, type, department_id),
+            departments(id, name),
             task_assignments(user_id, users(id, name, avatar, role))
           `)
           .is('reservation_id', null)
@@ -74,6 +76,8 @@ export function useTimeline() {
         template_id: t.template_id,
         template_name: t.templates?.name || 'Unnamed Task',
         type: t.type || t.templates?.type || 'cleaning',
+        department_id: t.department_id || t.templates?.department_id || null,
+        department_name: t.departments?.name || null,
         status: t.status || 'not_started',
         scheduled_date: t.scheduled_date,
         scheduled_time: t.scheduled_time,

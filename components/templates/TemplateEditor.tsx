@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -50,11 +50,17 @@ const FIELD_TYPE_OPTIONS: { value: FieldType; label: string }[] = [
   { value: 'separator', label: 'Section Separator' },
 ];
 
+interface Department {
+  id: string;
+  name: string;
+}
+
 interface TemplateEditorProps {
   /** null = creating new template */
   templateId: string | null;
   initialName?: string;
-  initialType?: 'cleaning' | 'maintenance';
+  initialType?: string;
+  initialDepartmentId?: string | null;
   initialDescription?: string;
   initialFields?: FieldDefinition[];
 }
@@ -62,7 +68,8 @@ interface TemplateEditorProps {
 export default function TemplateEditor({
   templateId,
   initialName = '',
-  initialType = 'cleaning',
+  initialType = '',
+  initialDepartmentId = null,
   initialDescription = '',
   initialFields = [],
 }: TemplateEditorProps) {
@@ -70,11 +77,34 @@ export default function TemplateEditor({
   const isEditing = !!templateId;
 
   const [formName, setFormName] = useState(initialName);
-  const [formType, setFormType] = useState<'cleaning' | 'maintenance'>(initialType);
+  const [formType, setFormType] = useState(initialType);
+  const [departmentId, setDepartmentId] = useState<string | null>(initialDepartmentId);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [formDescription, setFormDescription] = useState(initialDescription);
   const [fields, setFields] = useState<FieldDefinition[]>(initialFields);
   const [formErrors, setFormErrors] = useState<{ name?: string }>({});
   const [isSaving, setIsSaving] = useState(false);
+
+  // Fetch departments on mount
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const res = await fetch('/api/departments');
+        const data = await res.json();
+        if (data.departments) {
+          setDepartments(data.departments);
+          // Auto-select first department if none selected and creating new template
+          if (!departmentId && !isEditing && data.departments.length > 0) {
+            setDepartmentId(data.departments[0].id);
+            setFormType(data.departments[0].name.toLowerCase());
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching departments:', err);
+      }
+    };
+    fetchDepartments();
+  }, []);
 
   const addField = (type: FieldType) => {
     const newField: FieldDefinition = {
@@ -127,6 +157,7 @@ export default function TemplateEditor({
       const payload = {
         name: formName,
         type: formType,
+        department_id: departmentId,
         description: formDescription || null,
         fields,
       };
@@ -204,18 +235,25 @@ export default function TemplateEditor({
               </Field>
 
               <Field>
-                <FieldLabel>Template Type</FieldLabel>
+                <FieldLabel>Department</FieldLabel>
                 <Select
-                  onValueChange={(value) => setFormType(value as 'cleaning' | 'maintenance')}
-                  value={formType}
+                  onValueChange={(value) => {
+                    setDepartmentId(value);
+                    const dept = departments.find(d => d.id === value);
+                    if (dept) setFormType(dept.name.toLowerCase());
+                  }}
+                  value={departmentId || ''}
                   disabled={isSaving}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select type..." />
+                    <SelectValue placeholder="Select department..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="cleaning">Cleaning</SelectItem>
-                    <SelectItem value="maintenance">Maintenance</SelectItem>
+                    {departments.map((dept) => (
+                      <SelectItem key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </Field>

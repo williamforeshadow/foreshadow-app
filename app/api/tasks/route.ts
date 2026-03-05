@@ -97,7 +97,7 @@ export async function POST(request: Request) {
     // Get template details
     const { data: template, error: templateError } = await supabase
       .from('templates')
-      .select('id, name, type')
+      .select('id, name, type, department_id')
       .eq('id', template_id)
       .single();
 
@@ -171,11 +171,12 @@ export async function POST(request: Request) {
         reservation_id,
         template_id,
         type: template.type,
+        department_id: template.department_id || null,
         status: 'not_started',
         scheduled_date: scheduledDate,
         scheduled_time: scheduledTime
       })
-      .select('*, templates(name, type)')
+      .select('*, templates(name, type, department_id)')
       .single();
 
     if (insertError) {
@@ -241,7 +242,7 @@ export async function GET() {
   try {
     const { data: templates, error } = await getSupabaseServer()
       .from('templates')
-      .select('id, name, type')
+      .select('id, name, type, department_id, departments(id, name)')
       .order('type', { ascending: true })
       .order('name', { ascending: true });
 

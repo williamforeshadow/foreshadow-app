@@ -13,11 +13,18 @@ export async function GET(
   const propertyName = searchParams.get('property_name');
   
   try {
-    const { data, error } = await getSupabaseServer()
+    const { data: rawData, error } = await getSupabaseServer()
       .from('templates')
-      .select('*')
+      .select('*, departments(id, name)')
       .eq('id', id)
       .single();
+
+    // Flatten department join
+    const data = rawData ? {
+      ...rawData,
+      department_name: (rawData as any).departments?.name || null,
+      departments: undefined,
+    } : null;
 
     if (error) {
       return NextResponse.json(
@@ -65,7 +72,7 @@ export async function PUT(
   
   try {
     const body = await request.json();
-    const { name, type, description, fields } = body;
+    const { name, type, description, fields, department_id } = body;
 
     if (!name || !type || !fields) {
       return NextResponse.json(
@@ -81,6 +88,7 @@ export async function PUT(
         type,
         description,
         fields,
+        department_id: department_id || null,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)

@@ -14,6 +14,7 @@ export async function GET(
       .from('property_projects')
       .select(`
         *,
+        departments(id, name),
         project_assignments(
           user_id,
           assigned_at,
@@ -37,9 +38,11 @@ export async function GET(
       );
     }
 
-    // Transform to flatten user data in assignments
+    // Transform to flatten user data in assignments and department
     const transformedData = {
       ...data,
+      department_name: data.departments?.name || null,
+      departments: undefined,
       project_assignments: data.project_assignments?.map((a: any) => ({
         ...a,
         user: a.users || null, // Map users to user for frontend
@@ -63,7 +66,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, description, status, priority, assigned_user_ids, scheduled_date, scheduled_time, user_id } = body;
+    const { title, description, status, priority, assigned_user_ids, scheduled_date, scheduled_time, department_id, user_id } = body;
 
     // Fetch current project to compare for activity logging
     const { data: oldProject } = await getSupabaseServer()
@@ -84,6 +87,7 @@ export async function PUT(
     if (priority !== undefined) updateData.priority = priority;
     if (scheduled_date !== undefined) updateData.scheduled_date = scheduled_date;
     if (scheduled_time !== undefined) updateData.scheduled_time = scheduled_time;
+    if (department_id !== undefined) updateData.department_id = department_id || null;
 
     const { error: updateError } = await getSupabaseServer()
       .from('property_projects')
@@ -128,11 +132,12 @@ export async function PUT(
       }
     }
 
-    // Fetch updated project with assignments
+    // Fetch updated project with assignments and department
     const { data, error: fetchError } = await getSupabaseServer()
       .from('property_projects')
       .select(`
         *,
+        departments(id, name),
         project_assignments(
           user_id,
           assigned_at,
@@ -189,6 +194,11 @@ export async function PUT(
         const formattedTime = scheduled_time || 'none';
         await logProjectActivity(id, user_id, 'scheduled_time_change', `changed scheduled time to "${formattedTime}"`, oldProject.scheduled_time, scheduled_time);
       }
+      // Department change
+      if (department_id !== undefined && (department_id || null) !== (oldProject.department_id || null)) {
+        const deptName = data?.departments?.name || 'none';
+        await logProjectActivity(id, user_id, 'department_change', `changed department to "${deptName}"`, oldProject.department_id, department_id);
+      }
       // Assignment change
       if (assigned_user_ids !== undefined) {
         const oldAssigneeId = oldProject.project_assignments?.[0]?.user_id;
@@ -204,9 +214,11 @@ export async function PUT(
       }
     }
 
-    // Transform to flatten user data in assignments
+    // Transform to flatten user data in assignments and department
     const transformedData = {
       ...data,
+      department_name: data?.departments?.name || null,
+      departments: undefined,
       project_assignments: data?.project_assignments?.map((a: any) => ({
         ...a,
         user: a.users || null, // Map users to user for frontend

@@ -18,6 +18,7 @@ export async function GET(request: Request) {
         property_name,
         template_id,
         type,
+        department_id,
         status,
         scheduled_date,
         scheduled_time,
@@ -25,7 +26,8 @@ export async function GET(request: Request) {
         completed_at,
         created_at,
         updated_at,
-        templates(id, name, type),
+        templates(id, name, type, department_id),
+        departments(id, name),
         reservations(id, property_name, guest_name, check_in, check_out),
         task_assignments(user_id, users(id, name, avatar, role))
       `)
@@ -98,6 +100,7 @@ export async function GET(request: Request) {
     const transformedTasks = tasks?.map((task: any) => {
       const template = task.templates as any;
       const reservation = task.reservations as any;
+      const department = task.departments as any;
       const assignments = (task.task_assignments || []) as any[];
 
       // Use property_name from the task directly (now always populated),
@@ -112,6 +115,8 @@ export async function GET(request: Request) {
         template_id: task.template_id,
         template_name: template?.name || 'Unnamed Task',
         type: task.type || template?.type || 'cleaning',
+        department_id: task.department_id || template?.department_id || null,
+        department_name: department?.name || null,
         status: task.status || 'not_started',
         scheduled_date: task.scheduled_date,
         scheduled_time: task.scheduled_time,
@@ -146,15 +151,18 @@ export async function GET(request: Request) {
     }
 
     // Calculate summary stats
+    const byType: Record<string, number> = {};
+    filteredTasks.forEach((t: any) => {
+      const typeName = t.department_name || t.type || 'unknown';
+      byType[typeName] = (byType[typeName] || 0) + 1;
+    });
+
     const summary = {
       total: filteredTasks.length,
       not_started: filteredTasks.filter((t: any) => t.status === 'not_started').length,
       in_progress: filteredTasks.filter((t: any) => t.status === 'in_progress').length,
       complete: filteredTasks.filter((t: any) => t.status === 'complete').length,
-      by_type: {
-        cleaning: filteredTasks.filter((t: any) => t.type === 'cleaning').length,
-        maintenance: filteredTasks.filter((t: any) => t.type === 'maintenance').length
-      }
+      by_type: byType
     };
 
     return NextResponse.json({

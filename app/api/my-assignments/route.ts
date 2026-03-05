@@ -40,11 +40,13 @@ export async function GET(request: Request) {
           reservation_id,
           template_id,
           type,
+          department_id,
           scheduled_date,
           scheduled_time,
           status,
           form_metadata,
-          templates(id, name, type, description)
+          templates(id, name, type, department_id),
+          departments(id, name)
         `)
         .in('id', taskIds);
 
@@ -86,6 +88,7 @@ export async function GET(request: Request) {
       // Transform tasks
       tasks = taskData?.map((task: any) => {
         const template = task.templates as any;
+        const department = task.departments as any;
         const reservation = task.reservation_id ? reservationsMap[task.reservation_id] : null;
         const assignment = assignmentMap[task.id];
         
@@ -95,6 +98,8 @@ export async function GET(request: Request) {
           template_id: task.template_id,
           template_name: template?.name || 'Unnamed Task',
           type: task.type || template?.type || 'cleaning',
+          department_id: task.department_id || template?.department_id || null,
+          department_name: department?.name || null,
           description: template?.description,
           scheduled_date: task.scheduled_date,
           scheduled_time: task.scheduled_time,
@@ -123,9 +128,11 @@ export async function GET(request: Request) {
           description,
           status,
           priority,
+          department_id,
           scheduled_date,
           scheduled_time,
-          created_at
+          created_at,
+          departments(id, name)
         )
       `)
       .eq('user_id', userId);
@@ -145,6 +152,8 @@ export async function GET(request: Request) {
       
       return {
         ...project,
+        department_name: project.departments?.name || null,
+        departments: undefined,
         assigned_at: pa.assigned_at
       };
     }).filter(Boolean) || [];

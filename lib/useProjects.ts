@@ -69,6 +69,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     status: 'not_started',
     priority: 'medium',
     assigned_staff: '',
+    department_id: '',
     scheduled_date: '',
     scheduled_time: ''
   });
@@ -180,6 +181,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
       status: 'not_started',
       priority: 'medium',
       assigned_staff: '',
+      department_id: '',
       scheduled_date: '',
       scheduled_time: ''
     });
@@ -202,6 +204,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
       status: project.status,
       priority: project.priority,
       assigned_staff: project.assigned_staff || '',
+      department_id: project.department_id || '',
       scheduled_date: project.scheduled_date || '',
       scheduled_time: project.scheduled_time || ''
     });
@@ -227,6 +230,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
         status: projectForm.status,
         priority: projectForm.priority,
         assigned_staff: projectForm.assigned_staff || null,
+        department_id: projectForm.department_id || null,
         scheduled_date: projectForm.scheduled_date || null,
         scheduled_time: projectForm.scheduled_time || null
       };
@@ -341,6 +345,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
           status: fields.status,
           priority: fields.priority,
           assigned_user_ids: fields.assigned_staff ? [fields.assigned_staff] : [],
+          department_id: fields.department_id || null,
           scheduled_date: fields.scheduled_date || null,
           scheduled_time: fields.scheduled_time || null,
           user_id: currentUser.id

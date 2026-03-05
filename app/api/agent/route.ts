@@ -55,6 +55,16 @@ Guest booking records for properties.
 | created_at | timestamptz | Record creation time |
 | updated_at | timestamptz | Last update time |
 
+### departments
+Organizational departments that templates and tasks belong to.
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| name | text | Department name (unique, e.g. 'Cleaning', 'Maintenance', 'Landscaping') |
+| icon | text | Lucide icon key (e.g. 'spray-can', 'wrench', 'clipboard-check') |
+| created_at | timestamptz | Record creation time |
+| updated_at | timestamptz | Last update time |
+
 ### turnover_tasks
 Tasks associated with turnovers (cleanings, maintenance between guests).
 | Column | Type | Description |
@@ -62,7 +72,8 @@ Tasks associated with turnovers (cleanings, maintenance between guests).
 | id | uuid | Primary key |
 | reservation_id | uuid | FK to reservations |
 | template_id | uuid | FK to templates |
-| type | text | Task type (e.g., 'cleaning', 'maintenance') |
+| type | text | Task type (legacy, e.g., 'cleaning', 'maintenance') |
+| department_id | uuid | FK to departments (preferred over type) |
 | status | text | Task status: 'not_started', 'in_progress', 'paused', 'complete', 'reopened' |
 | scheduled_date | date | Scheduled date (YYYY-MM-DD) |
 | scheduled_time | time | Scheduled time (HH:MM, nullable) |
@@ -88,7 +99,8 @@ Reusable templates for tasks and forms.
 | name | text | Template name |
 | description | text | Template description |
 | fields | jsonb | Field definitions for forms |
-| type | text | Template type |
+| type | text | Template type (legacy) |
+| department_id | uuid | FK to departments (preferred over type) |
 | created_at | timestamptz | Record creation time |
 | updated_at | timestamptz | Last update time |
 
@@ -112,6 +124,7 @@ Capital/renovation projects for properties.
 | description | text | Project description |
 | status | text | 'not_started', 'in_progress', 'on_hold', 'complete' |
 | priority | text | 'low', 'medium', 'high', 'urgent' |
+| department_id | uuid | FK to departments (optional) |
 | scheduled_date | date | Project scheduled date (YYYY-MM-DD) |
 | scheduled_time | time | Project scheduled time (HH:MM, nullable) |
 | created_at | timestamptz | Record creation time |

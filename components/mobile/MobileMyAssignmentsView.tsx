@@ -25,7 +25,9 @@ interface Task {
   reservation_id: string;
   template_id: string;
   template_name: string;
-  type: 'cleaning' | 'maintenance';
+  type: string;
+  department_id?: string | null;
+  department_name?: string | null;
   description?: string;
   scheduled_date?: string;
   scheduled_time?: string;
@@ -310,11 +312,8 @@ export default function MobileMyAssignmentsView({
                           <Badge className={`px-2 py-0.5 text-xs border ${getStatusBadgeStyle(task.status)}`}>
                             {formatStatusLabel(task.status)}
                           </Badge>
-                          <Badge className={`px-2 py-0.5 text-xs border ${task.type === 'maintenance' 
-                            ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800' 
-                            : 'bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800'
-                          }`}>
-                            {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                          <Badge className="px-2 py-0.5 text-xs border bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700">
+                            {task.department_name || task.type}
                           </Badge>
                         </div>
 
@@ -389,6 +388,11 @@ export default function MobileMyAssignmentsView({
                           {project.priority && (
                             <Badge className={`px-2 py-0.5 text-xs border ${getPriorityStyle(project.priority)}`}>
                               {project.priority}
+                            </Badge>
+                          )}
+                          {project.department_name && (
+                            <Badge className="px-2 py-0.5 text-xs bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300 dark:border-neutral-600">
+                              {project.department_name}
                             </Badge>
                           )}
                         </div>

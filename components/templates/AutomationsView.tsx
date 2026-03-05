@@ -31,7 +31,9 @@ import {
 interface Template {
   id: string;
   name: string;
-  type: 'cleaning' | 'maintenance';
+  type: string;
+  department_id?: string | null;
+  department_name?: string | null;
   description: string | null;
 }
 
@@ -424,13 +426,10 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                           <CardTitle className="text-base flex items-center gap-2 truncate">
                             {template?.name || 'Unknown Template'}
                             <Badge 
-                              variant={template?.type === 'maintenance' ? 'default' : 'secondary'}
-                              className={template?.type === 'maintenance' 
-                                ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-300' 
-                                : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-300'
-                              }
+                              variant="secondary"
+                              className="bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300 dark:border-neutral-600"
                             >
-                              {template?.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                              {template?.department_name || template?.type || 'Unknown'}
                             </Badge>
                             {hasOverrides && (
                               <Badge variant="outline" className="text-xs">

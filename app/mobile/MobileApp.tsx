@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useUsers } from '@/lib/useUsers';
 import { useTurnovers } from '@/lib/useTurnovers';
@@ -50,6 +50,16 @@ export default function MobileApp() {
   const [mobileTab, setMobileTab] = useState<MobileTab>('assignments');
   const [mobileSelectedTask, setMobileSelectedTask] = useState<any>(null);
   const [mobileRefreshTrigger, setMobileRefreshTrigger] = useState(0);
+  const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
+
+  useEffect(() => {
+    fetch('/api/departments')
+      .then(res => res.json())
+      .then(data => {
+        if (data.departments) setDepartments(data.departments);
+      })
+      .catch(err => console.error('Error fetching departments:', err));
+  }, []);
 
   // Reset project form when dialog closes
   const handleProjectDialogClose = (open: boolean) => {
@@ -62,6 +72,7 @@ export default function MobileApp() {
         status: 'not_started',
         priority: 'medium',
         assigned_staff: '',
+        department_id: '',
         scheduled_date: '',
         scheduled_time: ''
       });
@@ -140,11 +151,8 @@ export default function MobileApp() {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-neutral-500 dark:text-neutral-400">{mobileSelectedTask.property_name}</span>
-              <Badge className={mobileSelectedTask.type === 'maintenance' 
-                ? 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200' 
-                : 'bg-sky-100 dark:bg-sky-900 text-sky-800 dark:text-sky-200'
-              }>
-                {mobileSelectedTask.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+              <Badge className="bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
+                {mobileSelectedTask.department_name || mobileSelectedTask.type}
               </Badge>
             </div>
           </div>
@@ -383,6 +391,21 @@ export default function MobileApp() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Department</label>
+              <Select
+                value={projectForm.department_id || 'none'}
+                onValueChange={(value) => setProjectForm({...projectForm, department_id: value === 'none' ? '' : value})}
+              >
+                <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Department</SelectItem>
+                  {departments.map((dept) => (
+                    <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">Assigned Staff</label>

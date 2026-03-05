@@ -6,7 +6,7 @@ export async function GET() {
   try {
     const { data, error } = await getSupabaseServer()
       .from('templates')
-      .select('*')
+      .select('*, departments(id, name)')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -16,7 +16,14 @@ export async function GET() {
       );
     }
 
-    return NextResponse.json({ templates: data || [] });
+    // Flatten department join
+    const templates = (data || []).map((t: any) => ({
+      ...t,
+      department_name: t.departments?.name || null,
+      departments: undefined,
+    }));
+
+    return NextResponse.json({ templates });
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || 'Failed to fetch templates' },
@@ -29,7 +36,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, type, description, fields } = body;
+    const { name, type, description, fields, department_id } = body;
 
     if (!name || !type || !fields) {
       return NextResponse.json(
@@ -44,7 +51,8 @@ export async function POST(request: Request) {
         name,
         type,
         description,
-        fields
+        fields,
+        department_id: department_id || null,
       })
       .select()
       .single();

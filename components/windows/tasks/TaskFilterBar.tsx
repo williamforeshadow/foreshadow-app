@@ -155,13 +155,13 @@ export function TaskFilterBar({
 
         <div className="w-px h-4 bg-neutral-200 dark:bg-neutral-700" />
 
-        {/* Type filters */}
+        {/* Department/type filters */}
         <div className="flex items-center gap-1">
-          {(['cleaning', 'maintenance'] as TaskType[]).map(type => (
+          {Object.keys(summary?.by_type || {}).map(type => (
             <button
               key={type}
               onClick={() => toggleTypeFilter(type)}
-              className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+              className={`px-2.5 py-1 text-xs rounded-full border transition-colors capitalize ${
                 filters.type.includes(type)
                   ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-neutral-900 dark:border-white'
                   : 'bg-white dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700 hover:border-neutral-400'

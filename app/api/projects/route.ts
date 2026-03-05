@@ -13,6 +13,7 @@ export async function GET(request: Request) {
       .from('property_projects')
       .select(`
         *,
+        departments(id, name),
         project_assignments(
           user_id,
           assigned_at,
@@ -75,9 +76,11 @@ export async function GET(request: Request) {
       });
     }
 
-    // Transform to flatten user data in assignments and add unread count
+    // Transform to flatten user data and department join, add unread count
     const transformedData = filteredData?.map((project: any) => ({
       ...project,
+      department_name: project.departments?.name || null,
+      departments: undefined,
       unread_comment_count: unreadCounts[project.id] || 0,
       project_assignments: project.project_assignments?.map((a: any) => ({
         ...a,
@@ -102,7 +105,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     console.log('Request body:', JSON.stringify(body, null, 2));
     
-    const { property_name, title, description, status, priority, assigned_user_ids, scheduled_date, scheduled_time } = body;
+    const { property_name, title, description, status, priority, assigned_user_ids, scheduled_date, scheduled_time, department_id } = body;
 
     if (!property_name || !title) {
       console.log('Validation failed: missing property_name or title');
@@ -123,7 +126,8 @@ export async function POST(request: Request) {
         status: status || 'not_started',
         priority: priority || 'medium',
         scheduled_date: scheduled_date || null,
-        scheduled_time: scheduled_time || null
+        scheduled_time: scheduled_time || null,
+        department_id: department_id || null
       })
       .select()
       .single();
@@ -155,11 +159,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // Fetch the project with assignments
+    // Fetch the project with assignments and department
     const { data: fullProject, error: fetchError } = await getSupabaseServer()
       .from('property_projects')
       .select(`
         *,
+        departments(id, name),
         project_assignments(
           user_id,
           assigned_at,
@@ -175,9 +180,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, data: project });
     }
 
-    // Transform to flatten user data in assignments
+    // Transform to flatten user data in assignments and department
     const transformedProject = {
       ...fullProject,
+      department_name: fullProject.departments?.name || null,
+      departments: undefined,
       project_assignments: fullProject.project_assignments?.map((a: any) => ({
         ...a,
         user: a.users || null, // Map users to user for frontend

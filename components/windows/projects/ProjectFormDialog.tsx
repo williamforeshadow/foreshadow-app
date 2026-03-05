@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { CheckIcon, ChevronsUpDownIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Project, ProjectFormData } from '@/lib/types';
+import type { Project, ProjectFormData, Department } from '@/lib/types';
 
 interface ProjectFormDialogProps {
   open: boolean;
@@ -36,6 +36,18 @@ export function ProjectFormDialog({
 }: ProjectFormDialogProps) {
   const isNewProject = !editingProject;
   const [propertyOpen, setPropertyOpen] = React.useState(false);
+  const [departments, setDepartments] = React.useState<Department[]>([]);
+
+  React.useEffect(() => {
+    if (open) {
+      fetch('/api/departments')
+        .then(res => res.json())
+        .then(data => {
+          if (data.departments) setDepartments(data.departments);
+        })
+        .catch(err => console.error('Error fetching departments:', err));
+    }
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -170,6 +182,24 @@ export function ProjectFormDialog({
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Department</Label>
+                <Select
+                  value={formData.department_id || 'none'}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, department_id: value === 'none' ? '' : value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Department</SelectItem>
+                    {departments.map((dept) => (
+                      <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">

@@ -6,7 +6,7 @@ import DynamicCleaningForm from '@/components/DynamicCleaningForm';
 import type { Template } from '@/components/DynamicCleaningForm';
 import type { TaskRow } from '@/lib/useTasks';
 import type { User, TaskStatus } from '@/lib/types';
-import { statusStyles, typeStyles } from './TaskRowItem';
+import { statusStyles, departmentBadgeStyle } from './TaskRowItem';
 
 interface TaskDetailPanelProps {
   task: TaskRow;
@@ -102,9 +102,9 @@ export function TaskDetailPanel({
             <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-700" />
           )}
 
-          {/* Type Badge */}
-          <Badge variant="outline" className={typeStyles[task.type]}>
-            {task.type}
+          {/* Department Badge */}
+          <Badge variant="outline" className={departmentBadgeStyle}>
+            {task.department_name || task.type}
           </Badge>
 
           {/* Status Badge */}

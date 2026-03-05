@@ -26,13 +26,27 @@ export interface AssignedUser {
 // ============================================================================
 
 export type TaskStatus = 'contingent' | 'not_started' | 'in_progress' | 'paused' | 'complete' | 'reopened';
-export type TaskType = 'cleaning' | 'maintenance';
+export type TaskType = string;
+
+// ============================================================================
+// Department Types
+// ============================================================================
+
+export interface Department {
+  id: string;
+  name: string;
+  icon: string;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface Task {
   task_id: string;
   template_id?: string;
   template_name?: string;
   type: TaskType;
+  department_id?: string | null;
+  department_name?: string | null;
   status: TaskStatus;
   property_name?: string;
   assigned_users?: AssignedUser[];
@@ -47,6 +61,8 @@ export interface TaskTemplate {
   id: string;
   name: string;
   type: string;
+  department_id?: string | null;
+  department_name?: string | null;
   sections?: TaskTemplateSection[];
   fields?: TaskTemplateField[];
 }
@@ -106,6 +122,8 @@ export interface Project {
   assigned_staff?: string;
   assigned_user_ids?: string[];
   project_assignments?: Array<{ user_id: string; user?: User }>;
+  department_id?: string | null;
+  department_name?: string | null;
   scheduled_date?: string | null;
   scheduled_time?: string | null;
   created_at: string;
@@ -119,6 +137,7 @@ export interface ProjectFormData {
   status: string;
   priority: string;
   assigned_staff: string;
+  department_id: string;
   scheduled_date: string;
   scheduled_time: string;
 }
@@ -129,6 +148,7 @@ export interface ProjectFormFields {
   status: string;
   priority: string;
   assigned_staff: string;
+  department_id: string;
   scheduled_date: string;
   scheduled_time: string;
 }

@@ -1014,13 +1014,10 @@ export default function StaffPage() {
                             </CardTitle>
                             <div className="flex items-center gap-2">
                               <Badge
-                                variant={task.type === 'maintenance' ? 'default' : 'secondary'}
-                                className={task.type === 'maintenance' 
-                                  ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200' 
-                                  : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                                }
+                                variant="secondary"
+                                className="bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300"
                               >
-                                {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+                                {task.department_name || task.type}
                               </Badge>
                               <Button
                                 variant="ghost"
@@ -1251,13 +1248,9 @@ export default function StaffPage() {
                               >
                                 <Badge 
                                   variant="outline" 
-                                  className={`mr-2 ${
-                                    template.type === 'maintenance' 
-                                      ? 'bg-orange-100 text-orange-800 border-orange-300' 
-                                      : 'bg-blue-100 text-blue-800 border-blue-300'
-                                  }`}
+                                  className="mr-2 bg-neutral-100 text-neutral-700 border-neutral-300"
                                 >
-                                  {template.type === 'cleaning' ? 'C' : 'M'}
+                                  {(template.department_name || template.type || '?').charAt(0).toUpperCase()}
                                 </Badge>
                                 {template.name}
                               </Button>
@@ -1325,13 +1318,9 @@ export default function StaffPage() {
                             >
                               <Badge 
                                 variant="outline" 
-                                className={`mr-2 ${
-                                  template.type === 'maintenance' 
-                                    ? 'bg-orange-100 text-orange-800 border-orange-300' 
-                                    : 'bg-blue-100 text-blue-800 border-blue-300'
-                                }`}
+                                className="mr-2 bg-neutral-100 text-neutral-700 border-neutral-300"
                               >
-                                {template.type === 'cleaning' ? 'C' : 'M'}
+                                {(template.department_name || template.type || '?').charAt(0).toUpperCase()}
                               </Badge>
                               {template.name}
                             </Button>

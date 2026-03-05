@@ -14,6 +14,8 @@ export interface TaskRow {
   template_id: string | null;
   template_name: string;
   type: TaskType;
+  department_id: string | null;
+  department_name: string | null;
   status: TaskStatus;
   scheduled_date: string | null;
   scheduled_time: string | null;
@@ -38,10 +40,7 @@ export interface TaskSummary {
   not_started: number;
   in_progress: number;
   complete: number;
-  by_type: {
-    cleaning: number;
-    maintenance: number;
-  };
+  by_type: Record<string, number>;
 }
 
 export type TimelineFilter = 'active' | 'inactive';

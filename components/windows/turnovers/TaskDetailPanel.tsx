@@ -49,13 +49,8 @@ export function TaskDetailPanel({
             <h2 className="text-xl font-semibold">{task.template_name || 'Task'}</h2>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-sm text-neutral-500">{propertyName}</span>
-              <Badge
-                className={task.type === 'maintenance'
-                  ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200'
-                  : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                }
-              >
-                {task.type === 'cleaning' ? 'Cleaning' : 'Maintenance'}
+              <Badge className="bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
+                {task.department_name || task.type}
               </Badge>
             </div>
           </div>
