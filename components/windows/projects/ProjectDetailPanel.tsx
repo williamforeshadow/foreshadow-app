@@ -1,6 +1,6 @@
 'use client';
 
-import { RefObject, useState, useEffect } from 'react';
+import { RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { DebouncedNativeInput, DebouncedTextarea } from '@/components/ui/debounced-input';
 import { CheckIcon, ChevronsUpDownIcon } from 'lucide-react';
+import { getDepartmentIcon } from '@/lib/departmentIcons';
+import { useDepartments } from '@/lib/departmentsContext';
 import {
   Command,
   CommandEmpty,
@@ -24,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import type { Project, User, ProjectFormFields, Comment, Attachment, TimeEntry, Department } from '@/lib/types';
+import type { Project, User, ProjectFormFields, Comment, Attachment, TimeEntry } from '@/lib/types';
 
 interface ProjectDetailPanelProps {
   project: Project;
@@ -91,16 +93,7 @@ export function ProjectDetailPanel({
   staffOpen,
   setStaffOpen,
 }: ProjectDetailPanelProps) {
-  const [departments, setDepartments] = useState<Department[]>([]);
-
-  useEffect(() => {
-    fetch('/api/departments')
-      .then(res => res.json())
-      .then(data => {
-        if (data.departments) setDepartments(data.departments);
-      })
-      .catch(err => console.error('Error fetching departments:', err));
-  }, []);
+  const { departments } = useDepartments();
 
   return (
     <div className="w-full h-full flex flex-col bg-card">
@@ -141,15 +134,58 @@ export function ProjectDetailPanel({
         </div>
 
         <div className="flex flex-col space-y-3 px-4 py-3">
-          <DebouncedNativeInput
-            type="text"
-            value={editingFields.title}
-            onChange={(value) => setEditingFields(prev => prev ? {...prev, title: value} : null)}
-            onBlur={onSave}
-            placeholder="Untitled Project"
-            className="text-lg font-semibold bg-transparent border-none outline-none focus:outline-none p-0 flex-1 min-w-0 text-foreground placeholder:text-muted-foreground"
-            delay={150}
-          />
+          {/* Department icon + title row */}
+          <div className="flex items-center gap-2">
+            {/* Department dropdown (icon trigger) - left of title */}
+            {departments.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="focus:outline-none p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded transition-colors shrink-0"
+                    title={departments.find(d => d.id === editingFields.department_id)?.name || 'No Department'}
+                  >
+                    {(() => {
+                      const dept = departments.find(d => d.id === editingFields.department_id);
+                      const DeptIcon = getDepartmentIcon(dept?.icon);
+                      return <DeptIcon className="w-5 h-5 text-neutral-500 dark:text-neutral-400" />;
+                    })()}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuCheckboxItem
+                    checked={!editingFields.department_id}
+                    onCheckedChange={() => { setEditingFields(prev => prev ? {...prev, department_id: ''} : null); setTimeout(onSave, 0); }}
+                  >
+                    No Department
+                  </DropdownMenuCheckboxItem>
+                  {departments.map((dept) => {
+                    const DIcon = getDepartmentIcon(dept.icon);
+                    return (
+                      <DropdownMenuCheckboxItem
+                        key={dept.id}
+                        checked={editingFields.department_id === dept.id}
+                        onCheckedChange={() => { setEditingFields(prev => prev ? {...prev, department_id: dept.id} : null); setTimeout(onSave, 0); }}
+                      >
+                        <span className="flex items-center gap-2">
+                          <DIcon className="w-3.5 h-3.5" />
+                          {dept.name}
+                        </span>
+                      </DropdownMenuCheckboxItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            <DebouncedNativeInput
+              type="text"
+              value={editingFields.title}
+              onChange={(value) => setEditingFields(prev => prev ? {...prev, title: value} : null)}
+              onBlur={onSave}
+              placeholder="Untitled Project"
+              className="text-lg font-semibold bg-transparent border-none outline-none focus:outline-none p-0 flex-1 min-w-0 text-foreground placeholder:text-muted-foreground"
+              delay={150}
+            />
+          </div>
 
           <div className="flex items-center justify-between">
             <p className="text-base text-muted-foreground">{project.property_name}</p>
@@ -246,39 +282,6 @@ export function ProjectDetailPanel({
                   </DropdownMenuCheckboxItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-
-              {/* Department dropdown */}
-              {departments.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className="focus:outline-none">
-                      <Badge
-                        variant="outline"
-                        className="cursor-pointer hover:opacity-80 transition-opacity bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300 dark:border-neutral-600"
-                      >
-                        {departments.find(d => d.id === editingFields.department_id)?.name || 'No Dept'}
-                      </Badge>
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    <DropdownMenuCheckboxItem
-                      checked={!editingFields.department_id}
-                      onCheckedChange={() => { setEditingFields(prev => prev ? {...prev, department_id: ''} : null); setTimeout(onSave, 0); }}
-                    >
-                      No Department
-                    </DropdownMenuCheckboxItem>
-                    {departments.map((dept) => (
-                      <DropdownMenuCheckboxItem
-                        key={dept.id}
-                        checked={editingFields.department_id === dept.id}
-                        onCheckedChange={() => { setEditingFields(prev => prev ? {...prev, department_id: dept.id} : null); setTimeout(onSave, 0); }}
-                      >
-                        {dept.name}
-                      </DropdownMenuCheckboxItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
             </div>
           </div>
 

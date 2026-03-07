@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, CardAction } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { applyCleaningFilters, type CleaningFilters } from '@/lib/cleaningFilters';
@@ -186,11 +186,14 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
     // When liquid border is present, card border is transparent (the shimmer IS the border)
     switch (status) {
       case 'not_started':
-        return `${glassBase} bg-red-50/55 dark:bg-red-500/[0.10] border ${hasLiquidBorder ? 'border-transparent' : 'border-red-300/40 dark:border-red-400/18'}`;
+        // Rose gold — bright warm pink-gold
+        return `${glassBase} bg-rose-50/65 dark:bg-rose-400/[0.13] border ${hasLiquidBorder ? 'border-transparent' : 'border-rose-200/50 dark:border-rose-400/22'}`;
       case 'in_progress':
-        return `${glassBase} bg-orange-50/55 dark:bg-orange-400/[0.10] border ${hasLiquidBorder ? 'border-transparent' : 'border-orange-300/35 dark:border-orange-400/18'}`;
+        // Midnight blue — deep, actively being worked on
+        return `${glassBase} bg-indigo-50/55 dark:bg-indigo-500/[0.12] border ${hasLiquidBorder ? 'border-transparent' : 'border-indigo-300/40 dark:border-indigo-400/20'}`;
       case 'complete':
-        return `${glassBase} bg-teal-50/55 dark:bg-teal-500/[0.08] border border-teal-200/35 dark:border-teal-400/14`;
+        // Muted midnight blue — faded text + card, receding into background
+        return `${glassBase} bg-indigo-50/35 dark:bg-indigo-500/[0.06] border border-indigo-200/25 dark:border-indigo-400/10 text-muted-foreground/60`;
       case 'no_tasks':
         return `${glassBase} bg-white/55 dark:bg-white/[0.08] border border-neutral-300/35 dark:border-white/12`;
       default:
@@ -234,79 +237,78 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
             </svg>
           </button>
         )}
-        
-        <CardHeader className="min-h-[3rem]">
-          <CardDescription className="line-clamp-1 text-sm font-medium">
+
+        {/* 1) Guest name + occupancy badge inline */}
+        <div className="flex items-center gap-2">
+          <p className="line-clamp-1 text-sm font-medium flex-1 min-w-0">
             {item.guest_name || 'No Guest'}
-          </CardDescription>
-          <CardAction>
-            {(() => {
-              const approvedTasks = (item.tasks || []).filter(t => t.status !== 'contingent');
-              const total = approvedTasks.length;
-              const done = approvedTasks.filter(t => t.status === 'complete').length;
-              const inProg = approvedTasks.some(t => t.status === 'in_progress' || t.status === 'complete');
-              if (total === 0) return null;
-              // Inactive / past cards get neutral grey badges
-              const isInactive = !isInPlay || isPast;
-              return (
-                <Badge 
-                  className={`font-semibold px-2.5 py-1 backdrop-blur-sm ${
-                    isInactive
-                      ? 'bg-neutral-500/12 text-neutral-500 dark:text-neutral-400 border-neutral-300/30 dark:border-white/10'
-                      : done === total
-                      ? 'bg-teal-500/15 text-teal-600 dark:text-teal-300 border-teal-300/30 dark:border-teal-500/20'
-                      : inProg
-                      ? 'bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-300/35 dark:border-orange-500/25'
-                      : 'bg-red-500/15 text-red-700 dark:text-red-300 border-red-300/35 dark:border-red-500/20'
-                  }`}
-                >
-                  {done}/{total}
-                </Badge>
-              );
-            })()}
-          </CardAction>
-        </CardHeader>
+          </p>
+          {isInPlay && (
+            <Badge 
+              className={`px-2 py-0.5 text-[11px] backdrop-blur-sm shrink-0 ${
+                item.occupancy_status === 'occupied' 
+                  ? 'bg-white/35 dark:bg-white/10 text-neutral-700 dark:text-neutral-300 border-neutral-300/30 dark:border-white/10'
+                  : 'bg-white/30 dark:bg-white/10 text-neutral-600 dark:text-neutral-400 border-neutral-300/30 dark:border-white/10'
+              }`}
+            >
+              {item.occupancy_status === 'occupied' ? 'Occupied' : 'Checked out'}
+            </Badge>
+          )}
+        </div>
 
-        <CardContent className="flex-grow">
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Occupancy badge - only show on "in play" cards */}
-            {isInPlay && (
-              <Badge 
-                className={`px-2.5 py-1 backdrop-blur-sm ${
-                  item.occupancy_status === 'occupied' 
-                    ? 'bg-white/35 dark:bg-white/10 text-neutral-700 dark:text-neutral-300 border-neutral-300/30 dark:border-white/10'
-                    : 'bg-white/30 dark:bg-white/10 text-neutral-600 dark:text-neutral-400 border-neutral-300/30 dark:border-white/10'
-                }`}
-              >
-                {item.occupancy_status === 'occupied' ? 'Occupied' : 'Out'}
-              </Badge>
-            )}
-          </div>
-        </CardContent>
+        {/* 3) N/N tasks complete */}
+        {(() => {
+          const approvedTasks = (item.tasks || []).filter(t => t.status !== 'contingent');
+          const total = approvedTasks.length;
+          const done = approvedTasks.filter(t => t.status === 'complete').length;
+          if (total === 0) return null;
+          return (
+            <p className="text-xs font-medium text-neutral-400 dark:text-neutral-500">
+              {done}/{total} tasks complete
+            </p>
+          );
+        })()}
 
-        <CardFooter className="mt-auto flex flex-col gap-2">
-          <div className="w-full py-1">
-            <div className="h-px w-full bg-neutral-400/20 dark:bg-white/10" />
-          </div>
-          <div className="flex w-full justify-between text-xs text-muted-foreground/60">
-            <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-white/20 dark:border-white/10 bg-white/25 dark:bg-white/[0.06] backdrop-blur-sm px-2 py-1 transition-all duration-150 hover:bg-white/40 dark:hover:bg-white/10 ${!item.check_out ? 'opacity-40' : ''}`}>
-              <svg className="w-3.5 h-3.5 text-blue-400 dark:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              <span>{formatDate(item.check_out) || 'Out'}</span>
+        {/* Spacer to push footer content to bottom */}
+        <div className="flex-grow" />
+
+        {/* 4) Progress bar */}
+        {(() => {
+          const approvedTasks = (item.tasks || []).filter(t => t.status !== 'contingent');
+          const total = approvedTasks.length;
+          const done = approvedTasks.filter(t => t.status === 'complete').length;
+          const pct = total > 0 ? (done / total) * 100 : 0;
+          return (
+            <div className="w-full">
+              <div className="h-1 w-full rounded-full bg-neutral-200/40 dark:bg-white/10 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-indigo-400/60 dark:bg-indigo-400/40 transition-all duration-300"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
             </div>
-            <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-white/20 dark:border-white/10 bg-white/25 dark:bg-white/[0.06] backdrop-blur-sm px-2 py-1 transition-all duration-150 hover:bg-white/40 dark:hover:bg-white/10 ${!item.next_check_in ? 'opacity-40' : ''}`}>
-              <FlagCheckeredIcon className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400" />
-              <span>{formatDate(item.next_check_in) || 'In'}</span>
-            </div>
+          );
+        })()}
+
+        {/* 5) Check out & next check in */}
+        <div className="flex w-full justify-between text-xs text-muted-foreground/60">
+          <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-white/20 dark:border-white/15 bg-white/25 dark:bg-white/[0.08] backdrop-blur-sm px-2 py-1 ${!item.check_out ? 'opacity-40' : ''}`}>
+            <svg className="w-3.5 h-3.5 text-blue-400 dark:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span>{formatDate(item.check_out) || 'Out'}</span>
           </div>
-        </CardFooter>
+          <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-white/20 dark:border-white/15 bg-white/25 dark:bg-white/[0.08] backdrop-blur-sm px-2 py-1 ${!item.next_check_in ? 'opacity-40' : ''}`}>
+            <FlagCheckeredIcon className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400" />
+            <span>{formatDate(item.next_check_in) || 'In'}</span>
+          </div>
+        </div>
       </Card>
     );
 
     // Active + out + incomplete cards get the animated liquid border wrapper
     if (needsAttention) {
-      const liquidHue = status === 'not_started' ? 25 : 55; // red or orange
+      const liquidHue = status === 'not_started' ? 15 : 270; // rose gold or midnight blue
       return (
         <div
           key={item.id}

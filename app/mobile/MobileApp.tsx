@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useUsers } from '@/lib/useUsers';
 import { useTurnovers } from '@/lib/useTurnovers';
 import { useProjects } from '@/lib/useProjects';
+import { useDepartments } from '@/lib/departmentsContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -50,16 +51,7 @@ export default function MobileApp() {
   const [mobileTab, setMobileTab] = useState<MobileTab>('assignments');
   const [mobileSelectedTask, setMobileSelectedTask] = useState<any>(null);
   const [mobileRefreshTrigger, setMobileRefreshTrigger] = useState(0);
-  const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
-
-  useEffect(() => {
-    fetch('/api/departments')
-      .then(res => res.json())
-      .then(data => {
-        if (data.departments) setDepartments(data.departments);
-      })
-      .catch(err => console.error('Error fetching departments:', err));
-  }, []);
+  const { departments } = useDepartments();
 
   // Reset project form when dialog closes
   const handleProjectDialogClose = (open: boolean) => {

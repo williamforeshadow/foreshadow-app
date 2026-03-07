@@ -50,10 +50,8 @@ const FIELD_TYPE_OPTIONS: { value: FieldType; label: string }[] = [
   { value: 'separator', label: 'Section Separator' },
 ];
 
-interface Department {
-  id: string;
-  name: string;
-}
+// Department type from context
+import { useDepartments } from '@/lib/departmentsContext';
 
 interface TemplateEditorProps {
   /** null = creating new template */
@@ -79,32 +77,19 @@ export default function TemplateEditor({
   const [formName, setFormName] = useState(initialName);
   const [formType, setFormType] = useState(initialType);
   const [departmentId, setDepartmentId] = useState<string | null>(initialDepartmentId);
-  const [departments, setDepartments] = useState<Department[]>([]);
+  const { departments } = useDepartments();
   const [formDescription, setFormDescription] = useState(initialDescription);
   const [fields, setFields] = useState<FieldDefinition[]>(initialFields);
   const [formErrors, setFormErrors] = useState<{ name?: string }>({});
   const [isSaving, setIsSaving] = useState(false);
 
-  // Fetch departments on mount
+  // Auto-select first department if none selected and creating new template
   useEffect(() => {
-    const fetchDepartments = async () => {
-      try {
-        const res = await fetch('/api/departments');
-        const data = await res.json();
-        if (data.departments) {
-          setDepartments(data.departments);
-          // Auto-select first department if none selected and creating new template
-          if (!departmentId && !isEditing && data.departments.length > 0) {
-            setDepartmentId(data.departments[0].id);
-            setFormType(data.departments[0].name.toLowerCase());
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching departments:', err);
-      }
-    };
-    fetchDepartments();
-  }, []);
+    if (!departmentId && !isEditing && departments.length > 0) {
+      setDepartmentId(departments[0].id);
+      setFormType(departments[0].name.toLowerCase());
+    }
+  }, [departments, departmentId, isEditing]);
 
   const addField = (type: FieldType) => {
     const newField: FieldDefinition = {

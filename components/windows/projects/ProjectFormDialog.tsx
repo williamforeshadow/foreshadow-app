@@ -11,7 +11,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { CheckIcon, ChevronsUpDownIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Project, ProjectFormData, Department } from '@/lib/types';
+import type { Project, ProjectFormData } from '@/lib/types';
+import { useDepartments } from '@/lib/departmentsContext';
 
 interface ProjectFormDialogProps {
   open: boolean;
@@ -36,18 +37,7 @@ export function ProjectFormDialog({
 }: ProjectFormDialogProps) {
   const isNewProject = !editingProject;
   const [propertyOpen, setPropertyOpen] = React.useState(false);
-  const [departments, setDepartments] = React.useState<Department[]>([]);
-
-  React.useEffect(() => {
-    if (open) {
-      fetch('/api/departments')
-        .then(res => res.json())
-        .then(data => {
-          if (data.departments) setDepartments(data.departments);
-        })
-        .catch(err => console.error('Error fetching departments:', err));
-    }
-  }, [open]);
+  const { departments } = useDepartments();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

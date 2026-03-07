@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -21,12 +21,11 @@ import {
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { Pencil, Trash2, Plus } from 'lucide-react';
-import type { Department } from '@/lib/types';
 import { getDepartmentIcon, DEPARTMENT_ICON_OPTIONS, DEPARTMENT_ICON_MAP } from '@/lib/departmentIcons';
+import { useDepartments } from '@/lib/departmentsContext';
 
 export default function DepartmentsPage() {
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { departments, loading, refreshDepartments } = useDepartments();
   const [error, setError] = useState<string | null>(null);
 
   // Create dialog state
@@ -48,28 +47,6 @@ export default function DepartmentsPage() {
   // Icon picker popover
   const [iconPickerOpen, setIconPickerOpen] = useState<string | null>(null); // 'create' | 'edit' | null
 
-  useEffect(() => {
-    fetchDepartments();
-  }, []);
-
-  const fetchDepartments = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/departments');
-      const data = await res.json();
-      if (res.ok && data.departments) {
-        setDepartments(data.departments);
-      } else {
-        setError(data.error || 'Failed to fetch departments');
-      }
-    } catch (err) {
-      setError('Failed to fetch departments');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleCreate = async () => {
     if (!newName.trim()) return;
     setCreating(true);
@@ -82,7 +59,7 @@ export default function DepartmentsPage() {
       });
       const data = await res.json();
       if (res.ok && data.department) {
-        setDepartments(prev => [...prev, data.department].sort((a, b) => a.name.localeCompare(b.name)));
+        await refreshDepartments();
         setShowCreateDialog(false);
         setNewName('');
         setNewIcon('folder');
@@ -120,9 +97,7 @@ export default function DepartmentsPage() {
       });
       const data = await res.json();
       if (res.ok && data.department) {
-        setDepartments(prev =>
-          prev.map(d => d.id === editingId ? data.department : d).sort((a, b) => a.name.localeCompare(b.name))
-        );
+        await refreshDepartments();
         cancelEdit();
       } else {
         setError(data.error || 'Failed to update department');
@@ -141,7 +116,7 @@ export default function DepartmentsPage() {
       const res = await fetch(`/api/departments/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (res.ok) {
-        setDepartments(prev => prev.filter(d => d.id !== id));
+        await refreshDepartments();
         setDeletingId(null);
       } else {
         setDeleteError(data.error || 'Failed to delete department');

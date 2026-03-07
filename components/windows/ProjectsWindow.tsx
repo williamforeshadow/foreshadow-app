@@ -24,6 +24,8 @@ import {
   ProjectFormDialog,
 } from './projects';
 import type { User, Project, Attachment, Comment, ProjectFormFields } from '@/lib/types';
+import { getDepartmentIcon } from '@/lib/departmentIcons';
+import { useDepartments } from '@/lib/departmentsContext';
 
 interface ProjectsWindowProps {
   users: User[];
@@ -40,6 +42,9 @@ interface ProjectCardProps {
 }
 
 const ProjectCard = memo(function ProjectCard({ project, isSelected, unreadCount, onSelect }: ProjectCardProps) {
+  const { deptIconMap } = useDepartments();
+  const DeptIcon = getDepartmentIcon(project.department_id ? deptIconMap[project.department_id] : null);
+
   return (
     <Card
       className={`group w-full gap-4 !p-4 hover:shadow-lg transition-shadow duration-150 !flex !flex-col cursor-pointer relative ${
@@ -56,7 +61,10 @@ const ProjectCard = memo(function ProjectCard({ project, isSelected, unreadCount
         </Badge>
       )}
       <CardHeader className="min-h-[4.5rem]">
-        <CardTitle className="text-base leading-tight line-clamp-2">{project.title}</CardTitle>
+        <div className="flex items-center gap-2">
+          <DeptIcon className="w-4 h-4 text-neutral-500 dark:text-neutral-400 shrink-0" />
+          <CardTitle className="text-base leading-tight line-clamp-2">{project.title}</CardTitle>
+        </div>
         <CardDescription className="line-clamp-2 text-muted-foreground">
           {project.description || '\u00A0'}
         </CardDescription>
@@ -65,7 +73,7 @@ const ProjectCard = memo(function ProjectCard({ project, isSelected, unreadCount
       <CardContent className="flex-grow">
         <div className="flex w-full items-center justify-between">
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Status badge first */}
+            {/* Status badge */}
             <Badge
               variant="outline"
               className={`px-2 py-0.5 text-xs border-transparent ${
@@ -77,7 +85,7 @@ const ProjectCard = memo(function ProjectCard({ project, isSelected, unreadCount
             >
               {(project.status?.replace('_', ' ') || 'not started').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
             </Badge>
-            {/* Priority badge second */}
+            {/* Priority badge */}
             <Badge
               variant="outline"
               className={`px-2 py-0.5 text-xs border-transparent ${
@@ -89,15 +97,6 @@ const ProjectCard = memo(function ProjectCard({ project, isSelected, unreadCount
             >
               {project.priority ? project.priority.charAt(0).toUpperCase() + project.priority.slice(1) : 'Low'}
             </Badge>
-            {/* Department badge */}
-            {project.department_name && (
-              <Badge
-                variant="outline"
-                className="px-2 py-0.5 text-xs bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300 dark:border-neutral-600"
-              >
-                {project.department_name}
-              </Badge>
-            )}
           </div>
         </div>
       </CardContent>

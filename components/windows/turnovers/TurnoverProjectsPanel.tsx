@@ -6,6 +6,8 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { ProjectDetailPanel } from '../projects';
 import type { Project, Comment, User, ProjectFormFields, Attachment, TimeEntry } from '@/lib/types';
+import { getDepartmentIcon } from '@/lib/departmentIcons';
+import { useDepartments } from '@/lib/departmentsContext';
 
 interface TurnoverProjectsPanelProps {
   propertyName: string;
@@ -49,13 +51,17 @@ interface TurnoverProjectsPanelProps {
 
 function ProjectCard({
   project,
+  deptIconMap,
   onClick,
   onOpenInWindow,
 }: {
   project: Project;
+  deptIconMap: Record<string, string | undefined>;
   onClick: () => void;
   onOpenInWindow: (project: Project) => void;
 }) {
+  const DeptIcon = getDepartmentIcon(project.department_id ? deptIconMap[project.department_id] : null);
+
   return (
     <Card
       className="cursor-pointer hover:shadow-md transition-all bg-white dark:bg-neutral-900 border"
@@ -63,8 +69,9 @@ function ProjectCard({
     >
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CardTitle className="text-base">{project.title}</CardTitle>
+          <div className="flex items-center gap-2 min-w-0">
+            <DeptIcon className="w-4 h-4 text-neutral-500 dark:text-neutral-400 shrink-0" />
+            <CardTitle className="text-base truncate">{project.title}</CardTitle>
             {/* Pop-out icon to open in Projects window */}
             <button
               onClick={(e) => {
@@ -164,6 +171,7 @@ export function TurnoverProjectsPanel({
   onOpenActivity,
 }: TurnoverProjectsPanelProps) {
   const propertyProjects = projects.filter(p => p.property_name === propertyName);
+  const { deptIconMap } = useDepartments();
 
   const handleProjectClick = (project: Project) => {
     setExpandedProject(project);
@@ -238,6 +246,7 @@ export function TurnoverProjectsPanel({
         <ProjectCard
           key={project.id}
           project={project}
+          deptIconMap={deptIconMap}
           onClick={() => handleProjectClick(project)}
           onOpenInWindow={onOpenProjectInWindow}
         />

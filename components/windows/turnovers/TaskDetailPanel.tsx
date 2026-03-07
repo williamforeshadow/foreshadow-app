@@ -5,6 +5,8 @@ import { Badge } from '@/components/ui/badge';
 import DynamicCleaningForm from '@/components/DynamicCleaningForm';
 import type { Task, User } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
+import { getDepartmentIcon } from '@/lib/departmentIcons';
+import { useDepartments } from '@/lib/departmentsContext';
 
 interface TaskDetailPanelProps {
   task: Task;
@@ -34,6 +36,8 @@ export function TaskDetailPanel({
   const isAssigned = (task.assigned_users || []).some((u) => u.user_id === currentUser?.id);
   const isContingent = task.status === 'contingent';
   const isNotStarted = task.status === 'not_started' || !task.status;
+  const { deptIconMap } = useDepartments();
+  const DeptIcon = getDepartmentIcon(task.department_id ? deptIconMap[task.department_id] : null);
 
   // Resolve the template from cache using property-aware key first, then fallback
   const resolvedTemplate = task.template_id
@@ -46,12 +50,12 @@ export function TaskDetailPanel({
       <div className="sticky top-0 bg-card z-10 border-b border-neutral-200 dark:border-neutral-700 p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-semibold">{task.template_name || 'Task'}</h2>
+            <div className="flex items-center gap-2">
+              <DeptIcon className="w-5 h-5 text-neutral-500 dark:text-neutral-400 shrink-0" />
+              <h2 className="text-xl font-semibold">{task.template_name || 'Task'}</h2>
+            </div>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-sm text-neutral-500">{propertyName}</span>
-              <Badge className="bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
-                {task.department_name || task.type}
-              </Badge>
             </div>
           </div>
           <button
