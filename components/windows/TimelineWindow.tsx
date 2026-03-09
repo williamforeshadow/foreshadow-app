@@ -145,6 +145,7 @@ export default function TimelineWindow({
         status: project.status,
         priority: project.priority,
         assigned_staff: project.project_assignments?.[0]?.user_id || '',
+        department_id: project.department_id || '',
         scheduled_date: project.scheduled_date || '',
         scheduled_time: project.scheduled_time || ''
       });
