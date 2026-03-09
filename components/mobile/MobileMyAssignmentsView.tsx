@@ -47,6 +47,7 @@ interface Project {
   description?: string;
   status: string;
   priority: string;
+  department_name?: string | null;
   scheduled_date?: string;
   scheduled_time?: string;
   created_at: string;
