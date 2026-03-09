@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -131,21 +131,50 @@ export function TurnoverTaskList({
   const [showContingent, setShowContingent] = useState(false);
   const { deptIconMap } = useDepartments();
 
+  // ── Snapshot-based sort order ──────────────────────────────────
+  // We capture the task order once when the card opens (or when the
+  // card id changes). Schedule edits update the DB and the displayed
+  // values, but the *visual order* only refreshes when the user
+  // clicks out and back in (i.e. selectedCard.id changes).
   const sortBySchedule = (a: Task, b: Task) => {
     if (!a.scheduled_date && !b.scheduled_date) return 0;
     if (!a.scheduled_date) return 1;
     if (!b.scheduled_date) return -1;
     const dateCompare = a.scheduled_date.localeCompare(b.scheduled_date);
     if (dateCompare !== 0) return dateCompare;
-    // Same date — compare by time
     if (!a.scheduled_time && !b.scheduled_time) return 0;
     if (!a.scheduled_time) return 1;
     if (!b.scheduled_time) return -1;
     return a.scheduled_time.localeCompare(b.scheduled_time);
   };
 
-  const approvedTasks = tasks.filter(t => t.status !== 'contingent').sort(sortBySchedule);
-  const contingentTasks = tasks.filter(t => t.status === 'contingent').sort(sortBySchedule);
+  // Snapshot the sort order when the card first opens
+  const [sortOrderIds, setSortOrderIds] = useState<string[]>([]);
+  const lastCardId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (selectedCard.id !== lastCardId.current) {
+      lastCardId.current = selectedCard.id;
+      const approved = tasks.filter(t => t.status !== 'contingent').sort(sortBySchedule);
+      const contingent = tasks.filter(t => t.status === 'contingent').sort(sortBySchedule);
+      setSortOrderIds([...approved.map(t => t.task_id), ...contingent.map(t => t.task_id)]);
+    }
+  }, [selectedCard.id, tasks]);
+
+  // Sort using the snapshot order; any new tasks go to the end
+  const stableSort = (taskList: Task[]) => {
+    return [...taskList].sort((a, b) => {
+      const ai = sortOrderIds.indexOf(a.task_id);
+      const bi = sortOrderIds.indexOf(b.task_id);
+      if (ai === -1 && bi === -1) return 0;
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+  };
+
+  const approvedTasks = stableSort(tasks.filter(t => t.status !== 'contingent'));
+  const contingentTasks = stableSort(tasks.filter(t => t.status === 'contingent'));
 
   const handleAddTaskClick = () => {
     onFetchTemplates();
@@ -185,7 +214,7 @@ export function TurnoverTaskList({
     return (
       <div
         key={task.task_id}
-        className={`cursor-pointer hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 ease-out p-4 ${statusStyles.card}`}
+        className={`group cursor-pointer hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] has-[[data-state=open]]:scale-100 has-[[data-state=open]]:shadow-none transition-all duration-200 ease-out p-3.5 ${statusStyles.card}`}
         onClick={async () => {
           const propName = selectedCard.property_name;
           const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
@@ -195,83 +224,88 @@ export function TurnoverTaskList({
           onTaskClick(task);
         }}
       >
-        {/* Top row: icon + name + delete */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <DeptIcon className="w-4 h-4 text-neutral-500 dark:text-neutral-400 shrink-0" />
+        <div className="flex items-center gap-3">
+          {/* Left: icon badge */}
+          <div className="w-9 h-9 rounded-lg bg-white/20 dark:bg-white/[0.08] backdrop-blur-sm flex items-center justify-center shrink-0 self-center">
+            <DeptIcon className="w-4.5 h-4.5 text-neutral-600 dark:text-neutral-300" />
+          </div>
+
+          {/* Middle: title + date/time stacked */}
+          <div className="flex flex-col gap-1 flex-1 min-w-0">
             <span className="text-sm font-medium truncate">{task.template_name || 'Unnamed Task'}</span>
-          </div>
-          <button
-            className="h-6 w-6 flex items-center justify-center rounded-md text-neutral-400 hover:text-red-500 hover:bg-white/30 dark:hover:bg-white/10 transition-colors shrink-0"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (confirm('Remove this task from the turnover?')) {
-                onDeleteTask(task.task_id);
-              }
-            }}
-          >
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Bottom row: date/time + assigned users */}
-        <div className="flex items-center justify-between mt-4">
-          <div className="flex items-center gap-2">
-            <Popover>
-              <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
-                <button className="h-7 px-2.5 text-xs rounded-lg border border-white/20 dark:border-white/15 bg-white/25 dark:bg-white/[0.08] backdrop-blur-sm hover:bg-white/40 dark:hover:bg-white/12 transition-colors">
-                  {task.scheduled_date ? new Date(task.scheduled_date + 'T00:00:00').toLocaleDateString() : 'Date'}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start" onClick={(e) => e.stopPropagation()}>
-                <Calendar
-                  mode="single"
-                  selected={task.scheduled_date ? new Date(task.scheduled_date + 'T00:00:00') : undefined}
-                  onSelect={(date) => {
-                    if (date) {
-                      const y = date.getFullYear();
-                      const m = String(date.getMonth() + 1).padStart(2, '0');
-                      const d = String(date.getDate()).padStart(2, '0');
-                      const newDate = `${y}-${m}-${d}`;
-                      onUpdateSchedule(task.task_id, newDate, task.scheduled_time || null);
-                    }
-                  }}
-                />
-              </PopoverContent>
-            </Popover>
-            <input
-              type="time"
-              className="h-7 px-2 text-xs rounded-lg border border-white/20 dark:border-white/15 bg-white/25 dark:bg-white/[0.08] backdrop-blur-sm"
-              value={task.scheduled_time ? task.scheduled_time.slice(0, 5) : ''}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => {
-                e.stopPropagation();
-                const newTime = e.target.value || null;
-                onUpdateSchedule(task.task_id, task.scheduled_date || null, newTime);
-              }}
-            />
+            <div className="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+              <Popover modal>
+                <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
+                  <button className="hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors">
+                    {task.scheduled_date ? new Date(task.scheduled_date + 'T00:00:00').toLocaleDateString() : 'Date'}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start" onClick={(e) => e.stopPropagation()}>
+                  <Calendar
+                    mode="single"
+                    selected={task.scheduled_date ? new Date(task.scheduled_date + 'T00:00:00') : undefined}
+                    onSelect={(date) => {
+                      if (date) {
+                        const y = date.getFullYear();
+                        const m = String(date.getMonth() + 1).padStart(2, '0');
+                        const d = String(date.getDate()).padStart(2, '0');
+                        const newDate = `${y}-${m}-${d}`;
+                        onUpdateSchedule(task.task_id, newDate, task.scheduled_time || null);
+                      }
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+              <span className="text-neutral-400 dark:text-neutral-600">·</span>
+              <Popover modal>
+                <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
+                  <button className="hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors">
+                    {task.scheduled_time ? (() => {
+                      const [h, m] = task.scheduled_time!.slice(0, 5).split(':').map(Number);
+                      const ampm = h >= 12 ? 'PM' : 'AM';
+                      const h12 = h % 12 || 12;
+                      return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+                    })() : 'Time'}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-2" align="start" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="time"
+                    className="bg-transparent text-sm cursor-pointer"
+                    value={task.scheduled_time ? task.scheduled_time.slice(0, 5) : ''}
+                    autoFocus
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      const newTime = e.target.value || null;
+                      onUpdateSchedule(task.task_id, task.scheduled_date || null, newTime);
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
 
+          {/* Right: avatar(s), vertically centered */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <button className="flex items-center gap-1 text-xs hover:opacity-80 transition-opacity">
+              <button className="flex items-center shrink-0 hover:opacity-80 transition-opacity self-center">
                 {assignedUserIds.length > 0 ? (
-                  <>
-                    <span className="flex items-center -space-x-1.5">
-                      {(task.assigned_users || []).slice(0, 3).map((u) => (
-                        u.avatar ? (
-                          <img key={u.user_id} src={u.avatar} alt={u.name} title={u.name} className="h-6 w-6 rounded-full object-cover ring-2 ring-white/50 dark:ring-white/10" />
-                        ) : (
-                          <span key={u.user_id} title={u.name} className="h-6 w-6 rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-[10px] ring-2 ring-white/50 dark:ring-white/10">👤</span>
-                        )
-                      ))}
-                    </span>
-                    {assignedUserIds.length > 3 && <span className="text-neutral-500 dark:text-neutral-400 ml-1">+{assignedUserIds.length - 3}</span>}
-                  </>
+                  <span className="flex items-center -space-x-2">
+                    {(task.assigned_users || []).slice(0, 3).map((u) => (
+                      u.avatar ? (
+                        <img key={u.user_id} src={u.avatar} alt={u.name} title={u.name} className="h-9 w-9 rounded-full object-cover ring-2 ring-white/50 dark:ring-white/10" />
+                      ) : (
+                        <span key={u.user_id} title={u.name} className="h-9 w-9 rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-xs ring-2 ring-white/50 dark:ring-white/10">👤</span>
+                      )
+                    ))}
+                    {assignedUserIds.length > 3 && <span className="text-neutral-500 dark:text-neutral-400 ml-1 text-xs">+{assignedUserIds.length - 3}</span>}
+                  </span>
                 ) : (
-                  <span className="text-neutral-400 dark:text-neutral-500 text-xs">Assign</span>
+                  <span className="h-9 w-9 rounded-full border-2 border-dashed border-neutral-400/50 dark:border-white/20 flex items-center justify-center text-neutral-400 dark:text-neutral-500 hover:border-neutral-500 dark:hover:border-white/30 transition-colors">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </span>
                 )}
               </button>
             </DropdownMenuTrigger>
@@ -300,6 +334,21 @@ export function TurnoverTaskList({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Delete — visible on hover */}
+          <button
+            className="h-6 w-6 flex items-center justify-center rounded-md text-neutral-400 hover:text-red-500 hover:bg-white/30 dark:hover:bg-white/10 transition-all opacity-0 group-hover:opacity-100 shrink-0 self-center"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (confirm('Remove this task from the turnover?')) {
+                onDeleteTask(task.task_id);
+              }
+            }}
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
         </div>
       </div>
     );

@@ -201,7 +201,7 @@ function TurnoversWindowContent({
   return (
     <div className="flex h-full overflow-hidden glass-bg">
       {/* Left Panel - Cards */}
-      <div className={`${selectedCard ? 'w-1/2 border-r border-neutral-200/30 dark:border-white/10' : 'w-full'} transition-all duration-300 overflow-y-auto hide-scrollbar p-6 space-y-4`}>
+      <div className={`${selectedCard ? 'flex-1 min-w-0 border-r border-neutral-200/30 dark:border-white/10' : 'w-full'} overflow-y-auto hide-scrollbar p-6 space-y-4`}>
         {/* Response Display */}
         {response !== null && (
           <div className="space-y-3">
@@ -277,7 +277,7 @@ function TurnoversWindowContent({
       {selectedCard && (
         <div
           ref={rightPanelRef}
-          className="w-1/2 h-full overflow-y-auto border-l border-white/20 dark:border-white/10 bg-white/30 dark:bg-white/[0.03] backdrop-blur-xl"
+          className="w-[30%] min-w-[320px] flex-shrink-0 h-full overflow-y-auto border-l border-white/20 dark:border-white/10 bg-white/30 dark:bg-white/[0.03] backdrop-blur-xl"
           onScroll={(e) => {
             scrollPositionRef.current = e.currentTarget.scrollTop;
           }}
