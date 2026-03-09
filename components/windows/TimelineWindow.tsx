@@ -569,6 +569,7 @@ export default function TimelineWindow({
         status: expandedProjectInTurnover.status,
         priority: expandedProjectInTurnover.priority,
         assigned_staff: expandedProjectInTurnover.project_assignments?.[0]?.user_id || '',
+        department_id: expandedProjectInTurnover.department_id || '',
         scheduled_date: expandedProjectInTurnover.scheduled_date || '',
         scheduled_time: expandedProjectInTurnover.scheduled_time || ''
       });
