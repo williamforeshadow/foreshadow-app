@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { Pencil, Trash2, Plus } from 'lucide-react';
 import { getDepartmentIcon, DEPARTMENT_ICON_OPTIONS, DEPARTMENT_ICON_MAP } from '@/lib/departmentIcons';
 import { useDepartments } from '@/lib/departmentsContext';
+import type { Department } from '@/lib/types';
 
 export default function DepartmentsPage() {
   const { departments, loading, refreshDepartments } = useDepartments();
