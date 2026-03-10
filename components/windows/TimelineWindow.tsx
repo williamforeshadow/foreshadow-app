@@ -16,8 +16,8 @@ import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
 import { ScheduledItemsCell, DayKanban } from './timeline';
 import { AttachmentLightbox, ProjectActivitySheet, ProjectDetailPanel } from './projects';
 import { TaskDetailPanel, TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
-import AssignmentIcon from '@/components/icons/AssignmentIcon';
-import HammerIcon from '@/components/icons/HammerIcon';
+import DiamondIcon from '@/components/icons/AssignmentIcon';
+import HexagonIcon from '@/components/icons/HammerIcon';
 import Rhombus16FilledIcon from '@/components/icons/Rhombus16FilledIcon';
 import RectangleStackIcon from '@/components/icons/RectangleStackIcon';
 import type { Project, Task, User, ProjectFormFields, Turnover, TaskTemplate } from '@/lib/types';
@@ -983,14 +983,14 @@ export default function TimelineWindow({
                               />
                               {/* Tasks icon + count - always show */}
                               <div className="flex items-center gap-0.5 text-neutral-500 dark:text-neutral-400">
-                                <AssignmentIcon size={12} />
+                                <DiamondIcon size={12} />
                                 <span className="text-[10px] font-medium w-3 text-right">
                                   {activeTurnover.tasks?.filter(t => t.status !== 'complete').length || 0}
                                 </span>
                               </div>
                               {/* Projects icon + count - always show */}
                               <div className="flex items-center gap-0.5 text-neutral-500 dark:text-neutral-400">
-                                <HammerIcon size={12} />
+                                <HexagonIcon size={12} />
                                 <span className="text-[10px] font-medium w-3 text-right">
                                   {propertyProjects.filter(p => p.status !== 'complete').length}
                                 </span>

@@ -14,8 +14,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip/tooltip';
-import AssignmentIcon from '@/components/icons/AssignmentIcon';
-import HammerIcon from '@/components/icons/HammerIcon';
+import DiamondIcon from '@/components/icons/AssignmentIcon';
+import HexagonIcon from '@/components/icons/HammerIcon';
 import { cn } from '@/lib/utils';
 import type { Task, Project } from '@/lib/types';
 
@@ -114,6 +114,29 @@ const getProjectUsers = (projects: Project[]): UniqueUser[] => {
   return Array.from(userMap.values());
 };
 
+// Compute aggregate status for a group of tasks (same logic as turnover cards)
+const getTaskFolderStatus = (tasks: Task[]): 'not_started' | 'in_progress' | 'complete' | 'no_tasks' => {
+  const activeTasks = tasks.filter(t => t.status !== 'contingent');
+  const total = activeTasks.length;
+  if (total === 0) return 'no_tasks';
+  const completed = activeTasks.filter(t => t.status === 'complete').length;
+  if (completed === total) return 'complete';
+  const inProgress = activeTasks.filter(t => t.status === 'in_progress' || t.status === 'paused').length;
+  if (inProgress > 0 || completed > 0) return 'in_progress';
+  return 'not_started';
+};
+
+// Compute aggregate status for a group of projects
+const getProjectFolderStatus = (projects: Project[]): 'not_started' | 'in_progress' | 'complete' | 'no_tasks' => {
+  const total = projects.length;
+  if (total === 0) return 'no_tasks';
+  const completed = projects.filter(p => p.status === 'complete').length;
+  if (completed === total) return 'complete';
+  const inProgress = projects.filter(p => p.status === 'in_progress' || p.status === 'on_hold').length;
+  if (inProgress > 0 || completed > 0) return 'in_progress';
+  return 'not_started';
+};
+
 // Reusable avatar group component - shows 1 avatar with +N overlay badge
 const AvatarGroup = ({ 
   users, 
@@ -175,14 +198,11 @@ export function ScheduledItemsCell({
   // Split tasks into approved vs contingent for icon styling
   const approvedTasks = scheduledTasks.filter(t => t.status !== 'contingent');
   const contingentTasks = scheduledTasks.filter(t => t.status === 'contingent');
+  const hasApproved = approvedTasks.length > 0;
+  const hasContingent = contingentTasks.length > 0;
 
-  // Determine icon variant: approved-only, contingent-only, or mixed
-  const taskIconVariant: 'approved' | 'mixed' | 'contingent' =
-    approvedTasks.length > 0 && contingentTasks.length > 0
-      ? 'mixed'
-      : contingentTasks.length > 0
-        ? 'contingent'
-        : 'approved';
+  // Aggregate status for the task icon folder (same logic as turnover cards)
+  const taskFolderStatus = getTaskFolderStatus(scheduledTasks);
 
   // Filter projects scheduled for this property + date
   const scheduledProjects = projects.filter(
@@ -215,16 +235,18 @@ export function ScheduledItemsCell({
                 <div
                   className={cn(
                     "flex items-center justify-center w-6 h-6 rounded cursor-pointer transition-colors",
-                    taskIconVariant === 'approved' && "bg-blue-500/80 text-white hover:bg-blue-600",
-                    taskIconVariant === 'contingent' && "border-[1.5px] border-dashed border-blue-400/70 text-blue-400 bg-blue-400/10 hover:bg-blue-400/20",
-                    taskIconVariant === 'mixed' && "text-white hover:brightness-110",
+                    // Contingent-only: dashed neutral outline
+                    !hasApproved && hasContingent && "border-[1.5px] border-dashed border-neutral-400/70 text-neutral-400 bg-neutral-400/10 hover:bg-neutral-400/20",
+                    // Status-driven colors (when approved tasks exist)
+                    hasApproved && taskFolderStatus === 'not_started' && "bg-rose-500/80 text-white hover:bg-rose-600",
+                    hasApproved && taskFolderStatus === 'in_progress' && "bg-indigo-500/80 text-white hover:bg-indigo-600",
+                    hasApproved && taskFolderStatus === 'complete' && "bg-indigo-400/40 text-indigo-200 hover:bg-indigo-400/50",
+                    hasApproved && taskFolderStatus === 'no_tasks' && "bg-neutral-400/60 text-white hover:bg-neutral-500",
+                    // Dashed border overlay when mixed (approved + contingent)
+                    hasApproved && hasContingent && "border-[1.5px] border-dashed",
                   )}
-                  style={taskIconVariant === 'mixed' ? {
-                    background: 'linear-gradient(135deg, rgba(59,130,246,0.8) 50%, rgba(147,197,253,0.15) 50%)',
-                    border: '1.5px dashed rgba(96,165,250,0.6)',
-                  } : undefined}
                 >
-                  <AssignmentIcon size={14} />
+                  <DiamondIcon size={14} />
                 </div>
               </HoverCardTrigger>
               <HoverCardContent side="right" align="start" sideOffset={-8} className="w-72 p-0">
@@ -278,12 +300,22 @@ export function ScheduledItemsCell({
         )}
 
         {/* Projects Icon + Project Assignees */}
-        {scheduledProjects.length > 0 && (
+        {scheduledProjects.length > 0 && (() => {
+          const projectFolderStatus = getProjectFolderStatus(scheduledProjects);
+          return (
           <>
             <HoverCard openDelay={0} closeDelay={0}>
               <HoverCardTrigger asChild>
-                <div className="flex items-center justify-center w-6 h-6 rounded bg-amber-500/80 text-white cursor-pointer hover:bg-amber-600">
-                  <HammerIcon size={14} />
+                <div
+                  className={cn(
+                    "flex items-center justify-center w-6 h-6 rounded cursor-pointer transition-colors",
+                    projectFolderStatus === 'not_started' && "bg-rose-500/80 text-white hover:bg-rose-600",
+                    projectFolderStatus === 'in_progress' && "bg-indigo-500/80 text-white hover:bg-indigo-600",
+                    projectFolderStatus === 'complete' && "bg-indigo-400/40 text-indigo-200 hover:bg-indigo-400/50",
+                    projectFolderStatus === 'no_tasks' && "bg-neutral-400/60 text-white hover:bg-neutral-500",
+                  )}
+                >
+                  <HexagonIcon size={14} />
                 </div>
               </HoverCardTrigger>
               <HoverCardContent side="right" align="start" sideOffset={-8} className="w-72 p-0">
@@ -322,7 +354,8 @@ export function ScheduledItemsCell({
             </HoverCard>
             {showAvatars && <AvatarGroup users={projectUsers} />}
           </>
-        )}
+          );
+        })()}
       </div>
     </TooltipProvider>
   );

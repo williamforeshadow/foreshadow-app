@@ -1,16 +1,16 @@
 import React from 'react';
 
-interface HammerIconProps {
+interface HexagonIconProps {
   size?: number;
   color?: string;
   className?: string;
 }
 
-const HammerIcon = ({
+const HexagonIcon = ({
   size = 14,
   color = 'currentColor',
   className,
-}: HammerIconProps) => {
+}: HexagonIconProps) => {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -24,10 +24,9 @@ const HammerIcon = ({
       strokeLinejoin="round"
       className={className}
     >
-      <path d="m15 12l-9.373 9.373a1 1 0 0 1-3.001-3L12 9m6 6l4-4"/>
-      <path d="m21.5 11.5l-1.914-1.914A2 2 0 0 1 19 8.172v-.344a2 2 0 0 0-.586-1.414l-1.657-1.657A6 6 0 0 0 12.516 3H9l1.243 1.243A6 6 0 0 1 12 8.485V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"/>
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16" />
     </svg>
   );
 };
 
-export default HammerIcon;
+export default HexagonIcon;

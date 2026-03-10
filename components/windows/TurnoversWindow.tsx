@@ -2,6 +2,16 @@
 
 import { memo, useState, useCallback, useEffect, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
+import {
+  Tooltip,
+  TooltipPopup,
+  TooltipPortal,
+  TooltipPositioner,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip/tooltip';
+import DiamondIcon from '@/components/icons/AssignmentIcon';
+import HexagonIcon from '@/components/icons/HammerIcon';
 import TurnoverCards from '@/components/TurnoverCards';
 import { useTurnovers } from '@/lib/useTurnovers';
 import type { useProjects } from '@/lib/useProjects';
@@ -380,32 +390,50 @@ function TurnoversWindowContent({
 
                 {/* Toggle Button Row */}
                 <div className="px-4 pb-3">
-                  <div className="flex rounded-xl bg-white/20 dark:bg-white/[0.05] backdrop-blur-sm border border-white/20 dark:border-white/10 p-1">
-                    <button
-                      onClick={() => {
-                        setRightPanelView('tasks');
-                        setExpandedProject(null);
-                        setProjectFields(null);
-                      }}
-                      className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-                        rightPanelView === 'tasks'
-                          ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
-                          : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/20 dark:hover:bg-white/10'
-                      }`}
-                    >
-                      Turnover Tasks ({selectedCard.completed_tasks || 0}/{selectedCard.total_tasks || 0})
-                    </button>
-                    <button
-                      onClick={() => setRightPanelView('projects')}
-                      className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-                        rightPanelView === 'projects'
-                          ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
-                          : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/20 dark:hover:bg-white/10'
-                      }`}
-                    >
-                      Property Projects ({projects.filter(p => p.property_name === selectedCard.property_name).length})
-                    </button>
+                  <TooltipProvider delay={300}>
+                  <div className="flex justify-center rounded-xl bg-white/20 dark:bg-white/[0.05] backdrop-blur-sm border border-white/20 dark:border-white/10 p-1">
+                    <Tooltip>
+                      <TooltipTrigger
+                        onClick={() => {
+                          setRightPanelView('tasks');
+                          setExpandedProject(null);
+                          setProjectFields(null);
+                        }}
+                        className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                          rightPanelView === 'tasks'
+                            ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
+                            : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/20 dark:hover:bg-white/10'
+                        }`}
+                      >
+                        <DiamondIcon size={14} />
+                        <span className="text-xs tabular-nums">{selectedCard.completed_tasks || 0}/{selectedCard.total_tasks || 0}</span>
+                      </TooltipTrigger>
+                      <TooltipPortal>
+                        <TooltipPositioner sideOffset={4}>
+                          <TooltipPopup className="text-xs">Turnover Tasks</TooltipPopup>
+                        </TooltipPositioner>
+                      </TooltipPortal>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger
+                        onClick={() => setRightPanelView('projects')}
+                        className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                          rightPanelView === 'projects'
+                            ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
+                            : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/20 dark:hover:bg-white/10'
+                        }`}
+                      >
+                        <HexagonIcon size={14} />
+                        <span className="text-xs tabular-nums">{projects.filter(p => p.property_name === selectedCard.property_name).length}</span>
+                      </TooltipTrigger>
+                      <TooltipPortal>
+                        <TooltipPositioner sideOffset={4}>
+                          <TooltipPopup className="text-xs">Property Projects</TooltipPopup>
+                        </TooltipPositioner>
+                      </TooltipPortal>
+                    </Tooltip>
                   </div>
+                  </TooltipProvider>
                 </div>
               </div>
 

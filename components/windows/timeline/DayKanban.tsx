@@ -10,8 +10,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import AssignmentIcon from '@/components/icons/AssignmentIcon';
-import HammerIcon from '@/components/icons/HammerIcon';
+import DiamondIcon from '@/components/icons/AssignmentIcon';
+import HexagonIcon from '@/components/icons/HammerIcon';
 import type { Task, Project } from '@/lib/types';
 import type { AppUser } from '@/lib/useUsers';
 import styles from './DayKanban.module.css';
@@ -814,9 +814,9 @@ function KanbanCardContent({
       <div className={styles.cardHeader}>
         <div className={cn(styles.cardIcon, isTask ? styles.cardIconTask : styles.cardIconProject)}>
           {isTask ? (
-            <AssignmentIcon size={12} />
+            <DiamondIcon size={12} />
           ) : (
-            <HammerIcon size={12} />
+            <HexagonIcon size={12} />
           )}
         </div>
         <div className={styles.cardContent}>
