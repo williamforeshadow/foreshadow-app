@@ -8,7 +8,7 @@ import {
   HoverCardTrigger,
 } from '@/components/ui/hover-card';
 import { useTimeline } from '@/lib/useTimeline';
-import { getActiveTurnoverForProperty, getTurnoverStatusColor } from '@/lib/turnoverUtils';
+import { getActiveTurnoverForProperty } from '@/lib/turnoverUtils';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
@@ -820,9 +820,9 @@ export default function TimelineWindow({
   }
 
   return (
-    <div className="h-full flex flex-col relative">
+    <div className="h-full flex flex-col relative glass-bg">
       {/* Header with navigation - fixed at top */}
-      <div className="flex-shrink-0 px-4 py-3">
+      <div className="flex-shrink-0 px-4 py-3 glass-panel bg-white/40 dark:bg-white/[0.05] border-b border-white/20 dark:border-white/10">
         <div className="flex items-center gap-4 mb-2">
           {/* View Mode Icons */}
           <div className="flex items-center gap-1">
@@ -830,8 +830,8 @@ export default function TimelineWindow({
               onClick={() => setViewMode('grid')}
               className={`p-1.5 rounded transition-colors ${
                 viewMode === 'grid' 
-                  ? 'bg-neutral-200 dark:bg-neutral-700 text-neutral-900 dark:text-white' 
-                  : 'text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-700 dark:hover:text-neutral-300'
+                  ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm' 
+                  : 'text-neutral-500 hover:bg-white/30 dark:hover:bg-white/10 hover:text-neutral-700 dark:hover:text-neutral-300'
               }`}
               title="Grid View"
             >
@@ -841,8 +841,8 @@ export default function TimelineWindow({
               onClick={() => setViewMode('kanban')}
               className={`p-1.5 rounded transition-colors ${
                 viewMode === 'kanban' 
-                  ? 'bg-neutral-200 dark:bg-neutral-700 text-neutral-900 dark:text-white' 
-                  : 'text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-700 dark:hover:text-neutral-300'
+                  ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm' 
+                  : 'text-neutral-500 hover:bg-white/30 dark:hover:bg-white/10 hover:text-neutral-700 dark:hover:text-neutral-300'
               }`}
               title="Kanban View"
             >
@@ -928,13 +928,13 @@ export default function TimelineWindow({
       <div className="flex-1 overflow-auto px-4 pb-4">
         <div className="overflow-hidden">
           <div
-            className="grid border border-neutral-200 dark:border-neutral-700 w-full"
+            className="grid border border-white/30 dark:border-white/10 w-full"
             style={{
               gridTemplateColumns: `200px repeat(${dateRange.length}, minmax(0, 1fr))`
             }}
           >
             {/* Header Row - will stick when scrolling */}
-            <div className="bg-neutral-200 dark:bg-neutral-700 px-2 py-1 text-xs font-semibold text-neutral-900 dark:text-white sticky left-0 top-0 z-20 border-b border-r border-neutral-300 dark:border-neutral-600">
+            <div className="bg-white/50 dark:bg-white/[0.08] backdrop-blur-xl px-2 py-1 text-xs font-semibold text-neutral-900 dark:text-white sticky left-0 top-0 z-20">
               Property
             </div>
             {dateRange.map((date, idx) => {
@@ -942,10 +942,10 @@ export default function TimelineWindow({
               return (
                 <div 
                   key={idx} 
-                  className={`px-1 py-1 border-b border-r border-neutral-200 dark:border-neutral-700 sticky top-0 z-10 cursor-pointer transition-colors ${
+                  className={`px-1 py-1 border-b border-r border-white/20 dark:border-white/10 sticky top-0 z-10 cursor-pointer transition-colors ${
                     isTodayDate 
-                      ? 'bg-emerald-700 hover:bg-emerald-600' 
-                      : 'bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                      ? 'bg-emerald-600/70 hover:bg-emerald-600/80 backdrop-blur-sm' 
+                      : 'bg-white/40 dark:bg-white/[0.06] hover:bg-white/55 dark:hover:bg-white/[0.10] backdrop-blur-sm'
                   }`}
                   onClick={() => {
                     setKanbanDate(date);
@@ -962,13 +962,34 @@ export default function TimelineWindow({
               const propertyReservations = getReservationsForProperty(property);
               const activeTurnover = getActiveTurnoverForProperty(propertyReservations);
 
+              // Cell background tint matching active turnover card colors
+              const propertyCellBg = activeTurnover
+                ? (() => {
+                    switch (activeTurnover.turnover_status) {
+                      case 'not_started':
+                        // Rose gold
+                        return 'bg-rose-50/65 dark:bg-rose-400/[0.13]';
+                      case 'in_progress':
+                        // Midnight blue
+                        return 'bg-indigo-50/55 dark:bg-indigo-500/[0.12]';
+                      case 'complete':
+                        // Muted indigo
+                        return 'bg-indigo-50/35 dark:bg-indigo-500/[0.06]';
+                      case 'no_tasks':
+                        return 'bg-white/55 dark:bg-white/[0.08]';
+                      default:
+                        return 'bg-white/45 dark:bg-white/[0.06]';
+                    }
+                  })()
+                : 'bg-white/45 dark:bg-white/[0.06]';
+
               return (
                 <div
                   key={property}
                   className="contents"
                 >
                   {/* Property Name with Status Indicator */}
-                  <div className="bg-neutral-50 dark:bg-neutral-800 px-2 py-1 text-xs font-medium text-neutral-900 dark:text-white sticky left-0 z-10 border-b border-r border-neutral-300 dark:border-neutral-600 flex items-center relative">
+                  <div className={`glass-card glass-sheen relative overflow-hidden px-2 py-1 text-xs font-medium text-neutral-900 dark:text-white sticky left-0 z-10 ${propertyCellBg} flex items-center`}>
                     <span className="truncate pr-24">{property}</span>
                     {activeTurnover && (() => {
                       const propertyProjects = projects.filter(p => p.property_name === activeTurnover.property_name);
@@ -977,10 +998,6 @@ export default function TimelineWindow({
                         <HoverCard openDelay={0} closeDelay={0}>
                           <HoverCardTrigger asChild>
                             <div className="absolute right-0 top-0 bottom-0 w-28 flex items-center justify-end gap-1.5 pr-2 cursor-default">
-                              {/* Status badge */}
-                              <div 
-                                className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${getTurnoverStatusColor(activeTurnover.turnover_status)}`}
-                              />
                               {/* Tasks icon + count - always show */}
                               <div className="flex items-center gap-0.5 text-neutral-500 dark:text-neutral-400">
                                 <DiamondIcon size={12} />
@@ -1096,7 +1113,7 @@ export default function TimelineWindow({
                     return (
                       <div
                         key={idx}
-                        className={`border-b border-r border-neutral-200 dark:border-neutral-700 h-[30px] relative overflow-visible ${isTodayDate ? 'bg-emerald-700/20' : 'bg-white dark:bg-neutral-900'}`}
+                        className={`border-b border-r border-white/20 dark:border-white/10 h-[30px] relative overflow-visible ${isTodayDate ? 'bg-emerald-600/15' : 'bg-white/30 dark:bg-white/[0.02]'}`}
                       >
                         {startingReservation && (() => {
                           const { span, startsBeforeRange, endsAfterRange } = getBlockPosition(startingReservation.check_in, startingReservation.check_out);
@@ -1117,7 +1134,7 @@ export default function TimelineWindow({
                               onClick={() => {
                                 setSelectedReservation(selectedReservation?.id === startingReservation.id ? null : startingReservation);
                               }}
-                              className={`absolute cursor-pointer transition-all duration-150 hover:brightness-110 hover:z-30 text-white text-[11px] font-medium flex items-center bg-neutral-500 hover:bg-neutral-600 ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-white shadow-lg z-30' : ''}`}
+                              className={`absolute cursor-pointer transition-all duration-150 hover:brightness-110 hover:z-30 text-white text-[11px] font-medium flex items-center bg-neutral-500/80 hover:bg-neutral-600/80 backdrop-blur-sm ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-white shadow-lg z-30' : ''}`}
                               style={{
                                 left: `${leftOffset}%`,
                                 top: 0,
@@ -1199,7 +1216,7 @@ export default function TimelineWindow({
       {/* Right Panel Overlay - Detail View */}
       {floatingData && (
         <div 
-          className="absolute top-0 right-0 h-full w-[30%] min-w-[320px] bg-card border-l border-neutral-200 dark:border-neutral-700 shadow-xl z-30 overflow-y-auto"
+          className="absolute top-0 right-0 h-full w-[30%] min-w-[320px] bg-white/30 dark:bg-white/[0.03] backdrop-blur-xl border-l border-white/20 dark:border-white/10 shadow-xl z-30 overflow-y-auto"
           onWheel={(e) => e.stopPropagation()}
         >
           {floatingData.type === 'task' ? (
@@ -1258,7 +1275,7 @@ export default function TimelineWindow({
             /* Turnover Detail Panel */
             <div className="flex flex-col h-full">
               {/* Sticky Header - Property Info + Toggle */}
-              <div className="sticky top-0 bg-card z-10 border-b border-neutral-200 dark:border-neutral-700">
+              <div className="sticky top-0 bg-white/40 dark:bg-white/[0.04] backdrop-blur-2xl z-10 border-b border-white/20 dark:border-white/10">
                 {/* Top Row: Property name, Guest, Dates, Occupancy, Close button */}
                 <div className="p-4 pb-3">
                   <div className="flex items-start justify-between gap-4">
@@ -1300,7 +1317,7 @@ export default function TimelineWindow({
                     {/* Close Button */}
                     <button
                       onClick={handleCloseFloatingWindow}
-                      className="p-1.5 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors shrink-0"
+                      className="p-1.5 hover:bg-white/40 dark:hover:bg-white/10 rounded-lg transition-colors shrink-0"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1311,27 +1328,27 @@ export default function TimelineWindow({
 
                 {/* Toggle Button Row */}
                 <div className="px-4 pb-3">
-                  <div className="flex rounded-lg bg-neutral-100 dark:bg-neutral-800 p-1">
+                  <div className="flex rounded-xl bg-white/20 dark:bg-white/[0.05] backdrop-blur-sm border border-white/20 dark:border-white/10 p-1">
                     <button
                       onClick={() => {
                         setTurnoverRightPanelView('tasks');
                         setExpandedProjectInTurnover(null);
                         setTurnoverProjectFields(null);
                       }}
-                      className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                      className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
                         turnoverRightPanelView === 'tasks'
-                          ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm'
-                          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                          ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
+                          : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/20 dark:hover:bg-white/10'
                       }`}
                     >
                       Turnover Tasks ({(floatingData.item as Turnover).completed_tasks || 0}/{(floatingData.item as Turnover).total_tasks || 0})
                     </button>
                     <button
                       onClick={() => setTurnoverRightPanelView('projects')}
-                      className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                      className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
                         turnoverRightPanelView === 'projects'
-                          ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm'
-                          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                          ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
+                          : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/20 dark:hover:bg-white/10'
                       }`}
                     >
                       Property Projects ({projects.filter(p => p.property_name === (floatingData.item as Turnover).property_name).length})

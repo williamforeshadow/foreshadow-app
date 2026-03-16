@@ -234,14 +234,14 @@ export function ScheduledItemsCell({
               <HoverCardTrigger asChild>
                 <div
                   className={cn(
-                    "flex items-center justify-center w-6 h-6 rounded cursor-pointer transition-colors",
+                    "flex items-center justify-center w-6 h-6 rounded cursor-pointer transition-colors glass-sheen relative overflow-hidden shadow-sm",
                     // Contingent-only: dashed neutral outline
-                    !hasApproved && hasContingent && "border-[1.5px] border-dashed border-neutral-400/70 text-neutral-400 bg-neutral-400/10 hover:bg-neutral-400/20",
-                    // Status-driven colors (when approved tasks exist)
-                    hasApproved && taskFolderStatus === 'not_started' && "bg-rose-500/80 text-white hover:bg-rose-600",
-                    hasApproved && taskFolderStatus === 'in_progress' && "bg-indigo-500/80 text-white hover:bg-indigo-600",
-                    hasApproved && taskFolderStatus === 'complete' && "bg-indigo-400/40 text-indigo-200 hover:bg-indigo-400/50",
-                    hasApproved && taskFolderStatus === 'no_tasks' && "bg-neutral-400/60 text-white hover:bg-neutral-500",
+                    !hasApproved && hasContingent && "border-[1.5px] border-dashed border-neutral-400/70 text-neutral-400 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700",
+                    // Status-driven glass colors (when approved tasks exist)
+                    hasApproved && taskFolderStatus === 'not_started' && "bg-rose-100 dark:bg-rose-950 border border-rose-200/50 dark:border-rose-400/22 text-rose-700 dark:text-rose-300 hover:bg-rose-200 dark:hover:bg-rose-900",
+                    hasApproved && taskFolderStatus === 'in_progress' && "bg-indigo-100 dark:bg-indigo-950 border border-indigo-300/40 dark:border-indigo-400/20 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-900",
+                    hasApproved && taskFolderStatus === 'complete' && "bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/25 dark:border-indigo-400/10 text-indigo-400 dark:text-indigo-300/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60",
+                    hasApproved && taskFolderStatus === 'no_tasks' && "bg-neutral-100 dark:bg-neutral-800 border border-neutral-300/35 dark:border-white/12 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700",
                     // Dashed border overlay when mixed (approved + contingent)
                     hasApproved && hasContingent && "border-[1.5px] border-dashed",
                   )}
@@ -308,11 +308,11 @@ export function ScheduledItemsCell({
               <HoverCardTrigger asChild>
                 <div
                   className={cn(
-                    "flex items-center justify-center w-6 h-6 rounded cursor-pointer transition-colors",
-                    projectFolderStatus === 'not_started' && "bg-rose-500/80 text-white hover:bg-rose-600",
-                    projectFolderStatus === 'in_progress' && "bg-indigo-500/80 text-white hover:bg-indigo-600",
-                    projectFolderStatus === 'complete' && "bg-indigo-400/40 text-indigo-200 hover:bg-indigo-400/50",
-                    projectFolderStatus === 'no_tasks' && "bg-neutral-400/60 text-white hover:bg-neutral-500",
+                    "flex items-center justify-center w-6 h-6 rounded cursor-pointer transition-colors glass-sheen relative overflow-hidden shadow-sm",
+                    projectFolderStatus === 'not_started' && "bg-rose-100 dark:bg-rose-950 border border-rose-200/50 dark:border-rose-400/22 text-rose-700 dark:text-rose-300 hover:bg-rose-200 dark:hover:bg-rose-900",
+                    projectFolderStatus === 'in_progress' && "bg-indigo-100 dark:bg-indigo-950 border border-indigo-300/40 dark:border-indigo-400/20 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-900",
+                    projectFolderStatus === 'complete' && "bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/25 dark:border-indigo-400/10 text-indigo-400 dark:text-indigo-300/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60",
+                    projectFolderStatus === 'no_tasks' && "bg-neutral-100 dark:bg-neutral-800 border border-neutral-300/35 dark:border-white/12 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700",
                   )}
                 >
                   <HexagonIcon size={14} />
