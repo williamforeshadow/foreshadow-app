@@ -799,10 +799,10 @@ export default function TimelineWindow({
 
     return (
       <div className="text-center">
-        <div className={`text-[11px] ${isTodayDate ? 'text-white/80' : 'text-neutral-600 dark:text-neutral-400'}`}>
+        <div className={`text-[11px] ${isTodayDate ? 'text-neutral-800 dark:text-neutral-200' : 'text-neutral-600 dark:text-neutral-400'}`}>
           {date.toLocaleDateString('en-US', { weekday: 'short' })}
         </div>
-        <div className={`text-xs ${isTodayDate ? 'text-white font-semibold' : 'text-neutral-900 dark:text-white'}`}>
+        <div className={`text-xs ${isTodayDate ? 'text-neutral-900 dark:text-white font-semibold' : 'text-neutral-900 dark:text-white'}`}>
           {month}/{day}
         </div>
       </div>
@@ -820,7 +820,7 @@ export default function TimelineWindow({
   }
 
   return (
-    <div className="h-full flex flex-col relative glass-bg">
+    <div className="h-full flex flex-col relative">
       {/* Header with navigation - fixed at top */}
       <div className="flex-shrink-0 px-4 py-3 glass-panel bg-white/40 dark:bg-white/[0.05] border-b border-white/20 dark:border-white/10">
         <div className="flex items-center gap-4 mb-2">
@@ -944,7 +944,7 @@ export default function TimelineWindow({
                   key={idx} 
                   className={`px-1 py-1 border-b border-r border-white/20 dark:border-white/10 sticky top-0 z-10 cursor-pointer transition-colors ${
                     isTodayDate 
-                      ? 'bg-emerald-600/70 hover:bg-emerald-600/80 backdrop-blur-sm' 
+                      ? 'bg-neutral-500/20 dark:bg-white/[0.10] hover:bg-neutral-500/30 dark:hover:bg-white/[0.14] backdrop-blur-sm' 
                       : 'bg-white/40 dark:bg-white/[0.06] hover:bg-white/55 dark:hover:bg-white/[0.10] backdrop-blur-sm'
                   }`}
                   onClick={() => {
@@ -967,14 +967,14 @@ export default function TimelineWindow({
                 ? (() => {
                     switch (activeTurnover.turnover_status) {
                       case 'not_started':
-                        // Rose gold
-                        return 'bg-rose-50/65 dark:bg-rose-400/[0.13]';
+                        // Rose gold — warm peachy-gold
+                        return 'bg-amber-50/55 dark:bg-amber-400/[0.12]';
                       case 'in_progress':
                         // Midnight blue
                         return 'bg-indigo-50/55 dark:bg-indigo-500/[0.12]';
                       case 'complete':
-                        // Muted indigo
-                        return 'bg-indigo-50/35 dark:bg-indigo-500/[0.06]';
+                        // Emerald green
+                        return 'bg-emerald-50/55 dark:bg-emerald-500/[0.12]';
                       case 'no_tasks':
                         return 'bg-white/55 dark:bg-white/[0.08]';
                       default:
@@ -1014,14 +1014,14 @@ export default function TimelineWindow({
                               </div>
                             </div>
                           </HoverCardTrigger>
-                          <HoverCardContent side="right" align="start" sideOffset={-8} className="w-72 p-0">
+                          <HoverCardContent side="right" align="start" sideOffset={0} collisionPadding={16} className="w-72 p-0 glass-card bg-white/90 dark:bg-neutral-900/95 border-white/30 dark:border-white/10">
                             {/* Header */}
-                            <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
+                            <div className="px-3 py-2 border-b border-white/20 dark:border-white/10">
                               <p className="text-sm font-medium">{property}</p>
                             </div>
                             
                             {/* Tasks Section */}
-                            <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
+                            <div className="px-3 py-2 border-b border-white/20 dark:border-white/10">
                               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                                 Active Turnover: ({activeTurnover.completed_tasks || 0}/{activeTurnover.total_tasks || 0})
                               </p>
@@ -1030,7 +1030,17 @@ export default function TimelineWindow({
                                   activeTurnover.tasks.map((task) => (
                                     <div 
                                       key={task.task_id} 
-                                      className="flex items-center justify-between gap-2 py-2 px-2 -mx-2 rounded cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 border-l-2 border-transparent hover:border-blue-500 transition-colors"
+                                      className={`flex items-center justify-between gap-2 py-2 px-2 -mx-2 rounded cursor-pointer border-l-2 border-transparent transition-colors ${
+                                        task.status === 'complete'
+                                          ? 'hover:bg-emerald-50/60 dark:hover:bg-emerald-500/10 hover:border-emerald-400/50 dark:hover:border-emerald-400/30'
+                                          : task.status === 'in_progress'
+                                          ? 'hover:bg-indigo-50/60 dark:hover:bg-indigo-500/10 hover:border-indigo-400/50 dark:hover:border-indigo-400/30'
+                                          : task.status === 'paused'
+                                          ? 'hover:bg-purple-50/60 dark:hover:bg-purple-500/10 hover:border-purple-400/50 dark:hover:border-purple-400/30'
+                                          : task.status === 'reopened'
+                                          ? 'hover:bg-orange-50/60 dark:hover:bg-orange-500/10 hover:border-orange-400/50 dark:hover:border-orange-400/30'
+                                          : 'hover:bg-amber-50/60 dark:hover:bg-amber-500/10 hover:border-amber-400/50 dark:hover:border-amber-400/30'
+                                      }`}
                                       onClick={() => setFloatingData({
                                         type: 'task',
                                         item: task,
@@ -1038,16 +1048,16 @@ export default function TimelineWindow({
                                       })}
                                     >
                                       <span className="truncate text-sm">{task.template_name || task.type}</span>
-                                      <span className={`text-[11px] px-1.5 py-0.5 rounded flex-shrink-0 ${
+                                      <span className={`text-[11px] px-1.5 py-0.5 rounded border flex-shrink-0 capitalize ${
                                         task.status === 'complete' 
-                                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                          ? 'bg-emerald-100/60 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 border-emerald-300/30 dark:border-emerald-500/20'
                                           : task.status === 'in_progress'
-                                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                          ? 'bg-indigo-100/60 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-400 border-indigo-300/30 dark:border-indigo-500/20'
                                           : task.status === 'paused'
-                                          ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                                          ? 'bg-purple-100/60 text-purple-700 dark:bg-purple-500/15 dark:text-purple-400 border-purple-300/30 dark:border-purple-500/20'
                                           : task.status === 'reopened'
-                                          ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-                                          : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                          ? 'bg-orange-100/60 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400 border-orange-300/30 dark:border-orange-500/20'
+                                          : 'bg-amber-100/60 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 border-amber-300/30 dark:border-amber-500/20'
                                       }`}>
                                         {task.status?.replace('_', ' ')}
                                       </span>
@@ -1069,7 +1079,15 @@ export default function TimelineWindow({
                                   propertyProjects.map((project) => (
                                     <div 
                                       key={project.id} 
-                                      className="flex items-center justify-between gap-2 py-2 px-2 -mx-2 rounded cursor-pointer hover:bg-amber-50 dark:hover:bg-amber-900/20 border-l-2 border-transparent hover:border-amber-500 transition-colors"
+                                      className={`flex items-center justify-between gap-2 py-2 px-2 -mx-2 rounded cursor-pointer border-l-2 border-transparent transition-colors ${
+                                        project.status === 'complete'
+                                          ? 'hover:bg-emerald-50/60 dark:hover:bg-emerald-500/10 hover:border-emerald-400/50 dark:hover:border-emerald-400/30'
+                                          : project.status === 'in_progress'
+                                          ? 'hover:bg-indigo-50/60 dark:hover:bg-indigo-500/10 hover:border-indigo-400/50 dark:hover:border-indigo-400/30'
+                                          : project.status === 'on_hold'
+                                          ? 'hover:bg-orange-50/60 dark:hover:bg-orange-500/10 hover:border-orange-400/50 dark:hover:border-orange-400/30'
+                                          : 'hover:bg-amber-50/60 dark:hover:bg-amber-500/10 hover:border-amber-400/50 dark:hover:border-amber-400/30'
+                                      }`}
                                       onClick={() => setFloatingData({
                                         type: 'project',
                                         item: project,
@@ -1077,14 +1095,14 @@ export default function TimelineWindow({
                                       })}
                                     >
                                       <span className="truncate text-sm">{project.title}</span>
-                                      <span className={`text-[11px] px-1.5 py-0.5 rounded flex-shrink-0 ${
+                                      <span className={`text-[11px] px-1.5 py-0.5 rounded border flex-shrink-0 capitalize ${
                                         project.status === 'complete' 
-                                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                          ? 'bg-emerald-100/60 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 border-emerald-300/30 dark:border-emerald-500/20'
                                           : project.status === 'in_progress'
-                                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                          ? 'bg-indigo-100/60 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-400 border-indigo-300/30 dark:border-indigo-500/20'
                                           : project.status === 'on_hold'
-                                          ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-                                          : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                          ? 'bg-orange-100/60 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400 border-orange-300/30 dark:border-orange-500/20'
+                                          : 'bg-amber-100/60 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 border-amber-300/30 dark:border-amber-500/20'
                                       }`}>
                                         {project.status?.replace('_', ' ')}
                                       </span>
@@ -1113,7 +1131,7 @@ export default function TimelineWindow({
                     return (
                       <div
                         key={idx}
-                        className={`border-b border-r border-white/20 dark:border-white/10 h-[30px] relative overflow-visible ${isTodayDate ? 'bg-emerald-600/15' : 'bg-white/30 dark:bg-white/[0.02]'}`}
+                        className={`border-b border-r border-white/20 dark:border-white/10 h-[30px] relative overflow-visible ${isTodayDate ? 'bg-neutral-500/10 dark:bg-white/[0.05]' : 'bg-white/30 dark:bg-white/[0.02]'}`}
                       >
                         {startingReservation && (() => {
                           const { span, startsBeforeRange, endsAfterRange } = getBlockPosition(startingReservation.check_in, startingReservation.check_out);
@@ -1134,7 +1152,7 @@ export default function TimelineWindow({
                               onClick={() => {
                                 setSelectedReservation(selectedReservation?.id === startingReservation.id ? null : startingReservation);
                               }}
-                              className={`absolute cursor-pointer transition-all duration-150 hover:brightness-110 hover:z-30 text-white text-[11px] font-medium flex items-center bg-neutral-500/80 hover:bg-neutral-600/80 backdrop-blur-sm ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-white shadow-lg z-30' : ''}`}
+                              className={`absolute cursor-pointer transition-all duration-150 hover:brightness-110 hover:z-30 text-neutral-800 dark:text-white text-[11px] font-medium flex items-center glass-card glass-sheen overflow-hidden bg-neutral-400/35 dark:bg-white/[0.10] border border-white/40 dark:border-white/[0.12] hover:bg-neutral-400/45 dark:hover:bg-white/[0.15] ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-white/70 dark:ring-white shadow-lg z-30' : ''}`}
                               style={{
                                 left: `${leftOffset}%`,
                                 top: 0,

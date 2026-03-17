@@ -47,28 +47,60 @@ const formatDateHeader = (date: Date) => {
 const getTaskStatusStyles = (status: string) => {
   switch (status) {
     case 'complete':
-      return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
+      return 'bg-emerald-100/60 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 border border-emerald-300/30 dark:border-emerald-500/20';
     case 'in_progress':
-      return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400';
+      return 'bg-indigo-100/60 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-400 border border-indigo-300/30 dark:border-indigo-500/20';
     case 'paused':
-      return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400';
+      return 'bg-purple-100/60 text-purple-700 dark:bg-purple-500/15 dark:text-purple-400 border border-purple-300/30 dark:border-purple-500/20';
     case 'reopened':
-      return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400';
+      return 'bg-orange-100/60 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400 border border-orange-300/30 dark:border-orange-500/20';
     default: // not_started
-      return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+      return 'bg-amber-100/60 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 border border-amber-300/30 dark:border-amber-500/20';
   }
 };
 
 const getProjectStatusStyles = (status: string) => {
   switch (status) {
     case 'complete':
-      return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
+      return 'bg-emerald-100/60 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 border border-emerald-300/30 dark:border-emerald-500/20';
     case 'in_progress':
-      return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400';
+      return 'bg-indigo-100/60 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-400 border border-indigo-300/30 dark:border-indigo-500/20';
     case 'on_hold':
-      return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400';
+      return 'bg-orange-100/60 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400 border border-orange-300/30 dark:border-orange-500/20';
     default: // not_started
-      return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+      return 'bg-amber-100/60 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 border border-amber-300/30 dark:border-amber-500/20';
+  }
+};
+
+// Get status-colored hover styles for task rows
+const getTaskRowHoverStyles = (status: string) => {
+  switch (status) {
+    case 'complete':
+      return 'hover:bg-emerald-50/60 dark:hover:bg-emerald-500/10 hover:border-emerald-400/50 dark:hover:border-emerald-400/30';
+    case 'in_progress':
+      return 'hover:bg-indigo-50/60 dark:hover:bg-indigo-500/10 hover:border-indigo-400/50 dark:hover:border-indigo-400/30';
+    case 'paused':
+      return 'hover:bg-purple-50/60 dark:hover:bg-purple-500/10 hover:border-purple-400/50 dark:hover:border-purple-400/30';
+    case 'reopened':
+      return 'hover:bg-orange-50/60 dark:hover:bg-orange-500/10 hover:border-orange-400/50 dark:hover:border-orange-400/30';
+    case 'contingent':
+      return 'hover:bg-white/40 dark:hover:bg-white/[0.06]';
+    default: // not_started
+      return 'hover:bg-amber-50/60 dark:hover:bg-amber-500/10 hover:border-amber-400/50 dark:hover:border-amber-400/30';
+  }
+};
+
+// Get status-colored hover styles for project rows
+const getProjectRowHoverStyles = (status: string) => {
+  switch (status) {
+    case 'complete':
+      return 'hover:bg-emerald-50/60 dark:hover:bg-emerald-500/10 hover:border-emerald-400/50 dark:hover:border-emerald-400/30';
+    case 'in_progress':
+      return 'hover:bg-indigo-50/60 dark:hover:bg-indigo-500/10 hover:border-indigo-400/50 dark:hover:border-indigo-400/30';
+    case 'on_hold':
+      return 'hover:bg-orange-50/60 dark:hover:bg-orange-500/10 hover:border-orange-400/50 dark:hover:border-orange-400/30';
+    default: // not_started
+      return 'hover:bg-amber-50/60 dark:hover:bg-amber-500/10 hover:border-amber-400/50 dark:hover:border-amber-400/30';
   }
 };
 
@@ -230,18 +262,18 @@ export function ScheduledItemsCell({
         {/* Tasks Icon + Task Assignees */}
         {scheduledTasks.length > 0 && (
           <>
-            <HoverCard openDelay={0} closeDelay={0}>
+            <HoverCard openDelay={0} closeDelay={100}>
               <HoverCardTrigger asChild>
                 <div
                   className={cn(
                     "flex items-center justify-center w-6 h-6 rounded cursor-pointer transition-colors glass-sheen relative overflow-hidden shadow-sm",
                     // Contingent-only: dashed neutral outline
-                    !hasApproved && hasContingent && "border-[1.5px] border-dashed border-neutral-400/70 text-neutral-400 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700",
-                    // Status-driven glass colors (when approved tasks exist)
-                    hasApproved && taskFolderStatus === 'not_started' && "bg-rose-100 dark:bg-rose-950 border border-rose-200/50 dark:border-rose-400/22 text-rose-700 dark:text-rose-300 hover:bg-rose-200 dark:hover:bg-rose-900",
-                    hasApproved && taskFolderStatus === 'in_progress' && "bg-indigo-100 dark:bg-indigo-950 border border-indigo-300/40 dark:border-indigo-400/20 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-900",
-                    hasApproved && taskFolderStatus === 'complete' && "bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/25 dark:border-indigo-400/10 text-indigo-400 dark:text-indigo-300/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60",
-                    hasApproved && taskFolderStatus === 'no_tasks' && "bg-neutral-100 dark:bg-neutral-800 border border-neutral-300/35 dark:border-white/12 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700",
+                    !hasApproved && hasContingent && "border-[1.5px] border-dashed border-neutral-400/70 text-white dark:text-white bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700",
+                    // Status-driven glass colors (when approved tasks exist) — icon stays white
+                    hasApproved && taskFolderStatus === 'not_started' && "bg-amber-100 dark:bg-amber-900 border border-amber-200/40 dark:border-amber-400/20 text-white dark:text-white hover:bg-amber-200 dark:hover:bg-amber-800",
+                    hasApproved && taskFolderStatus === 'in_progress' && "bg-indigo-100 dark:bg-indigo-900 border border-indigo-300/40 dark:border-indigo-400/20 text-white dark:text-white hover:bg-indigo-200 dark:hover:bg-indigo-800",
+                    hasApproved && taskFolderStatus === 'complete' && "bg-emerald-100 dark:bg-emerald-900 border border-emerald-200/40 dark:border-emerald-400/20 text-white dark:text-white hover:bg-emerald-200 dark:hover:bg-emerald-800",
+                    hasApproved && taskFolderStatus === 'no_tasks' && "bg-neutral-100 dark:bg-neutral-800 border border-neutral-300/35 dark:border-white/12 text-white dark:text-white hover:bg-neutral-200 dark:hover:bg-neutral-700",
                     // Dashed border overlay when mixed (approved + contingent)
                     hasApproved && hasContingent && "border-[1.5px] border-dashed",
                   )}
@@ -249,7 +281,7 @@ export function ScheduledItemsCell({
                   <DiamondIcon size={14} />
                 </div>
               </HoverCardTrigger>
-              <HoverCardContent side="right" align="start" sideOffset={-8} className="w-72 p-0">
+              <HoverCardContent side="bottom" align="start" sideOffset={2} collisionPadding={16} className="w-72 p-0 glass-card bg-white/90 dark:bg-neutral-900/95 border-white/30 dark:border-white/10">
                 <div className="px-3 py-2">
                   <p className="text-xs font-semibold text-muted-foreground mb-2">
                     Scheduled Tasks ({scheduledTasks.length}) — {formatDateHeader(date)}
@@ -259,23 +291,28 @@ export function ScheduledItemsCell({
                       <div
                         key={task.task_id}
                         className={cn(
-                          "flex items-center justify-between gap-2 py-2 px-2 -mx-2 rounded cursor-pointer transition-colors",
+                          "flex items-center justify-between gap-2 py-2 px-2 -mx-2 rounded cursor-pointer transition-colors border-l-2",
                           task.status === 'contingent'
-                            ? "border-l-2 border-dashed border-blue-400/50 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 text-muted-foreground"
-                            : "border-l-2 border-transparent hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                            ? "border-dashed border-neutral-400/40 dark:border-neutral-500/30 text-muted-foreground"
+                            : "border-transparent",
+                          getTaskRowHoverStyles(task.status)
                         )}
                         onClick={() => onTaskClick?.(task)}
                       >
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="truncate text-sm">{task.template_name || task.type}</span>
-                          {task.status === 'contingent' && (
-                            <span className="text-[10px] px-1 py-0.5 rounded bg-blue-100/50 dark:bg-blue-900/20 text-blue-500/70 dark:text-blue-400/60 whitespace-nowrap flex-shrink-0">
-                              contingent
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-0.5 flex-shrink-0">
-                          {task.assigned_users?.slice(0, 3).map((user) => (
+                        <span className="truncate text-sm">{task.template_name || task.type}</span>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <span className={cn(
+                            "text-[11px] px-1.5 py-0.5 rounded border flex-shrink-0 capitalize",
+                            task.status === 'complete' && 'bg-emerald-100/60 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 border-emerald-300/30 dark:border-emerald-500/20',
+                            task.status === 'in_progress' && 'bg-indigo-100/60 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-400 border-indigo-300/30 dark:border-indigo-500/20',
+                            task.status === 'paused' && 'bg-purple-100/60 text-purple-700 dark:bg-purple-500/15 dark:text-purple-400 border-purple-300/30 dark:border-purple-500/20',
+                            task.status === 'reopened' && 'bg-orange-100/60 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400 border-orange-300/30 dark:border-orange-500/20',
+                            task.status === 'contingent' && 'bg-neutral-500/10 text-neutral-500 dark:bg-neutral-500/15 dark:text-neutral-400 border-neutral-300/30 dark:border-neutral-500/20',
+                            task.status === 'not_started' && 'bg-amber-100/60 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 border-amber-300/30 dark:border-amber-500/20',
+                          )}>
+                            {task.status?.replace('_', ' ')}
+                          </span>
+                          {task.assigned_users?.slice(0, 1).map((user) => (
                             <UserAvatar
                               key={user.user_id}
                               src={user.avatar}
@@ -283,11 +320,6 @@ export function ScheduledItemsCell({
                               size="xs"
                             />
                           ))}
-                          {(task.assigned_users?.length || 0) > 3 && (
-                            <span className="text-[10px] text-muted-foreground ml-0.5">
-                              +{(task.assigned_users?.length || 0) - 3}
-                            </span>
-                          )}
                         </div>
                       </div>
                     ))}
@@ -304,21 +336,21 @@ export function ScheduledItemsCell({
           const projectFolderStatus = getProjectFolderStatus(scheduledProjects);
           return (
           <>
-            <HoverCard openDelay={0} closeDelay={0}>
+            <HoverCard openDelay={0} closeDelay={100}>
               <HoverCardTrigger asChild>
                 <div
                   className={cn(
                     "flex items-center justify-center w-6 h-6 rounded cursor-pointer transition-colors glass-sheen relative overflow-hidden shadow-sm",
-                    projectFolderStatus === 'not_started' && "bg-rose-100 dark:bg-rose-950 border border-rose-200/50 dark:border-rose-400/22 text-rose-700 dark:text-rose-300 hover:bg-rose-200 dark:hover:bg-rose-900",
-                    projectFolderStatus === 'in_progress' && "bg-indigo-100 dark:bg-indigo-950 border border-indigo-300/40 dark:border-indigo-400/20 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-900",
-                    projectFolderStatus === 'complete' && "bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/25 dark:border-indigo-400/10 text-indigo-400 dark:text-indigo-300/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60",
-                    projectFolderStatus === 'no_tasks' && "bg-neutral-100 dark:bg-neutral-800 border border-neutral-300/35 dark:border-white/12 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700",
+                    projectFolderStatus === 'not_started' && "bg-amber-100 dark:bg-amber-900 border border-amber-200/40 dark:border-amber-400/20 text-white dark:text-white hover:bg-amber-200 dark:hover:bg-amber-800",
+                    projectFolderStatus === 'in_progress' && "bg-indigo-100 dark:bg-indigo-900 border border-indigo-300/40 dark:border-indigo-400/20 text-white dark:text-white hover:bg-indigo-200 dark:hover:bg-indigo-800",
+                    projectFolderStatus === 'complete' && "bg-emerald-100 dark:bg-emerald-900 border border-emerald-200/40 dark:border-emerald-400/20 text-white dark:text-white hover:bg-emerald-200 dark:hover:bg-emerald-800",
+                    projectFolderStatus === 'no_tasks' && "bg-neutral-100 dark:bg-neutral-800 border border-neutral-300/35 dark:border-white/12 text-white dark:text-white hover:bg-neutral-200 dark:hover:bg-neutral-700",
                   )}
                 >
                   <HexagonIcon size={14} />
                 </div>
               </HoverCardTrigger>
-              <HoverCardContent side="right" align="start" sideOffset={-8} className="w-72 p-0">
+              <HoverCardContent side="bottom" align="start" sideOffset={2} collisionPadding={16} className="w-72 p-0 glass-card bg-white/90 dark:bg-neutral-900/95 border-white/30 dark:border-white/10">
                 <div className="px-3 py-2">
                   <p className="text-xs font-semibold text-muted-foreground mb-2">
                     Scheduled Projects ({scheduledProjects.length}) — {formatDateHeader(date)}
@@ -327,12 +359,24 @@ export function ScheduledItemsCell({
                     {scheduledProjects.map((project) => (
                       <div
                         key={project.id}
-                        className="flex items-center justify-between gap-2 py-2 px-2 -mx-2 rounded cursor-pointer hover:bg-amber-50 dark:hover:bg-amber-900/20 border-l-2 border-transparent hover:border-amber-500 transition-colors"
+                        className={cn(
+                          "flex items-center justify-between gap-2 py-2 px-2 -mx-2 rounded cursor-pointer border-l-2 border-transparent transition-colors",
+                          getProjectRowHoverStyles(project.status)
+                        )}
                         onClick={() => onProjectClick?.(project)}
                       >
                         <span className="truncate text-sm">{project.title}</span>
-                        <div className="flex items-center gap-0.5 flex-shrink-0">
-                          {project.project_assignments?.slice(0, 3).map((assignment) => (
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <span className={cn(
+                            "text-[11px] px-1.5 py-0.5 rounded border flex-shrink-0 capitalize",
+                            project.status === 'complete' && 'bg-emerald-100/60 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 border-emerald-300/30 dark:border-emerald-500/20',
+                            project.status === 'in_progress' && 'bg-indigo-100/60 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-400 border-indigo-300/30 dark:border-indigo-500/20',
+                            project.status === 'on_hold' && 'bg-orange-100/60 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400 border-orange-300/30 dark:border-orange-500/20',
+                            (!project.status || project.status === 'not_started') && 'bg-amber-100/60 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 border-amber-300/30 dark:border-amber-500/20',
+                          )}>
+                            {project.status?.replace('_', ' ')}
+                          </span>
+                          {project.project_assignments?.slice(0, 1).map((assignment) => (
                             <UserAvatar
                               key={assignment.user_id}
                               src={assignment.user?.avatar}
@@ -340,11 +384,6 @@ export function ScheduledItemsCell({
                               size="xs"
                             />
                           ))}
-                          {(project.project_assignments?.length || 0) > 3 && (
-                            <span className="text-[10px] text-muted-foreground ml-0.5">
-                              +{(project.project_assignments?.length || 0) - 3}
-                            </span>
-                          )}
                         </div>
                       </div>
                     ))}

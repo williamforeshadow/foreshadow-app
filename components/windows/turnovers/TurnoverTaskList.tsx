@@ -45,10 +45,10 @@ function getStatusStyles(status: string) {
   const glassBase = 'glass-card glass-sheen relative overflow-hidden rounded-xl';
   switch (status) {
     case 'complete':
-      // Muted indigo — done, receding
+      // Emerald green — done, completed
       return {
-        card: `${glassBase} bg-indigo-50/35 dark:bg-indigo-500/[0.06] border border-indigo-200/25 dark:border-indigo-400/10 text-muted-foreground/70`,
-        badge: 'bg-indigo-500/10 text-indigo-400 dark:text-indigo-300/70 border-indigo-300/20 dark:border-indigo-500/15',
+        card: `${glassBase} bg-emerald-50/55 dark:bg-emerald-500/[0.12] border border-emerald-200/40 dark:border-emerald-400/20`,
+        badge: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-300/35 dark:border-emerald-500/25',
       };
     case 'in_progress':
       // Indigo — actively being worked on
@@ -69,10 +69,10 @@ function getStatusStyles(status: string) {
         badge: 'bg-neutral-500/10 text-neutral-500 dark:text-neutral-400 border-neutral-300/25 dark:border-white/10',
       };
     default:
-      // Rose gold — not started, needs attention
+      // Rose gold — warm peachy-gold, not started, needs attention
       return {
-        card: `${glassBase} bg-rose-50/55 dark:bg-rose-400/[0.10] border border-rose-200/40 dark:border-rose-400/18`,
-        badge: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-300/35 dark:border-rose-500/20',
+        card: `${glassBase} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`,
+        badge: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-300/35 dark:border-amber-500/20',
       };
   }
 }

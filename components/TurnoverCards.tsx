@@ -186,14 +186,14 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
     // When liquid border is present, card border is transparent (the shimmer IS the border)
     switch (status) {
       case 'not_started':
-        // Rose gold — bright warm pink-gold
-        return `${glassBase} bg-rose-50/65 dark:bg-rose-400/[0.13] border ${hasLiquidBorder ? 'border-transparent' : 'border-rose-200/50 dark:border-rose-400/22'}`;
+        // Rose gold — warm peachy-gold
+        return `${glassBase} bg-amber-50/55 dark:bg-amber-400/[0.12] border ${hasLiquidBorder ? 'border-transparent' : 'border-amber-200/40 dark:border-amber-400/20'}`;
       case 'in_progress':
         // Midnight blue — deep, actively being worked on
         return `${glassBase} bg-indigo-50/55 dark:bg-indigo-500/[0.12] border ${hasLiquidBorder ? 'border-transparent' : 'border-indigo-300/40 dark:border-indigo-400/20'}`;
       case 'complete':
-        // Muted midnight blue — faded text + card, receding into background
-        return `${glassBase} bg-indigo-50/35 dark:bg-indigo-500/[0.06] border border-indigo-200/25 dark:border-indigo-400/10 text-muted-foreground/60`;
+        // Emerald green — done, completed
+        return `${glassBase} bg-emerald-50/55 dark:bg-emerald-500/[0.12] border ${hasLiquidBorder ? 'border-transparent' : 'border-emerald-200/40 dark:border-emerald-400/20'}`;
       case 'no_tasks':
         return `${glassBase} bg-white/55 dark:bg-white/[0.08] border border-neutral-300/35 dark:border-white/12`;
       default:
@@ -308,7 +308,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
 
     // Active + out + incomplete cards get the animated liquid border wrapper
     if (needsAttention) {
-      const liquidHue = status === 'not_started' ? 15 : 270; // rose gold or midnight blue
+      const liquidHue = status === 'not_started' ? 40 : 270; // warm amber or midnight blue
       return (
         <div
           key={item.id}
