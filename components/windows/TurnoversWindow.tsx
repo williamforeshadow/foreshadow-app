@@ -305,6 +305,9 @@ function TurnoversWindowContent({
               onUpdateStatus={updateTaskAction}
               onSaveForm={saveTaskForm}
               setTask={(task: Task) => setFullscreenTask(task)}
+              users={users}
+              onUpdateSchedule={updateTaskSchedule}
+              onUpdateAssignment={updateTaskAssignment}
             />
           ) : (
             /* Turnover Card Detail */

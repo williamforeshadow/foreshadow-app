@@ -282,6 +282,12 @@ export default function TimelineWindow({
         )
       })));
 
+      // Update localTask if it's the same task
+      setLocalTask(prev => {
+        if (!prev || prev.task_id !== taskId) return prev;
+        return { ...prev, assigned_users: assignedUsers };
+      });
+
       // Update floatingData if viewing a turnover
       if (floatingData?.type === 'turnover') {
         setFloatingData(prev => {
@@ -321,6 +327,12 @@ export default function TimelineWindow({
           task.task_id === taskId ? { ...task, scheduled_date: scheduledDate, scheduled_time: scheduledTime } : task
         )
       })));
+
+      // Update localTask if it's the same task
+      setLocalTask(prev => {
+        if (!prev || prev.task_id !== taskId) return prev;
+        return { ...prev, scheduled_date: scheduledDate, scheduled_time: scheduledTime };
+      });
 
       // Update floatingData if viewing a turnover
       if (floatingData?.type === 'turnover') {
@@ -1253,6 +1265,9 @@ export default function TimelineWindow({
                   ? undefined
                   : handleShowTurnover
               }
+              users={users}
+              onUpdateSchedule={updateTurnoverTaskSchedule}
+              onUpdateAssignment={updateTurnoverTaskAssignment}
             />
           ) : floatingData.type === 'project' && projectFields ? (
             <ProjectDetailPanel

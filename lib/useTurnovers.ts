@@ -210,6 +210,12 @@ export function useTurnovers() {
         return { ...prev, tasks: updatedTasks };
       });
 
+      // Also update fullscreenTask if it's the same task
+      setFullscreenTask((prev) => {
+        if (!prev || prev.task_id !== taskId) return prev;
+        return { ...prev, assigned_users: assignedUsers };
+      });
+
       // Update response array
       setResponse((prevResponse) => {
         if (!prevResponse) return prevResponse;
@@ -256,6 +262,12 @@ export function useTurnovers() {
         );
 
         return { ...prev, tasks: updatedTasks };
+      });
+
+      // Also update fullscreenTask if it's the same task
+      setFullscreenTask((prev) => {
+        if (!prev || prev.task_id !== taskId) return prev;
+        return { ...prev, scheduled_date: scheduledDate, scheduled_time: scheduledTime };
       });
 
       // Update response array

@@ -18,6 +18,8 @@ interface FloatingWindowProps {
   onUpdateTaskStatus: (taskId: string, status: string) => void;
   onSaveTaskForm: (taskId: string, formData: Record<string, unknown>) => Promise<void>;
   setLocalTask: (task: Task) => void;
+  onUpdateTaskSchedule?: (taskId: string, scheduledDate: string | null, scheduledTime: string | null) => void;
+  onUpdateTaskAssignment?: (taskId: string, userIds: string[]) => void;
   // Project props
   users: User[];
   projectFields: ProjectFormFields | null;
@@ -63,6 +65,8 @@ export function FloatingWindow({
   onUpdateTaskStatus,
   onSaveTaskForm,
   setLocalTask,
+  onUpdateTaskSchedule,
+  onUpdateTaskAssignment,
   // Project props
   users,
   projectFields,
@@ -218,6 +222,9 @@ export function FloatingWindow({
             onUpdateStatus={onUpdateTaskStatus}
             onSaveForm={onSaveTaskForm}
             setTask={setLocalTask}
+            users={users}
+            onUpdateSchedule={onUpdateTaskSchedule}
+            onUpdateAssignment={onUpdateTaskAssignment}
           />
         ) : projectFields ? (
           <ProjectDetailPanel

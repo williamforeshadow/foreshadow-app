@@ -33,6 +33,8 @@ interface DynamicCleaningFormProps {
   template: Template | null;
   formMetadata?: any;
   onSave: (formData: any) => Promise<void>;
+  readOnly?: boolean;
+  onValidationChange?: (allRequiredFilled: boolean) => void;
 }
 
 function DynamicCleaningForm({ 
@@ -40,7 +42,9 @@ function DynamicCleaningForm({
   propertyName, 
   template, 
   formMetadata, 
-  onSave
+  onSave,
+  readOnly = false,
+  onValidationChange,
 }: DynamicCleaningFormProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [formValues, setFormValues] = useState<Record<string, any>>({});
@@ -91,6 +95,34 @@ function DynamicCleaningForm({
   const updateValue = useCallback((fieldId: string, value: any) => {
     setFormValues(prev => ({ ...prev, [fieldId]: value }));
   }, []);
+
+  // Check if all required fields are filled and notify parent
+  useEffect(() => {
+    if (!onValidationChange || !template) return;
+
+    const allFilled = template.fields.every(field => {
+      if (field.type === 'separator') return true;
+      if (!field.required) return true;
+
+      const value = formValues[field.id];
+      switch (field.type) {
+        case 'rating':
+        case 'yes-no':
+        case 'text':
+          return value !== undefined && value !== '';
+        case 'checkbox':
+          return value === true;
+        case 'photo':
+          return value !== undefined && value !== '';
+        case 'photos':
+          return Array.isArray(value) && value.length > 0;
+        default:
+          return value !== undefined && value !== '';
+      }
+    });
+
+    onValidationChange(allFilled);
+  }, [formValues, template, onValidationChange]);
 
   // Get current form values - exposed for external save
   // Enriched with labels so AI can understand field context
@@ -192,19 +224,22 @@ function DynamicCleaningForm({
         return (
           <Field key={field.id}>
             <FieldLabel>
-              {field.label} {field.required && <span className="text-red-500">*</span>}
+              {field.label} {field.required && !readOnly && <span className="text-red-500">*</span>}
             </FieldLabel>
-            <div className="flex gap-2">
+            <div className={`flex gap-2 ${readOnly ? 'pointer-events-none' : ''}`}>
               {[1, 2, 3, 4, 5].map((rating) => (
                 <button
                   key={rating}
                   type="button"
                   onClick={() => updateValue(field.id, rating.toString())}
                   style={{ touchAction: 'manipulation' }}
+                  tabIndex={readOnly ? -1 : undefined}
                   className={`w-12 h-12 rounded-lg border-2 text-sm font-medium transition-all ${
-                    value === rating.toString()
-                      ? 'bg-emerald-500 border-emerald-500 text-white'
-                      : 'border-neutral-300 dark:border-neutral-600 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
+                    readOnly
+                      ? 'border-neutral-200 dark:border-neutral-700 text-neutral-400 dark:text-neutral-600 opacity-50'
+                      : value === rating.toString()
+                        ? 'bg-emerald-500 border-emerald-500 text-white'
+                        : 'border-neutral-300 dark:border-neutral-600 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
                   }`}
                 >
                   {rating}
@@ -219,17 +254,20 @@ function DynamicCleaningForm({
         return (
           <Field key={field.id}>
             <FieldLabel>
-              {field.label} {field.required && <span className="text-red-500">*</span>}
+              {field.label} {field.required && !readOnly && <span className="text-red-500">*</span>}
             </FieldLabel>
-            <div className="flex gap-3">
+            <div className={`flex gap-3 ${readOnly ? 'pointer-events-none' : ''}`}>
               <button
                 type="button"
                 onClick={() => updateValue(field.id, 'yes')}
                 style={{ touchAction: 'manipulation' }}
+                tabIndex={readOnly ? -1 : undefined}
                 className={`flex-1 py-3 px-5 rounded-lg border-2 text-sm font-medium transition-all ${
-                  value === 'yes'
-                    ? 'bg-emerald-500 border-emerald-500 text-white'
-                    : 'border-neutral-300 dark:border-neutral-600 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
+                  readOnly
+                    ? 'border-neutral-200 dark:border-neutral-700 text-neutral-400 dark:text-neutral-600 opacity-50'
+                    : value === 'yes'
+                      ? 'bg-emerald-500 border-emerald-500 text-white'
+                      : 'border-neutral-300 dark:border-neutral-600 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
                 }`}
               >
                 Yes
@@ -238,10 +276,13 @@ function DynamicCleaningForm({
                 type="button"
                 onClick={() => updateValue(field.id, 'no')}
                 style={{ touchAction: 'manipulation' }}
+                tabIndex={readOnly ? -1 : undefined}
                 className={`flex-1 py-3 px-5 rounded-lg border-2 text-sm font-medium transition-all ${
-                  value === 'no'
-                    ? 'bg-red-500 border-red-500 text-white'
-                    : 'border-neutral-300 dark:border-neutral-600 hover:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
+                  readOnly
+                    ? 'border-neutral-200 dark:border-neutral-700 text-neutral-400 dark:text-neutral-600 opacity-50'
+                    : value === 'no'
+                      ? 'bg-red-500 border-red-500 text-white'
+                      : 'border-neutral-300 dark:border-neutral-600 hover:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
                 }`}
               >
                 No
@@ -255,24 +296,31 @@ function DynamicCleaningForm({
           <Field key={field.id}>
             <button
               type="button"
-              onClick={() => updateValue(field.id, !value)}
-              className="flex items-center gap-4 cursor-pointer group p-3 rounded-lg border border-transparent hover:border-neutral-200 dark:hover:border-neutral-700 transition-colors w-full text-left"
+              onClick={readOnly ? undefined : () => updateValue(field.id, !value)}
+              className={`flex items-center justify-between gap-4 p-3 rounded-lg border border-transparent transition-colors w-full text-left ${
+                readOnly
+                  ? 'pointer-events-none'
+                  : 'cursor-pointer group hover:border-neutral-200 dark:hover:border-neutral-700'
+              }`}
               style={{ touchAction: 'manipulation' }}
+              tabIndex={readOnly ? -1 : undefined}
             >
+              <FieldLabel className={`!mb-0 ${readOnly ? '' : ''}`}>
+                {field.label} {field.required && !readOnly && <span className="text-red-500">*</span>}
+              </FieldLabel>
               <div className={`w-7 h-7 rounded-md border-2 flex items-center justify-center transition-all flex-shrink-0 ${
-                value
-                  ? 'bg-emerald-500 border-emerald-500'
-                  : 'border-neutral-300 dark:border-neutral-600 group-hover:border-emerald-400'
+                readOnly
+                  ? 'border-neutral-200 dark:border-neutral-700 opacity-50'
+                  : value
+                    ? 'bg-emerald-500 border-emerald-500'
+                    : 'border-neutral-300 dark:border-neutral-600 group-hover:border-emerald-400'
               }`}>
-                {value && (
+                {value && !readOnly && (
                   <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                   </svg>
                 )}
               </div>
-              <span className="text-sm font-medium text-neutral-900 dark:text-white">
-                {field.label} {field.required && <span className="text-red-500">*</span>}
-              </span>
             </button>
           </Field>
         );
@@ -282,19 +330,32 @@ function DynamicCleaningForm({
         return (
           <Field key={field.id}>
             <FieldLabel>
-              {field.label} {field.required && <span className="text-red-500">*</span>}
+              {field.label} {field.required && !readOnly && <span className="text-red-500">*</span>}
             </FieldLabel>
-            <PhotoUpload
-              cleaningId={cleaningId}
-              fieldId={field.id}
-              value={value}
-              onChange={(newValue) => updateValue(field.id, newValue)}
-              multiple={field.type === 'photos'}
-              maxPhotos={field.options?.maxPhotos || 5}
-              required={field.required}
-            />
-            {field.type === 'photos' && (
-              <FieldDescription>Upload up to {field.options?.maxPhotos || 5} photos</FieldDescription>
+            {readOnly ? (
+              <div className="flex items-center gap-2 py-3 px-4 rounded-lg border-2 border-dashed border-neutral-200 dark:border-neutral-700 opacity-50">
+                <svg className="w-5 h-5 text-neutral-400 dark:text-neutral-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="text-sm text-neutral-400 dark:text-neutral-600">
+                  {field.type === 'photos' ? 'Photo upload' : 'Photo upload'}
+                </span>
+              </div>
+            ) : (
+              <>
+                <PhotoUpload
+                  cleaningId={cleaningId}
+                  fieldId={field.id}
+                  value={value}
+                  onChange={(newValue) => updateValue(field.id, newValue)}
+                  multiple={field.type === 'photos'}
+                  maxPhotos={field.options?.maxPhotos || 5}
+                  required={field.required}
+                />
+                {field.type === 'photos' && (
+                  <FieldDescription>Upload up to {field.options?.maxPhotos || 5} photos</FieldDescription>
+                )}
+              </>
             )}
           </Field>
         );
@@ -304,14 +365,16 @@ function DynamicCleaningForm({
         return (
           <Field key={field.id}>
             <FieldLabel>
-              {field.label} {field.required && <span className="text-red-500">*</span>}
+              {field.label} {field.required && !readOnly && <span className="text-red-500">*</span>}
             </FieldLabel>
             <Textarea
               value={value || ''}
               onChange={(e) => updateValue(field.id, e.target.value)}
-              placeholder={`Enter ${field.label.toLowerCase()}`}
-              rows={3}
-              className="resize-none"
+              placeholder={readOnly ? '' : `Enter ${field.label.toLowerCase()}`}
+              rows={readOnly ? 2 : 3}
+              className={`resize-none ${readOnly ? 'pointer-events-none opacity-50 !bg-transparent' : ''}`}
+              readOnly={readOnly}
+              tabIndex={readOnly ? -1 : undefined}
             />
           </Field>
         );
@@ -319,19 +382,21 @@ function DynamicCleaningForm({
   };
 
   return (
-    <div className="w-full">
-      {/* Header */}
-      <div className="text-center mb-6">
-        <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
-          {template.name}
-        </h3>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
-          {propertyName}
-        </p>
-      </div>
+    <div className={`w-full ${readOnly ? 'opacity-60' : ''}`}>
+      {/* Header — hidden in readOnly preview */}
+      {!readOnly && (
+        <div className="text-center mb-6">
+          <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
+            {template.name}
+          </h3>
+          <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
+            {propertyName}
+          </p>
+        </div>
+      )}
 
       {/* Dynamic Form */}
-      <form onSubmit={(e) => { e.preventDefault(); saveForm(); }}>
+      <form onSubmit={(e) => { e.preventDefault(); if (!readOnly) saveForm(); }}>
         <div className="space-y-5">
           {template.fields.map(field => renderField(field))}
         </div>

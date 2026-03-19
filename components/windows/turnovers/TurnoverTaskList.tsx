@@ -227,18 +227,21 @@ export function TurnoverTaskList({
       >
         <div className="flex items-center gap-3">
           {/* Left: icon badge */}
-          <div className="w-9 h-9 rounded-lg bg-white/20 dark:bg-white/[0.08] backdrop-blur-sm flex items-center justify-center shrink-0 self-center">
+          <div className="w-9 h-9 rounded-lg bg-black/10 dark:bg-black/40 flex items-center justify-center shrink-0 self-center">
             <DeptIcon className="w-4.5 h-4.5 text-neutral-600 dark:text-neutral-300" />
           </div>
 
           {/* Middle: title + date/time stacked */}
-          <div className="flex flex-col gap-1 flex-1 min-w-0">
+          <div className="flex flex-col gap-2 flex-1 min-w-0">
             <span className="text-sm font-medium truncate flex items-center gap-3">{task.template_name || 'Unnamed Task'}<DiamondIcon size={10} className="shrink-0 opacity-40" /></span>
-            <div className="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+            <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 dark:text-neutral-400 px-2 py-1 rounded-lg bg-black/10 dark:bg-black/40 w-fit">
+              <svg className="w-3 h-3 shrink-0 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
               <Popover modal>
                 <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
                   <button className="hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors">
-                    {task.scheduled_date ? new Date(task.scheduled_date + 'T00:00:00').toLocaleDateString() : 'Date'}
+                    {task.scheduled_date ? new Date(task.scheduled_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Date'}
                   </button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start" onClick={(e) => e.stopPropagation()}>
