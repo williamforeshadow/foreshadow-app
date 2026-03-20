@@ -41,4 +41,17 @@ function HoverCardContent({
   )
 }
 
-export { HoverCard, HoverCardTrigger, HoverCardContent }
+function HoverCardArrow({
+  className,
+  ...props
+}: React.ComponentProps<typeof HoverCardPrimitive.Arrow>) {
+  return (
+    <HoverCardPrimitive.Arrow
+      data-slot="hover-card-arrow"
+      className={cn("", className)}
+      {...props}
+    />
+  )
+}
+
+export { HoverCard, HoverCardTrigger, HoverCardContent, HoverCardArrow }

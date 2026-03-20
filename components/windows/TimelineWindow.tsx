@@ -6,6 +6,7 @@ import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
+  HoverCardArrow,
 } from '@/components/ui/hover-card';
 import { useTimeline } from '@/lib/useTimeline';
 import { getActiveTurnoverForProperty } from '@/lib/turnoverUtils';
@@ -1026,102 +1027,79 @@ export default function TimelineWindow({
                               </div>
                             </div>
                           </HoverCardTrigger>
-                          <HoverCardContent side="right" align="start" sideOffset={0} collisionPadding={16} className="w-72 p-0 glass-card bg-white/90 dark:bg-neutral-900/95 border-white/30 dark:border-white/10">
+                          <HoverCardContent side="right" align="start" sideOffset={4} collisionPadding={16} className="w-72 p-0 glass-card bg-white/90 dark:bg-neutral-900/95 border-white/30 dark:border-white/10">
+                            <HoverCardArrow className="fill-white/90 dark:fill-neutral-900" />
                             {/* Header */}
                             <div className="px-3 py-2 border-b border-white/20 dark:border-white/10">
                               <p className="text-sm font-medium">{property}</p>
                             </div>
                             
                             {/* Tasks Section */}
-                            <div className="px-3 py-2 border-b border-white/20 dark:border-white/10">
-                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                            <div className="px-2 py-2 border-b border-white/20 dark:border-white/10">
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
                                 Active Turnover: ({activeTurnover.completed_tasks || 0}/{activeTurnover.total_tasks || 0})
                               </p>
-                              <div className="space-y-0.5 max-h-40 overflow-y-auto subtle-scrollbar">
+                              <div className="flex flex-col gap-2 max-h-40 overflow-y-auto subtle-scrollbar">
                                 {activeTurnover.tasks && activeTurnover.tasks.length > 0 ? (
-                                  activeTurnover.tasks.map((task) => (
-                                    <div 
-                                      key={task.task_id} 
-                                      className={`flex items-center justify-between gap-2 py-2 px-2 -mx-2 rounded cursor-pointer border-l-2 border-transparent transition-colors ${
-                                        task.status === 'complete'
-                                          ? 'hover:bg-emerald-50/60 dark:hover:bg-emerald-500/10 hover:border-emerald-400/50 dark:hover:border-emerald-400/30'
-                                          : task.status === 'in_progress'
-                                          ? 'hover:bg-indigo-50/60 dark:hover:bg-indigo-500/10 hover:border-indigo-400/50 dark:hover:border-indigo-400/30'
-                                          : task.status === 'paused'
-                                          ? 'hover:bg-purple-50/60 dark:hover:bg-purple-500/10 hover:border-purple-400/50 dark:hover:border-purple-400/30'
-                                          : task.status === 'reopened'
-                                          ? 'hover:bg-orange-50/60 dark:hover:bg-orange-500/10 hover:border-orange-400/50 dark:hover:border-orange-400/30'
-                                          : 'hover:bg-amber-50/60 dark:hover:bg-amber-500/10 hover:border-amber-400/50 dark:hover:border-amber-400/30'
-                                      }`}
-                                      onClick={() => setFloatingData({
-                                        type: 'task',
-                                        item: task,
-                                        propertyName: activeTurnover.property_name,
-                                      })}
-                                    >
-                                      <span className="truncate text-sm">{task.template_name || task.type}</span>
-                                      <span className={`text-[11px] px-1.5 py-0.5 rounded border flex-shrink-0 capitalize ${
-                                        task.status === 'complete' 
-                                          ? 'bg-emerald-100/60 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 border-emerald-300/30 dark:border-emerald-500/20'
-                                          : task.status === 'in_progress'
-                                          ? 'bg-indigo-100/60 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-400 border-indigo-300/30 dark:border-indigo-500/20'
-                                          : task.status === 'paused'
-                                          ? 'bg-purple-100/60 text-purple-700 dark:bg-purple-500/15 dark:text-purple-400 border-purple-300/30 dark:border-purple-500/20'
-                                          : task.status === 'reopened'
-                                          ? 'bg-orange-100/60 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400 border-orange-300/30 dark:border-orange-500/20'
-                                          : 'bg-amber-100/60 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 border-amber-300/30 dark:border-amber-500/20'
-                                      }`}>
-                                        {task.status?.replace('_', ' ')}
-                                      </span>
-                                    </div>
-                                  ))
+                                  activeTurnover.tasks.map((task) => {
+                                    const rowBase = 'glass-card glass-sheen relative overflow-hidden rounded-lg';
+                                    const rowStyle = task.status === 'complete'
+                                      ? `${rowBase} bg-emerald-50/55 dark:bg-emerald-500/[0.12] border border-emerald-200/40 dark:border-emerald-400/20`
+                                      : task.status === 'in_progress' || task.status === 'paused'
+                                      ? `${rowBase} bg-indigo-50/55 dark:bg-indigo-500/[0.12] border border-indigo-300/40 dark:border-indigo-400/20`
+                                      : task.status === 'contingent'
+                                      ? `${rowBase} bg-white/45 dark:bg-white/[0.05] border border-dashed border-neutral-400/50 dark:border-white/15`
+                                      : `${rowBase} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`;
+                                    return (
+                                      <div 
+                                        key={task.task_id} 
+                                        className={`flex items-center justify-between gap-2 py-2 px-2.5 shrink-0 cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.01] active:scale-[0.99] ${rowStyle}`}
+                                        onClick={() => setFloatingData({
+                                          type: 'task',
+                                          item: task,
+                                          propertyName: activeTurnover.property_name,
+                                        })}
+                                      >
+                                        <span className="truncate text-sm">{task.template_name || task.type}</span>
+                                      </div>
+                                    );
+                                  })
                                 ) : (
-                                  <p className="text-sm text-muted-foreground">No tasks</p>
+                                  <p className="text-sm text-muted-foreground px-1">No tasks</p>
                                 )}
                               </div>
                             </div>
                             
                             {/* Projects Section */}
-                            <div className="px-3 py-2">
-                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                            <div className="px-2 py-2">
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
                                 Projects ({propertyProjects.length})
                               </p>
-                              <div className="space-y-0.5 max-h-40 overflow-y-auto subtle-scrollbar">
+                              <div className="flex flex-col gap-2 max-h-40 overflow-y-auto subtle-scrollbar">
                                 {propertyProjects.length > 0 ? (
-                                  propertyProjects.map((project) => (
-                                    <div 
-                                      key={project.id} 
-                                      className={`flex items-center justify-between gap-2 py-2 px-2 -mx-2 rounded cursor-pointer border-l-2 border-transparent transition-colors ${
-                                        project.status === 'complete'
-                                          ? 'hover:bg-emerald-50/60 dark:hover:bg-emerald-500/10 hover:border-emerald-400/50 dark:hover:border-emerald-400/30'
-                                          : project.status === 'in_progress'
-                                          ? 'hover:bg-indigo-50/60 dark:hover:bg-indigo-500/10 hover:border-indigo-400/50 dark:hover:border-indigo-400/30'
-                                          : project.status === 'on_hold'
-                                          ? 'hover:bg-orange-50/60 dark:hover:bg-orange-500/10 hover:border-orange-400/50 dark:hover:border-orange-400/30'
-                                          : 'hover:bg-amber-50/60 dark:hover:bg-amber-500/10 hover:border-amber-400/50 dark:hover:border-amber-400/30'
-                                      }`}
-                                      onClick={() => setFloatingData({
-                                        type: 'project',
-                                        item: project,
-                                        propertyName: activeTurnover.property_name,
-                                      })}
-                                    >
-                                      <span className="truncate text-sm">{project.title}</span>
-                                      <span className={`text-[11px] px-1.5 py-0.5 rounded border flex-shrink-0 capitalize ${
-                                        project.status === 'complete' 
-                                          ? 'bg-emerald-100/60 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 border-emerald-300/30 dark:border-emerald-500/20'
-                                          : project.status === 'in_progress'
-                                          ? 'bg-indigo-100/60 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-400 border-indigo-300/30 dark:border-indigo-500/20'
-                                          : project.status === 'on_hold'
-                                          ? 'bg-orange-100/60 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400 border-orange-300/30 dark:border-orange-500/20'
-                                          : 'bg-amber-100/60 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 border-amber-300/30 dark:border-amber-500/20'
-                                      }`}>
-                                        {project.status?.replace('_', ' ')}
-                                      </span>
-                                    </div>
-                                  ))
+                                  propertyProjects.map((project) => {
+                                    const rowBase = 'glass-card glass-sheen relative overflow-hidden rounded-lg';
+                                    const rowStyle = project.status === 'complete'
+                                      ? `${rowBase} bg-emerald-50/55 dark:bg-emerald-500/[0.12] border border-emerald-200/40 dark:border-emerald-400/20`
+                                      : project.status === 'in_progress'
+                                      ? `${rowBase} bg-indigo-50/55 dark:bg-indigo-500/[0.12] border border-indigo-300/40 dark:border-indigo-400/20`
+                                      : `${rowBase} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`;
+                                    return (
+                                      <div 
+                                        key={project.id} 
+                                        className={`flex items-center justify-between gap-2 py-2 px-2.5 shrink-0 cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.01] active:scale-[0.99] ${rowStyle}`}
+                                        onClick={() => setFloatingData({
+                                          type: 'project',
+                                          item: project,
+                                          propertyName: activeTurnover.property_name,
+                                        })}
+                                      >
+                                        <span className="truncate text-sm">{project.title}</span>
+                                      </div>
+                                    );
+                                  })
                                 ) : (
-                                  <p className="text-sm text-muted-foreground">No projects</p>
+                                  <p className="text-sm text-muted-foreground px-1">No projects</p>
                                 )}
                               </div>
                             </div>
