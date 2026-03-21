@@ -26,6 +26,7 @@ interface ScheduledItemsCellProps {
   tasks: (Task & { property_name: string })[];
   projects: Project[];
   viewMode?: 'week' | 'month';
+  expanded?: boolean;
   onTaskClick?: (task: Task) => void;
   onProjectClick?: (project: Project) => void;
 }
@@ -158,6 +159,7 @@ export function ScheduledItemsCell({
   tasks,
   projects,
   viewMode = 'week',
+  expanded = false,
   onTaskClick,
   onProjectClick,
 }: ScheduledItemsCellProps) {
@@ -207,53 +209,67 @@ export function ScheduledItemsCell({
         {/* Tasks Icon + Task Assignees */}
         {scheduledTasks.length > 0 && (
           <>
-            <HoverCard openDelay={0} closeDelay={100}>
-              <HoverCardTrigger asChild>
-                <div
-                  className={cn(
-                    "flex items-center justify-center w-6 h-6 rounded cursor-pointer transition-colors glass-sheen relative overflow-hidden shadow-sm",
-                    // Contingent-only: dashed neutral outline
-                    !hasApproved && hasContingent && "border-[1.5px] border-dashed border-neutral-400/70 text-white dark:text-white bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700",
-                    // Status-driven glass colors (when approved tasks exist) — icon stays white
-                    hasApproved && taskFolderStatus === 'not_started' && "bg-amber-100 dark:bg-amber-900 border border-amber-200/40 dark:border-amber-400/20 text-white dark:text-white hover:bg-amber-200 dark:hover:bg-amber-800",
-                    hasApproved && taskFolderStatus === 'in_progress' && "bg-indigo-100 dark:bg-indigo-900 border border-indigo-300/40 dark:border-indigo-400/20 text-white dark:text-white hover:bg-indigo-200 dark:hover:bg-indigo-800",
-                    hasApproved && taskFolderStatus === 'complete' && "bg-emerald-100 dark:bg-emerald-900 border border-emerald-200/40 dark:border-emerald-400/20 text-white dark:text-white hover:bg-emerald-200 dark:hover:bg-emerald-800",
-                    hasApproved && taskFolderStatus === 'no_tasks' && "bg-neutral-100 dark:bg-neutral-800 border border-neutral-300/35 dark:border-white/12 text-white dark:text-white hover:bg-neutral-200 dark:hover:bg-neutral-700",
-                    // Dashed border overlay when mixed (approved + contingent)
-                    hasApproved && hasContingent && "border-[1.5px] border-dashed border-neutral-400/70 dark:border-neutral-400/70",
-                  )}
-                >
-                  <DiamondIcon size={14} />
-                </div>
-              </HoverCardTrigger>
-              <HoverCardContent side="bottom" align="start" sideOffset={4} collisionPadding={16} className="w-72 p-0 glass-card bg-white/90 dark:bg-neutral-900/95 border-white/30 dark:border-white/10">
-                <HoverCardArrow className="fill-white/90 dark:fill-neutral-900" />
-                <div className="p-2 flex flex-col gap-2 max-h-48 overflow-y-auto subtle-scrollbar">
-                  {scheduledTasks.map((task) => (
-                    <div
-                      key={task.task_id}
-                      className={cn(
-                        "flex items-center justify-between gap-2 py-2 px-2.5 shrink-0 cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.01] active:scale-[0.99]",
-                        getRowStyles(task.status)
-                      )}
-                      onClick={() => onTaskClick?.(task)}
-                    >
-                      <span className="truncate text-sm">{task.template_name || task.type}</span>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {task.assigned_users?.slice(0, 1).map((user) => (
-                          <UserAvatar
-                            key={user.user_id}
-                            src={user.avatar}
-                            name={user.name || 'Unknown'}
-                            size="xs"
-                          />
-                        ))}
+            {expanded ? (
+              /* When property is expanded, show icon only — no hover dropdown */
+              <div
+                className={cn(
+                  "flex items-center justify-center w-6 h-6 rounded transition-colors glass-sheen relative overflow-hidden shadow-sm",
+                  !hasApproved && hasContingent && "border-[1.5px] border-dashed border-neutral-400/70 text-white dark:text-white bg-neutral-100 dark:bg-neutral-800",
+                  hasApproved && taskFolderStatus === 'not_started' && "bg-amber-100 dark:bg-amber-900 border border-amber-200/40 dark:border-amber-400/20 text-white dark:text-white",
+                  hasApproved && taskFolderStatus === 'in_progress' && "bg-indigo-100 dark:bg-indigo-900 border border-indigo-300/40 dark:border-indigo-400/20 text-white dark:text-white",
+                  hasApproved && taskFolderStatus === 'complete' && "bg-emerald-100 dark:bg-emerald-900 border border-emerald-200/40 dark:border-emerald-400/20 text-white dark:text-white",
+                  hasApproved && taskFolderStatus === 'no_tasks' && "bg-neutral-100 dark:bg-neutral-800 border border-neutral-300/35 dark:border-white/12 text-white dark:text-white",
+                  hasApproved && hasContingent && "border-[1.5px] border-dashed border-neutral-400/70 dark:border-neutral-400/70",
+                )}
+              >
+                <DiamondIcon size={14} />
+              </div>
+            ) : (
+              <HoverCard openDelay={0} closeDelay={100}>
+                <HoverCardTrigger asChild>
+                  <div
+                    className={cn(
+                      "flex items-center justify-center w-6 h-6 rounded cursor-pointer transition-colors glass-sheen relative overflow-hidden shadow-sm",
+                      !hasApproved && hasContingent && "border-[1.5px] border-dashed border-neutral-400/70 text-white dark:text-white bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700",
+                      hasApproved && taskFolderStatus === 'not_started' && "bg-amber-100 dark:bg-amber-900 border border-amber-200/40 dark:border-amber-400/20 text-white dark:text-white hover:bg-amber-200 dark:hover:bg-amber-800",
+                      hasApproved && taskFolderStatus === 'in_progress' && "bg-indigo-100 dark:bg-indigo-900 border border-indigo-300/40 dark:border-indigo-400/20 text-white dark:text-white hover:bg-indigo-200 dark:hover:bg-indigo-800",
+                      hasApproved && taskFolderStatus === 'complete' && "bg-emerald-100 dark:bg-emerald-900 border border-emerald-200/40 dark:border-emerald-400/20 text-white dark:text-white hover:bg-emerald-200 dark:hover:bg-emerald-800",
+                      hasApproved && taskFolderStatus === 'no_tasks' && "bg-neutral-100 dark:bg-neutral-800 border border-neutral-300/35 dark:border-white/12 text-white dark:text-white hover:bg-neutral-200 dark:hover:bg-neutral-700",
+                      hasApproved && hasContingent && "border-[1.5px] border-dashed border-neutral-400/70 dark:border-neutral-400/70",
+                    )}
+                  >
+                    <DiamondIcon size={14} />
+                  </div>
+                </HoverCardTrigger>
+                <HoverCardContent side="bottom" align="start" sideOffset={4} collisionPadding={16} className="w-72 p-0 glass-card bg-white/90 dark:bg-neutral-900/95 border-white/30 dark:border-white/10">
+                  <HoverCardArrow className="fill-white/90 dark:fill-neutral-900" />
+                  <div className="p-2 flex flex-col gap-2 max-h-48 overflow-y-auto subtle-scrollbar">
+                    {scheduledTasks.map((task) => (
+                      <div
+                        key={task.task_id}
+                        className={cn(
+                          "flex items-center justify-between gap-2 py-2 px-2.5 shrink-0 cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.01] active:scale-[0.99]",
+                          getRowStyles(task.status)
+                        )}
+                        onClick={() => onTaskClick?.(task)}
+                      >
+                        <span className="truncate text-sm">{task.template_name || task.type}</span>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {task.assigned_users?.slice(0, 1).map((user) => (
+                            <UserAvatar
+                              key={user.user_id}
+                              src={user.avatar}
+                              name={user.name || 'Unknown'}
+                              size="xs"
+                            />
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </HoverCardContent>
-            </HoverCard>
+                    ))}
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
+            )}
             {showAvatars && <AvatarGroup users={taskUsers} />}
           </>
         )}
@@ -263,48 +279,63 @@ export function ScheduledItemsCell({
           const projectFolderStatus = getProjectFolderStatus(scheduledProjects);
           return (
           <>
-            <HoverCard openDelay={0} closeDelay={100}>
-              <HoverCardTrigger asChild>
-                <div
-                  className={cn(
-                    "flex items-center justify-center w-6 h-6 rounded cursor-pointer transition-colors glass-sheen relative overflow-hidden shadow-sm",
-                    projectFolderStatus === 'not_started' && "bg-amber-100 dark:bg-amber-900 border border-amber-200/40 dark:border-amber-400/20 text-white dark:text-white hover:bg-amber-200 dark:hover:bg-amber-800",
-                    projectFolderStatus === 'in_progress' && "bg-indigo-100 dark:bg-indigo-900 border border-indigo-300/40 dark:border-indigo-400/20 text-white dark:text-white hover:bg-indigo-200 dark:hover:bg-indigo-800",
-                    projectFolderStatus === 'complete' && "bg-emerald-100 dark:bg-emerald-900 border border-emerald-200/40 dark:border-emerald-400/20 text-white dark:text-white hover:bg-emerald-200 dark:hover:bg-emerald-800",
-                    projectFolderStatus === 'no_tasks' && "bg-neutral-100 dark:bg-neutral-800 border border-neutral-300/35 dark:border-white/12 text-white dark:text-white hover:bg-neutral-200 dark:hover:bg-neutral-700",
-                  )}
-                >
-                  <HexagonIcon size={14} />
-                </div>
-              </HoverCardTrigger>
-              <HoverCardContent side="bottom" align="start" sideOffset={4} collisionPadding={16} className="w-72 p-0 glass-card bg-white/90 dark:bg-neutral-900/95 border-white/30 dark:border-white/10">
-                <HoverCardArrow className="fill-white/90 dark:fill-neutral-900" />
-                <div className="p-2 flex flex-col gap-2 max-h-48 overflow-y-auto subtle-scrollbar">
-                  {scheduledProjects.map((project) => (
-                    <div
-                      key={project.id}
-                      className={cn(
-                        "flex items-center justify-between gap-2 py-2 px-2.5 shrink-0 cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.01] active:scale-[0.99]",
-                        getRowStyles(project.status)
-                      )}
-                      onClick={() => onProjectClick?.(project)}
-                    >
-                      <span className="truncate text-sm">{project.title}</span>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {project.project_assignments?.slice(0, 1).map((assignment) => (
-                          <UserAvatar
-                            key={assignment.user_id}
-                            src={assignment.user?.avatar}
-                            name={assignment.user?.name || 'Unknown'}
-                            size="xs"
-                          />
-                        ))}
+            {expanded ? (
+              /* When property is expanded, show icon only — no hover dropdown */
+              <div
+                className={cn(
+                  "flex items-center justify-center w-6 h-6 rounded transition-colors glass-sheen relative overflow-hidden shadow-sm",
+                  projectFolderStatus === 'not_started' && "bg-amber-100 dark:bg-amber-900 border border-amber-200/40 dark:border-amber-400/20 text-white dark:text-white",
+                  projectFolderStatus === 'in_progress' && "bg-indigo-100 dark:bg-indigo-900 border border-indigo-300/40 dark:border-indigo-400/20 text-white dark:text-white",
+                  projectFolderStatus === 'complete' && "bg-emerald-100 dark:bg-emerald-900 border border-emerald-200/40 dark:border-emerald-400/20 text-white dark:text-white",
+                  projectFolderStatus === 'no_tasks' && "bg-neutral-100 dark:bg-neutral-800 border border-neutral-300/35 dark:border-white/12 text-white dark:text-white",
+                )}
+              >
+                <HexagonIcon size={14} />
+              </div>
+            ) : (
+              <HoverCard openDelay={0} closeDelay={100}>
+                <HoverCardTrigger asChild>
+                  <div
+                    className={cn(
+                      "flex items-center justify-center w-6 h-6 rounded cursor-pointer transition-colors glass-sheen relative overflow-hidden shadow-sm",
+                      projectFolderStatus === 'not_started' && "bg-amber-100 dark:bg-amber-900 border border-amber-200/40 dark:border-amber-400/20 text-white dark:text-white hover:bg-amber-200 dark:hover:bg-amber-800",
+                      projectFolderStatus === 'in_progress' && "bg-indigo-100 dark:bg-indigo-900 border border-indigo-300/40 dark:border-indigo-400/20 text-white dark:text-white hover:bg-indigo-200 dark:hover:bg-indigo-800",
+                      projectFolderStatus === 'complete' && "bg-emerald-100 dark:bg-emerald-900 border border-emerald-200/40 dark:border-emerald-400/20 text-white dark:text-white hover:bg-emerald-200 dark:hover:bg-emerald-800",
+                      projectFolderStatus === 'no_tasks' && "bg-neutral-100 dark:bg-neutral-800 border border-neutral-300/35 dark:border-white/12 text-white dark:text-white hover:bg-neutral-200 dark:hover:bg-neutral-700",
+                    )}
+                  >
+                    <HexagonIcon size={14} />
+                  </div>
+                </HoverCardTrigger>
+                <HoverCardContent side="bottom" align="start" sideOffset={4} collisionPadding={16} className="w-72 p-0 glass-card bg-white/90 dark:bg-neutral-900/95 border-white/30 dark:border-white/10">
+                  <HoverCardArrow className="fill-white/90 dark:fill-neutral-900" />
+                  <div className="p-2 flex flex-col gap-2 max-h-48 overflow-y-auto subtle-scrollbar">
+                    {scheduledProjects.map((project) => (
+                      <div
+                        key={project.id}
+                        className={cn(
+                          "flex items-center justify-between gap-2 py-2 px-2.5 shrink-0 cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.01] active:scale-[0.99]",
+                          getRowStyles(project.status)
+                        )}
+                        onClick={() => onProjectClick?.(project)}
+                      >
+                        <span className="truncate text-sm">{project.title}</span>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {project.project_assignments?.slice(0, 1).map((assignment) => (
+                            <UserAvatar
+                              key={assignment.user_id}
+                              src={assignment.user?.avatar}
+                              name={assignment.user?.name || 'Unknown'}
+                              size="xs"
+                            />
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </HoverCardContent>
-            </HoverCard>
+                    ))}
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
+            )}
             {showAvatars && <AvatarGroup users={projectUsers} />}
           </>
           );

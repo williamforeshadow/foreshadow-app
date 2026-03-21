@@ -2,12 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-  HoverCardArrow,
-} from '@/components/ui/hover-card';
+import { Popover, PopoverContent, PopoverTrigger, PopoverClose } from '@/components/ui/popover';
 import { useTimeline } from '@/lib/useTimeline';
 import { getActiveTurnoverForProperty } from '@/lib/turnoverUtils';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
@@ -24,6 +19,26 @@ import RectangleStackIcon from '@/components/icons/RectangleStackIcon';
 import type { Project, Task, User, ProjectFormFields, Turnover, TaskTemplate } from '@/lib/types';
 import type { useProjects } from '@/lib/useProjects';
 import type { Template } from '@/components/DynamicCleaningForm';
+import { cn } from '@/lib/utils';
+import { UserAvatar } from '@/components/ui/user-avatar';
+
+// Status-colored row styles — matches hover dropdown / TaskDetailPanel / TurnoverTaskList
+const getRowStyles = (status: string) => {
+  const base = 'glass-card glass-sheen relative overflow-hidden rounded-lg';
+  switch (status) {
+    case 'complete':
+      return `${base} bg-emerald-50/55 dark:bg-emerald-500/[0.12] border border-emerald-200/40 dark:border-emerald-400/20`;
+    case 'in_progress':
+    case 'paused':
+      return `${base} bg-indigo-50/55 dark:bg-indigo-500/[0.12] border border-indigo-300/40 dark:border-indigo-400/20`;
+    case 'contingent':
+      return `${base} bg-white/45 dark:bg-white/[0.05] border border-dashed border-neutral-400/50 dark:border-white/15`;
+    case 'on_hold':
+      return `${base} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`;
+    default:
+      return `${base} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`;
+  }
+};
 
 interface TimelineWindowProps {
   projects: Project[];
@@ -93,6 +108,26 @@ export default function TimelineWindow({
   const [newComment, setNewComment] = useState('');
   const [staffOpen, setStaffOpen] = useState(false);
   const [viewingAttachmentIndex, setViewingAttachmentIndex] = useState<number | null>(null);
+
+  // Expanded property rows in timeline grid
+  const [expandedProperties, setExpandedProperties] = useState<Set<string>>(new Set());
+  const togglePropertyExpanded = useCallback((property: string) => {
+    setExpandedProperties(prev => {
+      const next = new Set(prev);
+      if (next.has(property)) {
+        next.delete(property);
+      } else {
+        next.add(property);
+      }
+      return next;
+    });
+  }, []);
+  const toggleAllExpanded = useCallback(() => {
+    setExpandedProperties(prev => {
+      if (prev.size === properties.length) return new Set();
+      return new Set(properties);
+    });
+  }, [properties]);
   const [activitySheetOpen, setActivitySheetOpen] = useState(false);
 
   // ============================================================================
@@ -947,7 +982,16 @@ export default function TimelineWindow({
             }}
           >
             {/* Header Row - will stick when scrolling */}
-            <div className="bg-white/50 dark:bg-white/[0.08] backdrop-blur-xl px-2 py-1 text-xs font-semibold text-neutral-900 dark:text-white sticky left-0 top-0 z-20">
+            <div className="bg-white/50 dark:bg-white/[0.08] backdrop-blur-xl px-2 py-1 text-xs font-semibold text-neutral-900 dark:text-white sticky left-0 top-0 z-20 flex items-center gap-1.5">
+              <button
+                onClick={toggleAllExpanded}
+                className="p-0.5 rounded hover:bg-white/30 dark:hover:bg-white/10 transition-colors"
+                title={expandedProperties.size === properties.length ? 'Collapse all' : 'Expand all'}
+              >
+                <svg className={`w-3 h-3 transition-transform duration-200 ${expandedProperties.size === properties.length ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
               Property
             </div>
             {dateRange.map((date, idx) => {
@@ -1002,36 +1046,50 @@ export default function TimelineWindow({
                   className="contents"
                 >
                   {/* Property Name with Status Indicator */}
-                  <div className={`glass-card glass-sheen relative overflow-hidden px-2 py-1 text-xs font-medium text-neutral-900 dark:text-white sticky left-0 z-10 ${propertyCellBg} flex items-center`}>
+                  <div className={`glass-card glass-sheen relative overflow-hidden px-2 py-1 text-xs font-medium text-neutral-900 dark:text-white sticky left-0 z-10 ${propertyCellBg} flex items-center gap-1.5`}>
+                    <button
+                      onClick={() => togglePropertyExpanded(property)}
+                      className="p-0.5 rounded hover:bg-white/30 dark:hover:bg-white/10 transition-colors shrink-0"
+                    >
+                      <svg className={`w-3 h-3 transition-transform duration-200 ${expandedProperties.has(property) ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
                     <span className="truncate pr-24">{property}</span>
                     {activeTurnover && (() => {
                       const propertyProjects = projects.filter(p => p.property_name === activeTurnover.property_name);
                       
                       return (
-                        <HoverCard openDelay={0} closeDelay={0}>
-                          <HoverCardTrigger asChild>
-                            <div className="absolute right-0 top-0 bottom-0 w-28 flex items-center justify-end gap-1.5 pr-2 cursor-default">
-                              {/* Tasks icon + count - always show */}
-                              <div className="flex items-center gap-0.5 text-neutral-500 dark:text-neutral-400">
-                                <DiamondIcon size={12} />
-                                <span className="text-[10px] font-medium w-3 text-right">
-                                  {activeTurnover.tasks?.filter(t => t.status !== 'complete').length || 0}
-                                </span>
-                              </div>
-                              {/* Projects icon + count - always show */}
-                              <div className="flex items-center gap-0.5 text-neutral-500 dark:text-neutral-400">
-                                <HexagonIcon size={12} />
-                                <span className="text-[10px] font-medium w-3 text-right">
-                                  {propertyProjects.filter(p => p.status !== 'complete').length}
-                                </span>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <div className="absolute right-0 top-0 bottom-0 w-28 flex items-center justify-end pr-2 cursor-pointer">
+                              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-black/10 dark:bg-black/40 text-neutral-500 dark:text-neutral-400 hover:bg-black/15 dark:hover:bg-black/50 transition-colors">
+                                {/* Tasks icon + count */}
+                                <div className="flex items-center gap-0.5">
+                                  <DiamondIcon size={12} />
+                                  <span className="text-[10px] font-medium w-3 text-right">
+                                    {activeTurnover.tasks?.filter(t => t.status !== 'complete').length || 0}
+                                  </span>
+                                </div>
+                                {/* Projects icon + count */}
+                                <div className="flex items-center gap-0.5">
+                                  <HexagonIcon size={12} />
+                                  <span className="text-[10px] font-medium w-3 text-right">
+                                    {propertyProjects.filter(p => p.status !== 'complete').length}
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                          </HoverCardTrigger>
-                          <HoverCardContent side="right" align="start" sideOffset={4} collisionPadding={16} className="w-72 p-0 glass-card bg-white/90 dark:bg-neutral-900/95 border-white/30 dark:border-white/10">
-                            <HoverCardArrow className="fill-white/90 dark:fill-neutral-900" />
-                            {/* Header */}
-                            <div className="px-3 py-2 border-b border-white/20 dark:border-white/10">
+                          </PopoverTrigger>
+                          <PopoverContent side="right" align="start" sideOffset={4} collisionPadding={16} className="w-72 p-0 glass-card bg-white/90 dark:bg-neutral-900/95 border-white/30 dark:border-white/10">
+                            {/* Header with close button */}
+                            <div className="flex items-center justify-between px-3 py-2 border-b border-white/20 dark:border-white/10">
                               <p className="text-sm font-medium">{property}</p>
+                              <PopoverClose className="p-1 hover:bg-white/20 dark:hover:bg-white/10 rounded-md transition-colors text-neutral-500 dark:text-neutral-400">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </PopoverClose>
                             </div>
                             
                             {/* Tasks Section */}
@@ -1103,8 +1161,8 @@ export default function TimelineWindow({
                                 )}
                               </div>
                             </div>
-                          </HoverCardContent>
-                        </HoverCard>
+                          </PopoverContent>
+                        </Popover>
                       );
                     })()}
                   </div>
@@ -1169,6 +1227,7 @@ export default function TimelineWindow({
                           tasks={allScheduledTasks}
                           projects={scheduledProjects}
                           viewMode={view}
+                          expanded={expandedProperties.has(property)}
                           onTaskClick={(task) => setFloatingData({
                             type: 'task',
                             item: task,
@@ -1183,6 +1242,95 @@ export default function TimelineWindow({
                       </div>
                     );
                   })}
+
+                  {/* Expanded Detail Row */}
+                  {expandedProperties.has(property) && (
+                    <>
+                      {/* Property column for expanded row — empty */}
+                      <div className={`sticky left-0 z-10 border-b border-white/20 dark:border-white/10 ${propertyCellBg} backdrop-blur-sm`} />
+
+                      {/* Date columns for expanded row */}
+                      {dateRange.map((date, idx) => {
+                        const isTodayDate = isToday(date);
+                        const cellDateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                        const dateTasks = allScheduledTasks.filter(
+                          (t) => t.property_name === property && t.scheduled_date === cellDateStr
+                        );
+                        const dateProjects = scheduledProjects.filter(
+                          (p) => p.property_name === property && p.scheduled_date === cellDateStr
+                        );
+                        const hasItems = dateTasks.length > 0 || dateProjects.length > 0;
+
+                        return (
+                          <div
+                            key={`expanded-${idx}`}
+                            className={`border-b border-r border-white/20 dark:border-white/10 p-1.5 ${
+                              isTodayDate ? 'bg-neutral-500/10 dark:bg-white/[0.05]' : 'bg-white/20 dark:bg-white/[0.01]'
+                            }`}
+                          >
+                            {hasItems && (
+                              <div className="flex flex-col gap-2">
+                                {dateTasks.map((task) => (
+                                  <div
+                                    key={task.task_id}
+                                    className={cn(
+                                      "flex items-center justify-between gap-2 py-2 px-2.5 shrink-0 cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.01] active:scale-[0.99]",
+                                      getRowStyles(task.status)
+                                    )}
+                                    title={task.template_name || task.type}
+                                    onClick={() => setFloatingData({
+                                      type: 'task',
+                                      item: task,
+                                      propertyName: property,
+                                    })}
+                                  >
+                                    <span className="truncate text-sm">{task.template_name || task.type}</span>
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                      {task.assigned_users?.slice(0, 1).map((user) => (
+                                        <UserAvatar
+                                          key={user.user_id}
+                                          src={user.avatar}
+                                          name={user.name || 'Unknown'}
+                                          size="xs"
+                                        />
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                                {dateProjects.map((project) => (
+                                  <div
+                                    key={project.id}
+                                    className={cn(
+                                      "flex items-center justify-between gap-2 py-2 px-2.5 shrink-0 cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.01] active:scale-[0.99]",
+                                      getRowStyles(project.status)
+                                    )}
+                                    title={project.title}
+                                    onClick={() => setFloatingData({
+                                      type: 'project',
+                                      item: project,
+                                      propertyName: property,
+                                    })}
+                                  >
+                                    <span className="truncate text-sm">{project.title}</span>
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                      {project.project_assignments?.slice(0, 1).map((assignment) => (
+                                        <UserAvatar
+                                          key={assignment.user_id}
+                                          src={assignment.user?.avatar}
+                                          name={assignment.user?.name || 'Unknown'}
+                                          size="xs"
+                                        />
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
                 </div>
               );
             })}
