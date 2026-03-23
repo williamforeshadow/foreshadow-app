@@ -36,21 +36,27 @@ export async function POST() {
     let synced = 0;
     const errors: string[] = [];
 
+    // Collect all Hostaway reservation IDs we're syncing (for cleanup step)
+    const syncedHostawayIds = new Set<number>();
+
     for (let i = 0; i < reservations.length; i += BATCH) {
-      const rows = reservations.slice(i, i + BATCH).map((r: any) => ({
-        hostaway_reservation_id: r.id,
-        property_id: propIdMap.get(r.listingMapId) || null,
-        property_name:
-          r.listingName ||
-          listingsMap.get(r.listingMapId) ||
-          `Listing ${r.listingMapId}`,
-        guest_name:
-          [r.guestFirstName, r.guestLastName].filter(Boolean).join(' ') ||
-          'Unknown Guest',
-        check_in: r.arrivalDate,
-        check_out: r.departureDate,
-        updated_at: new Date().toISOString(),
-      }));
+      const rows = reservations.slice(i, i + BATCH).map((r: any) => {
+        syncedHostawayIds.add(r.id);
+        return {
+          hostaway_reservation_id: r.id,
+          property_id: propIdMap.get(r.listingMapId) || null,
+          property_name:
+            r.listingName ||
+            listingsMap.get(r.listingMapId) ||
+            `Listing ${r.listingMapId}`,
+          guest_name:
+            [r.guestFirstName, r.guestLastName].filter(Boolean).join(' ') ||
+            'Unknown Guest',
+          check_in: r.arrivalDate,
+          check_out: r.departureDate,
+          updated_at: new Date().toISOString(),
+        };
+      });
 
       const { error } = await supabase
         .from('reservations')
@@ -67,11 +73,48 @@ export async function POST() {
       }
     }
 
+    // 4. Remove cancelled/stale reservations
+    //    Any Hostaway reservation in Supabase that is NOT in the fresh pull
+    //    has been cancelled, declined, or is now in the past — delete it.
+    let removed = 0;
+
+    const { data: existingRows } = await supabase
+      .from('reservations')
+      .select('id, hostaway_reservation_id')
+      .not('hostaway_reservation_id', 'is', null);
+
+    if (existingRows) {
+      const toDelete = existingRows.filter(
+        (row: any) => !syncedHostawayIds.has(row.hostaway_reservation_id)
+      );
+
+      if (toDelete.length > 0) {
+        // Delete in small batches to avoid trigger timeouts
+        for (let i = 0; i < toDelete.length; i += BATCH) {
+          const batch = toDelete.slice(i, i + BATCH);
+          const ids = batch.map((r: any) => r.id);
+
+          const { error: delError } = await supabase
+            .from('reservations')
+            .delete()
+            .in('id', ids);
+
+          if (delError) errors.push(`Delete batch error: ${delError.message}`);
+          else removed += batch.length;
+
+          if (i + BATCH < toDelete.length) {
+            await new Promise((r) => setTimeout(r, 1200));
+          }
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       properties: propertyRows.length,
       reservations_fetched: reservations.length,
       reservations_synced: synced,
+      reservations_removed: removed,
       errors: errors.length ? errors : undefined,
     });
   } catch (err: any) {
@@ -81,20 +124,6 @@ export async function POST() {
 }
 
 // GET for easy browser/testing access
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-
-  // Debug mode: show which HOSTAWAY env vars exist (not their values)
-  if (searchParams.get('debug') === '1') {
-    const envKeys = Object.keys(process.env).filter(
-      (k) => k.toUpperCase().includes('HOSTAWAY') || k.toUpperCase().includes('HOST_AWAY')
-    );
-    return NextResponse.json({
-      hostaway_env_keys_found: envKeys,
-      HOSTAWAY_ACCOUNT_ID: !!process.env.HOSTAWAY_ACCOUNT_ID,
-      HOSTAWAY_CLIENT_SECRET: !!process.env.HOSTAWAY_CLIENT_SECRET,
-    });
-  }
-
+export async function GET() {
   return POST();
 }
