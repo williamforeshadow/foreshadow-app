@@ -73,15 +73,16 @@ export async function POST() {
       }
     }
 
-    // 4. Remove cancelled/stale reservations
-    //    Any Hostaway reservation in Supabase that is NOT in the fresh pull
-    //    has been cancelled, declined, or is now in the past — delete it.
+    // 4. Remove cancelled reservations
+    //    Only delete current/future Hostaway reservations that are no longer
+    //    in the fresh pull (cancelled/declined). Past reservations stay forever.
     let removed = 0;
 
     const { data: existingRows } = await supabase
       .from('reservations')
       .select('id, hostaway_reservation_id')
-      .not('hostaway_reservation_id', 'is', null);
+      .not('hostaway_reservation_id', 'is', null)
+      .gte('check_out', today);
 
     if (existingRows) {
       const toDelete = existingRows.filter(
