@@ -59,7 +59,8 @@ export default function TemplatesPage() {
       const res = await fetch('/api/properties');
       const data = await res.json();
       if (data.properties) {
-        setProperties(data.properties);
+        // API now returns {id, name} objects; extract names for automations view
+        setProperties(data.properties.map((p: any) => p.name));
       }
     } catch (err) {
       console.error('Error fetching properties:', err);

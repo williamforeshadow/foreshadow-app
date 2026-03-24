@@ -106,6 +106,16 @@ export interface Turnover {
 }
 
 // ============================================================================
+// Property Types
+// ============================================================================
+
+/** A property option returned by /api/properties (id may be null for legacy entries) */
+export interface PropertyOption {
+  id: string | null;
+  name: string;
+}
+
+// ============================================================================
 // Project Types
 // ============================================================================
 
@@ -114,7 +124,8 @@ export type ProjectPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export interface Project {
   id: string;
-  property_name: string;
+  property_id?: string | null;
+  property_name?: string | null;
   title: string;
   description?: string;
   status: ProjectStatus;
@@ -131,6 +142,7 @@ export interface Project {
 }
 
 export interface ProjectFormData {
+  property_id: string;
   property_name: string;
   title: string;
   description: string;

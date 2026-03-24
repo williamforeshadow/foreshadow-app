@@ -105,22 +105,23 @@ export async function POST(request: Request) {
     const body = await request.json();
     console.log('Request body:', JSON.stringify(body, null, 2));
     
-    const { property_name, title, description, status, priority, assigned_user_ids, scheduled_date, scheduled_time, department_id } = body;
+    const { property_id, property_name, title, description, status, priority, assigned_user_ids, scheduled_date, scheduled_time, department_id } = body;
 
-    if (!property_name || !title) {
-      console.log('Validation failed: missing property_name or title');
+    if (!title) {
+      console.log('Validation failed: missing title');
       return NextResponse.json(
-        { error: 'property_name and title are required' },
+        { error: 'title is required' },
         { status: 400 }
       );
     }
 
-    // Insert the project
+    // Insert the project — property_id comes directly from the frontend
     console.log('Inserting into getSupabaseServer()...');
     const { data: project, error } = await getSupabaseServer()
       .from('property_projects')
       .insert({
-        property_name,
+        property_id: property_id || null,
+        property_name: property_name || null,
         title,
         description: description || null,
         status: status || 'not_started',

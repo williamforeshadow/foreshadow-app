@@ -324,14 +324,21 @@ export default function MobileApp() {
               <label className="block text-sm font-medium mb-2">Property *</label>
               <Select
                 value={projectForm.property_name}
-                onValueChange={(value) => setProjectForm({...projectForm, property_name: value})}
+                onValueChange={(value) => {
+                  const match = allProperties.find(p => p.name === value);
+                  setProjectForm({
+                    ...projectForm,
+                    property_name: value,
+                    property_id: match?.id || '',
+                  });
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select property" />
                 </SelectTrigger>
                 <SelectContent>
                   {allProperties.map((property) => (
-                    <SelectItem key={property} value={property}>{property}</SelectItem>
+                    <SelectItem key={property.id || property.name} value={property.name}>{property.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

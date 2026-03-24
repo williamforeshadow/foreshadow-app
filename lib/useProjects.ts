@@ -6,7 +6,8 @@ import type {
   User,
   ProjectFormFields,
   ProjectStatus,
-  ProjectPriority 
+  ProjectPriority,
+  PropertyOption
 } from '@/lib/types';
 
 // View mode type for project grouping
@@ -48,7 +49,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   // ============================================================================
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
-  const [allProperties, setAllProperties] = useState<string[]>([]);
+  const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
   
   // View mode for kanban-style grouping
   const [viewMode, setViewMode] = useState<ProjectViewMode>('property');
@@ -63,6 +64,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [savingProject, setSavingProject] = useState(false);
   const [projectForm, setProjectForm] = useState({
+    property_id: '',
     property_name: '',
     title: '',
     description: '',
@@ -175,6 +177,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   // ============================================================================
   const resetProjectForm = useCallback(() => {
     setProjectForm({
+      property_id: '',
       property_name: '',
       title: '',
       description: '',
@@ -191,14 +194,21 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   const openCreateProjectDialog = useCallback((propertyName?: string) => {
     resetProjectForm();
     if (propertyName) {
-      setProjectForm(prev => ({ ...prev, property_name: propertyName }));
+      // Look up property_id from allProperties for the given name
+      const match = allProperties.find(p => p.name === propertyName);
+      setProjectForm(prev => ({
+        ...prev,
+        property_name: propertyName,
+        property_id: match?.id || '',
+      }));
     }
     setShowProjectDialog(true);
-  }, [resetProjectForm]);
+  }, [resetProjectForm, allProperties]);
 
   const openEditProjectDialog = useCallback((project: Project) => {
     setProjectForm({
-      property_name: project.property_name,
+      property_id: project.property_id || '',
+      property_name: project.property_name || '',
       title: project.title,
       description: project.description || '',
       status: project.status,
@@ -216,15 +226,15 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   // CRUD Operations
   // ============================================================================
   const saveProject = useCallback(async (): Promise<Project | null> => {
-    // Only property_name is required for new projects (title defaults to "New Project")
-    if (!projectForm.property_name) return null;
-    // For editing, title is required
+    // Title is required (property is optional now)
+    if (!editingProject && !projectForm.title && !projectForm.property_name) return null;
     if (editingProject && !projectForm.title) return null;
 
     setSavingProject(true);
     try {
       const payload = {
-        property_name: projectForm.property_name,
+        property_id: projectForm.property_id || null,
+        property_name: projectForm.property_name || null,
         title: projectForm.title || 'New Project',
         description: projectForm.description || null,
         status: projectForm.status,
@@ -293,7 +303,10 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   const createProjectForProperty = useCallback(async (propertyName: string): Promise<Project | null> => {
     setSavingProject(true);
     try {
+      // Look up property_id from allProperties
+      const match = allProperties.find(p => p.name === propertyName);
       const payload = {
+        property_id: match?.id || null,
         property_name: propertyName,
         title: 'New Project',
         description: null,
@@ -324,7 +337,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     } finally {
       setSavingProject(false);
     }
-  }, []);
+  }, [allProperties]);
 
   // Parameterized save function - accepts project ID and fields from caller
   // Returns the updated project so caller can update their local state
@@ -383,10 +396,11 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   // ============================================================================
   const groupedProjects = useMemo(() => {
     return projects.reduce((acc, project) => {
-      if (!acc[project.property_name]) {
-        acc[project.property_name] = [];
+      const key = project.property_name || 'No Property';
+      if (!acc[key]) {
+        acc[key] = [];
       }
-      acc[project.property_name].push(project);
+      acc[key].push(project);
       return acc;
     }, {} as Record<string, Project[]>);
   }, [projects]);

@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { CheckIcon, ChevronsUpDownIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Project, ProjectFormData } from '@/lib/types';
+import type { Project, ProjectFormData, PropertyOption } from '@/lib/types';
 import { useDepartments } from '@/lib/departmentsContext';
 
 interface ProjectFormDialogProps {
@@ -20,7 +20,7 @@ interface ProjectFormDialogProps {
   editingProject: Project | null;
   formData: ProjectFormData;
   setFormData: (data: ProjectFormData | ((prev: ProjectFormData) => ProjectFormData)) => void;
-  allProperties: string[];
+  allProperties: PropertyOption[];
   saving: boolean;
   onSave: () => void;
 }
@@ -76,20 +76,24 @@ export function ProjectFormDialog({
                       <CommandGroup>
                         {allProperties.map((prop) => (
                           <CommandItem
-                            key={prop}
-                            value={prop}
+                            key={prop.id || prop.name}
+                            value={prop.name}
                             onSelect={() => {
-                              setFormData(prev => ({ ...prev, property_name: prop }));
+                              setFormData(prev => ({
+                                ...prev,
+                                property_name: prop.name,
+                                property_id: prop.id || '',
+                              }));
                               setPropertyOpen(false);
                             }}
                           >
                             <CheckIcon
                               className={cn(
                                 "mr-2 h-4 w-4",
-                                formData.property_name === prop ? "opacity-100" : "opacity-0"
+                                formData.property_name === prop.name ? "opacity-100" : "opacity-0"
                               )}
                             />
-                            {prop}
+                            {prop.name}
                           </CommandItem>
                         ))}
                       </CommandGroup>
@@ -100,14 +104,21 @@ export function ProjectFormDialog({
             ) : (
               <Select
                 value={formData.property_name}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, property_name: value }))}
+                onValueChange={(value) => {
+                  const match = allProperties.find(p => p.name === value);
+                  setFormData(prev => ({
+                    ...prev,
+                    property_name: value,
+                    property_id: match?.id || '',
+                  }));
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select a property" />
                 </SelectTrigger>
                 <SelectContent>
                   {allProperties.map((prop) => (
-                    <SelectItem key={prop} value={prop}>{prop}</SelectItem>
+                    <SelectItem key={prop.id || prop.name} value={prop.name}>{prop.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -218,7 +229,7 @@ export function ProjectFormDialog({
           </Button>
           <Button
             onClick={onSave}
-            disabled={saving || !formData.property_name || (!!editingProject && !formData.title)}
+            disabled={saving || !formData.title}
           >
             {saving ? 'Creating...' : editingProject ? 'Update' : 'Create'}
           </Button>
