@@ -1,48 +1,52 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 
-// GET properties as { id, name } objects from the properties table,
-// merged with any extra names from get_property_turnovers that haven't
-// been added to the properties table yet.
+// GET properties as { id, name } objects.
+//
+// The canonical property names come from the reservations table (property_name)
+// which uses address-style names.  The properties table (synced from Hostaway
+// listings) stores marketing titles that may differ.  To reliably resolve the
+// UUID for each name the app uses, we pull the (property_name → property_id)
+// mapping straight from reservations.
 export async function GET() {
   try {
     const supabase = getSupabaseServer();
 
-    // 1. Fetch from the properties table (Hostaway-synced, has real IDs)
-    const { data: propsTable, error: propsError } = await supabase
-      .from('properties')
-      .select('id, name')
-      .order('name', { ascending: true });
+    // 1. Get all distinct (property_name, property_id) pairs from reservations.
+    //    This is the source of truth for names displayed in the app.
+    const { data: resPropRows, error: resError } = await supabase
+      .from('reservations')
+      .select('property_name, property_id');
 
-    if (propsError) {
-      return NextResponse.json(
-        { error: propsError.message },
-        { status: 500 }
-      );
+    if (resError) {
+      return NextResponse.json({ error: resError.message }, { status: 500 });
     }
 
-    // Build a set of names we already have from the properties table
-    const knownNames = new Set(
-      (propsTable || []).map((p: any) => p.name)
-    );
+    // De-duplicate: for each property_name keep the property_id (prefer non-null)
+    const nameToId = new Map<string, string | null>();
+    for (const r of resPropRows || []) {
+      if (!r.property_name) continue;
+      const existing = nameToId.get(r.property_name);
+      if (!existing && r.property_id) {
+        nameToId.set(r.property_name, r.property_id);
+      } else if (!nameToId.has(r.property_name)) {
+        nameToId.set(r.property_name, r.property_id);
+      }
+    }
 
-    // 2. Also fetch from get_property_turnovers for any stragglers
-    //    (properties that exist in reservations but not yet in properties table)
+    // 2. Also pull from get_property_turnovers for any property_names that
+    //    might not appear in the reservations select above (edge case).
     const { data: turnovers } = await supabase.rpc('get_property_turnovers');
+    for (const t of turnovers || []) {
+      if (t.property_name && !nameToId.has(t.property_name)) {
+        nameToId.set(t.property_name, null);
+      }
+    }
 
-    const extraNames = Array.from(
-      new Set(
-        (turnovers || [])
-          .map((t: any) => t.property_name)
-          .filter((n: string) => n && !knownNames.has(n))
-      )
-    ).sort() as string[];
-
-    // 3. Merge: properties table entries first, then extras (with null id)
-    const properties = [
-      ...(propsTable || []).map((p: any) => ({ id: p.id, name: p.name })),
-      ...extraNames.map((name) => ({ id: null, name })),
-    ].sort((a, b) => a.name.localeCompare(b.name));
+    // 3. Build sorted result
+    const properties = Array.from(nameToId.entries())
+      .map(([name, id]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     return NextResponse.json({ properties });
   } catch (err: any) {
