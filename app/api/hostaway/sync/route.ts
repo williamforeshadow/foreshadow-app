@@ -73,6 +73,28 @@ export async function POST() {
       }
     }
 
+    // 3.5 Correct property names to match reservation data
+    //     The listings API returns marketing titles, but reservations use
+    //     address-style names which is what the app displays everywhere.
+    const nameCorrections = new Map<number, string>();
+    for (const r of reservations) {
+      if (r.listingMapId && r.listingName) {
+        nameCorrections.set(r.listingMapId, r.listingName);
+      }
+    }
+    if (nameCorrections.size > 0) {
+      const correctionRows = Array.from(nameCorrections.entries()).map(
+        ([listingId, name]) => ({
+          hostaway_listing_id: listingId,
+          name,
+          updated_at: new Date().toISOString(),
+        })
+      );
+      await supabase
+        .from('properties')
+        .upsert(correctionRows, { onConflict: 'hostaway_listing_id' });
+    }
+
     // 4. Remove cancelled reservations
     //    Only delete current/future Hostaway reservations that are no longer
     //    in the fresh pull (cancelled/declined). Past reservations stay forever.
