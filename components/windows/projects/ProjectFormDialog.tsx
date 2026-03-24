@@ -74,6 +74,25 @@ export function ProjectFormDialog({
                     <CommandList>
                       <CommandEmpty>No property found.</CommandEmpty>
                       <CommandGroup>
+                        <CommandItem
+                          value="__no_property__"
+                          onSelect={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              property_name: '',
+                              property_id: '',
+                            }));
+                            setPropertyOpen(false);
+                          }}
+                        >
+                          <CheckIcon
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              !formData.property_name ? "opacity-100" : "opacity-0"
+                            )}
+                          />
+                          <span className="text-muted-foreground italic">No Property</span>
+                        </CommandItem>
                         {allProperties.map((prop) => (
                           <CommandItem
                             key={prop.id || prop.name}

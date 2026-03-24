@@ -226,8 +226,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   // CRUD Operations
   // ============================================================================
   const saveProject = useCallback(async (): Promise<Project | null> => {
-    // Title is required (property is optional now)
-    if (!editingProject && !projectForm.title && !projectForm.property_name) return null;
+    // Title is required when editing; new projects default to "New Project"
     if (editingProject && !projectForm.title) return null;
 
     setSavingProject(true);
@@ -380,6 +379,35 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     }
   }, [currentUser]);
 
+  // Lightweight field update for kanban column moves (status / priority / property)
+  const updateProjectField = useCallback(async (
+    projectId: string,
+    field: string,
+    value: string
+  ) => {
+    try {
+      const payload: Record<string, unknown> = { [field]: value || null };
+
+      // When moving to a property column, also resolve the property_id
+      if (field === 'property_name') {
+        const prop = allProperties.find((p) => p.name === value);
+        payload.property_id = prop?.id || null;
+      }
+
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.data) {
+        setProjects(prev => prev.map(p => p.id === projectId ? data.data : p));
+      }
+    } catch (err) {
+      console.error('Error updating project field:', err);
+    }
+  }, [allProperties]);
+
   // ============================================================================
   // Effects
   // ============================================================================
@@ -460,6 +488,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     // Parameterized save function for window-specific use
     saveProjectById,
     savingProjectEdit,
+    updateProjectField,
 
     // Comments - expose sub-hook functions directly (parameterized by project ID)
     projectComments: comments.projectComments,
