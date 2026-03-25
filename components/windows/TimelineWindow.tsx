@@ -180,7 +180,7 @@ export default function TimelineWindow({
         description: project.description || '',
         status: project.status,
         priority: project.priority,
-        assigned_staff: project.project_assignments?.[0]?.user_id || '',
+        assigned_staff: project.project_assignments?.map(a => a.user_id) || [],
         department_id: project.department_id || '',
         scheduled_date: project.scheduled_date || '',
         scheduled_time: project.scheduled_time || ''
@@ -616,7 +616,7 @@ export default function TimelineWindow({
         description: expandedProjectInTurnover.description || '',
         status: expandedProjectInTurnover.status,
         priority: expandedProjectInTurnover.priority,
-        assigned_staff: expandedProjectInTurnover.project_assignments?.[0]?.user_id || '',
+        assigned_staff: expandedProjectInTurnover.project_assignments?.map(a => a.user_id) || [],
         department_id: expandedProjectInTurnover.department_id || '',
         scheduled_date: expandedProjectInTurnover.scheduled_date || '',
         scheduled_time: expandedProjectInTurnover.scheduled_time || ''

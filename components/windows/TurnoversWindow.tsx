@@ -146,7 +146,7 @@ function TurnoversWindowContent({
         description: expandedProject.description || '',
         status: expandedProject.status,
         priority: expandedProject.priority,
-        assigned_staff: expandedProject.project_assignments?.[0]?.user_id || '',
+        assigned_staff: expandedProject.project_assignments?.map(a => a.user_id) || [],
         department_id: expandedProject.department_id || '',
         scheduled_date: expandedProject.scheduled_date || '',
         scheduled_time: expandedProject.scheduled_time || ''

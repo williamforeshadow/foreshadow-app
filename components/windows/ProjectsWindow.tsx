@@ -14,12 +14,11 @@ import {
   ProjectDetailPanel,
   ProjectActivitySheet,
   AttachmentLightbox,
-  ProjectFormDialog,
   BinPicker,
 } from './projects';
 import { ColumnPicker } from './projects/ColumnPicker';
 import { ProjectsKanban } from './projects/ProjectsKanban';
-import type { User, Project, Attachment, Comment, ProjectFormFields, ProjectBin } from '@/lib/types';
+import type { User, Project, Attachment, Comment, ProjectFormFields } from '@/lib/types';
 
 interface ProjectsWindowProps {
   users: User[];
@@ -85,15 +84,8 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
     recordProjectView,
     getUnreadCommentCount,
 
-    // Dialog state (shared - one dialog for creating projects)
-    showProjectDialog,
-    setShowProjectDialog,
-    editingProject,
-    projectForm,
-    setProjectForm,
-    savingProject,
-    openCreateProjectDialog,
-    saveProject,
+    // Project creation (dialog-less)
+    createProjectForProperty,
     deleteProject,
 
     // Saving state
@@ -187,7 +179,7 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
         description: expandedProject.description || '',
         status: expandedProject.status,
         priority: expandedProject.priority,
-        assigned_staff: expandedProject.project_assignments?.[0]?.user_id || '',
+        assigned_staff: expandedProject.project_assignments?.map(a => a.user_id) || [],
         department_id: expandedProject.department_id || '',
         scheduled_date: expandedProject.scheduled_date || '',
         scheduled_time: expandedProject.scheduled_time || ''
@@ -244,14 +236,14 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
     }
   }, [expandedProject?.id, recordProjectView]);
 
-  // Handle creating a new project - auto-expands the project after creation
-  const handleCreateProject = useCallback(async () => {
-    const newProject = await saveProject();
-    if (newProject && !editingProject) {
-      // Only auto-expand for new projects, not edits
+  // Handle creating a new project - bypasses dialog, auto-expands in detail panel
+  const handleNewProject = useCallback(async () => {
+    const newProject = await createProjectForProperty('');
+    if (newProject) {
       setExpandedProject(newProject);
+      recordProjectView(newProject.id);
     }
-  }, [saveProject, editingProject]);
+  }, [createProjectForProperty, recordProjectView]);
 
   // Handle kanban column moves (drag-and-drop between columns)
   const handleColumnMove = useCallback(
@@ -266,30 +258,16 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
   // ============================================================================
   if (!showKanban) {
     return (
-      <>
-        <BinPicker
-          bins={binsHook.bins}
-          loadingBins={binsHook.loadingBins}
-          totalProjects={binsHook.totalProjects}
-          unbinnedCount={binsHook.unbinnedCount}
-          onSelectBin={handleSelectBin}
-          onCreateBin={handleCreateBin}
-          onDeleteBin={handleDeleteBin}
-          onRenameBin={handleRenameBin}
-        />
-
-        {/* Create/Edit Project Dialog (accessible from bin picker) */}
-        <ProjectFormDialog
-          open={showProjectDialog}
-          onOpenChange={setShowProjectDialog}
-          editingProject={editingProject}
-          formData={projectForm}
-          setFormData={setProjectForm}
-          allProperties={allProperties}
-          saving={savingProject}
-          onSave={handleCreateProject}
-        />
-      </>
+      <BinPicker
+        bins={binsHook.bins}
+        loadingBins={binsHook.loadingBins}
+        totalProjects={binsHook.totalProjects}
+        unbinnedCount={binsHook.unbinnedCount}
+        onSelectBin={handleSelectBin}
+        onCreateBin={handleCreateBin}
+        onDeleteBin={handleDeleteBin}
+        onRenameBin={handleRenameBin}
+      />
     );
   }
 
@@ -340,7 +318,7 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
               onSelectAll={() => columnVis.selectAll(allColumnOptions.map((c) => c.id))}
               onClearAll={columnVis.clearAll}
             />
-            <Button size="sm" onClick={() => openCreateProjectDialog()}>
+            <Button size="sm" onClick={handleNewProject}>
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
@@ -360,7 +338,7 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
               <p className="text-neutral-500 dark:text-neutral-400 mb-4">
                 No projects in this bin yet.
               </p>
-              <Button onClick={() => openCreateProjectDialog()}>
+              <Button onClick={handleNewProject}>
                 Create First Project
               </Button>
             </div>
@@ -444,17 +422,6 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
         onNavigate={setViewingAttachmentIndex}
       />
 
-      {/* Create/Edit Project Dialog */}
-      <ProjectFormDialog
-        open={showProjectDialog}
-        onOpenChange={setShowProjectDialog}
-        editingProject={editingProject}
-        formData={projectForm}
-        setFormData={setProjectForm}
-        allProperties={allProperties}
-        saving={savingProject}
-        onSave={handleCreateProject}
-      />
     </div>
   );
 }

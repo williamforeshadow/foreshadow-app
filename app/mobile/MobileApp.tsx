@@ -64,7 +64,7 @@ export default function MobileApp() {
         description: '',
         status: 'not_started',
         priority: 'medium',
-        assigned_staff: '',
+        assigned_staff: [],
         department_id: '',
         scheduled_date: '',
         scheduled_time: '',
@@ -411,9 +411,9 @@ export default function MobileApp() {
             <div>
               <label className="block text-sm font-medium mb-2">Assigned Staff</label>
               <Input
-                value={projectForm.assigned_staff}
-                onChange={(e) => setProjectForm({...projectForm, assigned_staff: e.target.value})}
-                placeholder="Staff member name"
+                value={projectForm.assigned_staff?.join(', ') || ''}
+                onChange={(e) => setProjectForm({...projectForm, assigned_staff: e.target.value ? e.target.value.split(',').map(s => s.trim()).filter(Boolean) : []})}
+                placeholder="Staff member IDs (comma separated)"
               />
             </div>
             <div>

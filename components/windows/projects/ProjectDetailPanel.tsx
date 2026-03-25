@@ -21,7 +21,6 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import type { Project, User, ProjectFormFields, Comment, Attachment, TimeEntry, PropertyOption } from '@/lib/types';
 
 interface ProjectDetailPanelProps {
@@ -97,7 +96,7 @@ export function ProjectDetailPanel({
   const [propertyOpen, setPropertyOpen] = useState(false);
 
   // Derived data
-  const assignedUser = users.find(u => u.id === editingFields.assigned_staff);
+  const assignedUsers = users.filter(u => editingFields.assigned_staff?.includes(u.id));
   const dept = departments.find(d => d.id === editingFields.department_id);
   const DeptIcon = getDepartmentIcon(dept?.icon);
 
@@ -154,11 +153,11 @@ export function ProjectDetailPanel({
       </div>
 
       {/* ── Scrollable body ── */}
-      <ScrollArea className="flex-1 min-h-0 overscroll-contain">
-        <div className="px-5 pb-4">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+        <div className="flex flex-col gap-5 px-6 pb-6 pt-4">
 
           {/* ── Header: Department icon + Title + Property ── */}
-          <div className="flex items-start gap-3.5 mb-5">
+          <div className="flex items-start gap-3.5">
             {/* Department icon — large, clickable */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -209,7 +208,7 @@ export function ProjectDetailPanel({
               {/* Property — clickable to change */}
               <Popover open={propertyOpen} onOpenChange={setPropertyOpen}>
                 <PopoverTrigger asChild>
-                  <button className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground hover:text-foreground transition-colors group">
+                  <button className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground hover:text-foreground transition-colors group">
                     <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
                       <path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
                     </svg>
@@ -257,7 +256,7 @@ export function ProjectDetailPanel({
           </div>
 
           {/* ── Status / Priority / Department pills ── */}
-          <div className="flex flex-wrap gap-2 mb-5">
+          <div className="flex flex-wrap gap-2">
             {/* Status pill */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -339,41 +338,56 @@ export function ProjectDetailPanel({
           </div>
 
           {/* ── Description card ── */}
-          <div className="rounded-xl bg-muted/50 px-4 py-3.5 mb-4">
-            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">Description</div>
+          <div className="rounded-xl bg-muted/50 px-5 py-4 flex flex-col gap-2">
+            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Description</div>
             <DebouncedTextarea
               value={editingFields.description}
               onChange={(value) => setEditingFields(prev => prev ? {...prev, description: value} : null)}
               onBlur={onSave}
               placeholder="Add a description..."
               rows={2}
-              className="resize-none bg-transparent border-none p-0 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 min-h-0"
+              className="resize-none bg-transparent dark:bg-transparent border-none p-0 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 min-h-0 shadow-none"
               delay={150}
             />
           </div>
 
           {/* ── Assigned + Scheduled grid ── */}
-          <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="grid grid-cols-2 gap-3.5">
             {/* Assigned to */}
-            <div className="rounded-xl bg-muted/50 px-4 py-3.5">
-              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">Assigned to</div>
+            <div className="rounded-xl bg-muted/50 px-5 py-4 flex flex-col gap-3">
+              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Assigned to</div>
               <Popover open={staffOpen} onOpenChange={setStaffOpen}>
                 <PopoverTrigger asChild>
-                  <button className="flex items-center gap-2.5 w-full hover:opacity-80 transition-opacity">
-                    {assignedUser ? (
+                  <button className="flex items-center gap-1 w-full hover:opacity-80 transition-opacity flex-wrap">
+                    {assignedUsers.length > 0 ? (
                       <>
-                        {assignedUser.avatar ? (
-                          <img
-                            src={assignedUser.avatar}
-                            alt={assignedUser.name}
-                            className="w-7 h-7 rounded-full object-cover ring-2 ring-background flex-shrink-0"
-                          />
-                        ) : (
-                          <div className="w-7 h-7 rounded-full bg-blue-500/15 flex items-center justify-center text-[11px] font-medium text-blue-400 flex-shrink-0">
-                            {assignedUser.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                          </div>
-                        )}
-                        <span className="text-[13px] font-medium text-foreground truncate">{assignedUser.name}</span>
+                        <div className="flex items-center -space-x-1.5">
+                          {assignedUsers.map((u) => (
+                            <div key={u.id} className="relative group">
+                              {u.avatar ? (
+                                <img
+                                  src={u.avatar}
+                                  alt={u.name}
+                                  className="w-7 h-7 rounded-full object-cover ring-2 ring-background flex-shrink-0"
+                                />
+                              ) : (
+                                <div className="w-7 h-7 rounded-full bg-blue-500/15 flex items-center justify-center text-[10px] font-medium text-blue-400 flex-shrink-0 ring-2 ring-background">
+                                  {u.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                                </div>
+                              )}
+                              {/* Tooltip */}
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded bg-popover border border-border text-[11px] text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-md">
+                                {u.name}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Plus icon to add more */}
+                        <div className="w-7 h-7 rounded-full border-2 border-dashed border-muted-foreground/20 flex items-center justify-center flex-shrink-0 ml-1">
+                          <svg className="w-3 h-3 text-muted-foreground/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                        </div>
                       </>
                     ) : (
                       <>
@@ -387,46 +401,58 @@ export function ProjectDetailPanel({
                     )}
                   </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[200px] p-0" align="start">
+                <PopoverContent className="w-[220px] p-0" align="start">
                   <Command>
                     <CommandInput placeholder="Search staff..." />
                     <CommandList>
                       <CommandEmpty>No staff found.</CommandEmpty>
                       <CommandGroup>
-                        <CommandItem
-                          value="unassigned"
-                          onSelect={() => {
-                            setEditingFields(prev => prev ? {...prev, assigned_staff: ''} : null);
-                            setStaffOpen(false);
-                            setTimeout(onSave, 0);
-                          }}
-                        >
-                          <CheckIcon className={cn("mr-2 h-4 w-4", !editingFields.assigned_staff ? "opacity-100" : "opacity-0")} />
-                          Unassigned
-                        </CommandItem>
-                        {users.map((user) => (
+                        {editingFields.assigned_staff?.length > 0 && (
                           <CommandItem
-                            key={user.id}
-                            value={user.name}
+                            value="__clear_all__"
                             onSelect={() => {
-                              setEditingFields(prev => prev ? {...prev, assigned_staff: user.id} : null);
-                              setStaffOpen(false);
+                              setEditingFields(prev => prev ? {...prev, assigned_staff: []} : null);
                               setTimeout(onSave, 0);
                             }}
                           >
-                            <CheckIcon className={cn("mr-2 h-4 w-4", editingFields.assigned_staff === user.id ? "opacity-100" : "opacity-0")} />
-                            <div className="flex items-center gap-2">
-                              {user.avatar ? (
-                                <img src={user.avatar} alt={user.name} className="w-5 h-5 rounded-full object-cover" />
-                              ) : (
-                                <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[9px] font-medium">
-                                  {user.name?.charAt(0)?.toUpperCase() || '?'}
-                                </div>
-                              )}
-                              {user.name}
-                            </div>
+                            <svg className="mr-2 h-4 w-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                            <span className="text-muted-foreground">Clear all</span>
                           </CommandItem>
-                        ))}
+                        )}
+                        {users.map((user) => {
+                          const isAssigned = editingFields.assigned_staff?.includes(user.id);
+                          return (
+                            <CommandItem
+                              key={user.id}
+                              value={user.name}
+                              onSelect={() => {
+                                setEditingFields(prev => {
+                                  if (!prev) return null;
+                                  const current = prev.assigned_staff || [];
+                                  const updated = isAssigned
+                                    ? current.filter(id => id !== user.id)
+                                    : [...current, user.id];
+                                  return {...prev, assigned_staff: updated};
+                                });
+                                setTimeout(onSave, 0);
+                              }}
+                            >
+                              <CheckIcon className={cn("mr-2 h-4 w-4", isAssigned ? "opacity-100" : "opacity-0")} />
+                              <div className="flex items-center gap-2">
+                                {user.avatar ? (
+                                  <img src={user.avatar} alt={user.name} className="w-5 h-5 rounded-full object-cover" />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[9px] font-medium">
+                                    {user.name?.charAt(0)?.toUpperCase() || '?'}
+                                  </div>
+                                )}
+                                {user.name}
+                              </div>
+                            </CommandItem>
+                          );
+                        })}
                       </CommandGroup>
                     </CommandList>
                   </Command>
@@ -435,9 +461,9 @@ export function ProjectDetailPanel({
             </div>
 
             {/* Scheduled */}
-            <div className="rounded-xl bg-muted/50 px-4 py-3.5">
-              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">Scheduled</div>
-              <div className="space-y-2">
+            <div className="rounded-xl bg-muted/50 px-5 py-4 flex flex-col gap-3">
+              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Scheduled</div>
+              <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-1.5">
                   <svg className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" viewBox="0 0 16 16" fill="none">
                     <rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
@@ -476,7 +502,7 @@ export function ProjectDetailPanel({
           </div>
 
           {/* ── Timer row ── */}
-          <div className="rounded-xl bg-muted/50 px-4 py-3 mb-5 flex items-center justify-between">
+          <div className="rounded-xl bg-muted/50 px-5 py-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <svg className="w-4 h-4 text-muted-foreground" viewBox="0 0 16 16" fill="none">
                 <circle cx="8" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.2" />
@@ -509,8 +535,8 @@ export function ProjectDetailPanel({
           </div>
 
           {/* ── Attachments ── */}
-          <div className="mb-5">
-            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2.5">Attachments</div>
+          <div className="flex flex-col gap-3">
+            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Attachments</div>
             <div className="flex gap-2.5 flex-wrap">
               {loadingAttachments ? (
                 <span className="text-xs text-muted-foreground">Loading...</span>
@@ -529,7 +555,7 @@ export function ProjectDetailPanel({
                           <path d="M4 2h8l4 4v12H4V2z" stroke="currentColor" strokeWidth="1.2" fill="none" />
                           <path d="M12 2v4h4" stroke="currentColor" strokeWidth="1.2" fill="none" />
                         </svg>
-                        <span className="text-[9px] text-muted-foreground mt-1 px-1 truncate max-w-full">
+                        <span className="text-[9px] text-muted-foreground pt-1 px-1 truncate max-w-full">
                           {attachment.file_name?.split('.').pop()?.toUpperCase() || 'FILE'}
                         </span>
                       </>
@@ -558,25 +584,25 @@ export function ProjectDetailPanel({
           </div>
 
           {/* ── Divider ── */}
-          <div className="border-t border-border mb-5" />
+          <div className="border-t border-border" />
 
           {/* ── Activity / Comments ── */}
-          <div>
-            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-3.5">Activity</div>
+          <div className="flex flex-col gap-4">
+            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Activity</div>
 
             {loadingComments ? (
               <p className="text-sm text-muted-foreground text-center py-4">Loading comments...</p>
             ) : comments.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">No comments yet</p>
             ) : (
-              <div className="space-y-4">
+              <div className="flex flex-col gap-5">
                 {comments.map((comment) => (
-                  <div key={comment.id} className="flex gap-2.5">
+                  <div key={comment.id} className="flex gap-3">
                     <div className="w-[30px] h-[30px] rounded-full bg-blue-500/15 flex items-center justify-center text-[11px] font-medium text-blue-400 flex-shrink-0">
                       {(comment.user_name || 'U').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline gap-2 mb-1">
+                      <div className="flex items-baseline gap-2 pb-1">
                         <span className="text-[13px] font-medium text-foreground">{comment.user_name || 'Unknown'}</span>
                         <span className="text-[11px] text-muted-foreground">
                           {new Date(comment.created_at).toLocaleDateString('en-US', {
@@ -594,12 +620,11 @@ export function ProjectDetailPanel({
             )}
           </div>
         </div>
-        <ScrollBar />
-      </ScrollArea>
+      </div>
 
       {/* ── Comment input — sticky bottom ── */}
-      <div className="flex-shrink-0 border-t border-border px-5 py-3 bg-card">
-        <div className="flex items-center gap-2.5 bg-muted/50 rounded-xl px-3.5 py-2.5 border border-border/50">
+      <div className="flex-shrink-0 border-t border-border px-6 py-3.5 bg-card">
+        <div className="flex items-center gap-2.5 bg-muted/50 rounded-xl px-4 py-3 border border-border/50">
           {/* Hidden file input */}
           <input
             ref={attachmentInputRef}
@@ -612,7 +637,7 @@ export function ProjectDetailPanel({
           <DebouncedTextarea
             placeholder="Add a comment..."
             rows={1}
-            className="resize-none min-h-[24px] flex-1 bg-transparent border-none p-0 text-[13px] text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
+            className="resize-none min-h-[24px] flex-1 bg-transparent dark:bg-transparent border-none p-0 text-[13px] text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
             value={newComment}
             onChange={setNewComment}
             delay={50}

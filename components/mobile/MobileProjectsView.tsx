@@ -12,6 +12,7 @@ interface Project {
   status: string;
   priority: string;
   assigned_staff?: string;
+  project_assignments?: Array<{ user_id: string; user?: { id: string; name: string } }>;
   scheduled_date?: string;
   scheduled_time?: string;
   created_at: string;
@@ -222,7 +223,7 @@ export default function MobileProjectsView({
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
-                      <span>{project.assigned_staff || 'Unassigned'}</span>
+                      <span>{project.project_assignments?.map(a => a.user?.name).filter(Boolean).join(', ') || 'Unassigned'}</span>
                     </div>
                     
                     {dueInfo && (

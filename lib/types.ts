@@ -164,7 +164,7 @@ export interface ProjectFormData {
   description: string;
   status: string;
   priority: string;
-  assigned_staff: string;
+  assigned_staff: string[];
   department_id: string;
   scheduled_date: string;
   scheduled_time: string;
@@ -176,7 +176,7 @@ export interface ProjectFormFields {
   description: string;
   status: string;
   priority: string;
-  assigned_staff: string;
+  assigned_staff: string[];
   department_id: string;
   scheduled_date: string;
   scheduled_time: string;
