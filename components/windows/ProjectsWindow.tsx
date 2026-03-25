@@ -1,9 +1,11 @@
 'use client';
 
-import { memo, useCallback, useState, useEffect, useRef } from 'react';
+import { memo, useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import type { useProjects } from '@/lib/useProjects';
+import { STATUS_LABELS, STATUS_ORDER, PRIORITY_LABELS, PRIORITY_ORDER } from '@/lib/useProjects';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
+import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
@@ -15,6 +17,7 @@ import {
   ProjectFormDialog,
   BinPicker,
 } from './projects';
+import { ColumnPicker } from './projects/ColumnPicker';
 import { ProjectsKanban } from './projects/ProjectsKanban';
 import type { User, Project, Attachment, Comment, ProjectFormFields, ProjectBin } from '@/lib/types';
 
@@ -98,6 +101,38 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
     saveProjectById,
     updateProjectField,
   } = projectsHook;
+
+  // ============================================================================
+  // Column Visibility (picker for which columns to show on the Kanban)
+  // ============================================================================
+  const columnVis = useColumnVisibility(selectedBinId, viewMode);
+
+  // Compute all possible column options for the picker
+  const allColumnOptions = useMemo(() => {
+    if (viewMode === 'property') {
+      const names = new Set<string>();
+      names.add('No Property'); // Always available as first option
+      projects.forEach((p) => names.add(p.property_name || 'No Property'));
+      allProperties.forEach((p) => { if (p.name) names.add(p.name); });
+      const sorted = Array.from(names).sort((a, b) => {
+        if (a === 'No Property') return -1;
+        if (b === 'No Property') return 1;
+        return a.localeCompare(b);
+      });
+      return sorted.map((name) => ({ id: `prop:${name}`, name }));
+    }
+    if (viewMode === 'status') {
+      return STATUS_ORDER.map((s) => ({ id: `status:${s}`, name: STATUS_LABELS[s] }));
+    }
+    return PRIORITY_ORDER.map((p) => ({ id: `priority:${p}`, name: PRIORITY_LABELS[p] }));
+  }, [viewMode, projects, allProperties]);
+
+  // Initialize column visibility defaults when columns are known
+  useEffect(() => {
+    if (allColumnOptions.length > 0 && columnVis.initialized) {
+      columnVis.initWithDefaults(allColumnOptions.map((c) => c.id));
+    }
+  }, [allColumnOptions, columnVis.initialized]);
 
   // ============================================================================
   // Bin Navigation
@@ -297,6 +332,14 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
                 </button>
               ))}
             </div>
+            {/* Column Picker */}
+            <ColumnPicker
+              columns={allColumnOptions}
+              visibleColumnIds={columnVis.visibleIds}
+              onToggle={columnVis.toggle}
+              onSelectAll={() => columnVis.selectAll(allColumnOptions.map((c) => c.id))}
+              onClearAll={columnVis.clearAll}
+            />
             <Button size="sm" onClick={() => openCreateProjectDialog()}>
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -331,6 +374,7 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
             expandedProjectId={expandedProject?.id || null}
             getUnreadCommentCount={getUnreadCommentCount}
             onColumnMove={handleColumnMove}
+            visibleColumnIds={columnVis.visibleIds}
           />
         )}
       </div>
@@ -343,11 +387,20 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
           editingFields={editingProjectFields}
           setEditingFields={setEditingProjectFields}
           users={users}
+          allProperties={allProperties}
           savingEdit={savingProjectEdit}
           onSave={handleSaveProject}
           onDelete={deleteProject}
           onClose={() => setExpandedProject(null)}
           onOpenActivity={handleOpenActivity}
+          onPropertyChange={async (propertyId, propertyName) => {
+            await updateProjectField(expandedProject.id, 'property_id', propertyId || '');
+            if (propertyName !== undefined) {
+              await updateProjectField(expandedProject.id, 'property_name', propertyName || '');
+            }
+            // Update the local expanded project to reflect change
+            setExpandedProject(prev => prev ? { ...prev, property_id: propertyId, property_name: propertyName } : null);
+          }}
           // Comments - use LOCAL hook
           comments={commentsHook.projectComments as Comment[]}
           loadingComments={commentsHook.loadingComments}

@@ -48,6 +48,7 @@ interface ProjectsKanbanProps {
   expandedProjectId: string | null;
   getUnreadCommentCount: (project: Project) => number;
   onColumnMove: (projectId: string, field: string, value: string) => void;
+  visibleColumnIds?: Set<string>; // When provided, only show these columns
 }
 
 // ============================================================================
@@ -62,12 +63,14 @@ export function ProjectsKanban({
   expandedProjectId,
   getUnreadCommentCount,
   onColumnMove,
+  visibleColumnIds,
 }: ProjectsKanbanProps) {
   // Build columns based on view mode
-  const columns: KanbanColumn[] = useMemo(() => {
+  const allColumns: KanbanColumn[] = useMemo(() => {
     if (viewMode === 'property') {
       // One column per property, plus "No Property"
       const propertyNames = new Set<string>();
+      propertyNames.add('No Property'); // Always include
       projects.forEach((p) => {
         propertyNames.add(p.property_name || 'No Property');
       });
@@ -78,8 +81,8 @@ export function ProjectsKanban({
       });
 
       const sorted = Array.from(propertyNames).sort((a, b) => {
-        if (a === 'No Property') return 1;
-        if (b === 'No Property') return -1;
+        if (a === 'No Property') return -1;
+        if (b === 'No Property') return 1;
         return a.localeCompare(b);
       });
 
@@ -118,6 +121,13 @@ export function ProjectsKanban({
           : styles.columnAccentLow,
     }));
   }, [viewMode, projects, allProperties]);
+
+  // Filter columns by visibility selection
+  // undefined = prop not passed, show all; empty Set = user cleared all, show none
+  const columns: KanbanColumn[] = useMemo(() => {
+    if (!visibleColumnIds) return allColumns;
+    return allColumns.filter((col) => visibleColumnIds.has(col.id));
+  }, [allColumns, visibleColumnIds]);
 
   // Transform projects into draggable items
   const initialItems: DraggableProjectItem[] = useMemo(() => {
