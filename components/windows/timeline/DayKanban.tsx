@@ -231,7 +231,7 @@ export function DayKanban({
         }
 
         // Property filter
-        if (filters.properties.length > 0 && !filters.properties.includes(project.property_name)) {
+        if (filters.properties.length > 0 && !filters.properties.includes(project.property_name || '')) {
           return;
         }
 
@@ -743,7 +743,7 @@ function SortableKanbanCard({
       onTaskClick(task, task.property_name);
     } else if (item.type === 'project' && onProjectClick) {
       const project = item.data as Project;
-      onProjectClick(project, project.property_name);
+      onProjectClick(project, project.property_name || '');
     }
   };
 

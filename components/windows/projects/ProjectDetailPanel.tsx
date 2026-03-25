@@ -29,7 +29,7 @@ interface ProjectDetailPanelProps {
   editingFields: ProjectFormFields;
   setEditingFields: (fields: ProjectFormFields | null | ((prev: ProjectFormFields | null) => ProjectFormFields | null)) => void;
   users: User[];
-  allProperties: PropertyOption[];
+  allProperties?: PropertyOption[];
   savingEdit: boolean;
   onSave: () => void;
   onDelete: (project: Project) => void;
@@ -66,7 +66,7 @@ export function ProjectDetailPanel({
   editingFields,
   setEditingFields,
   users,
-  allProperties,
+  allProperties = [],
   savingEdit,
   onSave,
   onDelete,

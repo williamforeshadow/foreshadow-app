@@ -58,6 +58,7 @@ export default function MobileApp() {
     if (!open) {
       setShowProjectDialog(false);
       setProjectForm({
+        property_id: '',
         property_name: '',
         title: '',
         description: '',
@@ -66,7 +67,8 @@ export default function MobileApp() {
         assigned_staff: '',
         department_id: '',
         scheduled_date: '',
-        scheduled_time: ''
+        scheduled_time: '',
+        bin_id: ''
       });
     }
   };

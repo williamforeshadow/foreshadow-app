@@ -168,6 +168,7 @@ export interface ProjectFormData {
   department_id: string;
   scheduled_date: string;
   scheduled_time: string;
+  bin_id: string;
 }
 
 export interface ProjectFormFields {
