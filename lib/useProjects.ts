@@ -54,6 +54,9 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   // View mode for kanban-style grouping
   const [viewMode, setViewMode] = useState<ProjectViewMode>('property');
 
+  // Active bin filter (null = show all, '__none__' = unbinned, uuid = specific bin)
+  const [activeBinId, setActiveBinId] = useState<string | null>(null);
+
   // Project views (for "new" badge)
   const [projectViews, setProjectViews] = useState<Record<string, string>>({});
 
@@ -73,7 +76,8 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     assigned_staff: '',
     department_id: '',
     scheduled_date: '',
-    scheduled_time: ''
+    scheduled_time: '',
+    bin_id: '',
   });
 
   // Saving state for project edits (shared loading indicator)
@@ -90,12 +94,16 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   // ============================================================================
   // Data Fetching
   // ============================================================================
-  const fetchProjects = useCallback(async () => {
+  const fetchProjects = useCallback(async (binId?: string | null) => {
     setLoadingProjects(true);
     try {
-      const url = currentUser?.id 
-        ? `/api/projects?viewer_user_id=${currentUser.id}` 
-        : '/api/projects';
+      const params = new URLSearchParams();
+      if (currentUser?.id) params.set('viewer_user_id', currentUser.id);
+      // If binId is explicitly passed, use it; otherwise don't filter by bin
+      if (binId !== undefined && binId !== null) {
+        params.set('bin_id', binId);
+      }
+      const url = `/api/projects?${params.toString()}`;
       const response = await fetch(url);
       const result = await response.json();
       if (response.ok && result.data) {
@@ -107,6 +115,18 @@ export function useProjects({ currentUser }: UseProjectsProps) {
       setLoadingProjects(false);
     }
   }, [currentUser?.id]);
+
+  // Fetch projects filtered by the active bin
+  const fetchProjectsForBin = useCallback(async (binId: string | null) => {
+    setActiveBinId(binId);
+    if (binId === null) {
+      // "All Projects" - fetch everything (no bin filter)
+      await fetchProjects();
+    } else {
+      // Specific bin or '__none__'
+      await fetchProjects(binId);
+    }
+  }, [fetchProjects]);
 
   const fetchAllProperties = useCallback(async () => {
     try {
@@ -186,24 +206,30 @@ export function useProjects({ currentUser }: UseProjectsProps) {
       assigned_staff: '',
       department_id: '',
       scheduled_date: '',
-      scheduled_time: ''
+      scheduled_time: '',
+      bin_id: '',
     });
     setEditingProject(null);
   }, []);
 
-  const openCreateProjectDialog = useCallback((propertyName?: string) => {
+  const openCreateProjectDialog = useCallback((propertyName?: string, binId?: string) => {
     resetProjectForm();
+    const updates: Record<string, string> = {};
     if (propertyName) {
-      // Look up property_id from allProperties for the given name
       const match = allProperties.find(p => p.name === propertyName);
-      setProjectForm(prev => ({
-        ...prev,
-        property_name: propertyName,
-        property_id: match?.id || '',
-      }));
+      updates.property_name = propertyName;
+      updates.property_id = match?.id || '';
+    }
+    // Auto-set bin_id if we're inside a bin view (but not "All Projects" or "__none__")
+    const effectiveBinId = binId ?? activeBinId;
+    if (effectiveBinId && effectiveBinId !== '__none__') {
+      updates.bin_id = effectiveBinId;
+    }
+    if (Object.keys(updates).length > 0) {
+      setProjectForm(prev => ({ ...prev, ...updates }));
     }
     setShowProjectDialog(true);
-  }, [resetProjectForm, allProperties]);
+  }, [resetProjectForm, allProperties, activeBinId]);
 
   const openEditProjectDialog = useCallback((project: Project) => {
     setProjectForm({
@@ -216,7 +242,8 @@ export function useProjects({ currentUser }: UseProjectsProps) {
       assigned_staff: project.assigned_staff || '',
       department_id: project.department_id || '',
       scheduled_date: project.scheduled_date || '',
-      scheduled_time: project.scheduled_time || ''
+      scheduled_time: project.scheduled_time || '',
+      bin_id: project.bin_id || '',
     });
     setEditingProject(project);
     setShowProjectDialog(true);
@@ -234,6 +261,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
       const payload = {
         property_id: projectForm.property_id || null,
         property_name: projectForm.property_name || null,
+        bin_id: projectForm.bin_id || null,
         title: projectForm.title || 'New Project',
         description: projectForm.description || null,
         status: projectForm.status,
@@ -307,6 +335,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
       const payload = {
         property_id: match?.id || null,
         property_name: propertyName,
+        bin_id: (activeBinId && activeBinId !== '__none__') ? activeBinId : null,
         title: 'New Project',
         description: null,
         status: 'not_started',
@@ -465,6 +494,11 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     // View mode
     viewMode,
     setViewMode,
+
+    // Bin filtering
+    activeBinId,
+    setActiveBinId,
+    fetchProjectsForBin,
 
     // Project views (SHARED)
     projectViews,

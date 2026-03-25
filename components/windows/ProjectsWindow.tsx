@@ -3,6 +3,7 @@
 import { memo, useCallback, useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import type { useProjects } from '@/lib/useProjects';
+import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
@@ -12,9 +13,10 @@ import {
   ProjectActivitySheet,
   AttachmentLightbox,
   ProjectFormDialog,
+  BinPicker,
 } from './projects';
 import { ProjectsKanban } from './projects/ProjectsKanban';
-import type { User, Project, Attachment, Comment, ProjectFormFields } from '@/lib/types';
+import type { User, Project, Attachment, Comment, ProjectFormFields, ProjectBin } from '@/lib/types';
 
 interface ProjectsWindowProps {
   users: User[];
@@ -23,6 +25,16 @@ interface ProjectsWindowProps {
 }
 
 function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWindowProps) {
+  // ============================================================================
+  // Bins hook
+  // ============================================================================
+  const binsHook = useProjectBins({ currentUser });
+
+  // Which bin is currently selected? null = still on picker screen
+  const [selectedBinId, setSelectedBinId] = useState<string | null>(null);
+  const [selectedBinName, setSelectedBinName] = useState<string>('All Projects');
+  const [showKanban, setShowKanban] = useState(false);
+
   // ============================================================================
   // LOCAL instances of sub-hooks (independent from TurnoversWindow)
   // ============================================================================
@@ -62,6 +74,10 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
     viewMode,
     setViewMode,
 
+    // Bin filtering
+    activeBinId,
+    fetchProjectsForBin,
+
     // Project views
     recordProjectView,
     getUnreadCommentCount,
@@ -82,6 +98,49 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
     saveProjectById,
     updateProjectField,
   } = projectsHook;
+
+  // ============================================================================
+  // Bin Navigation
+  // ============================================================================
+  const handleSelectBin = useCallback(async (binId: string | null) => {
+    // binId: null = "All Projects", '__none__' = unbinned, uuid = specific bin
+    setSelectedBinId(binId);
+    setShowKanban(true);
+    setExpandedProject(null);
+
+    if (binId === null) {
+      setSelectedBinName('All Projects');
+    } else if (binId === '__none__') {
+      setSelectedBinName('Unbinned');
+    } else {
+      const bin = binsHook.bins.find(b => b.id === binId);
+      setSelectedBinName(bin?.name || 'Bin');
+    }
+
+    // Fetch projects filtered by this bin
+    await fetchProjectsForBin(binId);
+  }, [binsHook.bins, fetchProjectsForBin]);
+
+  const handleBackToBins = useCallback(() => {
+    setShowKanban(false);
+    setExpandedProject(null);
+    setSelectedBinId(null);
+    setSelectedBinName('All Projects');
+    // Refresh bin counts
+    binsHook.fetchBins();
+  }, [binsHook.fetchBins]);
+
+  const handleCreateBin = useCallback(async (name: string, description?: string) => {
+    return binsHook.createBin(name, description);
+  }, [binsHook.createBin]);
+
+  const handleDeleteBin = useCallback((binId: string) => {
+    binsHook.deleteBin(binId);
+  }, [binsHook.deleteBin]);
+
+  const handleRenameBin = useCallback((binId: string, name: string) => {
+    binsHook.updateBin(binId, { name });
+  }, [binsHook.updateBin]);
 
   // ============================================================================
   // Initialize fields when expanding a project
@@ -167,15 +226,60 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
     [updateProjectField]
   );
 
+  // ============================================================================
+  // RENDER: Bin Picker screen vs Kanban screen
+  // ============================================================================
+  if (!showKanban) {
+    return (
+      <>
+        <BinPicker
+          bins={binsHook.bins}
+          loadingBins={binsHook.loadingBins}
+          totalProjects={binsHook.totalProjects}
+          unbinnedCount={binsHook.unbinnedCount}
+          onSelectBin={handleSelectBin}
+          onCreateBin={handleCreateBin}
+          onDeleteBin={handleDeleteBin}
+          onRenameBin={handleRenameBin}
+        />
+
+        {/* Create/Edit Project Dialog (accessible from bin picker) */}
+        <ProjectFormDialog
+          open={showProjectDialog}
+          onOpenChange={setShowProjectDialog}
+          editingProject={editingProject}
+          formData={projectForm}
+          setFormData={setProjectForm}
+          allProperties={allProperties}
+          saving={savingProject}
+          onSave={handleCreateProject}
+        />
+      </>
+    );
+  }
+
   return (
     <div className="flex h-full">
       {/* Left Panel - Kanban Board */}
       <div className={`${expandedProject ? 'w-2/3' : 'w-full'} h-full flex flex-col transition-[width] duration-200 ease-out`}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex-shrink-0">
-          <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
-            Projects
-          </h3>
+          <div className="flex items-center gap-3">
+            {/* Back to bins button */}
+            <button
+              onClick={handleBackToBins}
+              className="flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Bins
+            </button>
+            <span className="text-neutral-300 dark:text-neutral-600">/</span>
+            <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
+              {selectedBinName}
+            </h3>
+          </div>
           <div className="flex items-center gap-3">
             {/* View Mode Toggle */}
             <div className="flex bg-neutral-100 dark:bg-neutral-800 rounded-lg p-0.5">
@@ -211,7 +315,7 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
           <div className="flex items-center justify-center flex-1">
             <div className="text-center">
               <p className="text-neutral-500 dark:text-neutral-400 mb-4">
-                No projects yet. Create your first project!
+                No projects in this bin yet.
               </p>
               <Button onClick={() => openCreateProjectDialog()}>
                 Create First Project

@@ -8,6 +8,7 @@ export async function GET(request: Request) {
     const propertyName = searchParams.get('property_name');
     const userId = searchParams.get('user_id'); // For "My Assignments" filtering
     const viewerUserId = searchParams.get('viewer_user_id'); // For unread comment count
+    const binId = searchParams.get('bin_id'); // Filter by bin
 
     let query = getSupabaseServer()
       .from('property_projects')
@@ -26,6 +27,13 @@ export async function GET(request: Request) {
 
     if (propertyName) {
       query = query.eq('property_name', propertyName);
+    }
+
+    // Filter by bin_id (use '__none__' to get unbinned projects)
+    if (binId === '__none__') {
+      query = query.is('bin_id', null);
+    } else if (binId) {
+      query = query.eq('bin_id', binId);
     }
 
     const { data, error } = await query;
@@ -105,7 +113,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     console.log('Request body:', JSON.stringify(body, null, 2));
     
-    const { property_id, property_name, title, description, status, priority, assigned_user_ids, scheduled_date, scheduled_time, department_id } = body;
+    const { property_id, property_name, title, description, status, priority, assigned_user_ids, scheduled_date, scheduled_time, department_id, bin_id } = body;
 
     if (!title) {
       console.log('Validation failed: missing title');
@@ -122,6 +130,7 @@ export async function POST(request: Request) {
       .insert({
         property_id: property_id || null,
         property_name: property_name || null,
+        bin_id: bin_id || null,
         title,
         description: description || null,
         status: status || 'not_started',

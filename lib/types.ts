@@ -116,6 +116,21 @@ export interface PropertyOption {
 }
 
 // ============================================================================
+// Bin Types (project grouping containers)
+// ============================================================================
+
+export interface ProjectBin {
+  id: string;
+  name: string;
+  description?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  sort_order: number;
+  project_count?: number; // computed client-side
+}
+
+// ============================================================================
 // Project Types
 // ============================================================================
 
@@ -126,6 +141,7 @@ export interface Project {
   id: string;
   property_id?: string | null;
   property_name?: string | null;
+  bin_id?: string | null;
   title: string;
   description?: string;
   status: ProjectStatus;

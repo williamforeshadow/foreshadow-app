@@ -66,7 +66,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, description, status, priority, assigned_user_ids, scheduled_date, scheduled_time, department_id, user_id, property_name, property_id } = body;
+    const { title, description, status, priority, assigned_user_ids, scheduled_date, scheduled_time, department_id, user_id, property_name, property_id, bin_id } = body;
 
     // Fetch current project to compare for activity logging
     const { data: oldProject } = await getSupabaseServer()
@@ -90,6 +90,7 @@ export async function PUT(
     if (department_id !== undefined) updateData.department_id = department_id || null;
     if (property_name !== undefined) updateData.property_name = property_name || null;
     if (property_id !== undefined) updateData.property_id = property_id || null;
+    if (bin_id !== undefined) updateData.bin_id = bin_id || null;
 
     const { error: updateError } = await getSupabaseServer()
       .from('property_projects')
