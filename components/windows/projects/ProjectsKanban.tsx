@@ -3,7 +3,7 @@
 import { useMemo, useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import HexagonIcon from '@/components/icons/HammerIcon';
-import type { Project, ProjectStatus, ProjectPriority, PropertyOption } from '@/lib/types';
+import type { Project, ProjectStatus, ProjectPriority, PropertyOption, User, Department } from '@/lib/types';
 import type { ProjectViewMode } from '@/lib/useProjects';
 import { STATUS_LABELS, PRIORITY_LABELS, STATUS_ORDER, PRIORITY_ORDER } from '@/lib/useProjects';
 import type { KanbanItemProps, KanbanColumnDataProps } from '@/lib/kanban-helpers';
@@ -44,6 +44,8 @@ interface ProjectsKanbanProps {
   projects: Project[];
   viewMode: ProjectViewMode;
   allProperties: PropertyOption[];
+  users?: User[];
+  departments?: Department[];
   onProjectClick: (project: Project) => void;
   expandedProjectId: string | null;
   getUnreadCommentCount: (project: Project) => number;
@@ -59,6 +61,8 @@ export function ProjectsKanban({
   projects,
   viewMode,
   allProperties,
+  users = [],
+  departments = [],
   onProjectClick,
   expandedProjectId,
   getUnreadCommentCount,
@@ -107,20 +111,67 @@ export function ProjectsKanban({
       }));
     }
 
-    // priority
-    return PRIORITY_ORDER.map((priority) => ({
-      id: `priority:${priority}`,
-      name: PRIORITY_LABELS[priority],
-      accent:
-        priority === 'urgent'
-          ? styles.columnAccentUrgent
-          : priority === 'high'
-          ? styles.columnAccentHigh
-          : priority === 'medium'
-          ? styles.columnAccentMedium
-          : styles.columnAccentLow,
+    if (viewMode === 'priority') {
+      return PRIORITY_ORDER.map((priority) => ({
+        id: `priority:${priority}`,
+        name: PRIORITY_LABELS[priority],
+        accent:
+          priority === 'urgent'
+            ? styles.columnAccentUrgent
+            : priority === 'high'
+            ? styles.columnAccentHigh
+            : priority === 'medium'
+            ? styles.columnAccentMedium
+            : styles.columnAccentLow,
+      }));
+    }
+
+    if (viewMode === 'department') {
+      // One column per department, plus "No Department"
+      const deptNames = new Set<string>();
+      deptNames.add('No Department');
+      projects.forEach((p) => {
+        deptNames.add(p.department_name || 'No Department');
+      });
+      departments.forEach((d) => {
+        if (d.name) deptNames.add(d.name);
+      });
+      const sorted = Array.from(deptNames).sort((a, b) => {
+        if (a === 'No Department') return -1;
+        if (b === 'No Department') return 1;
+        return a.localeCompare(b);
+      });
+      return sorted.map((name) => ({
+        id: `dept:${name}`,
+        name,
+      }));
+    }
+
+    // assignee
+    const assigneeNames = new Set<string>();
+    assigneeNames.add('Unassigned');
+    projects.forEach((p) => {
+      if (p.project_assignments && p.project_assignments.length > 0) {
+        p.project_assignments.forEach((a) => {
+          assigneeNames.add(a.user?.name || a.user_id);
+        });
+      } else {
+        assigneeNames.add('Unassigned');
+      }
+    });
+    users.forEach((u) => {
+      if (u.name) assigneeNames.add(u.name);
+    });
+    const sorted = Array.from(assigneeNames).sort((a, b) => {
+      if (a === 'Unassigned') return -1;
+      if (b === 'Unassigned') return 1;
+      return a.localeCompare(b);
+    });
+    return sorted.map((name) => ({
+      id: `assignee:${name}`,
+      name,
     }));
-  }, [viewMode, projects, allProperties]);
+  }, [viewMode, projects, allProperties, departments, users]);
 
   // Filter columns by visibility selection
   // undefined = prop not passed, show all; empty Set = user cleared all, show none
@@ -131,12 +182,35 @@ export function ProjectsKanban({
 
   // Transform projects into draggable items
   const initialItems: DraggableProjectItem[] = useMemo(() => {
+    if (viewMode === 'assignee') {
+      // In assignee mode, duplicate a project into each assignee's column
+      const items: DraggableProjectItem[] = [];
+      projects.forEach((project) => {
+        const assignments = project.project_assignments || [];
+        if (assignments.length === 0) {
+          items.push({ id: project.id, columnId: 'assignee:Unassigned', project });
+        } else {
+          assignments.forEach((a, idx) => {
+            const name = a.user?.name || a.user_id;
+            items.push({
+              id: idx === 0 ? project.id : `${project.id}__assignee_${idx}`,
+              columnId: `assignee:${name}`,
+              project,
+            });
+          });
+        }
+      });
+      return items;
+    }
+
     return projects.map((project) => {
       let columnId: string;
       if (viewMode === 'property') {
         columnId = `prop:${project.property_name || 'No Property'}`;
       } else if (viewMode === 'status') {
         columnId = `status:${project.status}`;
+      } else if (viewMode === 'department') {
+        columnId = `dept:${project.department_name || 'No Department'}`;
       } else {
         columnId = `priority:${project.priority}`;
       }
@@ -163,17 +237,62 @@ export function ProjectsKanban({
       const [fieldPrefix, ...valueParts] = newColumnId.split(':');
       const value = valueParts.join(':'); // rejoin in case name had ':'
 
+      // Strip any duplicate-assignee suffix from the item ID
+      const realItemId = itemId.includes('__assignee_') ? itemId.split('__assignee_')[0] : itemId;
+
       if (fieldPrefix === 'prop') {
-        // Property change - pass property_name
         const propName = value === 'No Property' ? '' : value;
-        onColumnMove(itemId, 'property_name', propName);
+        onColumnMove(realItemId, 'property_name', propName);
       } else if (fieldPrefix === 'status') {
-        onColumnMove(itemId, 'status', value);
+        onColumnMove(realItemId, 'status', value);
       } else if (fieldPrefix === 'priority') {
-        onColumnMove(itemId, 'priority', value);
+        onColumnMove(realItemId, 'priority', value);
+      } else if (fieldPrefix === 'dept') {
+        // Find the department ID from the name
+        const dept = departments.find(d => d.name === value);
+        onColumnMove(realItemId, 'department_id', dept?.id || '');
+      } else if (fieldPrefix === 'assignee') {
+        // Find the project to get its current assignment list
+        const project = projects.find(p => p.id === realItemId);
+        const currentAssignments = project?.project_assignments || [];
+        const currentUserIds = currentAssignments.map(a => a.user_id);
+
+        // Parse old column to determine which user is being "removed"
+        const oldValue = _oldColumnId.split(':').slice(1).join(':');
+        const oldUser = users.find(u => u.name === oldValue);
+
+        if (value === 'Unassigned') {
+          // Moving to Unassigned = remove old assignee, keep the rest
+          if (oldUser) {
+            const newIds = currentUserIds.filter(id => id !== oldUser.id);
+            onColumnMove(realItemId, 'assigned_user_ids', newIds.join(','));
+          }
+        } else {
+          const newUser = users.find(u => u.name === value);
+          if (!newUser) return;
+
+          // If the target user is already assigned, reject the move
+          if (currentUserIds.includes(newUser.id)) {
+            // Revert the visual drag — put the card back in its old column
+            setItems(prev =>
+              prev.map(item =>
+                item.id === itemId ? { ...item, columnId: _oldColumnId } : item
+              )
+            );
+            return;
+          }
+
+          // Remove old assignee, add new one, keep everyone else
+          let newIds = [...currentUserIds];
+          if (oldUser) {
+            newIds = newIds.filter(id => id !== oldUser.id);
+          }
+          newIds.push(newUser.id);
+          onColumnMove(realItemId, 'assigned_user_ids', newIds.join(','));
+        }
       }
     },
-    [onColumnMove]
+    [onColumnMove, departments, users, projects]
   );
 
   // Use the kanban DnD hook
@@ -277,10 +396,10 @@ function ColumnIcon({ viewMode, columnId }: { viewMode: ProjectViewMode; columnI
   if (viewMode === 'status') {
     const status = columnId.replace('status:', '') as ProjectStatus;
     const colors: Record<ProjectStatus, { bg: string; color: string }> = {
-      not_started: { bg: 'rgba(239,68,68,0.2)', color: '#f87171' },
-      in_progress: { bg: 'rgba(234,179,8,0.2)', color: '#facc15' },
-      on_hold: { bg: 'rgba(249,115,22,0.2)', color: '#fb923c' },
-      complete: { bg: 'rgba(34,197,94,0.2)', color: '#4ade80' },
+      not_started: { bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
+      in_progress: { bg: 'rgba(99,102,241,0.15)', color: '#818cf8' },
+      on_hold: { bg: 'rgba(163,163,163,0.15)', color: '#a3a3a3' },
+      complete: { bg: 'rgba(16,185,129,0.15)', color: '#34d399' },
     };
     const c = colors[status] || colors.not_started;
     return (
@@ -290,18 +409,38 @@ function ColumnIcon({ viewMode, columnId }: { viewMode: ProjectViewMode; columnI
     );
   }
 
-  // priority
-  const priority = columnId.replace('priority:', '') as ProjectPriority;
-  const colors: Record<ProjectPriority, { bg: string; color: string }> = {
-    urgent: { bg: 'rgba(239,68,68,0.2)', color: '#f87171' },
-    high: { bg: 'rgba(249,115,22,0.2)', color: '#fb923c' },
-    medium: { bg: 'rgba(59,130,246,0.2)', color: '#60a5fa' },
-    low: { bg: 'rgba(100,116,139,0.2)', color: '#94a3b8' },
-  };
-  const c = colors[priority] || colors.medium;
+  if (viewMode === 'priority') {
+    const priority = columnId.replace('priority:', '') as ProjectPriority;
+    const colors: Record<ProjectPriority, { bg: string; color: string }> = {
+      urgent: { bg: 'rgba(239,68,68,0.15)', color: '#f87171' },
+      high: { bg: 'rgba(249,115,22,0.15)', color: '#fb923c' },
+      medium: { bg: 'rgba(59,130,246,0.15)', color: '#60a5fa' },
+      low: { bg: 'rgba(100,116,139,0.15)', color: '#94a3b8' },
+    };
+    const c = colors[priority] || colors.medium;
+    return (
+      <div className={styles.columnIcon} style={{ backgroundColor: c.bg, color: c.color }}>
+        {priority === 'urgent' ? '!!' : priority === 'high' ? '!' : '●'}
+      </div>
+    );
+  }
+
+  if (viewMode === 'department') {
+    return (
+      <div className={styles.columnIcon} style={{ backgroundColor: 'rgba(133,183,235,0.15)', color: '#85B7EB' }}>
+        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        </svg>
+      </div>
+    );
+  }
+
+  // assignee
   return (
-    <div className={styles.columnIcon} style={{ backgroundColor: c.bg, color: c.color }}>
-      {priority === 'urgent' ? '!!' : priority === 'high' ? '!' : '●'}
+    <div className={styles.columnIcon} style={{ backgroundColor: 'rgba(168,85,247,0.15)', color: '#c084fc' }}>
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
     </div>
   );
 }
@@ -424,9 +563,7 @@ function ProjectCardContent({
   };
 
   // Decide what subtitle to show based on view mode
-  // In property view, don't show property name (it's already the column header)
-  // In status view, don't show status (it's the column)
-  // In priority view, don't show priority (it's the column)
+  // Don't repeat information that's already the column header
   const subtitle =
     viewMode === 'property'
       ? null
@@ -502,9 +639,9 @@ function ProjectCardContent({
           })()}
         </div>
 
-        {/* Right: assignee avatars */}
+        {/* Right: assignee avatars (hide in assignee view — column is the user) */}
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          {assignees.length > 0 && (
+          {viewMode !== 'assignee' && assignees.length > 0 && (
             <>
               {assignees.slice(0, 3).map((user, index) => (
                 <div

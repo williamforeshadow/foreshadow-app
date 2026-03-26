@@ -11,7 +11,7 @@ import type {
 } from '@/lib/types';
 
 // View mode type for project grouping
-export type ProjectViewMode = 'property' | 'status' | 'priority';
+export type ProjectViewMode = 'property' | 'status' | 'priority' | 'department' | 'assignee';
 
 // Labels for display
 export const STATUS_LABELS: Record<ProjectStatus, string> = {
@@ -29,7 +29,7 @@ export const PRIORITY_LABELS: Record<ProjectPriority, string> = {
 };
 
 // Ordered arrays for consistent column order
-export const STATUS_ORDER: ProjectStatus[] = ['not_started', 'in_progress', 'on_hold', 'complete'];
+export const STATUS_ORDER: ProjectStatus[] = ['on_hold', 'not_started', 'in_progress', 'complete'];
 export const PRIORITY_ORDER: ProjectPriority[] = ['urgent', 'high', 'medium', 'low'];
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
@@ -408,19 +408,24 @@ export function useProjects({ currentUser }: UseProjectsProps) {
     }
   }, [currentUser]);
 
-  // Lightweight field update for kanban column moves (status / priority / property)
+  // Lightweight field update for kanban column moves (status / priority / property / department / assignee)
   const updateProjectField = useCallback(async (
     projectId: string,
     field: string,
     value: string
   ) => {
     try {
-      const payload: Record<string, unknown> = { [field]: value || null };
+      const payload: Record<string, unknown> = {};
 
-      // When moving to a property column, also resolve the property_id
       if (field === 'property_name') {
+        payload.property_name = value || null;
         const prop = allProperties.find((p) => p.name === value);
         payload.property_id = prop?.id || null;
+      } else if (field === 'assigned_user_ids') {
+        // value is '' for unassign, or a single user id, or comma-separated ids
+        payload.assigned_user_ids = value ? value.split(',').filter(Boolean) : [];
+      } else {
+        payload[field] = value || null;
       }
 
       const res = await fetch(`/api/projects/${projectId}`, {

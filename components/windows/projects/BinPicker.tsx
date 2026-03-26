@@ -62,19 +62,19 @@ export function BinPicker({
   }
 
   return (
-    <div className="h-full flex flex-col bg-neutral-950">
+    <div className="h-full flex flex-col bg-transparent">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 flex-shrink-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0">
         <div>
           <h2 className="text-xl font-semibold text-white">Project Bins</h2>
-          <p className="text-sm text-neutral-400 mt-0.5">
+          <p className="text-sm text-white/40 mt-0.5">
             {totalProjects} total project{totalProjects !== 1 ? 's' : ''} across {bins.length} bin{bins.length !== 1 ? 's' : ''}
           </p>
         </div>
         <Button
           size="sm"
           onClick={() => setShowCreateForm(true)}
-          className="bg-neutral-800 hover:bg-neutral-700 text-white border border-neutral-700"
+          className="bg-white/[0.08] hover:bg-white/[0.14] text-white border border-white/10 backdrop-blur-sm"
         >
           <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -89,26 +89,26 @@ export function BinPicker({
           {/* All Projects Card */}
           <button
             onClick={() => onSelectBin(null)}
-            className="group relative flex flex-col justify-between p-5 rounded-xl border border-neutral-700 bg-neutral-900 hover:bg-neutral-800 hover:border-neutral-600 transition-all duration-150 text-left min-h-[140px]"
+            className="group relative flex flex-col justify-between p-5 rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md hover:bg-white/[0.08] hover:border-white/20 transition-all duration-200 text-left min-h-[140px]"
           >
             <div>
               <div className="flex items-center gap-2.5 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center">
                   <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                   </svg>
                 </div>
                 <h3 className="text-base font-semibold text-white">All Projects</h3>
               </div>
-              <p className="text-xs text-neutral-500 line-clamp-2">
+              <p className="text-xs text-white/30 line-clamp-2">
                 View every project across all bins
               </p>
             </div>
             <div className="flex items-center justify-between mt-3">
-              <span className="text-sm font-medium text-neutral-400">
+              <span className="text-sm font-medium text-white/40">
                 {totalProjects} project{totalProjects !== 1 ? 's' : ''}
               </span>
-              <svg className="w-4 h-4 text-neutral-600 group-hover:text-neutral-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-white/20 group-hover:text-white/40 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </div>
@@ -116,21 +116,36 @@ export function BinPicker({
 
           {/* Individual Bin Cards */}
           {bins.map((bin) => (
-            <button
+            <div
               key={bin.id}
+              role="button"
+              tabIndex={0}
               onClick={() => {
                 if (editingBinId === bin.id) return;
                 onSelectBin(bin.id);
               }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setContextMenuBinId(contextMenuBinId === bin.id ? null : bin.id);
-              }}
-              className="group relative flex flex-col justify-between p-5 rounded-xl border border-neutral-700 bg-neutral-900 hover:bg-neutral-800 hover:border-neutral-600 transition-all duration-150 text-left min-h-[140px]"
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectBin(bin.id); } }}
+              className="group relative flex flex-col justify-between p-5 rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md hover:bg-white/[0.08] hover:border-white/20 transition-all duration-200 text-left min-h-[140px] cursor-pointer"
             >
+              {/* ⋯ menu button — visible on hover */}
+              <div
+                className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => setContextMenuBinId(contextMenuBinId === bin.id ? null : bin.id)}
+                  className="p-1 rounded-md hover:bg-white/10 transition-colors"
+                  title="Bin options"
+                >
+                  <svg className="w-4 h-4 text-white/40" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </button>
+              </div>
+
               <div>
                 <div className="flex items-center gap-2.5 mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center">
                     <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                     </svg>
@@ -146,35 +161,35 @@ export function BinPicker({
                         if (e.key === 'Escape') { setEditingBinId(null); setEditName(''); }
                       }}
                       onClick={(e) => e.stopPropagation()}
-                      className="text-base font-semibold text-white bg-transparent border-b border-neutral-500 outline-none flex-1 min-w-0"
+                      className="text-base font-semibold text-white bg-transparent border-b border-white/20 outline-none flex-1 min-w-0"
                     />
                   ) : (
                     <h3 className="text-base font-semibold text-white truncate">{bin.name}</h3>
                   )}
                 </div>
                 {bin.description && (
-                  <p className="text-xs text-neutral-500 line-clamp-2">
+                  <p className="text-xs text-white/30 line-clamp-2">
                     {bin.description}
                   </p>
                 )}
               </div>
               <div className="flex items-center justify-between mt-3">
-                <span className="text-sm font-medium text-neutral-400">
+                <span className="text-sm font-medium text-white/40">
                   {bin.project_count || 0} project{(bin.project_count || 0) !== 1 ? 's' : ''}
                 </span>
-                <svg className="w-4 h-4 text-neutral-600 group-hover:text-neutral-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-white/20 group-hover:text-white/40 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </div>
 
-              {/* Context menu */}
+              {/* Context menu dropdown */}
               {contextMenuBinId === bin.id && (
                 <div
-                  className="absolute top-2 right-2 z-20 bg-neutral-800 border border-neutral-700 rounded-lg shadow-lg py-1 min-w-[120px]"
+                  className="absolute top-10 right-3 z-20 bg-neutral-900/90 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl py-1 min-w-[120px]"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
-                    className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-700 transition-colors"
+                    className="w-full text-left px-3 py-1.5 text-xs text-white/70 hover:bg-white/10 transition-colors"
                     onClick={() => {
                       setEditingBinId(bin.id);
                       setEditName(bin.name);
@@ -184,7 +199,7 @@ export function BinPicker({
                     Rename
                   </button>
                   <button
-                    className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-neutral-700 transition-colors"
+                    className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-white/10 transition-colors"
                     onClick={() => {
                       if (confirm(`Delete "${bin.name}"? Projects will be moved to unbinned.`)) {
                         onDeleteBin(bin.id);
@@ -196,33 +211,33 @@ export function BinPicker({
                   </button>
                 </div>
               )}
-            </button>
+            </div>
           ))}
 
           {/* Unbinned Card (only show if there are unbinned projects) */}
           {unbinnedCount > 0 && (
             <button
               onClick={() => onSelectBin('__none__')}
-              className="group relative flex flex-col justify-between p-5 rounded-xl border border-dashed border-neutral-700 bg-neutral-900/50 hover:bg-neutral-800 hover:border-neutral-600 transition-all duration-150 text-left min-h-[140px]"
+              className="group relative flex flex-col justify-between p-5 rounded-xl border border-dashed border-white/10 bg-white/[0.02] backdrop-blur-md hover:bg-white/[0.06] hover:border-white/20 transition-all duration-200 text-left min-h-[140px]"
             >
               <div>
                 <div className="flex items-center gap-2.5 mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-neutral-700/50 flex items-center justify-center">
-                    <svg className="w-4 h-4 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-8 h-8 rounded-lg bg-white/[0.06] flex items-center justify-center">
+                    <svg className="w-4 h-4 text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                     </svg>
                   </div>
-                  <h3 className="text-base font-semibold text-neutral-400">Unbinned</h3>
+                  <h3 className="text-base font-semibold text-white/40">Unbinned</h3>
                 </div>
-                <p className="text-xs text-neutral-600 line-clamp-2">
+                <p className="text-xs text-white/20 line-clamp-2">
                   Projects not assigned to any bin
                 </p>
               </div>
               <div className="flex items-center justify-between mt-3">
-                <span className="text-sm font-medium text-neutral-500">
+                <span className="text-sm font-medium text-white/30">
                   {unbinnedCount} project{unbinnedCount !== 1 ? 's' : ''}
                 </span>
-                <svg className="w-4 h-4 text-neutral-600 group-hover:text-neutral-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-white/20 group-hover:text-white/40 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </div>
@@ -233,21 +248,21 @@ export function BinPicker({
           {!showCreateForm && (
             <button
               onClick={() => setShowCreateForm(true)}
-              className="flex flex-col items-center justify-center p-5 rounded-xl border border-dashed border-neutral-700 bg-transparent hover:bg-neutral-900 hover:border-neutral-600 transition-all duration-150 min-h-[140px]"
+              className="flex flex-col items-center justify-center p-5 rounded-xl border border-dashed border-white/10 bg-transparent hover:bg-white/[0.04] hover:border-white/20 transition-all duration-200 min-h-[140px]"
             >
-              <div className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center mb-2">
-                <svg className="w-5 h-5 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-10 h-10 rounded-full bg-white/[0.06] flex items-center justify-center mb-2">
+                <svg className="w-5 h-5 text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
               </div>
-              <span className="text-sm text-neutral-500 font-medium">Create Bin</span>
+              <span className="text-sm text-white/30 font-medium">Create Bin</span>
             </button>
           )}
         </div>
 
         {/* Inline Create Form */}
         {showCreateForm && (
-          <div className="mt-6 p-5 rounded-xl border border-neutral-700 bg-neutral-900 max-w-md">
+          <div className="mt-6 p-5 rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md max-w-md">
             <h4 className="text-sm font-semibold text-white mb-3">New Bin</h4>
             <input
               autoFocus
@@ -256,7 +271,7 @@ export function BinPicker({
               value={newBinName}
               onChange={(e) => setNewBinName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
-              className="w-full px-3 py-2 rounded-lg bg-neutral-800 border border-neutral-700 text-white text-sm placeholder-neutral-500 outline-none focus:border-neutral-500 mb-2"
+              className="w-full px-3 py-2 rounded-lg bg-white/[0.06] border border-white/10 text-white text-sm placeholder-white/30 outline-none focus:border-white/20 mb-2"
             />
             <input
               type="text"
@@ -264,7 +279,7 @@ export function BinPicker({
               value={newBinDescription}
               onChange={(e) => setNewBinDescription(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
-              className="w-full px-3 py-2 rounded-lg bg-neutral-800 border border-neutral-700 text-white text-sm placeholder-neutral-500 outline-none focus:border-neutral-500 mb-3"
+              className="w-full px-3 py-2 rounded-lg bg-white/[0.06] border border-white/10 text-white text-sm placeholder-white/30 outline-none focus:border-white/20 mb-3"
             />
             <div className="flex items-center gap-2">
               <Button
@@ -277,7 +292,7 @@ export function BinPicker({
               <Button
                 size="sm"
                 variant="ghost"
-                className="text-neutral-400"
+                className="text-white/40"
                 onClick={() => {
                   setShowCreateForm(false);
                   setNewBinName('');

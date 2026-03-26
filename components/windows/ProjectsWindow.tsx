@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import type { useProjects } from '@/lib/useProjects';
+import type { useProjects, ProjectViewMode } from '@/lib/useProjects';
 import { STATUS_LABELS, STATUS_ORDER, PRIORITY_LABELS, PRIORITY_ORDER } from '@/lib/useProjects';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
@@ -18,7 +18,83 @@ import {
 } from './projects';
 import { ColumnPicker } from './projects/ColumnPicker';
 import { ProjectsKanban } from './projects/ProjectsKanban';
+import { useDepartments } from '@/lib/departmentsContext';
 import type { User, Project, Attachment, Comment, ProjectFormFields } from '@/lib/types';
+
+// ============================================================================
+// View Mode Toggle — compact pill that expands on click
+// ============================================================================
+
+const VIEW_MODE_LABELS: Record<ProjectViewMode, string> = {
+  property: 'Property',
+  status: 'Status',
+  priority: 'Priority',
+  department: 'Dept',
+  assignee: 'Assignee',
+};
+
+const ALL_VIEW_MODES: ProjectViewMode[] = ['property', 'status', 'priority', 'department', 'assignee'];
+
+function ViewModeToggle({
+  viewMode,
+  setViewMode,
+}: {
+  viewMode: ProjectViewMode;
+  setViewMode: (m: ProjectViewMode) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on click outside
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      {/* Collapsed: just the active mode */}
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl bg-white/30 dark:bg-white/[0.08] backdrop-blur-sm border border-white/20 dark:border-white/10 text-neutral-900 dark:text-white transition-all hover:bg-white/50 dark:hover:bg-white/[0.12]"
+        >
+          {VIEW_MODE_LABELS[viewMode]}
+        </button>
+      )}
+
+      {/* Expanded: all modes in a row */}
+      {open && (
+        <div className="flex gap-0.5 p-1 rounded-xl bg-white/30 dark:bg-white/[0.06] backdrop-blur-sm border border-white/20 dark:border-white/10">
+          {ALL_VIEW_MODES.map((mode) => (
+            <button
+              key={mode}
+              onClick={() => {
+                setViewMode(mode);
+                setOpen(false);
+              }}
+              className={`px-3 py-1 text-xs font-medium rounded-lg whitespace-nowrap transition-all duration-200 ${
+                viewMode === mode
+                  ? 'bg-white/70 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
+                  : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/30 dark:hover:bg-white/10'
+              }`}
+            >
+              {VIEW_MODE_LABELS[mode]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
 
 interface ProjectsWindowProps {
   users: User[];
@@ -28,8 +104,9 @@ interface ProjectsWindowProps {
 
 function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWindowProps) {
   // ============================================================================
-  // Bins hook
+  // Departments + Bins hooks
   // ============================================================================
+  const { departments } = useDepartments();
   const binsHook = useProjectBins({ currentUser });
 
   // Which bin is currently selected? null = still on picker screen
@@ -103,7 +180,7 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
   const allColumnOptions = useMemo(() => {
     if (viewMode === 'property') {
       const names = new Set<string>();
-      names.add('No Property'); // Always available as first option
+      names.add('No Property');
       projects.forEach((p) => names.add(p.property_name || 'No Property'));
       allProperties.forEach((p) => { if (p.name) names.add(p.name); });
       const sorted = Array.from(names).sort((a, b) => {
@@ -116,8 +193,37 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
     if (viewMode === 'status') {
       return STATUS_ORDER.map((s) => ({ id: `status:${s}`, name: STATUS_LABELS[s] }));
     }
-    return PRIORITY_ORDER.map((p) => ({ id: `priority:${p}`, name: PRIORITY_LABELS[p] }));
-  }, [viewMode, projects, allProperties]);
+    if (viewMode === 'priority') {
+      return PRIORITY_ORDER.map((p) => ({ id: `priority:${p}`, name: PRIORITY_LABELS[p] }));
+    }
+    if (viewMode === 'department') {
+      const names = new Set<string>();
+      names.add('No Department');
+      projects.forEach((p) => names.add(p.department_name || 'No Department'));
+      departments.forEach((d) => { if (d.name) names.add(d.name); });
+      const sorted = Array.from(names).sort((a, b) => {
+        if (a === 'No Department') return -1;
+        if (b === 'No Department') return 1;
+        return a.localeCompare(b);
+      });
+      return sorted.map((name) => ({ id: `dept:${name}`, name }));
+    }
+    // assignee
+    const names = new Set<string>();
+    names.add('Unassigned');
+    projects.forEach((p) => {
+      if (p.project_assignments && p.project_assignments.length > 0) {
+        p.project_assignments.forEach((a) => names.add(a.user?.name || a.user_id));
+      }
+    });
+    users.forEach((u) => { if (u.name) names.add(u.name); });
+    const sorted = Array.from(names).sort((a, b) => {
+      if (a === 'Unassigned') return -1;
+      if (b === 'Unassigned') return 1;
+      return a.localeCompare(b);
+    });
+    return sorted.map((name) => ({ id: `assignee:${name}`, name }));
+  }, [viewMode, projects, allProperties, departments, users]);
 
   // Initialize column visibility defaults when columns are known
   useEffect(() => {
@@ -272,11 +378,11 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
   }
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full overflow-hidden glass-bg-neutral">
       {/* Left Panel - Kanban Board */}
       <div className={`${expandedProject ? 'w-2/3' : 'w-full'} h-full flex flex-col transition-[width] duration-200 ease-out`}>
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex-shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/20 dark:border-white/10 glass-panel bg-white/40 dark:bg-white/[0.05] flex-shrink-0">
           <div className="flex items-center gap-3">
             {/* Back to bins button */}
             <button
@@ -288,28 +394,15 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
               </svg>
               Bins
             </button>
-            <span className="text-neutral-300 dark:text-neutral-600">/</span>
+            <span className="text-neutral-400/50 dark:text-white/20">/</span>
             <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
               {selectedBinName}
             </h3>
           </div>
           <div className="flex items-center gap-3">
             {/* View Mode Toggle */}
-            <div className="flex bg-neutral-100 dark:bg-neutral-800 rounded-lg p-0.5">
-              {(['property', 'status', 'priority'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setViewMode(mode)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                    viewMode === mode
-                      ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm'
-                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-                  }`}
-                >
-                  {mode === 'property' ? 'Property' : mode === 'status' ? 'Status' : 'Priority'}
-                </button>
-              ))}
-            </div>
+            {/* View Mode Toggle — click to expand/collapse */}
+            <ViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
             {/* Column Picker */}
             <ColumnPicker
               columns={allColumnOptions}
@@ -348,6 +441,8 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
             projects={projects}
             viewMode={viewMode}
             allProperties={allProperties}
+            users={users}
+            departments={departments}
             onProjectClick={handleProjectSelect}
             expandedProjectId={expandedProject?.id || null}
             getUnreadCommentCount={getUnreadCommentCount}
@@ -359,7 +454,7 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
 
       {/* Right Panel - Project Detail */}
       {expandedProject && editingProjectFields && (
-        <div className="w-1/3 flex-shrink-0 border-l border-neutral-200 dark:border-neutral-700">
+        <div className="w-1/3 flex-shrink-0 border-l border-white/20 dark:border-white/10 bg-white/30 dark:bg-white/[0.03] backdrop-blur-xl">
         <ProjectDetailPanel
           project={expandedProject}
           editingFields={editingProjectFields}
@@ -378,6 +473,14 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
             }
             // Update the local expanded project to reflect change
             setExpandedProject(prev => prev ? { ...prev, property_id: propertyId, property_name: propertyName } : null);
+          }}
+          // Bins
+          bins={binsHook.bins}
+          onBinChange={async (binId, _binName) => {
+            await updateProjectField(expandedProject.id, 'bin_id', binId || '');
+            setExpandedProject(prev => prev ? { ...prev, bin_id: binId } : null);
+            // Refresh bin counts
+            binsHook.fetchBins();
           }}
           // Comments - use LOCAL hook
           comments={commentsHook.projectComments as Comment[]}

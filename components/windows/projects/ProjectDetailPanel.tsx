@@ -21,7 +21,7 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { Project, User, ProjectFormFields, Comment, Attachment, TimeEntry, PropertyOption } from '@/lib/types';
+import type { Project, User, ProjectFormFields, Comment, Attachment, TimeEntry, PropertyOption, ProjectBin } from '@/lib/types';
 
 interface ProjectDetailPanelProps {
   project: Project;
@@ -35,6 +35,9 @@ interface ProjectDetailPanelProps {
   onClose: () => void;
   onOpenActivity: () => void;
   onPropertyChange?: (propertyId: string | null, propertyName: string | null) => void;
+  // Bins
+  bins?: ProjectBin[];
+  onBinChange?: (binId: string | null, binName: string | null) => void;
   // Comments
   comments: Comment[];
   loadingComments: boolean;
@@ -72,6 +75,8 @@ export function ProjectDetailPanel({
   onClose,
   onOpenActivity,
   onPropertyChange,
+  bins = [],
+  onBinChange,
   comments,
   loadingComments,
   newComment,
@@ -94,33 +99,37 @@ export function ProjectDetailPanel({
 }: ProjectDetailPanelProps) {
   const { departments } = useDepartments();
   const [propertyOpen, setPropertyOpen] = useState(false);
+  const [binOpen, setBinOpen] = useState(false);
+
+  // Current bin name
+  const currentBin = bins.find(b => b.id === project.bin_id);
 
   // Derived data
   const assignedUsers = users.filter(u => editingFields.assigned_staff?.includes(u.id));
   const dept = departments.find(d => d.id === editingFields.department_id);
   const DeptIcon = getDepartmentIcon(dept?.icon);
 
-  // Status config
+  // Status config — on_hold is grey
   const statusConfig: Record<string, { bg: string; dot: string; label: string }> = {
     not_started: { bg: 'bg-amber-500/15 text-amber-400', dot: 'bg-amber-400', label: 'Not Started' },
-    in_progress: { bg: 'bg-blue-500/15 text-blue-400', dot: 'bg-blue-400', label: 'In Progress' },
-    on_hold: { bg: 'bg-orange-500/15 text-orange-400', dot: 'bg-orange-400', label: 'On Hold' },
+    in_progress: { bg: 'bg-indigo-500/15 text-indigo-400', dot: 'bg-indigo-400', label: 'In Progress' },
+    on_hold: { bg: 'bg-neutral-400/15 text-neutral-400', dot: 'bg-neutral-400', label: 'On Hold' },
     complete: { bg: 'bg-emerald-500/15 text-emerald-400', dot: 'bg-emerald-400', label: 'Complete' },
   };
 
   // Priority config
   const priorityConfig: Record<string, { bg: string; label: string }> = {
     low: { bg: 'bg-slate-500/15 text-slate-400', label: 'Low' },
-    medium: { bg: 'bg-sky-500/15 text-sky-400', label: 'Medium' },
-    high: { bg: 'bg-red-500/15 text-red-300', label: 'High' },
-    urgent: { bg: 'bg-red-500/20 text-red-400', label: 'Urgent' },
+    medium: { bg: 'bg-blue-500/15 text-blue-400', label: 'Medium' },
+    high: { bg: 'bg-orange-500/15 text-orange-300', label: 'High' },
+    urgent: { bg: 'bg-red-500/15 text-red-400', label: 'Urgent' },
   };
 
   const status = statusConfig[editingFields.status] || statusConfig.not_started;
   const priority = priorityConfig[editingFields.priority] || priorityConfig.medium;
 
   return (
-    <div className="w-full h-full flex flex-col bg-card">
+    <div className="w-full h-full flex flex-col bg-transparent">
       {/* ── Top actions (activity, delete, close) ── */}
       <div className="flex-shrink-0 flex items-center justify-end gap-0.5 px-3 pt-2">
         <button
@@ -162,7 +171,7 @@ export function ProjectDetailPanel({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
-                  className="w-[42px] h-[42px] rounded-lg flex items-center justify-center flex-shrink-0 transition-colors hover:opacity-80"
+                  className="w-[42px] h-[42px] rounded-lg flex items-center justify-center flex-shrink-0 transition-all hover:opacity-80 backdrop-blur-sm border border-white/10"
                   style={{ backgroundColor: dept ? 'rgba(133,183,235,0.12)' : 'rgba(255,255,255,0.06)' }}
                   title={dept?.name || 'No Department — click to assign'}
                 >
@@ -252,6 +261,55 @@ export function ProjectDetailPanel({
                   </Command>
                 </PopoverContent>
               </Popover>
+              {/* Bin — clickable to move to another bin */}
+              {bins.length > 0 && (
+                <Popover open={binOpen} onOpenChange={setBinOpen}>
+                  <PopoverTrigger asChild>
+                    <button className="flex items-center gap-1.5 pt-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors group">
+                      <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                      </svg>
+                      <span className="truncate">{currentBin?.name || 'No bin'}</span>
+                      <svg className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[220px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search bins..." />
+                      <CommandList>
+                        <CommandEmpty>No bins found.</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="__no_bin__"
+                            onSelect={() => {
+                              onBinChange?.(null, null);
+                              setBinOpen(false);
+                            }}
+                          >
+                            <CheckIcon className={cn("mr-2 h-4 w-4", !project.bin_id ? "opacity-100" : "opacity-0")} />
+                            <span className="text-muted-foreground italic">No Bin</span>
+                          </CommandItem>
+                          {bins.map((bin) => (
+                            <CommandItem
+                              key={bin.id}
+                              value={bin.name}
+                              onSelect={() => {
+                                onBinChange?.(bin.id, bin.name);
+                                setBinOpen(false);
+                              }}
+                            >
+                              <CheckIcon className={cn("mr-2 h-4 w-4", project.bin_id === bin.id ? "opacity-100" : "opacity-0")} />
+                              {bin.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              )}
             </div>
           </div>
 
@@ -338,7 +396,7 @@ export function ProjectDetailPanel({
           </div>
 
           {/* ── Description card ── */}
-          <div className="rounded-xl bg-muted/50 px-5 py-4 flex flex-col gap-2">
+          <div className="rounded-xl bg-white/[0.04] backdrop-blur-sm border border-white/10 px-5 py-4 flex flex-col gap-2">
             <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Description</div>
             <DebouncedTextarea
               value={editingFields.description}
@@ -354,7 +412,7 @@ export function ProjectDetailPanel({
           {/* ── Assigned + Scheduled grid ── */}
           <div className="grid grid-cols-2 gap-3.5">
             {/* Assigned to */}
-            <div className="rounded-xl bg-muted/50 px-5 py-4 flex flex-col gap-3">
+            <div className="rounded-xl bg-white/[0.04] backdrop-blur-sm border border-white/10 px-5 py-4 flex flex-col gap-3">
               <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Assigned to</div>
               <Popover open={staffOpen} onOpenChange={setStaffOpen}>
                 <PopoverTrigger asChild>
@@ -461,7 +519,7 @@ export function ProjectDetailPanel({
             </div>
 
             {/* Scheduled */}
-            <div className="rounded-xl bg-muted/50 px-5 py-4 flex flex-col gap-3">
+            <div className="rounded-xl bg-white/[0.04] backdrop-blur-sm border border-white/10 px-5 py-4 flex flex-col gap-3">
               <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Scheduled</div>
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-1.5">
@@ -502,7 +560,7 @@ export function ProjectDetailPanel({
           </div>
 
           {/* ── Timer row ── */}
-          <div className="rounded-xl bg-muted/50 px-5 py-4 flex items-center justify-between">
+          <div className="rounded-xl bg-white/[0.04] backdrop-blur-sm border border-white/10 px-5 py-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <svg className="w-4 h-4 text-muted-foreground" viewBox="0 0 16 16" fill="none">
                 <circle cx="8" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.2" />
@@ -544,7 +602,7 @@ export function ProjectDetailPanel({
                 attachments.map((attachment, index) => (
                   <div
                     key={attachment.id}
-                    className="relative w-[72px] h-[72px] rounded-lg overflow-hidden border border-border bg-muted/50 flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity flex flex-col items-center justify-center"
+                    className="relative w-[72px] h-[72px] rounded-lg overflow-hidden border border-white/10 bg-white/[0.04] flex-shrink-0 cursor-pointer hover:bg-white/[0.08] transition-all flex flex-col items-center justify-center"
                     onClick={(e) => { e.stopPropagation(); onViewAttachment(index); }}
                   >
                     {attachment.file_type === 'image' ? (
@@ -565,7 +623,7 @@ export function ProjectDetailPanel({
               )}
               {/* Upload button */}
               <button
-                className="w-[72px] h-[72px] rounded-lg border border-dashed border-border flex items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors"
+                className="w-[72px] h-[72px] rounded-lg border border-dashed border-white/10 flex items-center justify-center cursor-pointer hover:bg-white/[0.06] transition-all"
                 onClick={() => attachmentInputRef.current?.click()}
                 disabled={uploadingAttachment}
               >
@@ -584,7 +642,7 @@ export function ProjectDetailPanel({
           </div>
 
           {/* ── Divider ── */}
-          <div className="border-t border-border" />
+          <div className="border-t border-white/10" />
 
           {/* ── Activity / Comments ── */}
           <div className="flex flex-col gap-4">
@@ -610,7 +668,7 @@ export function ProjectDetailPanel({
                           })}
                         </span>
                       </div>
-                      <div className="text-[13px] text-muted-foreground leading-relaxed bg-muted/50 px-3.5 py-2.5 rounded-r-lg rounded-bl-lg whitespace-pre-wrap">
+                      <div className="text-[13px] text-muted-foreground leading-relaxed bg-white/[0.04] border border-white/10 px-3.5 py-2.5 rounded-r-lg rounded-bl-lg whitespace-pre-wrap">
                         {comment.comment_content}
                       </div>
                     </div>
@@ -623,8 +681,8 @@ export function ProjectDetailPanel({
       </div>
 
       {/* ── Comment input — sticky bottom ── */}
-      <div className="flex-shrink-0 border-t border-border px-6 py-3.5 bg-card">
-        <div className="flex items-center gap-2.5 bg-muted/50 rounded-xl px-4 py-3 border border-border/50">
+      <div className="flex-shrink-0 border-t border-white/10 px-6 py-3.5 bg-transparent">
+        <div className="flex items-center gap-2.5 bg-white/[0.04] backdrop-blur-sm rounded-xl px-4 py-3 border border-white/10">
           {/* Hidden file input */}
           <input
             ref={attachmentInputRef}

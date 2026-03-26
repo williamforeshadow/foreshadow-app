@@ -196,6 +196,23 @@ a {
     var(--background);
 }
 
+/* Neutral mesh gradient — subtle depth for glass blur, no color cast */
+.glass-bg-neutral {
+  background:
+    radial-gradient(ellipse at 20% 50%, oklch(0.94 0.005 260 / 0.25) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, oklch(0.91 0.005 240 / 0.2) 0%, transparent 50%),
+    radial-gradient(ellipse at 60% 80%, oklch(0.89 0.005 280 / 0.18) 0%, transparent 50%),
+    var(--background);
+}
+
+.dark .glass-bg-neutral {
+  background:
+    radial-gradient(ellipse at 20% 50%, oklch(0.25 0.005 260 / 0.3) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, oklch(0.21 0.005 240 / 0.25) 0%, transparent 50%),
+    radial-gradient(ellipse at 60% 80%, oklch(0.17 0.005 280 / 0.2) 0%, transparent 50%),
+    var(--background);
+}
+
 /* Base glass card surface */
 .glass-card {
   backdrop-filter: blur(20px) saturate(1.6);
