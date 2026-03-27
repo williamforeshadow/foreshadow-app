@@ -32,7 +32,7 @@ const TOOLS = [
   {
     name: "send_message",
     description:
-      "Send a message to a Foreshadow channel. Set requires_action=true for messages needing human approval (e.g. proposed guest replies).",
+      "Send proposed AI reply to the internal tool on the conduit channel for team review and approval.",
     inputSchema: {
       type: "object" as const,
       properties: {
