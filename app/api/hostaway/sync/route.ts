@@ -2,12 +2,17 @@ import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { fetchListings, fetchReservations } from '@/lib/hostaway';
 
+// Allow enough time for paginated Hostaway fetches + batched upserts
+export const maxDuration = 120;
+
 export async function POST() {
   try {
+    console.log('[Hostaway Sync] Starting…');
     const supabase = getSupabaseServer();
 
     // 1. Sync listings → properties
     const listingsMap = await fetchListings();
+    console.log(`[Hostaway Sync] Fetched ${listingsMap.size} listings`);
 
     const propertyRows = Array.from(listingsMap.entries()).map(([id, name]) => ({
       hostaway_listing_id: id,
@@ -30,6 +35,7 @@ export async function POST() {
     // 2. Fetch current + future reservations from Hostaway
     const today = new Date().toISOString().split('T')[0];
     const reservations = await fetchReservations(today);
+    console.log(`[Hostaway Sync] Fetched ${reservations.length} reservations from Hostaway`);
 
     // 3. Upsert in small batches (20 rows, 1.2s delay) to keep triggers happy
     const BATCH = 20;
@@ -112,6 +118,7 @@ export async function POST() {
       );
 
       if (toDelete.length > 0) {
+        console.log(`[Hostaway Sync] Removing ${toDelete.length} cancelled/declined reservations`);
         // Delete in small batches to avoid trigger timeouts
         for (let i = 0; i < toDelete.length; i += BATCH) {
           const batch = toDelete.slice(i, i + BATCH);
@@ -132,16 +139,18 @@ export async function POST() {
       }
     }
 
-    return NextResponse.json({
+    const result = {
       success: true,
       properties: propertyRows.length,
       reservations_fetched: reservations.length,
       reservations_synced: synced,
       reservations_removed: removed,
       errors: errors.length ? errors : undefined,
-    });
+    };
+    console.log('[Hostaway Sync] Complete:', JSON.stringify(result));
+    return NextResponse.json(result);
   } catch (err: any) {
-    console.error('Hostaway sync error:', err);
+    console.error('[Hostaway Sync] Error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
