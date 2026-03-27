@@ -17,8 +17,10 @@ import {
   MobileLayout, 
   MobileTimelineView, 
   MobileMyAssignmentsView,
+  MobileProjectsView,
   type MobileTab 
 } from '@/components/mobile';
+import MessagesWindow from '@/components/windows/MessagesWindow';
 
 export default function MobileApp() {
   // Core hooks
@@ -35,6 +37,7 @@ export default function MobileApp() {
   } = useTurnovers();
 
   // Shared hooks - project functionality
+  const projectsHook = useProjects({ currentUser });
   const {
     allProperties,
     showProjectDialog,
@@ -45,7 +48,7 @@ export default function MobileApp() {
     savingProject,
     openEditProjectDialog,
     saveProject,
-  } = useProjects({ currentUser });
+  } = projectsHook;
 
   // Mobile-specific state
   const [mobileTab, setMobileTab] = useState<MobileTab>('assignments');
@@ -100,6 +103,13 @@ export default function MobileApp() {
             refreshTrigger={mobileRefreshTrigger}
           />
         )}
+
+        {mobileTab === 'projects' && (
+          <MobileProjectsView
+            users={users}
+            projectsHook={projectsHook}
+          />
+        )}
         
         {mobileTab === 'timeline' && (
           <MobileTimelineView 
@@ -118,6 +128,10 @@ export default function MobileApp() {
               openEditProjectDialog(project);
             }}
           />
+        )}
+
+        {mobileTab === 'messages' && (
+          <MessagesWindow currentUser={currentUser} users={users} />
         )}
       </MobileLayout>
 
@@ -196,7 +210,7 @@ export default function MobileApp() {
                   <Button disabled variant="outline">
                     Start Task
                   </Button>
-                  <p className="text-sm text-neutral-500">This task hasn't been assigned</p>
+                  <p className="text-sm text-neutral-500">This task hasn&apos;t been assigned</p>
                 </div>
               ) : (mobileSelectedTask.status === 'not_started' || !mobileSelectedTask.status) ? (
                 /* ASSIGNED + NOT STARTED - Show Start button */
@@ -312,7 +326,7 @@ export default function MobileApp() {
         </div>
       )}
 
-      {/* Project Dialog */}
+      {/* Project Dialog (for creating projects from Projects tab) */}
       <Dialog open={showProjectDialog} onOpenChange={handleProjectDialogClose}>
         <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>

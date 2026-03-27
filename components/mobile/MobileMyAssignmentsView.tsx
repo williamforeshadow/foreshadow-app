@@ -3,8 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -236,41 +234,40 @@ export default function MobileMyAssignmentsView({
 
   return (
     <div className="flex flex-col h-full relative">
-      {/* Header with Page Labels and Indicators */}
-      <div className="sticky top-0 z-30 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-4 py-3">
-        {/* Page Labels with dots beneath each */}
-        <div className="flex items-center justify-between">
-          {/* Spacer for balance */}
-          <div className="w-8" />
-          
-          {/* Centered Labels with dots */}
-          <div className="flex items-center gap-8">
-            <button 
-              className="flex flex-col items-center gap-1"
-              onClick={() => carouselApi?.scrollTo(0)}
-            >
-              <span className={`text-sm font-medium transition-colors ${activeSlide === 0 ? 'text-neutral-900 dark:text-white' : 'text-neutral-400'}`}>
-                Tasks
-              </span>
-              <div className={`w-1.5 h-1.5 rounded-full transition-colors ${activeSlide === 0 ? 'bg-neutral-900 dark:bg-white' : 'bg-transparent'}`} />
-            </button>
-            <button 
-              className="flex flex-col items-center gap-1"
-              onClick={() => carouselApi?.scrollTo(1)}
-            >
-              <span className={`text-sm font-medium transition-colors ${activeSlide === 1 ? 'text-neutral-900 dark:text-white' : 'text-neutral-400'}`}>
-                Projects
-              </span>
-              <div className={`w-1.5 h-1.5 rounded-full transition-colors ${activeSlide === 1 ? 'bg-neutral-900 dark:bg-white' : 'bg-transparent'}`} />
-            </button>
-          </div>
-
-          {/* Refresh Button */}
-          <Button variant="ghost" size="sm" onClick={fetchAssignments} disabled={loading} className="px-2 w-8">
+      {/* Header */}
+      <div className="sticky top-0 z-30 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800">
+        <div className="flex items-center justify-between px-4 pt-3 pb-1">
+          <h2 className="text-xl font-semibold text-neutral-900 dark:text-white">My Work</h2>
+          <button
+            onClick={fetchAssignments}
+            disabled={loading}
+            className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 active:scale-95 transition-all"
+          >
             <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-          </Button>
+          </button>
+        </div>
+        {/* Slide indicators */}
+        <div className="flex items-center justify-center gap-8 pb-2">
+          <button 
+            className="flex flex-col items-center gap-1"
+            onClick={() => carouselApi?.scrollTo(0)}
+          >
+            <span className={`text-sm font-medium transition-colors ${activeSlide === 0 ? 'text-neutral-900 dark:text-white' : 'text-neutral-400'}`}>
+              Tasks
+            </span>
+            <div className={`w-6 h-0.5 rounded-full transition-colors ${activeSlide === 0 ? 'bg-neutral-900 dark:bg-white' : 'bg-transparent'}`} />
+          </button>
+          <button 
+            className="flex flex-col items-center gap-1"
+            onClick={() => carouselApi?.scrollTo(1)}
+          >
+            <span className={`text-sm font-medium transition-colors ${activeSlide === 1 ? 'text-neutral-900 dark:text-white' : 'text-neutral-400'}`}>
+              Projects
+            </span>
+            <div className={`w-6 h-0.5 rounded-full transition-colors ${activeSlide === 1 ? 'bg-neutral-900 dark:bg-white' : 'bg-transparent'}`} />
+          </button>
         </div>
       </div>
 
@@ -296,53 +293,51 @@ export default function MobileMyAssignmentsView({
               ) : (
                 <div className="p-4 space-y-2">
                   {tasks.map((task) => (
-                    <Card 
+                    <button
                       key={task.task_id}
-                      className="cursor-pointer hover:shadow-md transition-all bg-white dark:bg-neutral-900 border !p-0 !gap-0"
+                      className="w-full text-left p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/60 active:scale-[0.99] transition-all shadow-sm"
                       onClick={() => onTaskClick?.(task)}
                     >
-                      <CardHeader className="p-3">
-                        <CardTitle className="text-sm font-medium truncate">
-                          {task.template_name}
-                        </CardTitle>
-                        <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate mt-0.5">
-                          {task.property_name}
-                        </p>
-                        
-                        <div className="flex items-center gap-2 mt-2">
-                          <Badge className={`px-2 py-0.5 text-xs border ${getStatusBadgeStyle(task.status)}`}>
-                            {formatStatusLabel(task.status)}
-                          </Badge>
-                          <Badge className="px-2 py-0.5 text-xs border bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700">
-                            {task.department_name || task.type}
-                          </Badge>
-                        </div>
+                      <div className="text-sm font-medium text-neutral-900 dark:text-white truncate">
+                        {task.template_name}
+                      </div>
+                      <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate mt-0.5">
+                        {task.property_name}
+                      </p>
+                      
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full ${getStatusBadgeStyle(task.status)}`}>
+                          {formatStatusLabel(task.status)}
+                        </span>
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400">
+                          {task.department_name || task.type}
+                        </span>
+                      </div>
 
-                        <div className="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400 mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
-                          <div className="flex items-center gap-1">
-                            {task.scheduled_date ? (
-                              <>
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                                <span>{formatDate(task.scheduled_date)}{formatTime(task.scheduled_time) ? `, ${formatTime(task.scheduled_time)}` : ''}</span>
-                              </>
-                            ) : (
-                              <span className="text-neutral-400">No schedule</span>
-                            )}
-                          </div>
-                          
-                          {task.guest_name && (
-                            <div className="flex items-center gap-1">
+                      <div className="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400 mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+                        <div className="flex items-center gap-1">
+                          {task.scheduled_date ? (
+                            <>
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                               </svg>
-                              <span className="truncate max-w-[80px]">{task.guest_name}</span>
-                            </div>
+                              <span>{formatDate(task.scheduled_date)}{formatTime(task.scheduled_time) ? `, ${formatTime(task.scheduled_time)}` : ''}</span>
+                            </>
+                          ) : (
+                            <span className="text-neutral-400">No schedule</span>
                           )}
                         </div>
-                      </CardHeader>
-                    </Card>
+                        
+                        {task.guest_name && (
+                          <div className="flex items-center gap-1">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            <span className="truncate max-w-[80px]">{task.guest_name}</span>
+                          </div>
+                        )}
+                      </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -363,51 +358,49 @@ export default function MobileMyAssignmentsView({
               ) : (
                 <div className="p-4 space-y-2">
                   {projects.map((project) => (
-                    <Card
+                    <button
                       key={project.id}
                       onClick={() => onProjectClick?.(project)}
-                      className="cursor-pointer hover:shadow-md transition-all bg-white dark:bg-neutral-900 border !p-0 !gap-0"
+                      className="w-full text-left p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/60 active:scale-[0.99] transition-all shadow-sm"
                     >
-                      <CardHeader className="p-3">
-                        <CardTitle className="text-sm font-medium truncate">
-                          {project.title}
-                        </CardTitle>
-                        <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate mt-0.5">
-                          {project.property_name}
+                      <div className="text-sm font-medium text-neutral-900 dark:text-white truncate">
+                        {project.title}
+                      </div>
+                      <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate mt-0.5">
+                        {project.property_name}
+                      </p>
+                      
+                      {project.description && (
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 line-clamp-2">
+                          {project.description}
                         </p>
-                        
-                        {project.description && (
-                          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 line-clamp-2">
-                            {project.description}
-                          </p>
+                      )}
+                      
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full ${getStatusBadgeStyle(project.status)}`}>
+                          {formatStatusLabel(project.status)}
+                        </span>
+                        {project.priority && (
+                          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${getPriorityStyle(project.priority)}`}>
+                            {project.priority}
+                          </span>
                         )}
-                        
-                        <div className="flex items-center gap-2 mt-2">
-                          <Badge className={`px-2 py-0.5 text-xs border ${getStatusBadgeStyle(project.status)}`}>
-                            {formatStatusLabel(project.status)}
-                          </Badge>
-                          {project.priority && (
-                            <Badge className={`px-2 py-0.5 text-xs border ${getPriorityStyle(project.priority)}`}>
-                              {project.priority}
-                            </Badge>
-                          )}
-                          {project.department_name && (
-                            <Badge className="px-2 py-0.5 text-xs bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300 dark:border-neutral-600">
-                              {project.department_name}
-                            </Badge>
-                          )}
-                        </div>
+                        {project.department_name && (
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400">
+                            {project.department_name}
+                          </span>
+                        )}
+                      </div>
 
-                        {project.scheduled_date && (
-                          <div className="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400 mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            <span>Start: {formatDate(project.scheduled_date)}{formatTime(project.scheduled_time) ? ` @ ${formatTime(project.scheduled_time)}` : ''}</span>
-                          </div>
-                        )}
-                      </CardHeader>
-                    </Card>
+                      {project.scheduled_date && (
+                        <div className="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400 mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <span>Start: {formatDate(project.scheduled_date)}{formatTime(project.scheduled_time) ? ` @ ${formatTime(project.scheduled_time)}` : ''}</span>
+                        </div>
+                      )}
+                    </button>
                   ))}
                 </div>
               )}
@@ -416,10 +409,10 @@ export default function MobileMyAssignmentsView({
         </Carousel>
       </div>
 
-      {/* Floating User Menu - Bottom Right */}
+      {/* Floating User Menu - Bottom Right (above 3-tab nav) */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="fixed bottom-20 right-4 z-40 w-12 h-12 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-lg flex items-center justify-center hover:scale-105 transition-transform overflow-hidden">
+          <button className="fixed bottom-[4.5rem] right-4 z-40 w-11 h-11 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform overflow-hidden">
             <UserAvatar src={user.avatar} name={user.name} size="xl" />
           </button>
         </DropdownMenuTrigger>

@@ -10,9 +10,10 @@ import TimelineWindow from '@/components/windows/TimelineWindow';
 import TurnoversWindow from '@/components/windows/TurnoversWindow';
 import ProjectsWindow from '@/components/windows/ProjectsWindow';
 import TasksWindow from '@/components/windows/TasksWindow';
+import MessagesWindow from '@/components/windows/MessagesWindow';
 import { AiChat } from '@/components/AiChat';
 
-type ViewType = 'turnovers' | 'timeline' | 'projects' | 'tasks';
+type ViewType = 'turnovers' | 'timeline' | 'projects' | 'tasks' | 'messages';
 
 export default function DesktopApp() {
   // Hooks
@@ -29,7 +30,8 @@ export default function DesktopApp() {
     turnovers: 'Turnovers',
     timeline: 'Timeline',
     projects: 'Projects',
-    tasks: 'Tasks'
+    tasks: 'Tasks',
+    messages: 'Messages'
   };
 
   return (
@@ -48,7 +50,7 @@ export default function DesktopApp() {
             
             {/* View Navigation */}
             <div className="flex items-center gap-1">
-              {(['turnovers', 'timeline', 'projects', 'tasks'] as ViewType[]).map((view) => (
+              {(['turnovers', 'timeline', 'projects', 'tasks', 'messages'] as ViewType[]).map((view) => (
                 <Button
                   key={view}
                   onClick={() => setActiveView(view)}
@@ -94,6 +96,10 @@ export default function DesktopApp() {
 
           <div className={`absolute inset-0 ${activeView === 'tasks' ? '' : 'hidden'}`}>
             <TasksWindow currentUser={currentUser} users={users} />
+          </div>
+
+          <div className={`absolute inset-0 ${activeView === 'messages' ? '' : 'hidden'}`}>
+            <MessagesWindow currentUser={currentUser} users={users} />
           </div>
 
           {/* AI Chat */}
