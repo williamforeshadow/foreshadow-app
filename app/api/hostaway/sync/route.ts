@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { fetchListings, fetchReservations } from '@/lib/hostaway';
 
-// Allow enough time for paginated Hostaway fetches + batched upserts
+// Allow enough time for paginated Hostaway fetches + batched inserts
 export const maxDuration = 120;
 
 export async function POST() {
@@ -37,51 +37,116 @@ export async function POST() {
     const reservations = await fetchReservations(today);
     console.log(`[Hostaway Sync] Fetched ${reservations.length} reservations from Hostaway`);
 
-    // 3. Upsert in small batches (20 rows, 1.2s delay) to keep triggers happy
+    // 3. Load existing Hostaway reservation IDs from Supabase so we know what's new
+    const { data: existingRows } = await supabase
+      .from('reservations')
+      .select('id, hostaway_reservation_id, check_in, check_out, guest_name')
+      .not('hostaway_reservation_id', 'is', null);
+
+    const existingMap = new Map<number, {
+      id: string;
+      check_in: string;
+      check_out: string;
+      guest_name: string;
+    }>();
+    for (const row of existingRows || []) {
+      existingMap.set(row.hostaway_reservation_id, {
+        id: row.id,
+        check_in: row.check_in,
+        check_out: row.check_out,
+        guest_name: row.guest_name,
+      });
+    }
+
     const BATCH = 20;
-    let synced = 0;
+    let inserted = 0;
+    let updated = 0;
     const errors: string[] = [];
 
-    // Collect all Hostaway reservation IDs we're syncing (for cleanup step)
-    const syncedHostawayIds = new Set<number>();
+    // Collect all Hostaway reservation IDs from the fresh pull (for cancellation detection)
+    const freshHostawayIds = new Set<number>();
 
-    for (let i = 0; i < reservations.length; i += BATCH) {
-      const rows = reservations.slice(i, i + BATCH).map((r: any) => {
-        syncedHostawayIds.add(r.id);
-        return {
+    // Separate new vs existing reservations
+    const newRows: any[] = [];
+    const updateRows: any[] = [];
+
+    for (const r of reservations) {
+      freshHostawayIds.add(r.id);
+
+      const propertyName =
+        r.listingName ||
+        listingsMap.get(r.listingMapId) ||
+        `Listing ${r.listingMapId}`;
+      const guestName =
+        [r.guestFirstName, r.guestLastName].filter(Boolean).join(' ') ||
+        'Unknown Guest';
+
+      const existing = existingMap.get(r.id);
+
+      if (!existing) {
+        // Brand new reservation → INSERT (will trigger automations correctly)
+        newRows.push({
           hostaway_reservation_id: r.id,
           property_id: propIdMap.get(r.listingMapId) || null,
-          property_name:
-            r.listingName ||
-            listingsMap.get(r.listingMapId) ||
-            `Listing ${r.listingMapId}`,
-          guest_name:
-            [r.guestFirstName, r.guestLastName].filter(Boolean).join(' ') ||
-            'Unknown Guest',
+          property_name: propertyName,
+          guest_name: guestName,
           check_in: r.arrivalDate,
           check_out: r.departureDate,
           updated_at: new Date().toISOString(),
-        };
-      });
-
-      const { error } = await supabase
-        .from('reservations')
-        .upsert(rows, {
-          onConflict: 'hostaway_reservation_id',
-          ignoreDuplicates: false,
         });
+      } else {
+        // Already exists — only update if dates or guest actually changed
+        // Normalize dates to YYYY-MM-DD for comparison (Supabase stores ISO timestamps)
+        const existCheckIn = existing.check_in?.slice(0, 10) || '';
+        const existCheckOut = existing.check_out?.slice(0, 10) || '';
+        const haChanges =
+          existCheckIn !== r.arrivalDate ||
+          existCheckOut !== r.departureDate ||
+          existing.guest_name !== guestName;
 
-      if (error) errors.push(error.message);
-      else synced += rows.length;
+        if (haChanges) {
+          updateRows.push({
+            supabaseId: existing.id,
+            guest_name: guestName,
+            check_in: r.arrivalDate,
+            check_out: r.departureDate,
+          });
+        }
+      }
+    }
 
-      if (i + BATCH < reservations.length) {
+    // 4a. INSERT new reservations in batches (triggers fire = tasks created)
+    for (let i = 0; i < newRows.length; i += BATCH) {
+      const batch = newRows.slice(i, i + BATCH);
+      const { error } = await supabase.from('reservations').insert(batch);
+
+      if (error) errors.push(`Insert batch error: ${error.message}`);
+      else inserted += batch.length;
+
+      if (i + BATCH < newRows.length) {
         await new Promise((r) => setTimeout(r, 1200));
       }
     }
 
-    // 3.5 Correct property names to match reservation data
-    //     The listings API returns marketing titles, but reservations use
-    //     address-style names which is what the app displays everywhere.
+    // 4b. UPDATE existing reservations individually (no INSERT trigger re-fire)
+    for (const row of updateRows) {
+      const { error } = await supabase
+        .from('reservations')
+        .update({
+          guest_name: row.guest_name,
+          check_in: row.check_in,
+          check_out: row.check_out,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', row.supabaseId);
+
+      if (error) errors.push(`Update error: ${error.message}`);
+      else updated++;
+    }
+
+    console.log(`[Hostaway Sync] Inserted ${inserted} new, updated ${updated} existing`);
+
+    // 5. Correct property names to match reservation data
     const nameCorrections = new Map<number, string>();
     for (const r of reservations) {
       if (r.listingMapId && r.listingName) {
@@ -101,40 +166,35 @@ export async function POST() {
         .upsert(correctionRows, { onConflict: 'hostaway_listing_id' });
     }
 
-    // 4. Remove cancelled reservations
+    // 6. Remove cancelled reservations
     //    Only delete current/future Hostaway reservations that are no longer
     //    in the fresh pull (cancelled/declined). Past reservations stay forever.
     let removed = 0;
 
-    const { data: existingRows } = await supabase
-      .from('reservations')
-      .select('id, hostaway_reservation_id')
-      .not('hostaway_reservation_id', 'is', null)
-      .gte('check_out', today);
+    const futureExisting = (existingRows || []).filter(
+      (row: any) => row.check_out >= today
+    );
 
-    if (existingRows) {
-      const toDelete = existingRows.filter(
-        (row: any) => !syncedHostawayIds.has(row.hostaway_reservation_id)
-      );
+    const toDelete = futureExisting.filter(
+      (row: any) => !freshHostawayIds.has(row.hostaway_reservation_id)
+    );
 
-      if (toDelete.length > 0) {
-        console.log(`[Hostaway Sync] Removing ${toDelete.length} cancelled/declined reservations`);
-        // Delete in small batches to avoid trigger timeouts
-        for (let i = 0; i < toDelete.length; i += BATCH) {
-          const batch = toDelete.slice(i, i + BATCH);
-          const ids = batch.map((r: any) => r.id);
+    if (toDelete.length > 0) {
+      console.log(`[Hostaway Sync] Removing ${toDelete.length} cancelled/declined reservations`);
+      for (let i = 0; i < toDelete.length; i += BATCH) {
+        const batch = toDelete.slice(i, i + BATCH);
+        const ids = batch.map((r: any) => r.id);
 
-          const { error: delError } = await supabase
-            .from('reservations')
-            .delete()
-            .in('id', ids);
+        const { error: delError } = await supabase
+          .from('reservations')
+          .delete()
+          .in('id', ids);
 
-          if (delError) errors.push(`Delete batch error: ${delError.message}`);
-          else removed += batch.length;
+        if (delError) errors.push(`Delete batch error: ${delError.message}`);
+        else removed += batch.length;
 
-          if (i + BATCH < toDelete.length) {
-            await new Promise((r) => setTimeout(r, 1200));
-          }
+        if (i + BATCH < toDelete.length) {
+          await new Promise((r) => setTimeout(r, 1200));
         }
       }
     }
@@ -143,7 +203,8 @@ export async function POST() {
       success: true,
       properties: propertyRows.length,
       reservations_fetched: reservations.length,
-      reservations_synced: synced,
+      reservations_inserted: inserted,
+      reservations_updated: updated,
       reservations_removed: removed,
       errors: errors.length ? errors : undefined,
     };
