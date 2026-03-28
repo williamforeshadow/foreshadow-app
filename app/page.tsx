@@ -6,5 +6,8 @@ import MobileApp from './mobile/MobileApp';
 
 export default function HomePage() {
   const isMobile = useIsMobile();
+
+  if (isMobile === null) return null;
+
   return isMobile ? <MobileApp /> : <DesktopApp />;
 }

@@ -1,40 +1,91 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import MobileBinPicker from '@/components/mobile/MobileBinPicker';
-import MobileProjectsList from '@/components/mobile/MobileProjectsList';
 import MobileProjectDetail from '@/components/mobile/MobileProjectDetail';
+import { ProjectsKanban } from '@/components/windows/projects/ProjectsKanban';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
+import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
 import { useAuth } from '@/lib/authContext';
+import { useDepartments } from '@/lib/departmentsContext';
+import { STATUS_ORDER, STATUS_LABELS, PRIORITY_ORDER, PRIORITY_LABELS } from '@/lib/useProjects';
+import type { ProjectViewMode } from '@/lib/useProjects';
 import type { Project, User, ProjectFormFields } from '@/lib/types';
+import type { useProjects } from '@/lib/useProjects';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-/**
- * The projects view orchestrates three screens:
- *  1. BinPicker  — choose a workspace / "All" / "Unbinned"
- *  2. ProjectsList — see projects grouped by status inside that bin
- *  3. ProjectDetail — full-screen project editor
- */
-
 type Screen =
   | { type: 'bins' }
-  | { type: 'list'; binId: string | null; binName: string }
+  | { type: 'kanban'; binId: string | null; binName: string }
   | { type: 'detail'; project: Project; binId: string | null; binName: string };
 
 interface MobileProjectsViewProps {
   users: User[];
-  projectsHook: {
-    projects: Project[];
-    loadingProjects: boolean;
-    fetchProjectsForBin: (binId: string | null) => Promise<void>;
-    openCreateProjectDialog: (propertyName?: string, binId?: string) => void;
-    saveProjectById: (projectId: string, fields: ProjectFormFields) => Promise<Project | null>;
-    deleteProject: (project: Project) => void;
-    recordProjectView: (projectId: string) => void;
-  };
+  projectsHook: ReturnType<typeof useProjects>;
+}
+
+// ============================================================================
+// View Mode Toggle (compact mobile version)
+// ============================================================================
+
+const VIEW_MODE_LABELS: Record<ProjectViewMode, string> = {
+  property: 'Property',
+  status: 'Status',
+  priority: 'Priority',
+  department: 'Dept',
+  assignee: 'Assignee',
+};
+
+const ALL_VIEW_MODES: ProjectViewMode[] = ['property', 'status', 'priority', 'department', 'assignee'];
+
+function MobileViewModeToggle({
+  viewMode,
+  setViewMode,
+}: {
+  viewMode: ProjectViewMode;
+  setViewMode: (m: ProjectViewMode) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-lg bg-white/30 dark:bg-white/[0.08] backdrop-blur-sm border border-white/20 dark:border-white/10 text-neutral-900 dark:text-white"
+        >
+          {VIEW_MODE_LABELS[viewMode]}
+          <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      )}
+
+      {open && (
+        <div className="absolute right-0 top-0 z-20 flex gap-0.5 p-1 rounded-lg bg-white/90 dark:bg-neutral-800/95 backdrop-blur-md border border-white/30 dark:border-white/10 shadow-lg">
+          {ALL_VIEW_MODES.map((mode) => (
+            <button
+              key={mode}
+              onClick={() => {
+                setViewMode(mode);
+                setOpen(false);
+              }}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded-md whitespace-nowrap transition-all ${
+                viewMode === mode
+                  ? 'bg-white/70 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
+                  : 'text-neutral-500 dark:text-neutral-400 active:bg-white/30 dark:active:bg-white/10'
+              }`}
+            >
+              {VIEW_MODE_LABELS[mode]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ============================================================================
@@ -43,33 +94,119 @@ interface MobileProjectsViewProps {
 
 export default function MobileProjectsView({ users, projectsHook }: MobileProjectsViewProps) {
   const { user: currentUser } = useAuth();
+  const { departments } = useDepartments();
   const binsHook = useProjectBins({ currentUser: currentUser as User | null });
 
   const [screen, setScreen] = useState<Screen>({ type: 'bins' });
 
-  // When navigating to a bin list, fetch projects for that bin
+  const {
+    projects,
+    loadingProjects,
+    allProperties,
+    viewMode,
+    setViewMode,
+    fetchProjectsForBin,
+    recordProjectView,
+    getUnreadCommentCount,
+    updateProjectField,
+    openCreateProjectDialog,
+    createProjectForProperty,
+    saveProjectById,
+    deleteProject,
+  } = projectsHook;
+
+  // Column visibility for the kanban
+  const activeBinId = screen.type !== 'bins' ? (screen as any).binId : null;
+  const columnVis = useColumnVisibility(activeBinId, viewMode);
+
+  const allColumnOptions = useMemo(() => {
+    if (viewMode === 'property') {
+      const names = new Set<string>();
+      names.add('No Property');
+      projects.forEach((p) => names.add(p.property_name || 'No Property'));
+      allProperties.forEach((p) => { if (p.name) names.add(p.name); });
+      const sorted = Array.from(names).sort((a, b) => {
+        if (a === 'No Property') return -1;
+        if (b === 'No Property') return 1;
+        return a.localeCompare(b);
+      });
+      return sorted.map((name) => ({ id: `prop:${name}`, name }));
+    }
+    if (viewMode === 'status') {
+      return STATUS_ORDER.map((s) => ({ id: `status:${s}`, name: STATUS_LABELS[s] }));
+    }
+    if (viewMode === 'priority') {
+      return PRIORITY_ORDER.map((p) => ({ id: `priority:${p}`, name: PRIORITY_LABELS[p] }));
+    }
+    if (viewMode === 'department') {
+      const names = new Set<string>();
+      names.add('No Department');
+      projects.forEach((p) => names.add(p.department_name || 'No Department'));
+      departments.forEach((d) => { if (d.name) names.add(d.name); });
+      const sorted = Array.from(names).sort((a, b) => {
+        if (a === 'No Department') return -1;
+        if (b === 'No Department') return 1;
+        return a.localeCompare(b);
+      });
+      return sorted.map((name) => ({ id: `dept:${name}`, name }));
+    }
+    const names = new Set<string>();
+    names.add('Unassigned');
+    projects.forEach((p) => {
+      if (p.project_assignments && p.project_assignments.length > 0) {
+        p.project_assignments.forEach((a) => names.add(a.user?.name || a.user_id));
+      }
+    });
+    users.forEach((u) => { if (u.name) names.add(u.name); });
+    const sorted = Array.from(names).sort((a, b) => {
+      if (a === 'Unassigned') return -1;
+      if (b === 'Unassigned') return 1;
+      return a.localeCompare(b);
+    });
+    return sorted.map((name) => ({ id: `assignee:${name}`, name }));
+  }, [viewMode, projects, allProperties, departments, users]);
+
+  useEffect(() => {
+    if (allColumnOptions.length > 0 && columnVis.initialized) {
+      columnVis.initWithDefaults(allColumnOptions.map((c) => c.id));
+    }
+  }, [allColumnOptions, columnVis.initialized]);
+
+  // Navigation
   const navigateToBin = useCallback(async (binId: string | null, binName: string) => {
-    setScreen({ type: 'list', binId, binName });
-    await projectsHook.fetchProjectsForBin(binId);
-  }, [projectsHook]);
+    setScreen({ type: 'kanban', binId, binName });
+    await fetchProjectsForBin(binId);
+  }, [fetchProjectsForBin]);
 
-  // Navigate to project detail
   const navigateToProject = useCallback((project: Project, binId: string | null, binName: string) => {
-    projectsHook.recordProjectView(project.id);
+    recordProjectView(project.id);
     setScreen({ type: 'detail', project, binId, binName });
-  }, [projectsHook]);
+  }, [recordProjectView]);
 
-  // Back navigation
   const goBack = useCallback(() => {
     if (screen.type === 'detail') {
-      setScreen({ type: 'list', binId: screen.binId, binName: screen.binName });
-      // Refresh projects after potential edits
-      projectsHook.fetchProjectsForBin(screen.binId);
-    } else if (screen.type === 'list') {
+      setScreen({ type: 'kanban', binId: screen.binId, binName: screen.binName });
+      fetchProjectsForBin(screen.binId);
+    } else if (screen.type === 'kanban') {
       setScreen({ type: 'bins' });
       binsHook.fetchBins();
     }
-  }, [screen, projectsHook, binsHook]);
+  }, [screen, fetchProjectsForBin, binsHook]);
+
+  const handleColumnMove = useCallback(
+    (projectId: string, field: string, value: string) => {
+      updateProjectField(projectId, field, value);
+    },
+    [updateProjectField]
+  );
+
+  const handleNewProject = useCallback(async () => {
+    const newProject = await createProjectForProperty('');
+    if (newProject && screen.type === 'kanban') {
+      recordProjectView(newProject.id);
+      setScreen({ type: 'detail', project: newProject, binId: screen.binId, binName: screen.binName });
+    }
+  }, [createProjectForProperty, recordProjectView, screen]);
 
   return (
     <div className="h-full">
@@ -90,20 +227,73 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
         />
       )}
 
-      {/* Projects list screen */}
-      {screen.type === 'list' && (
-        <MobileProjectsList
-          projects={projectsHook.projects}
-          users={users}
-          binName={screen.binName}
-          viewMode="status"
-          onBack={goBack}
-          onSelectProject={(project) => navigateToProject(project, screen.binId, screen.binName)}
-          onCreateProject={() => {
-            const effectiveBinId = screen.binId && screen.binId !== '__none__' ? screen.binId : undefined;
-            projectsHook.openCreateProjectDialog(undefined, effectiveBinId);
-          }}
-        />
+      {/* Kanban screen */}
+      {screen.type === 'kanban' && (
+        <div className="flex flex-col h-full">
+          {/* Header */}
+          <div className="shrink-0 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={goBack}
+                className="flex items-center gap-1 text-sm text-neutral-500 dark:text-neutral-400"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-semibold text-neutral-900 dark:text-white truncate">{screen.binName}</h2>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                  {projects.length} project{projects.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+              <MobileViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
+              <button
+                onClick={handleNewProject}
+                className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 active:scale-95 transition-all"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Kanban Board */}
+          <div className="flex-1 min-h-0 mobile-kanban-wrapper">
+            {loadingProjects ? (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-neutral-500">Loading projects...</p>
+              </div>
+            ) : projects.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-neutral-400">
+                <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-sm font-medium">No projects yet</p>
+                <button
+                  onClick={handleNewProject}
+                  className="mt-3 text-xs font-medium text-emerald-500 active:text-emerald-600"
+                >
+                  + Create one
+                </button>
+              </div>
+            ) : (
+              <ProjectsKanban
+                projects={projects}
+                viewMode={viewMode}
+                allProperties={allProperties}
+                users={users}
+                departments={departments}
+                onProjectClick={(project) => navigateToProject(project, screen.binId, screen.binName)}
+                expandedProjectId={null}
+                getUnreadCommentCount={getUnreadCommentCount}
+                onColumnMove={handleColumnMove}
+                visibleColumnIds={columnVis.visibleIds}
+              />
+            )}
+          </div>
+        </div>
       )}
 
       {/* Project detail screen */}
@@ -112,10 +302,10 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
           project={screen.project}
           users={users}
           onClose={goBack}
-          onSave={projectsHook.saveProjectById}
+          onSave={saveProjectById}
           onDelete={(project) => {
-            projectsHook.deleteProject(project);
-            setScreen({ type: 'list', binId: screen.binId, binName: screen.binName });
+            deleteProject(project);
+            setScreen({ type: 'kanban', binId: screen.binId, binName: screen.binName });
           }}
         />
       )}

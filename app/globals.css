@@ -416,7 +416,29 @@ a {
   }
   * {
     scrollbar-width: none !important;
-    /* Prevent scroll anchoring issues on mobile */
     overflow-anchor: none;
+  }
+}
+
+/* ============================================================
+   Mobile Kanban Overrides
+   Narrows columns and adds scroll-snap for swipe navigation.
+   ============================================================ */
+.mobile-kanban-wrapper {
+  overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .mobile-kanban-wrapper > div:first-child {
+    gap: 0.75rem;
+    padding: 0.75rem;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mobile-kanban-wrapper > div:first-child > div {
+    width: 260px;
+    min-width: 260px;
+    scroll-snap-align: start;
   }
 }

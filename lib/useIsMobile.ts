@@ -4,24 +4,16 @@ import { useState, useEffect } from 'react';
 
 const MOBILE_BREAKPOINT = 768;
 
-export function useIsMobile(): boolean {
-  // Check if we're in browser environment
-  const getIsMobile = (): boolean => {
-    if (typeof window === 'undefined') return false;
-    return window.innerWidth < MOBILE_BREAKPOINT;
-  };
-
-  // Initialize with actual value if in browser, false otherwise
-  const [isMobile, setIsMobile] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return window.innerWidth < MOBILE_BREAKPOINT;
-    }
-    return false;
-  });
+/**
+ * Returns `null` during SSR / before first client paint (unknown),
+ * then `true` or `false` once the viewport is measured.
+ * Callers should treat `null` as "not ready" and render nothing or a skeleton.
+ */
+export function useIsMobile(): boolean | null {
+  const [isMobile, setIsMobile] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Double-check on mount
-    setIsMobile(getIsMobile());
+    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
 
     const handleResize = () => {
       setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
