@@ -17,6 +17,29 @@ import {
 } from '@/components/ui/carousel';
 import { useRouter } from 'next/navigation';
 import { UserAvatar } from '@/components/ui/user-avatar';
+import { getDepartmentIcon } from '@/lib/departmentIcons';
+import { useDepartments } from '@/lib/departmentsContext';
+import DiamondIcon from '@/components/icons/AssignmentIcon';
+
+function getTaskStatusStyles(status: string) {
+  const glassBase = 'glass-card glass-sheen relative overflow-hidden rounded-xl';
+  switch (status) {
+    case 'complete':
+      return `${glassBase} bg-emerald-50/55 dark:bg-emerald-500/[0.12] border border-emerald-200/40 dark:border-emerald-400/20`;
+    case 'in_progress':
+      return `${glassBase} bg-indigo-50/55 dark:bg-indigo-500/[0.12] border border-indigo-300/40 dark:border-indigo-400/20`;
+    case 'paused':
+      return `${glassBase} bg-indigo-50/55 dark:bg-indigo-500/[0.12] border border-indigo-300/40 dark:border-indigo-400/20`;
+    default:
+      return `${glassBase} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`;
+  }
+}
+
+interface TaskAssignee {
+  user_id: string;
+  name: string;
+  avatar: string | null;
+}
 
 interface Task {
   task_id: string;
@@ -32,6 +55,7 @@ interface Task {
   status: string;
   form_metadata?: any;
   assigned_at: string;
+  assigned_users?: TaskAssignee[];
   property_name: string;
   check_out?: string;
   check_in?: string;
@@ -75,6 +99,7 @@ export default function MobileMyAssignmentsView({
   refreshTrigger,
 }: MobileMyAssignmentsViewProps) {
   const { user, role, loading: authLoading } = useAuth();
+  const { deptIconMap } = useDepartments();
   const [data, setData] = useState<AssignmentsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -291,54 +316,74 @@ export default function MobileMyAssignmentsView({
                   <p className="text-sm text-neutral-500 mt-1">You're all caught up!</p>
                 </div>
               ) : (
-                <div className="p-4 space-y-2">
-                  {tasks.map((task) => (
-                    <button
-                      key={task.task_id}
-                      className="w-full text-left p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/60 active:scale-[0.99] transition-all shadow-sm"
-                      onClick={() => onTaskClick?.(task)}
-                    >
-                      <div className="text-sm font-medium text-neutral-900 dark:text-white truncate">
-                        {task.template_name}
-                      </div>
-                      <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate mt-0.5">
-                        {task.property_name}
-                      </p>
-                      
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full ${getStatusBadgeStyle(task.status)}`}>
-                          {formatStatusLabel(task.status)}
-                        </span>
-                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400">
-                          {task.department_name || task.type}
-                        </span>
-                      </div>
+                <div className="p-4 flex flex-col gap-3">
+                  {tasks.map((task) => {
+                    const DeptIcon = getDepartmentIcon(task.department_id ? deptIconMap[task.department_id] : null);
+                    const assignees = task.assigned_users || [];
+                    return (
+                      <button
+                        key={task.task_id}
+                        className={`w-full text-left p-3.5 active:scale-[0.99] transition-all duration-200 ease-out ${getTaskStatusStyles(task.status)}`}
+                        onClick={() => onTaskClick?.(task)}
+                      >
+                        <div className="flex items-center gap-3">
+                          {/* Department icon */}
+                          <div className="w-9 h-9 rounded-lg bg-black/10 dark:bg-black/40 flex items-center justify-center shrink-0">
+                            <DeptIcon className="w-4 h-4 text-neutral-600 dark:text-neutral-300" />
+                          </div>
 
-                      <div className="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400 mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
-                        <div className="flex items-center gap-1">
-                          {task.scheduled_date ? (
-                            <>
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          {/* Title + property + schedule */}
+                          <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                            <span className="text-sm font-medium truncate flex items-center gap-2">
+                              {task.template_name || 'Unnamed Task'}
+                              <DiamondIcon size={10} className="shrink-0 opacity-40" />
+                            </span>
+                            <span className="text-xs text-neutral-500 dark:text-neutral-400 truncate">
+                              {task.property_name}
+                            </span>
+                            <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 dark:text-neutral-400 px-2 py-1 rounded-lg bg-black/10 dark:bg-black/40 w-fit">
+                              <svg className="w-3 h-3 shrink-0 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                               </svg>
-                              <span>{formatDate(task.scheduled_date)}{formatTime(task.scheduled_time) ? `, ${formatTime(task.scheduled_time)}` : ''}</span>
-                            </>
-                          ) : (
-                            <span className="text-neutral-400">No schedule</span>
+                              <span>
+                                {task.scheduled_date
+                                  ? `${formatDate(task.scheduled_date)}${formatTime(task.scheduled_time) ? ` · ${formatTime(task.scheduled_time)}` : ''}`
+                                  : 'No schedule'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Assignee avatars */}
+                          {assignees.length > 0 && (
+                            <div className="flex items-center shrink-0">
+                              {assignees.slice(0, 3).map((u, i) => (
+                                <div
+                                  key={u.user_id}
+                                  className="w-8 h-8 rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-[10px] font-semibold text-neutral-600 dark:text-neutral-300 ring-2 ring-white/50 dark:ring-white/10 overflow-hidden"
+                                  style={{ marginLeft: i > 0 ? '-8px' : 0 }}
+                                  title={u.name}
+                                >
+                                  {u.avatar ? (
+                                    <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    u.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+                                  )}
+                                </div>
+                              ))}
+                              {assignees.length > 3 && (
+                                <div
+                                  className="w-8 h-8 rounded-full bg-neutral-300 dark:bg-neutral-600 flex items-center justify-center text-[10px] font-semibold text-neutral-600 dark:text-neutral-300 ring-2 ring-white/50 dark:ring-white/10"
+                                  style={{ marginLeft: '-8px' }}
+                                >
+                                  +{assignees.length - 3}
+                                </div>
+                              )}
+                            </div>
                           )}
                         </div>
-                        
-                        {task.guest_name && (
-                          <div className="flex items-center gap-1">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </svg>
-                            <span className="truncate max-w-[80px]">{task.guest_name}</span>
-                          </div>
-                        )}
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </CarouselItem>

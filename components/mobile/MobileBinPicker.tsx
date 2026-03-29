@@ -16,18 +16,11 @@ interface MobileBinPickerProps {
   onDeleteBin?: (binId: string) => Promise<void>;
 }
 
-// Shared glass card style (neutral grey, like the kanban "On Hold" column)
 const glassCard =
   'w-full flex items-center gap-4 p-4 rounded-2xl text-left transition-all active:scale-[0.98] ' +
+  'glass-card glass-sheen relative overflow-hidden ' +
+  'bg-neutral-400/[0.08] dark:bg-white/[0.05] ' +
   'border border-white/[0.12] dark:border-white/[0.08]';
-
-const glassCardStyle: React.CSSProperties = {
-  background: 'rgba(163, 163, 163, 0.08)',
-  backdropFilter: 'blur(20px) saturate(1.6)',
-  WebkitBackdropFilter: 'blur(20px) saturate(1.6)',
-  boxShadow:
-    '0 1px 1px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.09)',
-};
 
 const MobileBinPicker = memo(function MobileBinPicker({
   bins,
@@ -150,7 +143,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
       )}
 
       {/* All Projects Card */}
-      <button onClick={onSelectAll} className={glassCard} style={glassCardStyle}>
+      <button onClick={onSelectAll} className={glassCard}>
         <div className="w-11 h-11 rounded-xl bg-white/[0.08] flex items-center justify-center">
           <svg className="w-5 h-5 text-neutral-500 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -164,7 +157,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
 
       {/* Unbinned Card */}
       {unbinnedCount > 0 && (
-        <button onClick={onSelectUnbinned} className={glassCard} style={glassCardStyle}>
+        <button onClick={onSelectUnbinned} className={glassCard}>
           <div className="w-11 h-11 rounded-xl bg-white/[0.08] flex items-center justify-center">
             <svg className="w-5 h-5 text-neutral-500 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
@@ -192,8 +185,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
               return (
                 <div
                   key={bin.id}
-                  className="flex flex-col gap-2 p-4 rounded-2xl border border-white/[0.12] dark:border-white/[0.08]"
-                  style={glassCardStyle}
+                  className="flex flex-col gap-2 p-4 rounded-2xl glass-card glass-sheen relative overflow-hidden bg-neutral-400/[0.08] dark:bg-white/[0.05] border border-white/[0.12] dark:border-white/[0.08]"
                 >
                   <input
                     type="text"
@@ -235,7 +227,6 @@ const MobileBinPicker = memo(function MobileBinPicker({
                 <button
                   onClick={() => onSelectBin(bin.id)}
                   className={glassCard}
-                  style={glassCardStyle}
                 >
                   <div className="w-11 h-11 rounded-xl bg-white/[0.08] flex items-center justify-center">
                     <svg className="w-5 h-5 text-neutral-500 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

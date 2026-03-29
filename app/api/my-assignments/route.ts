@@ -79,11 +79,32 @@ export async function GET(request: Request) {
         }
       }
 
-      // Create a map of assignments
+      // Create a map of assignments (current user's assigned_at)
       const assignmentMap = taskAssignments?.reduce((acc: any, ta: any) => {
         acc[ta.task_id] = ta;
         return acc;
       }, {} as { [key: string]: any }) || {};
+
+      // Fetch ALL assignees for these tasks (not just current user)
+      let allAssigneesMap: Record<string, { user_id: string; name: string; avatar: string | null }[]> = {};
+      if (taskIds.length > 0) {
+        const { data: allAssignments } = await getSupabaseServer()
+          .from('task_assignments')
+          .select('task_id, user_id, users(id, name, avatar)')
+          .in('task_id', taskIds);
+
+        if (allAssignments) {
+          allAssignments.forEach((a: any) => {
+            const u = a.users as any;
+            if (!allAssigneesMap[a.task_id]) allAssigneesMap[a.task_id] = [];
+            allAssigneesMap[a.task_id].push({
+              user_id: a.user_id,
+              name: u?.name || 'Unknown',
+              avatar: u?.avatar || null,
+            });
+          });
+        }
+      }
 
       // Transform tasks
       tasks = taskData?.map((task: any) => {
@@ -106,7 +127,7 @@ export async function GET(request: Request) {
           status: task.status || 'not_started',
           form_metadata: task.form_metadata,
           assigned_at: assignment?.assigned_at,
-          // Reservation context
+          assigned_users: allAssigneesMap[task.id] || [],
           property_name: reservation?.property_name || 'Unknown Property',
           check_out: reservation?.check_out,
           check_in: reservation?.check_in,
