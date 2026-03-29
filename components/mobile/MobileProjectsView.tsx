@@ -225,6 +225,8 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
           onSelectAll={() => navigateToBin(null, 'All Projects')}
           onSelectUnbinned={() => navigateToBin('__none__', 'Unbinned')}
           onCreateBin={binsHook.createBin}
+          onUpdateBin={binsHook.updateBin}
+          onDeleteBin={binsHook.deleteBin}
         />
       )}
 
