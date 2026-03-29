@@ -1,7 +1,7 @@
 'use client';
 
 import { memo } from 'react';
-import MobileNav, { type MobileTab } from './MobileNav';
+import MobileNav, { type MobileTab, RAIL_WIDTH } from './MobileNav';
 
 interface MobileLayoutProps {
   children: React.ReactNode;
@@ -15,14 +15,17 @@ const MobileLayout = memo(function MobileLayout({
   onTabChange,
 }: MobileLayoutProps) {
   return (
-    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 overflow-auto hide-scrollbar">
-      {/* Main Content Area - scrollable, with padding for bottom nav only */}
-      <main className="pb-20 min-h-screen hide-scrollbar">
+    <div className="h-dvh bg-neutral-50 dark:bg-neutral-950 overflow-hidden">
+      {/* Sidebar Navigation */}
+      <MobileNav activeTab={activeTab} onTabChange={onTabChange} />
+
+      {/* Main Content Area — offset by the sidebar rail width, full viewport height */}
+      <main
+        className="h-full overflow-auto hide-scrollbar"
+        style={{ marginLeft: RAIL_WIDTH }}
+      >
         {children}
       </main>
-
-      {/* Fixed Bottom Navigation */}
-      <MobileNav activeTab={activeTab} onTabChange={onTabChange} />
     </div>
   );
 });
@@ -31,4 +34,3 @@ export default MobileLayout;
 
 // Export everything from this directory for easy importing
 export { default as MobileNav, type MobileTab } from './MobileNav';
-

@@ -143,9 +143,11 @@
   --shadow-2xl: var(--shadow-2xl);
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+  }
 }
 
 html,

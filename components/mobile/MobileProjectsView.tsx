@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/authContext';
 import { useDepartments } from '@/lib/departmentsContext';
 import { STATUS_ORDER, STATUS_LABELS, PRIORITY_ORDER, PRIORITY_LABELS } from '@/lib/useProjects';
 import type { ProjectViewMode } from '@/lib/useProjects';
+import { ColumnPicker } from '@/components/windows/projects/ColumnPicker';
 import type { Project, User, ProjectFormFields } from '@/lib/types';
 import type { useProjects } from '@/lib/useProjects';
 
@@ -230,9 +231,9 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
       {/* Kanban screen */}
       {screen.type === 'kanban' && (
         <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="shrink-0 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-4 py-3">
-            <div className="flex items-center gap-3">
+          {/* Header — z-20 so column picker dropdown renders above the kanban board */}
+          <div className="shrink-0 relative z-20 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-4 py-3">
+            <div className="flex items-center gap-2">
               <button
                 onClick={goBack}
                 className="flex items-center gap-1 text-sm text-neutral-500 dark:text-neutral-400"
@@ -248,6 +249,13 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
                 </p>
               </div>
               <MobileViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
+              <ColumnPicker
+                columns={allColumnOptions}
+                visibleColumnIds={columnVis.visibleIds}
+                onToggle={columnVis.toggle}
+                onSelectAll={() => columnVis.selectAll(allColumnOptions.map((c) => c.id))}
+                onClearAll={columnVis.clearAll}
+              />
               <button
                 onClick={handleNewProject}
                 className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 active:scale-95 transition-all"
@@ -260,7 +268,7 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
           </div>
 
           {/* Kanban Board */}
-          <div className="flex-1 min-h-0 mobile-kanban-wrapper">
+          <div className="flex-1 min-h-0 flex flex-col mobile-kanban-wrapper">
             {loadingProjects ? (
               <div className="flex items-center justify-center h-full">
                 <p className="text-neutral-500">Loading projects...</p>
@@ -306,6 +314,26 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
           onDelete={(project) => {
             deleteProject(project);
             setScreen({ type: 'kanban', binId: screen.binId, binName: screen.binName });
+          }}
+          allProperties={allProperties}
+          onPropertyChange={async (propertyId, propertyName) => {
+            await updateProjectField(screen.project.id, 'property_id', propertyId || '');
+            if (propertyName !== undefined) {
+              await updateProjectField(screen.project.id, 'property_name', propertyName || '');
+            }
+            setScreen(prev => prev.type === 'detail' ? {
+              ...prev,
+              project: { ...prev.project, property_id: propertyId, property_name: propertyName },
+            } : prev);
+          }}
+          bins={binsHook.bins}
+          onBinChange={async (binId, _binName) => {
+            await updateProjectField(screen.project.id, 'bin_id', binId || '');
+            setScreen(prev => prev.type === 'detail' ? {
+              ...prev,
+              project: { ...prev.project, bin_id: binId },
+            } : prev);
+            binsHook.fetchBins();
           }}
         />
       )}

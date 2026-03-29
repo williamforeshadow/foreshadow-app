@@ -10,7 +10,7 @@ import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
-import type { Project, User, ProjectFormFields, Comment, Attachment } from '@/lib/types';
+import type { Project, User, ProjectFormFields, Comment, Attachment, PropertyOption, ProjectBin } from '@/lib/types';
 
 // ============================================================================
 // Types
@@ -22,6 +22,10 @@ interface MobileProjectDetailProps {
   onClose: () => void;
   onSave: (projectId: string, fields: ProjectFormFields) => Promise<Project | null>;
   onDelete?: (project: Project) => void;
+  allProperties?: PropertyOption[];
+  onPropertyChange?: (propertyId: string | null, propertyName: string | null) => void;
+  bins?: ProjectBin[];
+  onBinChange?: (binId: string | null, binName: string | null) => void;
 }
 
 // ============================================================================
@@ -55,6 +59,10 @@ export default function MobileProjectDetail({
   onClose,
   onSave,
   onDelete,
+  allProperties = [],
+  onPropertyChange,
+  bins = [],
+  onBinChange,
 }: MobileProjectDetailProps) {
   const { user: currentUser } = useAuth();
   const { departments } = useDepartments();
@@ -76,6 +84,8 @@ export default function MobileProjectDetail({
   const [showPriorityPicker, setShowPriorityPicker] = useState(false);
   const [showStaffPicker, setShowStaffPicker] = useState(false);
   const [showDeptPicker, setShowDeptPicker] = useState(false);
+  const [showPropertyPicker, setShowPropertyPicker] = useState(false);
+  const [showBinPicker, setShowBinPicker] = useState(false);
   const [activeSection, setActiveSection] = useState<'details' | 'comments' | 'attachments'>('details');
   const [saving, setSaving] = useState(false);
   const [newComment, setNewComment] = useState('');
@@ -117,6 +127,7 @@ export default function MobileProjectDetail({
   const DeptIcon = getDepartmentIcon(dept?.icon);
   const status = STATUS_CONFIG[fields.status] || STATUS_CONFIG.not_started;
   const priority = PRIORITY_CONFIG[fields.priority] || PRIORITY_CONFIG.medium;
+  const currentBin = bins.find(b => b.id === project.bin_id);
 
   // Post comment
   const handlePostComment = async () => {
@@ -132,7 +143,7 @@ export default function MobileProjectDetail({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-white dark:bg-neutral-950 flex flex-col"
+      className="fixed inset-0 z-[60] bg-white dark:bg-neutral-950 flex flex-col"
       style={{ height: '100dvh' }}
     >
       {/* ── Header ── */}
@@ -187,14 +198,36 @@ export default function MobileProjectDetail({
               placeholder="Untitled Project"
               className="text-lg font-semibold bg-transparent border-none outline-none w-full text-neutral-900 dark:text-white placeholder:text-neutral-400"
             />
-            <div className="flex items-center gap-1.5 mt-0.5">
+            <button
+              onClick={() => setShowPropertyPicker(true)}
+              className="flex items-center gap-1.5 mt-0.5 group"
+            >
               <svg className="w-3 h-3 text-neutral-400" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
               </svg>
               <span className="text-xs text-neutral-500 dark:text-neutral-400 truncate">
                 {project.property_name || 'No property'}
               </span>
-            </div>
+              <svg className="w-3 h-3 text-neutral-300 dark:text-neutral-600 group-active:text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {bins.length > 0 && (
+              <button
+                onClick={() => setShowBinPicker(true)}
+                className="flex items-center gap-1.5 mt-0.5 group"
+              >
+                <svg className="w-3 h-3 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+                <span className="text-xs text-neutral-500 dark:text-neutral-400 truncate">
+                  {currentBin?.name || 'No bin'}
+                </span>
+                <svg className="w-3 h-3 text-neutral-300 dark:text-neutral-600 group-active:text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
 
@@ -396,17 +429,108 @@ export default function MobileProjectDetail({
         </PickerOverlay>
       )}
 
-      {/* ── Scrollable Body ── */}
-      <div
-        className="flex-1 min-h-0 overflow-y-auto overscroll-contain hide-scrollbar"
-        style={{ WebkitOverflowScrolling: 'touch' }}
-      >
+      {showPropertyPicker && (
+        <PickerOverlay onClose={() => setShowPropertyPicker(false)}>
+          <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-3 pb-2">Property</p>
+          <button
+            onClick={() => {
+              onPropertyChange?.(null, null);
+              setShowPropertyPicker(false);
+            }}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+              !project.property_name ? 'bg-neutral-100 dark:bg-neutral-800' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
+            }`}
+          >
+            <span className="text-sm text-neutral-500 italic">No Property</span>
+            {!project.property_name && (
+              <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+          </button>
+          {allProperties.map((prop) => (
+            <button
+              key={prop.id || prop.name}
+              onClick={() => {
+                onPropertyChange?.(prop.id || null, prop.name);
+                setShowPropertyPicker(false);
+              }}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                project.property_name === prop.name ? 'bg-neutral-100 dark:bg-neutral-800' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
+              }`}
+            >
+              <svg className="w-4 h-4 text-neutral-400" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
+              </svg>
+              <span className="text-sm text-neutral-900 dark:text-white flex-1">{prop.name}</span>
+              {project.property_name === prop.name && (
+                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </PickerOverlay>
+      )}
+
+      {showBinPicker && (
+        <PickerOverlay onClose={() => setShowBinPicker(false)}>
+          <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-3 pb-2">Bin</p>
+          <button
+            onClick={() => {
+              onBinChange?.(null, null);
+              setShowBinPicker(false);
+            }}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+              !project.bin_id ? 'bg-neutral-100 dark:bg-neutral-800' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
+            }`}
+          >
+            <span className="text-sm text-neutral-500 italic">No Bin</span>
+            {!project.bin_id && (
+              <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+          </button>
+          {bins.map((bin) => (
+            <button
+              key={bin.id}
+              onClick={() => {
+                onBinChange?.(bin.id, bin.name);
+                setShowBinPicker(false);
+              }}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                project.bin_id === bin.id ? 'bg-neutral-100 dark:bg-neutral-800' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
+              }`}
+            >
+              <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+              </svg>
+              <span className="text-sm text-neutral-900 dark:text-white flex-1">{bin.name}</span>
+              {project.bin_id === bin.id && (
+                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </PickerOverlay>
+      )}
+
+      {/* ── Scrollable Body + Comment Input ── */}
+      {/* When on the comments tab, the input bar sits below the scroll area.
+          We wrap both in a flex-1 container so they share the remaining height. */}
+      <div className="flex-1 min-h-0 flex flex-col">
+        <div
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain hide-scrollbar"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
         {/* Details Section */}
         {activeSection === 'details' && (
-          <div className="p-4 space-y-4">
+          <div className="px-5 pt-5 pb-6 flex flex-col gap-5">
             {/* Description */}
-            <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 p-4">
-              <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-2">Description</p>
+            <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 px-5 py-4">
+              <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Description</p>
               <textarea
                 value={fields.description}
                 onChange={(e) => setFields(prev => ({ ...prev, description: e.target.value }))}
@@ -417,73 +541,73 @@ export default function MobileProjectDetail({
               />
             </div>
 
-            {/* Assigned Staff */}
-            <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 p-4">
-              <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Assigned to</p>
-              <button
-                onClick={() => setShowStaffPicker(true)}
-                className="flex items-center gap-2 w-full"
-              >
-                {assignedUsers.length > 0 ? (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex -space-x-1.5">
-                      {assignedUsers.map((u) => (
-                        <UserAvatar key={u.id} src={u.avatar} name={u.name} size="sm" className="ring-2 ring-white dark:ring-neutral-900" />
-                      ))}
+            {/* Assigned + Schedule — side by side */}
+            <div className="grid grid-cols-2 gap-3.5">
+              {/* Assigned Staff */}
+              <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 px-5 py-4">
+                <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Assigned to</p>
+                <button
+                  onClick={() => setShowStaffPicker(true)}
+                  className="flex items-center gap-2 w-full"
+                >
+                  {assignedUsers.length > 0 ? (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <div className="flex -space-x-1.5">
+                        {assignedUsers.map((u) => (
+                          <UserAvatar key={u.id} src={u.avatar} name={u.name} size="sm" className="ring-2 ring-white dark:ring-neutral-900" />
+                        ))}
+                      </div>
+                      <div className="w-6 h-6 rounded-full border-2 border-dashed border-neutral-300 dark:border-neutral-600 flex items-center justify-center ml-0.5">
+                        <svg className="w-3 h-3 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                      </div>
                     </div>
-                    <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                      {assignedUsers.map(u => u.name).join(', ')}
-                    </span>
-                    <div className="w-6 h-6 rounded-full border-2 border-dashed border-neutral-300 dark:border-neutral-600 flex items-center justify-center ml-1">
-                      <svg className="w-3 h-3 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full border-2 border-dashed border-neutral-300 dark:border-neutral-600 flex items-center justify-center">
+                        <svg className="w-3.5 h-3.5 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </div>
+                      <span className="text-xs text-neutral-400">Tap to assign</span>
                     </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full border-2 border-dashed border-neutral-300 dark:border-neutral-600 flex items-center justify-center">
-                      <svg className="w-3.5 h-3.5 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                    </div>
-                    <span className="text-sm text-neutral-400">Tap to assign</span>
-                  </div>
-                )}
-              </button>
-            </div>
+                  )}
+                </button>
+              </div>
 
-            {/* Schedule */}
-            <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 p-4">
-              <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Schedule</p>
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-neutral-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  <input
-                    type="date"
-                    value={fields.scheduled_date}
-                    onChange={(e) => updateField('scheduled_date', e.target.value)}
-                    className="flex-1 bg-transparent border-none outline-none text-sm text-neutral-900 dark:text-neutral-100"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-neutral-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <input
-                    type="time"
-                    value={fields.scheduled_time}
-                    onChange={(e) => updateField('scheduled_time', e.target.value)}
-                    className="flex-1 bg-transparent border-none outline-none text-sm text-neutral-900 dark:text-neutral-100"
-                  />
+              {/* Schedule */}
+              <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 px-5 py-4">
+                <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Schedule</p>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-neutral-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <input
+                      type="date"
+                      value={fields.scheduled_date}
+                      onChange={(e) => updateField('scheduled_date', e.target.value)}
+                      className="flex-1 bg-transparent border-none outline-none text-[13px] text-neutral-900 dark:text-neutral-100 min-w-0"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-neutral-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <input
+                      type="time"
+                      value={fields.scheduled_time}
+                      onChange={(e) => updateField('scheduled_time', e.target.value)}
+                      className="flex-1 bg-transparent border-none outline-none text-[13px] text-neutral-900 dark:text-neutral-100 min-w-0"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Time Tracking */}
-            <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 p-4 flex items-center justify-between">
+            <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 px-5 py-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -519,8 +643,8 @@ export default function MobileProjectDetail({
 
         {/* Comments Section */}
         {activeSection === 'comments' && (
-          <div className="flex flex-col h-full">
-            <div className="flex-1 p-4 space-y-4">
+          <div className="flex flex-col">
+            <div className="p-4 space-y-4">
               {commentsHook.loadingComments ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
@@ -644,38 +768,39 @@ export default function MobileProjectDetail({
             <div className="h-4" />
           </div>
         )}
-      </div>
-
-      {/* ── Comment Input (sticky bottom, only on comments tab) ── */}
-      {activeSection === 'comments' && (
-        <div className="shrink-0 border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-4 py-3 safe-area-bottom">
-          <div className="flex items-end gap-2">
-            <textarea
-              ref={commentInputRef}
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handlePostComment();
-                }
-              }}
-              placeholder="Add a comment..."
-              rows={1}
-              className="flex-1 resize-none bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-sm text-neutral-900 dark:text-white placeholder:text-neutral-400 outline-none focus:border-neutral-400 dark:focus:border-neutral-600"
-            />
-            <button
-              onClick={handlePostComment}
-              disabled={commentsHook.postingComment || !newComment.trim()}
-              className="p-2 text-neutral-500 disabled:opacity-30 active:text-neutral-800 dark:active:text-neutral-200"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-            </button>
-          </div>
         </div>
-      )}
+
+        {/* ── Comment Input (below scroll area, only on comments tab) ── */}
+        {activeSection === 'comments' && (
+          <div className="shrink-0 border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-4 py-3 safe-area-bottom">
+            <div className="flex items-end gap-2">
+              <textarea
+                ref={commentInputRef}
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handlePostComment();
+                  }
+                }}
+                placeholder="Add a comment..."
+                rows={1}
+                className="flex-1 resize-none bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-sm text-neutral-900 dark:text-white placeholder:text-neutral-400 outline-none focus:border-neutral-400 dark:focus:border-neutral-600"
+              />
+              <button
+                onClick={handlePostComment}
+                disabled={commentsHook.postingComment || !newComment.trim()}
+                className="p-2 text-neutral-500 disabled:opacity-30 active:text-neutral-800 dark:active:text-neutral-200"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -695,11 +820,11 @@ function PickerOverlay({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-[60] bg-black/30"
+        className="fixed inset-0 z-[70] bg-black/30"
         onClick={onClose}
       />
       {/* Content */}
-      <div className="fixed bottom-0 left-0 right-0 z-[61] bg-white dark:bg-neutral-900 rounded-t-2xl border-t border-neutral-200 dark:border-neutral-700 max-h-[60vh] overflow-y-auto safe-area-bottom shadow-xl">
+      <div className="fixed bottom-0 left-0 right-0 z-[71] bg-white dark:bg-neutral-900 rounded-t-2xl border-t border-neutral-200 dark:border-neutral-700 max-h-[60vh] overflow-y-auto safe-area-bottom shadow-xl">
         <div className="w-10 h-1 bg-neutral-300 dark:bg-neutral-600 rounded-full mx-auto mt-2 mb-1" />
         {children}
         <div className="h-4" />

@@ -381,8 +381,8 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
     <div className="flex h-full overflow-hidden glass-bg-neutral">
       {/* Left Panel - Kanban Board */}
       <div className={`${expandedProject ? 'w-2/3' : 'w-full'} h-full flex flex-col transition-[width] duration-200 ease-out`}>
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/20 dark:border-white/10 glass-panel bg-white/40 dark:bg-white/[0.05] flex-shrink-0">
+        {/* Header — z-20 so dropdowns (ColumnPicker, ViewModeToggle) render above the kanban board's scroll container */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/20 dark:border-white/10 glass-panel bg-white/40 dark:bg-white/[0.05] flex-shrink-0 relative z-20">
           <div className="flex items-center gap-3">
             {/* Back to bins button */}
             <button

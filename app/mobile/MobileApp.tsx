@@ -138,7 +138,7 @@ export default function MobileApp() {
       {/* Mobile Task Detail - Full Screen Takeover */}
       {mobileSelectedTask && (
         <div 
-          className="fixed inset-0 z-50 bg-white dark:bg-neutral-900 flex flex-col"
+          className="fixed inset-0 z-[60] bg-white dark:bg-neutral-900 flex flex-col"
           style={{ height: '100dvh' }}
         >
           {/* Header */}

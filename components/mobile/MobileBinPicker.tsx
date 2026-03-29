@@ -51,7 +51,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
   }
 
   return (
-    <div className="p-4 space-y-3">
+    <div className="p-4 flex flex-col gap-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold text-neutral-900 dark:text-white">Projects</h2>
@@ -136,9 +136,9 @@ const MobileBinPicker = memo(function MobileBinPicker({
 
       {/* Bin List */}
       {bins.length > 0 && (
-        <div className="space-y-2">
+        <div className="flex flex-col gap-3">
           <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider px-1 pt-2">
-            Workspaces
+            Bins
           </p>
           {bins.map((bin) => (
             <button

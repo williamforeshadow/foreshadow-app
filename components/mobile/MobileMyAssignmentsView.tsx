@@ -272,7 +272,7 @@ export default function MobileMyAssignmentsView({
       </div>
 
       {/* Carousel Content */}
-      <div className="flex-1 overflow-hidden pb-20">
+      <div className="flex-1 overflow-hidden">
         <Carousel
           className="h-full"
           setApi={setCarouselApi}
@@ -412,7 +412,7 @@ export default function MobileMyAssignmentsView({
       {/* Floating User Menu - Bottom Right (above 3-tab nav) */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="fixed bottom-[4.5rem] right-4 z-40 w-11 h-11 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform overflow-hidden">
+          <button className="fixed bottom-4 right-4 z-40 w-11 h-11 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform overflow-hidden">
             <UserAvatar src={user.avatar} name={user.name} size="xl" />
           </button>
         </DropdownMenuTrigger>
