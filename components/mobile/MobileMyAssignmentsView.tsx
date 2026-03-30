@@ -261,12 +261,12 @@ export default function MobileMyAssignmentsView({
     <div className="flex flex-col h-full relative">
       {/* Header */}
       <div className="sticky top-0 z-30 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800">
-        <div className="flex items-center justify-between px-4 pt-3 pb-1">
-          <h2 className="text-xl font-semibold text-neutral-900 dark:text-white">My Work</h2>
+        <div className="flex items-center px-4 pt-3 pb-1 relative">
+          <h2 className="absolute left-1/2 -translate-x-1/2 text-xl font-semibold text-neutral-900 dark:text-white">My Assignments</h2>
           <button
             onClick={fetchAssignments}
             disabled={loading}
-            className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 active:scale-95 transition-all"
+            className="ml-auto p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 active:scale-95 transition-all"
           >
             <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />

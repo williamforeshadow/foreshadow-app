@@ -13,7 +13,7 @@ interface MobileNavProps {
 const tabs: { id: MobileTab; label: string; icon: React.ReactNode }[] = [
   {
     id: 'assignments',
-    label: 'My Work',
+    label: 'My Assignments',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
@@ -49,27 +49,26 @@ const tabs: { id: MobileTab; label: string; icon: React.ReactNode }[] = [
   },
 ];
 
-const RAIL_WIDTH = 52;
-const EXPANDED_WIDTH = 176;
+const DRAWER_WIDTH = 220;
 
 const MobileNav = memo(function MobileNav({ activeTab, onTabChange }: MobileNavProps) {
   const { theme, setTheme } = useTheme();
-  const [expanded, setExpanded] = useState(false);
+  const [open, setOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
 
   const handleTabClick = useCallback(
     (id: MobileTab) => {
       onTabChange(id);
-      setExpanded(false);
+      setOpen(false);
     },
     [onTabChange],
   );
 
   useEffect(() => {
-    if (!expanded) return;
+    if (!open) return;
     function onTap(e: MouseEvent | TouchEvent) {
       if (navRef.current && !navRef.current.contains(e.target as Node)) {
-        setExpanded(false);
+        setOpen(false);
       }
     }
     document.addEventListener('mousedown', onTap);
@@ -78,59 +77,71 @@ const MobileNav = memo(function MobileNav({ activeTab, onTabChange }: MobileNavP
       document.removeEventListener('mousedown', onTap);
       document.removeEventListener('touchstart', onTap);
     };
-  }, [expanded]);
+  }, [open]);
 
   return (
     <>
-      {/* Scrim when expanded */}
-      {expanded && (
-        <div
-          className="fixed inset-0 z-[49] bg-black/20 transition-opacity"
-          aria-hidden
-        />
-      )}
-
-      <nav
-        ref={navRef}
-        className="fixed left-0 top-0 bottom-0 z-50 flex flex-col bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 transition-[width] duration-200 ease-in-out safe-area-left"
-        style={{ width: expanded ? EXPANDED_WIDTH : RAIL_WIDTH }}
-      >
-        {/* Expand / collapse toggle */}
+      {/* Hamburger trigger — fixed top-left, visible only when drawer is closed */}
+      {!open && (
         <button
-          onClick={() => setExpanded((v) => !v)}
-          className="shrink-0 flex items-center justify-center h-12 mt-[env(safe-area-inset-top)] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
-          aria-label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+          onClick={() => setOpen(true)}
+          className="fixed top-3 left-3 z-40 flex items-center justify-center w-10 h-10 rounded-xl bg-white/80 dark:bg-neutral-900/80 backdrop-blur-md border border-neutral-200/60 dark:border-neutral-700/60 text-neutral-600 dark:text-neutral-300 active:scale-95 transition-all shadow-sm"
+          style={{ marginTop: 'env(safe-area-inset-top)' }}
+          aria-label="Open navigation"
         >
-          <svg
-            className={`w-5 h-5 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
+      )}
+
+      {/* Scrim */}
+      <div
+        className={`fixed inset-0 z-[49] bg-black/25 transition-opacity duration-200 ${
+          open ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+        aria-hidden
+      />
+
+      {/* Drawer */}
+      <nav
+        ref={navRef}
+        className="fixed left-0 top-0 bottom-0 z-50 flex flex-col bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 transition-transform duration-250 ease-out safe-area-left will-change-transform"
+        style={{
+          width: DRAWER_WIDTH,
+          transform: open ? 'translateX(0)' : `translateX(-${DRAWER_WIDTH}px)`,
+        }}
+      >
+        {/* Header with close button */}
+        <div className="shrink-0 flex items-center justify-between px-4 h-12 mt-[env(safe-area-inset-top)]">
+          <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">Menu</span>
+          <button
+            onClick={() => setOpen(false)}
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+            aria-label="Close navigation"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
 
         {/* Tab buttons */}
-        <div className="flex-1 flex flex-col gap-1 px-1.5 pt-1">
+        <div className="flex-1 flex flex-col gap-1 px-2 pt-1">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => handleTabClick(tab.id)}
-                className={`flex items-center gap-3 rounded-lg px-2.5 py-2.5 transition-colors overflow-hidden whitespace-nowrap ${
+                className={`flex items-center gap-3 rounded-xl px-3 py-3 transition-colors ${
                   isActive
                     ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'
                     : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
                 }`}
               >
                 <div className="shrink-0">{tab.icon}</div>
-                <span
-                  className={`text-sm transition-opacity duration-200 ${
-                    expanded ? 'opacity-100' : 'opacity-0 w-0'
-                  } ${isActive ? 'font-semibold' : 'font-medium'}`}
-                >
+                <span className={`text-sm ${isActive ? 'font-semibold' : 'font-medium'}`}>
                   {tab.label}
                 </span>
               </button>
@@ -139,10 +150,10 @@ const MobileNav = memo(function MobileNav({ activeTab, onTabChange }: MobileNavP
         </div>
 
         {/* Theme toggle at bottom */}
-        <div className="shrink-0 px-1.5 pb-3 safe-area-bottom">
+        <div className="shrink-0 px-2 pb-3 safe-area-bottom">
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="flex items-center gap-3 w-full rounded-lg px-2.5 py-2.5 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors overflow-hidden whitespace-nowrap"
+            className="flex items-center gap-3 w-full rounded-xl px-3 py-3 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
           >
             <div className="shrink-0">
               {theme === 'dark' ? (
@@ -155,11 +166,7 @@ const MobileNav = memo(function MobileNav({ activeTab, onTabChange }: MobileNavP
                 </svg>
               )}
             </div>
-            <span
-              className={`text-sm font-medium transition-opacity duration-200 ${
-                expanded ? 'opacity-100' : 'opacity-0 w-0'
-              }`}
-            >
+            <span className="text-sm font-medium">
               {theme === 'dark' ? 'Light mode' : 'Dark mode'}
             </span>
           </button>
@@ -170,4 +177,3 @@ const MobileNav = memo(function MobileNav({ activeTab, onTabChange }: MobileNavP
 });
 
 export default MobileNav;
-export { RAIL_WIDTH };

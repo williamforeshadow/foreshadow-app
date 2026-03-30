@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import HexagonIcon from '@/components/icons/HammerIcon';
 import type { Project, ProjectStatus, ProjectPriority, PropertyOption, User, Department } from '@/lib/types';
@@ -50,7 +50,8 @@ interface ProjectsKanbanProps {
   expandedProjectId: string | null;
   getUnreadCommentCount: (project: Project) => number;
   onColumnMove: (projectId: string, field: string, value: string) => void;
-  visibleColumnIds?: Set<string>; // When provided, only show these columns
+  visibleColumnIds?: Set<string>;
+  onDraggingChange?: (isDragging: boolean) => void;
 }
 
 // ============================================================================
@@ -68,6 +69,7 @@ export function ProjectsKanban({
   getUnreadCommentCount,
   onColumnMove,
   visibleColumnIds,
+  onDraggingChange,
 }: ProjectsKanbanProps) {
   // Build columns based on view mode
   const allColumns: KanbanColumn[] = useMemo(() => {
@@ -296,7 +298,7 @@ export function ProjectsKanban({
   );
 
   // Use the kanban DnD hook
-  const { activeItem, sensors, announcements, handleDragStart, handleDragOver, handleDragEnd } =
+  const { activeItem, isDragging, sensors, announcements, handleDragStart, handleDragOver, handleDragEnd } =
     useKanbanDnd<DraggableProjectItem, KanbanColumn>({
       data: items,
       columns,
@@ -304,6 +306,10 @@ export function ProjectsKanban({
       onDataChange: setItems,
       onColumnChange: handleColumnChange,
     });
+
+  useEffect(() => {
+    onDraggingChange?.(isDragging);
+  }, [isDragging, onDraggingChange]);
 
   // Group items by column for rendering
   const itemsByColumn = useMemo(() => {

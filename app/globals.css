@@ -425,6 +425,8 @@ a {
 /* ============================================================
    Mobile Kanban Overrides
    Narrows columns and adds scroll-snap for swipe navigation.
+   Scroll-snap is disabled while dragging (.is-dragging) so
+   dnd-kit pointer tracking isn't fought by the snap engine.
    ============================================================ */
 .mobile-kanban-wrapper {
   overflow: hidden;
@@ -438,9 +440,17 @@ a {
     -webkit-overflow-scrolling: touch;
   }
 
+  .mobile-kanban-wrapper.is-dragging > div:first-child {
+    scroll-snap-type: none;
+  }
+
   .mobile-kanban-wrapper > div:first-child > div {
     width: 260px;
     min-width: 260px;
     scroll-snap-align: start;
+  }
+
+  .mobile-kanban-wrapper.is-dragging > div:first-child > div {
+    scroll-snap-align: none;
   }
 }
