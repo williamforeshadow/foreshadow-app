@@ -85,7 +85,6 @@ export function ColumnPicker({
             {/* Search */}
             <div className="p-2 border-b border-neutral-200/60 dark:border-white/10">
               <input
-                autoFocus
                 type="text"
                 placeholder="Search columns..."
                 value={search}

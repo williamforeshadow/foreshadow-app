@@ -261,7 +261,6 @@ export default function MobileProjectDetail({
                   <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Property</p>
                   <div className="px-3 pb-2">
                     <input
-                      autoFocus
                       type="text"
                       placeholder="Search properties..."
                       value={propertySearch}
@@ -327,7 +326,6 @@ export default function MobileProjectDetail({
                     <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Bin</p>
                     <div className="px-3 pb-2">
                       <input
-                        autoFocus
                         type="text"
                         placeholder="Search bins..."
                         value={binSearch}
@@ -582,7 +580,6 @@ export default function MobileProjectDetail({
                     <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Assign Staff</p>
                     <div className="px-3 pb-2">
                       <input
-                        autoFocus
                         type="text"
                         placeholder="Search staff..."
                         value={staffSearch}
