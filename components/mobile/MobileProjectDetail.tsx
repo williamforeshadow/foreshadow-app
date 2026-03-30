@@ -86,6 +86,9 @@ export default function MobileProjectDetail({
   const [showDeptPicker, setShowDeptPicker] = useState(false);
   const [showPropertyPicker, setShowPropertyPicker] = useState(false);
   const [showBinPicker, setShowBinPicker] = useState(false);
+  const [propertySearch, setPropertySearch] = useState('');
+  const [binSearch, setBinSearch] = useState('');
+  const [staffSearch, setStaffSearch] = useState('');
   const [activeSection, setActiveSection] = useState<'details' | 'comments' | 'attachments'>('details');
   const [saving, setSaving] = useState(false);
   const [newComment, setNewComment] = useState('');
@@ -183,12 +186,52 @@ export default function MobileProjectDetail({
 
         {/* Department icon + Title */}
         <div className="flex items-start gap-3 px-4 pb-3">
-          <button
-            onClick={() => setShowDeptPicker(!showDeptPicker)}
-            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-sky-500/10 dark:bg-sky-500/15 border border-sky-200/30 dark:border-sky-500/20"
-          >
-            <DeptIcon className="w-5 h-5 text-sky-500 dark:text-sky-400" />
-          </button>
+          <div className="relative shrink-0">
+            <button
+              onClick={() => { setShowDeptPicker(!showDeptPicker); setShowStatusPicker(false); setShowPriorityPicker(false); setShowPropertyPicker(false); setShowBinPicker(false); }}
+              className="w-10 h-10 rounded-xl flex items-center justify-center bg-sky-500/10 dark:bg-sky-500/15 border border-sky-200/30 dark:border-sky-500/20"
+            >
+              <DeptIcon className="w-5 h-5 text-sky-500 dark:text-sky-400" />
+            </button>
+            {showDeptPicker && !dept && (
+              <InlineDropdown onClose={() => setShowDeptPicker(false)}>
+                <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Department</p>
+                <button
+                  onClick={() => { updateField('department_id', ''); setShowDeptPicker(false); }}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                    !fields.department_id ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
+                  }`}
+                >
+                  <span className="text-[15px] text-neutral-500">No Department</span>
+                  {!fields.department_id && (
+                    <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </button>
+                {departments.map((d) => {
+                  const DIcon2 = getDepartmentIcon(d.icon);
+                  return (
+                    <button
+                      key={d.id}
+                      onClick={() => { updateField('department_id', d.id); setShowDeptPicker(false); }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                        fields.department_id === d.id ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
+                      }`}
+                    >
+                      <DIcon2 className="w-4 h-4 text-sky-500" />
+                      <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{d.name}</span>
+                      {fields.department_id === d.id && (
+                        <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
+              </InlineDropdown>
+            )}
+          </div>
           <div className="flex-1 min-w-0">
             <input
               type="text"
@@ -198,62 +241,259 @@ export default function MobileProjectDetail({
               placeholder="Untitled Project"
               className="text-lg font-semibold bg-transparent border-none outline-none w-full text-neutral-900 dark:text-white placeholder:text-neutral-400"
             />
-            <button
-              onClick={() => setShowPropertyPicker(true)}
-              className="flex items-center gap-1.5 mt-0.5 group"
-            >
-              <svg className="w-3 h-3 text-neutral-400" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
-              </svg>
-              <span className="text-xs text-neutral-500 dark:text-neutral-400 truncate">
-                {project.property_name || 'No property'}
-              </span>
-              <svg className="w-3 h-3 text-neutral-300 dark:text-neutral-600 group-active:text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            {bins.length > 0 && (
+            <div className="relative">
               <button
-                onClick={() => setShowBinPicker(true)}
+                onClick={() => { setShowPropertyPicker(!showPropertyPicker); setShowBinPicker(false); }}
                 className="flex items-center gap-1.5 mt-0.5 group"
               >
-                <svg className="w-3 h-3 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                <svg className="w-3 h-3 text-neutral-400" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
                 </svg>
                 <span className="text-xs text-neutral-500 dark:text-neutral-400 truncate">
-                  {currentBin?.name || 'No bin'}
+                  {project.property_name || 'No property'}
                 </span>
-                <svg className="w-3 h-3 text-neutral-300 dark:text-neutral-600 group-active:text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`w-3 h-3 text-neutral-300 dark:text-neutral-600 transition-transform ${showPropertyPicker ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
+              {showPropertyPicker && (
+                <InlineDropdown onClose={() => { setShowPropertyPicker(false); setPropertySearch(''); }}>
+                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Property</p>
+                  <div className="px-3 pb-2">
+                    <input
+                      autoFocus
+                      type="text"
+                      placeholder="Search properties..."
+                      value={propertySearch}
+                      onChange={(e) => setPropertySearch(e.target.value)}
+                      className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
+                    />
+                  </div>
+                  <button
+                    onClick={() => { onPropertyChange?.(null, null); setShowPropertyPicker(false); setPropertySearch(''); }}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                      !project.property_name ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
+                    }`}
+                  >
+                    <span className="text-[15px] text-neutral-500 italic">No Property</span>
+                    {!project.property_name && (
+                      <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                  {allProperties
+                    .filter(prop => !propertySearch.trim() || prop.name.toLowerCase().includes(propertySearch.toLowerCase()))
+                    .map((prop) => (
+                    <button
+                      key={prop.id || prop.name}
+                      onClick={() => { onPropertyChange?.(prop.id || null, prop.name); setShowPropertyPicker(false); setPropertySearch(''); }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                        project.property_name === prop.name ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
+                      }`}
+                    >
+                      <svg className="w-4 h-4 text-neutral-400" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
+                      </svg>
+                      <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{prop.name}</span>
+                      {project.property_name === prop.name && (
+                        <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </InlineDropdown>
+              )}
+            </div>
+            {bins.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => { setShowBinPicker(!showBinPicker); setShowPropertyPicker(false); }}
+                  className="flex items-center gap-1.5 mt-0.5 group"
+                >
+                  <svg className="w-3 h-3 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                  </svg>
+                  <span className="text-xs text-neutral-500 dark:text-neutral-400 truncate">
+                    {currentBin?.name || 'No bin'}
+                  </span>
+                  <svg className={`w-3 h-3 text-neutral-300 dark:text-neutral-600 transition-transform ${showBinPicker ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showBinPicker && (
+                  <InlineDropdown onClose={() => { setShowBinPicker(false); setBinSearch(''); }}>
+                    <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Bin</p>
+                    <div className="px-3 pb-2">
+                      <input
+                        autoFocus
+                        type="text"
+                        placeholder="Search bins..."
+                        value={binSearch}
+                        onChange={(e) => setBinSearch(e.target.value)}
+                        className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
+                      />
+                    </div>
+                    <button
+                      onClick={() => { onBinChange?.(null, null); setShowBinPicker(false); setBinSearch(''); }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                        !project.bin_id ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
+                      }`}
+                    >
+                      <span className="text-[15px] text-neutral-500 italic">No Bin</span>
+                      {!project.bin_id && (
+                        <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                    {bins
+                      .filter(bin => !binSearch.trim() || bin.name.toLowerCase().includes(binSearch.toLowerCase()))
+                      .map((bin) => (
+                      <button
+                        key={bin.id}
+                        onClick={() => { onBinChange?.(bin.id, bin.name); setShowBinPicker(false); setBinSearch(''); }}
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                          project.bin_id === bin.id ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
+                        }`}
+                      >
+                        <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                        </svg>
+                        <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{bin.name}</span>
+                        {project.bin_id === bin.id && (
+                          <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                  </InlineDropdown>
+                )}
+              </div>
             )}
           </div>
         </div>
 
-        {/* Status + Priority pills */}
+        {/* Status + Priority + Department pills */}
         <div className="flex items-center gap-2 px-4 pb-3 flex-wrap">
-          <button
-            onClick={() => setShowStatusPicker(!showStatusPicker)}
-            className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-opacity active:opacity-70 ${status.bg}`}
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
-            {status.label}
-          </button>
-          <button
-            onClick={() => setShowPriorityPicker(!showPriorityPicker)}
-            className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-opacity active:opacity-70 ${priority.bg}`}
-          >
-            {priority.label} priority
-          </button>
-          {dept && (
+          <div className="relative">
             <button
-              onClick={() => setShowDeptPicker(!showDeptPicker)}
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 transition-opacity active:opacity-70"
+              onClick={() => { setShowStatusPicker(!showStatusPicker); setShowPriorityPicker(false); setShowDeptPicker(false); }}
+              className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-opacity active:opacity-70 ${status.bg}`}
             >
-              <DeptIcon className="w-3 h-3" />
-              {dept.name}
+              <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
+              {status.label}
             </button>
+            {showStatusPicker && (
+              <InlineDropdown onClose={() => setShowStatusPicker(false)}>
+                <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Status</p>
+                {STATUS_OPTIONS.map((s) => {
+                  const cfg = STATUS_CONFIG[s];
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => { updateField('status', s); setShowStatusPicker(false); }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                        fields.status === s ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
+                      }`}
+                    >
+                      <span className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
+                      <span className="text-[15px] text-neutral-900 dark:text-white">{cfg.label}</span>
+                      {fields.status === s && (
+                        <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
+              </InlineDropdown>
+            )}
+          </div>
+          <div className="relative">
+            <button
+              onClick={() => { setShowPriorityPicker(!showPriorityPicker); setShowStatusPicker(false); setShowDeptPicker(false); }}
+              className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-opacity active:opacity-70 ${priority.bg}`}
+            >
+              {priority.label} priority
+            </button>
+            {showPriorityPicker && (
+              <InlineDropdown onClose={() => setShowPriorityPicker(false)}>
+                <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Priority</p>
+                {PRIORITY_OPTIONS.map((p) => {
+                  const cfg = PRIORITY_CONFIG[p];
+                  const dotColor = cfg.bg.includes('red') ? 'bg-red-500' : cfg.bg.includes('orange') ? 'bg-orange-500' : cfg.bg.includes('blue') ? 'bg-blue-500' : 'bg-slate-400';
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => { updateField('priority', p); setShowPriorityPicker(false); }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                        fields.priority === p ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
+                      }`}
+                    >
+                      <span className={`inline-block w-2.5 h-2.5 rounded-full ${dotColor}`} />
+                      <span className="text-[15px] text-neutral-900 dark:text-white">{cfg.label}</span>
+                      {fields.priority === p && (
+                        <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
+              </InlineDropdown>
+            )}
+          </div>
+          {dept && (
+            <div className="relative">
+              <button
+                onClick={() => { setShowDeptPicker(!showDeptPicker); setShowStatusPicker(false); setShowPriorityPicker(false); }}
+                className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 transition-opacity active:opacity-70"
+              >
+                <DeptIcon className="w-3 h-3" />
+                {dept.name}
+              </button>
+              {showDeptPicker && (
+                <InlineDropdown onClose={() => setShowDeptPicker(false)}>
+                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Department</p>
+                  <button
+                    onClick={() => { updateField('department_id', ''); setShowDeptPicker(false); }}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                      !fields.department_id ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
+                    }`}
+                  >
+                    <span className="text-[15px] text-neutral-500">No Department</span>
+                    {!fields.department_id && (
+                      <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                  {departments.map((d) => {
+                    const DIcon2 = getDepartmentIcon(d.icon);
+                    return (
+                      <button
+                        key={d.id}
+                        onClick={() => { updateField('department_id', d.id); setShowDeptPicker(false); }}
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                          fields.department_id === d.id ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
+                        }`}
+                      >
+                        <DIcon2 className="w-4 h-4 text-sky-500" />
+                        <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{d.name}</span>
+                        {fields.department_id === d.id && (
+                          <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                    );
+                  })}
+                </InlineDropdown>
+              )}
+            </div>
           )}
         </div>
 
@@ -279,243 +519,6 @@ export default function MobileProjectDetail({
           ))}
         </div>
       </div>
-
-      {/* ── Picker Overlays (inline dropdowns) ── */}
-      {showStatusPicker && (
-        <PickerOverlay onClose={() => setShowStatusPicker(false)}>
-          <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-3 pb-2">Status</p>
-          {STATUS_OPTIONS.map((s) => {
-            const cfg = STATUS_CONFIG[s];
-            return (
-              <button
-                key={s}
-                onClick={() => {
-                  updateField('status', s);
-                  setShowStatusPicker(false);
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  fields.status === s ? 'bg-neutral-100 dark:bg-neutral-800' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
-                }`}
-              >
-                <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-                <span className="text-sm text-neutral-900 dark:text-white">{cfg.label}</span>
-                {fields.status === s && (
-                  <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-              </button>
-            );
-          })}
-        </PickerOverlay>
-      )}
-
-      {showPriorityPicker && (
-        <PickerOverlay onClose={() => setShowPriorityPicker(false)}>
-          <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-3 pb-2">Priority</p>
-          {PRIORITY_OPTIONS.map((p) => {
-            const cfg = PRIORITY_CONFIG[p];
-            return (
-              <button
-                key={p}
-                onClick={() => {
-                  updateField('priority', p);
-                  setShowPriorityPicker(false);
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  fields.priority === p ? 'bg-neutral-100 dark:bg-neutral-800' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
-                }`}
-              >
-                <span className={`inline-block w-2 h-2 rounded-full ${cfg.bg.includes('red') ? 'bg-red-500' : cfg.bg.includes('orange') ? 'bg-orange-500' : cfg.bg.includes('blue') ? 'bg-blue-500' : 'bg-slate-400'}`} />
-                <span className="text-sm text-neutral-900 dark:text-white">{cfg.label}</span>
-                {fields.priority === p && (
-                  <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-              </button>
-            );
-          })}
-        </PickerOverlay>
-      )}
-
-      {showStaffPicker && (
-        <PickerOverlay onClose={() => setShowStaffPicker(false)}>
-          <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-3 pb-2">Assign Staff</p>
-          {fields.assigned_staff.length > 0 && (
-            <button
-              onClick={() => {
-                updateField('assigned_staff', []);
-                setShowStaffPicker(false);
-              }}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              <span className="text-sm">Clear all</span>
-            </button>
-          )}
-          {users.map((user) => {
-            const isAssigned = fields.assigned_staff?.includes(user.id);
-            return (
-              <button
-                key={user.id}
-                onClick={() => {
-                  const updated = isAssigned
-                    ? fields.assigned_staff.filter(id => id !== user.id)
-                    : [...fields.assigned_staff, user.id];
-                  updateField('assigned_staff', updated);
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  isAssigned ? 'bg-neutral-100 dark:bg-neutral-800' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
-                }`}
-              >
-                <UserAvatar src={user.avatar} name={user.name} size="sm" />
-                <span className="text-sm text-neutral-900 dark:text-white flex-1">{user.name}</span>
-                {isAssigned && (
-                  <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-              </button>
-            );
-          })}
-        </PickerOverlay>
-      )}
-
-      {showDeptPicker && (
-        <PickerOverlay onClose={() => setShowDeptPicker(false)}>
-          <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-3 pb-2">Department</p>
-          <button
-            onClick={() => {
-              updateField('department_id', '');
-              setShowDeptPicker(false);
-            }}
-            className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-              !fields.department_id ? 'bg-neutral-100 dark:bg-neutral-800' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
-            }`}
-          >
-            <span className="text-sm text-neutral-500">No Department</span>
-            {!fields.department_id && (
-              <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            )}
-          </button>
-          {departments.map((d) => {
-            const DIcon = getDepartmentIcon(d.icon);
-            return (
-              <button
-                key={d.id}
-                onClick={() => {
-                  updateField('department_id', d.id);
-                  setShowDeptPicker(false);
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  fields.department_id === d.id ? 'bg-neutral-100 dark:bg-neutral-800' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
-                }`}
-              >
-                <DIcon className="w-4 h-4 text-sky-500" />
-                <span className="text-sm text-neutral-900 dark:text-white flex-1">{d.name}</span>
-                {fields.department_id === d.id && (
-                  <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-              </button>
-            );
-          })}
-        </PickerOverlay>
-      )}
-
-      {showPropertyPicker && (
-        <PickerOverlay onClose={() => setShowPropertyPicker(false)}>
-          <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-3 pb-2">Property</p>
-          <button
-            onClick={() => {
-              onPropertyChange?.(null, null);
-              setShowPropertyPicker(false);
-            }}
-            className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-              !project.property_name ? 'bg-neutral-100 dark:bg-neutral-800' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
-            }`}
-          >
-            <span className="text-sm text-neutral-500 italic">No Property</span>
-            {!project.property_name && (
-              <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            )}
-          </button>
-          {allProperties.map((prop) => (
-            <button
-              key={prop.id || prop.name}
-              onClick={() => {
-                onPropertyChange?.(prop.id || null, prop.name);
-                setShowPropertyPicker(false);
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                project.property_name === prop.name ? 'bg-neutral-100 dark:bg-neutral-800' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
-              }`}
-            >
-              <svg className="w-4 h-4 text-neutral-400" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
-              </svg>
-              <span className="text-sm text-neutral-900 dark:text-white flex-1">{prop.name}</span>
-              {project.property_name === prop.name && (
-                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              )}
-            </button>
-          ))}
-        </PickerOverlay>
-      )}
-
-      {showBinPicker && (
-        <PickerOverlay onClose={() => setShowBinPicker(false)}>
-          <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-3 pb-2">Bin</p>
-          <button
-            onClick={() => {
-              onBinChange?.(null, null);
-              setShowBinPicker(false);
-            }}
-            className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-              !project.bin_id ? 'bg-neutral-100 dark:bg-neutral-800' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
-            }`}
-          >
-            <span className="text-sm text-neutral-500 italic">No Bin</span>
-            {!project.bin_id && (
-              <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            )}
-          </button>
-          {bins.map((bin) => (
-            <button
-              key={bin.id}
-              onClick={() => {
-                onBinChange?.(bin.id, bin.name);
-                setShowBinPicker(false);
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                project.bin_id === bin.id ? 'bg-neutral-100 dark:bg-neutral-800' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
-              }`}
-            >
-              <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-              </svg>
-              <span className="text-sm text-neutral-900 dark:text-white flex-1">{bin.name}</span>
-              {project.bin_id === bin.id && (
-                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              )}
-            </button>
-          ))}
-        </PickerOverlay>
-      )}
 
       {/* ── Scrollable Body + Comment Input ── */}
       {/* When on the comments tab, the input bar sits below the scroll area.
@@ -544,10 +547,10 @@ export default function MobileProjectDetail({
             {/* Assigned + Schedule — side by side */}
             <div className="grid grid-cols-2 gap-3.5">
               {/* Assigned Staff */}
-              <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 px-5 py-4">
+              <div className="relative rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 px-5 py-4">
                 <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Assigned to</p>
                 <button
-                  onClick={() => setShowStaffPicker(true)}
+                  onClick={() => setShowStaffPicker(!showStaffPicker)}
                   className="flex items-center gap-2 w-full"
                 >
                   {assignedUsers.length > 0 ? (
@@ -574,6 +577,59 @@ export default function MobileProjectDetail({
                     </div>
                   )}
                 </button>
+                {showStaffPicker && (
+                  <InlineDropdown onClose={() => { setShowStaffPicker(false); setStaffSearch(''); }} align="left">
+                    <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Assign Staff</p>
+                    <div className="px-3 pb-2">
+                      <input
+                        autoFocus
+                        type="text"
+                        placeholder="Search staff..."
+                        value={staffSearch}
+                        onChange={(e) => setStaffSearch(e.target.value)}
+                        className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
+                      />
+                    </div>
+                    {fields.assigned_staff.length > 0 && (
+                      <button
+                        onClick={() => { updateField('assigned_staff', []); setShowStaffPicker(false); setStaffSearch(''); }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-neutral-500 active:bg-black/[0.03] dark:active:bg-white/[0.05]"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        <span className="text-[15px]">Clear all</span>
+                      </button>
+                    )}
+                    {users
+                      .filter(user => !staffSearch.trim() || user.name.toLowerCase().includes(staffSearch.toLowerCase()))
+                      .map((user) => {
+                      const isAssigned = fields.assigned_staff?.includes(user.id);
+                      return (
+                        <button
+                          key={user.id}
+                          onClick={() => {
+                            const updated = isAssigned
+                              ? fields.assigned_staff.filter(id => id !== user.id)
+                              : [...fields.assigned_staff, user.id];
+                            updateField('assigned_staff', updated);
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                            isAssigned ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
+                          }`}
+                        >
+                          <UserAvatar src={user.avatar} name={user.name} size="sm" />
+                          <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{user.name}</span>
+                          {isAssigned && (
+                            <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </InlineDropdown>
+                )}
               </div>
 
               {/* Schedule */}
@@ -806,29 +862,42 @@ export default function MobileProjectDetail({
 }
 
 // ============================================================================
-// Picker Overlay — bottom sheet style list picker
+// Inline Dropdown — glass card positioned below its trigger
 // ============================================================================
 
-function PickerOverlay({
+function InlineDropdown({
   children,
   onClose,
+  align = 'left',
 }: {
   children: React.ReactNode;
   onClose: () => void;
+  align?: 'left' | 'right';
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onTap(e: MouseEvent | TouchEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose();
+      }
+    }
+    document.addEventListener('mousedown', onTap);
+    document.addEventListener('touchstart', onTap);
+    return () => {
+      document.removeEventListener('mousedown', onTap);
+      document.removeEventListener('touchstart', onTap);
+    };
+  }, [onClose]);
+
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-[70] bg-black/30"
-        onClick={onClose}
-      />
-      {/* Content */}
-      <div className="fixed bottom-0 left-0 right-0 z-[71] bg-white dark:bg-neutral-900 rounded-t-2xl border-t border-neutral-200 dark:border-neutral-700 max-h-[60vh] overflow-y-auto safe-area-bottom shadow-xl">
-        <div className="w-10 h-1 bg-neutral-300 dark:bg-neutral-600 rounded-full mx-auto mt-2 mb-1" />
+    <div
+      ref={ref}
+      className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} top-full mt-1.5 z-[70] min-w-[200px] max-w-[280px] rounded-xl glass-card bg-white/85 dark:bg-neutral-900/90 border border-white/30 dark:border-white/10`}
+    >
+      <div className="relative overflow-hidden rounded-xl glass-sheen max-h-[50vh] overflow-y-auto py-1">
         {children}
-        <div className="h-4" />
       </div>
-    </>
+    </div>
   );
 }
