@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { useAuth } from '@/lib/authContext';
 import { useDepartments } from '@/lib/departmentsContext';
@@ -33,17 +32,17 @@ interface MobileProjectDetailProps {
 // ============================================================================
 
 const STATUS_CONFIG: Record<string, { bg: string; dot: string; label: string }> = {
-  not_started: { bg: 'bg-amber-500/15 text-amber-600 dark:text-amber-400', dot: 'bg-amber-500', label: 'Not Started' },
-  in_progress: { bg: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400', dot: 'bg-indigo-500', label: 'In Progress' },
-  on_hold: { bg: 'bg-neutral-400/15 text-neutral-600 dark:text-neutral-400', dot: 'bg-neutral-400', label: 'On Hold' },
-  complete: { bg: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500', label: 'Complete' },
+  not_started: { bg: 'bg-amber-500/15 text-white', dot: 'bg-amber-500', label: 'Not Started' },
+  in_progress: { bg: 'bg-indigo-500/15 text-white', dot: 'bg-indigo-500', label: 'In Progress' },
+  on_hold: { bg: 'bg-neutral-400/15 text-white', dot: 'bg-neutral-400', label: 'On Hold' },
+  complete: { bg: 'bg-emerald-500/15 text-white', dot: 'bg-emerald-500', label: 'Complete' },
 };
 
 const PRIORITY_CONFIG: Record<string, { bg: string; label: string }> = {
-  low: { bg: 'bg-slate-500/15 text-slate-600 dark:text-slate-400', label: 'Low' },
-  medium: { bg: 'bg-blue-500/15 text-blue-600 dark:text-blue-400', label: 'Medium' },
-  high: { bg: 'bg-orange-500/15 text-orange-600 dark:text-orange-400', label: 'High' },
-  urgent: { bg: 'bg-red-500/15 text-red-600 dark:text-red-400', label: 'Urgent' },
+  low: { bg: 'bg-slate-500/15 text-white', label: 'Low' },
+  medium: { bg: 'bg-blue-500/15 text-white', label: 'Medium' },
+  high: { bg: 'bg-orange-500/15 text-white', label: 'High' },
+  urgent: { bg: 'bg-red-500/15 text-white', label: 'Urgent' },
 };
 
 const STATUS_OPTIONS = ['not_started', 'in_progress', 'on_hold', 'complete'];
@@ -189,9 +188,9 @@ export default function MobileProjectDetail({
           <div className="relative shrink-0">
             <button
               onClick={() => { setShowDeptPicker(!showDeptPicker); setShowStatusPicker(false); setShowPriorityPicker(false); setShowPropertyPicker(false); setShowBinPicker(false); }}
-              className="w-10 h-10 rounded-xl flex items-center justify-center bg-sky-500/10 dark:bg-sky-500/15 border border-sky-200/30 dark:border-sky-500/20"
+              className="w-10 h-10 rounded-xl flex items-center justify-center glass-card glass-sheen relative overflow-hidden bg-sky-500/10 dark:bg-sky-500/15 border border-white/20 dark:border-white/10"
             >
-              <DeptIcon className="w-5 h-5 text-sky-500 dark:text-sky-400" />
+              <DeptIcon className="w-5 h-5 text-white" />
             </button>
             {showDeptPicker && !dept && (
               <InlineDropdown onClose={() => setShowDeptPicker(false)}>
@@ -379,9 +378,9 @@ export default function MobileProjectDetail({
           <div className="relative">
             <button
               onClick={() => { setShowStatusPicker(!showStatusPicker); setShowPriorityPicker(false); setShowDeptPicker(false); }}
-              className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-opacity active:opacity-70 ${status.bg}`}
+              className={`inline-flex items-center gap-1.5 text-sm font-medium px-3.5 py-1.5 rounded-full glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10 active:opacity-70 transition-opacity ${status.bg}`}
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
+              <span className={`w-2 h-2 rounded-full ${status.dot}`} />
               {status.label}
             </button>
             {showStatusPicker && (
@@ -413,7 +412,7 @@ export default function MobileProjectDetail({
           <div className="relative">
             <button
               onClick={() => { setShowPriorityPicker(!showPriorityPicker); setShowStatusPicker(false); setShowDeptPicker(false); }}
-              className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-opacity active:opacity-70 ${priority.bg}`}
+              className={`inline-flex items-center gap-1.5 text-sm font-medium px-3.5 py-1.5 rounded-full glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10 active:opacity-70 transition-opacity ${priority.bg}`}
             >
               {priority.label} priority
             </button>
@@ -448,7 +447,7 @@ export default function MobileProjectDetail({
             <div className="relative">
               <button
                 onClick={() => { setShowDeptPicker(!showDeptPicker); setShowStatusPicker(false); setShowPriorityPicker(false); }}
-                className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 transition-opacity active:opacity-70"
+                className="inline-flex items-center gap-1.5 text-sm font-medium px-3.5 py-1.5 rounded-full glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10 bg-sky-500/10 text-white active:opacity-70 transition-opacity"
               >
                 <DeptIcon className="w-3 h-3" />
                 {dept.name}

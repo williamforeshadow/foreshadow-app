@@ -52,7 +52,7 @@ export function useProjects({ currentUser }: UseProjectsProps) {
   const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
   
   // View mode for kanban-style grouping
-  const [viewMode, setViewMode] = useState<ProjectViewMode>('property');
+  const [viewMode, setViewMode] = useState<ProjectViewMode>('status');
 
   // Active bin filter (null = show all, '__none__' = unbinned, uuid = specific bin)
   const [activeBinId, setActiveBinId] = useState<string | null>(null);
