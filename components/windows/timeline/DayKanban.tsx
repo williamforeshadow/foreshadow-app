@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useCallback, useEffect } from 'react';
 import { X, Plus } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, tiptapToPlainText } from '@/lib/utils';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -226,7 +226,7 @@ export function DayKanban({
           const matchesSearch = 
             project.title?.toLowerCase().includes(query) ||
             project.property_name?.toLowerCase().includes(query) ||
-            project.description?.toLowerCase().includes(query);
+            tiptapToPlainText(project.description).toLowerCase().includes(query);
           if (!matchesSearch) return;
         }
 

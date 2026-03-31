@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import type { Project, User, ProjectFormFields, Comment, Attachment, TimeEntry, PropertyOption, ProjectBin } from '@/lib/types';
+import { RichTextEditor } from '@/components/ui/rich-text-editor';
 
 interface ProjectDetailPanelProps {
   project: Project;
@@ -398,14 +399,11 @@ export function ProjectDetailPanel({
           {/* ── Description card ── */}
           <div className="rounded-xl bg-white/[0.04] backdrop-blur-sm border border-white/10 px-5 py-4 flex flex-col gap-2">
             <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Description</div>
-            <DebouncedTextarea
-              value={editingFields.description}
-              onChange={(value) => setEditingFields(prev => prev ? {...prev, description: value} : null)}
+            <RichTextEditor
+              content={editingFields.description}
+              onChange={(json) => setEditingFields(prev => prev ? {...prev, description: json} : null)}
               onBlur={onSave}
-              placeholder="Add a description..."
-              rows={2}
-              className="resize-none bg-transparent dark:bg-transparent border-none p-0 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 min-h-0 shadow-none"
-              delay={150}
+              placeholder="Add a description or checklist..."
             />
           </div>
 

@@ -282,7 +282,7 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
     if (expandedProject) {
       setEditingProjectFields({
         title: expandedProject.title,
-        description: expandedProject.description || '',
+        description: expandedProject.description || null,
         status: expandedProject.status,
         priority: expandedProject.priority,
         assigned_staff: expandedProject.project_assignments?.map(a => a.user_id) || [],

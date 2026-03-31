@@ -8,6 +8,7 @@ import { ProjectDetailPanel } from '../projects';
 import type { Project, Comment, User, ProjectFormFields, Attachment, TimeEntry } from '@/lib/types';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useDepartments } from '@/lib/departmentsContext';
+import { tiptapToPlainText, tiptapHasContent } from '@/lib/utils';
 
 interface TurnoverProjectsPanelProps {
   propertyName: string;
@@ -98,9 +99,9 @@ function ProjectCard({
             {project.priority}
           </Badge>
         </div>
-        {project.description && (
+        {tiptapHasContent(project.description) && (
           <CardDescription className="text-sm line-clamp-2 mt-1">
-            {project.description}
+            {tiptapToPlainText(project.description)}
           </CardDescription>
         )}
       </CardHeader>

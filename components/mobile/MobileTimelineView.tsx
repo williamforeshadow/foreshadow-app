@@ -11,6 +11,7 @@ import {
   CarouselItem,
   type CarouselApi,
 } from '@/components/ui/carousel';
+import { tiptapToPlainText, tiptapHasContent } from '@/lib/utils';
 
 interface MobileTimelineViewProps {
   onCardClick?: (card: any) => void; // Optional - for turnover card selection
@@ -444,9 +445,9 @@ export default function MobileTimelineView({ onCardClick, onTaskClick, onProject
                                                   {project.title || 'Unnamed Project'}
                                                 </CardTitle>
                                                 
-                                                {project.description && (
+                                                {tiptapHasContent(project.description) && (
                                                   <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 line-clamp-2">
-                                                    {project.description}
+                                                    {tiptapToPlainText(project.description)}
                                                   </p>
                                                 )}
                                                 

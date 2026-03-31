@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import DynamicCleaningForm from '@/components/DynamicCleaningForm';
 import { 
   MobileLayout, 
@@ -64,7 +65,7 @@ export default function MobileApp() {
         property_id: '',
         property_name: '',
         title: '',
-        description: '',
+        description: null,
         status: 'not_started',
         priority: 'medium',
         assigned_staff: [],
@@ -369,11 +370,13 @@ export default function MobileApp() {
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">Description</label>
-              <Textarea
-                value={projectForm.description}
-                onChange={(e) => setProjectForm({...projectForm, description: e.target.value})}
-                placeholder="Project description"
-              />
+              <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-2">
+                <RichTextEditor
+                  content={projectForm.description}
+                  onChange={(json) => setProjectForm({...projectForm, description: json})}
+                  placeholder="Project description..."
+                />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>

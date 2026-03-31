@@ -137,13 +137,16 @@ export interface ProjectBin {
 export type ProjectStatus = 'not_started' | 'in_progress' | 'on_hold' | 'complete';
 export type ProjectPriority = 'low' | 'medium' | 'high' | 'urgent';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type TiptapJSON = Record<string, any>;
+
 export interface Project {
   id: string;
   property_id?: string | null;
   property_name?: string | null;
   bin_id?: string | null;
   title: string;
-  description?: string;
+  description?: TiptapJSON | null;
   status: ProjectStatus;
   priority: ProjectPriority;
   assigned_staff?: string;
@@ -161,7 +164,7 @@ export interface ProjectFormData {
   property_id: string;
   property_name: string;
   title: string;
-  description: string;
+  description: TiptapJSON | null;
   status: string;
   priority: string;
   assigned_staff: string[];
@@ -173,7 +176,7 @@ export interface ProjectFormData {
 
 export interface ProjectFormFields {
   title: string;
-  description: string;
+  description: TiptapJSON | null;
   status: string;
   priority: string;
   assigned_staff: string[];

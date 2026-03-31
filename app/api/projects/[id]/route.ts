@@ -184,9 +184,9 @@ export async function PUT(
       if (priority !== undefined && priority !== oldProject.priority) {
         await logProjectActivity(id, user_id, 'priority_change', `changed priority from "${priorityLabels[oldProject.priority] || oldProject.priority}" to "${priorityLabels[priority] || priority}"`, oldProject.priority, priority);
       }
-      // Description change
-      if (description !== undefined && description !== oldProject.description) {
-        await logProjectActivity(id, user_id, 'description_change', 'updated the description', oldProject.description, description);
+      // Description change (JSON comparison)
+      if (description !== undefined && JSON.stringify(description) !== JSON.stringify(oldProject.description)) {
+        await logProjectActivity(id, user_id, 'description_change', 'updated the description', null, null);
       }
       // Scheduled date/time change
       if (scheduled_date !== undefined && scheduled_date !== oldProject.scheduled_date) {

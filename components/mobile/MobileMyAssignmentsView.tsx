@@ -4,22 +4,16 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { Button } from '@/components/ui/button';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   Carousel,
   CarouselContent,
   CarouselItem,
   type CarouselApi,
 } from '@/components/ui/carousel';
 import { useRouter } from 'next/navigation';
-import { UserAvatar } from '@/components/ui/user-avatar';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useDepartments } from '@/lib/departmentsContext';
 import DiamondIcon from '@/components/icons/AssignmentIcon';
+import { tiptapToPlainText, tiptapHasContent } from '@/lib/utils';
 
 function getTaskStatusStyles(status: string) {
   const glassBase = 'glass-card glass-sheen relative overflow-hidden rounded-xl';
@@ -66,7 +60,7 @@ interface Project {
   id: string;
   property_name: string;
   title: string;
-  description?: string;
+  description?: Record<string, any> | null;
   status: string;
   priority: string;
   department_name?: string | null;
@@ -98,7 +92,7 @@ export default function MobileMyAssignmentsView({
   onProjectClick,
   refreshTrigger,
 }: MobileMyAssignmentsViewProps) {
-  const { user, role, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { deptIconMap } = useDepartments();
   const [data, setData] = useState<AssignmentsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -250,12 +244,6 @@ export default function MobileMyAssignmentsView({
 
   const tasks = data?.tasks || [];
   const projects = data?.projects || [];
-
-  const roleColors: Record<string, string> = {
-    superadmin: 'bg-purple-500',
-    manager: 'bg-blue-500',
-    staff: 'bg-emerald-500'
-  };
 
   return (
     <div className="flex flex-col h-full relative">
@@ -415,9 +403,9 @@ export default function MobileMyAssignmentsView({
                         {project.property_name}
                       </p>
                       
-                      {project.description && (
+                      {tiptapHasContent(project.description) && (
                         <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 line-clamp-2">
-                          {project.description}
+                          {tiptapToPlainText(project.description)}
                         </p>
                       )}
                       
@@ -454,47 +442,6 @@ export default function MobileMyAssignmentsView({
         </Carousel>
       </div>
 
-      {/* Floating User Menu - Bottom Right (above 3-tab nav) */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button className="fixed bottom-4 right-4 z-40 w-11 h-11 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform overflow-hidden">
-            <UserAvatar src={user.avatar} name={user.name} size="xl" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
-          {/* User Info */}
-          <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
-            <p className="font-medium text-sm text-neutral-900 dark:text-white">{user.name}</p>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">{user.email}</p>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className={`w-2 h-2 rounded-full ${roleColors[role || 'staff']}`} />
-              <span className="text-xs text-neutral-500 capitalize">{role}</span>
-            </div>
-          </div>
-          
-          {/* Edit Profile */}
-          <DropdownMenuItem onClick={() => router.push('/profile')}>
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-            Edit Profile
-          </DropdownMenuItem>
-          
-          {/* Sign Out */}
-          <DropdownMenuItem 
-            onClick={() => {
-              localStorage.removeItem('foreshadow_selected_user');
-              router.push('/login');
-            }}
-            className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
-          >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            Sign Out
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
     </div>
   );
 }

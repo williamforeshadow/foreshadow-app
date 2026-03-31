@@ -9,7 +9,8 @@ import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
-import type { Project, User, ProjectFormFields, Comment, Attachment, PropertyOption, ProjectBin } from '@/lib/types';
+import type { Project, User, ProjectFormFields, Comment, Attachment, PropertyOption, ProjectBin, TiptapJSON } from '@/lib/types';
+import { RichTextEditor } from '@/components/ui/rich-text-editor';
 
 // ============================================================================
 // Types
@@ -69,7 +70,7 @@ export default function MobileProjectDetail({
   // Local editing fields
   const [fields, setFields] = useState<ProjectFormFields>({
     title: project.title,
-    description: project.description || '',
+    description: (project.description as TiptapJSON | null) || null,
     status: project.status,
     priority: project.priority,
     assigned_staff: project.project_assignments?.map(a => a.user_id) || [],
@@ -528,16 +529,14 @@ export default function MobileProjectDetail({
         {/* Details Section */}
         {activeSection === 'details' && (
           <div className="px-5 pt-5 pb-6 flex flex-col gap-5">
-            {/* Description */}
+            {/* Description & Checklists */}
             <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 px-5 py-4">
               <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Description</p>
-              <textarea
-                value={fields.description}
-                onChange={(e) => setFields(prev => ({ ...prev, description: e.target.value }))}
+              <RichTextEditor
+                content={fields.description}
+                onChange={(json) => setFields(prev => ({ ...prev, description: json }))}
                 onBlur={() => autoSave(fields)}
-                placeholder="Add a description..."
-                rows={3}
-                className="w-full resize-none bg-transparent border-none outline-none text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400"
+                placeholder="Add a description or checklist..."
               />
             </div>
 

@@ -177,7 +177,7 @@ export default function TimelineWindow({
       const project = floatingData.item as Project;
       setProjectFields({
         title: project.title,
-        description: project.description || '',
+        description: project.description || null,
         status: project.status,
         priority: project.priority,
         assigned_staff: project.project_assignments?.map(a => a.user_id) || [],
@@ -613,7 +613,7 @@ export default function TimelineWindow({
     if (expandedProjectInTurnover) {
       setTurnoverProjectFields({
         title: expandedProjectInTurnover.title,
-        description: expandedProjectInTurnover.description || '',
+        description: expandedProjectInTurnover.description || null,
         status: expandedProjectInTurnover.status,
         priority: expandedProjectInTurnover.priority,
         assigned_staff: expandedProjectInTurnover.project_assignments?.map(a => a.user_id) || [],

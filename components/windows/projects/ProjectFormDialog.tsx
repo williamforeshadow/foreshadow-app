@@ -5,13 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { CheckIcon, ChevronsUpDownIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Project, ProjectFormData, PropertyOption } from '@/lib/types';
+import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { useDepartments } from '@/lib/departmentsContext';
 
 interface ProjectFormDialogProps {
@@ -158,12 +158,13 @@ export function ProjectFormDialog({
 
               <div className="space-y-2">
                 <Label>Description</Label>
-                <Textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Optional description"
-                  rows={3}
-                />
+                <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-2">
+                  <RichTextEditor
+                    content={formData.description}
+                    onChange={(json) => setFormData(prev => ({ ...prev, description: json }))}
+                    placeholder="Optional description..."
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

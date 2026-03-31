@@ -2,6 +2,8 @@
 
 import { memo, useState, useCallback, useEffect, useRef } from 'react';
 import { useTheme } from 'next-themes';
+import { useAuth } from '@/lib/authContext';
+import { UserAvatar } from '@/components/ui/user-avatar';
 
 export type MobileTab = 'assignments' | 'projects' | 'timeline' | 'messages';
 
@@ -53,6 +55,7 @@ const DRAWER_WIDTH = 220;
 
 const MobileNav = memo(function MobileNav({ activeTab, onTabChange }: MobileNavProps) {
   const { theme, setTheme } = useTheme();
+  const { user, allUsers, role, switchUser } = useAuth();
   const [open, setOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
 
@@ -148,6 +151,49 @@ const MobileNav = memo(function MobileNav({ activeTab, onTabChange }: MobileNavP
             );
           })}
         </div>
+
+        {/* User section */}
+        {user && (
+          <div className="shrink-0 px-2 border-t border-neutral-200 dark:border-neutral-700 pt-3 pb-2">
+            <div className="flex items-center gap-3 px-3 py-2">
+              <UserAvatar src={user.avatar} name={user.name} size="md" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-neutral-900 dark:text-white truncate">{user.name}</p>
+                <p className="text-xs text-neutral-500 capitalize">{role}</p>
+              </div>
+            </div>
+
+            {allUsers.length > 1 && (
+              <div className="mt-2">
+                <p className="text-xs font-medium text-neutral-400 dark:text-neutral-500 px-3 mb-1">Switch User</p>
+                <div className="flex flex-col gap-0.5 max-h-40 overflow-y-auto">
+                  {allUsers.map((u) => (
+                    <button
+                      key={u.id}
+                      onClick={() => switchUser(u.id)}
+                      className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left text-sm transition-colors ${
+                        u.id === user.id
+                          ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'
+                          : 'text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                      }`}
+                    >
+                      <UserAvatar src={u.avatar} name={u.name} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate font-medium">{u.name}</p>
+                        <p className="text-xs text-neutral-500 capitalize">{u.role}</p>
+                      </div>
+                      {u.id === user.id && (
+                        <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Theme toggle at bottom */}
         <div className="shrink-0 px-2 pb-3 safe-area-bottom">
