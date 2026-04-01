@@ -870,7 +870,7 @@ export default function TimelineWindow({
   return (
     <div className="h-full flex flex-col relative">
       {/* Header with navigation - fixed at top */}
-      <div className="flex-shrink-0 px-4 py-3 glass-panel bg-white/40 dark:bg-white/[0.05] border-b border-white/20 dark:border-white/10">
+      <div className="flex-shrink-0 px-4 py-3 glass-panel bg-white/40 dark:bg-white/[0.06] border-b border-white/20 dark:border-white/[0.08]">
         <div className="flex items-center gap-4 mb-2">
           {/* View Mode Icons */}
           <div className="flex items-center gap-1">
@@ -976,13 +976,13 @@ export default function TimelineWindow({
       <div className="flex-1 overflow-auto px-4 pb-4">
         <div className="overflow-hidden">
           <div
-            className="grid border border-white/30 dark:border-white/10 w-full"
+            className="grid border border-white/30 dark:border-white/[0.08] w-full"
             style={{
               gridTemplateColumns: `200px repeat(${dateRange.length}, minmax(0, 1fr))`
             }}
           >
             {/* Header Row - will stick when scrolling */}
-            <div className="bg-white/50 dark:bg-white/[0.08] backdrop-blur-xl px-2 py-1 text-xs font-semibold text-neutral-900 dark:text-white sticky left-0 top-0 z-20 flex items-center gap-1.5">
+            <div className="bg-white/50 dark:bg-white/[0.10] backdrop-blur-xl px-2 py-1 text-xs font-semibold text-neutral-900 dark:text-white sticky left-0 top-0 z-20 flex items-center gap-1.5">
               <button
                 onClick={toggleAllExpanded}
                 className="p-0.5 rounded hover:bg-white/30 dark:hover:bg-white/10 transition-colors"
@@ -999,10 +999,10 @@ export default function TimelineWindow({
               return (
                 <div 
                   key={idx} 
-                  className={`px-1 py-1 border-b border-r border-white/20 dark:border-white/10 sticky top-0 z-10 cursor-pointer transition-colors ${
+                  className={`px-1 py-1 border-b border-r border-white/20 dark:border-white/[0.07] sticky top-0 z-10 cursor-pointer transition-colors ${
                     isTodayDate 
-                      ? 'bg-neutral-500/20 dark:bg-white/[0.10] hover:bg-neutral-500/30 dark:hover:bg-white/[0.14] backdrop-blur-sm' 
-                      : 'bg-white/40 dark:bg-white/[0.06] hover:bg-white/55 dark:hover:bg-white/[0.10] backdrop-blur-sm'
+                      ? 'bg-neutral-500/20 dark:bg-white/[0.13] hover:bg-neutral-500/30 dark:hover:bg-white/[0.16] backdrop-blur-sm' 
+                      : 'bg-white/40 dark:bg-white/[0.08] hover:bg-white/55 dark:hover:bg-white/[0.11] backdrop-blur-sm'
                   }`}
                   onClick={() => {
                     setKanbanDate(date);
@@ -1033,12 +1033,12 @@ export default function TimelineWindow({
                         // Emerald green
                         return 'bg-emerald-50/55 dark:bg-emerald-500/[0.12]';
                       case 'no_tasks':
-                        return 'bg-white/55 dark:bg-white/[0.08]';
+                        return 'bg-white/55 dark:bg-white/[0.09]';
                       default:
-                        return 'bg-white/45 dark:bg-white/[0.06]';
+                        return 'bg-white/45 dark:bg-white/[0.07]';
                     }
                   })()
-                : 'bg-white/45 dark:bg-white/[0.06]';
+                : 'bg-white/45 dark:bg-white/[0.07]';
 
               return (
                 <div
@@ -1179,7 +1179,7 @@ export default function TimelineWindow({
                     return (
                       <div
                         key={idx}
-                        className={`border-b border-r border-white/20 dark:border-white/10 h-[30px] relative overflow-visible ${isTodayDate ? 'bg-neutral-500/10 dark:bg-white/[0.05]' : 'bg-white/30 dark:bg-white/[0.02]'}`}
+                        className={`border-b border-r border-white/20 dark:border-white/[0.07] h-[30px] relative overflow-visible ${isTodayDate ? 'bg-neutral-500/10 dark:bg-white/[0.07]' : 'bg-white/30 dark:bg-white/[0.045]'}`}
                       >
                         {startingReservation && (() => {
                           const { span, startsBeforeRange, endsAfterRange } = getBlockPosition(startingReservation.check_in, startingReservation.check_out);
@@ -1247,7 +1247,7 @@ export default function TimelineWindow({
                   {expandedProperties.has(property) && (
                     <>
                       {/* Property column for expanded row — empty */}
-                      <div className={`sticky left-0 z-10 border-b border-white/20 dark:border-white/10 ${propertyCellBg} backdrop-blur-sm`} />
+                      <div className={`sticky left-0 z-10 border-b border-white/20 dark:border-white/[0.07] ${propertyCellBg} backdrop-blur-sm`} />
 
                       {/* Date columns for expanded row */}
                       {dateRange.map((date, idx) => {
@@ -1264,8 +1264,8 @@ export default function TimelineWindow({
                         return (
                           <div
                             key={`expanded-${idx}`}
-                            className={`border-b border-r border-white/20 dark:border-white/10 p-1.5 ${
-                              isTodayDate ? 'bg-neutral-500/10 dark:bg-white/[0.05]' : 'bg-white/20 dark:bg-white/[0.01]'
+                            className={`border-b border-r border-white/20 dark:border-white/[0.07] p-1.5 ${
+                              isTodayDate ? 'bg-neutral-500/10 dark:bg-white/[0.045]' : 'bg-white/20 dark:bg-white/[0.025]'
                             }`}
                           >
                             {hasItems && (

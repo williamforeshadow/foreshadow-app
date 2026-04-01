@@ -398,6 +398,40 @@ a {
   background: rgba(255, 255, 255, 0.5);
 }
 
+/* Overlay scrollbar — no width impact, visible only on hover */
+.overlay-scrollbar {
+  overflow-y: auto;
+  overflow-y: overlay; /* Chromium: scrollbar floats over content */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.overlay-scrollbar:hover {
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+.overlay-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  background: transparent;
+}
+
+.overlay-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.overlay-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.overlay-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.overlay-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
 /* Hide body scrollbar on mobile */
 @media (max-width: 768px) {
   html, body {

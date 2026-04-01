@@ -65,6 +65,16 @@ export function RichTextEditor({
     },
   });
 
+  // Sync content when it changes externally (e.g. switching projects)
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    const newContent = content || EMPTY_DOC;
+    const currentContent = editor.getJSON();
+    if (JSON.stringify(newContent) !== JSON.stringify(currentContent)) {
+      editor.commands.setContent(newContent);
+    }
+  }, [editor, content]);
+
   useEffect(() => {
     if (!editor) return;
     editor.setEditable(editable);

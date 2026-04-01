@@ -79,7 +79,7 @@ export function ColumnPicker({
       {open && (
         <div
           ref={popoverRef}
-          className="absolute right-0 top-full mt-1.5 w-64 z-50 rounded-xl glass-card bg-white/85 dark:bg-neutral-900/90 border border-white/30 dark:border-white/10"
+          className="absolute right-0 top-full mt-1.5 w-64 z-50 rounded-xl glass-card bg-white/[0.97] dark:bg-neutral-900/[0.98] border border-white/30 dark:border-white/15"
         >
           <div className="relative overflow-hidden rounded-xl glass-sheen">
             {/* Search */}

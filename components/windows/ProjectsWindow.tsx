@@ -59,35 +59,36 @@ function ViewModeToggle({
 
   return (
     <div ref={ref} className="relative">
-      {/* Collapsed: just the active mode */}
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl bg-white/30 dark:bg-white/[0.08] backdrop-blur-sm border border-white/20 dark:border-white/10 text-neutral-900 dark:text-white transition-all hover:bg-white/50 dark:hover:bg-white/[0.12]"
-        >
-          {VIEW_MODE_LABELS[viewMode]}
-        </button>
-      )}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-xl bg-white/30 dark:bg-white/[0.08] backdrop-blur-sm border border-white/20 dark:border-white/10 text-neutral-900 dark:text-white transition-all hover:bg-white/50 dark:hover:bg-white/[0.12]"
+      >
+        {VIEW_MODE_LABELS[viewMode]}
+        <svg className={`w-3.5 h-3.5 opacity-50 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
 
-      {/* Expanded: all modes in a row */}
       {open && (
-        <div className="flex gap-0.5 p-1 rounded-xl bg-white/30 dark:bg-white/[0.06] backdrop-blur-sm border border-white/20 dark:border-white/10">
-          {ALL_VIEW_MODES.map((mode) => (
-            <button
-              key={mode}
-              onClick={() => {
-                setViewMode(mode);
-                setOpen(false);
-              }}
-              className={`px-3 py-1 text-xs font-medium rounded-lg whitespace-nowrap transition-all duration-200 ${
-                viewMode === mode
-                  ? 'bg-white/70 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
-                  : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/30 dark:hover:bg-white/10'
-              }`}
-            >
-              {VIEW_MODE_LABELS[mode]}
-            </button>
-          ))}
+        <div className="absolute right-0 top-full mt-1.5 z-50 rounded-xl glass-card bg-white/[0.97] dark:bg-neutral-900/[0.98] border border-white/30 dark:border-white/15 min-w-[140px]">
+          <div className="relative overflow-hidden rounded-xl glass-sheen flex flex-col gap-0.5 p-1.5">
+            {ALL_VIEW_MODES.map((mode) => (
+              <button
+                key={mode}
+                onClick={() => {
+                  setViewMode(mode);
+                  setOpen(false);
+                }}
+                className={`px-3.5 py-2 text-sm font-medium rounded-lg text-left transition-all ${
+                  viewMode === mode
+                    ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
+                    : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/30 dark:hover:bg-white/10'
+                }`}
+              >
+                {VIEW_MODE_LABELS[mode]}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

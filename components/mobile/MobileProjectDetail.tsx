@@ -672,14 +672,14 @@ export default function MobileProjectDetail({
                 {timeTrackingHook.activeTimeEntry ? (
                   <button
                     onClick={timeTrackingHook.stopProjectTimer}
-                    className="text-xs font-medium px-3 py-1.5 rounded-full bg-red-500/10 text-red-500 active:bg-red-500/20 transition-colors"
+                    className="text-xs font-medium px-3 py-1.5 rounded-full bg-red-500/10 text-white active:opacity-70 transition-opacity glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10"
                   >
                     Stop
                   </button>
                 ) : (
                   <button
                     onClick={() => timeTrackingHook.startProjectTimer(project.id)}
-                    className="text-xs font-medium px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-500 active:bg-emerald-500/20 transition-colors"
+                    className="text-xs font-medium px-3 py-1.5 rounded-full bg-emerald-500/10 text-white active:opacity-70 transition-opacity glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10"
                   >
                     {timeTrackingHook.displaySeconds > 0 ? 'Resume' : 'Start'}
                   </button>
