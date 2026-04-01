@@ -256,12 +256,18 @@ export function ScheduledItemsCell({
                         <span className="truncate text-sm">{task.template_name || task.type}</span>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           {task.assigned_users?.slice(0, 1).map((user) => (
-                            <UserAvatar
-                              key={user.user_id}
-                              src={user.avatar}
-                              name={user.name || 'Unknown'}
-                              size="xs"
-                            />
+                            <div key={user.user_id} className="relative">
+                              <UserAvatar
+                                src={user.avatar}
+                                name={user.name || 'Unknown'}
+                                size="xs"
+                              />
+                              {(task.assigned_users?.length ?? 0) > 1 && (
+                                <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-neutral-700 dark:bg-neutral-200 text-[9px] font-medium text-white dark:text-neutral-800 border border-white dark:border-neutral-900">
+                                  +{(task.assigned_users?.length ?? 0) - 1}
+                                </div>
+                              )}
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -322,12 +328,18 @@ export function ScheduledItemsCell({
                         <span className="truncate text-sm">{project.title}</span>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           {project.project_assignments?.slice(0, 1).map((assignment) => (
-                            <UserAvatar
-                              key={assignment.user_id}
-                              src={assignment.user?.avatar}
-                              name={assignment.user?.name || 'Unknown'}
-                              size="xs"
-                            />
+                            <div key={assignment.user_id} className="relative">
+                              <UserAvatar
+                                src={assignment.user?.avatar}
+                                name={assignment.user?.name || 'Unknown'}
+                                size="xs"
+                              />
+                              {(project.project_assignments?.length ?? 0) > 1 && (
+                                <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-neutral-700 dark:bg-neutral-200 text-[9px] font-medium text-white dark:text-neutral-800 border border-white dark:border-neutral-900">
+                                  +{(project.project_assignments?.length ?? 0) - 1}
+                                </div>
+                              )}
+                            </div>
                           ))}
                         </div>
                       </div>

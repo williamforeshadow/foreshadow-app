@@ -131,9 +131,6 @@ export default function TimelineWindow({
     });
   }, [properties]);
   const [activitySheetOpen, setActivitySheetOpen] = useState(false);
-  const [visiblePlusCellKey, setVisiblePlusCellKey] = useState<string | null>(null);
-  const hoverPlusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingPlusCellKeyRef = useRef<string | null>(null);
 
   // ============================================================================
   // Task state
@@ -142,35 +139,6 @@ export default function TimelineWindow({
   const [loadingTaskTemplate, setLoadingTaskTemplate] = useState<string | null>(null);
   const [localTask, setLocalTask] = useState<Task | null>(null);
 
-  const getCellKey = useCallback((propertyName: string, dayIdx: number) => {
-    return `${propertyName}::${dayIdx}`;
-  }, []);
-
-  const clearPlusHover = useCallback(() => {
-    if (hoverPlusTimerRef.current) {
-      clearTimeout(hoverPlusTimerRef.current);
-      hoverPlusTimerRef.current = null;
-    }
-    pendingPlusCellKeyRef.current = null;
-    setVisiblePlusCellKey(null);
-  }, []);
-
-  const schedulePlusForCell = useCallback((cellKey: string) => {
-    if (visiblePlusCellKey === cellKey && pendingPlusCellKeyRef.current === null) return;
-    if (pendingPlusCellKeyRef.current === cellKey) return;
-
-    if (hoverPlusTimerRef.current) {
-      clearTimeout(hoverPlusTimerRef.current);
-      hoverPlusTimerRef.current = null;
-    }
-
-    pendingPlusCellKeyRef.current = cellKey;
-    hoverPlusTimerRef.current = setTimeout(() => {
-      setVisiblePlusCellKey(cellKey);
-      pendingPlusCellKeyRef.current = null;
-      hoverPlusTimerRef.current = null;
-    }, 200);
-  }, [visiblePlusCellKey]);
 
   // ============================================================================
   // Turnover detail state
@@ -878,14 +846,6 @@ export default function TimelineWindow({
     }
   }, [currentUser?.id, projectsHook, setReservations, setRecurringTasks, users]);
 
-  useEffect(() => {
-    return () => {
-      if (hoverPlusTimerRef.current) {
-        clearTimeout(hoverPlusTimerRef.current);
-      }
-    };
-  }, []);
-
   // Extract ALL tasks from reservations + recurring tasks, tagged with property_name
   const allTasksWithProperty = useMemo(() => {
     const tasks: (Task & { property_name: string })[] = [];
@@ -1253,8 +1213,6 @@ export default function TimelineWindow({
                   {/* Date Cells with embedded reservations */}
                   {dateRange.map((date, idx) => {
                     const isTodayDate = isToday(date);
-                    const cellKey = getCellKey(property, idx);
-                    // Only render the block if this is the starting cell
                     const startingReservation = propertyReservations.find(res => {
                       const { start } = getBlockPosition(res.check_in, res.check_out);
                       return start === idx;
@@ -1264,18 +1222,23 @@ export default function TimelineWindow({
                       <div
                         key={idx}
                         className={`group border-b border-r border-white/20 dark:border-white/[0.07] h-[30px] relative overflow-visible ${isTodayDate ? 'bg-neutral-500/10 dark:bg-white/[0.07]' : 'bg-white/30 dark:bg-white/[0.045]'}`}
-                        onMouseEnter={() => schedulePlusForCell(cellKey)}
-                        onMouseLeave={clearPlusHover}
+                        onClick={() => {
+                          const res = propertyReservations.find(r => {
+                            const pos = getBlockPosition(r.check_in, r.check_out);
+                            return idx >= pos.start && idx < pos.start + pos.span;
+                          });
+                          if (res) {
+                            setSelectedReservation(selectedReservation?.id === res.id ? null : res);
+                          }
+                        }}
                       >
                         {startingReservation && (() => {
                           const { span, startsBeforeRange, endsAfterRange } = getBlockPosition(startingReservation.check_in, startingReservation.check_out);
 
-                          // Calculate actual position and width to create gaps between same-day turnovers
                           const leftOffset = startsBeforeRange ? 0 : 50;
                           const rightOffset = endsAfterRange ? 0 : 50;
                           const totalWidth = (span * 100) - leftOffset - rightOffset;
 
-                          // Fixed pixel diagonal for consistent rhombus shape
                           const diagonalPx = 12;
                           const leftDiagonal = startsBeforeRange ? '0px' : `${diagonalPx}px`;
                           const rightDiagonal = endsAfterRange ? '0px' : `${diagonalPx}px`;
@@ -1283,25 +1246,7 @@ export default function TimelineWindow({
 
                           return (
                             <div
-                              onMouseMove={(e) => {
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                if (rect.width <= 0 || span <= 0) return;
-
-                                const relativeX = Math.min(Math.max(e.clientX - rect.left, 0), rect.width - 1);
-                                const segmentWidth = rect.width / span;
-                                const segmentOffset = Math.floor(relativeX / segmentWidth);
-                                const hoveredDayIdx = Math.min(
-                                  Math.max(idx + segmentOffset, 0),
-                                  dateRange.length - 1
-                                );
-
-                                schedulePlusForCell(getCellKey(property, hoveredDayIdx));
-                              }}
-                              onMouseLeave={clearPlusHover}
-                              onClick={() => {
-                                setSelectedReservation(selectedReservation?.id === startingReservation.id ? null : startingReservation);
-                              }}
-                              className={`absolute cursor-pointer transition-all duration-150 hover:brightness-110 hover:z-30 text-neutral-800 dark:text-white text-[11px] font-medium flex items-center glass-card glass-sheen overflow-hidden bg-neutral-400/35 dark:bg-white/[0.10] border border-white/40 dark:border-white/[0.12] hover:bg-neutral-400/45 dark:hover:bg-white/[0.15] ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-white/70 dark:ring-white shadow-lg z-30' : ''}`}
+                              className={`absolute pointer-events-none transition-all duration-150 text-neutral-800 dark:text-white text-[11px] font-medium flex items-center glass-card glass-sheen overflow-hidden bg-neutral-400/35 dark:bg-white/[0.10] border border-white/40 dark:border-white/[0.12] ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-white/70 dark:ring-white shadow-lg z-30' : ''}`}
                               style={{
                                 left: `${leftOffset}%`,
                                 top: 0,
@@ -1342,7 +1287,7 @@ export default function TimelineWindow({
                         />
 
                         <button
-                          className={`absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-white/40 dark:border-white/20 bg-white/70 dark:bg-white/10 text-neutral-600 dark:text-neutral-300 hover:bg-white/90 dark:hover:bg-white/20 hover:text-neutral-900 dark:hover:text-white transition-all z-20 flex items-center justify-center ${visiblePlusCellKey === cellKey ? 'opacity-100' : 'opacity-0'}`}
+                          className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-white/40 dark:border-white/20 bg-white/70 dark:bg-white/10 text-neutral-600 dark:text-neutral-300 hover:bg-white/90 dark:hover:bg-white/20 hover:text-neutral-900 dark:hover:text-white transition-all z-20 flex items-center justify-center opacity-0 group-hover:opacity-100"
                           title="Create project for this day"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1401,12 +1346,18 @@ export default function TimelineWindow({
                                     <span className="truncate text-sm">{task.template_name || task.type}</span>
                                     <div className="flex items-center gap-1.5 flex-shrink-0">
                                       {task.assigned_users?.slice(0, 1).map((user) => (
-                                        <UserAvatar
-                                          key={user.user_id}
-                                          src={user.avatar}
-                                          name={user.name || 'Unknown'}
-                                          size="xs"
-                                        />
+                                        <div key={user.user_id} className="relative">
+                                          <UserAvatar
+                                            src={user.avatar}
+                                            name={user.name || 'Unknown'}
+                                            size="xs"
+                                          />
+                                          {(task.assigned_users?.length ?? 0) > 1 && (
+                                            <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-neutral-700 dark:bg-neutral-200 text-[9px] font-medium text-white dark:text-neutral-800 border border-white dark:border-neutral-900">
+                                              +{(task.assigned_users?.length ?? 0) - 1}
+                                            </div>
+                                          )}
+                                        </div>
                                       ))}
                                     </div>
                                   </div>
@@ -1428,12 +1379,18 @@ export default function TimelineWindow({
                                     <span className="truncate text-sm">{project.title}</span>
                                     <div className="flex items-center gap-1.5 flex-shrink-0">
                                       {project.project_assignments?.slice(0, 1).map((assignment) => (
-                                        <UserAvatar
-                                          key={assignment.user_id}
-                                          src={assignment.user?.avatar}
-                                          name={assignment.user?.name || 'Unknown'}
-                                          size="xs"
-                                        />
+                                        <div key={assignment.user_id} className="relative">
+                                          <UserAvatar
+                                            src={assignment.user?.avatar}
+                                            name={assignment.user?.name || 'Unknown'}
+                                            size="xs"
+                                          />
+                                          {(project.project_assignments?.length ?? 0) > 1 && (
+                                            <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-neutral-700 dark:bg-neutral-200 text-[9px] font-medium text-white dark:text-neutral-800 border border-white dark:border-neutral-900">
+                                              +{(project.project_assignments?.length ?? 0) - 1}
+                                            </div>
+                                          )}
+                                        </div>
                                       ))}
                                     </div>
                                   </div>

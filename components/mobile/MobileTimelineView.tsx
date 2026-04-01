@@ -1,496 +1,519 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useTimeline } from '@/lib/useTimeline';
+import { getActiveTurnoverForProperty } from '@/lib/turnoverUtils';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  type CarouselApi,
-} from '@/components/ui/carousel';
-import { tiptapToPlainText, tiptapHasContent } from '@/lib/utils';
+import DiamondIcon from '@/components/icons/AssignmentIcon';
+import HexagonIcon from '@/components/icons/HammerIcon';
+import { cn } from '@/lib/utils';
+import type { Task, Project } from '@/lib/types';
+
+const getRowStyles = (status: string) => {
+  const base = 'glass-card glass-sheen relative overflow-hidden rounded-lg';
+  switch (status) {
+    case 'complete':
+      return `${base} bg-emerald-50/55 dark:bg-emerald-500/[0.12] border border-emerald-200/40 dark:border-emerald-400/20`;
+    case 'in_progress':
+    case 'paused':
+      return `${base} bg-indigo-50/55 dark:bg-indigo-500/[0.12] border border-indigo-300/40 dark:border-indigo-400/20`;
+    case 'contingent':
+      return `${base} bg-white/45 dark:bg-white/[0.05] border border-dashed border-neutral-400/50 dark:border-white/15`;
+    case 'on_hold':
+      return `${base} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`;
+    default:
+      return `${base} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`;
+  }
+};
+
+const getTaskFolderStatus = (tasks: Task[]): string => {
+  const active = tasks.filter(t => t.status !== 'contingent');
+  if (active.length === 0) return 'no_tasks';
+  const completed = active.filter(t => t.status === 'complete').length;
+  if (completed === active.length) return 'complete';
+  const inProgress = active.filter(t => t.status === 'in_progress' || t.status === 'paused').length;
+  if (inProgress > 0 || completed > 0) return 'in_progress';
+  return 'not_started';
+};
+
+const getProjectFolderStatus = (projects: Project[]): string => {
+  if (projects.length === 0) return 'no_tasks';
+  const completed = projects.filter(p => p.status === 'complete').length;
+  if (completed === projects.length) return 'complete';
+  const inProgress = projects.filter(p => p.status === 'in_progress' || p.status === 'on_hold').length;
+  if (inProgress > 0 || completed > 0) return 'in_progress';
+  return 'not_started';
+};
+
+const getIconStyles = (status: string) => {
+  switch (status) {
+    case 'complete': return 'bg-emerald-100 dark:bg-emerald-900 border-emerald-200/40 dark:border-emerald-400/20';
+    case 'in_progress': return 'bg-indigo-100 dark:bg-indigo-900 border-indigo-300/40 dark:border-indigo-400/20';
+    case 'not_started': return 'bg-amber-100 dark:bg-amber-900 border-amber-200/40 dark:border-amber-400/20';
+    default: return 'bg-neutral-100 dark:bg-neutral-800 border-neutral-300/35 dark:border-white/12';
+  }
+};
+
+const toDateString = (d: Date) => {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 interface MobileTimelineViewProps {
-  onCardClick?: (card: any) => void; // Optional - for turnover card selection
-  onTaskClick?: (task: any) => void; // Optional - for task detail view
-  onProjectClick?: (project: any) => void; // Optional - for project detail view
-  refreshTrigger?: number; // Optional - triggers refetch when changed
+  onCardClick?: (card: any) => void;
+  onTaskClick?: (task: any) => void;
+  onProjectClick?: (project: any) => void;
+  refreshTrigger?: number;
 }
 
-export default function MobileTimelineView({ onCardClick, onTaskClick, onProjectClick, refreshTrigger }: MobileTimelineViewProps) {
-  const [reservations, setReservations] = useState<any[]>([]);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [expandedCheckInId, setExpandedCheckInId] = useState<string | null>(null);
-  const [carouselApis, setCarouselApis] = useState<{ [key: string]: CarouselApi }>({});
-  const [activeSlides, setActiveSlides] = useState<{ [key: string]: number }>({});
+export default function MobileTimelineView({
+  onCardClick,
+  onTaskClick,
+  onProjectClick,
+  refreshTrigger,
+}: MobileTimelineViewProps) {
+  const {
+    properties,
+    loading,
+    view,
+    setView,
+    dateRange,
+    goToPrevious,
+    goToNext,
+    goToToday,
+    formatDate,
+    isToday,
+    getReservationsForProperty,
+    getBlockPosition,
+    reservations,
+    recurringTasks,
+    fetchReservations,
+  } = useTimeline();
+
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [expandedCell, setExpandedCell] = useState<{ property: string; dateStr: string } | null>(null);
 
   useEffect(() => {
-    fetchData();
+    const fetchProjects = async () => {
+      setLoadingProjects(true);
+      try {
+        const res = await fetch('/api/projects');
+        const result = await res.json();
+        setProjects(result?.data || []);
+      } catch (err) {
+        console.error('Error fetching projects:', err);
+      } finally {
+        setLoadingProjects(false);
+      }
+    };
+    fetchProjects();
   }, [refreshTrigger]);
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      // Fetch reservations and projects in parallel
-      const [reservationsRes, projectsRes] = await Promise.all([
-        supabase.rpc('get_property_turnovers'),
-        fetch('/api/projects').then(res => res.json())
-      ]);
-      
-      if (reservationsRes.error) throw reservationsRes.error;
-      setReservations(reservationsRes.data || []);
-      // API returns { data: [...] }, extract the array
-      setProjects(projectsRes?.data || []);
-    } catch (err) {
-      console.error('Error fetching data:', err);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0) {
+      fetchReservations();
     }
-  };
+  }, [refreshTrigger, fetchReservations]);
 
-  // Get projects for a specific property
-  const getProjectsForProperty = (propertyName: string) => {
-    return projects.filter((p: any) => p.property_name === propertyName);
-  };
-
-  // Handle carousel API for tracking active slide
-  const handleCarouselApi = (checkInId: string, api: CarouselApi) => {
-    if (!api) return;
-    
-    // Only update if this API isn't already stored (prevents infinite loop)
-    if (carouselApis[checkInId] === api) return;
-    
-    setCarouselApis(prev => ({ ...prev, [checkInId]: api }));
-    
-    api.on('select', () => {
-      setActiveSlides(prev => ({ ...prev, [checkInId]: api.selectedScrollSnap() }));
+  const allTasksWithProperty = useMemo(() => {
+    const tasks: (Task & { property_name: string })[] = [];
+    reservations.forEach((res: any) => {
+      (res.tasks || []).forEach((task: Task) => {
+        tasks.push({ ...task, property_name: res.property_name });
+      });
     });
-  };
+    recurringTasks.forEach((task: any) => {
+      tasks.push({ ...task, property_name: task.property_name });
+    });
+    return tasks;
+  }, [reservations, recurringTasks]);
 
-  // Helper to compare just date portion
-  const toDateString = (d: Date) => {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
+  const allScheduledTasks = useMemo(() => {
+    return allTasksWithProperty.filter(task => task.scheduled_date);
+  }, [allTasksWithProperty]);
 
-  // Helper to find the previous turnover for a property
-  const findPreviousTurnover = (currentCheckIn: any) => {
-    const checkInDate = new Date(currentCheckIn.check_in);
-    
-    // Find all reservations for same property that checked out before this check-in
-    const previousTurnovers = reservations.filter(res => 
-      res.property_name === currentCheckIn.property_name &&
-      res.id !== currentCheckIn.id &&
-      new Date(res.check_out) <= checkInDate
-    );
-    
-    // Return the most recent one (closest check_out to this check_in)
-    if (previousTurnovers.length === 0) return null;
-    
-    return previousTurnovers.reduce((latest, current) => 
-      new Date(current.check_out) > new Date(latest.check_out) ? current : latest
-    );
-  };
+  const scheduledProjects = useMemo(() => {
+    return projects.filter(p => p.scheduled_date);
+  }, [projects]);
 
-  // Helper to get badge color class based on turnover status
-  const getTurnoverBadgeClass = (status: string | null) => {
-    switch (status) {
-      case 'complete':
-        return 'bg-green-500 hover:bg-green-500';
-      case 'in_progress':
-        return 'bg-yellow-500 hover:bg-yellow-500';
-      default: // not_started or null
-        return 'bg-red-500 hover:bg-red-500';
-    }
-  };
-
-  // Helper to get task status badge styles
-  const getTaskStatusStyles = (status: string) => {
-    switch (status) {
-      case 'complete':
-        return 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
-      case 'in_progress':
-        return 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800';
-      case 'paused':
-        return 'bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800';
-      default: // not_started
-        return 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800';
-    }
-  };
-
-  // Helper to format task status label
-  const formatStatusLabel = (status: string) => {
-    switch (status) {
-      case 'complete': return 'Complete';
-      case 'in_progress': return 'In Progress';
-      case 'paused': return 'Paused';
-      case 'reopened': return 'Reopened';
-      default: return 'Not Started';
-    }
-  };
-
-  // Helper to format scheduled date/time
-  const formatScheduledDate = (dateString?: string) => {
-    if (!dateString) return null;
-    // dateString is YYYY-MM-DD
-    const date = new Date(dateString + 'T00:00:00');
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
-
-  const formatScheduledTime = (timeString?: string) => {
-    if (!timeString) return null;
-    // timeString is HH:MM or HH:MM:SS
-    const [h, m] = timeString.split(':').map(Number);
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const hour12 = h % 12 || 12;
-    return `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
-  };
-
-  // Helper to get project status badge styles
-  const getProjectStatusStyles = (status: string) => {
-    switch (status) {
-      case 'complete':
-        return 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
-      case 'in_progress':
-        return 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800';
-      case 'on_hold':
-        return 'bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800';
-      default: // not_started
-        return 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800';
-    }
-  };
-
-  // Helper to get project priority badge styles
-  const getPriorityStyles = (priority: string) => {
-    switch (priority) {
-      case 'urgent':
-        return 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800';
-      case 'high':
-        return 'bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800';
-      default:
-        return 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700';
-    }
-  };
-
-  // Get reservations with CHECK-IN on selected date
-  const getCheckInsForDate = (date: Date) => {
+  const getCellItems = useCallback((propertyName: string, date: Date) => {
     const dateStr = toDateString(date);
-    return reservations.filter(res => {
-      const checkInStr = toDateString(new Date(res.check_in));
-      return checkInStr === dateStr;
-    });
-  };
+    const tasks = allScheduledTasks.filter(
+      t => t.property_name === propertyName && t.scheduled_date === dateStr
+    );
+    const projs = scheduledProjects.filter(
+      p => p.property_name === propertyName && p.scheduled_date === dateStr
+    );
+    return { tasks, projects: projs };
+  }, [allScheduledTasks, scheduledProjects]);
 
-  const navigateDay = (direction: number) => {
-    const newDate = new Date(selectedDate);
-    newDate.setDate(newDate.getDate() + direction);
-    setSelectedDate(newDate);
-  };
-
-  const goToToday = () => {
-    setSelectedDate(new Date());
-  };
+  const cellWidth = view === 'week' ? 56 : 30;
+  const propertyCellWidth = 110;
+  const rowHeight = 38;
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-neutral-500 dark:text-neutral-400">Loading...</div>
+        <div className="text-neutral-500 dark:text-neutral-400">Loading timeline...</div>
       </div>
     );
   }
 
-  const checkIns = getCheckInsForDate(selectedDate);
-  const isToday = toDateString(selectedDate) === toDateString(new Date());
-
   return (
     <div className="flex flex-col h-full">
-      {/* Date Picker */}
-      <div className="sticky top-0 z-30 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <Button variant="ghost" size="sm" onClick={() => navigateDay(-1)}>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </Button>
-          
-          <div className="text-center">
-            {isToday && (
-              <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Today</div>
-            )}
-            <button onClick={goToToday} className="text-base font-bold text-neutral-900 dark:text-white">
-              {selectedDate.toLocaleDateString('en-US', { 
-                weekday: 'short',
-                month: 'short', 
-                day: 'numeric' 
-              })}
-            </button>
+      {/* Header */}
+      <div className="sticky top-0 z-40 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-3 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-0.5">
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={goToPrevious}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </Button>
+            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs font-semibold" onClick={goToToday}>
+              Today
+            </Button>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={goToNext}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Button>
           </div>
-          
-          <Button variant="ghost" size="sm" onClick={() => navigateDay(1)}>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </Button>
+
+          <div className="text-xs font-semibold text-neutral-900 dark:text-white">
+            {dateRange.length > 0 && (
+              <>
+                {formatDate(dateRange[0])} – {formatDate(dateRange[dateRange.length - 1])}
+              </>
+            )}
+          </div>
+
+          <div className="flex gap-1">
+            <Button
+              onClick={() => setView('week')}
+              variant={view === 'week' ? 'default' : 'outline'}
+              size="sm"
+              className="h-7 px-2 text-xs"
+            >
+              W
+            </Button>
+            <Button
+              onClick={() => setView('month')}
+              variant={view === 'month' ? 'default' : 'outline'}
+              size="sm"
+              className="h-7 px-2 text-xs"
+            >
+              M
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Check-ins Header */}
-      <div className="bg-neutral-100 dark:bg-neutral-800 px-4 py-2 border-b border-neutral-200 dark:border-neutral-700">
-        <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
-          Check-ins ({checkIns.length})
-        </span>
-      </div>
-
-      {/* Check-ins List */}
+      {/* Grid */}
       <div className="flex-1 overflow-auto hide-scrollbar">
-        {checkIns.length === 0 ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="text-neutral-500 dark:text-neutral-400">
-              No check-ins on this date
+        <div className="min-w-max">
+          {/* Date header row */}
+          <div className="flex sticky top-0 z-30">
+            <div
+              className="sticky left-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-sm border-b border-r border-neutral-200 dark:border-neutral-700 px-2 py-1.5 text-[11px] font-semibold text-neutral-600 dark:text-neutral-300 flex items-center"
+              style={{ width: propertyCellWidth, minWidth: propertyCellWidth }}
+            >
+              Property
             </div>
-          </div>
-        ) : (
-          <div className="divide-y divide-neutral-200 dark:divide-neutral-700">
-            {checkIns.map((item, idx) => {
-              const previousTurnover = findPreviousTurnover(item);
-              const badgeClass = getTurnoverBadgeClass(previousTurnover?.turnover_status);
-              const isExpanded = expandedCheckInId === item.id;
-              const tasks = previousTurnover?.tasks || [];
-              
+            {dateRange.map((date, idx) => {
+              const todayDate = isToday(date);
               return (
-                <div key={item.id || idx}>
-                  {/* Check-in Header Row - Clickable */}
-                  <div
-                    className="flex items-center px-4 py-3 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors"
-                    onClick={() => setExpandedCheckInId(isExpanded ? null : item.id)}
-                  >
-                    {/* Expand/Collapse Icon */}
-                    <svg 
-                      className={`w-4 h-4 mr-2 text-neutral-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-
-                    {/* Property Name with Turnover Status Badge */}
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <Badge className={`w-3 h-3 p-0 rounded-full shrink-0 ${badgeClass}`} />
-                      <div className="font-medium text-neutral-900 dark:text-white truncate">
-                        {item.property_name}
-                      </div>
-                    </div>
-
-                    {/* Task Progress */}
-                    {previousTurnover && (
-                      <div className="text-xs text-neutral-500 dark:text-neutral-400 mr-3">
-                        {previousTurnover.completed_tasks || 0}/{previousTurnover.total_tasks || 0}
-                      </div>
-                    )}
-
-                    {/* Rhombus Check-in Visual - neutral color */}
-                    <div className="w-12 h-6 relative shrink-0">
-                      <div 
-                        className="absolute inset-0 bg-neutral-400 dark:bg-neutral-500"
-                        style={{
-                          clipPath: 'polygon(40% 0%, 100% 0%, 100% 100%, 0% 100%)',
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Expanded Section - Carousel with Tasks and Projects */}
-                  {isExpanded && (
-                    <div className="bg-neutral-50 dark:bg-neutral-800/30">
-                      {(() => {
-                        const propertyProjects = getProjectsForProperty(item.property_name);
-                        const activeSlide = activeSlides[item.id] || 0;
-                        
-                        return (
-                          <>
-                            {/* Page Labels */}
-                            <div className="flex items-center justify-center gap-4 pt-2 pb-1">
-                              <button 
-                                className={`text-xs font-medium transition-colors ${activeSlide === 0 ? 'text-neutral-900 dark:text-white' : 'text-neutral-400'}`}
-                                onClick={() => carouselApis[item.id]?.scrollTo(0)}
-                              >
-                                Tasks ({tasks.length})
-                              </button>
-                              <button 
-                                className={`text-xs font-medium transition-colors ${activeSlide === 1 ? 'text-neutral-900 dark:text-white' : 'text-neutral-400'}`}
-                                onClick={() => carouselApis[item.id]?.scrollTo(1)}
-                              >
-                                Projects ({propertyProjects.length})
-                              </button>
-                            </div>
-
-                            {/* Page Indicators */}
-                            <div className="flex items-center justify-center gap-1.5 pb-2">
-                              <div className={`w-1.5 h-1.5 rounded-full transition-colors ${activeSlide === 0 ? 'bg-neutral-900 dark:bg-white' : 'bg-neutral-300 dark:bg-neutral-600'}`} />
-                              <div className={`w-1.5 h-1.5 rounded-full transition-colors ${activeSlide === 1 ? 'bg-neutral-900 dark:bg-white' : 'bg-neutral-300 dark:bg-neutral-600'}`} />
-                            </div>
-
-                            <Carousel
-                              className="w-full"
-                              setApi={(api) => handleCarouselApi(item.id, api)}
-                            >
-                              <CarouselContent className="-ml-0">
-                                {/* Tasks Slide */}
-                                <CarouselItem className="pl-0">
-                                  <div className="px-4 pb-4">
-                                    {tasks.length === 0 ? (
-                                      <div className="py-4 text-center text-sm text-neutral-500 dark:text-neutral-400">
-                                        No tasks for this turnover
-                                      </div>
-                                    ) : (
-                                      <div className="space-y-2">
-                                        {tasks.map((task: any) => {
-                                          const taskStatus = task.status || 'not_started';
-                                          const statusStyles = getTaskStatusStyles(taskStatus);
-                                          const assignedUsers = task.assigned_users || [];
-                                          const scheduledDate = formatScheduledDate(task.scheduled_date);
-                                          const scheduledTime = formatScheduledTime(task.scheduled_time);
-                                          
-                                          return (
-                                            <Card 
-                                              key={task.task_id}
-                                              className="cursor-pointer hover:shadow-md transition-all bg-white dark:bg-neutral-900 border !p-0 !gap-0"
-                                              onClick={() => onTaskClick?.(task)}
-                                            >
-                                              <CardHeader className="p-3">
-                                                <CardTitle className="text-sm font-medium">
-                                                  {task.template_name || 'Unnamed Task'}
-                                                </CardTitle>
-                                                
-                                                <div className="flex items-center gap-2 mt-2">
-                                                  <Badge className={`px-2 py-0.5 text-xs border ${statusStyles}`}>
-                                                    {formatStatusLabel(taskStatus)}
-                                                  </Badge>
-                                                  <Badge className="px-2 py-0.5 text-xs border bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700">
-                                                    {task.department_name || task.type}
-                                                  </Badge>
-                                                </div>
-
-                                                <div className="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400 mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
-                                                  <div className="flex items-center gap-1">
-                                                    {scheduledDate ? (
-                                                      <>
-                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                        </svg>
-                                                        <span>{scheduledDate}{scheduledTime ? `, ${scheduledTime}` : ''}</span>
-                                                      </>
-                                                    ) : (
-                                                      <span className="text-neutral-400">No schedule</span>
-                                                    )}
-                                                  </div>
-
-                                                  <div className="flex items-center gap-1">
-                                                    {assignedUsers.length > 0 ? (
-                                                      <>
-                                                        {assignedUsers.slice(0, 3).map((u: any) => (
-                                                          <span key={u.user_id} title={u.name} className="text-base">
-                                                            {u.avatar || '👤'}
-                                                          </span>
-                                                        ))}
-                                                        {assignedUsers.length > 3 && (
-                                                          <span className="text-neutral-400">+{assignedUsers.length - 3}</span>
-                                                        )}
-                                                      </>
-                                                    ) : (
-                                                      <span className="text-neutral-400">Unassigned</span>
-                                                    )}
-                                                  </div>
-                                                </div>
-                                              </CardHeader>
-                                            </Card>
-                                          );
-                                        })}
-                                      </div>
-                                    )}
-                                  </div>
-                                </CarouselItem>
-
-                                {/* Projects Slide */}
-                                <CarouselItem className="pl-0">
-                                  <div className="px-4 pb-4">
-                                    {propertyProjects.length === 0 ? (
-                                      <div className="py-4 text-center text-sm text-neutral-500 dark:text-neutral-400">
-                                        No projects for this property
-                                      </div>
-                                    ) : (
-                                      <div className="space-y-2">
-                                        {propertyProjects.map((project: any) => {
-                                          const projectStatus = project.status || 'not_started';
-                                          const statusStyles = getProjectStatusStyles(projectStatus);
-                                          const priorityStyles = getPriorityStyles(project.priority);
-                                          const dueDate = formatScheduledDate(project.scheduled_date);
-                                          
-                                          return (
-                                            <Card 
-                                              key={project.id}
-                                              className="cursor-pointer hover:shadow-md transition-all bg-white dark:bg-neutral-900 border !p-0 !gap-0"
-                                              onClick={() => onProjectClick?.(project)}
-                                            >
-                                              <CardHeader className="p-3">
-                                                <CardTitle className="text-sm font-medium">
-                                                  {project.title || 'Unnamed Project'}
-                                                </CardTitle>
-                                                
-                                                {tiptapHasContent(project.description) && (
-                                                  <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 line-clamp-2">
-                                                    {tiptapToPlainText(project.description)}
-                                                  </p>
-                                                )}
-                                                
-                                                <div className="flex items-center gap-2 mt-2">
-                                                  <Badge className={`px-2 py-0.5 text-xs border ${statusStyles}`}>
-                                                    {formatStatusLabel(projectStatus)}
-                                                  </Badge>
-                                                  {project.priority && (
-                                                    <Badge className={`px-2 py-0.5 text-xs border ${priorityStyles}`}>
-                                                      {project.priority}
-                                                    </Badge>
-                                                  )}
-                                                </div>
-
-                                                {dueDate && (
-                                                  <div className="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400 mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
-                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                    </svg>
-                                                    <span>Due: {dueDate}</span>
-                                                  </div>
-                                                )}
-                                              </CardHeader>
-                                            </Card>
-                                          );
-                                        })}
-                                      </div>
-                                    )}
-                                  </div>
-                                </CarouselItem>
-                              </CarouselContent>
-                            </Carousel>
-                          </>
-                        );
-                      })()}
-                    </div>
+                <div
+                  key={idx}
+                  className={cn(
+                    'border-b border-r border-neutral-200 dark:border-neutral-700 text-center py-1',
+                    todayDate
+                      ? 'bg-neutral-200/80 dark:bg-neutral-700/60'
+                      : 'bg-white/95 dark:bg-neutral-900/95'
                   )}
+                  style={{ width: cellWidth, minWidth: cellWidth }}
+                >
+                  <div className={cn(
+                    'text-[9px] leading-tight',
+                    todayDate ? 'text-neutral-800 dark:text-neutral-200 font-medium' : 'text-neutral-500 dark:text-neutral-400'
+                  )}>
+                    {date.toLocaleDateString('en-US', { weekday: view === 'week' ? 'short' : 'narrow' })}
+                  </div>
+                  <div className={cn(
+                    'text-[11px] leading-tight',
+                    todayDate ? 'font-bold text-neutral-900 dark:text-white' : 'text-neutral-800 dark:text-neutral-200'
+                  )}>
+                    {date.getDate()}
+                  </div>
                 </div>
               );
             })}
           </div>
-        )}
+
+          {/* Property rows */}
+          {properties.map((property) => {
+            const propReservations = getReservationsForProperty(property);
+            const activeTurnover = getActiveTurnoverForProperty(propReservations);
+
+            const cellBg = activeTurnover
+              ? (() => {
+                  switch (activeTurnover.turnover_status) {
+                    case 'not_started': return 'bg-amber-50/55 dark:bg-amber-400/[0.12]';
+                    case 'in_progress': return 'bg-indigo-50/55 dark:bg-indigo-500/[0.12]';
+                    case 'complete': return 'bg-emerald-50/55 dark:bg-emerald-500/[0.12]';
+                    case 'no_tasks': return 'bg-white/55 dark:bg-white/[0.09]';
+                    default: return 'bg-white/45 dark:bg-white/[0.07]';
+                  }
+                })()
+              : 'bg-white/45 dark:bg-white/[0.07]';
+
+            const activeTaskCount = activeTurnover?.tasks?.filter(t => t.status !== 'complete').length || 0;
+            const propertyProjects = projects.filter(p => p.property_name === property);
+            const activeProjectCount = propertyProjects.filter(p => p.status !== 'complete').length;
+
+            return (
+              <div key={property} className="flex">
+                {/* Property name cell */}
+                <div
+                  className={cn(
+                    'sticky left-0 z-10 border-b border-r border-neutral-200 dark:border-neutral-700 px-2 py-0.5 text-[11px] font-medium text-neutral-900 dark:text-white flex flex-col justify-center',
+                    cellBg
+                  )}
+                  style={{ width: propertyCellWidth, minWidth: propertyCellWidth, height: rowHeight }}
+                >
+                  <span className="truncate leading-tight">{property}</span>
+                  {(activeTaskCount > 0 || activeProjectCount > 0) && (
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      {activeTaskCount > 0 && (
+                        <div className="flex items-center gap-0.5 text-neutral-500 dark:text-neutral-400">
+                          <DiamondIcon size={9} />
+                          <span className="text-[9px]">{activeTaskCount}</span>
+                        </div>
+                      )}
+                      {activeProjectCount > 0 && (
+                        <div className="flex items-center gap-0.5 text-neutral-500 dark:text-neutral-400">
+                          <HexagonIcon size={9} />
+                          <span className="text-[9px]">{activeProjectCount}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Date cells */}
+                {dateRange.map((date, idx) => {
+                  const todayDate = isToday(date);
+                  const startingRes = propReservations.find(res => {
+                    const { start } = getBlockPosition(res.check_in, res.check_out);
+                    return start === idx;
+                  });
+
+                  const { tasks: cellTasks, projects: cellProjects } = getCellItems(property, date);
+                  const hasTasks = cellTasks.length > 0;
+                  const hasProjects = cellProjects.length > 0;
+                  const hasItems = hasTasks || hasProjects;
+
+                  return (
+                    <div
+                      key={idx}
+                      className={cn(
+                        'border-b border-r border-neutral-200/50 dark:border-neutral-700/50 relative overflow-visible',
+                        todayDate ? 'bg-neutral-200/25 dark:bg-white/[0.04]' : 'bg-white/25 dark:bg-white/[0.02]'
+                      )}
+                      style={{ width: cellWidth, minWidth: cellWidth, height: rowHeight }}
+                      onClick={() => {
+                        if (hasItems) {
+                          if (cellTasks.length + cellProjects.length === 1) {
+                            if (cellTasks.length === 1) onTaskClick?.(cellTasks[0]);
+                            else onProjectClick?.(cellProjects[0]);
+                          } else {
+                            const dateStr = toDateString(date);
+                            setExpandedCell(prev =>
+                              prev?.property === property && prev?.dateStr === dateStr ? null : { property, dateStr }
+                            );
+                          }
+                          return;
+                        }
+                        const res = propReservations.find(r => {
+                          const pos = getBlockPosition(r.check_in, r.check_out);
+                          return idx >= pos.start && idx < pos.start + pos.span;
+                        });
+                        if (res) onCardClick?.(res);
+                      }}
+                    >
+                      {/* Reservation block */}
+                      {startingRes && (() => {
+                        const { span, startsBeforeRange, endsAfterRange } = getBlockPosition(startingRes.check_in, startingRes.check_out);
+                        const leftOffset = startsBeforeRange ? 0 : 50;
+                        const rightOffset = endsAfterRange ? 0 : 50;
+                        const totalWidth = (span * 100) - leftOffset - rightOffset;
+
+                        const diagonalPx = view === 'week' ? 8 : 4;
+                        const leftDiag = startsBeforeRange ? '0px' : `${diagonalPx}px`;
+                        const rightDiag = endsAfterRange ? '0px' : `${diagonalPx}px`;
+                        const clipPath = `polygon(${leftDiag} 0%, 100% 0%, calc(100% - ${rightDiag}) 100%, 0% 100%)`;
+
+                        return (
+                          <div
+                            className="absolute pointer-events-none text-neutral-800 dark:text-white text-[9px] font-medium flex items-center glass-card glass-sheen overflow-hidden bg-neutral-400/35 dark:bg-white/[0.10] border border-white/40 dark:border-white/[0.12]"
+                            style={{
+                              left: `${leftOffset}%`,
+                              top: 0,
+                              bottom: 0,
+                              width: `${totalWidth}%`,
+                              zIndex: 15,
+                              clipPath,
+                            }}
+                            title={startingRes.guest_name || 'No guest'}
+                          >
+                            {!startsBeforeRange && view === 'week' && (
+                              <span
+                                className="truncate whitespace-nowrap"
+                                style={{ paddingLeft: `${diagonalPx + 3}px`, paddingRight: `${diagonalPx + 3}px` }}
+                              >
+                                {startingRes.guest_name || 'No guest'}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Task/Project icons */}
+                      {hasItems && (
+                        <div className="absolute bottom-0.5 left-0.5 flex items-center gap-px z-20">
+                          {hasTasks && (
+                            <div
+                              className={cn(
+                                'flex items-center justify-center rounded text-white border shadow-sm',
+                                getIconStyles(getTaskFolderStatus(cellTasks)),
+                                view === 'week' ? 'w-[18px] h-[18px]' : 'w-3.5 h-3.5'
+                              )}
+                            >
+                              <DiamondIcon size={view === 'week' ? 10 : 8} />
+                            </div>
+                          )}
+                          {hasProjects && (
+                            <div
+                              className={cn(
+                                'flex items-center justify-center rounded text-white border shadow-sm',
+                                getIconStyles(getProjectFolderStatus(cellProjects)),
+                                view === 'week' ? 'w-[18px] h-[18px]' : 'w-3.5 h-3.5'
+                              )}
+                            >
+                              <HexagonIcon size={view === 'week' ? 10 : 8} />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
       </div>
+
+      {/* Bottom sheet for expanded cell items */}
+      {expandedCell && (() => {
+        const date = new Date(expandedCell.dateStr + 'T00:00:00');
+        const { tasks: cellTasks, projects: cellProjects } = getCellItems(expandedCell.property, date);
+
+        if (cellTasks.length === 0 && cellProjects.length === 0) return null;
+
+        return (
+          <>
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 z-40 bg-black/20 dark:bg-black/40"
+              onClick={() => setExpandedCell(null)}
+            />
+            {/* Sheet */}
+            <div className="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-neutral-900 border-t border-neutral-200 dark:border-neutral-700 rounded-t-2xl shadow-2xl max-h-[50vh] overflow-y-auto">
+              {/* Drag handle */}
+              <div className="flex justify-center pt-2 pb-1">
+                <div className="w-10 h-1 rounded-full bg-neutral-300 dark:bg-neutral-600" />
+              </div>
+
+              {/* Header */}
+              <div className="px-4 pb-2 flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-neutral-900 dark:text-white">{expandedCell.property}</div>
+                  <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                    {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setExpandedCell(null)}
+                  className="p-2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Items */}
+              <div className="px-4 pb-6 space-y-3">
+                {cellTasks.length > 0 && (
+                  <div>
+                    <div className="text-[10px] font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                      <DiamondIcon size={10} /> Tasks ({cellTasks.length})
+                    </div>
+                    <div className="space-y-1.5">
+                      {cellTasks.map(task => (
+                        <div
+                          key={task.task_id}
+                          className={cn(
+                            'flex items-center justify-between gap-2 py-2.5 px-3 cursor-pointer transition-all duration-150 active:scale-[0.98]',
+                            getRowStyles(task.status)
+                          )}
+                          onClick={() => {
+                            onTaskClick?.(task);
+                            setExpandedCell(null);
+                          }}
+                        >
+                          <span className="truncate text-sm font-medium">{task.template_name || task.type}</span>
+                          <svg className="w-4 h-4 text-neutral-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {cellProjects.length > 0 && (
+                  <div>
+                    <div className="text-[10px] font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                      <HexagonIcon size={10} /> Projects ({cellProjects.length})
+                    </div>
+                    <div className="space-y-1.5">
+                      {cellProjects.map(project => (
+                        <div
+                          key={project.id}
+                          className={cn(
+                            'flex items-center justify-between gap-2 py-2.5 px-3 cursor-pointer transition-all duration-150 active:scale-[0.98]',
+                            getRowStyles(project.status)
+                          )}
+                          onClick={() => {
+                            onProjectClick?.(project);
+                            setExpandedCell(null);
+                          }}
+                        >
+                          <span className="truncate text-sm font-medium">{project.title}</span>
+                          <svg className="w-4 h-4 text-neutral-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }
