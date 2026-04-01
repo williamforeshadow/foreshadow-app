@@ -340,32 +340,57 @@ export function useProjects({ currentUser }: UseProjectsProps) {
         description: null,
         status: 'not_started',
         priority: 'medium',
-        assigned_staff: null,
+        assigned_user_ids: [],
         scheduled_date: null,
         scheduled_time: null
       };
 
-      const response = await fetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      let lastError: Error | null = null;
+      const maxAttempts = 3;
 
-      const result = await response.json();
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const response = await fetch('/api/projects', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to create project');
+          const result = await response.json();
+
+          if (!response.ok) {
+            const message = result.error || 'Failed to create project';
+            // Retry transient server failures from upstream fetch issues.
+            if (response.status >= 500 && attempt < maxAttempts) {
+              lastError = new Error(message);
+              await new Promise(resolve => setTimeout(resolve, attempt * 400));
+              continue;
+            }
+            throw new Error(message);
+          }
+
+          setProjects(prev => [...prev, result.data]);
+          return result.data as Project;
+        } catch (err) {
+          if (attempt >= maxAttempts) {
+            throw err;
+          }
+          lastError = err instanceof Error ? err : new Error('Failed to create project');
+          await new Promise(resolve => setTimeout(resolve, attempt * 400));
+        }
       }
 
-      setProjects(prev => [...prev, result.data]);
-      return result.data as Project;
+      if (lastError) {
+        throw lastError;
+      }
+      throw new Error('Failed to create project');
     } catch (err) {
       console.error('Error creating project:', err);
       return null;
     } finally {
       setSavingProject(false);
     }
-  }, [allProperties]);
+  }, [allProperties, activeBinId]);
 
   // Parameterized save function - accepts project ID and fields from caller
   // Returns the updated project so caller can update their local state

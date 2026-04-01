@@ -9,6 +9,7 @@ import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
 import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
+import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { ScheduledItemsCell, DayKanban } from './timeline';
 import { AttachmentLightbox, ProjectActivitySheet, ProjectDetailPanel } from './projects';
 import { TaskDetailPanel, TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
@@ -100,6 +101,7 @@ export default function TimelineWindow({
   const attachmentsHook = useProjectAttachments({ currentUser });
   const timeTrackingHook = useProjectTimeTracking({ currentUser });
   const activityHook = useProjectActivity();
+  const binsHook = useProjectBins({ currentUser });
 
   // ============================================================================
   // LOCAL UI State for Projects (independent from other windows)
@@ -129,6 +131,9 @@ export default function TimelineWindow({
     });
   }, [properties]);
   const [activitySheetOpen, setActivitySheetOpen] = useState(false);
+  const [visiblePlusCellKey, setVisiblePlusCellKey] = useState<string | null>(null);
+  const hoverPlusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPlusCellKeyRef = useRef<string | null>(null);
 
   // ============================================================================
   // Task state
@@ -136,6 +141,36 @@ export default function TimelineWindow({
   const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
   const [loadingTaskTemplate, setLoadingTaskTemplate] = useState<string | null>(null);
   const [localTask, setLocalTask] = useState<Task | null>(null);
+
+  const getCellKey = useCallback((propertyName: string, dayIdx: number) => {
+    return `${propertyName}::${dayIdx}`;
+  }, []);
+
+  const clearPlusHover = useCallback(() => {
+    if (hoverPlusTimerRef.current) {
+      clearTimeout(hoverPlusTimerRef.current);
+      hoverPlusTimerRef.current = null;
+    }
+    pendingPlusCellKeyRef.current = null;
+    setVisiblePlusCellKey(null);
+  }, []);
+
+  const schedulePlusForCell = useCallback((cellKey: string) => {
+    if (visiblePlusCellKey === cellKey && pendingPlusCellKeyRef.current === null) return;
+    if (pendingPlusCellKeyRef.current === cellKey) return;
+
+    if (hoverPlusTimerRef.current) {
+      clearTimeout(hoverPlusTimerRef.current);
+      hoverPlusTimerRef.current = null;
+    }
+
+    pendingPlusCellKeyRef.current = cellKey;
+    hoverPlusTimerRef.current = setTimeout(() => {
+      setVisiblePlusCellKey(cellKey);
+      pendingPlusCellKeyRef.current = null;
+      hoverPlusTimerRef.current = null;
+    }, 200);
+  }, [visiblePlusCellKey]);
 
   // ============================================================================
   // Turnover detail state
@@ -674,6 +709,34 @@ export default function TimelineWindow({
     }
   }, [projectsHook]);
 
+  const handleCreateProjectFromTimelineCell = useCallback(async (propertyName: string, date: Date) => {
+    const newProject = await projectsHook.createProjectForProperty(propertyName);
+    if (!newProject) return;
+
+    const scheduledDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    projectsHook.updateProjectField(newProject.id, 'scheduled_date', scheduledDate);
+
+    setFloatingData({
+      type: 'project',
+      item: {
+        ...newProject,
+        scheduled_date: scheduledDate,
+      },
+      propertyName,
+    });
+  }, [projectsHook]);
+
+  const handleCreateProjectFromHeader = useCallback(async () => {
+    const newProject = await projectsHook.createProjectForProperty('');
+    if (!newProject) return;
+
+    setFloatingData({
+      type: 'project',
+      item: newProject,
+      propertyName: '',
+    });
+  }, [projectsHook]);
+
   // Handle column moves from kanban drag/drop (assignment + schedule changes, atomically)
   const handleKanbanColumnMove = useCallback(async (
     itemType: 'task' | 'project',
@@ -814,6 +877,14 @@ export default function TimelineWindow({
       console.error('Error updating column move:', err);
     }
   }, [currentUser?.id, projectsHook, setReservations, setRecurringTasks, users]);
+
+  useEffect(() => {
+    return () => {
+      if (hoverPlusTimerRef.current) {
+        clearTimeout(hoverPlusTimerRef.current);
+      }
+    };
+  }, []);
 
   // Extract ALL tasks from reservations + recurring tasks, tagged with property_name
   const allTasksWithProperty = useMemo(() => {
@@ -967,6 +1038,18 @@ export default function TimelineWindow({
                 </Button>
               </div>
             )}
+          </div>
+
+          <div className="ml-auto">
+            <Button
+              onClick={handleCreateProjectFromHeader}
+              variant="outline"
+              size="sm"
+              title="Create Project"
+              className="px-3"
+            >
+              + Project
+            </Button>
           </div>
         </div>
       </div>
@@ -1170,6 +1253,7 @@ export default function TimelineWindow({
                   {/* Date Cells with embedded reservations */}
                   {dateRange.map((date, idx) => {
                     const isTodayDate = isToday(date);
+                    const cellKey = getCellKey(property, idx);
                     // Only render the block if this is the starting cell
                     const startingReservation = propertyReservations.find(res => {
                       const { start } = getBlockPosition(res.check_in, res.check_out);
@@ -1179,7 +1263,9 @@ export default function TimelineWindow({
                     return (
                       <div
                         key={idx}
-                        className={`border-b border-r border-white/20 dark:border-white/[0.07] h-[30px] relative overflow-visible ${isTodayDate ? 'bg-neutral-500/10 dark:bg-white/[0.07]' : 'bg-white/30 dark:bg-white/[0.045]'}`}
+                        className={`group border-b border-r border-white/20 dark:border-white/[0.07] h-[30px] relative overflow-visible ${isTodayDate ? 'bg-neutral-500/10 dark:bg-white/[0.07]' : 'bg-white/30 dark:bg-white/[0.045]'}`}
+                        onMouseEnter={() => schedulePlusForCell(cellKey)}
+                        onMouseLeave={clearPlusHover}
                       >
                         {startingReservation && (() => {
                           const { span, startsBeforeRange, endsAfterRange } = getBlockPosition(startingReservation.check_in, startingReservation.check_out);
@@ -1197,6 +1283,21 @@ export default function TimelineWindow({
 
                           return (
                             <div
+                              onMouseMove={(e) => {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                if (rect.width <= 0 || span <= 0) return;
+
+                                const relativeX = Math.min(Math.max(e.clientX - rect.left, 0), rect.width - 1);
+                                const segmentWidth = rect.width / span;
+                                const segmentOffset = Math.floor(relativeX / segmentWidth);
+                                const hoveredDayIdx = Math.min(
+                                  Math.max(idx + segmentOffset, 0),
+                                  dateRange.length - 1
+                                );
+
+                                schedulePlusForCell(getCellKey(property, hoveredDayIdx));
+                              }}
+                              onMouseLeave={clearPlusHover}
                               onClick={() => {
                                 setSelectedReservation(selectedReservation?.id === startingReservation.id ? null : startingReservation);
                               }}
@@ -1239,6 +1340,19 @@ export default function TimelineWindow({
                             propertyName: property,
                           })}
                         />
+
+                        <button
+                          className={`absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-white/40 dark:border-white/20 bg-white/70 dark:bg-white/10 text-neutral-600 dark:text-neutral-300 hover:bg-white/90 dark:hover:bg-white/20 hover:text-neutral-900 dark:hover:text-white transition-all z-20 flex items-center justify-center ${visiblePlusCellKey === cellKey ? 'opacity-100' : 'opacity-0'}`}
+                          title="Create project for this day"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCreateProjectFromTimelineCell(property, date);
+                          }}
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14m7-7H5" />
+                          </svg>
+                        </button>
                       </div>
                     );
                   })}
@@ -1399,6 +1513,7 @@ export default function TimelineWindow({
             <ProjectDetailPanel
               project={floatingData.item as Project}
               users={users}
+              allProperties={projectsHook.allProperties}
               editingFields={projectFields}
               setEditingFields={setProjectFields}
               savingEdit={projectsHook.savingProjectEdit}
@@ -1406,6 +1521,25 @@ export default function TimelineWindow({
               onDelete={handleDeleteProject}
               onClose={handleCloseFloatingWindow}
               onOpenActivity={handleOpenActivity}
+              onPropertyChange={async (propertyId, propertyName) => {
+                const project = floatingData.item as Project;
+                await projectsHook.updateProjectField(project.id, 'property_id', propertyId || '');
+                if (propertyName !== undefined) {
+                  await projectsHook.updateProjectField(project.id, 'property_name', propertyName || '');
+                }
+                setFloatingData(prev => {
+                  if (!prev || prev.type !== 'project') return prev;
+                  return {
+                    ...prev,
+                    item: {
+                      ...(prev.item as Project),
+                      property_id: propertyId,
+                      property_name: propertyName,
+                    },
+                    propertyName: propertyName || '',
+                  };
+                });
+              }}
               // Comments
               comments={commentsHook.projectComments}
               loadingComments={commentsHook.loadingComments}
@@ -1429,6 +1563,23 @@ export default function TimelineWindow({
               // Popover states
               staffOpen={staffOpen}
               setStaffOpen={setStaffOpen}
+              // Bins
+              bins={binsHook.bins}
+              onBinChange={async (binId, _binName) => {
+                const project = floatingData.item as Project;
+                await projectsHook.updateProjectField(project.id, 'bin_id', binId || '');
+                setFloatingData(prev => {
+                  if (!prev || prev.type !== 'project') return prev;
+                  return {
+                    ...prev,
+                    item: {
+                      ...(prev.item as Project),
+                      bin_id: binId,
+                    },
+                  };
+                });
+                binsHook.fetchBins();
+              }}
             />
           ) : floatingData.type === 'turnover' ? (
             /* Turnover Detail Panel */
