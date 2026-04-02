@@ -144,7 +144,9 @@ export async function GET(request: Request) {
         assigned_at,
         property_projects(
           id,
+          property_id,
           property_name,
+          bin_id,
           title,
           description,
           status,
@@ -153,6 +155,7 @@ export async function GET(request: Request) {
           scheduled_date,
           scheduled_time,
           created_at,
+          updated_at,
           departments(id, name)
         )
       `)
@@ -168,7 +171,7 @@ export async function GET(request: Request) {
 
     // Fetch ALL assignees for these projects (not just current user)
     const projectIds = projectAssignments?.map((pa: any) => pa.project_id).filter(Boolean) || [];
-    let projectAssigneesMap: Record<string, { user_id: string; name: string; avatar: string | null }[]> = {};
+    let projectAssigneesMap: Record<string, { user_id: string; user: { id: string; name: string; avatar: string | null } }[]> = {};
     if (projectIds.length > 0) {
       const { data: allProjectAssignments } = await getSupabaseServer()
         .from('project_assignments')
@@ -181,8 +184,11 @@ export async function GET(request: Request) {
           if (!projectAssigneesMap[a.project_id]) projectAssigneesMap[a.project_id] = [];
           projectAssigneesMap[a.project_id].push({
             user_id: a.user_id,
-            name: u?.name || 'Unknown',
-            avatar: u?.avatar || null,
+            user: {
+              id: u?.id || a.user_id,
+              name: u?.name || 'Unknown',
+              avatar: u?.avatar || null,
+            },
           });
         });
       }
@@ -198,7 +204,7 @@ export async function GET(request: Request) {
         department_name: project.departments?.name || null,
         departments: undefined,
         assigned_at: pa.assigned_at,
-        assigned_users: projectAssigneesMap[project.id] || [],
+        project_assignments: projectAssigneesMap[project.id] || [],
       };
     }).filter(Boolean) || [];
 

@@ -70,6 +70,11 @@ interface Task {
   guest_name?: string;
 }
 
+interface ProjectAssignment {
+  user_id: string;
+  user?: { id: string; name: string; avatar?: string | null };
+}
+
 interface Project {
   id: string;
   property_name: string;
@@ -83,7 +88,7 @@ interface Project {
   scheduled_time?: string;
   created_at: string;
   assigned_at: string;
-  assigned_users?: TaskAssignee[];
+  project_assignments?: ProjectAssignment[];
 }
 
 interface AssignmentsData {
@@ -378,7 +383,7 @@ export default function MobileMyAssignmentsView({
                 <div className="p-4 flex flex-col gap-3">
                   {projects.map((project) => {
                     const DeptIcon = getDepartmentIcon(project.department_id ? deptIconMap[project.department_id] : null);
-                    const assignees = project.assigned_users || [];
+                    const assignees = project.project_assignments || [];
                     return (
                       <button
                         key={project.id}
@@ -412,17 +417,17 @@ export default function MobileMyAssignmentsView({
 
                           {assignees.length > 0 && (
                             <div className="flex items-center shrink-0">
-                              {assignees.slice(0, 3).map((u, i) => (
+                              {assignees.slice(0, 3).map((a, i) => (
                                 <div
-                                  key={u.user_id}
+                                  key={a.user_id}
                                   className="w-8 h-8 rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-[10px] font-semibold text-neutral-600 dark:text-neutral-300 ring-2 ring-white/50 dark:ring-white/10 overflow-hidden"
                                   style={{ marginLeft: i > 0 ? '-8px' : 0 }}
-                                  title={u.name}
+                                  title={a.user?.name || 'Unknown'}
                                 >
-                                  {u.avatar ? (
-                                    <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" />
+                                  {a.user?.avatar ? (
+                                    <img src={a.user.avatar} alt={a.user.name} className="w-full h-full object-cover" />
                                   ) : (
-                                    u.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+                                    (a.user?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
                                   )}
                                 </div>
                               ))}
