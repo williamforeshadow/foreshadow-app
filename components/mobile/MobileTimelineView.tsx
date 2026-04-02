@@ -7,6 +7,9 @@ import { Button } from '@/components/ui/button';
 import DiamondIcon from '@/components/icons/AssignmentIcon';
 import HexagonIcon from '@/components/icons/HammerIcon';
 import { cn } from '@/lib/utils';
+import { UserAvatar } from '@/components/ui/user-avatar';
+import { useDepartments } from '@/lib/departmentsContext';
+import { getDepartmentIcon } from '@/lib/departmentIcons';
 import type { Task, Project } from '@/lib/types';
 
 const getRowStyles = (status: string) => {
@@ -89,9 +92,27 @@ export default function MobileTimelineView({
     fetchReservations,
   } = useTimeline();
 
+  const { deptIconMap } = useDepartments();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [expandedCell, setExpandedCell] = useState<{ property: string; dateStr: string } | null>(null);
+  const [expandedProperties, setExpandedProperties] = useState<Set<string>>(new Set());
+
+  const togglePropertyExpanded = useCallback((property: string) => {
+    setExpandedProperties(prev => {
+      const next = new Set(prev);
+      if (next.has(property)) next.delete(property);
+      else next.add(property);
+      return next;
+    });
+  }, []);
+
+  const toggleAllExpanded = useCallback(() => {
+    setExpandedProperties(prev => {
+      if (prev.size === properties.length) return new Set();
+      return new Set(properties);
+    });
+  }, [properties]);
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -147,9 +168,9 @@ export default function MobileTimelineView({
     return { tasks, projects: projs };
   }, [allScheduledTasks, scheduledProjects]);
 
-  const cellWidth = view === 'week' ? 56 : 30;
-  const propertyCellWidth = 110;
-  const rowHeight = 38;
+  const cellWidth = view === 'week' ? 72 : 38;
+  const propertyCellWidth = 130;
+  const rowHeight = 36;
 
   if (loading) {
     return (
@@ -162,25 +183,25 @@ export default function MobileTimelineView({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="sticky top-0 z-40 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-3 py-2">
+      <div className="sticky top-0 z-40 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-0.5">
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={goToPrevious}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={goToPrevious}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </Button>
-            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs font-semibold" onClick={goToToday}>
+            <Button variant="ghost" size="sm" className="h-9 px-3 text-sm font-semibold" onClick={goToToday}>
               Today
             </Button>
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={goToNext}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={goToNext}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </Button>
           </div>
 
-          <div className="text-xs font-semibold text-neutral-900 dark:text-white">
+          <div className="text-sm font-semibold text-neutral-900 dark:text-white">
             {dateRange.length > 0 && (
               <>
                 {formatDate(dateRange[0])} – {formatDate(dateRange[dateRange.length - 1])}
@@ -193,7 +214,7 @@ export default function MobileTimelineView({
               onClick={() => setView('week')}
               variant={view === 'week' ? 'default' : 'outline'}
               size="sm"
-              className="h-7 px-2 text-xs"
+              className="h-8 px-2.5 text-sm"
             >
               W
             </Button>
@@ -201,7 +222,7 @@ export default function MobileTimelineView({
               onClick={() => setView('month')}
               variant={view === 'month' ? 'default' : 'outline'}
               size="sm"
-              className="h-7 px-2 text-xs"
+              className="h-8 px-2.5 text-sm"
             >
               M
             </Button>
@@ -215,9 +236,16 @@ export default function MobileTimelineView({
           {/* Date header row */}
           <div className="flex sticky top-0 z-30">
             <div
-              className="sticky left-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-sm border-b border-r border-neutral-200 dark:border-neutral-700 px-2 py-1.5 text-[11px] font-semibold text-neutral-600 dark:text-neutral-300 flex items-center"
+              className="sticky left-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-sm border-b border-r border-neutral-200 dark:border-neutral-700 px-1.5 py-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300 flex items-center gap-1"
               style={{ width: propertyCellWidth, minWidth: propertyCellWidth }}
+              onClick={toggleAllExpanded}
             >
+              <svg
+                className={cn('w-3 h-3 shrink-0 transition-transform duration-200', expandedProperties.size === properties.length && 'rotate-90')}
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
               Property
             </div>
             {dateRange.map((date, idx) => {
@@ -226,7 +254,7 @@ export default function MobileTimelineView({
                 <div
                   key={idx}
                   className={cn(
-                    'border-b border-r border-neutral-200 dark:border-neutral-700 text-center py-1',
+                    'border-b border-r border-neutral-200 dark:border-neutral-700 text-center py-1.5',
                     todayDate
                       ? 'bg-neutral-200/80 dark:bg-neutral-700/60'
                       : 'bg-white/95 dark:bg-neutral-900/95'
@@ -234,13 +262,13 @@ export default function MobileTimelineView({
                   style={{ width: cellWidth, minWidth: cellWidth }}
                 >
                   <div className={cn(
-                    'text-[9px] leading-tight',
+                    'text-[10px] leading-tight',
                     todayDate ? 'text-neutral-800 dark:text-neutral-200 font-medium' : 'text-neutral-500 dark:text-neutral-400'
                   )}>
                     {date.toLocaleDateString('en-US', { weekday: view === 'week' ? 'short' : 'narrow' })}
                   </div>
                   <div className={cn(
-                    'text-[11px] leading-tight',
+                    'text-xs leading-tight',
                     todayDate ? 'font-bold text-neutral-900 dark:text-white' : 'text-neutral-800 dark:text-neutral-200'
                   )}>
                     {date.getDate()}
@@ -267,37 +295,31 @@ export default function MobileTimelineView({
                 })()
               : 'bg-white/45 dark:bg-white/[0.07]';
 
-            const activeTaskCount = activeTurnover?.tasks?.filter(t => t.status !== 'complete').length || 0;
-            const propertyProjects = projects.filter(p => p.property_name === property);
-            const activeProjectCount = propertyProjects.filter(p => p.status !== 'complete').length;
+            const isExpanded = expandedProperties.has(property);
 
             return (
-              <div key={property} className="flex">
-                {/* Property name cell */}
+              <div key={property}>
+              <div className="flex">
+                {/* Property name cell — opaque base + glass overlay */}
                 <div
-                  className={cn(
-                    'sticky left-0 z-10 border-b border-r border-neutral-200 dark:border-neutral-700 px-2 py-0.5 text-[11px] font-medium text-neutral-900 dark:text-white flex flex-col justify-center',
-                    cellBg
-                  )}
+                  className="sticky left-0 z-30 bg-white dark:bg-neutral-900 border-b border-r border-neutral-200 dark:border-neutral-700"
                   style={{ width: propertyCellWidth, minWidth: propertyCellWidth, height: rowHeight }}
+                  onClick={() => togglePropertyExpanded(property)}
                 >
-                  <span className="truncate leading-tight">{property}</span>
-                  {(activeTaskCount > 0 || activeProjectCount > 0) && (
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      {activeTaskCount > 0 && (
-                        <div className="flex items-center gap-0.5 text-neutral-500 dark:text-neutral-400">
-                          <DiamondIcon size={9} />
-                          <span className="text-[9px]">{activeTaskCount}</span>
-                        </div>
-                      )}
-                      {activeProjectCount > 0 && (
-                        <div className="flex items-center gap-0.5 text-neutral-500 dark:text-neutral-400">
-                          <HexagonIcon size={9} />
-                          <span className="text-[9px]">{activeProjectCount}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  <div
+                    className={cn(
+                      'glass-card glass-sheen relative overflow-hidden w-full h-full px-1.5 text-xs font-medium text-neutral-900 dark:text-white flex items-center gap-1',
+                      cellBg
+                    )}
+                  >
+                    <svg
+                      className={cn('w-3 h-3 shrink-0 text-neutral-400 transition-transform duration-200', isExpanded && 'rotate-90')}
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                    <span className="truncate">{property}</span>
+                  </div>
                 </div>
 
                 {/* Date cells */}
@@ -348,14 +370,14 @@ export default function MobileTimelineView({
                         const rightOffset = endsAfterRange ? 0 : 50;
                         const totalWidth = (span * 100) - leftOffset - rightOffset;
 
-                        const diagonalPx = view === 'week' ? 8 : 4;
+                        const diagonalPx = view === 'week' ? 10 : 5;
                         const leftDiag = startsBeforeRange ? '0px' : `${diagonalPx}px`;
                         const rightDiag = endsAfterRange ? '0px' : `${diagonalPx}px`;
                         const clipPath = `polygon(${leftDiag} 0%, 100% 0%, calc(100% - ${rightDiag}) 100%, 0% 100%)`;
 
                         return (
                           <div
-                            className="absolute pointer-events-none text-neutral-800 dark:text-white text-[9px] font-medium flex items-center glass-card glass-sheen overflow-hidden bg-neutral-400/35 dark:bg-white/[0.10] border border-white/40 dark:border-white/[0.12]"
+                            className="absolute pointer-events-none text-neutral-800 dark:text-white text-[11px] font-medium flex items-center glass-card glass-sheen overflow-hidden bg-neutral-400/35 dark:bg-white/[0.10] border border-white/40 dark:border-white/[0.12]"
                             style={{
                               left: `${leftOffset}%`,
                               top: 0,
@@ -380,16 +402,16 @@ export default function MobileTimelineView({
 
                       {/* Task/Project icons */}
                       {hasItems && (
-                        <div className="absolute bottom-0.5 left-0.5 flex items-center gap-px z-20">
+                        <div className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 z-20">
                           {hasTasks && (
                             <div
                               className={cn(
                                 'flex items-center justify-center rounded text-white border shadow-sm',
                                 getIconStyles(getTaskFolderStatus(cellTasks)),
-                                view === 'week' ? 'w-[18px] h-[18px]' : 'w-3.5 h-3.5'
+                                view === 'week' ? 'w-[22px] h-[22px]' : 'w-4 h-4'
                               )}
                             >
-                              <DiamondIcon size={view === 'week' ? 10 : 8} />
+                              <DiamondIcon size={view === 'week' ? 12 : 9} />
                             </div>
                           )}
                           {hasProjects && (
@@ -397,10 +419,10 @@ export default function MobileTimelineView({
                               className={cn(
                                 'flex items-center justify-center rounded text-white border shadow-sm',
                                 getIconStyles(getProjectFolderStatus(cellProjects)),
-                                view === 'week' ? 'w-[18px] h-[18px]' : 'w-3.5 h-3.5'
+                                view === 'week' ? 'w-[22px] h-[22px]' : 'w-4 h-4'
                               )}
                             >
-                              <HexagonIcon size={view === 'week' ? 10 : 8} />
+                              <HexagonIcon size={view === 'week' ? 12 : 9} />
                             </div>
                           )}
                         </div>
@@ -408,6 +430,105 @@ export default function MobileTimelineView({
                     </div>
                   );
                 })}
+              </div>
+
+              {/* Expanded detail row */}
+              {isExpanded && (
+                <div className="flex">
+                  {/* Empty property column for expanded row */}
+                  <div
+                    className={cn(
+                      'sticky left-0 z-30 bg-white dark:bg-neutral-900 border-b border-r border-neutral-200 dark:border-neutral-700'
+                    )}
+                    style={{ width: propertyCellWidth, minWidth: propertyCellWidth }}
+                  >
+                    <div className={cn('w-full h-full', cellBg)} />
+                  </div>
+
+                  {/* Date cells with task/project cards */}
+                  {dateRange.map((date, idx) => {
+                    const todayDate = isToday(date);
+                    const cellDateStr = toDateString(date);
+                    const dateTasks = allScheduledTasks.filter(
+                      t => t.property_name === property && t.scheduled_date === cellDateStr
+                    );
+                    const dateProjects = scheduledProjects.filter(
+                      p => p.property_name === property && p.scheduled_date === cellDateStr
+                    );
+                    const hasItems = dateTasks.length > 0 || dateProjects.length > 0;
+
+                    return (
+                      <div
+                        key={`expanded-${idx}`}
+                        className={cn(
+                          'border-b border-r border-neutral-200/50 dark:border-neutral-700/50 p-1',
+                          todayDate ? 'bg-neutral-200/20 dark:bg-white/[0.03]' : 'bg-white/15 dark:bg-white/[0.015]'
+                        )}
+                        style={{ width: cellWidth, minWidth: cellWidth }}
+                      >
+                        {hasItems && (
+                          <div className="flex flex-col gap-1">
+                            {dateTasks.map(task => {
+                              const TaskDeptIcon = getDepartmentIcon(task.department_id ? deptIconMap[task.department_id] : null);
+                              const firstUser = task.assigned_users?.[0];
+                              const extraCount = (task.assigned_users?.length ?? 0) - 1;
+                              return (
+                                <div
+                                  key={task.task_id}
+                                  className={cn(
+                                    'flex items-center gap-1.5 py-1.5 px-1.5 cursor-pointer transition-all duration-150 active:scale-[0.97]',
+                                    getRowStyles(task.status)
+                                  )}
+                                  onClick={() => onTaskClick?.(task)}
+                                >
+                                  <TaskDeptIcon size={14} className="shrink-0 text-neutral-600 dark:text-neutral-300" />
+                                  {firstUser && (
+                                    <div className="relative shrink-0">
+                                      <UserAvatar src={firstUser.avatar} name={firstUser.name || 'Unknown'} size="xs" />
+                                      {extraCount > 0 && (
+                                        <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[13px] h-[13px] px-0.5 rounded-full bg-neutral-700 dark:bg-neutral-200 text-[8px] font-medium text-white dark:text-neutral-800 border border-white dark:border-neutral-900">
+                                          +{extraCount}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            {dateProjects.map(project => {
+                              const ProjectDeptIcon = getDepartmentIcon(project.department_id ? deptIconMap[project.department_id] : null);
+                              const firstAssignment = project.project_assignments?.[0];
+                              const extraCount = (project.project_assignments?.length ?? 0) - 1;
+                              return (
+                                <div
+                                  key={project.id}
+                                  className={cn(
+                                    'flex items-center gap-1.5 py-1.5 px-1.5 cursor-pointer transition-all duration-150 active:scale-[0.97]',
+                                    getRowStyles(project.status)
+                                  )}
+                                  onClick={() => onProjectClick?.(project)}
+                                >
+                                  <ProjectDeptIcon size={14} className="shrink-0 text-neutral-600 dark:text-neutral-300" />
+                                  {firstAssignment && (
+                                    <div className="relative shrink-0">
+                                      <UserAvatar src={firstAssignment.user?.avatar} name={firstAssignment.user?.name || 'Unknown'} size="xs" />
+                                      {extraCount > 0 && (
+                                        <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[13px] h-[13px] px-0.5 rounded-full bg-neutral-700 dark:bg-neutral-200 text-[8px] font-medium text-white dark:text-neutral-800 border border-white dark:border-neutral-900">
+                                          +{extraCount}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               </div>
             );
           })}
