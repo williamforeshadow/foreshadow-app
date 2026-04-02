@@ -166,6 +166,28 @@ export async function GET(request: Request) {
       );
     }
 
+    // Fetch ALL assignees for these projects (not just current user)
+    const projectIds = projectAssignments?.map((pa: any) => pa.project_id).filter(Boolean) || [];
+    let projectAssigneesMap: Record<string, { user_id: string; name: string; avatar: string | null }[]> = {};
+    if (projectIds.length > 0) {
+      const { data: allProjectAssignments } = await getSupabaseServer()
+        .from('project_assignments')
+        .select('project_id, user_id, users(id, name, avatar)')
+        .in('project_id', projectIds);
+
+      if (allProjectAssignments) {
+        allProjectAssignments.forEach((a: any) => {
+          const u = a.users as any;
+          if (!projectAssigneesMap[a.project_id]) projectAssigneesMap[a.project_id] = [];
+          projectAssigneesMap[a.project_id].push({
+            user_id: a.user_id,
+            name: u?.name || 'Unknown',
+            avatar: u?.avatar || null,
+          });
+        });
+      }
+    }
+
     // Transform projects
     const projects = projectAssignments?.map((pa: any) => {
       const project = pa.property_projects as any;
@@ -175,7 +197,8 @@ export async function GET(request: Request) {
         ...project,
         department_name: project.departments?.name || null,
         departments: undefined,
-        assigned_at: pa.assigned_at
+        assigned_at: pa.assigned_at,
+        assigned_users: projectAssigneesMap[project.id] || [],
       };
     }).filter(Boolean) || [];
 
