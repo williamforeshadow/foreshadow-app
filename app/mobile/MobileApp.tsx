@@ -1,27 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useUsers } from '@/lib/useUsers';
 import { useTurnovers } from '@/lib/useTurnovers';
 import { useProjects } from '@/lib/useProjects';
-import { useDepartments } from '@/lib/departmentsContext';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { RichTextEditor } from '@/components/ui/rich-text-editor';
-import DynamicCleaningForm from '@/components/DynamicCleaningForm';
+import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { 
   MobileLayout, 
   MobileTimelineView, 
   MobileMyAssignmentsView,
   MobileProjectsView,
+  MobileProjectDetail,
+  MobileTaskDetail,
   type MobileTab 
 } from '@/components/mobile';
 import MessagesWindow from '@/components/windows/MessagesWindow';
+import type { Project, Task } from '@/lib/types';
 
 export default function MobileApp() {
   // Core hooks
@@ -34,48 +29,29 @@ export default function MobileApp() {
     loadingTaskTemplate,
     fetchTaskTemplate,
     updateTaskAction,
+    updateTaskAssignment,
+    updateTaskSchedule,
     saveTaskForm,
   } = useTurnovers();
 
   // Shared hooks - project functionality
   const projectsHook = useProjects({ currentUser });
-  const {
-    allProperties,
-    showProjectDialog,
-    setShowProjectDialog,
-    editingProject,
-    projectForm,
-    setProjectForm,
-    savingProject,
-    openEditProjectDialog,
-    saveProject,
-  } = projectsHook;
+  const { allProperties } = projectsHook;
+  const binsHook = useProjectBins({ currentUser: currentUser as any });
 
   // Mobile-specific state
   const [mobileTab, setMobileTab] = useState<MobileTab>('assignments');
-  const [mobileSelectedTask, setMobileSelectedTask] = useState<any>(null);
+  const [mobileSelectedTask, setMobileSelectedTask] = useState<Task | null>(null);
+  const [mobileSelectedProject, setMobileSelectedProject] = useState<Project | null>(null);
   const [mobileRefreshTrigger, setMobileRefreshTrigger] = useState(0);
-  const { departments } = useDepartments();
 
-  // Reset project form when dialog closes
-  const handleProjectDialogClose = (open: boolean) => {
-    if (!open) {
-      setShowProjectDialog(false);
-      setProjectForm({
-        property_id: '',
-        property_name: '',
-        title: '',
-        description: null,
-        status: 'not_started',
-        priority: 'medium',
-        assigned_staff: [],
-        department_id: '',
-        scheduled_date: '',
-        scheduled_time: '',
-        bin_id: ''
-      });
-    }
-  };
+  const handleTaskScheduleUpdate = useCallback(async (taskId: string, scheduledDate: string | null, scheduledTime: string | null) => {
+    await updateTaskSchedule(taskId, scheduledDate, scheduledTime);
+  }, [updateTaskSchedule]);
+
+  const handleTaskAssignmentUpdate = useCallback(async (taskId: string, userIds: string[]) => {
+    await updateTaskAssignment(taskId, userIds);
+  }, [updateTaskAssignment]);
 
   return (
     <>
@@ -99,7 +75,7 @@ export default function MobileApp() {
               });
             }}
             onProjectClick={(project: any) => {
-              openEditProjectDialog(project);
+              setMobileSelectedProject(project);
             }}
             refreshTrigger={mobileRefreshTrigger}
           />
@@ -126,7 +102,7 @@ export default function MobileApp() {
               setMobileSelectedTask(task);
             }}
             onProjectClick={(project: any) => {
-              openEditProjectDialog(project);
+              setMobileSelectedProject(project);
             }}
           />
         )}
@@ -138,326 +114,59 @@ export default function MobileApp() {
 
       {/* Mobile Task Detail - Full Screen Takeover */}
       {mobileSelectedTask && (
-        <div 
-          className="fixed inset-0 z-[60] bg-white dark:bg-neutral-900 flex flex-col"
-          style={{ height: '100dvh' }}
-        >
-          {/* Header */}
-          <div className="shrink-0 px-4 pt-4 pb-3 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-lg font-semibold">{mobileSelectedTask.template_name || 'Task'}</h2>
-              <button 
-                onClick={() => {
-                  setMobileSelectedTask(null);
-                  setMobileRefreshTrigger(prev => prev + 1);
-                }}
-                className="p-2 -mr-2 text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-neutral-500 dark:text-neutral-400">{mobileSelectedTask.property_name}</span>
-              <Badge className="bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
-                {mobileSelectedTask.department_name || mobileSelectedTask.type}
-              </Badge>
-            </div>
-          </div>
-
-          {/* Scrollable Content */}
-          <div 
-            className="flex-1 min-h-0 overflow-y-auto overscroll-contain hide-scrollbar"
-            style={{ 
-              overflowAnchor: 'none',
-              WebkitOverflowScrolling: 'touch',
-              transform: 'translate3d(0,0,0)',
-            }}
-          >
-            <div className="p-4 space-y-4">
-              {/* Status Bar */}
-              <div className="p-3 bg-neutral-50 dark:bg-neutral-800 rounded-lg flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">Status</p>
-                  <Badge className={`${
-                    mobileSelectedTask.status === 'complete' 
-                      ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
-                      : mobileSelectedTask.status === 'in_progress'
-                      ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                      : mobileSelectedTask.status === 'paused'
-                      ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
-                      : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200'
-                  }`}>
-                    {mobileSelectedTask.status === 'not_started' ? 'Not Started' :
-                     mobileSelectedTask.status === 'in_progress' ? 'In Progress' :
-                     mobileSelectedTask.status === 'paused' ? 'Paused' :
-                     mobileSelectedTask.status === 'complete' ? 'Completed' :
-                     'Not Started'}
-                  </Badge>
-                </div>
-                {mobileSelectedTask.guest_name && (
-                  <div className="text-right">
-                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">Guest</p>
-                    <p className="text-sm font-medium">{mobileSelectedTask.guest_name}</p>
-                  </div>
-                )}
-              </div>
-
-              {/* TASK VIEW - Check assignment first, then status */}
-              {!(mobileSelectedTask.assigned_users || []).some((u: any) => u.user_id === currentUser?.id) ? (
-                /* NOT ASSIGNED - Block access to task */
-                <div className="flex flex-col items-center justify-center py-12 gap-3">
-                  <Button disabled variant="outline">
-                    Start Task
-                  </Button>
-                  <p className="text-sm text-neutral-500">This task hasn&apos;t been assigned</p>
-                </div>
-              ) : (mobileSelectedTask.status === 'not_started' || !mobileSelectedTask.status) ? (
-                /* ASSIGNED + NOT STARTED - Show Start button */
-                <div className="flex flex-col items-center justify-center py-12 gap-3">
-                  <Button
-                    onClick={() => {
-                      updateTaskAction(mobileSelectedTask.task_id, 'in_progress');
-                      setMobileSelectedTask({ ...mobileSelectedTask, status: 'in_progress' });
-                    }}
-                  >
-                    Start Task
-                  </Button>
-                </div>
-              ) : (
-                /* ASSIGNED + ACTIVE - Show form and action buttons */
-                <>
-                  {/* Template Form */}
-                  {mobileSelectedTask.template_id ? (
-                    loadingTaskTemplate === mobileSelectedTask.template_id ? (
-                      <div className="flex items-center justify-center py-8">
-                        <p className="text-neutral-500">Loading form...</p>
-                      </div>
-                    ) : (taskTemplates[`${mobileSelectedTask.template_id}__${mobileSelectedTask.property_name}`] || taskTemplates[mobileSelectedTask.template_id]) ? (
-                      <DynamicCleaningForm
-                        cleaningId={mobileSelectedTask.task_id}
-                        propertyName={mobileSelectedTask.property_name || ''}
-                        template={taskTemplates[`${mobileSelectedTask.template_id}__${mobileSelectedTask.property_name}`] || taskTemplates[mobileSelectedTask.template_id]}
-                        formMetadata={mobileSelectedTask.form_metadata}
-                        onSave={async (formData) => {
-                          await saveTaskForm(mobileSelectedTask.task_id, formData);
-                        }}
-                      />
-                    ) : (
-                      <p className="text-center text-neutral-500 py-8">
-                        No template configured for this task
-                      </p>
-                    )
-                  ) : (
-                    <p className="text-center text-neutral-500 py-8">
-                      No template configured for this task
-                    </p>
-                  )}
-
-                  {/* Action Buttons - Only show for active tasks */}
-                  <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
-                    <div className="flex flex-wrap gap-2">
-                      {mobileSelectedTask.status === 'in_progress' && (
-                        <>
-                          <Button
-                            onClick={() => {
-                              updateTaskAction(mobileSelectedTask.task_id, 'paused');
-                              setMobileSelectedTask({ ...mobileSelectedTask, status: 'paused' });
-                            }}
-                            variant="outline"
-                            className="flex-1"
-                          >
-                            Pause
-                          </Button>
-                          <Button
-                            onClick={() => {
-                              updateTaskAction(mobileSelectedTask.task_id, 'complete');
-                              setMobileSelectedTask({ ...mobileSelectedTask, status: 'complete' });
-                            }}
-                            className="flex-1"
-                          >
-                            Complete
-                          </Button>
-                        </>
-                      )}
-                      {mobileSelectedTask.status === 'paused' && (
-                        <>
-                          <Button
-                            onClick={() => {
-                              updateTaskAction(mobileSelectedTask.task_id, 'in_progress');
-                              setMobileSelectedTask({ ...mobileSelectedTask, status: 'in_progress' });
-                            }}
-                            className="flex-1"
-                          >
-                            Resume
-                          </Button>
-                          <Button
-                            onClick={() => {
-                              updateTaskAction(mobileSelectedTask.task_id, 'complete');
-                              setMobileSelectedTask({ ...mobileSelectedTask, status: 'complete' });
-                            }}
-                            variant="outline"
-                            className="flex-1"
-                          >
-                            Complete
-                          </Button>
-                        </>
-                      )}
-                      {(mobileSelectedTask.status === 'complete' || mobileSelectedTask.status === 'reopened') && (
-                        <Button
-                          onClick={() => {
-                            updateTaskAction(mobileSelectedTask.task_id, 'not_started');
-                            setMobileSelectedTask({ ...mobileSelectedTask, status: 'not_started' });
-                          }}
-                          className="w-full"
-                        >
-                          Reopen Task
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Bottom padding for safe area */}
-              <div className="h-8" />
-            </div>
-          </div>
-        </div>
+        <MobileTaskDetail
+          task={mobileSelectedTask}
+          users={users}
+          onClose={() => {
+            setMobileSelectedTask(null);
+            setMobileRefreshTrigger(prev => prev + 1);
+          }}
+          onUpdateStatus={updateTaskAction}
+          onSaveForm={saveTaskForm}
+          taskTemplates={taskTemplates}
+          loadingTaskTemplate={loadingTaskTemplate}
+          onUpdateSchedule={handleTaskScheduleUpdate}
+          onUpdateAssignment={handleTaskAssignmentUpdate}
+        />
       )}
 
-      {/* Project Dialog (for creating projects from Projects tab) */}
-      <Dialog open={showProjectDialog} onOpenChange={handleProjectDialogClose}>
-        <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingProject ? 'Edit Project' : 'Create Project'}</DialogTitle>
-            <DialogDescription>
-              {editingProject ? 'Update project details' : 'Create a new project for a property'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Property *</label>
-              <Select
-                value={projectForm.property_name}
-                onValueChange={(value) => {
-                  const match = allProperties.find(p => p.name === value);
-                  setProjectForm({
-                    ...projectForm,
-                    property_name: value,
-                    property_id: match?.id || '',
-                  });
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select property" />
-                </SelectTrigger>
-                <SelectContent>
-                  {allProperties.map((property) => (
-                    <SelectItem key={property.id || property.name} value={property.name}>{property.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Title *</label>
-              <Input
-                value={projectForm.title}
-                onChange={(e) => setProjectForm({...projectForm, title: e.target.value})}
-                placeholder="Project title"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Description</label>
-              <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-2">
-                <RichTextEditor
-                  content={projectForm.description}
-                  onChange={(json) => setProjectForm({...projectForm, description: json})}
-                  placeholder="Project description..."
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Status</label>
-                <Select
-                  value={projectForm.status}
-                  onValueChange={(value) => setProjectForm({...projectForm, status: value})}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="not_started">Not Started</SelectItem>
-                    <SelectItem value="in_progress">In Progress</SelectItem>
-                    <SelectItem value="on_hold">On Hold</SelectItem>
-                    <SelectItem value="complete">Complete</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Priority</label>
-                <Select
-                  value={projectForm.priority}
-                  onValueChange={(value) => setProjectForm({...projectForm, priority: value})}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="urgent">Urgent</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Department</label>
-              <Select
-                value={projectForm.department_id || 'none'}
-                onValueChange={(value) => setProjectForm({...projectForm, department_id: value === 'none' ? '' : value})}
-              >
-                <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No Department</SelectItem>
-                  {departments.map((dept) => (
-                    <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Assigned Staff</label>
-              <Input
-                value={projectForm.assigned_staff?.join(', ') || ''}
-                onChange={(e) => setProjectForm({...projectForm, assigned_staff: e.target.value ? e.target.value.split(',').map(s => s.trim()).filter(Boolean) : []})}
-                placeholder="Staff member IDs (comma separated)"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Scheduled Date</label>
-              <Input
-                type="date"
-                value={projectForm.scheduled_date}
-                onChange={(e) => setProjectForm({...projectForm, scheduled_date: e.target.value})}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Scheduled Time</label>
-              <Input
-                type="time"
-                value={projectForm.scheduled_time}
-                onChange={(e) => setProjectForm({...projectForm, scheduled_time: e.target.value})}
-              />
-            </div>
-          </div>
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => handleProjectDialogClose(false)} className="w-full sm:w-auto">Cancel</Button>
-            <Button onClick={saveProject} disabled={savingProject} className="w-full sm:w-auto">
-              {savingProject ? 'Saving...' : (editingProject ? 'Update' : 'Create')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Mobile Project Detail - Full Screen Takeover */}
+      {mobileSelectedProject && (
+        <MobileProjectDetail
+          project={mobileSelectedProject}
+          users={users}
+          onClose={() => {
+            setMobileSelectedProject(null);
+            setMobileRefreshTrigger(prev => prev + 1);
+          }}
+          onSave={projectsHook.saveProjectById}
+          onDelete={(project) => {
+            projectsHook.deleteProject(project);
+            setMobileSelectedProject(null);
+          }}
+          allProperties={allProperties}
+          onPropertyChange={async (propertyId, propertyName) => {
+            await projectsHook.updateProjectField(mobileSelectedProject.id, 'property_id', propertyId || '');
+            if (propertyName !== undefined) {
+              await projectsHook.updateProjectField(mobileSelectedProject.id, 'property_name', propertyName || '');
+            }
+            setMobileSelectedProject(prev => prev ? {
+              ...prev,
+              property_id: propertyId,
+              property_name: propertyName,
+            } : null);
+          }}
+          bins={binsHook.bins}
+          onBinChange={async (binId, _binName) => {
+            await projectsHook.updateProjectField(mobileSelectedProject.id, 'bin_id', binId || '');
+            setMobileSelectedProject(prev => prev ? {
+              ...prev,
+              bin_id: binId,
+            } : null);
+            binsHook.fetchBins();
+          }}
+        />
+      )}
     </>
   );
 }

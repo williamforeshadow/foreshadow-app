@@ -345,15 +345,10 @@ export default function MobileTimelineView({
                       style={{ width: cellWidth, minWidth: cellWidth, height: rowHeight }}
                       onClick={() => {
                         if (hasItems) {
-                          if (cellTasks.length + cellProjects.length === 1) {
-                            if (cellTasks.length === 1) onTaskClick?.(cellTasks[0]);
-                            else onProjectClick?.(cellProjects[0]);
-                          } else {
-                            const dateStr = toDateString(date);
-                            setExpandedCell(prev =>
-                              prev?.property === property && prev?.dateStr === dateStr ? null : { property, dateStr }
-                            );
-                          }
+                          const dateStr = toDateString(date);
+                          setExpandedCell(prev =>
+                            prev?.property === property && prev?.dateStr === dateStr ? null : { property, dateStr }
+                          );
                           return;
                         }
                         const res = propReservations.find(r => {
@@ -479,7 +474,7 @@ export default function MobileTimelineView({
                                     'flex items-center gap-1.5 py-1.5 px-1.5 cursor-pointer transition-all duration-150 active:scale-[0.97]',
                                     getRowStyles(task.status)
                                   )}
-                                  onClick={() => onTaskClick?.(task)}
+                                  onClick={() => setExpandedCell({ property, dateStr: cellDateStr })}
                                 >
                                   <TaskDeptIcon size={14} className="shrink-0 text-neutral-600 dark:text-neutral-300" />
                                   {firstUser && (
@@ -506,7 +501,7 @@ export default function MobileTimelineView({
                                     'flex items-center gap-1.5 py-1.5 px-1.5 cursor-pointer transition-all duration-150 active:scale-[0.97]',
                                     getRowStyles(project.status)
                                   )}
-                                  onClick={() => onProjectClick?.(project)}
+                                  onClick={() => setExpandedCell({ property, dateStr: cellDateStr })}
                                 >
                                   <ProjectDeptIcon size={14} className="shrink-0 text-neutral-600 dark:text-neutral-300" />
                                   {firstAssignment && (
