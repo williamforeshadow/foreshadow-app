@@ -183,7 +183,7 @@ export default function MobileTimelineView({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="sticky top-0 z-40 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-3 py-2.5">
+      <div className="sticky top-0 z-30 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 pl-14 pr-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-0.5">
             <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={goToPrevious}>
