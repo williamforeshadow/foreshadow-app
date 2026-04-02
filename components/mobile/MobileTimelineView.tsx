@@ -545,7 +545,7 @@ export default function MobileTimelineView({
               onClick={() => setExpandedCell(null)}
             />
             {/* Sheet */}
-            <div className="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-neutral-900 border-t border-neutral-200 dark:border-neutral-700 rounded-t-2xl shadow-2xl max-h-[50vh] overflow-y-auto">
+            <div className="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-neutral-900 border-t border-neutral-200 dark:border-neutral-700 rounded-t-2xl shadow-2xl max-h-[50vh] overflow-y-auto safe-area-bottom">
               {/* Drag handle */}
               <div className="flex justify-center pt-2 pb-1">
                 <div className="w-10 h-1 rounded-full bg-neutral-300 dark:bg-neutral-600" />

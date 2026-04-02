@@ -109,7 +109,7 @@ const MobileNav = memo(function MobileNav({ activeTab, onTabChange }: MobileNavP
       {/* Drawer */}
       <nav
         ref={navRef}
-        className="fixed left-0 top-0 bottom-0 z-50 flex flex-col bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 transition-transform duration-250 ease-out safe-area-left will-change-transform"
+        className="fixed left-0 top-0 bottom-0 z-50 flex flex-col bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 transition-transform duration-250 ease-out will-change-transform pl-[env(safe-area-inset-left)]"
         style={{
           width: DRAWER_WIDTH,
           transform: open ? 'translateX(0)' : `translateX(-${DRAWER_WIDTH}px)`,

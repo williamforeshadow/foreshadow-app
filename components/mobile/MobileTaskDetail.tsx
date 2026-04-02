@@ -171,7 +171,7 @@ export default function MobileTaskDetail({
       style={{ height: '100dvh' }}
     >
       {/* ── Unified Header ── */}
-      <div className="shrink-0 p-4 space-y-3 backdrop-blur-xl bg-white/80 dark:bg-neutral-900/80 border-b border-neutral-200 dark:border-neutral-800">
+      <div className="shrink-0 p-4 space-y-3 backdrop-blur-xl bg-white/80 dark:bg-neutral-900/80 border-b border-neutral-200 dark:border-neutral-800 pt-[calc(env(safe-area-inset-top)+16px)]">
         {/* Back row */}
         <button
           onClick={onClose}
@@ -312,7 +312,7 @@ export default function MobileTaskDetail({
       </div>
 
       {/* ── Scrollable Body — form ── */}
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain hide-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain hide-scrollbar safe-area-bottom" style={{ WebkitOverflowScrolling: 'touch' }}>
         <div className="p-5">
           {task.template_id ? (
             loadingTaskTemplate === task.template_id ? (

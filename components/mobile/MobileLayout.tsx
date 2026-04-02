@@ -15,10 +15,10 @@ const MobileLayout = memo(function MobileLayout({
   onTabChange,
 }: MobileLayoutProps) {
   return (
-    <div className="h-dvh bg-neutral-50 dark:bg-neutral-950 overflow-hidden">
+    <div className="h-dvh bg-neutral-50 dark:bg-neutral-950 overflow-hidden flex flex-col safe-area-top">
       <MobileNav activeTab={activeTab} onTabChange={onTabChange} />
 
-      <main className="h-full overflow-auto hide-scrollbar">
+      <main className="flex-1 min-h-0 overflow-auto hide-scrollbar pb-[env(safe-area-inset-bottom)]">
         {children}
       </main>
     </div>

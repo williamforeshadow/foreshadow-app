@@ -150,7 +150,7 @@ export default function MobileProjectDetail({
       style={{ height: '100dvh' }}
     >
       {/* ── Header ── */}
-      <div className="shrink-0 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800">
+      <div className="shrink-0 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 safe-area-top">
         {/* Top bar */}
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
           <button
@@ -523,7 +523,7 @@ export default function MobileProjectDetail({
           We wrap both in a flex-1 container so they share the remaining height. */}
       <div className="flex-1 min-h-0 flex flex-col">
         <div
-          className="flex-1 min-h-0 overflow-y-auto overscroll-contain hide-scrollbar"
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain hide-scrollbar safe-area-bottom"
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
         {/* Details Section */}
