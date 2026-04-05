@@ -6,38 +6,38 @@
 :root {
   --sidebar-width: 256px;
   --sidebar-width-collapsed: 64px;
-  --background: oklch(0.9461 0 0);
-  --foreground: oklch(0.1344 0 0);
-  --card: oklch(1.0000 0 0);
-  --card-foreground: oklch(0.1218 0.0190 31.6766);
-  --popover: oklch(0.9711 0.0074 80.7211);
-  --popover-foreground: oklch(0.1757 0.0271 32.1855);
-  --primary: oklch(0.5234 0.1347 144.1672);
+  --background: oklch(0.9581 0 0);
+  --foreground: oklch(0.3134 0.0234 253.6270);
+  --card: oklch(0.9774 0.0042 236.4961);
+  --card-foreground: oklch(0.2022 0.0110 151.1628);
+  --popover: oklch(1.0000 0 0);
+  --popover-foreground: oklch(0.2505 0.0149 235.6259);
+  --primary: oklch(0.6112 0.1217 248.9572);
   --primary-foreground: oklch(1.0000 0 0);
-  --secondary: oklch(0.9571 0.0210 147.6360);
-  --secondary-foreground: oklch(0.4254 0.1159 144.3078);
-  --muted: oklch(0.9370 0.0142 74.4218);
-  --muted-foreground: oklch(0.1103 0.0174 35.7942);
-  --accent: oklch(0.8952 0.0504 146.0366);
-  --accent-foreground: oklch(0.4254 0.1159 144.3078);
-  --destructive: oklch(0.5386 0.1937 26.7249);
+  --secondary: oklch(0.9122 0.0111 243.6627);
+  --secondary-foreground: oklch(0.4186 0.0133 235.1330);
+  --muted: oklch(0.9209 0.0128 244.2626);
+  --muted-foreground: oklch(0.6027 0.0062 211.0375);
+  --accent: oklch(0.9122 0.0111 243.6627);
+  --accent-foreground: oklch(0.2505 0.0149 235.6259);
+  --destructive: oklch(0.1931 0.0037 164.6298);
   --destructive-foreground: oklch(1.0000 0 0);
-  --border: oklch(0.8805 0.0208 74.6428);
-  --input: oklch(0.8805 0.0208 74.6428);
-  --ring: oklch(0.5234 0.1347 144.1672);
-  --chart-1: oklch(0.6731 0.1624 144.2083);
-  --chart-2: oklch(0.5752 0.1446 144.1813);
-  --chart-3: oklch(0.5234 0.1347 144.1672);
-  --chart-4: oklch(0.4254 0.1159 144.3078);
-  --chart-5: oklch(0.2157 0.0453 145.7256);
-  --sidebar: oklch(0.9370 0.0142 74.4218);
-  --sidebar-foreground: oklch(0.3000 0.0358 30.2042);
-  --sidebar-primary: oklch(0.5234 0.1347 144.1672);
+  --border: oklch(0.8840 0.0067 208.7806);
+  --input: oklch(0.7450 0.0121 252.1201);
+  --ring: oklch(0.6112 0.1217 248.9572);
+  --chart-1: oklch(0.5098 0.1320 257.5458);
+  --chart-2: oklch(0.7360 0.1191 266.5038);
+  --chart-3: oklch(0.8467 0.0177 248.0373);
+  --chart-4: oklch(0.8977 0.0274 260.3158);
+  --chart-5: oklch(0.4893 0.1504 261.9302);
+  --sidebar: oklch(0.9590 0.0059 239.8204);
+  --sidebar-foreground: oklch(0.3571 0.0041 196.9738);
+  --sidebar-primary: oklch(0.6112 0.1217 248.9572);
   --sidebar-primary-foreground: oklch(1.0000 0 0);
-  --sidebar-accent: oklch(0.8952 0.0504 146.0366);
-  --sidebar-accent-foreground: oklch(0.4254 0.1159 144.3078);
-  --sidebar-border: oklch(0.8805 0.0208 74.6428);
-  --sidebar-ring: oklch(0.5234 0.1347 144.1672);
+  --sidebar-accent: oklch(0.9122 0.0111 243.6627);
+  --sidebar-accent-foreground: oklch(0.3250 0 0);
+  --sidebar-border: oklch(0.9401 0 0);
+  --sidebar-ring: oklch(0.7731 0 0);
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -180,23 +180,6 @@ a {
 /* ============================================================
    Liquid Glass Utilities
    ============================================================ */
-
-/* Subtle mesh gradient background that glass elements blur against */
-.glass-bg {
-  background:
-    radial-gradient(ellipse at 20% 50%, oklch(0.92 0.03 200 / 0.4) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, oklch(0.93 0.04 150 / 0.3) 0%, transparent 50%),
-    radial-gradient(ellipse at 60% 80%, oklch(0.94 0.03 280 / 0.25) 0%, transparent 50%),
-    var(--background);
-}
-
-.dark .glass-bg {
-  background:
-    radial-gradient(ellipse at 20% 50%, oklch(0.25 0.03 200 / 0.3) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, oklch(0.22 0.04 150 / 0.25) 0%, transparent 50%),
-    radial-gradient(ellipse at 60% 80%, oklch(0.20 0.03 280 / 0.2) 0%, transparent 50%),
-    var(--background);
-}
 
 /* Neutral mesh gradient — subtle depth for glass blur, no color cast */
 .glass-bg-neutral {

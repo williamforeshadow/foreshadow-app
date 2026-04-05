@@ -210,7 +210,7 @@ function TurnoversWindowContent({
   }, [projectsHook]);
 
   return (
-    <div className="flex h-full overflow-hidden glass-bg">
+    <div className="flex h-full overflow-hidden glass-bg-neutral">
       {/* Left Panel - Cards */}
       <div className={`${selectedCard ? 'flex-1 min-w-0 border-r border-neutral-200/30 dark:border-white/10' : 'w-full'} overflow-y-auto hide-scrollbar p-6 space-y-4`}>
         {/* Response Display */}
