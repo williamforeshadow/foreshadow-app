@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect, RefObject } from 'react';
-import { TaskDetailPanel } from '../turnovers';
 import { ProjectDetailPanel } from '../projects';
-import type { Task, Project, User, ProjectFormFields, Comment, Attachment, TimeEntry } from '@/lib/types';
+import type { Task, Project, User, ProjectFormFields, Comment, Attachment, TimeEntry, ProjectBin } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 
 interface FloatingWindowProps {
@@ -11,32 +10,24 @@ interface FloatingWindowProps {
   item: Task | Project;
   propertyName: string;
   onClose: () => void;
-  // Task props
   currentUser: User | null;
-  taskTemplates: Record<string, Template>;
-  loadingTaskTemplate: string | null;
-  onUpdateTaskStatus: (taskId: string, status: string) => void;
-  onSaveTaskForm: (taskId: string, formData: Record<string, unknown>) => Promise<void>;
-  setLocalTask: (task: Task) => void;
-  onUpdateTaskSchedule?: (taskId: string, scheduledDate: string | null, scheduledTime: string | null) => void;
-  onUpdateTaskAssignment?: (taskId: string, userIds: string[]) => void;
-  // Project props
+  // Unified detail panel props (used for both tasks and projects)
   users: User[];
-  projectFields: ProjectFormFields | null;
-  setProjectFields: (fields: ProjectFormFields | null | ((prev: ProjectFormFields | null) => ProjectFormFields | null)) => void;
-  savingProject: boolean;
-  onSaveProject: () => void;
-  onDeleteProject: (project: Project) => void;
+  editingFields: ProjectFormFields | null;
+  setEditingFields: (fields: ProjectFormFields | null | ((prev: ProjectFormFields | null) => ProjectFormFields | null)) => void;
+  savingEdit: boolean;
+  onSave: () => void;
+  onDelete: (item: Project) => void;
   onOpenActivity: () => void;
   // Comments
-  projectComments: Comment[];
+  comments: Comment[];
   loadingComments: boolean;
   newComment: string;
   setNewComment: (comment: string) => void;
   postingComment: boolean;
   onPostComment: () => void;
   // Attachments
-  projectAttachments: Attachment[];
+  attachments: Attachment[];
   loadingAttachments: boolean;
   uploadingAttachment: boolean;
   attachmentInputRef: RefObject<HTMLInputElement | null>;
@@ -51,6 +42,18 @@ interface FloatingWindowProps {
   // Popover states
   staffOpen: boolean;
   setStaffOpen: (open: boolean) => void;
+  // Template/checklist (for tasks)
+  template?: Template | null;
+  formMetadata?: Record<string, unknown>;
+  onSaveForm?: (formData: Record<string, unknown>) => Promise<void>;
+  loadingTemplate?: boolean;
+  onValidationChange?: (allRequiredFilled: boolean) => void;
+  onShowTurnover?: () => void;
+  // Optional extras
+  allProperties?: Array<{ id: string | null; name: string }>;
+  bins?: ProjectBin[];
+  onBinChange?: (binId: string | null, binName: string | null) => void;
+  onPropertyChange?: (propertyId: string | null, propertyName: string | null) => void;
 }
 
 export function FloatingWindow({
@@ -58,46 +61,43 @@ export function FloatingWindow({
   item,
   propertyName,
   onClose,
-  // Task props
   currentUser,
-  taskTemplates,
-  loadingTaskTemplate,
-  onUpdateTaskStatus,
-  onSaveTaskForm,
-  setLocalTask,
-  onUpdateTaskSchedule,
-  onUpdateTaskAssignment,
-  // Project props
   users,
-  projectFields,
-  setProjectFields,
-  savingProject,
-  onSaveProject,
-  onDeleteProject,
+  editingFields,
+  setEditingFields,
+  savingEdit,
+  onSave,
+  onDelete,
   onOpenActivity,
-  // Comments
-  projectComments,
+  comments,
   loadingComments,
   newComment,
   setNewComment,
   postingComment,
   onPostComment,
-  // Attachments
-  projectAttachments,
+  attachments,
   loadingAttachments,
   uploadingAttachment,
   attachmentInputRef,
   onAttachmentUpload,
   onViewAttachment,
-  // Time tracking
   activeTimeEntry,
   displaySeconds,
   formatTime,
   onStartTimer,
   onStopTimer,
-  // Popover states
   staffOpen,
   setStaffOpen,
+  template,
+  formMetadata,
+  onSaveForm,
+  loadingTemplate,
+  onValidationChange,
+  onShowTurnover,
+  allProperties,
+  bins,
+  onBinChange,
+  onPropertyChange,
 }: FloatingWindowProps) {
   // Position state - calculate initial position to be 3/4 to the right
   const [position, setPosition] = useState(() => {
@@ -173,7 +173,7 @@ export function FloatingWindow({
   }, [isDragging, isResizing, handleMouseMove, handleMouseUp]);
 
   const title = type === 'task'
-    ? (item as Task).template_name || 'Task'
+    ? (item as Task).title || (item as Task).template_name || 'Task'
     : (item as Project).title;
 
   return (
@@ -209,57 +209,67 @@ export function FloatingWindow({
         </button>
       </div>
       
-      {/* Content - Render the appropriate detail panel */}
+      {/* Content - Unified detail panel for both tasks and projects */}
       <div className="flex-1 overflow-auto overscroll-contain [&>div]:h-full [&>div]:w-full [&>div]:border-l-0">
-        {type === 'task' ? (
-          <TaskDetailPanel
-            task={item as Task}
-            propertyName={propertyName}
-            currentUser={currentUser}
-            taskTemplates={taskTemplates}
-            loadingTaskTemplate={loadingTaskTemplate}
-            onClose={onClose}
-            onUpdateStatus={onUpdateTaskStatus}
-            onSaveForm={onSaveTaskForm}
-            setTask={setLocalTask}
-            users={users}
-            onUpdateSchedule={onUpdateTaskSchedule}
-            onUpdateAssignment={onUpdateTaskAssignment}
-          />
-        ) : projectFields ? (
+        {editingFields ? (
           <ProjectDetailPanel
-            project={item as Project}
-            editingFields={projectFields}
-            setEditingFields={setProjectFields}
+            project={type === 'task' ? {
+              id: (item as Task).task_id,
+              property_name: propertyName || null,
+              bin_id: (item as Task).bin_id || null,
+              title: (item as Task).title || (item as Task).template_name || 'Task',
+              description: (item as Task).description || null,
+              status: (item as Task).status as Project['status'],
+              priority: ((item as Task).priority || 'medium') as Project['priority'],
+              department_id: (item as Task).department_id || null,
+              department_name: (item as Task).department_name || null,
+              scheduled_date: (item as Task).scheduled_date || null,
+              scheduled_time: (item as Task).scheduled_time || null,
+              project_assignments: ((item as Task).assigned_users || []).map(u => ({
+                user_id: u.user_id,
+                user: { id: u.user_id, name: u.name, avatar: u.avatar, role: u.role }
+              })),
+              created_at: '',
+              updated_at: '',
+            } : item as Project}
+            editingFields={editingFields}
+            setEditingFields={setEditingFields}
             users={users}
-            savingEdit={savingProject}
-            onSave={onSaveProject}
-            onDelete={onDeleteProject}
+            allProperties={allProperties}
+            savingEdit={savingEdit}
+            onSave={onSave}
+            onDelete={onDelete}
             onClose={onClose}
             onOpenActivity={onOpenActivity}
-            // Comments
-            comments={projectComments}
+            onPropertyChange={onPropertyChange}
+            bins={bins}
+            onBinChange={onBinChange}
+            comments={comments}
             loadingComments={loadingComments}
             newComment={newComment}
             setNewComment={setNewComment}
             postingComment={postingComment}
             onPostComment={onPostComment}
-            // Attachments
-            attachments={projectAttachments}
+            attachments={attachments}
             loadingAttachments={loadingAttachments}
             uploadingAttachment={uploadingAttachment}
             attachmentInputRef={attachmentInputRef}
             onAttachmentUpload={onAttachmentUpload}
             onViewAttachment={onViewAttachment}
-            // Time tracking
             activeTimeEntry={activeTimeEntry}
             displaySeconds={displaySeconds}
             formatTime={formatTime}
             onStartTimer={onStartTimer}
             onStopTimer={onStopTimer}
-            // Popover states
             staffOpen={staffOpen}
             setStaffOpen={setStaffOpen}
+            template={template}
+            formMetadata={formMetadata}
+            onSaveForm={onSaveForm}
+            loadingTemplate={loadingTemplate}
+            currentUser={currentUser}
+            onValidationChange={onValidationChange}
+            onShowTurnover={onShowTurnover}
           />
         ) : (
           <div className="flex items-center justify-center h-full">

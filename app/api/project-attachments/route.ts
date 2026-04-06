@@ -2,27 +2,35 @@ import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { logProjectActivity } from '@/lib/logProjectActivity';
 
-// GET - List all attachments for a project
+// GET - List all attachments for a project or task
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get('project_id');
+    const taskId = searchParams.get('task_id');
 
-    if (!projectId) {
+    if (!projectId && !taskId) {
       return NextResponse.json(
-        { error: 'project_id is required' },
+        { error: 'project_id or task_id is required' },
         { status: 400 }
       );
     }
 
-    const { data, error } = await getSupabaseServer()
+    let query = getSupabaseServer()
       .from('project_attachments')
       .select(`
         *,
         users(id, name, avatar)
       `)
-      .eq('project_id', projectId)
       .order('created_at', { ascending: false });
+
+    if (taskId) {
+      query = query.eq('task_id', taskId);
+    } else {
+      query = query.eq('project_id', projectId!);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       return NextResponse.json(
@@ -45,15 +53,18 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const projectId = formData.get('project_id') as string;
+    const projectId = formData.get('project_id') as string | null;
+    const taskId = formData.get('task_id') as string | null;
     const uploadedBy = formData.get('uploaded_by') as string;
 
-    if (!file || !projectId) {
+    if (!file || (!projectId && !taskId)) {
       return NextResponse.json(
-        { error: 'file and project_id are required' },
+        { error: 'file and (project_id or task_id) are required' },
         { status: 400 }
       );
     }
+
+    const entityId = taskId || projectId!;
 
     // Determine file type (image or video)
     const isVideo = file.type.startsWith('video/');
@@ -97,11 +108,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check attachment count for this project (max 30)
-    const { count, error: countError } = await getSupabaseServer()
+    // Check attachment count for this entity (max 30)
+    let countQuery = getSupabaseServer()
       .from('project_attachments')
-      .select('*', { count: 'exact', head: true })
-      .eq('project_id', projectId);
+      .select('*', { count: 'exact', head: true });
+    if (taskId) {
+      countQuery = countQuery.eq('task_id', taskId);
+    } else {
+      countQuery = countQuery.eq('project_id', projectId!);
+    }
+    const { count, error: countError } = await countQuery;
 
     if (countError) {
       console.error('Error checking attachment count:', countError);
@@ -116,7 +132,7 @@ export async function POST(request: Request) {
     const fileExt = file.name.split('.').pop();
     const timestamp = Date.now();
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const fileName = `${projectId}/${timestamp}_${sanitizedName}`;
+    const fileName = `${entityId}/${timestamp}_${sanitizedName}`;
 
     // Convert File to ArrayBuffer then to Buffer
     const arrayBuffer = await file.arrayBuffer();
@@ -144,17 +160,20 @@ export async function POST(request: Request) {
       .getPublicUrl(fileName);
 
     // Insert record into database
+    const insertData: Record<string, unknown> = {
+      url: publicUrl,
+      file_name: file.name,
+      file_type: isVideo ? 'video' : 'image',
+      mime_type: file.type,
+      file_size: file.size,
+      uploaded_by: uploadedBy || null,
+    };
+    if (taskId) insertData.task_id = taskId;
+    if (projectId) insertData.project_id = projectId;
+
     const { data: attachment, error: dbError } = await getSupabaseServer()
       .from('project_attachments')
-      .insert({
-        project_id: projectId,
-        url: publicUrl,
-        file_name: file.name,
-        file_type: isVideo ? 'video' : 'image',
-        mime_type: file.type,
-        file_size: file.size,
-        uploaded_by: uploadedBy || null
-      })
+      .insert(insertData)
       .select(`
         *,
         users(id, name, avatar)
@@ -171,8 +190,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Log activity
-    if (uploadedBy) {
+    // Log activity (only for projects — tasks don't have activity log yet)
+    if (uploadedBy && projectId) {
       const fileType = isVideo ? 'video' : 'image';
       await logProjectActivity(projectId, uploadedBy, 'attachment_upload', `uploaded ${fileType}: ${file.name}`, null, publicUrl);
     }

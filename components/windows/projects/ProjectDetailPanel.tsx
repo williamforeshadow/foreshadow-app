@@ -7,6 +7,8 @@ import { useDepartments } from '@/lib/departmentsContext';
 import { cn } from '@/lib/utils';
 import type { Project, User, ProjectFormFields, Comment, Attachment, TimeEntry, PropertyOption, ProjectBin } from '@/lib/types';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
+import DynamicCleaningForm from '@/components/DynamicCleaningForm';
+import type { Template } from '@/components/DynamicCleaningForm';
 
 // ── Reusable inline dropdown panel (matches mobile InlineDropdown) ──
 function InlineDropdown({ children, onClose, align = 'left' }: { children: React.ReactNode; onClose: () => void; align?: 'left' | 'right' }) {
@@ -81,6 +83,15 @@ interface ProjectDetailPanelProps {
   // Popover states
   staffOpen: boolean;
   setStaffOpen: (open: boolean) => void;
+  // Template/Checklist (optional — slides in when present)
+  template?: Template | null;
+  formMetadata?: Record<string, unknown>;
+  onSaveForm?: (formData: Record<string, unknown>) => Promise<void>;
+  loadingTemplate?: boolean;
+  currentUser?: User | null;
+  onValidationChange?: (allRequiredFilled: boolean) => void;
+  // Turnover context (optional)
+  onShowTurnover?: () => void;
 }
 
 export function ProjectDetailPanel({
@@ -116,8 +127,21 @@ export function ProjectDetailPanel({
   onStopTimer,
   staffOpen,
   setStaffOpen,
+  template,
+  formMetadata,
+  onSaveForm,
+  loadingTemplate,
+  currentUser,
+  onValidationChange,
+  onShowTurnover,
 }: ProjectDetailPanelProps) {
   const { departments } = useDepartments();
+
+  // Checklist slide state
+  const [showChecklist, setShowChecklist] = useState(false);
+  const hasChecklist = !!template;
+  const isAssigned = currentUser ? editingFields.assigned_staff?.includes(currentUser.id) : false;
+  const isChecklistReadOnly = !isAssigned || editingFields.status === 'complete' || editingFields.status === 'contingent';
 
   // Picker open states
   const [propertyOpen, setPropertyOpen] = useState(false);
@@ -170,12 +194,15 @@ export function ProjectDetailPanel({
     return users.filter(u => u.name?.toLowerCase().includes(lower));
   }, [users, staffSearch]);
 
-  // Status config
+  // Status config (unified: project + task statuses)
   const statusConfig: Record<string, { bg: string; dot: string; label: string }> = {
+    contingent: { bg: 'bg-neutral-400/10 text-white', dot: 'bg-neutral-500', label: 'Contingent' },
     not_started: { bg: 'bg-amber-500/15 text-white', dot: 'bg-amber-400', label: 'Not Started' },
     in_progress: { bg: 'bg-indigo-500/15 text-white', dot: 'bg-indigo-400', label: 'In Progress' },
+    paused: { bg: 'bg-neutral-400/15 text-white', dot: 'bg-neutral-400', label: 'Paused' },
     on_hold: { bg: 'bg-neutral-400/15 text-white', dot: 'bg-neutral-400', label: 'On Hold' },
     complete: { bg: 'bg-emerald-500/15 text-white', dot: 'bg-emerald-400', label: 'Complete' },
+    reopened: { bg: 'bg-orange-500/15 text-white', dot: 'bg-orange-400', label: 'Reopened' },
   };
 
   // Priority config
@@ -186,7 +213,7 @@ export function ProjectDetailPanel({
     urgent: { bg: 'bg-red-500/15 text-white', dot: 'bg-red-500', label: 'Urgent' },
   };
 
-  const STATUS_OPTIONS = ['not_started', 'in_progress', 'on_hold', 'complete'];
+  const STATUS_OPTIONS = ['contingent', 'not_started', 'in_progress', 'paused', 'on_hold', 'complete', 'reopened'];
   const PRIORITY_OPTIONS = ['low', 'medium', 'high', 'urgent'];
 
   const status = statusConfig[editingFields.status] || statusConfig.not_started;
@@ -194,8 +221,22 @@ export function ProjectDetailPanel({
 
   return (
     <div className="w-full h-full flex flex-col bg-transparent">
-      {/* ── Top actions (activity, delete, close) ── */}
+      {/* ── Top actions (checklist, activity, delete, close) ── */}
       <div className="flex-shrink-0 flex items-center justify-end gap-0.5 px-3 pt-2">
+        {hasChecklist && (
+          <button
+            onClick={() => setShowChecklist(!showChecklist)}
+            className={cn(
+              "p-1.5 rounded-md transition-colors",
+              showChecklist ? "bg-indigo-500/15 text-indigo-400" : "hover:bg-muted text-muted-foreground"
+            )}
+            title={showChecklist ? "Back to details" : "View checklist"}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
+          </button>
+        )}
         <button
           onClick={onOpenActivity}
           className="p-1.5 hover:bg-muted rounded-md transition-colors"
@@ -225,8 +266,66 @@ export function ProjectDetailPanel({
         </button>
       </div>
 
-      {/* ── Scrollable body ── */}
-      <div className="flex-1 min-h-0 overlay-scrollbar overscroll-contain">
+      {/* ── Scrollable body (detail view / checklist view) ── */}
+      <div className="flex-1 min-h-0 relative overflow-hidden">
+
+        {/* ── Checklist slide-over ── */}
+        {hasChecklist && (
+          <div
+            className={cn(
+              "absolute inset-0 z-20 bg-background/95 backdrop-blur-sm transition-transform duration-300 ease-in-out overflow-y-auto overlay-scrollbar overscroll-contain",
+              showChecklist ? "translate-x-0" : "translate-x-full"
+            )}
+          >
+            <div className="px-6 pb-6 pt-4">
+              {/* Checklist header */}
+              <div className="flex items-center gap-3 mb-5">
+                <button
+                  onClick={() => setShowChecklist(false)}
+                  className="p-1.5 hover:bg-muted rounded-md transition-colors"
+                >
+                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-foreground truncate">{template?.name || 'Checklist'}</div>
+                  <div className="text-[11px] text-muted-foreground">Template checklist</div>
+                </div>
+                {isChecklistReadOnly && (
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                    Read only
+                  </span>
+                )}
+              </div>
+
+              {/* Checklist form */}
+              {loadingTemplate ? (
+                <div className="flex items-center justify-center py-12">
+                  <p className="text-sm text-muted-foreground">Loading checklist...</p>
+                </div>
+              ) : template ? (
+                <DynamicCleaningForm
+                  cleaningId={project.id}
+                  propertyName={project.property_name || ''}
+                  template={template}
+                  formMetadata={formMetadata}
+                  onSave={async (formData) => {
+                    if (onSaveForm) await onSaveForm(formData);
+                  }}
+                  readOnly={isChecklistReadOnly}
+                  onValidationChange={onValidationChange}
+                />
+              ) : null}
+            </div>
+          </div>
+        )}
+
+        {/* ── Detail view ── */}
+        <div className={cn(
+          "h-full overflow-y-auto overlay-scrollbar overscroll-contain transition-transform duration-300 ease-in-out",
+          showChecklist ? "-translate-x-full" : "translate-x-0"
+        )}>
         <div className="flex flex-col gap-5 px-6 pb-6 pt-4">
 
           {/* ── Header: Department icon + Title + Property + Bin ── */}
@@ -794,9 +893,10 @@ export function ProjectDetailPanel({
             )}
           </div>
         </div>
+        </div>
       </div>
 
-      {/* ── Comment input — sticky bottom ── */}
+      {/* ── Comment input — sticky bottom (hidden when checklist is open) ── */}
       <div className="flex-shrink-0 border-t border-white/10 px-6 py-3.5 bg-transparent">
         <div className="flex items-center gap-2.5 bg-white/[0.04] backdrop-blur-sm rounded-xl px-4 py-3 border border-white/10">
           {/* Hidden file input */}
@@ -839,6 +939,21 @@ export function ProjectDetailPanel({
           </button>
         </div>
       </div>
+
+      {/* ── Associated Turnover footer (when linked to a reservation) ── */}
+      {onShowTurnover && !showChecklist && (
+        <div className="flex-shrink-0 border-t border-white/10 px-6 py-3">
+          <button
+            onClick={onShowTurnover}
+            className="w-full flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-1.5"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+            Associated Turnover
+          </button>
+        </div>
+      )}
     </div>
   );
 }

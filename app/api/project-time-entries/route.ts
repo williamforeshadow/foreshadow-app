@@ -10,11 +10,12 @@ function formatDuration(seconds: number): string {
   return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-// GET - Fetch time entries for a project or check for active timer
+// GET - Fetch time entries for a project/task or check for active timer
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get('project_id');
+    const taskId = searchParams.get('task_id');
     const userId = searchParams.get('user_id');
     const activeOnly = searchParams.get('active') === 'true';
 
@@ -26,7 +27,9 @@ export async function GET(request: Request) {
       `)
       .order('created_at', { ascending: false });
 
-    if (projectId) {
+    if (taskId) {
+      query = query.eq('task_id', taskId);
+    } else if (projectId) {
       query = query.eq('project_id', projectId);
     }
 
@@ -78,40 +81,49 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { project_id, user_id, notes } = body;
+    const { project_id, task_id, user_id, notes } = body;
 
-    if (!project_id || !user_id) {
+    if ((!project_id && !task_id) || !user_id) {
       return NextResponse.json(
-        { error: 'project_id and user_id are required' },
+        { error: '(project_id or task_id) and user_id are required' },
         { status: 400 }
       );
     }
 
-    // Check if user already has an active timer on this project
-    const { data: existingActive } = await getSupabaseServer()
+    // Check if user already has an active timer on this entity
+    let activeQuery = getSupabaseServer()
       .from('project_time_entries')
       .select('id')
-      .eq('project_id', project_id)
       .eq('user_id', user_id)
-      .is('end_time', null)
-      .single();
+      .is('end_time', null);
+
+    if (task_id) {
+      activeQuery = activeQuery.eq('task_id', task_id);
+    } else {
+      activeQuery = activeQuery.eq('project_id', project_id);
+    }
+
+    const { data: existingActive } = await activeQuery.single();
 
     if (existingActive) {
       return NextResponse.json(
-        { error: 'Timer already running for this project', activeEntryId: existingActive.id },
+        { error: 'Timer already running', activeEntryId: existingActive.id },
         { status: 409 }
       );
     }
 
     // Create new time entry with start_time
+    const insertData: Record<string, unknown> = {
+      user_id,
+      notes: notes || null,
+      start_time: new Date().toISOString(),
+    };
+    if (task_id) insertData.task_id = task_id;
+    if (project_id) insertData.project_id = project_id;
+
     const { data, error } = await getSupabaseServer()
       .from('project_time_entries')
-      .insert({
-        project_id,
-        user_id,
-        notes: notes || null,
-        start_time: new Date().toISOString(),
-      })
+      .insert(insertData)
       .select(`
         *,
         users (id, name, avatar)
@@ -123,8 +135,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Log activity
-    await logProjectActivity(project_id, user_id, 'timer_start', 'started the timer');
+    // Log activity (only for projects)
+    if (project_id) {
+      await logProjectActivity(project_id, user_id, 'timer_start', 'started the timer');
+    }
 
     return NextResponse.json({ data });
   } catch (err) {
@@ -157,8 +171,8 @@ export async function PUT(request: Request) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
-      // Log activity
-      if (data) {
+      // Log activity (only for projects)
+      if (data?.project_id) {
         const durationSeconds = Math.floor(
           (new Date(data.end_time).getTime() - new Date(data.start_time).getTime()) / 1000
         );
@@ -173,20 +187,28 @@ export async function PUT(request: Request) {
       return NextResponse.json({ data });
     }
 
-    // Otherwise, find and stop the active timer for this user/project
-    if (!project_id || !user_id) {
+    // Otherwise, find and stop the active timer for this user/project/task
+    const { task_id } = body;
+    if ((!project_id && !task_id) || !user_id) {
       return NextResponse.json(
-        { error: 'entry_id or (project_id and user_id) required' },
+        { error: 'entry_id or ((project_id or task_id) and user_id) required' },
         { status: 400 }
       );
     }
 
-    const { data, error } = await getSupabaseServer()
+    let stopQuery = getSupabaseServer()
       .from('project_time_entries')
       .update({ end_time: new Date().toISOString() })
-      .eq('project_id', project_id)
       .eq('user_id', user_id)
-      .is('end_time', null)
+      .is('end_time', null);
+
+    if (task_id) {
+      stopQuery = stopQuery.eq('task_id', task_id);
+    } else {
+      stopQuery = stopQuery.eq('project_id', project_id);
+    }
+
+    const { data, error } = await stopQuery
       .select(`
         *,
         users (id, name, avatar)
@@ -198,13 +220,13 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Log activity
-    if (data) {
+    // Log activity (only for projects)
+    if (data?.project_id) {
       const durationSeconds = Math.floor(
         (new Date(data.end_time).getTime() - new Date(data.start_time).getTime()) / 1000
       );
       await logProjectActivity(
-        project_id, 
+        data.project_id, 
         user_id, 
         'timer_stop', 
         `stopped the timer at ${formatDuration(durationSeconds)}`

@@ -2,27 +2,35 @@ import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { logProjectActivity } from '@/lib/logProjectActivity';
 
-// GET - List comments for a specific project with user details
+// GET - List comments for a specific project or task with user details
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get('project_id');
+    const taskId = searchParams.get('task_id');
 
-    if (!projectId) {
+    if (!projectId && !taskId) {
       return NextResponse.json(
-        { error: 'project_id is required' },
+        { error: 'project_id or task_id is required' },
         { status: 400 }
       );
     }
 
-    const { data, error } = await getSupabaseServer()
+    let query = getSupabaseServer()
       .from('project_comments')
       .select(`
         *,
         users(id, name, email, role, avatar)
       `)
-      .eq('project_id', projectId)
       .order('created_at', { ascending: true });
+
+    if (taskId) {
+      query = query.eq('task_id', taskId);
+    } else {
+      query = query.eq('project_id', projectId!);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       return NextResponse.json(
@@ -51,22 +59,25 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { project_id, user_id, comment_content } = body;
+    const { project_id, task_id, user_id, comment_content } = body;
 
-    if (!project_id || !user_id || !comment_content) {
+    if ((!project_id && !task_id) || !user_id || !comment_content) {
       return NextResponse.json(
-        { error: 'project_id, user_id, and comment_content are required' },
+        { error: '(project_id or task_id), user_id, and comment_content are required' },
         { status: 400 }
       );
     }
 
+    const insertData: Record<string, unknown> = {
+      user_id,
+      comment_content,
+    };
+    if (task_id) insertData.task_id = task_id;
+    if (project_id) insertData.project_id = project_id;
+
     const { data, error } = await getSupabaseServer()
       .from('project_comments')
-      .insert({
-        project_id,
-        user_id,
-        comment_content
-      })
+      .insert(insertData)
       .select(`
         *,
         users(id, name, email, role, avatar)
@@ -80,11 +91,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Log activity
-    const truncatedComment = comment_content.length > 50 
-      ? comment_content.substring(0, 50) + '...' 
-      : comment_content;
-    await logProjectActivity(project_id, user_id, 'comment', `commented "${truncatedComment}"`, null, comment_content);
+    // Log activity (only for projects — tasks don't have activity log yet)
+    if (project_id) {
+      const truncatedComment = comment_content.length > 50 
+        ? comment_content.substring(0, 50) + '...' 
+        : comment_content;
+      await logProjectActivity(project_id, user_id, 'comment', `commented "${truncatedComment}"`, null, comment_content);
+    }
 
     // Transform to flatten user data
     const transformedData = {

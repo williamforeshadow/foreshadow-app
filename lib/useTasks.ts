@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { TaskStatus, TaskType, AssignedUser } from '@/lib/types';
+import type { TaskStatus, TaskType, AssignedUser, TiptapJSON } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 
 // ============================================================================
@@ -13,6 +13,10 @@ export interface TaskRow {
   reservation_id: string | null;
   template_id: string | null;
   template_name: string;
+  title: string | null;
+  description: TiptapJSON | null;
+  priority: string | null;
+  bin_id: string | null;
   type: TaskType;
   department_id: string | null;
   department_name: string | null;

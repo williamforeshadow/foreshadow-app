@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import type { useProjects, ProjectViewMode } from '@/lib/useProjects';
+import type { ProjectViewMode } from '@/lib/useProjects';
 import { STATUS_LABELS, STATUS_ORDER, PRIORITY_LABELS, PRIORITY_ORDER } from '@/lib/useProjects';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
@@ -19,7 +19,7 @@ import {
 import { ColumnPicker } from './projects/ColumnPicker';
 import { ProjectsKanban } from './projects/ProjectsKanban';
 import { useDepartments } from '@/lib/departmentsContext';
-import type { User, Project, Attachment, Comment, ProjectFormFields } from '@/lib/types';
+import type { User, Project, Attachment, Comment, ProjectFormFields, PropertyOption } from '@/lib/types';
 
 // ============================================================================
 // View Mode Toggle — compact pill that expands on click
@@ -45,7 +45,6 @@ function ViewModeToggle({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Close on click outside
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -100,89 +99,90 @@ function ViewModeToggle({
 interface ProjectsWindowProps {
   users: User[];
   currentUser: User | null;
-  projectsHook: ReturnType<typeof useProjects>;
 }
 
-function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWindowProps) {
-  // ============================================================================
-  // Departments + Bins hooks
-  // ============================================================================
+function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   const { departments } = useDepartments();
   const binsHook = useProjectBins({ currentUser });
 
-  // Which bin is currently selected? null = still on picker screen
+  // Bin navigation state
   const [selectedBinId, setSelectedBinId] = useState<string | null>(null);
-  const [selectedBinName, setSelectedBinName] = useState<string>('All Projects');
+  const [selectedBinName, setSelectedBinName] = useState<string>('All Tasks');
   const [showKanban, setShowKanban] = useState(false);
 
-  // ============================================================================
-  // LOCAL instances of sub-hooks (independent from TurnoversWindow)
-  // ============================================================================
+  // Task data (fetched from tasks-for-bin API)
+  const [tasks, setTasks] = useState<Project[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
+
+  // View mode
+  const [viewMode, setViewMode] = useState<ProjectViewMode>('status');
+
+  // Sub-hooks for detail panel features
   const commentsHook = useProjectComments({ currentUser });
   const attachmentsHook = useProjectAttachments({ currentUser });
   const timeTrackingHook = useProjectTimeTracking({ currentUser });
   const activityHook = useProjectActivity();
 
-  // ============================================================================
-  // LOCAL UI State (independent from other windows)
-  // ============================================================================
+  // UI state
   const [expandedProject, setExpandedProject] = useState<Project | null>(null);
   const [editingProjectFields, setEditingProjectFields] = useState<ProjectFormFields | null>(null);
   const [newComment, setNewComment] = useState('');
   const [staffOpen, setStaffOpen] = useState(false);
   const [viewingAttachmentIndex, setViewingAttachmentIndex] = useState<number | null>(null);
   const [activityPopoverOpen, setActivityPopoverOpen] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
 
-  // Ref to track the latest editing fields (avoids stale closure issues)
   const editingFieldsRef = useRef<ProjectFormFields | null>(null);
 
-  // Keep ref in sync with state
   useEffect(() => {
     editingFieldsRef.current = editingProjectFields;
   }, [editingProjectFields]);
 
-  // ============================================================================
-  // SHARED data from projectsHook (only core project data and mutations)
-  // ============================================================================
-  const {
-    // Core data
-    projects,
-    loadingProjects,
-    allProperties,
-    
-    // View mode
-    viewMode,
-    setViewMode,
+  // Fetch properties list on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/properties');
+        const result = await res.json();
+        if (res.ok && result.properties) {
+          setAllProperties(result.properties);
+        }
+      } catch (err) {
+        console.error('Error fetching properties:', err);
+      }
+    })();
+  }, []);
 
-    // Bin filtering
-    activeBinId,
-    fetchProjectsForBin,
+  // Fetch tasks for a given bin
+  const fetchTasksForBin = useCallback(async (binId: string | null) => {
+    setLoadingTasks(true);
+    try {
+      const params = new URLSearchParams();
+      if (currentUser?.id) params.set('viewer_user_id', currentUser.id);
+      if (binId !== null) {
+        params.set('bin_id', binId);
+      }
+      const res = await fetch(`/api/tasks-for-bin?${params.toString()}`);
+      const result = await res.json();
+      if (res.ok && result.data) {
+        setTasks(result.data);
+      }
+    } catch (err) {
+      console.error('Error fetching tasks for bin:', err);
+    } finally {
+      setLoadingTasks(false);
+    }
+  }, [currentUser?.id]);
 
-    // Project views
-    recordProjectView,
-    getUnreadCommentCount,
-
-    // Project creation (dialog-less)
-    createProjectForProperty,
-    deleteProject,
-
-    // Saving state
-    savingProjectEdit,
-    saveProjectById,
-    updateProjectField,
-  } = projectsHook;
-
-  // ============================================================================
-  // Column Visibility (picker for which columns to show on the Kanban)
-  // ============================================================================
+  // Column visibility
   const columnVis = useColumnVisibility(selectedBinId, viewMode);
 
-  // Compute all possible column options for the picker
   const allColumnOptions = useMemo(() => {
     if (viewMode === 'property') {
       const names = new Set<string>();
       names.add('No Property');
-      projects.forEach((p) => names.add(p.property_name || 'No Property'));
+      tasks.forEach((p) => names.add(p.property_name || 'No Property'));
       allProperties.forEach((p) => { if (p.name) names.add(p.name); });
       const sorted = Array.from(names).sort((a, b) => {
         if (a === 'No Property') return -1;
@@ -200,7 +200,7 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
     if (viewMode === 'department') {
       const names = new Set<string>();
       names.add('No Department');
-      projects.forEach((p) => names.add(p.department_name || 'No Department'));
+      tasks.forEach((p) => names.add(p.department_name || 'No Department'));
       departments.forEach((d) => { if (d.name) names.add(d.name); });
       const sorted = Array.from(names).sort((a, b) => {
         if (a === 'No Department') return -1;
@@ -209,10 +209,9 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
       });
       return sorted.map((name) => ({ id: `dept:${name}`, name }));
     }
-    // assignee
     const names = new Set<string>();
     names.add('Unassigned');
-    projects.forEach((p) => {
+    tasks.forEach((p) => {
       if (p.project_assignments && p.project_assignments.length > 0) {
         p.project_assignments.forEach((a) => names.add(a.user?.name || a.user_id));
       }
@@ -224,9 +223,8 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
       return a.localeCompare(b);
     });
     return sorted.map((name) => ({ id: `assignee:${name}`, name }));
-  }, [viewMode, projects, allProperties, departments, users]);
+  }, [viewMode, tasks, allProperties, departments, users]);
 
-  // Initialize column visibility defaults when columns are known
   useEffect(() => {
     if (allColumnOptions.length > 0 && columnVis.initialized) {
       columnVis.initWithDefaults(allColumnOptions.map((c) => c.id));
@@ -237,13 +235,12 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
   // Bin Navigation
   // ============================================================================
   const handleSelectBin = useCallback(async (binId: string | null) => {
-    // binId: null = "All Projects", '__none__' = unbinned, uuid = specific bin
     setSelectedBinId(binId);
     setShowKanban(true);
     setExpandedProject(null);
 
     if (binId === null) {
-      setSelectedBinName('All Projects');
+      setSelectedBinName('All Tasks');
     } else if (binId === '__none__') {
       setSelectedBinName('Unbinned');
     } else {
@@ -251,16 +248,14 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
       setSelectedBinName(bin?.name || 'Bin');
     }
 
-    // Fetch projects filtered by this bin
-    await fetchProjectsForBin(binId);
-  }, [binsHook.bins, fetchProjectsForBin]);
+    await fetchTasksForBin(binId);
+  }, [binsHook.bins, fetchTasksForBin]);
 
   const handleBackToBins = useCallback(() => {
     setShowKanban(false);
     setExpandedProject(null);
     setSelectedBinId(null);
-    setSelectedBinName('All Projects');
-    // Refresh bin counts
+    setSelectedBinName('All Tasks');
     binsHook.fetchBins();
   }, [binsHook.fetchBins]);
 
@@ -277,7 +272,7 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
   }, [binsHook.updateBin]);
 
   // ============================================================================
-  // Initialize fields when expanding a project
+  // Detail panel initialization
   // ============================================================================
   useEffect(() => {
     if (expandedProject) {
@@ -291,39 +286,152 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
         scheduled_date: expandedProject.scheduled_date || '',
         scheduled_time: expandedProject.scheduled_time || ''
       });
-      // Use LOCAL hook instances
-      commentsHook.fetchProjectComments(expandedProject.id);
-      attachmentsHook.fetchProjectAttachments(expandedProject.id);
-      timeTrackingHook.fetchProjectTimeEntries(expandedProject.id);
+      commentsHook.fetchProjectComments(expandedProject.id, 'task');
+      attachmentsHook.fetchProjectAttachments(expandedProject.id, 'task');
+      timeTrackingHook.fetchProjectTimeEntries(expandedProject.id, 'task');
     }
-  }, [expandedProject?.id]); // Only re-run when project ID changes
+  }, [expandedProject?.id]);
 
   // ============================================================================
-  // Wrapper functions that use LOCAL state with LOCAL hook mutations
+  // Task CRUD via tasks-for-bin APIs
   // ============================================================================
   const handleSaveProject = useCallback(async () => {
     const currentFields = editingFieldsRef.current;
     if (!expandedProject || !currentFields) return;
-    const updatedProject = await saveProjectById(expandedProject.id, currentFields);
-    if (updatedProject) {
-      setExpandedProject(updatedProject);
-    }
-  }, [expandedProject, saveProjectById]);
 
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/tasks-for-bin/${expandedProject.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: currentFields.title,
+          description: currentFields.description || null,
+          status: currentFields.status,
+          priority: currentFields.priority,
+          assigned_user_ids: currentFields.assigned_staff || [],
+          department_id: currentFields.department_id || null,
+          scheduled_date: currentFields.scheduled_date || null,
+          scheduled_time: currentFields.scheduled_time || null,
+        }),
+      });
+      const result = await res.json();
+      if (result.data) {
+        setExpandedProject(result.data);
+        setTasks(prev => prev.map(t => t.id === expandedProject.id ? result.data : t));
+      }
+    } catch (err) {
+      console.error('Error saving task:', err);
+    } finally {
+      setSavingEdit(false);
+    }
+  }, [expandedProject]);
+
+  const handleNewTask = useCallback(async () => {
+    try {
+      const payload: Record<string, unknown> = {
+        title: 'New Task',
+        status: 'not_started',
+        priority: 'medium',
+      };
+      if (selectedBinId && selectedBinId !== '__none__') {
+        payload.bin_id = selectedBinId;
+      }
+
+      const res = await fetch('/api/tasks-for-bin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json();
+      if (result.data) {
+        setTasks(prev => [...prev, result.data]);
+        setExpandedProject(result.data);
+      }
+    } catch (err) {
+      console.error('Error creating task:', err);
+    }
+  }, [selectedBinId]);
+
+  const handleDeleteTask = useCallback(async (task: Project) => {
+    try {
+      const res = await fetch(`/api/tasks-for-bin/${task.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setTasks(prev => prev.filter(t => t.id !== task.id));
+        if (expandedProject?.id === task.id) {
+          setExpandedProject(null);
+        }
+      }
+    } catch (err) {
+      console.error('Error deleting task:', err);
+    }
+  }, [expandedProject?.id]);
+
+  const handleColumnMove = useCallback(async (taskId: string, field: string, value: string) => {
+    try {
+      const payload: Record<string, unknown> = {};
+
+      if (field === 'property_name') {
+        payload.property_name = value || null;
+      } else if (field === 'assigned_user_ids') {
+        payload.assigned_user_ids = value ? value.split(',').filter(Boolean) : [];
+      } else {
+        payload[field] = value || null;
+      }
+
+      const res = await fetch(`/api/tasks-for-bin/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json();
+      if (result.data) {
+        setTasks(prev => prev.map(t => t.id === taskId ? result.data : t));
+      }
+    } catch (err) {
+      console.error('Error updating task field:', err);
+    }
+  }, []);
+
+  // Unread comment count from the task data
+  const getUnreadCommentCount = useCallback((project: Project): number => {
+    return (project as any).unread_comment_count || 0;
+  }, []);
+
+  // Record project view (reuses existing project_views table with task ID)
+  const recordView = useCallback(async (taskId: string) => {
+    if (!currentUser?.id) return;
+    try {
+      await fetch('/api/project-views', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: taskId, user_id: currentUser.id }),
+      });
+      setTasks(prev => prev.map(t =>
+        t.id === taskId ? { ...t, unread_comment_count: 0 } as any : t
+      ));
+    } catch (err) {
+      console.error('Error recording view:', err);
+    }
+  }, [currentUser?.id]);
+
+  // ============================================================================
+  // Detail panel actions
+  // ============================================================================
   const handlePostComment = useCallback(async () => {
     if (!expandedProject || !newComment.trim()) return;
-    await commentsHook.postProjectComment(expandedProject.id, newComment);
+    await commentsHook.postProjectComment(expandedProject.id, newComment, 'task');
     setNewComment('');
   }, [expandedProject, newComment, commentsHook]);
 
   const handleAttachmentUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (!expandedProject) return;
-    attachmentsHook.handleAttachmentUpload(e, expandedProject.id);
+    attachmentsHook.handleAttachmentUpload(e, expandedProject.id, 'task');
   }, [expandedProject, attachmentsHook]);
 
   const handleStartTimer = useCallback(() => {
     if (!expandedProject) return;
-    timeTrackingHook.startProjectTimer(expandedProject.id);
+    timeTrackingHook.startProjectTimer(expandedProject.id, 'task');
   }, [expandedProject, timeTrackingHook]);
 
   const handleOpenActivity = useCallback(() => {
@@ -333,35 +441,17 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
     }
   }, [expandedProject, activityHook]);
 
-  // Memoized handler for project selection
   const handleProjectSelect = useCallback((project: Project) => {
     if (expandedProject?.id === project.id) {
       setExpandedProject(null);
     } else {
       setExpandedProject(project);
-      recordProjectView(project.id);
+      recordView(project.id);
     }
-  }, [expandedProject?.id, recordProjectView]);
-
-  // Handle creating a new project - bypasses dialog, auto-expands in detail panel
-  const handleNewProject = useCallback(async () => {
-    const newProject = await createProjectForProperty('');
-    if (newProject) {
-      setExpandedProject(newProject);
-      recordProjectView(newProject.id);
-    }
-  }, [createProjectForProperty, recordProjectView]);
-
-  // Handle kanban column moves (drag-and-drop between columns)
-  const handleColumnMove = useCallback(
-    (projectId: string, field: string, value: string) => {
-      updateProjectField(projectId, field, value);
-    },
-    [updateProjectField]
-  );
+  }, [expandedProject?.id, recordView]);
 
   // ============================================================================
-  // RENDER: Bin Picker screen vs Kanban screen
+  // RENDER
   // ============================================================================
   if (!showKanban) {
     return (
@@ -382,10 +472,8 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
     <div className="flex h-full overflow-hidden glass-bg-neutral">
       {/* Left Panel - Kanban Board */}
       <div className={`${expandedProject ? 'w-2/3' : 'w-full'} h-full flex flex-col transition-[width] duration-200 ease-out`}>
-        {/* Header — z-20 so dropdowns (ColumnPicker, ViewModeToggle) render above the kanban board's scroll container */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/20 dark:border-white/10 glass-panel bg-white/40 dark:bg-white/[0.05] flex-shrink-0 relative z-20">
           <div className="flex items-center gap-3">
-            {/* Back to bins button */}
             <button
               onClick={handleBackToBins}
               className="flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
@@ -401,10 +489,7 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
             </h3>
           </div>
           <div className="flex items-center gap-3">
-            {/* View Mode Toggle */}
-            {/* View Mode Toggle — click to expand/collapse */}
             <ViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
-            {/* Column Picker */}
             <ColumnPicker
               columns={allColumnOptions}
               visibleColumnIds={columnVis.visibleIds}
@@ -412,34 +497,33 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
               onSelectAll={() => columnVis.selectAll(allColumnOptions.map((c) => c.id))}
               onClearAll={columnVis.clearAll}
             />
-            <Button size="sm" onClick={handleNewProject}>
+            <Button size="sm" onClick={handleNewTask}>
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
-              New Project
+              New Task
             </Button>
           </div>
         </div>
 
-        {/* Kanban Board */}
-        {loadingProjects ? (
+        {loadingTasks ? (
           <div className="flex items-center justify-center flex-1">
-            <p className="text-neutral-500">Loading projects...</p>
+            <p className="text-neutral-500">Loading tasks...</p>
           </div>
-        ) : projects.length === 0 ? (
+        ) : tasks.length === 0 ? (
           <div className="flex items-center justify-center flex-1">
             <div className="text-center">
               <p className="text-neutral-500 dark:text-neutral-400 mb-4">
-                No projects in this bin yet.
+                No tasks in this bin yet.
               </p>
-              <Button onClick={handleNewProject}>
-                Create First Project
+              <Button onClick={handleNewTask}>
+                Create First Task
               </Button>
             </div>
           </div>
         ) : (
           <ProjectsKanban
-            projects={projects}
+            projects={tasks}
             viewMode={viewMode}
             allProperties={allProperties}
             users={users}
@@ -453,7 +537,7 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
         )}
       </div>
 
-      {/* Right Panel - Project Detail */}
+      {/* Right Panel - Task Detail */}
       {expandedProject && editingProjectFields && (
         <div className="w-1/3 flex-shrink-0 border-l border-white/20 dark:border-white/10 bg-white/30 dark:bg-white/[0.03] backdrop-blur-xl">
         <ProjectDetailPanel
@@ -462,55 +546,68 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
           setEditingFields={setEditingProjectFields}
           users={users}
           allProperties={allProperties}
-          savingEdit={savingProjectEdit}
+          savingEdit={savingEdit}
           onSave={handleSaveProject}
-          onDelete={deleteProject}
+          onDelete={handleDeleteTask}
           onClose={() => setExpandedProject(null)}
           onOpenActivity={handleOpenActivity}
-          onPropertyChange={async (propertyId, propertyName) => {
-            await updateProjectField(expandedProject.id, 'property_id', propertyId || '');
-            if (propertyName !== undefined) {
-              await updateProjectField(expandedProject.id, 'property_name', propertyName || '');
+          onPropertyChange={async (_propertyId, propertyName) => {
+            try {
+              const res = await fetch(`/api/tasks-for-bin/${expandedProject.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ property_name: propertyName || null }),
+              });
+              const result = await res.json();
+              if (result.data) {
+                setExpandedProject(result.data);
+                setTasks(prev => prev.map(t => t.id === expandedProject.id ? result.data : t));
+              }
+            } catch (err) {
+              console.error('Error updating property:', err);
             }
-            // Update the local expanded project to reflect change
-            setExpandedProject(prev => prev ? { ...prev, property_id: propertyId, property_name: propertyName } : null);
           }}
-          // Bins
           bins={binsHook.bins}
-          onBinChange={async (binId, _binName) => {
-            await updateProjectField(expandedProject.id, 'bin_id', binId || '');
-            setExpandedProject(prev => prev ? { ...prev, bin_id: binId } : null);
-            // Refresh bin counts
-            binsHook.fetchBins();
+          onBinChange={async (binId) => {
+            try {
+              const res = await fetch(`/api/tasks-for-bin/${expandedProject.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bin_id: binId || null }),
+              });
+              const result = await res.json();
+              if (result.data) {
+                setExpandedProject(result.data);
+                setTasks(prev => prev.map(t => t.id === expandedProject.id ? result.data : t));
+              }
+              binsHook.fetchBins();
+            } catch (err) {
+              console.error('Error updating bin:', err);
+            }
           }}
-          // Comments - use LOCAL hook
           comments={commentsHook.projectComments as Comment[]}
           loadingComments={commentsHook.loadingComments}
           newComment={newComment}
           setNewComment={setNewComment}
           postingComment={commentsHook.postingComment}
           onPostComment={handlePostComment}
-          // Attachments - use LOCAL hook
           attachments={attachmentsHook.projectAttachments as Attachment[]}
           loadingAttachments={attachmentsHook.loadingAttachments}
           uploadingAttachment={attachmentsHook.uploadingAttachment}
           attachmentInputRef={attachmentsHook.attachmentInputRef}
           onAttachmentUpload={handleAttachmentUpload}
           onViewAttachment={setViewingAttachmentIndex}
-          // Time tracking - use LOCAL hook
           activeTimeEntry={timeTrackingHook.activeTimeEntry}
           displaySeconds={timeTrackingHook.displaySeconds}
           formatTime={timeTrackingHook.formatTime}
           onStartTimer={handleStartTimer}
           onStopTimer={timeTrackingHook.stopProjectTimer}
-          // Popover states
           staffOpen={staffOpen}
           setStaffOpen={setStaffOpen}
         />
         </div>
       )}
 
-      {/* Activity History Sheet - use LOCAL hook */}
       <ProjectActivitySheet
         open={activityPopoverOpen}
         onOpenChange={setActivityPopoverOpen}
@@ -518,14 +615,12 @@ function ProjectsWindowContent({ users, currentUser, projectsHook }: ProjectsWin
         loading={activityHook.loadingActivity}
       />
 
-      {/* Attachment Lightbox - use LOCAL hook */}
       <AttachmentLightbox
         attachments={attachmentsHook.projectAttachments as Attachment[]}
         viewingIndex={viewingAttachmentIndex}
         onClose={() => setViewingAttachmentIndex(null)}
         onNavigate={setViewingAttachmentIndex}
       />
-
     </div>
   );
 }

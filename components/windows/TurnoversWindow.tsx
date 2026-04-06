@@ -18,14 +18,14 @@ import type { useProjects } from '@/lib/useProjects';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
+import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
 import {
   TurnoverFilterBar,
-  TaskDetailPanel,
   TurnoverTaskList,
   TurnoverProjectsPanel,
 } from './turnovers';
-import { AttachmentLightbox, ProjectActivitySheet } from './projects';
+import { ProjectDetailPanel, AttachmentLightbox, ProjectActivitySheet } from './projects';
 import type { Template } from '@/components/DynamicCleaningForm';
 import type { User, Task, Turnover, Project, ProjectFormFields } from '@/lib/types';
 
@@ -116,6 +116,54 @@ function TurnoversWindowContent({
   useEffect(() => {
     projectFieldsRef.current = projectFields;
   }, [projectFields]);
+
+  // ============================================================================
+  // Task → ProjectDetailPanel state (unified task detail view)
+  // ============================================================================
+  const [taskEditingFields, setTaskEditingFields] = useState<ProjectFormFields | null>(null);
+  const [taskStaffOpen, setTaskStaffOpen] = useState(false);
+  const taskEditingFieldsRef = useRef<ProjectFormFields | null>(null);
+  const taskAttachmentRef = useRef<HTMLInputElement>(null);
+  const [taskNewComment, setTaskNewComment] = useState('');
+  const [taskViewingAttachmentIndex, setTaskViewingAttachmentIndex] = useState<number | null>(null);
+
+  const taskCommentsHook = useProjectComments({ currentUser });
+  const taskAttachmentsHook = useProjectAttachments({ currentUser });
+  const taskTimeTrackingHook = useProjectTimeTracking({ currentUser });
+  const binsHook = useProjectBins({ currentUser });
+
+  useEffect(() => {
+    taskEditingFieldsRef.current = taskEditingFields;
+  }, [taskEditingFields]);
+
+  // Initialize task editing fields + fetch data when a task is opened
+  useEffect(() => {
+    if (fullscreenTask) {
+      setTaskEditingFields({
+        title: fullscreenTask.title || fullscreenTask.template_name || 'Task',
+        description: fullscreenTask.description || null,
+        status: fullscreenTask.status,
+        priority: fullscreenTask.priority || 'medium',
+        assigned_staff: (fullscreenTask.assigned_users || []).map(u => u.user_id),
+        department_id: fullscreenTask.department_id || '',
+        scheduled_date: fullscreenTask.scheduled_date || '',
+        scheduled_time: fullscreenTask.scheduled_time || '',
+      });
+      if (fullscreenTask.template_id && selectedCard?.property_name) {
+        fetchTaskTemplate(fullscreenTask.template_id, selectedCard.property_name);
+      }
+      taskCommentsHook.fetchProjectComments(fullscreenTask.task_id, 'task');
+      taskAttachmentsHook.fetchProjectAttachments(fullscreenTask.task_id, 'task');
+      taskTimeTrackingHook.fetchProjectTimeEntries(fullscreenTask.task_id, 'task');
+    } else {
+      setTaskEditingFields(null);
+      setTaskStaffOpen(false);
+      setTaskNewComment('');
+      taskCommentsHook.clearComments();
+      taskAttachmentsHook.clearAttachments();
+      taskTimeTrackingHook.clearTimeTracking();
+    }
+  }, [fullscreenTask?.task_id]);
 
   // ============================================================================
   // Reset project state when switching to a different turnover card
@@ -209,6 +257,87 @@ function TurnoversWindowContent({
     }
   }, [projectsHook]);
 
+  // ============================================================================
+  // Task → ProjectDetailPanel: save handler + derived data
+  // ============================================================================
+  const handleSaveTaskFields = useCallback(async () => {
+    if (!fullscreenTask) return;
+    const fields = taskEditingFieldsRef.current;
+    if (!fields) return;
+    const taskId = fullscreenTask.task_id;
+
+    if (fields.status !== fullscreenTask.status) {
+      updateTaskAction(taskId, fields.status);
+      setFullscreenTask((prev: Task | null) => prev ? { ...prev, status: fields.status as Task['status'] } : null);
+    }
+
+    const oldDate = fullscreenTask.scheduled_date || '';
+    const oldTime = fullscreenTask.scheduled_time || '';
+    if (fields.scheduled_date !== oldDate || fields.scheduled_time !== oldTime) {
+      updateTaskSchedule(taskId, fields.scheduled_date || null, fields.scheduled_time || null);
+    }
+
+    const oldAssignees = (fullscreenTask.assigned_users || []).map(u => u.user_id).sort().join(',');
+    const newAssignees = (fields.assigned_staff || []).sort().join(',');
+    if (oldAssignees !== newAssignees) {
+      updateTaskAssignment(taskId, fields.assigned_staff || []);
+    }
+
+    // Persist title, description, priority, department
+    const fieldUpdates: Record<string, unknown> = {};
+    const origTitle = fullscreenTask.title || fullscreenTask.template_name || 'Task';
+    const origPriority = fullscreenTask.priority || 'medium';
+    if (fields.title !== origTitle) fieldUpdates.title = fields.title;
+    if (JSON.stringify(fields.description) !== JSON.stringify(fullscreenTask.description || null)) fieldUpdates.description = fields.description;
+    if (fields.priority !== origPriority) fieldUpdates.priority = fields.priority;
+    if (fields.department_id !== (fullscreenTask.department_id || '')) fieldUpdates.department_id = fields.department_id || null;
+
+    if (Object.keys(fieldUpdates).length > 0) {
+      try {
+        await fetch('/api/update-task-fields', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskId, fields: fieldUpdates }),
+        });
+      } catch (err) {
+        console.error('Error updating task fields:', err);
+      }
+    }
+  }, [fullscreenTask, updateTaskAction, updateTaskSchedule, updateTaskAssignment, setFullscreenTask]);
+
+  // Map current task to a Project-compatible shape for ProjectDetailPanel
+  const taskAsProject: Project | null = fullscreenTask ? {
+    id: fullscreenTask.task_id,
+    property_name: selectedCard?.property_name || null,
+    bin_id: fullscreenTask.bin_id || null,
+    title: fullscreenTask.title || fullscreenTask.template_name || 'Task',
+    description: fullscreenTask.description || null,
+    status: fullscreenTask.status as Project['status'],
+    priority: (fullscreenTask.priority || 'medium') as Project['priority'],
+    department_id: fullscreenTask.department_id || null,
+    department_name: fullscreenTask.department_name || null,
+    scheduled_date: fullscreenTask.scheduled_date || null,
+    scheduled_time: fullscreenTask.scheduled_time || null,
+    project_assignments: (fullscreenTask.assigned_users || []).map(u => ({
+      user_id: u.user_id,
+      user: { id: u.user_id, name: u.name, avatar: u.avatar, role: u.role }
+    })),
+    created_at: '',
+    updated_at: '',
+  } : null;
+
+  // Resolve the template for the checklist slide-over
+  const resolvedTaskTemplate = fullscreenTask?.template_id
+    ? (taskTemplates[`${fullscreenTask.template_id}__${selectedCard?.property_name}`] as Template
+       || taskTemplates[fullscreenTask.template_id] as Template)
+    : null;
+
+  const formatTimeDisplay = useCallback((seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }, []);
+
   return (
     <div className="flex h-full overflow-hidden glass-bg-neutral">
       {/* Left Panel - Cards */}
@@ -293,21 +422,79 @@ function TurnoversWindowContent({
             scrollPositionRef.current = e.currentTarget.scrollTop;
           }}
         >
-          {fullscreenTask ? (
-            /* Task Template View */
-            <TaskDetailPanel
-              task={fullscreenTask}
-              propertyName={selectedCard.property_name}
-              currentUser={currentUser}
-              taskTemplates={taskTemplates as Record<string, Template>}
-              loadingTaskTemplate={loadingTaskTemplate}
-              onClose={() => setFullscreenTask(null)}
-              onUpdateStatus={updateTaskAction}
-              onSaveForm={saveTaskForm}
-              setTask={(task: Task) => setFullscreenTask(task)}
+          {fullscreenTask && taskAsProject && taskEditingFields ? (
+            /* Unified Task Detail View (ProjectDetailPanel with checklist) */
+            <ProjectDetailPanel
+              project={taskAsProject}
+              editingFields={taskEditingFields}
+              setEditingFields={setTaskEditingFields}
               users={users}
-              onUpdateSchedule={updateTaskSchedule}
-              onUpdateAssignment={updateTaskAssignment}
+              savingEdit={false}
+              onSave={handleSaveTaskFields}
+              onDelete={() => {
+                if (confirm('Are you sure you want to delete this task?')) {
+                  deleteTaskFromCard(fullscreenTask.task_id);
+                  setFullscreenTask(null);
+                }
+              }}
+              onClose={() => setFullscreenTask(null)}
+              onOpenActivity={() => {}}
+              staffOpen={taskStaffOpen}
+              setStaffOpen={setTaskStaffOpen}
+              // Template / checklist slide-over
+              template={resolvedTaskTemplate || undefined}
+              formMetadata={fullscreenTask.form_metadata}
+              onSaveForm={async (formData) => { await saveTaskForm(fullscreenTask.task_id, formData); }}
+              loadingTemplate={loadingTaskTemplate === fullscreenTask.template_id}
+              currentUser={currentUser}
+              // Turnover context
+              onShowTurnover={() => setFullscreenTask(null)}
+              // Comments
+              comments={taskCommentsHook.projectComments}
+              loadingComments={taskCommentsHook.loadingComments}
+              newComment={taskNewComment}
+              setNewComment={setTaskNewComment}
+              postingComment={taskCommentsHook.postingComment}
+              onPostComment={async () => {
+                if (fullscreenTask && taskNewComment.trim()) {
+                  await taskCommentsHook.postProjectComment(fullscreenTask.task_id, taskNewComment, 'task');
+                  setTaskNewComment('');
+                }
+              }}
+              // Attachments
+              attachments={taskAttachmentsHook.projectAttachments}
+              loadingAttachments={taskAttachmentsHook.loadingAttachments}
+              uploadingAttachment={taskAttachmentsHook.uploadingAttachment}
+              attachmentInputRef={taskAttachmentsHook.attachmentInputRef}
+              onAttachmentUpload={(e) => {
+                if (fullscreenTask) {
+                  taskAttachmentsHook.handleAttachmentUpload(e, fullscreenTask.task_id, 'task');
+                }
+              }}
+              onViewAttachment={(index) => setTaskViewingAttachmentIndex(index)}
+              // Time tracking
+              activeTimeEntry={taskTimeTrackingHook.activeTimeEntry}
+              displaySeconds={taskTimeTrackingHook.displaySeconds}
+              formatTime={taskTimeTrackingHook.formatTime}
+              onStartTimer={() => {
+                if (fullscreenTask) taskTimeTrackingHook.startProjectTimer(fullscreenTask.task_id, 'task');
+              }}
+              onStopTimer={taskTimeTrackingHook.stopProjectTimer}
+              // Bins
+              bins={binsHook.bins}
+              onBinChange={async (binId) => {
+                if (!fullscreenTask) return;
+                try {
+                  await fetch('/api/update-task-fields', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ taskId: fullscreenTask.task_id, fields: { bin_id: binId || null } }),
+                  });
+                  binsHook.fetchBins();
+                } catch (err) {
+                  console.error('Error updating bin:', err);
+                }
+              }}
             />
           ) : (
             /* Turnover Card Detail */
@@ -505,12 +692,20 @@ function TurnoversWindowContent({
         </div>
       )}
 
-      {/* Attachment Lightbox - use LOCAL hook */}
+      {/* Attachment Lightbox - use LOCAL hook (projects) */}
       <AttachmentLightbox
         attachments={attachmentsHook.projectAttachments}
         viewingIndex={viewingAttachmentIndex}
         onClose={() => setViewingAttachmentIndex(null)}
         onNavigate={setViewingAttachmentIndex}
+      />
+
+      {/* Attachment Lightbox for tasks */}
+      <AttachmentLightbox
+        attachments={taskAttachmentsHook.projectAttachments}
+        viewingIndex={taskViewingAttachmentIndex}
+        onClose={() => setTaskViewingAttachmentIndex(null)}
+        onNavigate={setTaskViewingAttachmentIndex}
       />
 
       {/* Activity Sheet - use LOCAL hook */}

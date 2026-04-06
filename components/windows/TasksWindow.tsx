@@ -1,13 +1,18 @@
 'use client';
 
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useState, useCallback, useRef } from 'react';
 import { useTasks } from '@/lib/useTasks';
-import type { User } from '@/lib/types';
+import { useProjectComments } from '@/lib/hooks/useProjectComments';
+import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
+import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
+import { useProjectBins } from '@/lib/hooks/useProjectBins';
+import type { User, Project, ProjectFormFields } from '@/lib/types';
+import type { Template } from '@/components/DynamicCleaningForm';
 import {
   TaskRowItem,
   TaskFilterBar,
-  TaskDetailPanel,
 } from './tasks';
+import { ProjectDetailPanel, AttachmentLightbox } from './projects';
 
 interface TasksWindowProps {
   currentUser: User | null;
@@ -42,12 +47,117 @@ function TasksWindowContent({ currentUser, users }: TasksWindowProps) {
     updateTaskStatus,
   } = useTasks();
 
+  // Task → ProjectDetailPanel state
+  const [taskEditingFields, setTaskEditingFields] = useState<ProjectFormFields | null>(null);
+  const [taskStaffOpen, setTaskStaffOpen] = useState(false);
+  const taskEditingFieldsRef = useRef<ProjectFormFields | null>(null);
+  const [taskNewComment, setTaskNewComment] = useState('');
+
+  const taskCommentsHook = useProjectComments({ currentUser });
+  const taskAttachmentsHook = useProjectAttachments({ currentUser });
+  const taskTimeTrackingHook = useProjectTimeTracking({ currentUser });
+  const binsHook = useProjectBins({ currentUser });
+  const [taskViewingAttachmentIndex, setTaskViewingAttachmentIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    taskEditingFieldsRef.current = taskEditingFields;
+  }, [taskEditingFields]);
+
   // Fetch template when a task with template_id is selected (with property context)
   useEffect(() => {
     if (selectedTask?.template_id) {
       fetchTaskTemplate(selectedTask.template_id, selectedTask.property_name);
     }
   }, [selectedTask?.template_id, selectedTask?.property_name, fetchTaskTemplate]);
+
+  // Initialize editing fields + fetch data when a task is selected
+  useEffect(() => {
+    if (selectedTask) {
+      setTaskEditingFields({
+        title: selectedTask.title || selectedTask.template_name || 'Task',
+        description: selectedTask.description || null,
+        status: selectedTask.status,
+        priority: selectedTask.priority || 'medium',
+        assigned_staff: (selectedTask.assigned_users || []).map(u => u.user_id),
+        department_id: selectedTask.department_id || '',
+        scheduled_date: selectedTask.scheduled_date || '',
+        scheduled_time: selectedTask.scheduled_time || '',
+      });
+      taskCommentsHook.fetchProjectComments(selectedTask.task_id, 'task');
+      taskAttachmentsHook.fetchProjectAttachments(selectedTask.task_id, 'task');
+      taskTimeTrackingHook.fetchProjectTimeEntries(selectedTask.task_id, 'task');
+    } else {
+      setTaskEditingFields(null);
+      setTaskStaffOpen(false);
+      setTaskNewComment('');
+      taskCommentsHook.clearComments();
+      taskAttachmentsHook.clearAttachments();
+      taskTimeTrackingHook.clearTimeTracking();
+    }
+  }, [selectedTask?.task_id]);
+
+  const handleSaveTaskFields = useCallback(async () => {
+    if (!selectedTask) return;
+    const fields = taskEditingFieldsRef.current;
+    if (!fields) return;
+    const taskId = selectedTask.task_id;
+
+    if (fields.status !== selectedTask.status) {
+      await updateTaskStatus(taskId, fields.status as any);
+      setSelectedTask({ ...selectedTask, status: fields.status as any });
+    }
+
+    const fieldUpdates: Record<string, unknown> = {};
+    const origTitle = selectedTask.title || selectedTask.template_name || 'Task';
+    const origPriority = selectedTask.priority || 'medium';
+    if (fields.title !== origTitle) fieldUpdates.title = fields.title;
+    if (JSON.stringify(fields.description) !== JSON.stringify(selectedTask.description || null)) fieldUpdates.description = fields.description;
+    if (fields.priority !== origPriority) fieldUpdates.priority = fields.priority;
+    if (fields.department_id !== (selectedTask.department_id || '')) fieldUpdates.department_id = fields.department_id || null;
+
+    if (Object.keys(fieldUpdates).length > 0) {
+      try {
+        await fetch('/api/update-task-fields', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskId, fields: fieldUpdates }),
+        });
+      } catch (err) {
+        console.error('Error updating task fields:', err);
+      }
+    }
+  }, [selectedTask, updateTaskStatus, setSelectedTask]);
+
+  const resolvedTemplate: Template | undefined = selectedTask?.template_id
+    ? (taskTemplates[`${selectedTask.template_id}__${selectedTask.property_name}`] as Template
+       || taskTemplates[selectedTask.template_id] as Template)
+    : undefined;
+
+  const taskAsProject: Project | null = selectedTask ? {
+    id: selectedTask.task_id,
+    property_name: selectedTask.property_name || null,
+    bin_id: selectedTask.bin_id || null,
+    title: selectedTask.title || selectedTask.template_name || 'Task',
+    description: selectedTask.description || null,
+    status: selectedTask.status as Project['status'],
+    priority: (selectedTask.priority || 'medium') as Project['priority'],
+    department_id: selectedTask.department_id || null,
+    department_name: selectedTask.department_name || null,
+    scheduled_date: selectedTask.scheduled_date || null,
+    scheduled_time: selectedTask.scheduled_time || null,
+    project_assignments: (selectedTask.assigned_users || []).map(u => ({
+      user_id: u.user_id,
+      user: { id: u.user_id, name: u.name, avatar: u.avatar, role: u.role }
+    })),
+    created_at: selectedTask.created_at || '',
+    updated_at: selectedTask.updated_at || '',
+  } : null;
+
+  const formatTimeDisplay = useCallback((seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }, []);
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -124,20 +234,80 @@ function TasksWindowContent({ currentUser, users }: TasksWindowProps) {
       </div>
 
       {/* Detail Panel - flex sibling so scrollbar stays accessible */}
-      {selectedTask && (
+      {selectedTask && taskAsProject && taskEditingFields && (
         <div className="w-1/2 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex-shrink-0">
-          <TaskDetailPanel
-            task={selectedTask}
-            currentUser={currentUser}
-            taskTemplates={taskTemplates}
-            loadingTaskTemplate={loadingTaskTemplate}
+          <ProjectDetailPanel
+            project={taskAsProject}
+            editingFields={taskEditingFields}
+            setEditingFields={setTaskEditingFields}
+            users={users}
+            savingEdit={false}
+            onSave={handleSaveTaskFields}
+            onDelete={() => setSelectedTask(null)}
             onClose={() => setSelectedTask(null)}
-            onUpdateStatus={updateTaskStatus}
-            onSaveForm={saveTaskForm}
-            setTask={setSelectedTask}
+            onOpenActivity={() => {}}
+            staffOpen={taskStaffOpen}
+            setStaffOpen={setTaskStaffOpen}
+            template={resolvedTemplate}
+            formMetadata={selectedTask.form_metadata ?? undefined}
+            onSaveForm={async (formData) => {
+              await saveTaskForm(selectedTask.task_id, formData);
+            }}
+            loadingTemplate={loadingTaskTemplate === selectedTask.template_id}
+            currentUser={currentUser}
+            comments={taskCommentsHook.projectComments}
+            loadingComments={taskCommentsHook.loadingComments}
+            newComment={taskNewComment}
+            setNewComment={setTaskNewComment}
+            postingComment={taskCommentsHook.postingComment}
+            onPostComment={async () => {
+              if (selectedTask && taskNewComment.trim()) {
+                await taskCommentsHook.postProjectComment(selectedTask.task_id, taskNewComment, 'task');
+                setTaskNewComment('');
+              }
+            }}
+            attachments={taskAttachmentsHook.projectAttachments}
+            loadingAttachments={taskAttachmentsHook.loadingAttachments}
+            uploadingAttachment={taskAttachmentsHook.uploadingAttachment}
+            attachmentInputRef={taskAttachmentsHook.attachmentInputRef}
+            onAttachmentUpload={(e) => {
+              if (selectedTask) {
+                taskAttachmentsHook.handleAttachmentUpload(e, selectedTask.task_id, 'task');
+              }
+            }}
+            onViewAttachment={(index) => setTaskViewingAttachmentIndex(index)}
+            activeTimeEntry={taskTimeTrackingHook.activeTimeEntry}
+            displaySeconds={taskTimeTrackingHook.displaySeconds}
+            formatTime={taskTimeTrackingHook.formatTime}
+            onStartTimer={() => {
+              if (selectedTask) taskTimeTrackingHook.startProjectTimer(selectedTask.task_id, 'task');
+            }}
+            onStopTimer={taskTimeTrackingHook.stopProjectTimer}
+            // Bins
+            bins={binsHook.bins}
+            onBinChange={async (binId) => {
+              if (!selectedTask) return;
+              try {
+                await fetch('/api/update-task-fields', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ taskId: selectedTask.task_id, fields: { bin_id: binId || null } }),
+                });
+                binsHook.fetchBins();
+              } catch (err) {
+                console.error('Error updating bin:', err);
+              }
+            }}
           />
         </div>
       )}
+      {/* Attachment Lightbox for tasks */}
+      <AttachmentLightbox
+        attachments={taskAttachmentsHook.projectAttachments}
+        viewingIndex={taskViewingAttachmentIndex}
+        onClose={() => setTaskViewingAttachmentIndex(null)}
+        onNavigate={setTaskViewingAttachmentIndex}
+      />
     </div>
   );
 }

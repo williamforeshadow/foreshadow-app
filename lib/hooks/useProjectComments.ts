@@ -13,11 +13,12 @@ export function useProjectComments({ currentUser }: UseProjectCommentsProps) {
   const [newComment, setNewComment] = useState('');
   const [postingComment, setPostingComment] = useState(false);
 
-  // Fetch comments for a project
-  const fetchProjectComments = useCallback(async (projectId: string) => {
+  // Fetch comments for a project or task
+  const fetchProjectComments = useCallback(async (entityId: string, entityType: 'project' | 'task' = 'project') => {
     setLoadingComments(true);
     try {
-      const res = await fetch(`/api/project-comments?project_id=${projectId}`);
+      const param = entityType === 'task' ? 'task_id' : 'project_id';
+      const res = await fetch(`/api/project-comments?${param}=${entityId}`);
       const data = await res.json();
       if (data.data) {
         setProjectComments(data.data);
@@ -31,20 +32,26 @@ export function useProjectComments({ currentUser }: UseProjectCommentsProps) {
   }, []);
 
   // Post a new comment (accepts comment text as parameter for window-independent state)
-  const postProjectComment = useCallback(async (projectId: string, commentText?: string) => {
+  const postProjectComment = useCallback(async (entityId: string, commentText?: string, entityType: 'project' | 'task' = 'project') => {
     const textToPost = commentText ?? newComment;
-    if (!projectId || !textToPost.trim() || !currentUser) return;
+    if (!entityId || !textToPost.trim() || !currentUser) return;
 
     setPostingComment(true);
     try {
+      const bodyData: Record<string, string> = {
+        user_id: currentUser.id,
+        comment_content: textToPost.trim(),
+      };
+      if (entityType === 'task') {
+        bodyData.task_id = entityId;
+      } else {
+        bodyData.project_id = entityId;
+      }
+
       const res = await fetch('/api/project-comments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: projectId,
-          user_id: currentUser.id,
-          comment_content: textToPost.trim()
-        })
+        body: JSON.stringify(bodyData)
       });
 
       const data = await res.json();

@@ -14,10 +14,11 @@ export function useProjectTimeTracking({ currentUser }: UseProjectTimeTrackingPr
   const [displaySeconds, setDisplaySeconds] = useState(0);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch time entries for a project
-  const fetchProjectTimeEntries = useCallback(async (projectId: string) => {
+  // Fetch time entries for a project or task
+  const fetchProjectTimeEntries = useCallback(async (entityId: string, entityType: 'project' | 'task' = 'project') => {
     try {
-      const res = await fetch(`/api/project-time-entries?project_id=${projectId}`);
+      const param = entityType === 'task' ? 'task_id' : 'project_id';
+      const res = await fetch(`/api/project-time-entries?${param}=${entityId}`);
       const data = await res.json();
       if (data.data) {
         setProjectTimeEntries(data.data);
@@ -43,17 +44,23 @@ export function useProjectTimeTracking({ currentUser }: UseProjectTimeTrackingPr
   }, []);
 
   // Start timer
-  const startProjectTimer = useCallback(async (projectId: string) => {
-    if (!projectId || !currentUser) return;
+  const startProjectTimer = useCallback(async (entityId: string, entityType: 'project' | 'task' = 'project') => {
+    if (!entityId || !currentUser) return;
 
     try {
+      const bodyData: Record<string, string> = {
+        user_id: currentUser.id,
+      };
+      if (entityType === 'task') {
+        bodyData.task_id = entityId;
+      } else {
+        bodyData.project_id = entityId;
+      }
+
       const res = await fetch('/api/project-time-entries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: projectId,
-          user_id: currentUser.id
-        })
+        body: JSON.stringify(bodyData)
       });
 
       const data = await res.json();

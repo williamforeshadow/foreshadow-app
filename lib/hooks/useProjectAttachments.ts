@@ -14,11 +14,12 @@ export function useProjectAttachments({ currentUser }: UseProjectAttachmentsProp
   const [viewingAttachmentIndex, setViewingAttachmentIndex] = useState<number | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch attachments for a project
-  const fetchProjectAttachments = useCallback(async (projectId: string) => {
+  // Fetch attachments for a project or task
+  const fetchProjectAttachments = useCallback(async (entityId: string, entityType: 'project' | 'task' = 'project') => {
     setLoadingAttachments(true);
     try {
-      const res = await fetch(`/api/project-attachments?project_id=${projectId}`);
+      const param = entityType === 'task' ? 'task_id' : 'project_id';
+      const res = await fetch(`/api/project-attachments?${param}=${entityId}`);
       const data = await res.json();
       if (data.data) {
         setProjectAttachments(data.data);
@@ -34,17 +35,22 @@ export function useProjectAttachments({ currentUser }: UseProjectAttachmentsProp
   // Handle file upload
   const handleAttachmentUpload = useCallback(async (
     e: React.ChangeEvent<HTMLInputElement>,
-    projectId: string
+    entityId: string,
+    entityType: 'project' | 'task' = 'project'
   ) => {
     const files = e.target.files;
-    if (!files || files.length === 0 || !projectId || !currentUser) return;
+    if (!files || files.length === 0 || !entityId || !currentUser) return;
 
     setUploadingAttachment(true);
     try {
       for (const file of Array.from(files)) {
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('project_id', projectId);
+        if (entityType === 'task') {
+          formData.append('task_id', entityId);
+        } else {
+          formData.append('project_id', entityId);
+        }
         formData.append('uploaded_by', currentUser.id);
 
         const res = await fetch('/api/project-attachments', {

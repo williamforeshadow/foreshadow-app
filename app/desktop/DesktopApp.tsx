@@ -91,7 +91,7 @@ export default function DesktopApp() {
           </div>
 
           <div className={`absolute inset-0 ${activeView === 'projects' ? '' : 'hidden'}`}>
-            <ProjectsWindow users={users} currentUser={currentUser} projectsHook={projectsHook} />
+            <ProjectsWindow users={users} currentUser={currentUser} />
           </div>
 
           <div className={`absolute inset-0 ${activeView === 'tasks' ? '' : 'hidden'}`}>

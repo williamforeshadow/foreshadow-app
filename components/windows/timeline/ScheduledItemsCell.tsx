@@ -253,7 +253,7 @@ export function ScheduledItemsCell({
                         )}
                         onClick={() => onTaskClick?.(task)}
                       >
-                        <span className="truncate text-sm">{task.template_name || task.type}</span>
+                        <span className="truncate text-sm">{task.title || task.template_name || task.type}</span>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           {task.assigned_users?.slice(0, 1).map((user) => (
                             <div key={user.user_id} className="relative">

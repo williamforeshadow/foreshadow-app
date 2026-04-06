@@ -16,9 +16,9 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Get project counts per bin
+    // Get task counts per bin (tasks are the unified entity now)
     const { data: counts } = await supabase
-      .from('property_projects')
+      .from('turnover_tasks')
       .select('bin_id')
       .not('bin_id', 'is', null);
 
@@ -29,11 +29,9 @@ export async function GET() {
       }
     });
 
-    // Also count projects with no bin
-    const { count: unbinnedCount } = await supabase
-      .from('property_projects')
-      .select('id', { count: 'exact', head: true })
-      .is('bin_id', null);
+    // Count binned tasks total (unbinned tasks are regular tasks, not shown here)
+    const totalBinnedCount = counts?.length || 0;
+    const unbinnedCount = 0;
 
     const enrichedBins = (bins || []).map((bin: any) => ({
       ...bin,
@@ -42,8 +40,8 @@ export async function GET() {
 
     return NextResponse.json({
       data: enrichedBins,
-      total_projects: (counts?.length || 0) + (unbinnedCount || 0),
-      unbinned_count: unbinnedCount || 0,
+      total_projects: totalBinnedCount,
+      unbinned_count: unbinnedCount,
     });
   } catch (err: any) {
     return NextResponse.json(

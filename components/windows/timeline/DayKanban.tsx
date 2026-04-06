@@ -170,6 +170,7 @@ export function DayKanban({
         if (filters.searchQuery) {
           const query = filters.searchQuery.toLowerCase();
           const matchesSearch = 
+            task.title?.toLowerCase().includes(query) ||
             task.template_name?.toLowerCase().includes(query) ||
             task.property_name?.toLowerCase().includes(query) ||
             task.guest_name?.toLowerCase().includes(query);
@@ -821,7 +822,7 @@ function KanbanCardContent({
         </div>
         <div className={styles.cardContent}>
           <p className={styles.cardTitle}>
-            {isTask ? (task?.template_name || task?.type) : project?.title}
+            {isTask ? (task?.title || task?.template_name || task?.type) : project?.title}
           </p>
           <p className={styles.cardProperty}>
             {isTask ? task?.property_name : project?.property_name}

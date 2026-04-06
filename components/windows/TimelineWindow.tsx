@@ -12,7 +12,7 @@ import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { ScheduledItemsCell, DayKanban } from './timeline';
 import { AttachmentLightbox, ProjectActivitySheet, ProjectDetailPanel } from './projects';
-import { TaskDetailPanel, TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
+import { TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
 import DiamondIcon from '@/components/icons/AssignmentIcon';
 import HexagonIcon from '@/components/icons/HammerIcon';
 import Rhombus16FilledIcon from '@/components/icons/Rhombus16FilledIcon';
@@ -92,6 +92,7 @@ export default function TimelineWindow({
     setReservations,
     recurringTasks,
     setRecurringTasks,
+    fetchReservations,
   } = useTimeline();
 
   // ============================================================================
@@ -138,6 +139,20 @@ export default function TimelineWindow({
   const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
   const [loadingTaskTemplate, setLoadingTaskTemplate] = useState<string | null>(null);
   const [localTask, setLocalTask] = useState<Task | null>(null);
+  const [taskEditingFields, setTaskEditingFields] = useState<ProjectFormFields | null>(null);
+  const [taskStaffOpen, setTaskStaffOpen] = useState(false);
+  const taskEditingFieldsRef = useRef<ProjectFormFields | null>(null);
+  const taskAttachmentRef = useRef<HTMLInputElement>(null);
+  const [taskNewComment, setTaskNewComment] = useState('');
+  const [taskViewingAttachmentIndex, setTaskViewingAttachmentIndex] = useState<number | null>(null);
+
+  const taskCommentsHook = useProjectComments({ currentUser });
+  const taskAttachmentsHook = useProjectAttachments({ currentUser });
+  const taskTimeTrackingHook = useProjectTimeTracking({ currentUser });
+
+  useEffect(() => {
+    taskEditingFieldsRef.current = taskEditingFields;
+  }, [taskEditingFields]);
 
 
   // ============================================================================
@@ -194,15 +209,35 @@ export default function TimelineWindow({
     } else if (floatingData?.type === 'task') {
       const task = floatingData.item as Task;
       setLocalTask(task);
+      setTaskEditingFields({
+        title: task.title || task.template_name || 'Task',
+        description: task.description || null,
+        status: task.status,
+        priority: task.priority || 'medium',
+        assigned_staff: (task.assigned_users || []).map(u => u.user_id),
+        department_id: task.department_id || '',
+        scheduled_date: task.scheduled_date || '',
+        scheduled_time: task.scheduled_time || '',
+      });
       // Fetch template if needed (with property context for overrides)
       const propName = floatingData.propertyName || task.property_name;
       const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
       if (task.template_id && !taskTemplates[cacheKey!]) {
         fetchTaskTemplate(task.template_id, propName);
       }
+      // Fetch comments, attachments, time entries for this task
+      taskCommentsHook.fetchProjectComments(task.task_id, 'task');
+      taskAttachmentsHook.fetchProjectAttachments(task.task_id, 'task');
+      taskTimeTrackingHook.fetchProjectTimeEntries(task.task_id, 'task');
     } else {
       setProjectFields(null);
       setLocalTask(null);
+      setTaskEditingFields(null);
+      setTaskStaffOpen(false);
+      setTaskNewComment('');
+      taskCommentsHook.clearComments();
+      taskAttachmentsHook.clearAttachments();
+      taskTimeTrackingHook.clearTimeTracking();
     }
   }, [floatingData?.type, floatingItemId]);
 
@@ -568,10 +603,90 @@ export default function TimelineWindow({
     }
   }, [floatingData, activityHook]);
 
+  // ============================================================================
+  // Task → ProjectDetailPanel: save handler + derived data
+  // ============================================================================
+  const handleSaveTaskEditFields = useCallback(async () => {
+    if (!localTask) return;
+    const fields = taskEditingFieldsRef.current;
+    if (!fields) return;
+    const taskId = localTask.task_id;
+
+    if (fields.status !== localTask.status) {
+      handleUpdateTaskStatus(taskId, fields.status);
+      setLocalTask((prev: Task | null) => prev ? { ...prev, status: fields.status as Task['status'] } : null);
+    }
+
+    const oldDate = localTask.scheduled_date || '';
+    const oldTime = localTask.scheduled_time || '';
+    if (fields.scheduled_date !== oldDate || fields.scheduled_time !== oldTime) {
+      updateTurnoverTaskSchedule(taskId, fields.scheduled_date || null, fields.scheduled_time || null);
+    }
+
+    const oldAssignees = (localTask.assigned_users || []).map(u => u.user_id).sort().join(',');
+    const newAssignees = (fields.assigned_staff || []).sort().join(',');
+    if (oldAssignees !== newAssignees) {
+      updateTurnoverTaskAssignment(taskId, fields.assigned_staff || []);
+    }
+
+    const fieldUpdates: Record<string, unknown> = {};
+    const origTitle = localTask.title || localTask.template_name || 'Task';
+    const origPriority = localTask.priority || 'medium';
+    if (fields.title !== origTitle) fieldUpdates.title = fields.title;
+    if (JSON.stringify(fields.description) !== JSON.stringify(localTask.description || null)) fieldUpdates.description = fields.description;
+    if (fields.priority !== origPriority) fieldUpdates.priority = fields.priority;
+    if (fields.department_id !== (localTask.department_id || '')) fieldUpdates.department_id = fields.department_id || null;
+
+    if (Object.keys(fieldUpdates).length > 0) {
+      try {
+        await fetch('/api/update-task-fields', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskId, fields: fieldUpdates }),
+        });
+      } catch (err) {
+        console.error('Error updating task fields:', err);
+      }
+    }
+  }, [localTask, handleUpdateTaskStatus, updateTurnoverTaskSchedule, updateTurnoverTaskAssignment]);
+
+  const taskAsProject: Project | null = localTask ? {
+    id: localTask.task_id,
+    property_name: floatingData?.propertyName || localTask.property_name || null,
+    bin_id: localTask.bin_id || null,
+    title: localTask.title || localTask.template_name || 'Task',
+    description: localTask.description || null,
+    status: localTask.status as Project['status'],
+    priority: (localTask.priority || 'medium') as Project['priority'],
+    department_id: localTask.department_id || null,
+    department_name: localTask.department_name || null,
+    scheduled_date: localTask.scheduled_date || null,
+    scheduled_time: localTask.scheduled_time || null,
+    project_assignments: (localTask.assigned_users || []).map(u => ({
+      user_id: u.user_id,
+      user: { id: u.user_id, name: u.name, avatar: u.avatar, role: u.role }
+    })),
+    created_at: '',
+    updated_at: '',
+  } : null;
+
+  const resolvedTaskTemplate = localTask?.template_id
+    ? (taskTemplates[`${localTask.template_id}__${floatingData?.propertyName}`] as Template
+       || taskTemplates[localTask.template_id] as Template)
+    : null;
+
+  const formatTimeDisplay = useCallback((seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }, []);
+
   const handleCloseFloatingWindow = useCallback(() => {
     setFloatingData(null);
     setProjectFields(null);
     setLocalTask(null);
+    setTaskEditingFields(null);
+    setTaskStaffOpen(false);
     setTurnoverRightPanelView('tasks');
     setExpandedProjectInTurnover(null);
     setTurnoverProjectFields(null);
@@ -670,40 +785,73 @@ export default function TimelineWindow({
     }
   }, [expandedProjectInTurnover, turnoverActivityHook]);
 
-  const handleTurnoverCreateProject = useCallback(async (propertyName: string) => {
-    const newProject = await projectsHook.createProjectForProperty(propertyName);
-    if (newProject) {
-      setExpandedProjectInTurnover(newProject);
+  const createTaskViaApi = useCallback(async (payload: Record<string, unknown>): Promise<Task | null> => {
+    try {
+      const res = await fetch('/api/tasks-for-bin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'New Task', status: 'not_started', priority: 'medium', ...payload }),
+      });
+      const result = await res.json();
+      const data = result.data;
+      if (!data) return null;
+      return {
+        task_id: data.id,
+        template_id: undefined,
+        template_name: undefined,
+        title: data.title || 'New Task',
+        description: data.description || null,
+        priority: data.priority || 'medium',
+        bin_id: data.bin_id || null,
+        type: 'project',
+        department_id: data.department_id || null,
+        department_name: data.department_name || null,
+        status: data.status || 'not_started',
+        property_name: data.property_name || undefined,
+        scheduled_date: data.scheduled_date || null,
+        scheduled_time: data.scheduled_time || null,
+        assigned_users: (data.project_assignments || []).map((a: any) => ({
+          user_id: a.user_id,
+          name: a.user?.name || '',
+          avatar: a.user?.avatar || '',
+          role: a.user?.role || '',
+        })),
+      } as Task;
+    } catch (err) {
+      console.error('Error creating task:', err);
+      return null;
     }
-  }, [projectsHook]);
+  }, []);
+
+  const handleTurnoverCreateProject = useCallback(async (propertyName: string) => {
+    const newTask = await createTaskViaApi({ property_name: propertyName });
+    if (newTask) {
+      setExpandedProjectInTurnover(newTask as any);
+    }
+  }, [createTaskViaApi]);
 
   const handleCreateProjectFromTimelineCell = useCallback(async (propertyName: string, date: Date) => {
-    const newProject = await projectsHook.createProjectForProperty(propertyName);
-    if (!newProject) return;
-
     const scheduledDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    projectsHook.updateProjectField(newProject.id, 'scheduled_date', scheduledDate);
+    const newTask = await createTaskViaApi({ property_name: propertyName, scheduled_date: scheduledDate });
+    if (!newTask) return;
 
     setFloatingData({
-      type: 'project',
-      item: {
-        ...newProject,
-        scheduled_date: scheduledDate,
-      },
+      type: 'task',
+      item: newTask,
       propertyName,
     });
-  }, [projectsHook]);
+  }, [createTaskViaApi]);
 
   const handleCreateProjectFromHeader = useCallback(async () => {
-    const newProject = await projectsHook.createProjectForProperty('');
-    if (!newProject) return;
+    const newTask = await createTaskViaApi({});
+    if (!newTask) return;
 
     setFloatingData({
-      type: 'project',
-      item: newProject,
+      type: 'task',
+      item: newTask,
       propertyName: '',
     });
-  }, [projectsHook]);
+  }, [createTaskViaApi]);
 
   // Handle column moves from kanban drag/drop (assignment + schedule changes, atomically)
   const handleKanbanColumnMove = useCallback(async (
@@ -1005,10 +1153,10 @@ export default function TimelineWindow({
               onClick={handleCreateProjectFromHeader}
               variant="outline"
               size="sm"
-              title="Create Project"
+              title="Create Task"
               className="px-3"
             >
-              + Project
+              + Task
             </Button>
           </div>
         </div>
@@ -1161,7 +1309,7 @@ export default function TimelineWindow({
                                           propertyName: activeTurnover.property_name,
                                         })}
                                       >
-                                        <span className="truncate text-sm">{task.template_name || task.type}</span>
+                                        <span className="truncate text-sm">{task.title || task.template_name || task.type}</span>
                                       </div>
                                     );
                                   })
@@ -1288,7 +1436,7 @@ export default function TimelineWindow({
 
                         <button
                           className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-white/40 dark:border-white/20 bg-white/70 dark:bg-white/10 text-neutral-600 dark:text-neutral-300 hover:bg-white/90 dark:hover:bg-white/20 hover:text-neutral-900 dark:hover:text-white transition-all z-20 flex items-center justify-center opacity-0 group-hover:opacity-100"
-                          title="Create project for this day"
+                          title="Create task for this day"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleCreateProjectFromTimelineCell(property, date);
@@ -1336,14 +1484,14 @@ export default function TimelineWindow({
                                       "flex items-center justify-between gap-2 py-2 px-2.5 shrink-0 cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.01] active:scale-[0.99]",
                                       getRowStyles(task.status)
                                     )}
-                                    title={task.template_name || task.type}
+                                    title={task.title || task.template_name || task.type}
                                     onClick={() => setFloatingData({
                                       type: 'task',
                                       item: task,
                                       propertyName: property,
                                     })}
                                   >
-                                    <span className="truncate text-sm">{task.template_name || task.type}</span>
+                                    <span className="truncate text-sm">{task.title || task.template_name || task.type}</span>
                                     <div className="flex items-center gap-1.5 flex-shrink-0">
                                       {task.assigned_users?.slice(0, 1).map((user) => (
                                         <div key={user.user_id} className="relative">
@@ -1446,25 +1594,93 @@ export default function TimelineWindow({
           className="absolute top-0 right-0 h-full w-[30%] min-w-[320px] bg-white/30 dark:bg-white/[0.03] backdrop-blur-xl border-l border-white/20 dark:border-white/10 shadow-xl z-30 overflow-y-auto"
           onWheel={(e) => e.stopPropagation()}
         >
-          {floatingData.type === 'task' ? (
-            <TaskDetailPanel
-              task={localTask || floatingData.item as Task}
-              propertyName={floatingData.propertyName}
-              currentUser={currentUser}
-              taskTemplates={taskTemplates}
-              loadingTaskTemplate={loadingTaskTemplate}
+          {floatingData.type === 'task' && taskAsProject && taskEditingFields ? (
+            <ProjectDetailPanel
+              project={taskAsProject}
+              editingFields={taskEditingFields}
+              setEditingFields={setTaskEditingFields}
+              users={users}
+              allProperties={projectsHook.allProperties}
+              savingEdit={false}
+              onSave={handleSaveTaskEditFields}
+              onDelete={async () => {
+                const task = localTask || floatingData.item as Task;
+                try {
+                  await fetch(`/api/tasks-for-bin/${task.task_id}`, { method: 'DELETE' });
+                  setRecurringTasks(prev => prev.filter((t: any) => t.task_id !== task.task_id));
+                  fetchReservations();
+                } catch (err) {
+                  console.error('Error deleting task:', err);
+                }
+                handleCloseFloatingWindow();
+              }}
               onClose={handleCloseFloatingWindow}
-              onUpdateStatus={handleUpdateTaskStatus}
-              onSaveForm={handleSaveTaskForm}
-              setTask={setLocalTask}
+              onOpenActivity={() => {}}
+              staffOpen={taskStaffOpen}
+              setStaffOpen={setTaskStaffOpen}
+              // Template / checklist slide-over
+              template={resolvedTaskTemplate || undefined}
+              formMetadata={(localTask || floatingData.item as Task).form_metadata}
+              onSaveForm={async (formData) => {
+                const task = localTask || floatingData.item as Task;
+                await handleSaveTaskForm(task.task_id, formData);
+              }}
+              loadingTemplate={loadingTaskTemplate === (localTask || floatingData.item as Task).template_id}
+              currentUser={currentUser}
+              // Turnover context
               onShowTurnover={
                 (localTask || floatingData.item as any)?.is_recurring
                   ? undefined
                   : handleShowTurnover
               }
-              users={users}
-              onUpdateSchedule={updateTurnoverTaskSchedule}
-              onUpdateAssignment={updateTurnoverTaskAssignment}
+              // Comments
+              comments={taskCommentsHook.projectComments}
+              loadingComments={taskCommentsHook.loadingComments}
+              newComment={taskNewComment}
+              setNewComment={setTaskNewComment}
+              postingComment={taskCommentsHook.postingComment}
+              onPostComment={async () => {
+                const task = localTask || floatingData.item as Task;
+                if (taskNewComment.trim()) {
+                  await taskCommentsHook.postProjectComment(task.task_id, taskNewComment, 'task');
+                  setTaskNewComment('');
+                }
+              }}
+              // Attachments
+              attachments={taskAttachmentsHook.projectAttachments}
+              loadingAttachments={taskAttachmentsHook.loadingAttachments}
+              uploadingAttachment={taskAttachmentsHook.uploadingAttachment}
+              attachmentInputRef={taskAttachmentsHook.attachmentInputRef}
+              onAttachmentUpload={(e) => {
+                const task = localTask || floatingData.item as Task;
+                taskAttachmentsHook.handleAttachmentUpload(e, task.task_id, 'task');
+              }}
+              onViewAttachment={(index) => setTaskViewingAttachmentIndex(index)}
+              // Time tracking
+              activeTimeEntry={taskTimeTrackingHook.activeTimeEntry}
+              displaySeconds={taskTimeTrackingHook.displaySeconds}
+              formatTime={taskTimeTrackingHook.formatTime}
+              onStartTimer={() => {
+                const task = localTask || floatingData.item as Task;
+                taskTimeTrackingHook.startProjectTimer(task.task_id, 'task');
+              }}
+              onStopTimer={taskTimeTrackingHook.stopProjectTimer}
+              // Bins
+              bins={binsHook.bins}
+              onBinChange={async (binId) => {
+                const task = localTask || floatingData.item as Task;
+                try {
+                  await fetch('/api/update-task-fields', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ taskId: task.task_id, fields: { bin_id: binId || null } }),
+                  });
+                  setLocalTask(prev => prev ? { ...prev, bin_id: binId || null } : prev);
+                  binsHook.fetchBins();
+                } catch (err) {
+                  console.error('Error updating bin:', err);
+                }
+              }}
             />
           ) : floatingData.type === 'project' && projectFields ? (
             <ProjectDetailPanel
@@ -1703,6 +1919,14 @@ export default function TimelineWindow({
         onOpenChange={setActivitySheetOpen}
         activities={activityHook.projectActivity}
         loading={activityHook.loadingActivity}
+      />
+
+      {/* Task Attachment Lightbox */}
+      <AttachmentLightbox
+        attachments={taskAttachmentsHook.projectAttachments}
+        viewingIndex={taskViewingAttachmentIndex}
+        onClose={() => setTaskViewingAttachmentIndex(null)}
+        onNavigate={setTaskViewingAttachmentIndex}
       />
 
       {/* Turnover Projects - Attachment Lightbox */}

@@ -44,6 +44,10 @@ export interface Task {
   task_id: string;
   template_id?: string;
   template_name?: string;
+  title?: string | null;
+  description?: TiptapJSON | null;
+  priority?: string | null;
+  bin_id?: string | null;
   type: TaskType;
   department_id?: string | null;
   department_name?: string | null;
