@@ -33,7 +33,7 @@ const getFolderStatus = (items: Task[]): string => {
   if (active.length === 0) return 'no_tasks';
   const completed = active.filter(t => t.status === 'complete').length;
   if (completed === active.length) return 'complete';
-  const inProgress = active.filter(t => t.status === 'in_progress' || t.status === 'paused' || t.status === 'on_hold').length;
+  const inProgress = active.filter(t => t.status === 'in_progress' || t.status === 'paused').length;
   if (inProgress > 0 || completed > 0) return 'in_progress';
   return 'not_started';
 };
