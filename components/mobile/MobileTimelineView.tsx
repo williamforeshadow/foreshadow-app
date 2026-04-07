@@ -28,7 +28,7 @@ const getRowStyles = (status: string) => {
   }
 };
 
-const getFolderStatus = (items: (Task | Project)[]): string => {
+const getFolderStatus = (items: Task[]): string => {
   const active = items.filter(t => t.status !== 'contingent');
   if (active.length === 0) return 'no_tasks';
   const completed = active.filter(t => t.status === 'complete').length;
