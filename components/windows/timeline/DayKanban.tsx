@@ -10,8 +10,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import DiamondIcon from '@/components/icons/AssignmentIcon';
-import HexagonIcon from '@/components/icons/HammerIcon';
+import { getDepartmentIcon } from '@/lib/departmentIcons';
+import { useDepartments } from '@/lib/departmentsContext';
 import type { Task, Project } from '@/lib/types';
 import type { AppUser } from '@/lib/useUsers';
 import styles from './DayKanban.module.css';
@@ -772,9 +772,13 @@ function KanbanCardContent({
   item: DraggableKanbanItem;
   isDragging?: boolean;
 }) {
+  const { departments: allDepts } = useDepartments();
   const isTask = item.type === 'task';
   const task = isTask ? (item.data as Task & { property_name: string }) : null;
   const project = !isTask ? (item.data as Project) : null;
+  const deptId = isTask ? task?.department_id : project?.department_id;
+  const dept = allDepts.find(d => d.id === deptId);
+  const DeptIcon = getDepartmentIcon(dept?.icon);
 
   // Collect assignees from task or project
   const assignees: { id: string; name: string; avatar?: string }[] = [];
@@ -814,11 +818,7 @@ function KanbanCardContent({
       {/* Card Header */}
       <div className={styles.cardHeader}>
         <div className={cn(styles.cardIcon, isTask ? styles.cardIconTask : styles.cardIconProject)}>
-          {isTask ? (
-            <DiamondIcon size={12} />
-          ) : (
-            <HexagonIcon size={12} />
-          )}
+          <DeptIcon className="w-3 h-3" />
         </div>
         <div className={styles.cardContent}>
           <p className={styles.cardTitle}>

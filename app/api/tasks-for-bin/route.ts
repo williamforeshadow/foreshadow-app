@@ -7,9 +7,7 @@ export async function GET(request: Request) {
     const binId = searchParams.get('bin_id');
     const viewerUserId = searchParams.get('viewer_user_id');
 
-    let query = getSupabaseServer()
-      .from('turnover_tasks')
-      .select(`
+    const selectFields = `
         id,
         property_name,
         template_id,
@@ -22,6 +20,7 @@ export async function GET(request: Request) {
         status,
         scheduled_date,
         scheduled_time,
+        form_metadata,
         created_at,
         updated_at,
         templates(id, name),
@@ -31,36 +30,18 @@ export async function GET(request: Request) {
           assigned_at,
           users(id, name, email, role, avatar)
         )
-      `)
+      `;
+
+    let query = getSupabaseServer()
+      .from('turnover_tasks')
+      .select(selectFields)
       .not('bin_id', 'is', null)
       .order('created_at', { ascending: false });
 
     if (binId === '__none__') {
       query = getSupabaseServer()
         .from('turnover_tasks')
-        .select(`
-          id,
-          property_name,
-          template_id,
-          title,
-          description,
-          priority,
-          bin_id,
-          type,
-          department_id,
-          status,
-          scheduled_date,
-          scheduled_time,
-          created_at,
-          updated_at,
-          templates(id, name),
-          departments(id, name),
-          task_assignments(
-            user_id,
-            assigned_at,
-            users(id, name, email, role, avatar)
-          )
-        `)
+        .select(selectFields)
         .is('bin_id', null)
         .order('created_at', { ascending: false });
     } else if (binId) {
@@ -111,6 +92,8 @@ export async function GET(request: Request) {
         id: task.id,
         property_name: task.property_name || null,
         bin_id: task.bin_id || null,
+        template_id: task.template_id || null,
+        template_name: template?.name || null,
         title: task.title || template?.name || 'Untitled Task',
         description: task.description || null,
         status: task.status || 'not_started',
@@ -119,6 +102,7 @@ export async function GET(request: Request) {
         department_name: department?.name || null,
         scheduled_date: task.scheduled_date || null,
         scheduled_time: task.scheduled_time || null,
+        form_metadata: task.form_metadata || null,
         created_at: task.created_at,
         updated_at: task.updated_at,
         unread_comment_count: unreadCounts[task.id] || 0,
@@ -209,8 +193,10 @@ export async function POST(request: Request) {
         status,
         scheduled_date,
         scheduled_time,
+        form_metadata,
         created_at,
         updated_at,
+        templates(id, name),
         departments(id, name),
         task_assignments(
           user_id,
@@ -225,10 +211,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, data: task });
     }
 
+    const tmpl = fullTask.templates as any;
     const transformed = {
       id: fullTask.id,
       property_name: fullTask.property_name || null,
       bin_id: fullTask.bin_id || null,
+      template_id: fullTask.template_id || null,
+      template_name: tmpl?.name || null,
       title: fullTask.title || 'Untitled Task',
       description: fullTask.description || null,
       status: fullTask.status || 'not_started',
@@ -237,6 +226,7 @@ export async function POST(request: Request) {
       department_name: (fullTask.departments as any)?.name || null,
       scheduled_date: fullTask.scheduled_date || null,
       scheduled_time: fullTask.scheduled_time || null,
+      form_metadata: fullTask.form_metadata || null,
       created_at: fullTask.created_at,
       updated_at: fullTask.updated_at,
       unread_comment_count: 0,

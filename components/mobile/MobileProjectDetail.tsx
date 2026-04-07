@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { useAuth } from '@/lib/authContext';
@@ -9,8 +9,10 @@ import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
-import type { Project, User, ProjectFormFields, Comment, Attachment, PropertyOption, ProjectBin, TiptapJSON } from '@/lib/types';
+import type { Project, User, ProjectFormFields, Comment, Attachment, PropertyOption, ProjectBin, TiptapJSON, TaskTemplate } from '@/lib/types';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
+import DynamicCleaningForm from '@/components/DynamicCleaningForm';
+import type { Template } from '@/components/DynamicCleaningForm';
 
 // ============================================================================
 // Types
@@ -26,6 +28,12 @@ interface MobileProjectDetailProps {
   onPropertyChange?: (propertyId: string | null, propertyName: string | null) => void;
   bins?: ProjectBin[];
   onBinChange?: (binId: string | null, binName: string | null) => void;
+  template?: Template | null;
+  formMetadata?: Record<string, unknown>;
+  onSaveForm?: (formData: Record<string, unknown>) => Promise<void>;
+  loadingTemplate?: boolean;
+  availableTemplates?: TaskTemplate[];
+  onTemplateChange?: (templateId: string | null) => void;
 }
 
 // ============================================================================
@@ -63,6 +71,12 @@ export default function MobileProjectDetail({
   onPropertyChange,
   bins = [],
   onBinChange,
+  template,
+  formMetadata,
+  onSaveForm,
+  loadingTemplate,
+  availableTemplates = [],
+  onTemplateChange,
 }: MobileProjectDetailProps) {
   const { user: currentUser } = useAuth();
   const { departments } = useDepartments();
@@ -89,9 +103,11 @@ export default function MobileProjectDetail({
   const [propertySearch, setPropertySearch] = useState('');
   const [binSearch, setBinSearch] = useState('');
   const [staffSearch, setStaffSearch] = useState('');
-  const [activeSection, setActiveSection] = useState<'details' | 'comments' | 'attachments'>('details');
+  const [activeSection, setActiveSection] = useState<'details' | 'checklist' | 'comments' | 'attachments'>('details');
   const [saving, setSaving] = useState(false);
   const [newComment, setNewComment] = useState('');
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState('');
 
   // Hooks for comments, attachments, time tracking
   const commentsHook = useProjectComments({ currentUser: currentUser as User | null });
@@ -131,6 +147,20 @@ export default function MobileProjectDetail({
   const status = STATUS_CONFIG[fields.status] || STATUS_CONFIG.not_started;
   const priority = PRIORITY_CONFIG[fields.priority] || PRIORITY_CONFIG.medium;
   const currentBin = bins.find(b => b.id === project.bin_id);
+
+  const hasChecklist = !!template;
+  const isAssigned = currentUser ? fields.assigned_staff?.includes(currentUser.id) : false;
+  const isChecklistReadOnly = !isAssigned || fields.status === 'complete' || fields.status === 'contingent';
+
+  const filteredTemplates = useMemo(() => {
+    if (!templateSearch.trim()) return availableTemplates;
+    const lower = templateSearch.toLowerCase();
+    return availableTemplates.filter(t => t.name.toLowerCase().includes(lower));
+  }, [availableTemplates, templateSearch]);
+
+  const currentTemplateName = project.template_name
+    || availableTemplates.find(t => t.id === project.template_id)?.name
+    || null;
 
   // Post comment
   const handlePostComment = async () => {
@@ -238,7 +268,7 @@ export default function MobileProjectDetail({
               value={fields.title}
               onChange={(e) => setFields(prev => ({ ...prev, title: e.target.value }))}
               onBlur={() => autoSave(fields)}
-              placeholder="Untitled Project"
+              placeholder="Untitled Task"
               className="text-lg font-semibold bg-transparent border-none outline-none w-full text-neutral-900 dark:text-white placeholder:text-neutral-400"
             />
             <div className="relative">
@@ -308,7 +338,7 @@ export default function MobileProjectDetail({
             {bins.length > 0 && (
               <div className="relative">
                 <button
-                  onClick={() => { setShowBinPicker(!showBinPicker); setShowPropertyPicker(false); }}
+                  onClick={() => { setShowBinPicker(!showBinPicker); setShowPropertyPicker(false); setShowTemplatePicker(false); }}
                   className="flex items-center gap-1.5 mt-0.5 group"
                 >
                   <svg className="w-3 h-3 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -361,6 +391,67 @@ export default function MobileProjectDetail({
                         </svg>
                         <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{bin.name}</span>
                         {project.bin_id === bin.id && (
+                          <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                  </InlineDropdown>
+                )}
+              </div>
+            )}
+            {onTemplateChange && availableTemplates.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => { setShowTemplatePicker(!showTemplatePicker); setShowPropertyPicker(false); setShowBinPicker(false); setTemplateSearch(''); }}
+                  className="flex items-center gap-1.5 mt-0.5 group"
+                >
+                  <svg className="w-3 h-3 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                  <span className="text-xs text-neutral-500 dark:text-neutral-400 truncate">
+                    {currentTemplateName || 'No template'}
+                  </span>
+                  <svg className={`w-3 h-3 text-neutral-300 dark:text-neutral-600 transition-transform ${showTemplatePicker ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showTemplatePicker && (
+                  <InlineDropdown onClose={() => { setShowTemplatePicker(false); setTemplateSearch(''); }}>
+                    <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Template</p>
+                    <div className="px-3 pb-2">
+                      <input
+                        type="text"
+                        placeholder="Search templates..."
+                        value={templateSearch}
+                        onChange={(e) => setTemplateSearch(e.target.value)}
+                        className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
+                      />
+                    </div>
+                    <button
+                      onClick={() => { onTemplateChange(null); setShowTemplatePicker(false); }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                        !project.template_id ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
+                      }`}
+                    >
+                      <span className="text-[15px] text-neutral-500 italic">No Template</span>
+                      {!project.template_id && (
+                        <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                    {filteredTemplates.map((tmpl) => (
+                      <button
+                        key={tmpl.id}
+                        onClick={() => { onTemplateChange(tmpl.id); setShowTemplatePicker(false); }}
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                          project.template_id === tmpl.id ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
+                        }`}
+                      >
+                        <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{tmpl.name}</span>
+                        {project.template_id === tmpl.id && (
                           <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
@@ -497,10 +588,10 @@ export default function MobileProjectDetail({
 
         {/* Section tabs */}
         <div className="flex border-t border-neutral-100 dark:border-neutral-800">
-          {(['details', 'comments', 'attachments'] as const).map((section) => (
+          {(['details', ...(hasChecklist || loadingTemplate ? ['checklist'] : []), 'comments', 'attachments'] as const).map((section) => (
             <button
               key={section}
-              onClick={() => setActiveSection(section)}
+              onClick={() => setActiveSection(section as typeof activeSection)}
               className={`flex-1 py-2.5 text-xs font-medium text-center transition-colors relative ${
                 activeSection === section
                   ? 'text-neutral-900 dark:text-white'
@@ -508,6 +599,7 @@ export default function MobileProjectDetail({
               }`}
             >
               {section === 'details' && 'Details'}
+              {section === 'checklist' && 'Checklist'}
               {section === 'comments' && `Comments${commentsHook.projectComments.length > 0 ? ` (${commentsHook.projectComments.length})` : ''}`}
               {section === 'attachments' && `Files${attachmentsHook.projectAttachments.length > 0 ? ` (${attachmentsHook.projectAttachments.length})` : ''}`}
               {activeSection === section && (
@@ -689,6 +781,35 @@ export default function MobileProjectDetail({
 
             {/* Bottom padding */}
             <div className="h-4" />
+          </div>
+        )}
+
+        {/* Checklist Section */}
+        {activeSection === 'checklist' && (
+          <div className="px-5 pt-5 pb-6">
+            {loadingTemplate ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : template ? (
+              <DynamicCleaningForm
+                cleaningId={project.id}
+                propertyName={project.property_name || ''}
+                template={template}
+                formMetadata={formMetadata}
+                onSave={async (formData) => {
+                  if (onSaveForm) await onSaveForm(formData);
+                }}
+                readOnly={isChecklistReadOnly}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-neutral-400">
+                <svg className="w-10 h-10 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-sm font-medium">No checklist configured</p>
+              </div>
+            )}
           </div>
         )}
 

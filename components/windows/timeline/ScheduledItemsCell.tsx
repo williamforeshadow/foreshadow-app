@@ -15,8 +15,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip/tooltip';
-import DiamondIcon from '@/components/icons/AssignmentIcon';
-import HexagonIcon from '@/components/icons/HammerIcon';
+import { ClipboardCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Task, Project } from '@/lib/types';
 
@@ -222,7 +221,7 @@ export function ScheduledItemsCell({
                   hasApproved && hasContingent && "border-[1.5px] border-dashed border-neutral-400/70 dark:border-neutral-400/70",
                 )}
               >
-                <DiamondIcon size={14} />
+                <ClipboardCheck className="w-3.5 h-3.5" />
               </div>
             ) : (
               <HoverCard openDelay={0} closeDelay={100}>
@@ -238,7 +237,7 @@ export function ScheduledItemsCell({
                       hasApproved && hasContingent && "border-[1.5px] border-dashed border-neutral-400/70 dark:border-neutral-400/70",
                     )}
                   >
-                    <DiamondIcon size={14} />
+                    <ClipboardCheck className="w-3.5 h-3.5" />
                   </div>
                 </HoverCardTrigger>
                 <HoverCardContent side="bottom" align="start" sideOffset={4} collisionPadding={16} className="w-72 p-0 glass-card bg-white/90 dark:bg-neutral-900/95 border-white/30 dark:border-white/10">
@@ -296,7 +295,7 @@ export function ScheduledItemsCell({
                   projectFolderStatus === 'no_tasks' && "bg-neutral-100 dark:bg-neutral-800 border border-neutral-300/35 dark:border-white/12 text-white dark:text-white",
                 )}
               >
-                <HexagonIcon size={14} />
+                <ClipboardCheck className="w-3.5 h-3.5" />
               </div>
             ) : (
               <HoverCard openDelay={0} closeDelay={100}>
@@ -310,7 +309,7 @@ export function ScheduledItemsCell({
                       projectFolderStatus === 'no_tasks' && "bg-neutral-100 dark:bg-neutral-800 border border-neutral-300/35 dark:border-white/12 text-white dark:text-white hover:bg-neutral-200 dark:hover:bg-neutral-700",
                     )}
                   >
-                    <HexagonIcon size={14} />
+                    <ClipboardCheck className="w-3.5 h-3.5" />
                   </div>
                 </HoverCardTrigger>
                 <HoverCardContent side="bottom" align="start" sideOffset={4} collisionPadding={16} className="w-72 p-0 glass-card bg-white/90 dark:bg-neutral-900/95 border-white/30 dark:border-white/10">

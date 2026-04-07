@@ -29,7 +29,7 @@ export default function DesktopApp() {
   const viewLabels: Record<ViewType, string> = {
     turnovers: 'Turnovers',
     timeline: 'Timeline',
-    projects: 'Projects',
+    projects: 'Bins',
     tasks: 'Tasks',
     messages: 'Messages'
   };

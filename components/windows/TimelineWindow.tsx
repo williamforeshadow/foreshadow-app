@@ -13,8 +13,7 @@ import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { ScheduledItemsCell, DayKanban } from './timeline';
 import { AttachmentLightbox, ProjectActivitySheet, ProjectDetailPanel } from './projects';
 import { TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
-import DiamondIcon from '@/components/icons/AssignmentIcon';
-import HexagonIcon from '@/components/icons/HammerIcon';
+import { ClipboardCheck } from 'lucide-react';
 import Rhombus16FilledIcon from '@/components/icons/Rhombus16FilledIcon';
 import RectangleStackIcon from '@/components/icons/RectangleStackIcon';
 import type { Project, Task, User, ProjectFormFields, Turnover, TaskTemplate } from '@/lib/types';
@@ -229,6 +228,8 @@ export default function TimelineWindow({
       taskCommentsHook.fetchProjectComments(task.task_id, 'task');
       taskAttachmentsHook.fetchProjectAttachments(task.task_id, 'task');
       taskTimeTrackingHook.fetchProjectTimeEntries(task.task_id, 'task');
+      // Ensure available templates are loaded for the picker
+      if (availableTemplates.length === 0) fetchAvailableTemplates();
     } else {
       setProjectFields(null);
       setLocalTask(null);
@@ -654,6 +655,8 @@ export default function TimelineWindow({
     id: localTask.task_id,
     property_name: floatingData?.propertyName || localTask.property_name || null,
     bin_id: localTask.bin_id || null,
+    template_id: localTask.template_id || null,
+    template_name: localTask.template_name || null,
     title: localTask.title || localTask.template_name || 'Task',
     description: localTask.description || null,
     status: localTask.status as Project['status'],
@@ -662,6 +665,7 @@ export default function TimelineWindow({
     department_name: localTask.department_name || null,
     scheduled_date: localTask.scheduled_date || null,
     scheduled_time: localTask.scheduled_time || null,
+    form_metadata: localTask.form_metadata || undefined,
     project_assignments: (localTask.assigned_users || []).map(u => ({
       user_id: u.user_id,
       user: { id: u.user_id, name: u.name, avatar: u.avatar, role: u.role }
@@ -997,15 +1001,22 @@ export default function TimelineWindow({
   // Extract ALL tasks from reservations + recurring tasks, tagged with property_name
   const allTasksWithProperty = useMemo(() => {
     const tasks: (Task & { property_name: string })[] = [];
+    const seen = new Set<string>();
     // Tasks from reservations (turnover, occupancy, vacancy triggers)
     reservations.forEach((res: any) => {
       (res.tasks || []).forEach((task: Task) => {
-        tasks.push({ ...task, property_name: res.property_name });
+        if (!seen.has(task.task_id)) {
+          seen.add(task.task_id);
+          tasks.push({ ...task, property_name: res.property_name });
+        }
       });
     });
     // Recurring tasks (property-level, no reservation)
     recurringTasks.forEach((task: any) => {
-      tasks.push({ ...task, property_name: task.property_name });
+      if (!seen.has(task.task_id)) {
+        seen.add(task.task_id);
+        tasks.push({ ...task, property_name: task.property_name });
+      }
     });
     return tasks;
   }, [reservations, recurringTasks]);
@@ -1257,14 +1268,14 @@ export default function TimelineWindow({
                               <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-black/10 dark:bg-black/40 text-neutral-500 dark:text-neutral-400 hover:bg-black/15 dark:hover:bg-black/50 transition-colors">
                                 {/* Tasks icon + count */}
                                 <div className="flex items-center gap-0.5">
-                                  <DiamondIcon size={12} />
+                                  <ClipboardCheck className="w-3 h-3" />
                                   <span className="text-[10px] font-medium w-3 text-right">
                                     {activeTurnover.tasks?.filter(t => t.status !== 'complete').length || 0}
                                   </span>
                                 </div>
                                 {/* Projects icon + count */}
                                 <div className="flex items-center gap-0.5">
-                                  <HexagonIcon size={12} />
+                                  <ClipboardCheck className="w-3 h-3" />
                                   <span className="text-[10px] font-medium w-3 text-right">
                                     {propertyProjects.filter(p => p.status !== 'complete').length}
                                   </span>
@@ -1627,6 +1638,24 @@ export default function TimelineWindow({
               }}
               loadingTemplate={loadingTaskTemplate === (localTask || floatingData.item as Task).template_id}
               currentUser={currentUser}
+              // Template picker
+              availableTemplates={availableTemplates}
+              onTemplateChange={async (templateId) => {
+                const task = localTask || floatingData.item as Task;
+                try {
+                  await fetch('/api/update-task-fields', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ taskId: task.task_id, fields: { template_id: templateId || null } }),
+                  });
+                  setLocalTask(prev => prev ? { ...prev, template_id: templateId || undefined } : prev);
+                  if (templateId) {
+                    fetchTaskTemplate(templateId, task.property_name);
+                  }
+                } catch (err) {
+                  console.error('Error changing template:', err);
+                }
+              }}
               // Turnover context
               onShowTurnover={
                 (localTask || floatingData.item as any)?.is_recurring

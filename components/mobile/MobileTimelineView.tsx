@@ -4,13 +4,12 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTimeline } from '@/lib/useTimeline';
 import { getActiveTurnoverForProperty } from '@/lib/turnoverUtils';
 import { Button } from '@/components/ui/button';
-import DiamondIcon from '@/components/icons/AssignmentIcon';
-import HexagonIcon from '@/components/icons/HammerIcon';
+import { ClipboardCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
-import type { Task, Project } from '@/lib/types';
+import type { Task } from '@/lib/types';
 
 const getRowStyles = (status: string) => {
   const base = 'glass-card glass-sheen relative overflow-hidden rounded-lg';
@@ -29,21 +28,12 @@ const getRowStyles = (status: string) => {
   }
 };
 
-const getTaskFolderStatus = (tasks: Task[]): string => {
-  const active = tasks.filter(t => t.status !== 'contingent');
+const getFolderStatus = (items: (Task | Project)[]): string => {
+  const active = items.filter(t => t.status !== 'contingent');
   if (active.length === 0) return 'no_tasks';
   const completed = active.filter(t => t.status === 'complete').length;
   if (completed === active.length) return 'complete';
-  const inProgress = active.filter(t => t.status === 'in_progress' || t.status === 'paused').length;
-  if (inProgress > 0 || completed > 0) return 'in_progress';
-  return 'not_started';
-};
-
-const getProjectFolderStatus = (projects: Project[]): string => {
-  if (projects.length === 0) return 'no_tasks';
-  const completed = projects.filter(p => p.status === 'complete').length;
-  if (completed === projects.length) return 'complete';
-  const inProgress = projects.filter(p => p.status === 'in_progress' || p.status === 'on_hold').length;
+  const inProgress = active.filter(t => t.status === 'in_progress' || t.status === 'paused' || t.status === 'on_hold').length;
   if (inProgress > 0 || completed > 0) return 'in_progress';
   return 'not_started';
 };
@@ -71,7 +61,6 @@ interface MobileTimelineViewProps {
 export default function MobileTimelineView({
   onCardClick,
   onTaskClick,
-  onProjectClick,
   refreshTrigger,
 }: MobileTimelineViewProps) {
   const {
@@ -93,8 +82,6 @@ export default function MobileTimelineView({
   } = useTimeline();
 
   const { deptIconMap } = useDepartments();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loadingProjects, setLoadingProjects] = useState(true);
   const [expandedCell, setExpandedCell] = useState<{ property: string; dateStr: string } | null>(null);
   const [expandedProperties, setExpandedProperties] = useState<Set<string>>(new Set());
 
@@ -113,22 +100,6 @@ export default function MobileTimelineView({
       return new Set(properties);
     });
   }, [properties]);
-
-  useEffect(() => {
-    const fetchProjects = async () => {
-      setLoadingProjects(true);
-      try {
-        const res = await fetch('/api/projects');
-        const result = await res.json();
-        setProjects(result?.data || []);
-      } catch (err) {
-        console.error('Error fetching projects:', err);
-      } finally {
-        setLoadingProjects(false);
-      }
-    };
-    fetchProjects();
-  }, [refreshTrigger]);
 
   useEffect(() => {
     if (refreshTrigger && refreshTrigger > 0) {
@@ -153,20 +124,12 @@ export default function MobileTimelineView({
     return allTasksWithProperty.filter(task => task.scheduled_date);
   }, [allTasksWithProperty]);
 
-  const scheduledProjects = useMemo(() => {
-    return projects.filter(p => p.scheduled_date);
-  }, [projects]);
-
-  const getCellItems = useCallback((propertyName: string, date: Date) => {
+  const getCellTasks = useCallback((propertyName: string, date: Date) => {
     const dateStr = toDateString(date);
-    const tasks = allScheduledTasks.filter(
+    return allScheduledTasks.filter(
       t => t.property_name === propertyName && t.scheduled_date === dateStr
     );
-    const projs = scheduledProjects.filter(
-      p => p.property_name === propertyName && p.scheduled_date === dateStr
-    );
-    return { tasks, projects: projs };
-  }, [allScheduledTasks, scheduledProjects]);
+  }, [allScheduledTasks]);
 
   const cellWidth = view === 'week' ? 72 : 38;
   const propertyCellWidth = 130;
@@ -330,10 +293,8 @@ export default function MobileTimelineView({
                     return start === idx;
                   });
 
-                  const { tasks: cellTasks, projects: cellProjects } = getCellItems(property, date);
-                  const hasTasks = cellTasks.length > 0;
-                  const hasProjects = cellProjects.length > 0;
-                  const hasItems = hasTasks || hasProjects;
+                  const cellTasks = getCellTasks(property, date);
+                  const hasItems = cellTasks.length > 0;
 
                   return (
                     <div
@@ -395,31 +356,18 @@ export default function MobileTimelineView({
                         );
                       })()}
 
-                      {/* Task/Project icons */}
+                      {/* Task icon */}
                       {hasItems && (
                         <div className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 z-20">
-                          {hasTasks && (
-                            <div
-                              className={cn(
-                                'flex items-center justify-center rounded text-white border shadow-sm',
-                                getIconStyles(getTaskFolderStatus(cellTasks)),
-                                view === 'week' ? 'w-[22px] h-[22px]' : 'w-4 h-4'
-                              )}
-                            >
-                              <DiamondIcon size={view === 'week' ? 12 : 9} />
-                            </div>
-                          )}
-                          {hasProjects && (
-                            <div
-                              className={cn(
-                                'flex items-center justify-center rounded text-white border shadow-sm',
-                                getIconStyles(getProjectFolderStatus(cellProjects)),
-                                view === 'week' ? 'w-[22px] h-[22px]' : 'w-4 h-4'
-                              )}
-                            >
-                              <HexagonIcon size={view === 'week' ? 12 : 9} />
-                            </div>
-                          )}
+                          <div
+                            className={cn(
+                              'flex items-center justify-center rounded text-white border shadow-sm',
+                              getIconStyles(getFolderStatus(cellTasks)),
+                              view === 'week' ? 'w-[22px] h-[22px]' : 'w-4 h-4'
+                            )}
+                          >
+                            <ClipboardCheck className={view === 'week' ? 'w-3 h-3' : 'w-2.5 h-2.5'} />
+                          </div>
                         </div>
                       )}
                     </div>
@@ -447,10 +395,7 @@ export default function MobileTimelineView({
                     const dateTasks = allScheduledTasks.filter(
                       t => t.property_name === property && t.scheduled_date === cellDateStr
                     );
-                    const dateProjects = scheduledProjects.filter(
-                      p => p.property_name === property && p.scheduled_date === cellDateStr
-                    );
-                    const hasItems = dateTasks.length > 0 || dateProjects.length > 0;
+                    const hasItems = dateTasks.length > 0;
 
                     return (
                       <div
@@ -490,33 +435,6 @@ export default function MobileTimelineView({
                                 </div>
                               );
                             })}
-                            {dateProjects.map(project => {
-                              const ProjectDeptIcon = getDepartmentIcon(project.department_id ? deptIconMap[project.department_id] : null);
-                              const firstAssignment = project.project_assignments?.[0];
-                              const extraCount = (project.project_assignments?.length ?? 0) - 1;
-                              return (
-                                <div
-                                  key={project.id}
-                                  className={cn(
-                                    'flex items-center gap-1.5 py-1.5 px-1.5 cursor-pointer transition-all duration-150 active:scale-[0.97]',
-                                    getRowStyles(project.status)
-                                  )}
-                                  onClick={() => setExpandedCell({ property, dateStr: cellDateStr })}
-                                >
-                                  <ProjectDeptIcon size={14} className="shrink-0 text-neutral-600 dark:text-neutral-300" />
-                                  {firstAssignment && (
-                                    <div className="relative shrink-0">
-                                      <UserAvatar src={firstAssignment.user?.avatar} name={firstAssignment.user?.name || 'Unknown'} size="xs" />
-                                      {extraCount > 0 && (
-                                        <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[13px] h-[13px] px-0.5 rounded-full bg-neutral-700 dark:bg-neutral-200 text-[8px] font-medium text-white dark:text-neutral-800 border border-white dark:border-neutral-900">
-                                          +{extraCount}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
                           </div>
                         )}
                       </div>
@@ -533,9 +451,9 @@ export default function MobileTimelineView({
       {/* Bottom sheet for expanded cell items */}
       {expandedCell && (() => {
         const date = new Date(expandedCell.dateStr + 'T00:00:00');
-        const { tasks: cellTasks, projects: cellProjects } = getCellItems(expandedCell.property, date);
+        const cellTasks = getCellTasks(expandedCell.property, date);
 
-        if (cellTasks.length === 0 && cellProjects.length === 0) return null;
+        if (cellTasks.length === 0) return null;
 
         return (
           <>
@@ -571,60 +489,31 @@ export default function MobileTimelineView({
 
               {/* Items */}
               <div className="px-4 pb-6 space-y-3">
-                {cellTasks.length > 0 && (
-                  <div>
-                    <div className="text-[10px] font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                      <DiamondIcon size={10} /> Tasks ({cellTasks.length})
-                    </div>
-                    <div className="space-y-1.5">
-                      {cellTasks.map(task => (
-                        <div
-                          key={task.task_id}
-                          className={cn(
-                            'flex items-center justify-between gap-2 py-2.5 px-3 cursor-pointer transition-all duration-150 active:scale-[0.98]',
-                            getRowStyles(task.status)
-                          )}
-                          onClick={() => {
-                            onTaskClick?.(task);
-                            setExpandedCell(null);
-                          }}
-                        >
-                          <span className="truncate text-sm font-medium">{task.template_name || task.type}</span>
-                          <svg className="w-4 h-4 text-neutral-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </div>
-                      ))}
-                    </div>
+                <div>
+                  <div className="text-[10px] font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                    <ClipboardCheck className="w-2.5 h-2.5" /> Tasks ({cellTasks.length})
                   </div>
-                )}
-                {cellProjects.length > 0 && (
-                  <div>
-                    <div className="text-[10px] font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                      <HexagonIcon size={10} /> Projects ({cellProjects.length})
-                    </div>
-                    <div className="space-y-1.5">
-                      {cellProjects.map(project => (
-                        <div
-                          key={project.id}
-                          className={cn(
-                            'flex items-center justify-between gap-2 py-2.5 px-3 cursor-pointer transition-all duration-150 active:scale-[0.98]',
-                            getRowStyles(project.status)
-                          )}
-                          onClick={() => {
-                            onProjectClick?.(project);
-                            setExpandedCell(null);
-                          }}
-                        >
-                          <span className="truncate text-sm font-medium">{project.title}</span>
-                          <svg className="w-4 h-4 text-neutral-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </div>
-                      ))}
-                    </div>
+                  <div className="space-y-1.5">
+                    {cellTasks.map(task => (
+                      <div
+                        key={task.task_id}
+                        className={cn(
+                          'flex items-center justify-between gap-2 py-2.5 px-3 cursor-pointer transition-all duration-150 active:scale-[0.98]',
+                          getRowStyles(task.status)
+                        )}
+                        onClick={() => {
+                          onTaskClick?.(task);
+                          setExpandedCell(null);
+                        }}
+                      >
+                        <span className="truncate text-sm font-medium">{task.title || task.template_name || task.type}</span>
+                        <svg className="w-4 h-4 text-neutral-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
+                    ))}
                   </div>
-                )}
+                </div>
               </div>
             </div>
           </>

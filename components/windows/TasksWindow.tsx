@@ -6,7 +6,7 @@ import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
-import type { User, Project, ProjectFormFields } from '@/lib/types';
+import type { User, Project, ProjectFormFields, TaskTemplate } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 import {
   TaskRowItem,
@@ -59,6 +59,8 @@ function TasksWindowContent({ currentUser, users }: TasksWindowProps) {
   const binsHook = useProjectBins({ currentUser });
   const [taskViewingAttachmentIndex, setTaskViewingAttachmentIndex] = useState<number | null>(null);
 
+  const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
+
   useEffect(() => {
     taskEditingFieldsRef.current = taskEditingFields;
   }, [taskEditingFields]);
@@ -95,6 +97,37 @@ function TasksWindowContent({ currentUser, users }: TasksWindowProps) {
       taskTimeTrackingHook.clearTimeTracking();
     }
   }, [selectedTask?.task_id]);
+
+  // Fetch available templates lazily when a task is selected
+  useEffect(() => {
+    if (selectedTask && availableTemplates.length === 0) {
+      (async () => {
+        try {
+          const res = await fetch('/api/tasks');
+          const result = await res.json();
+          if (res.ok && result.data) setAvailableTemplates(result.data);
+        } catch (err) {
+          console.error('Error fetching templates:', err);
+        }
+      })();
+    }
+  }, [selectedTask?.task_id]);
+
+  const handleTemplateChange = useCallback(async (templateId: string | null) => {
+    if (!selectedTask) return;
+    try {
+      await fetch('/api/update-task-fields', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: selectedTask.task_id, fields: { template_id: templateId || null } }),
+      });
+      if (templateId) {
+        fetchTaskTemplate(templateId, selectedTask.property_name);
+      }
+    } catch (err) {
+      console.error('Error changing template:', err);
+    }
+  }, [selectedTask, fetchTaskTemplate]);
 
   const handleSaveTaskFields = useCallback(async () => {
     if (!selectedTask) return;
@@ -137,6 +170,8 @@ function TasksWindowContent({ currentUser, users }: TasksWindowProps) {
     id: selectedTask.task_id,
     property_name: selectedTask.property_name || null,
     bin_id: selectedTask.bin_id || null,
+    template_id: selectedTask.template_id || null,
+    template_name: selectedTask.template_name || null,
     title: selectedTask.title || selectedTask.template_name || 'Task',
     description: selectedTask.description || null,
     status: selectedTask.status as Project['status'],
@@ -145,6 +180,7 @@ function TasksWindowContent({ currentUser, users }: TasksWindowProps) {
     department_name: selectedTask.department_name || null,
     scheduled_date: selectedTask.scheduled_date || null,
     scheduled_time: selectedTask.scheduled_time || null,
+    form_metadata: selectedTask.form_metadata || undefined,
     project_assignments: (selectedTask.assigned_users || []).map(u => ({
       user_id: u.user_id,
       user: { id: u.user_id, name: u.name, avatar: u.avatar, role: u.role }
@@ -283,6 +319,9 @@ function TasksWindowContent({ currentUser, users }: TasksWindowProps) {
               if (selectedTask) taskTimeTrackingHook.startProjectTimer(selectedTask.task_id, 'task');
             }}
             onStopTimer={taskTimeTrackingHook.stopProjectTimer}
+            // Template picker
+            availableTemplates={availableTemplates}
+            onTemplateChange={handleTemplateChange}
             // Bins
             bins={binsHook.bins}
             onBinChange={async (binId) => {

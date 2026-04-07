@@ -5,7 +5,7 @@ import { DebouncedNativeInput, DebouncedTextarea } from '@/components/ui/debounc
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useDepartments } from '@/lib/departmentsContext';
 import { cn } from '@/lib/utils';
-import type { Project, User, ProjectFormFields, Comment, Attachment, TimeEntry, PropertyOption, ProjectBin } from '@/lib/types';
+import type { Project, User, ProjectFormFields, Comment, Attachment, TimeEntry, PropertyOption, ProjectBin, TaskTemplate } from '@/lib/types';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import DynamicCleaningForm from '@/components/DynamicCleaningForm';
 import type { Template } from '@/components/DynamicCleaningForm';
@@ -90,6 +90,9 @@ interface ProjectDetailPanelProps {
   loadingTemplate?: boolean;
   currentUser?: User | null;
   onValidationChange?: (allRequiredFilled: boolean) => void;
+  // Template picker (optional — for tasks without a template)
+  availableTemplates?: TaskTemplate[];
+  onTemplateChange?: (templateId: string | null) => void;
   // Turnover context (optional)
   onShowTurnover?: () => void;
 }
@@ -133,6 +136,8 @@ export function ProjectDetailPanel({
   loadingTemplate,
   currentUser,
   onValidationChange,
+  availableTemplates = [],
+  onTemplateChange,
   onShowTurnover,
 }: ProjectDetailPanelProps) {
   const { departments } = useDepartments();
@@ -151,6 +156,10 @@ export function ProjectDetailPanel({
   const [deptIconOpen, setDeptIconOpen] = useState(false);
   const [deptPillOpen, setDeptPillOpen] = useState(false);
 
+  // Template picker state
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState('');
+
   // Search states
   const [propertySearch, setPropertySearch] = useState('');
   const [binSearch, setBinSearch] = useState('');
@@ -164,6 +173,7 @@ export function ProjectDetailPanel({
     setDeptPillOpen(false);
     setPropertyOpen(false);
     setBinOpen(false);
+    setTemplateOpen(false);
     setStaffOpen(false);
   }, [setStaffOpen]);
 
@@ -187,6 +197,16 @@ export function ProjectDetailPanel({
     const lower = binSearch.toLowerCase();
     return bins.filter(b => b.name.toLowerCase().includes(lower));
   }, [bins, binSearch]);
+
+  const filteredTemplates = useMemo(() => {
+    if (!templateSearch.trim()) return availableTemplates;
+    const lower = templateSearch.toLowerCase();
+    return availableTemplates.filter(t => t.name.toLowerCase().includes(lower));
+  }, [availableTemplates, templateSearch]);
+
+  const currentTemplateName = project.template_name
+    || availableTemplates.find(t => t.id === project.template_id)?.name
+    || null;
 
   const filteredUsers = useMemo(() => {
     if (!staffSearch.trim()) return users;
@@ -487,6 +507,67 @@ export function ProjectDetailPanel({
                           </svg>
                           <span className="text-[15px] text-neutral-900 dark:text-white flex-1 truncate">{bin.name}</span>
                           {project.bin_id === bin.id && <GreenCheck />}
+                        </button>
+                      ))}
+                    </InlineDropdown>
+                  )}
+                </div>
+              )}
+
+              {/* Template — clickable to assign/change a checklist template */}
+              {onTemplateChange && availableTemplates.length > 0 && (
+                <div className="relative">
+                  <button
+                    onClick={() => { closeAllPickers(); setTemplateOpen(!templateOpen); setTemplateSearch(''); }}
+                    className="flex items-center gap-1.5 pt-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors group"
+                  >
+                    <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                    </svg>
+                    <span className="truncate">{currentTemplateName || 'No template'}</span>
+                    <svg className={`w-3 h-3 opacity-50 transition-transform flex-shrink-0 ${templateOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {templateOpen && (
+                    <InlineDropdown onClose={() => setTemplateOpen(false)}>
+                      <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Template</p>
+                      <div className="px-3 pb-2">
+                        <input
+                          type="text"
+                          placeholder="Search templates..."
+                          value={templateSearch}
+                          onChange={(e) => setTemplateSearch(e.target.value)}
+                          className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
+                        />
+                      </div>
+                      <button
+                        onClick={() => { onTemplateChange(null); setTemplateOpen(false); }}
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                          !project.template_id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                        }`}
+                      >
+                        <span className="text-[15px] text-neutral-500 dark:text-neutral-400 italic">No Template</span>
+                        {!project.template_id && <GreenCheck />}
+                      </button>
+                      {filteredTemplates.map((tmpl) => (
+                        <button
+                          key={tmpl.id}
+                          onClick={() => { onTemplateChange(tmpl.id); setTemplateOpen(false); }}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                            project.template_id === tmpl.id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                          }`}
+                        >
+                          <svg className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                          </svg>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-[15px] text-neutral-900 dark:text-white truncate block">{tmpl.name}</span>
+                            {tmpl.department_name && (
+                              <span className="text-[11px] text-neutral-400 dark:text-neutral-500">{tmpl.department_name}</span>
+                            )}
+                          </div>
+                          {project.template_id === tmpl.id && <GreenCheck />}
                         </button>
                       ))}
                     </InlineDropdown>

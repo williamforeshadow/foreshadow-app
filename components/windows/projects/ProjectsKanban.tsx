@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import HexagonIcon from '@/components/icons/HammerIcon';
+import { getDepartmentIcon } from '@/lib/departmentIcons';
+import { useDepartments } from '@/lib/departmentsContext';
 import type { Project, ProjectStatus, ProjectPriority, PropertyOption, User, Department } from '@/lib/types';
 import type { ProjectViewMode } from '@/lib/useProjects';
 import { STATUS_LABELS, PRIORITY_LABELS, STATUS_ORDER, PRIORITY_ORDER } from '@/lib/useProjects';
@@ -529,6 +530,9 @@ function ProjectCardContent({
   unreadCount?: number;
 }) {
   const project = item.project;
+  const { departments: allDepts } = useDepartments();
+  const dept = allDepts.find(d => d.id === project.department_id);
+  const DeptIcon = getDepartmentIcon(dept?.icon);
 
   // Assignees
   const assignees: { id: string; name: string; avatar?: string }[] = [];
@@ -608,7 +612,7 @@ function ProjectCardContent({
       {/* Card Header */}
       <div className={styles.cardHeader}>
         <div className={styles.cardIcon}>
-          <HexagonIcon size={12} />
+          <DeptIcon className="w-3 h-3" />
         </div>
         <div className={styles.cardContent}>
           <p className={styles.cardTitle}>{project.title}</p>

@@ -66,9 +66,9 @@ export function BinPicker({
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0">
         <div>
-          <h2 className="text-xl font-semibold text-white">Project Bins</h2>
+          <h2 className="text-xl font-semibold text-white">Task Bins</h2>
           <p className="text-sm text-white/40 mt-0.5">
-            {totalProjects} total project{totalProjects !== 1 ? 's' : ''} across {bins.length} bin{bins.length !== 1 ? 's' : ''}
+            {totalProjects} total task{totalProjects !== 1 ? 's' : ''} across {bins.length} bin{bins.length !== 1 ? 's' : ''}
           </p>
         </div>
         <Button

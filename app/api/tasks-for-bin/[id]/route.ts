@@ -19,6 +19,7 @@ export async function PUT(
       department_id,
       property_name,
       bin_id,
+      template_id,
     } = body;
 
     const updateData: Record<string, unknown> = {
@@ -34,6 +35,7 @@ export async function PUT(
     if (department_id !== undefined) updateData.department_id = department_id || null;
     if (property_name !== undefined) updateData.property_name = property_name || null;
     if (bin_id !== undefined) updateData.bin_id = bin_id || null;
+    if (template_id !== undefined) updateData.template_id = template_id || null;
 
     const { error: updateError } = await getSupabaseServer()
       .from('turnover_tasks')
@@ -81,8 +83,10 @@ export async function PUT(
         status,
         scheduled_date,
         scheduled_time,
+        form_metadata,
         created_at,
         updated_at,
+        templates(id, name),
         departments(id, name),
         task_assignments(
           user_id,
@@ -97,10 +101,13 @@ export async function PUT(
       return NextResponse.json({ error: fetchError.message }, { status: 500 });
     }
 
+    const tmpl = data.templates as any;
     const transformed = {
       id: data.id,
       property_name: data.property_name || null,
       bin_id: data.bin_id || null,
+      template_id: data.template_id || null,
+      template_name: tmpl?.name || null,
       title: data.title || 'Untitled Task',
       description: data.description || null,
       status: data.status || 'not_started',
@@ -109,6 +116,7 @@ export async function PUT(
       department_name: (data.departments as any)?.name || null,
       scheduled_date: data.scheduled_date || null,
       scheduled_time: data.scheduled_time || null,
+      form_metadata: data.form_metadata || null,
       created_at: data.created_at,
       updated_at: data.updated_at,
       project_assignments: (data.task_assignments as any[])?.map((a: any) => ({

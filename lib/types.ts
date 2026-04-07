@@ -149,6 +149,8 @@ export interface Project {
   property_id?: string | null;
   property_name?: string | null;
   bin_id?: string | null;
+  template_id?: string | null;
+  template_name?: string | null;
   title: string;
   description?: TiptapJSON | null;
   status: ProjectStatus;
@@ -160,6 +162,7 @@ export interface Project {
   department_name?: string | null;
   scheduled_date?: string | null;
   scheduled_time?: string | null;
+  form_metadata?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }

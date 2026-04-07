@@ -16,7 +16,6 @@ import type { Task, Turnover, User } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useDepartments } from '@/lib/departmentsContext';
-import DiamondIcon from '@/components/icons/AssignmentIcon';
 
 interface TaskTemplateBasic {
   id: string;
@@ -233,7 +232,7 @@ export function TurnoverTaskList({
 
           {/* Middle: title + date/time stacked */}
           <div className="flex flex-col gap-2 flex-1 min-w-0">
-            <span className="text-sm font-medium truncate flex items-center gap-3">{task.template_name || 'Unnamed Task'}<DiamondIcon size={10} className="shrink-0 opacity-40" /></span>
+            <span className="text-sm font-medium truncate">{task.template_name || 'Unnamed Task'}</span>
             <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 dark:text-neutral-400 px-2 py-1 rounded-lg bg-black/10 dark:bg-black/40 w-fit">
               <svg className="w-3 h-3 shrink-0 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />

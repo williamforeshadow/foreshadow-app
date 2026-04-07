@@ -17,7 +17,6 @@ import type { Task, User } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useDepartments } from '@/lib/departmentsContext';
-import DiamondIcon from '@/components/icons/AssignmentIcon';
 
 interface TaskDetailPanelProps {
   task: Task;
@@ -240,9 +239,8 @@ export function TaskDetailPanel({
               {/* Title + property grouped */}
               <div className="flex flex-col gap-0.5">
                 {/* Task name */}
-                <span className="text-sm font-medium truncate flex items-center gap-3">
+                <span className="text-sm font-medium truncate">
                   {task.template_name || 'Task'}
-                  <DiamondIcon size={10} className="shrink-0 opacity-40" />
                 </span>
 
                 {/* Property name */}

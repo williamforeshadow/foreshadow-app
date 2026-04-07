@@ -11,7 +11,8 @@ import { useDepartments } from '@/lib/departmentsContext';
 import { STATUS_ORDER, STATUS_LABELS, PRIORITY_ORDER, PRIORITY_LABELS } from '@/lib/useProjects';
 import type { ProjectViewMode } from '@/lib/useProjects';
 import { ColumnPicker } from '@/components/windows/projects/ColumnPicker';
-import type { Project, User, ProjectFormFields } from '@/lib/types';
+import type { Project, User, ProjectFormFields, TaskTemplate } from '@/lib/types';
+import type { Template } from '@/components/DynamicCleaningForm';
 import type { useProjects } from '@/lib/useProjects';
 
 // ============================================================================
@@ -116,6 +117,85 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
 
   const [screen, setScreen] = useState<Screen>({ type: 'bins' });
   const [kanbanDragging, setKanbanDragging] = useState(false);
+
+  // Template state
+  const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
+  const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
+  const [loadingTemplate, setLoadingTemplate] = useState(false);
+
+  // Fetch available templates lazily when detail opens
+  useEffect(() => {
+    if (screen.type === 'detail' && availableTemplates.length === 0) {
+      fetch('/api/tasks').then(r => r.json()).then(result => {
+        if (result?.data) setAvailableTemplates(result.data);
+      }).catch(() => {});
+    }
+  }, [screen.type]);
+
+  const fetchTaskTemplate = useCallback(async (templateId: string, propertyName?: string | null) => {
+    const cacheKey = propertyName ? `${templateId}__${propertyName}` : templateId;
+    if (taskTemplates[cacheKey]) return;
+    setLoadingTemplate(true);
+    try {
+      const params = new URLSearchParams({ id: templateId });
+      if (propertyName) params.set('property_name', propertyName);
+      const res = await fetch(`/api/templates/${templateId}?${params.toString()}`);
+      const result = await res.json();
+      if (res.ok && result) {
+        setTaskTemplates(prev => ({ ...prev, [cacheKey]: result }));
+      }
+    } catch {
+    } finally {
+      setLoadingTemplate(false);
+    }
+  }, [taskTemplates]);
+
+  const detailProject = screen.type === 'detail' ? screen.project : null;
+
+  const detailTemplate = useMemo((): Template | null => {
+    if (!detailProject?.template_id) return null;
+    const templateId = detailProject.template_id;
+    const cacheKey = detailProject.property_name
+      ? `${templateId}__${detailProject.property_name}`
+      : templateId;
+    return taskTemplates[cacheKey] || taskTemplates[templateId] || null;
+  }, [detailProject, taskTemplates]);
+
+  // Fetch template when detail opens with a template_id
+  useEffect(() => {
+    if (detailProject?.template_id) {
+      fetchTaskTemplate(detailProject.template_id, detailProject.property_name);
+    }
+  }, [detailProject?.id]);
+
+  const handleTemplateChange = useCallback(async (templateId: string | null) => {
+    if (!detailProject) return;
+    await fetch(`/api/tasks-for-bin/${detailProject.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template_id: templateId }),
+    });
+    setScreen(prev => prev.type === 'detail' ? {
+      ...prev,
+      project: { ...prev.project, template_id: templateId, template_name: null },
+    } : prev);
+    if (templateId) {
+      await fetchTaskTemplate(templateId, detailProject.property_name);
+    }
+  }, [detailProject, fetchTaskTemplate]);
+
+  const handleSaveForm = useCallback(async (formData: Record<string, unknown>) => {
+    if (!detailProject) return;
+    await fetch('/api/save-task-form', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task_id: detailProject.id, form_metadata: formData }),
+    });
+    setScreen(prev => prev.type === 'detail' ? {
+      ...prev,
+      project: { ...prev.project, form_metadata: formData },
+    } : prev);
+  }, [detailProject]);
 
   const {
     projects,
@@ -239,7 +319,7 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
             const bin = binsHook.bins.find(b => b.id === binId);
             navigateToBin(binId, bin?.name || 'Bin');
           }}
-          onSelectAll={() => navigateToBin(null, 'All Projects')}
+          onSelectAll={() => navigateToBin(null, 'All Tasks')}
           onSelectUnbinned={() => navigateToBin('__none__', 'Unbinned')}
           onCreateBin={binsHook.createBin}
           onUpdateBin={binsHook.updateBin}
@@ -264,7 +344,7 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-semibold text-neutral-900 dark:text-white truncate">{screen.binName}</h2>
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                  {projects.length} project{projects.length !== 1 ? 's' : ''}
+                  {projects.length} task{projects.length !== 1 ? 's' : ''}
                 </p>
               </div>
               <MobileViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
@@ -290,14 +370,14 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
           <div className={`flex-1 min-h-0 flex flex-col mobile-kanban-wrapper${kanbanDragging ? ' is-dragging' : ''}`}>
             {loadingProjects ? (
               <div className="flex items-center justify-center h-full">
-                <p className="text-neutral-500">Loading projects...</p>
+                <p className="text-neutral-500">Loading tasks...</p>
               </div>
             ) : projects.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-neutral-400">
                 <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <p className="text-sm font-medium">No projects yet</p>
+                <p className="text-sm font-medium">No tasks yet</p>
                 <button
                   onClick={handleNewProject}
                   className="mt-3 text-xs font-medium text-emerald-500 active:text-emerald-600"
@@ -355,6 +435,12 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
             } : prev);
             binsHook.fetchBins();
           }}
+          template={detailTemplate}
+          formMetadata={screen.project.form_metadata as Record<string, unknown> | undefined}
+          onSaveForm={handleSaveForm}
+          loadingTemplate={loadingTemplate}
+          availableTemplates={availableTemplates}
+          onTemplateChange={handleTemplateChange}
         />
       )}
     </div>

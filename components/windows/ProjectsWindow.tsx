@@ -19,7 +19,8 @@ import {
 import { ColumnPicker } from './projects/ColumnPicker';
 import { ProjectsKanban } from './projects/ProjectsKanban';
 import { useDepartments } from '@/lib/departmentsContext';
-import type { User, Project, Attachment, Comment, ProjectFormFields, PropertyOption } from '@/lib/types';
+import type { User, Project, Attachment, Comment, ProjectFormFields, PropertyOption, TaskTemplate } from '@/lib/types';
+import type { Template } from '@/components/DynamicCleaningForm';
 
 // ============================================================================
 // View Mode Toggle — compact pill that expands on click
@@ -115,6 +116,11 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
 
+  // Template state
+  const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
+  const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
+  const [loadingTaskTemplate, setLoadingTaskTemplate] = useState<string | null>(null);
+
   // View mode
   const [viewMode, setViewMode] = useState<ProjectViewMode>('status');
 
@@ -153,6 +159,86 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       }
     })();
   }, []);
+
+  // Fetch available templates on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/tasks');
+        const result = await res.json();
+        if (res.ok && result.data) {
+          setAvailableTemplates(result.data);
+        }
+      } catch (err) {
+        console.error('Error fetching templates:', err);
+      }
+    })();
+  }, []);
+
+  const fetchTaskTemplate = useCallback(async (templateId: string, propertyName?: string) => {
+    const cacheKey = propertyName ? `${templateId}__${propertyName}` : templateId;
+    if (taskTemplates[cacheKey]) return taskTemplates[cacheKey];
+
+    setLoadingTaskTemplate(templateId);
+    try {
+      const url = propertyName
+        ? `/api/templates/${templateId}?property_name=${encodeURIComponent(propertyName)}`
+        : `/api/templates/${templateId}`;
+      const res = await fetch(url);
+      const result = await res.json();
+      if (res.ok && result.template) {
+        setTaskTemplates(prev => ({ ...prev, [cacheKey]: result.template }));
+        return result.template as Template;
+      }
+    } catch (err) {
+      console.error('Error fetching template:', err);
+    } finally {
+      setLoadingTaskTemplate(null);
+    }
+    return null;
+  }, [taskTemplates]);
+
+  const handleSaveTaskForm = useCallback(async (taskId: string, formData: Record<string, unknown>) => {
+    try {
+      const res = await fetch('/api/save-task-form', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, formData }),
+      });
+      if (res.ok) {
+        setTasks(prev => prev.map(t =>
+          t.id === taskId ? { ...t, form_metadata: formData } : t
+        ));
+        if (expandedProject?.id === taskId) {
+          setExpandedProject(prev => prev ? { ...prev, form_metadata: formData } : prev);
+        }
+      }
+    } catch (err) {
+      console.error('Error saving task form:', err);
+    }
+  }, [expandedProject?.id]);
+
+  const handleTemplateChange = useCallback(async (templateId: string | null) => {
+    if (!expandedProject) return;
+    try {
+      const res = await fetch(`/api/tasks-for-bin/${expandedProject.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template_id: templateId }),
+      });
+      const result = await res.json();
+      if (result.data) {
+        const updated = { ...result.data, form_metadata: templateId ? (result.data.form_metadata || {}) : null };
+        setExpandedProject(updated);
+        setTasks(prev => prev.map(t => t.id === expandedProject.id ? updated : t));
+        if (templateId) {
+          fetchTaskTemplate(templateId, updated.property_name || undefined);
+        }
+      }
+    } catch (err) {
+      console.error('Error changing template:', err);
+    }
+  }, [expandedProject, fetchTaskTemplate]);
 
   // Fetch tasks for a given bin
   const fetchTasksForBin = useCallback(async (binId: string | null) => {
@@ -289,6 +375,14 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       commentsHook.fetchProjectComments(expandedProject.id, 'task');
       attachmentsHook.fetchProjectAttachments(expandedProject.id, 'task');
       timeTrackingHook.fetchProjectTimeEntries(expandedProject.id, 'task');
+
+      if (expandedProject.template_id) {
+        const propName = expandedProject.property_name || undefined;
+        const cacheKey = propName ? `${expandedProject.template_id}__${propName}` : expandedProject.template_id;
+        if (!taskTemplates[cacheKey]) {
+          fetchTaskTemplate(expandedProject.template_id, propName);
+        }
+      }
     }
   }, [expandedProject?.id]);
 
@@ -538,7 +632,15 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       </div>
 
       {/* Right Panel - Task Detail */}
-      {expandedProject && editingProjectFields && (
+      {expandedProject && editingProjectFields && (() => {
+        const propName = expandedProject.property_name || undefined;
+        const resolvedTemplate = expandedProject.template_id
+          ? (taskTemplates[`${expandedProject.template_id}__${propName}`] as Template
+            || taskTemplates[expandedProject.template_id] as Template
+            || null)
+          : null;
+
+        return (
         <div className="w-1/3 flex-shrink-0 border-l border-white/20 dark:border-white/10 bg-white/30 dark:bg-white/[0.03] backdrop-blur-xl">
         <ProjectDetailPanel
           project={expandedProject}
@@ -604,9 +706,19 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
           onStopTimer={timeTrackingHook.stopProjectTimer}
           staffOpen={staffOpen}
           setStaffOpen={setStaffOpen}
+          template={resolvedTemplate || undefined}
+          formMetadata={expandedProject.form_metadata}
+          onSaveForm={async (formData) => {
+            await handleSaveTaskForm(expandedProject.id, formData);
+          }}
+          loadingTemplate={loadingTaskTemplate === expandedProject.template_id}
+          currentUser={currentUser}
+          availableTemplates={availableTemplates}
+          onTemplateChange={handleTemplateChange}
         />
         </div>
-      )}
+        );
+      })()}
 
       <ProjectActivitySheet
         open={activityPopoverOpen}

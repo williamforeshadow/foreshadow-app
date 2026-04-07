@@ -10,8 +10,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip/tooltip';
-import DiamondIcon from '@/components/icons/AssignmentIcon';
-import HexagonIcon from '@/components/icons/HammerIcon';
+import { ClipboardCheck } from 'lucide-react';
 import TurnoverCards from '@/components/TurnoverCards';
 import { useTurnovers } from '@/lib/useTurnovers';
 import type { useProjects } from '@/lib/useProjects';
@@ -155,6 +154,7 @@ function TurnoversWindowContent({
       taskCommentsHook.fetchProjectComments(fullscreenTask.task_id, 'task');
       taskAttachmentsHook.fetchProjectAttachments(fullscreenTask.task_id, 'task');
       taskTimeTrackingHook.fetchProjectTimeEntries(fullscreenTask.task_id, 'task');
+      if (availableTemplates.length === 0) fetchAvailableTemplates();
     } else {
       setTaskEditingFields(null);
       setTaskStaffOpen(false);
@@ -310,6 +310,8 @@ function TurnoversWindowContent({
     id: fullscreenTask.task_id,
     property_name: selectedCard?.property_name || null,
     bin_id: fullscreenTask.bin_id || null,
+    template_id: fullscreenTask.template_id || null,
+    template_name: fullscreenTask.template_name || null,
     title: fullscreenTask.title || fullscreenTask.template_name || 'Task',
     description: fullscreenTask.description || null,
     status: fullscreenTask.status as Project['status'],
@@ -318,6 +320,7 @@ function TurnoversWindowContent({
     department_name: fullscreenTask.department_name || null,
     scheduled_date: fullscreenTask.scheduled_date || null,
     scheduled_time: fullscreenTask.scheduled_time || null,
+    form_metadata: fullscreenTask.form_metadata || undefined,
     project_assignments: (fullscreenTask.assigned_users || []).map(u => ({
       user_id: u.user_id,
       user: { id: u.user_id, name: u.name, avatar: u.avatar, role: u.role }
@@ -480,6 +483,23 @@ function TurnoversWindowContent({
                 if (fullscreenTask) taskTimeTrackingHook.startProjectTimer(fullscreenTask.task_id, 'task');
               }}
               onStopTimer={taskTimeTrackingHook.stopProjectTimer}
+              // Template picker
+              availableTemplates={availableTemplates}
+              onTemplateChange={async (templateId) => {
+                if (!fullscreenTask) return;
+                try {
+                  await fetch('/api/update-task-fields', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ taskId: fullscreenTask.task_id, fields: { template_id: templateId || null } }),
+                  });
+                  if (templateId) {
+                    fetchTaskTemplate(templateId, selectedCard?.property_name);
+                  }
+                } catch (err) {
+                  console.error('Error changing template:', err);
+                }
+              }}
               // Bins
               bins={binsHook.bins}
               onBinChange={async (binId) => {
@@ -595,7 +615,7 @@ function TurnoversWindowContent({
                             : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/20 dark:hover:bg-white/10'
                         }`}
                       >
-                        <DiamondIcon size={14} />
+                        <ClipboardCheck className="w-3.5 h-3.5" />
                         <span className="text-xs tabular-nums">{selectedCard.completed_tasks || 0}/{selectedCard.total_tasks || 0}</span>
                       </TooltipTrigger>
                       <TooltipPortal>
@@ -613,7 +633,7 @@ function TurnoversWindowContent({
                             : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/20 dark:hover:bg-white/10'
                         }`}
                       >
-                        <HexagonIcon size={14} />
+                        <ClipboardCheck className="w-3.5 h-3.5" />
                         <span className="text-xs tabular-nums">{projects.filter(p => p.property_name === selectedCard.property_name).length}</span>
                       </TooltipTrigger>
                       <TooltipPortal>

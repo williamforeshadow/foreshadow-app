@@ -92,7 +92,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
     <div className="p-4 flex flex-col gap-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-neutral-900 dark:text-white">Projects</h2>
+        <h2 className="text-xl font-semibold text-neutral-900 dark:text-white">Task Bins</h2>
         <button
           onClick={() => setIsCreating(!isCreating)}
           className="flex items-center gap-1.5 text-xs font-medium text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
@@ -150,8 +150,8 @@ const MobileBinPicker = memo(function MobileBinPicker({
           </svg>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-neutral-900 dark:text-white">All Projects</p>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">{totalProjects} project{totalProjects !== 1 ? 's' : ''}</p>
+          <p className="text-sm font-semibold text-neutral-900 dark:text-white">All Tasks</p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">{totalProjects} task{totalProjects !== 1 ? 's' : ''}</p>
         </div>
       </button>
 
@@ -165,7 +165,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-neutral-900 dark:text-white">Unbinned</p>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">{unbinnedCount} project{unbinnedCount !== 1 ? 's' : ''}</p>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">{unbinnedCount} task{unbinnedCount !== 1 ? 's' : ''}</p>
           </div>
         </button>
       )}
@@ -239,7 +239,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
                       <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 line-clamp-1">{bin.description}</p>
                     )}
                     <p className="text-[11px] text-neutral-400 dark:text-neutral-500 mt-0.5">
-                      {bin.project_count ?? 0} project{(bin.project_count ?? 0) !== 1 ? 's' : ''}
+                      {bin.project_count ?? 0} task{(bin.project_count ?? 0) !== 1 ? 's' : ''}
                     </p>
                   </div>
                 </button>
@@ -290,7 +290,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
                       {isConfirmingDelete && (
                         <div className="px-3 py-2 flex flex-col gap-1.5">
                           <p className="text-xs text-red-500 font-medium">Delete this bin?</p>
-                          <p className="text-[11px] text-neutral-500">Projects will be moved to Unbinned.</p>
+                          <p className="text-[11px] text-neutral-500">Tasks will be moved to Unbinned.</p>
                           <div className="flex gap-2 pt-1">
                             <button
                               onClick={(e) => { e.stopPropagation(); handleDelete(bin.id); }}
