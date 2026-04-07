@@ -13,7 +13,6 @@ import {
 import { ClipboardCheck } from 'lucide-react';
 import TurnoverCards from '@/components/TurnoverCards';
 import { useTurnovers } from '@/lib/useTurnovers';
-import type { useProjects } from '@/lib/useProjects';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
@@ -31,14 +30,12 @@ import type { User, Task, Turnover, Project, ProjectFormFields } from '@/lib/typ
 interface TurnoversWindowProps {
   users: User[];
   currentUser: User | null;
-  projectsHook: ReturnType<typeof useProjects>;
   onOpenProjectInWindow: (project: any) => void;
 }
 
 function TurnoversWindowContent({
   users,
   currentUser,
-  projectsHook,
   onOpenProjectInWindow,
 }: TurnoversWindowProps) {
   // Turnover/task functionality
@@ -175,14 +172,68 @@ function TurnoversWindowContent({
   }, [selectedCard?.id]);
 
   // ============================================================================
-  // SHARED data from projectsHook (only core project data and mutations)
+  // LOCAL project data (fetched from tasks-for-bin API)
   // ============================================================================
-  const {
-    projects,
-    savingProjectEdit,
-    saveProjectById,
-    deleteProject,
-  } = projectsHook;
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [savingProjectEdit, setSavingProjectEdit] = useState(false);
+
+  const fetchProjects = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ bin_id: '__all__' });
+      if (currentUser?.id) params.set('viewer_user_id', currentUser.id);
+      const res = await fetch(`/api/tasks-for-bin?${params.toString()}`);
+      const result = await res.json();
+      if (res.ok && result.data) setProjects(result.data);
+    } catch (err) {
+      console.error('Error fetching projects:', err);
+    }
+  }, [currentUser?.id]);
+
+  useEffect(() => { fetchProjects(); }, [fetchProjects]);
+
+  const saveProjectById = useCallback(async (
+    projectId: string,
+    fields: ProjectFormFields
+  ): Promise<Project | null> => {
+    setSavingProjectEdit(true);
+    try {
+      const res = await fetch(`/api/tasks-for-bin/${projectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: fields.title,
+          description: fields.description || null,
+          status: fields.status,
+          priority: fields.priority,
+          assigned_user_ids: fields.assigned_staff || [],
+          department_id: fields.department_id || null,
+          scheduled_date: fields.scheduled_date || null,
+          scheduled_time: fields.scheduled_time || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.data) {
+        setProjects(prev => prev.map(p => p.id === projectId ? data.data : p));
+        return data.data as Project;
+      }
+      return null;
+    } catch (err) {
+      console.error('Error saving project:', err);
+      return null;
+    } finally {
+      setSavingProjectEdit(false);
+    }
+  }, []);
+
+  const deleteProject = useCallback(async (project: Project) => {
+    if (!confirm(`Delete project "${project.title}"?`)) return;
+    try {
+      const res = await fetch(`/api/tasks-for-bin/${project.id}`, { method: 'DELETE' });
+      if (res.ok) setProjects(prev => prev.filter(p => p.id !== project.id));
+    } catch (err) {
+      console.error('Error deleting project:', err);
+    }
+  }, []);
 
   // ============================================================================
   // Initialize project fields when expanding a project
@@ -249,13 +300,27 @@ function TurnoversWindowContent({
     }
   }, [expandedProject, activityHook]);
 
-  // Create a new project for the current property (without dialog)
   const handleCreateProjectForTurnover = useCallback(async (propertyName: string) => {
-    const newProject = await projectsHook.createProjectForProperty(propertyName);
-    if (newProject) {
-      setExpandedProject(newProject);
+    try {
+      const res = await fetch('/api/tasks-for-bin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          property_name: propertyName,
+          title: 'New Task',
+          status: 'not_started',
+          priority: 'medium',
+        }),
+      });
+      const result = await res.json();
+      if (result.data) {
+        setProjects(prev => [...prev, result.data]);
+        setExpandedProject(result.data);
+      }
+    } catch (err) {
+      console.error('Error creating project:', err);
     }
-  }, [projectsHook]);
+  }, []);
 
   // ============================================================================
   // Task → ProjectDetailPanel: save handler + derived data

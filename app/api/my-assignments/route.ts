@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 
-// GET - Fetch all tasks and projects assigned to a specific user
+// GET - Fetch all tasks assigned to a specific user
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -43,6 +43,7 @@ export async function GET(request: Request) {
           description,
           priority,
           bin_id,
+          property_name,
           type,
           department_id,
           scheduled_date,
@@ -62,7 +63,6 @@ export async function GET(request: Request) {
         );
       }
 
-      // Get reservation IDs to fetch property info
       const reservationIds = taskData
         ?.map((t: any) => t.reservation_id)
         .filter(Boolean) as string[];
@@ -133,7 +133,7 @@ export async function GET(request: Request) {
           form_metadata: task.form_metadata,
           assigned_at: assignment?.assigned_at,
           assigned_users: allAssigneesMap[task.id] || [],
-          property_name: reservation?.property_name || 'Unknown Property',
+          property_name: reservation?.property_name || task.property_name || null,
           check_out: reservation?.check_out,
           check_in: reservation?.check_in,
           guest_name: reservation?.guest_name
@@ -141,86 +141,14 @@ export async function GET(request: Request) {
       }) || [];
     }
 
-    // Fetch projects assigned to this user
-    const { data: projectAssignments, error: projectsError } = await getSupabaseServer()
-      .from('project_assignments')
-      .select(`
-        project_id,
-        assigned_at,
-        property_projects(
-          id,
-          property_id,
-          property_name,
-          bin_id,
-          title,
-          description,
-          status,
-          priority,
-          department_id,
-          scheduled_date,
-          scheduled_time,
-          created_at,
-          updated_at,
-          departments(id, name)
-        )
-      `)
-      .eq('user_id', userId);
-
-    if (projectsError) {
-      console.error('Error fetching project assignments:', projectsError);
-      return NextResponse.json(
-        { error: projectsError.message },
-        { status: 500 }
-      );
-    }
-
-    // Fetch ALL assignees for these projects (not just current user)
-    const projectIds = projectAssignments?.map((pa: any) => pa.project_id).filter(Boolean) || [];
-    let projectAssigneesMap: Record<string, { user_id: string; user: { id: string; name: string; avatar: string | null } }[]> = {};
-    if (projectIds.length > 0) {
-      const { data: allProjectAssignments } = await getSupabaseServer()
-        .from('project_assignments')
-        .select('project_id, user_id, users(id, name, avatar)')
-        .in('project_id', projectIds);
-
-      if (allProjectAssignments) {
-        allProjectAssignments.forEach((a: any) => {
-          const u = a.users as any;
-          if (!projectAssigneesMap[a.project_id]) projectAssigneesMap[a.project_id] = [];
-          projectAssigneesMap[a.project_id].push({
-            user_id: a.user_id,
-            user: {
-              id: u?.id || a.user_id,
-              name: u?.name || 'Unknown',
-              avatar: u?.avatar || null,
-            },
-          });
-        });
-      }
-    }
-
-    // Transform projects
-    const projects = projectAssignments?.map((pa: any) => {
-      const project = pa.property_projects as any;
-      if (!project) return null;
-      
-      return {
-        ...project,
-        department_name: project.departments?.name || null,
-        departments: undefined,
-        assigned_at: pa.assigned_at,
-        project_assignments: projectAssigneesMap[project.id] || [],
-      };
-    }).filter(Boolean) || [];
-
     return NextResponse.json({
       tasks,
-      projects,
+      projects: [],
       summary: {
         total_tasks: tasks.length,
         completed_tasks: tasks.filter((t: any) => t?.status === 'complete').length,
-        total_projects: projects.length,
-        completed_projects: projects.filter((p: any) => p?.status === 'complete').length
+        total_projects: 0,
+        completed_projects: 0,
       }
     });
   } catch (err: any) {

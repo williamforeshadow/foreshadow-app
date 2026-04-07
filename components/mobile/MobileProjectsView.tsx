@@ -11,9 +11,8 @@ import { useDepartments } from '@/lib/departmentsContext';
 import { STATUS_ORDER, STATUS_LABELS, PRIORITY_ORDER, PRIORITY_LABELS } from '@/lib/useProjects';
 import type { ProjectViewMode } from '@/lib/useProjects';
 import { ColumnPicker } from '@/components/windows/projects/ColumnPicker';
-import type { Project, User, ProjectFormFields, TaskTemplate } from '@/lib/types';
+import type { Project, User, PropertyOption, TaskTemplate } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
-import type { useProjects } from '@/lib/useProjects';
 
 // ============================================================================
 // Types
@@ -26,7 +25,6 @@ type Screen =
 
 interface MobileProjectsViewProps {
   users: User[];
-  projectsHook: ReturnType<typeof useProjects>;
 }
 
 // ============================================================================
@@ -110,7 +108,7 @@ function MobileViewModeToggle({
 // Component
 // ============================================================================
 
-export default function MobileProjectsView({ users, projectsHook }: MobileProjectsViewProps) {
+export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
   const { user: currentUser } = useAuth();
   const { departments } = useDepartments();
   const binsHook = useProjectBins({ currentUser: currentUser as User | null });
@@ -118,10 +116,29 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
   const [screen, setScreen] = useState<Screen>({ type: 'bins' });
   const [kanbanDragging, setKanbanDragging] = useState(false);
 
+  // Task data (fetched via tasks-for-bin API, same as desktop ProjectsWindow)
+  const [tasks, setTasks] = useState<Project[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
+  const [viewMode, setViewMode] = useState<ProjectViewMode>('status');
+
   // Template state
   const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
   const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
   const [loadingTemplate, setLoadingTemplate] = useState(false);
+
+  // Fetch properties on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/properties');
+        const result = await res.json();
+        if (res.ok && result.properties) {
+          setAllProperties(result.properties);
+        }
+      } catch {}
+    })();
+  }, []);
 
   // Fetch available templates lazily when detail opens
   useEffect(() => {
@@ -161,7 +178,6 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
     return taskTemplates[cacheKey] || taskTemplates[templateId] || null;
   }, [detailProject, taskTemplates]);
 
-  // Fetch template when detail opens with a template_id
   useEffect(() => {
     if (detailProject?.template_id) {
       fetchTaskTemplate(detailProject.template_id, detailProject.property_name);
@@ -170,17 +186,18 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
 
   const handleTemplateChange = useCallback(async (templateId: string | null) => {
     if (!detailProject) return;
-    await fetch(`/api/tasks-for-bin/${detailProject.id}`, {
+    const res = await fetch(`/api/tasks-for-bin/${detailProject.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ template_id: templateId }),
     });
-    setScreen(prev => prev.type === 'detail' ? {
-      ...prev,
-      project: { ...prev.project, template_id: templateId, template_name: null },
-    } : prev);
-    if (templateId) {
-      await fetchTaskTemplate(templateId, detailProject.property_name);
+    const result = await res.json();
+    if (result.data) {
+      setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
+      setTasks(prev => prev.map(t => t.id === detailProject.id ? result.data : t));
+      if (templateId) {
+        await fetchTaskTemplate(templateId, result.data.property_name);
+      }
     }
   }, [detailProject, fetchTaskTemplate]);
 
@@ -195,23 +212,29 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
       ...prev,
       project: { ...prev.project, form_metadata: formData },
     } : prev);
+    setTasks(prev => prev.map(t => t.id === detailProject.id ? { ...t, form_metadata: formData } : t));
   }, [detailProject]);
 
-  const {
-    projects,
-    loadingProjects,
-    allProperties,
-    viewMode,
-    setViewMode,
-    fetchProjectsForBin,
-    recordProjectView,
-    getUnreadCommentCount,
-    updateProjectField,
-    openCreateProjectDialog,
-    createProjectForProperty,
-    saveProjectById,
-    deleteProject,
-  } = projectsHook;
+  // Fetch tasks for a given bin (via tasks-for-bin API)
+  const fetchTasksForBin = useCallback(async (binId: string | null) => {
+    setLoadingTasks(true);
+    try {
+      const params = new URLSearchParams();
+      if (currentUser?.id) params.set('viewer_user_id', currentUser.id);
+      if (binId !== null) {
+        params.set('bin_id', binId);
+      }
+      const res = await fetch(`/api/tasks-for-bin?${params.toString()}`);
+      const result = await res.json();
+      if (res.ok && result.data) {
+        setTasks(result.data);
+      }
+    } catch (err) {
+      console.error('Error fetching tasks:', err);
+    } finally {
+      setLoadingTasks(false);
+    }
+  }, [currentUser?.id]);
 
   // Column visibility for the kanban
   const activeBinId = screen.type !== 'bins' ? (screen as any).binId : null;
@@ -221,7 +244,7 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
     if (viewMode === 'property') {
       const names = new Set<string>();
       names.add('No Property');
-      projects.forEach((p) => names.add(p.property_name || 'No Property'));
+      tasks.forEach((p) => names.add(p.property_name || 'No Property'));
       allProperties.forEach((p) => { if (p.name) names.add(p.name); });
       const sorted = Array.from(names).sort((a, b) => {
         if (a === 'No Property') return -1;
@@ -239,7 +262,7 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
     if (viewMode === 'department') {
       const names = new Set<string>();
       names.add('No Department');
-      projects.forEach((p) => names.add(p.department_name || 'No Department'));
+      tasks.forEach((p) => names.add(p.department_name || 'No Department'));
       departments.forEach((d) => { if (d.name) names.add(d.name); });
       const sorted = Array.from(names).sort((a, b) => {
         if (a === 'No Department') return -1;
@@ -250,7 +273,7 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
     }
     const names = new Set<string>();
     names.add('Unassigned');
-    projects.forEach((p) => {
+    tasks.forEach((p) => {
       if (p.project_assignments && p.project_assignments.length > 0) {
         p.project_assignments.forEach((a) => names.add(a.user?.name || a.user_id));
       }
@@ -262,7 +285,7 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
       return a.localeCompare(b);
     });
     return sorted.map((name) => ({ id: `assignee:${name}`, name }));
-  }, [viewMode, projects, allProperties, departments, users]);
+  }, [viewMode, tasks, allProperties, departments, users]);
 
   useEffect(() => {
     if (allColumnOptions.length > 0 && columnVis.initialized) {
@@ -273,38 +296,126 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
   // Navigation
   const navigateToBin = useCallback(async (binId: string | null, binName: string) => {
     setScreen({ type: 'kanban', binId, binName });
-    await fetchProjectsForBin(binId);
-  }, [fetchProjectsForBin]);
+    await fetchTasksForBin(binId);
+  }, [fetchTasksForBin]);
 
   const navigateToProject = useCallback((project: Project, binId: string | null, binName: string) => {
-    recordProjectView(project.id);
+    if (currentUser?.id) {
+      fetch('/api/project-views', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: project.id, user_id: currentUser.id }),
+      }).catch(() => {});
+    }
     setScreen({ type: 'detail', project, binId, binName });
-  }, [recordProjectView]);
+  }, [currentUser?.id]);
 
   const goBack = useCallback(() => {
     if (screen.type === 'detail') {
       setScreen({ type: 'kanban', binId: screen.binId, binName: screen.binName });
-      fetchProjectsForBin(screen.binId);
+      fetchTasksForBin(screen.binId);
     } else if (screen.type === 'kanban') {
       setScreen({ type: 'bins' });
       binsHook.fetchBins();
     }
-  }, [screen, fetchProjectsForBin, binsHook]);
+  }, [screen, fetchTasksForBin, binsHook]);
 
-  const handleColumnMove = useCallback(
-    (projectId: string, field: string, value: string) => {
-      updateProjectField(projectId, field, value);
-    },
-    [updateProjectField]
-  );
-
-  const handleNewProject = useCallback(async () => {
-    const newProject = await createProjectForProperty('');
-    if (newProject && screen.type === 'kanban') {
-      recordProjectView(newProject.id);
-      setScreen({ type: 'detail', project: newProject, binId: screen.binId, binName: screen.binName });
+  const handleColumnMove = useCallback(async (taskId: string, field: string, value: string) => {
+    try {
+      const payload: Record<string, unknown> = {};
+      if (field === 'property_name') {
+        payload.property_name = value || null;
+      } else if (field === 'assigned_user_ids') {
+        payload.assigned_user_ids = value ? value.split(',').filter(Boolean) : [];
+      } else {
+        payload[field] = value || null;
+      }
+      const res = await fetch(`/api/tasks-for-bin/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json();
+      if (result.data) {
+        setTasks(prev => prev.map(t => t.id === taskId ? result.data : t));
+      }
+    } catch (err) {
+      console.error('Error updating task field:', err);
     }
-  }, [createProjectForProperty, recordProjectView, screen]);
+  }, []);
+
+  const handleNewTask = useCallback(async () => {
+    try {
+      const payload: Record<string, unknown> = {
+        title: 'New Task',
+        status: 'not_started',
+        priority: 'medium',
+      };
+      const binId = screen.type === 'kanban' ? screen.binId : null;
+      if (binId && binId !== '__none__') {
+        payload.bin_id = binId;
+      }
+      const res = await fetch('/api/tasks-for-bin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json();
+      if (result.data && screen.type === 'kanban') {
+        setTasks(prev => [...prev, result.data]);
+        setScreen({ type: 'detail', project: result.data, binId: screen.binId, binName: screen.binName });
+      }
+    } catch (err) {
+      console.error('Error creating task:', err);
+    }
+  }, [screen]);
+
+  const handleDeleteTask = useCallback(async (task: Project) => {
+    try {
+      const res = await fetch(`/api/tasks-for-bin/${task.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setTasks(prev => prev.filter(t => t.id !== task.id));
+        if (screen.type === 'detail') {
+          setScreen({ type: 'kanban', binId: screen.binId, binName: screen.binName });
+        }
+      }
+    } catch (err) {
+      console.error('Error deleting task:', err);
+    }
+  }, [screen]);
+
+  const handleSaveProject = useCallback(async (projectId: string, fields: any) => {
+    try {
+      const payload: Record<string, unknown> = {};
+      if (fields.title !== undefined) payload.title = fields.title;
+      if (fields.description !== undefined) payload.description = fields.description || null;
+      if (fields.status !== undefined) payload.status = fields.status;
+      if (fields.priority !== undefined) payload.priority = fields.priority;
+      if (fields.assigned_staff !== undefined) payload.assigned_user_ids = fields.assigned_staff || [];
+      if (fields.department_id !== undefined) payload.department_id = fields.department_id || null;
+      if (fields.scheduled_date !== undefined) payload.scheduled_date = fields.scheduled_date || null;
+      if (fields.scheduled_time !== undefined) payload.scheduled_time = fields.scheduled_time || null;
+
+      const res = await fetch(`/api/tasks-for-bin/${projectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json();
+      if (result.data) {
+        setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
+        setTasks(prev => prev.map(t => t.id === projectId ? result.data : t));
+        return result.data;
+      }
+    } catch (err) {
+      console.error('Error saving task:', err);
+    }
+    return null;
+  }, []);
+
+  const getUnreadCommentCount = useCallback((project: Project): number => {
+    return (project as any).unread_comment_count || 0;
+  }, []);
 
   return (
     <div className="h-full">
@@ -330,7 +441,6 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
       {/* Kanban screen */}
       {screen.type === 'kanban' && (
         <div className="flex flex-col h-full">
-          {/* Header — z-20 so column picker dropdown renders above the kanban board */}
           <div className="shrink-0 relative z-20 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-4 py-3">
             <div className="flex items-center gap-2">
               <button
@@ -344,7 +454,7 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-semibold text-neutral-900 dark:text-white truncate">{screen.binName}</h2>
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                  {projects.length} task{projects.length !== 1 ? 's' : ''}
+                  {tasks.length} task{tasks.length !== 1 ? 's' : ''}
                 </p>
               </div>
               <MobileViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
@@ -356,7 +466,7 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
                 onClearAll={columnVis.clearAll}
               />
               <button
-                onClick={handleNewProject}
+                onClick={handleNewTask}
                 className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 active:scale-95 transition-all"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -366,20 +476,19 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
             </div>
           </div>
 
-          {/* Kanban Board */}
           <div className={`flex-1 min-h-0 flex flex-col mobile-kanban-wrapper${kanbanDragging ? ' is-dragging' : ''}`}>
-            {loadingProjects ? (
+            {loadingTasks ? (
               <div className="flex items-center justify-center h-full">
                 <p className="text-neutral-500">Loading tasks...</p>
               </div>
-            ) : projects.length === 0 ? (
+            ) : tasks.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-neutral-400">
                 <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <p className="text-sm font-medium">No tasks yet</p>
                 <button
-                  onClick={handleNewProject}
+                  onClick={handleNewTask}
                   className="mt-3 text-xs font-medium text-emerald-500 active:text-emerald-600"
                 >
                   + Create one
@@ -387,7 +496,7 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
               </div>
             ) : (
               <ProjectsKanban
-                projects={projects}
+                projects={tasks}
                 viewMode={viewMode}
                 allProperties={allProperties}
                 users={users}
@@ -404,35 +513,39 @@ export default function MobileProjectsView({ users, projectsHook }: MobileProjec
         </div>
       )}
 
-      {/* Project detail screen */}
+      {/* Task detail screen */}
       {screen.type === 'detail' && (
         <MobileProjectDetail
           project={screen.project}
           users={users}
           onClose={goBack}
-          onSave={saveProjectById}
-          onDelete={(project) => {
-            deleteProject(project);
-            setScreen({ type: 'kanban', binId: screen.binId, binName: screen.binName });
-          }}
+          onSave={handleSaveProject}
+          onDelete={handleDeleteTask}
           allProperties={allProperties}
           onPropertyChange={async (propertyId, propertyName) => {
-            await updateProjectField(screen.project.id, 'property_id', propertyId || '');
-            if (propertyName !== undefined) {
-              await updateProjectField(screen.project.id, 'property_name', propertyName || '');
+            const res = await fetch(`/api/tasks-for-bin/${screen.project.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ property_name: propertyName || null }),
+            });
+            const result = await res.json();
+            if (result.data) {
+              setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
+              setTasks(prev => prev.map(t => t.id === screen.project.id ? result.data : t));
             }
-            setScreen(prev => prev.type === 'detail' ? {
-              ...prev,
-              project: { ...prev.project, property_id: propertyId, property_name: propertyName },
-            } : prev);
           }}
           bins={binsHook.bins}
-          onBinChange={async (binId, _binName) => {
-            await updateProjectField(screen.project.id, 'bin_id', binId || '');
-            setScreen(prev => prev.type === 'detail' ? {
-              ...prev,
-              project: { ...prev.project, bin_id: binId },
-            } : prev);
+          onBinChange={async (binId) => {
+            const res = await fetch(`/api/tasks-for-bin/${screen.project.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ bin_id: binId || null }),
+            });
+            const result = await res.json();
+            if (result.data) {
+              setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
+              setTasks(prev => prev.map(t => t.id === screen.project.id ? result.data : t));
+            }
             binsHook.fetchBins();
           }}
           template={detailTemplate}

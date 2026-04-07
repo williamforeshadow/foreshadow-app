@@ -16,8 +16,7 @@ import { TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
 import { ClipboardCheck } from 'lucide-react';
 import Rhombus16FilledIcon from '@/components/icons/Rhombus16FilledIcon';
 import RectangleStackIcon from '@/components/icons/RectangleStackIcon';
-import type { Project, Task, User, ProjectFormFields, Turnover, TaskTemplate } from '@/lib/types';
-import type { useProjects } from '@/lib/useProjects';
+import type { Project, Task, User, ProjectFormFields, Turnover, TaskTemplate, PropertyOption } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 import { cn } from '@/lib/utils';
 import { UserAvatar } from '@/components/ui/user-avatar';
@@ -41,10 +40,8 @@ const getRowStyles = (status: string) => {
 };
 
 interface TimelineWindowProps {
-  projects: Project[];
   users: User[];
   currentUser: User | null;
-  projectsHook: ReturnType<typeof useProjects>;
 }
 
 // Type for what's being viewed in the floating window
@@ -55,10 +52,8 @@ type FloatingWindowData = {
 } | null;
 
 export default function TimelineWindow({
-  projects,
   users,
   currentUser,
-  projectsHook,
 }: TimelineWindowProps) {
   // State for the floating window
   const [floatingData, setFloatingData] = useState<FloatingWindowData>(null);
@@ -68,6 +63,34 @@ export default function TimelineWindow({
   
   // State for kanban - use current date as default when in kanban view mode
   const [kanbanDate, setKanbanDate] = useState<Date>(new Date());
+
+  // ============================================================================
+  // LOCAL project data (fetched from tasks-for-bin API)
+  // ============================================================================
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
+  const [savingProjectEdit, setSavingProjectEdit] = useState(false);
+
+  const fetchProjects = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ bin_id: '__all__' });
+      if (currentUser?.id) params.set('viewer_user_id', currentUser.id);
+      const res = await fetch(`/api/tasks-for-bin?${params.toString()}`);
+      const result = await res.json();
+      if (res.ok && result.data) setProjects(result.data);
+    } catch (err) {
+      console.error('Error fetching projects:', err);
+    }
+  }, [currentUser?.id]);
+
+  useEffect(() => { fetchProjects(); }, [fetchProjects]);
+
+  useEffect(() => {
+    fetch('/api/properties')
+      .then(r => r.json())
+      .then(result => { if (result.properties) setAllProperties(result.properties); })
+      .catch(err => console.error('Error fetching properties:', err));
+  }, []);
 
   // ============================================================================
   // Timeline hook (needed early for fetchReservations)
@@ -563,11 +586,33 @@ export default function TimelineWindow({
     const currentFields = projectFieldsRef.current;
     if (floatingData?.type !== 'project' || !currentFields) return;
     const project = floatingData.item as Project;
-    const updatedProject = await projectsHook.saveProjectById(project.id, currentFields);
-    if (updatedProject) {
-      setFloatingData(prev => prev ? { ...prev, item: updatedProject } : null);
+    setSavingProjectEdit(true);
+    try {
+      const res = await fetch(`/api/tasks-for-bin/${project.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: currentFields.title,
+          description: currentFields.description || null,
+          status: currentFields.status,
+          priority: currentFields.priority,
+          assigned_user_ids: currentFields.assigned_staff || [],
+          department_id: currentFields.department_id || null,
+          scheduled_date: currentFields.scheduled_date || null,
+          scheduled_time: currentFields.scheduled_time || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.data) {
+        setProjects(prev => prev.map(p => p.id === project.id ? data.data : p));
+        setFloatingData(prev => prev ? { ...prev, item: data.data } : null);
+      }
+    } catch (err) {
+      console.error('Error saving project:', err);
+    } finally {
+      setSavingProjectEdit(false);
     }
-  }, [floatingData, projectsHook]);
+  }, [floatingData]);
 
   const handlePostComment = useCallback(async () => {
     if (floatingData?.type !== 'project' || !newComment.trim()) return;
@@ -590,11 +635,19 @@ export default function TimelineWindow({
     }
   }, [floatingData, timeTrackingHook]);
 
-  const handleDeleteProject = useCallback((project: Project) => {
-    projectsHook.deleteProject(project);
-    setFloatingData(null);
-    setProjectFields(null);
-  }, [projectsHook]);
+  const handleDeleteProject = useCallback(async (project: Project) => {
+    if (!confirm(`Delete project "${project.title}"?`)) return;
+    try {
+      const res = await fetch(`/api/tasks-for-bin/${project.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setProjects(prev => prev.filter(p => p.id !== project.id));
+        setFloatingData(null);
+        setProjectFields(null);
+      }
+    } catch (err) {
+      console.error('Error deleting project:', err);
+    }
+  }, []);
 
   const handleOpenActivity = useCallback(() => {
     if (floatingData?.type === 'project') {
@@ -752,11 +805,33 @@ export default function TimelineWindow({
   const handleTurnoverSaveProject = useCallback(async () => {
     const currentFields = turnoverProjectFieldsRef.current;
     if (!expandedProjectInTurnover || !currentFields) return;
-    const updatedProject = await projectsHook.saveProjectById(expandedProjectInTurnover.id, currentFields);
-    if (updatedProject) {
-      setExpandedProjectInTurnover(updatedProject);
+    setSavingProjectEdit(true);
+    try {
+      const res = await fetch(`/api/tasks-for-bin/${expandedProjectInTurnover.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: currentFields.title,
+          description: currentFields.description || null,
+          status: currentFields.status,
+          priority: currentFields.priority,
+          assigned_user_ids: currentFields.assigned_staff || [],
+          department_id: currentFields.department_id || null,
+          scheduled_date: currentFields.scheduled_date || null,
+          scheduled_time: currentFields.scheduled_time || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.data) {
+        setProjects(prev => prev.map(p => p.id === expandedProjectInTurnover.id ? data.data : p));
+        setExpandedProjectInTurnover(data.data);
+      }
+    } catch (err) {
+      console.error('Error saving project:', err);
+    } finally {
+      setSavingProjectEdit(false);
     }
-  }, [expandedProjectInTurnover, projectsHook]);
+  }, [expandedProjectInTurnover]);
 
   const handleTurnoverPostComment = useCallback(async () => {
     if (!expandedProjectInTurnover || !turnoverNewComment.trim()) return;
@@ -776,11 +851,19 @@ export default function TimelineWindow({
     }
   }, [expandedProjectInTurnover, turnoverTimeTrackingHook]);
 
-  const handleTurnoverDeleteProject = useCallback((project: Project) => {
-    projectsHook.deleteProject(project);
-    setExpandedProjectInTurnover(null);
-    setTurnoverProjectFields(null);
-  }, [projectsHook]);
+  const handleTurnoverDeleteProject = useCallback(async (project: Project) => {
+    if (!confirm(`Delete project "${project.title}"?`)) return;
+    try {
+      const res = await fetch(`/api/tasks-for-bin/${project.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setProjects(prev => prev.filter(p => p.id !== project.id));
+        setExpandedProjectInTurnover(null);
+        setTurnoverProjectFields(null);
+      }
+    } catch (err) {
+      console.error('Error deleting project:', err);
+    }
+  }, []);
 
   const handleTurnoverOpenActivity = useCallback(() => {
     if (expandedProjectInTurnover) {
@@ -975,7 +1058,7 @@ export default function TimelineWindow({
           projectPayload.scheduled_time = changes.scheduledTime;
         }
 
-        const res = await fetch(`/api/projects/${itemId}`, {
+        const res = await fetch(`/api/tasks-for-bin/${itemId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(projectPayload)
@@ -988,7 +1071,7 @@ export default function TimelineWindow({
         }
 
         if (result.data) {
-          projectsHook.setProjects(prev =>
+          setProjects(prev =>
             prev.map(p => p.id === itemId ? result.data : p)
           );
         }
@@ -996,7 +1079,7 @@ export default function TimelineWindow({
     } catch (err) {
       console.error('Error updating column move:', err);
     }
-  }, [currentUser?.id, projectsHook, setReservations, setRecurringTasks, users]);
+  }, [currentUser?.id, setReservations, setRecurringTasks, users]);
 
   // Extract ALL tasks from reservations + recurring tasks, tagged with property_name
   const allTasksWithProperty = useMemo(() => {
@@ -1026,10 +1109,8 @@ export default function TimelineWindow({
     return allTasksWithProperty.filter(task => task.scheduled_date);
   }, [allTasksWithProperty]);
 
-  // Filter projects that have scheduled_date
-  const scheduledProjects = useMemo(() => {
-    return projects.filter(p => p.scheduled_date);
-  }, [projects]);
+  // Note: projects state is kept for TurnoverProjectsPanel but NOT shown on the
+  // grid — useTimeline's recurringTasks already includes all non-reservation tasks.
 
   const formatHeaderDate = (date: Date, isTodayDate: boolean) => {
     const month = date.getMonth() + 1;
@@ -1425,22 +1506,17 @@ export default function TimelineWindow({
                           );
                         })()}
                         
-                        {/* Scheduled tasks/projects icons */}
+                        {/* Scheduled tasks icons */}
                         <ScheduledItemsCell
                           propertyName={property}
                           date={date}
                           tasks={allScheduledTasks}
-                          projects={scheduledProjects}
+                          projects={[]}
                           viewMode={view}
                           expanded={expandedProperties.has(property)}
                           onTaskClick={(task) => setFloatingData({
                             type: 'task',
                             item: task,
-                            propertyName: property,
-                          })}
-                          onProjectClick={(project) => setFloatingData({
-                            type: 'project',
-                            item: project,
                             propertyName: property,
                           })}
                         />
@@ -1474,10 +1550,7 @@ export default function TimelineWindow({
                         const dateTasks = allScheduledTasks.filter(
                           (t) => t.property_name === property && t.scheduled_date === cellDateStr
                         );
-                        const dateProjects = scheduledProjects.filter(
-                          (p) => p.property_name === property && p.scheduled_date === cellDateStr
-                        );
-                        const hasItems = dateTasks.length > 0 || dateProjects.length > 0;
+                        const hasItems = dateTasks.length > 0;
 
                         return (
                           <div
@@ -1521,39 +1594,6 @@ export default function TimelineWindow({
                                     </div>
                                   </div>
                                 ))}
-                                {dateProjects.map((project) => (
-                                  <div
-                                    key={project.id}
-                                    className={cn(
-                                      "flex items-center justify-between gap-2 py-2 px-2.5 shrink-0 cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.01] active:scale-[0.99]",
-                                      getRowStyles(project.status)
-                                    )}
-                                    title={project.title}
-                                    onClick={() => setFloatingData({
-                                      type: 'project',
-                                      item: project,
-                                      propertyName: property,
-                                    })}
-                                  >
-                                    <span className="truncate text-sm">{project.title}</span>
-                                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                                      {project.project_assignments?.slice(0, 1).map((assignment) => (
-                                        <div key={assignment.user_id} className="relative">
-                                          <UserAvatar
-                                            src={assignment.user?.avatar}
-                                            name={assignment.user?.name || 'Unknown'}
-                                            size="xs"
-                                          />
-                                          {(project.project_assignments?.length ?? 0) > 1 && (
-                                            <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-neutral-700 dark:bg-neutral-200 text-[9px] font-medium text-white dark:text-neutral-800 border border-white dark:border-neutral-900">
-                                              +{(project.project_assignments?.length ?? 0) - 1}
-                                            </div>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
                               </div>
                             )}
                           </div>
@@ -1573,7 +1613,7 @@ export default function TimelineWindow({
           <DayKanban
             date={kanbanDate}
             tasks={allScheduledTasks}
-            projects={scheduledProjects}
+            projects={[]}
             users={users as any}
             onClose={() => setViewMode('grid')}
             onTaskClick={(task, propertyName) => {
@@ -1611,7 +1651,7 @@ export default function TimelineWindow({
               editingFields={taskEditingFields}
               setEditingFields={setTaskEditingFields}
               users={users}
-              allProperties={projectsHook.allProperties}
+              allProperties={allProperties}
               savingEdit={false}
               onSave={handleSaveTaskEditFields}
               onDelete={async () => {
@@ -1715,32 +1755,33 @@ export default function TimelineWindow({
             <ProjectDetailPanel
               project={floatingData.item as Project}
               users={users}
-              allProperties={projectsHook.allProperties}
+              allProperties={allProperties}
               editingFields={projectFields}
               setEditingFields={setProjectFields}
-              savingEdit={projectsHook.savingProjectEdit}
+              savingEdit={savingProjectEdit}
               onSave={handleSaveProject}
               onDelete={handleDeleteProject}
               onClose={handleCloseFloatingWindow}
               onOpenActivity={handleOpenActivity}
-              onPropertyChange={async (propertyId, propertyName) => {
+              onPropertyChange={async (_propertyId, propertyName) => {
                 const project = floatingData.item as Project;
-                await projectsHook.updateProjectField(project.id, 'property_id', propertyId || '');
-                if (propertyName !== undefined) {
-                  await projectsHook.updateProjectField(project.id, 'property_name', propertyName || '');
+                try {
+                  const res = await fetch(`/api/tasks-for-bin/${project.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ property_name: propertyName || null }),
+                  });
+                  const data = await res.json();
+                  if (data.data) {
+                    setProjects(prev => prev.map(p => p.id === project.id ? data.data : p));
+                    setFloatingData(prev => {
+                      if (!prev || prev.type !== 'project') return prev;
+                      return { ...prev, item: data.data, propertyName: propertyName || '' };
+                    });
+                  }
+                } catch (err) {
+                  console.error('Error updating property:', err);
                 }
-                setFloatingData(prev => {
-                  if (!prev || prev.type !== 'project') return prev;
-                  return {
-                    ...prev,
-                    item: {
-                      ...(prev.item as Project),
-                      property_id: propertyId,
-                      property_name: propertyName,
-                    },
-                    propertyName: propertyName || '',
-                  };
-                });
               }}
               // Comments
               comments={commentsHook.projectComments}
@@ -1767,19 +1808,25 @@ export default function TimelineWindow({
               setStaffOpen={setStaffOpen}
               // Bins
               bins={binsHook.bins}
-              onBinChange={async (binId, _binName) => {
+              onBinChange={async (binId) => {
                 const project = floatingData.item as Project;
-                await projectsHook.updateProjectField(project.id, 'bin_id', binId || '');
-                setFloatingData(prev => {
-                  if (!prev || prev.type !== 'project') return prev;
-                  return {
-                    ...prev,
-                    item: {
-                      ...(prev.item as Project),
-                      bin_id: binId,
-                    },
-                  };
-                });
+                try {
+                  const res = await fetch(`/api/tasks-for-bin/${project.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bin_id: binId || null }),
+                  });
+                  const data = await res.json();
+                  if (data.data) {
+                    setProjects(prev => prev.map(p => p.id === project.id ? data.data : p));
+                    setFloatingData(prev => {
+                      if (!prev || prev.type !== 'project') return prev;
+                      return { ...prev, item: data.data };
+                    });
+                  }
+                } catch (err) {
+                  console.error('Error updating bin:', err);
+                }
                 binsHook.fetchBins();
               }}
             />
@@ -1895,7 +1942,7 @@ export default function TimelineWindow({
                     currentUser={currentUser}
                     expandedProject={expandedProjectInTurnover}
                     projectFields={turnoverProjectFields}
-                    savingProject={projectsHook.savingProjectEdit}
+                    savingProject={savingProjectEdit}
                     staffOpen={turnoverStaffOpen}
                     setExpandedProject={setExpandedProjectInTurnover}
                     setProjectFields={setTurnoverProjectFields}

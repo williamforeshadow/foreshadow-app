@@ -32,20 +32,35 @@ export async function GET(request: Request) {
         )
       `;
 
-    let query = getSupabaseServer()
-      .from('turnover_tasks')
-      .select(selectFields)
-      .not('bin_id', 'is', null)
-      .order('created_at', { ascending: false });
+    let query;
 
-    if (binId === '__none__') {
+    if (binId === '__all__') {
+      // Return all manually-created tasks (no reservation) regardless of bin
+      query = getSupabaseServer()
+        .from('turnover_tasks')
+        .select(selectFields)
+        .is('reservation_id', null)
+        .order('created_at', { ascending: false });
+    } else if (binId === '__none__') {
       query = getSupabaseServer()
         .from('turnover_tasks')
         .select(selectFields)
         .is('bin_id', null)
         .order('created_at', { ascending: false });
     } else if (binId) {
-      query = query.eq('bin_id', binId);
+      query = getSupabaseServer()
+        .from('turnover_tasks')
+        .select(selectFields)
+        .not('bin_id', 'is', null)
+        .eq('bin_id', binId)
+        .order('created_at', { ascending: false });
+    } else {
+      // Default: all tasks with a bin assigned
+      query = getSupabaseServer()
+        .from('turnover_tasks')
+        .select(selectFields)
+        .not('bin_id', 'is', null)
+        .order('created_at', { ascending: false });
     }
 
     const { data, error } = await query;

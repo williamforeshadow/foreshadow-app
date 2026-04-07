@@ -5,7 +5,6 @@ import Sidebar from '@/components/Sidebar';
 import { Button } from '@/components/ui/button';
 import { useUsers } from '@/lib/useUsers';
 import { useAuth } from '@/lib/authContext';
-import { useProjects } from '@/lib/useProjects';
 import TimelineWindow from '@/components/windows/TimelineWindow';
 import TurnoversWindow from '@/components/windows/TurnoversWindow';
 import ProjectsWindow from '@/components/windows/ProjectsWindow';
@@ -19,9 +18,6 @@ export default function DesktopApp() {
   // Hooks
   const { users } = useUsers();
   const { user: currentUser } = useAuth();
-
-  // Shared project state - called once, shared by all windows
-  const projectsHook = useProjects({ currentUser });
 
   // Active view state - single state instead of multiple booleans
   const [activeView, setActiveView] = useState<ViewType>('turnovers');
@@ -76,17 +72,14 @@ export default function DesktopApp() {
             <TurnoversWindow
               users={users}
               currentUser={currentUser}
-              projectsHook={projectsHook}
               onOpenProjectInWindow={() => setActiveView('projects')}
             />
           </div>
 
           <div className={`absolute inset-0 ${activeView === 'timeline' ? '' : 'hidden'}`}>
             <TimelineWindow
-              projects={projectsHook.projects}
               users={users}
               currentUser={currentUser}
-              projectsHook={projectsHook}
             />
           </div>
 

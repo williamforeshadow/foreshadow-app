@@ -4,7 +4,6 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useUsers } from '@/lib/useUsers';
 import { useTurnovers } from '@/lib/useTurnovers';
-import { useProjects } from '@/lib/useProjects';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { 
   MobileLayout, 
@@ -15,15 +14,13 @@ import {
   type MobileTab 
 } from '@/components/mobile';
 import MessagesWindow from '@/components/windows/MessagesWindow';
-import type { Project, Task, TaskTemplate } from '@/lib/types';
+import type { Project, Task, TaskTemplate, PropertyOption } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 
 export default function MobileApp() {
-  // Core hooks
   const { user: currentUser } = useAuth();
   const { users } = useUsers();
 
-  // Shared hooks - task functionality
   const {
     taskTemplates,
     loadingTaskTemplate,
@@ -34,10 +31,21 @@ export default function MobileApp() {
     saveTaskForm,
   } = useTurnovers();
 
-  // Shared hooks - project functionality
-  const projectsHook = useProjects({ currentUser });
-  const { allProperties } = projectsHook;
   const binsHook = useProjectBins({ currentUser: currentUser as any });
+
+  // Fetch properties list (replaces projectsHook.allProperties)
+  const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/properties');
+        const result = await res.json();
+        if (res.ok && result.properties) {
+          setAllProperties(result.properties);
+        }
+      } catch {}
+    })();
+  }, []);
 
   // Mobile-specific state
   const [mobileTab, setMobileTab] = useState<MobileTab>('assignments');
@@ -45,10 +53,8 @@ export default function MobileApp() {
   const [mobileSelectedProject, setMobileSelectedProject] = useState<Project | null>(null);
   const [mobileRefreshTrigger, setMobileRefreshTrigger] = useState(0);
 
-  // Template state for task detail
   const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
 
-  // Fetch available templates lazily (when any detail opens)
   useEffect(() => {
     if ((mobileSelectedTask || mobileSelectedProject) && availableTemplates.length === 0) {
       fetch('/api/tasks').then(r => r.json()).then(result => {
@@ -87,7 +93,6 @@ export default function MobileApp() {
     };
   }, [mobileSelectedTask]);
 
-  // Resolve template for current task
   const taskTemplate = useMemo((): Template | null => {
     if (!mobileSelectedTask?.template_id) return null;
     const task = mobileSelectedTask;
@@ -98,7 +103,6 @@ export default function MobileApp() {
     return taskTemplates[cacheKey] || taskTemplates[templateId] || null;
   }, [mobileSelectedTask, taskTemplates]);
 
-  // Save handler that bridges ProjectFormFields → task update APIs
   const handleSaveTaskAsProject = useCallback(async (projectId: string, fields: any) => {
     const updates: Record<string, unknown> = {};
     if (fields.title !== undefined) updates.title = fields.title;
@@ -121,7 +125,6 @@ export default function MobileApp() {
         body: JSON.stringify({ task_id: projectId, fields: updates }),
       });
     }
-    // Update local state
     setMobileSelectedTask(prev => {
       if (!prev) return null;
       return {
@@ -162,7 +165,7 @@ export default function MobileApp() {
     setMobileSelectedTask(null);
   }, []);
 
-  // Template handling for project overlay (from My Assignments / Timeline)
+  // Project overlay handlers (now via tasks-for-bin APIs instead of useProjects)
   const projectTemplate = useMemo((): Template | null => {
     if (!mobileSelectedProject?.template_id) return null;
     const templateId = mobileSelectedProject.template_id;
@@ -172,7 +175,6 @@ export default function MobileApp() {
     return taskTemplates[cacheKey] || taskTemplates[templateId] || null;
   }, [mobileSelectedProject, taskTemplates]);
 
-  // Fetch project template on open
   useEffect(() => {
     if (mobileSelectedProject?.template_id) {
       const templateId = mobileSelectedProject.template_id;
@@ -184,6 +186,39 @@ export default function MobileApp() {
       }
     }
   }, [mobileSelectedProject?.id]);
+
+  const handleSaveProject = useCallback(async (projectId: string, fields: any) => {
+    try {
+      const payload: Record<string, unknown> = {};
+      if (fields.title !== undefined) payload.title = fields.title;
+      if (fields.description !== undefined) payload.description = fields.description || null;
+      if (fields.status !== undefined) payload.status = fields.status;
+      if (fields.priority !== undefined) payload.priority = fields.priority;
+      if (fields.assigned_staff !== undefined) payload.assigned_user_ids = fields.assigned_staff || [];
+      if (fields.department_id !== undefined) payload.department_id = fields.department_id || null;
+      if (fields.scheduled_date !== undefined) payload.scheduled_date = fields.scheduled_date || null;
+      if (fields.scheduled_time !== undefined) payload.scheduled_time = fields.scheduled_time || null;
+
+      const res = await fetch(`/api/tasks-for-bin/${projectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json();
+      if (result.data) {
+        setMobileSelectedProject(result.data);
+        return result.data;
+      }
+    } catch (err) {
+      console.error('Error saving project:', err);
+    }
+    return null;
+  }, []);
+
+  const handleDeleteProject = useCallback(async (project: Project) => {
+    await fetch(`/api/tasks-for-bin/${project.id}`, { method: 'DELETE' });
+    setMobileSelectedProject(null);
+  }, []);
 
   const handleProjectTemplateChange = useCallback(async (templateId: string | null) => {
     if (!mobileSelectedProject) return;
@@ -217,13 +252,11 @@ export default function MobileApp() {
         {mobileTab === 'assignments' && (
           <MobileMyAssignmentsView
             onTaskClick={async (task: any) => {
-              // Fetch template if needed, then open task detail sheet
               const propName = task.property_name;
               const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
               if (task.template_id && !taskTemplates[cacheKey]) {
                 await fetchTaskTemplate(task.template_id, propName);
               }
-              // Add current user to assigned_users since this task came from My Work (they're assigned)
               setMobileSelectedTask({
                 ...task,
                 assigned_users: [{ user_id: currentUser?.id, name: currentUser?.name }]
@@ -246,7 +279,6 @@ export default function MobileApp() {
         {mobileTab === 'projects' && (
           <MobileProjectsView
             users={users}
-            projectsHook={projectsHook}
           />
         )}
         
@@ -270,7 +302,7 @@ export default function MobileApp() {
         )}
       </MobileLayout>
 
-      {/* Mobile Task Detail - Full Screen Takeover (unified via MobileProjectDetail) */}
+      {/* Task Detail overlay */}
       {mobileSelectedTask && taskAsProject && (
         <MobileProjectDetail
           project={taskAsProject}
@@ -315,7 +347,7 @@ export default function MobileApp() {
         />
       )}
 
-      {/* Mobile Project Detail - Full Screen Takeover */}
+      {/* Project Detail overlay (from My Assignments) */}
       {mobileSelectedProject && (
         <MobileProjectDetail
           project={mobileSelectedProject}
@@ -324,30 +356,31 @@ export default function MobileApp() {
             setMobileSelectedProject(null);
             setMobileRefreshTrigger(prev => prev + 1);
           }}
-          onSave={projectsHook.saveProjectById}
-          onDelete={(project) => {
-            projectsHook.deleteProject(project);
-            setMobileSelectedProject(null);
-          }}
+          onSave={handleSaveProject}
+          onDelete={handleDeleteProject}
           allProperties={allProperties}
           onPropertyChange={async (propertyId, propertyName) => {
-            await projectsHook.updateProjectField(mobileSelectedProject.id, 'property_id', propertyId || '');
-            if (propertyName !== undefined) {
-              await projectsHook.updateProjectField(mobileSelectedProject.id, 'property_name', propertyName || '');
+            const res = await fetch(`/api/tasks-for-bin/${mobileSelectedProject.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ property_name: propertyName || null }),
+            });
+            const result = await res.json();
+            if (result.data) {
+              setMobileSelectedProject(result.data);
             }
-            setMobileSelectedProject(prev => prev ? {
-              ...prev,
-              property_id: propertyId,
-              property_name: propertyName,
-            } : null);
           }}
           bins={binsHook.bins}
-          onBinChange={async (binId, _binName) => {
-            await projectsHook.updateProjectField(mobileSelectedProject.id, 'bin_id', binId || '');
-            setMobileSelectedProject(prev => prev ? {
-              ...prev,
-              bin_id: binId,
-            } : null);
+          onBinChange={async (binId) => {
+            const res = await fetch(`/api/tasks-for-bin/${mobileSelectedProject.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ bin_id: binId || null }),
+            });
+            const result = await res.json();
+            if (result.data) {
+              setMobileSelectedProject(result.data);
+            }
             binsHook.fetchBins();
           }}
           template={projectTemplate}
