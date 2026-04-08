@@ -113,7 +113,6 @@ export function TaskDetailPanel({
              task.status === 'in_progress' ? 'In Progress' :
              task.status === 'paused' ? 'Paused' :
              task.status === 'complete' ? 'Completed' :
-             task.status === 'reopened' ? 'Reopened' :
              'Not Started'}
           </Badge>
 
@@ -259,11 +258,11 @@ export function TaskDetailPanel({
                     </Button>
                   </>
                 )}
-                {(task.status === 'complete' || task.status === 'reopened') && (
+                {task.status === 'complete' && (
                   <Button
                     onClick={async () => {
-                      await onUpdateStatus(task.task_id, 'not_started');
-                      setTask({ ...task, status: 'not_started' });
+                      await onUpdateStatus(task.task_id, 'paused');
+                      setTask({ ...task, status: 'paused' });
                     }}
                     variant="outline"
                     className="w-full"

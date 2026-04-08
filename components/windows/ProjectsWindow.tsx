@@ -2,8 +2,8 @@
 
 import { memo, useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import type { ProjectViewMode } from '@/lib/useProjects';
-import { STATUS_LABELS, STATUS_ORDER, PRIORITY_LABELS, PRIORITY_ORDER } from '@/lib/useProjects';
+import type { ProjectViewMode } from '@/lib/types';
+import { STATUS_LABELS, STATUS_ORDER, PRIORITY_LABELS, PRIORITY_ORDER } from '@/lib/types';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
@@ -389,8 +389,8 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   // ============================================================================
   // Task CRUD via tasks-for-bin APIs
   // ============================================================================
-  const handleSaveProject = useCallback(async () => {
-    const currentFields = editingFieldsRef.current;
+  const handleSaveProject = useCallback(async (directFields?: ProjectFormFields) => {
+    const currentFields = directFields || editingFieldsRef.current;
     if (!expandedProject || !currentFields) return;
 
     setSavingEdit(true);
@@ -411,8 +411,19 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       });
       const result = await res.json();
       if (result.data) {
-        setExpandedProject(result.data);
-        setTasks(prev => prev.map(t => t.id === expandedProject.id ? result.data : t));
+        const d = result.data;
+        setExpandedProject(d);
+        setTasks(prev => prev.map(t => t.id === expandedProject.id ? d : t));
+        setEditingProjectFields({
+          title: d.title,
+          description: d.description || null,
+          status: d.status,
+          priority: d.priority,
+          assigned_staff: d.project_assignments?.map((a: { user_id: string }) => a.user_id) || currentFields.assigned_staff || [],
+          department_id: d.department_id || '',
+          scheduled_date: d.scheduled_date || '',
+          scheduled_time: d.scheduled_time || '',
+        });
       }
     } catch (err) {
       console.error('Error saving task:', err);
@@ -480,12 +491,26 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       });
       const result = await res.json();
       if (result.data) {
-        setTasks(prev => prev.map(t => t.id === taskId ? result.data : t));
+        const d = result.data;
+        setTasks(prev => prev.map(t => t.id === taskId ? d : t));
+        if (expandedProject?.id === taskId) {
+          setExpandedProject(d);
+          setEditingProjectFields({
+            title: d.title,
+            description: d.description || null,
+            status: d.status,
+            priority: d.priority,
+            assigned_staff: d.project_assignments?.map((a: { user_id: string }) => a.user_id) || [],
+            department_id: d.department_id || '',
+            scheduled_date: d.scheduled_date || '',
+            scheduled_time: d.scheduled_time || '',
+          });
+        }
       }
     } catch (err) {
       console.error('Error updating task field:', err);
     }
-  }, []);
+  }, [expandedProject?.id]);
 
   // Unread comment count from the task data
   const getUnreadCommentCount = useCallback((project: Project): number => {

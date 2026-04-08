@@ -363,7 +363,7 @@ export function DayKanban({
   const [items, setItems] = useState<DraggableKanbanItem[]>(initialItems);
 
   // Update items when initialItems change (e.g., when data updates)
-  useMemo(() => {
+  useEffect(() => {
     setItems(initialItems);
   }, [initialItems]);
 
@@ -800,9 +800,7 @@ function KanbanCardContent({
     switch (status) {
       case 'complete': return styles.statusComplete;
       case 'in_progress': return styles.statusInProgress;
-      case 'on_hold': return styles.statusOnHold;
       case 'paused': return styles.statusPaused;
-      case 'reopened': return styles.statusReopened;
       default: return styles.statusNotStarted;
     }
   };

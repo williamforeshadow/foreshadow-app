@@ -325,9 +325,9 @@ function TurnoversWindowContent({
   // ============================================================================
   // Task → ProjectDetailPanel: save handler + derived data
   // ============================================================================
-  const handleSaveTaskFields = useCallback(async () => {
+  const handleSaveTaskFields = useCallback(async (directFields?: ProjectFormFields) => {
     if (!fullscreenTask) return;
-    const fields = taskEditingFieldsRef.current;
+    const fields = directFields || taskEditingFieldsRef.current;
     if (!fields) return;
     const taskId = fullscreenTask.task_id;
 
@@ -367,6 +367,10 @@ function TurnoversWindowContent({
       } catch (err) {
         console.error('Error updating task fields:', err);
       }
+    }
+
+    if (directFields) {
+      setTaskEditingFields(directFields);
     }
   }, [fullscreenTask, updateTaskAction, updateTaskSchedule, updateTaskAssignment, setFullscreenTask]);
 
@@ -575,6 +579,8 @@ function TurnoversWindowContent({
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ taskId: fullscreenTask.task_id, fields: { bin_id: binId || null } }),
                   });
+                  setFullscreenTask(prev => prev ? { ...prev, bin_id: binId || null } : prev);
+                  setTaskEditingFields(prev => prev ? { ...prev } : prev);
                   binsHook.fetchBins();
                 } catch (err) {
                   console.error('Error updating bin:', err);

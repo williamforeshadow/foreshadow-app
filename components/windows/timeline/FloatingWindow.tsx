@@ -16,7 +16,7 @@ interface FloatingWindowProps {
   editingFields: ProjectFormFields | null;
   setEditingFields: (fields: ProjectFormFields | null | ((prev: ProjectFormFields | null) => ProjectFormFields | null)) => void;
   savingEdit: boolean;
-  onSave: () => void;
+  onSave: (fields?: ProjectFormFields) => void;
   onDelete: (item: Project) => void;
   onOpenActivity: () => void;
   // Comments

@@ -233,7 +233,7 @@
   color: #818cf8;
 }
 
-.statusOnHold {
+.statusPaused {
   background-color: rgba(163, 163, 163, 0.15);
   color: #a3a3a3;
 }
@@ -339,7 +339,7 @@
   color: #a5b4fc;
 }
 
-:global(.dark) .statusOnHold {
+:global(.dark) .statusPaused {
   background-color: rgba(163, 163, 163, 0.18);
   color: #d4d4d4;
 }
@@ -378,7 +378,7 @@
   background: rgba(99, 102, 241, 0.10);
 }
 
-.columnAccentOnHold {
+.columnAccentPaused {
   background: rgba(163, 163, 163, 0.08);
 }
 

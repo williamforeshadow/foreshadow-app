@@ -165,7 +165,7 @@ export default function MobileApp() {
     setMobileSelectedTask(null);
   }, []);
 
-  // Project overlay handlers (now via tasks-for-bin APIs instead of useProjects)
+  // Project overlay handlers (via tasks-for-bin APIs)
   const projectTemplate = useMemo((): Template | null => {
     if (!mobileSelectedProject?.template_id) return null;
     const templateId = mobileSelectedProject.template_id;
@@ -257,10 +257,7 @@ export default function MobileApp() {
               if (task.template_id && !taskTemplates[cacheKey]) {
                 await fetchTaskTemplate(task.template_id, propName);
               }
-              setMobileSelectedTask({
-                ...task,
-                assigned_users: [{ user_id: currentUser?.id, name: currentUser?.name }]
-              });
+              setMobileSelectedTask(task);
             }}
             onProjectClick={async (project: any) => {
               if (project.template_id) {

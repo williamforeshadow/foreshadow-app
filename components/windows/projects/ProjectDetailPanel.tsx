@@ -52,7 +52,7 @@ interface ProjectDetailPanelProps {
   users: User[];
   allProperties?: PropertyOption[];
   savingEdit: boolean;
-  onSave: () => void;
+  onSave: (fields?: ProjectFormFields) => void;
   onDelete: (project: Project) => void;
   onClose: () => void;
   onOpenActivity: () => void;
@@ -146,7 +146,46 @@ export function ProjectDetailPanel({
   const [showChecklist, setShowChecklist] = useState(false);
   const hasChecklist = !!template;
   const isAssigned = currentUser ? editingFields.assigned_staff?.includes(currentUser.id) : false;
-  const isChecklistReadOnly = !isAssigned || editingFields.status === 'complete' || editingFields.status === 'contingent';
+  const timerNeverStarted = !!template && displaySeconds === 0 && !activeTimeEntry;
+  const isChecklistReadOnly = !isAssigned || editingFields.status === 'complete' || editingFields.status === 'contingent' || timerNeverStarted;
+
+  // Auto-status transitions for templated tasks
+  const autoSetStatus = useCallback((targetStatus: string) => {
+    if (!template || !editingFields) return;
+    const updated = { ...editingFields, status: targetStatus };
+    setEditingFields(updated);
+    onSave(updated);
+  }, [template, editingFields, setEditingFields, onSave]);
+
+  const handleTimerStart = useCallback(() => {
+    onStartTimer();
+    if (template && (editingFields.status === 'not_started' || editingFields.status === 'paused')) {
+      autoSetStatus('in_progress');
+    }
+  }, [onStartTimer, template, editingFields.status, autoSetStatus]);
+
+  const handleTimerStop = useCallback(() => {
+    onStopTimer();
+    if (template && editingFields.status === 'in_progress') {
+      autoSetStatus('paused');
+    }
+  }, [onStopTimer, template, editingFields.status, autoSetStatus]);
+
+  const handleChecklistInteraction = useCallback(() => {
+    if (template && editingFields.status === 'not_started') {
+      autoSetStatus('in_progress');
+    }
+  }, [template, editingFields.status, autoSetStatus]);
+
+  const prevAllFilledRef = useRef(false);
+  const handleValidationChange = useCallback((allRequiredFilled: boolean) => {
+    const wasAllFilled = prevAllFilledRef.current;
+    prevAllFilledRef.current = allRequiredFilled;
+    if (!wasAllFilled && allRequiredFilled && template && editingFields.status === 'in_progress') {
+      autoSetStatus('complete');
+    }
+    onValidationChange?.(allRequiredFilled);
+  }, [template, editingFields.status, autoSetStatus, onValidationChange]);
 
   // Picker open states
   const [propertyOpen, setPropertyOpen] = useState(false);
@@ -220,9 +259,7 @@ export function ProjectDetailPanel({
     not_started: { bg: 'bg-amber-500/15 text-white', dot: 'bg-amber-400', label: 'Not Started' },
     in_progress: { bg: 'bg-indigo-500/15 text-white', dot: 'bg-indigo-400', label: 'In Progress' },
     paused: { bg: 'bg-neutral-400/15 text-white', dot: 'bg-neutral-400', label: 'Paused' },
-    on_hold: { bg: 'bg-neutral-400/15 text-white', dot: 'bg-neutral-400', label: 'On Hold' },
     complete: { bg: 'bg-emerald-500/15 text-white', dot: 'bg-emerald-400', label: 'Complete' },
-    reopened: { bg: 'bg-orange-500/15 text-white', dot: 'bg-orange-400', label: 'Reopened' },
   };
 
   // Priority config
@@ -233,7 +270,7 @@ export function ProjectDetailPanel({
     urgent: { bg: 'bg-red-500/15 text-white', dot: 'bg-red-500', label: 'Urgent' },
   };
 
-  const STATUS_OPTIONS = ['contingent', 'not_started', 'in_progress', 'paused', 'on_hold', 'complete', 'reopened'];
+  const STATUS_OPTIONS = ['not_started', 'in_progress', 'paused', 'complete'];
   const PRIORITY_OPTIONS = ['low', 'medium', 'high', 'urgent'];
 
   const status = statusConfig[editingFields.status] || statusConfig.not_started;
@@ -314,9 +351,72 @@ export function ProjectDetailPanel({
                 </div>
                 {isChecklistReadOnly && (
                   <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                    Read only
+                    {timerNeverStarted ? 'Start timer to unlock' : 'Read only'}
                   </span>
                 )}
+              </div>
+
+              {/* Action buttons row */}
+              <div className="flex items-center gap-2 mb-4">
+                {activeTimeEntry ? (
+                  <button
+                    onClick={handleTimerStop}
+                    className="flex-1 text-sm font-medium py-2.5 rounded-xl bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors border border-red-500/20"
+                  >
+                    Stop
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleTimerStart}
+                    className="flex-1 text-sm font-medium py-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 transition-colors border border-emerald-500/20"
+                  >
+                    {displaySeconds > 0 ? 'Resume' : 'Start'}
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    if (editingFields.status === 'complete') {
+                      const f = { ...editingFields, status: 'paused' }; setEditingFields(f); onSave(f);
+                      return;
+                    }
+                    const fd = formMetadata || {};
+                    const hasIncomplete = Object.entries(fd).some(([k, v]) => {
+                      if (['property_name', 'template_id', 'template_name'].includes(k)) return false;
+                      const val = (v && typeof v === 'object' && 'value' in (v as Record<string, unknown>))
+                        ? (v as Record<string, unknown>).value : v;
+                      return val === false || val === '' || val === undefined || val === null;
+                    });
+                    if (hasIncomplete && !confirm('Are you sure you want to complete this task? The checklist has not been completed.')) return;
+                    if (activeTimeEntry) onStopTimer();
+                    const f = { ...editingFields, status: 'complete' };
+                    setEditingFields(f);
+                    onSave(f);
+                  }}
+                  className={cn(
+                    "flex-1 text-sm font-medium py-2.5 rounded-xl transition-colors border",
+                    editingFields.status === 'complete'
+                      ? "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 border-amber-500/20"
+                      : "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 border-blue-500/20"
+                  )}
+                >
+                  {editingFields.status === 'complete' ? 'Reopen' : 'Complete'}
+                </button>
+              </div>
+
+              {/* Time display */}
+              <div className="rounded-xl bg-white/[0.04] backdrop-blur-sm border border-white/10 px-5 py-3 flex items-center justify-between mb-5">
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-muted-foreground" viewBox="0 0 16 16" fill="none">
+                    <circle cx="8" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.2" />
+                    <line x1="8" y1="9" x2="8" y2="6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                    <line x1="8" y1="9" x2="10" y2="9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                    <line x1="6.5" y1="2.5" x2="9.5" y2="2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                  </svg>
+                  <span className="text-[13px] text-muted-foreground">Time tracked</span>
+                </div>
+                <span className="text-[15px] font-medium font-mono text-foreground tracking-wide">
+                  {formatTime(displaySeconds)}
+                </span>
               </div>
 
               {/* Checklist form */}
@@ -334,7 +434,8 @@ export function ProjectDetailPanel({
                     if (onSaveForm) await onSaveForm(formData);
                   }}
                   readOnly={isChecklistReadOnly}
-                  onValidationChange={onValidationChange}
+                  onValidationChange={handleValidationChange}
+                  onChecklistInteraction={handleChecklistInteraction}
                 />
               ) : null}
             </div>
@@ -364,7 +465,7 @@ export function ProjectDetailPanel({
                 <InlineDropdown onClose={() => setDeptIconOpen(false)}>
                   <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Department</p>
                   <button
-                    onClick={() => { setEditingFields(prev => prev ? {...prev, department_id: ''} : null); setTimeout(onSave, 0); setDeptIconOpen(false); }}
+                    onClick={() => { const f = {...editingFields, department_id: ''}; setEditingFields(f); onSave(f); setDeptIconOpen(false); }}
                     className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
                       !editingFields.department_id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
                     }`}
@@ -377,7 +478,7 @@ export function ProjectDetailPanel({
                     return (
                       <button
                         key={d.id}
-                        onClick={() => { setEditingFields(prev => prev ? {...prev, department_id: d.id} : null); setTimeout(onSave, 0); setDeptIconOpen(false); }}
+                        onClick={() => { const f = {...editingFields, department_id: d.id}; setEditingFields(f); onSave(f); setDeptIconOpen(false); }}
                         className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
                           editingFields.department_id === d.id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
                         }`}
@@ -596,7 +697,32 @@ export function ProjectDetailPanel({
                     return (
                       <button
                         key={key}
-                        onClick={() => { setEditingFields(prev => prev ? {...prev, status: key} : null); setTimeout(onSave, 0); setStatusOpen(false); }}
+                        onClick={() => {
+                          if (key === editingFields.status) { setStatusOpen(false); return; }
+                          if (project.template_id) {
+                            const hasBeenWorkedOn = editingFields.status === 'in_progress' || editingFields.status === 'paused' ||
+                              (formMetadata && Object.keys(formMetadata).some(
+                                k => !['property_name', 'template_id', 'template_name'].includes(k)
+                              ));
+                            if (key === 'not_started' && hasBeenWorkedOn) {
+                              alert('This task has already been started. If progress needs to be delayed, move to "Paused".');
+                              return;
+                            }
+                            if (key === 'complete' && editingFields.status !== 'complete') {
+                              const fd = formMetadata || {};
+                              const hasIncomplete = Object.entries(fd).some(([k, v]) => {
+                                if (['property_name', 'template_id', 'template_name'].includes(k)) return false;
+                                const val = (v && typeof v === 'object' && 'value' in (v as Record<string, unknown>))
+                                  ? (v as Record<string, unknown>).value : v;
+                                return val === false || val === '' || val === undefined || val === null;
+                              });
+                              if (hasIncomplete && !confirm('Are you sure you want to complete this task? The checklist has not been completed.')) {
+                                return;
+                              }
+                            }
+                          }
+                          const f = {...editingFields, status: key}; setEditingFields(f); onSave(f); setStatusOpen(false);
+                        }}
                         className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
                           editingFields.status === key ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
                         }`}
@@ -630,7 +756,7 @@ export function ProjectDetailPanel({
                     return (
                       <button
                         key={key}
-                        onClick={() => { setEditingFields(prev => prev ? {...prev, priority: key} : null); setTimeout(onSave, 0); setPriorityOpen(false); }}
+                        onClick={() => { const f = {...editingFields, priority: key}; setEditingFields(f); onSave(f); setPriorityOpen(false); }}
                         className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
                           editingFields.priority === key ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
                         }`}
@@ -659,7 +785,7 @@ export function ProjectDetailPanel({
                   <InlineDropdown onClose={() => setDeptPillOpen(false)}>
                     <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Department</p>
                     <button
-                      onClick={() => { setEditingFields(prev => prev ? {...prev, department_id: ''} : null); setTimeout(onSave, 0); setDeptPillOpen(false); }}
+                      onClick={() => { const f = {...editingFields, department_id: ''}; setEditingFields(f); onSave(f); setDeptPillOpen(false); }}
                       className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
                         !editingFields.department_id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
                       }`}
@@ -672,7 +798,7 @@ export function ProjectDetailPanel({
                       return (
                         <button
                           key={d.id}
-                          onClick={() => { setEditingFields(prev => prev ? {...prev, department_id: d.id} : null); setTimeout(onSave, 0); setDeptPillOpen(false); }}
+                          onClick={() => { const f = {...editingFields, department_id: d.id}; setEditingFields(f); onSave(f); setDeptPillOpen(false); }}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
                             editingFields.department_id === d.id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
                           }`}
@@ -766,8 +892,9 @@ export function ProjectDetailPanel({
                     {editingFields.assigned_staff?.length > 0 && (
                       <button
                         onClick={() => {
-                          setEditingFields(prev => prev ? {...prev, assigned_staff: []} : null);
-                          setTimeout(onSave, 0);
+                          const f = {...editingFields, assigned_staff: []};
+                          setEditingFields(f);
+                          onSave(f);
                         }}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
                       >
@@ -783,15 +910,13 @@ export function ProjectDetailPanel({
                         <button
                           key={user.id}
                           onClick={() => {
-                            setEditingFields(prev => {
-                              if (!prev) return null;
-                              const current = prev.assigned_staff || [];
-                              const updated = isAssigned
-                                ? current.filter(id => id !== user.id)
-                                : [...current, user.id];
-                              return {...prev, assigned_staff: updated};
-                            });
-                            setTimeout(onSave, 0);
+                            const current = editingFields.assigned_staff || [];
+                            const updated = isAssigned
+                              ? current.filter(id => id !== user.id)
+                              : [...current, user.id];
+                            const f = {...editingFields, assigned_staff: updated};
+                            setEditingFields(f);
+                            onSave(f);
                           }}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
                             isAssigned ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
@@ -829,8 +954,9 @@ export function ProjectDetailPanel({
                     type="date"
                     value={editingFields.scheduled_date}
                     onChange={(e) => {
-                      setEditingFields(prev => prev ? {...prev, scheduled_date: e.target.value} : null);
-                      setTimeout(onSave, 0);
+                      const f = {...editingFields, scheduled_date: e.target.value};
+                      setEditingFields(f);
+                      onSave(f);
                     }}
                     className="bg-transparent border-none outline-none text-[13px] text-muted-foreground focus:text-foreground p-0 w-full min-w-0 [color-scheme:dark]"
                   />
@@ -845,8 +971,9 @@ export function ProjectDetailPanel({
                     type="time"
                     value={editingFields.scheduled_time}
                     onChange={(e) => {
-                      setEditingFields(prev => prev ? {...prev, scheduled_time: e.target.value} : null);
-                      setTimeout(onSave, 0);
+                      const f = {...editingFields, scheduled_time: e.target.value};
+                      setEditingFields(f);
+                      onSave(f);
                     }}
                     className="bg-transparent border-none outline-none text-[13px] text-muted-foreground focus:text-foreground p-0 w-full min-w-0 [color-scheme:dark]"
                   />
@@ -855,38 +982,40 @@ export function ProjectDetailPanel({
             </div>
           </div>
 
-          {/* ── Timer row ── */}
-          <div className="rounded-xl bg-white/[0.04] backdrop-blur-sm border border-white/10 px-5 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <svg className="w-4 h-4 text-muted-foreground" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.2" />
-                <line x1="8" y1="9" x2="8" y2="6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                <line x1="8" y1="9" x2="10" y2="9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                <line x1="6.5" y1="2.5" x2="9.5" y2="2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-              </svg>
-              <span className="text-[13px] text-muted-foreground">Time tracked</span>
+          {/* ── Timer row (only shown here for non-templated tasks; templated tasks show timer on checklist side) ── */}
+          {!hasChecklist && (
+            <div className="rounded-xl bg-white/[0.04] backdrop-blur-sm border border-white/10 px-5 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-muted-foreground" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.2" />
+                  <line x1="8" y1="9" x2="8" y2="6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                  <line x1="8" y1="9" x2="10" y2="9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                  <line x1="6.5" y1="2.5" x2="9.5" y2="2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                </svg>
+                <span className="text-[13px] text-muted-foreground">Time tracked</span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="text-[15px] font-medium font-mono text-foreground tracking-wide">
+                  {formatTime(displaySeconds)}
+                </span>
+                {activeTimeEntry ? (
+                  <button
+                    onClick={onStopTimer}
+                    className="text-xs font-medium px-3.5 py-1.5 rounded-full bg-red-500/12 text-white hover:opacity-80 transition-opacity glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10"
+                  >
+                    Stop
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleTimerStart}
+                    className="text-xs font-medium px-3.5 py-1.5 rounded-full bg-emerald-500/12 text-white hover:opacity-80 transition-opacity glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10"
+                  >
+                    {displaySeconds > 0 ? 'Resume' : 'Start'}
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2.5">
-              <span className="text-[15px] font-medium font-mono text-foreground tracking-wide">
-                {formatTime(displaySeconds)}
-              </span>
-              {activeTimeEntry ? (
-                <button
-                  onClick={onStopTimer}
-                  className="text-xs font-medium px-3.5 py-1.5 rounded-full bg-red-500/12 text-white hover:opacity-80 transition-opacity glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10"
-                >
-                  Stop
-                </button>
-              ) : (
-                <button
-                  onClick={onStartTimer}
-                  className="text-xs font-medium px-3.5 py-1.5 rounded-full bg-emerald-500/12 text-white hover:opacity-80 transition-opacity glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10"
-                >
-                  {displaySeconds > 0 ? 'Resume' : 'Start'}
-                </button>
-              )}
-            </div>
-          </div>
+          )}
 
           {/* ── Attachments ── */}
           <div className="flex flex-col gap-3">

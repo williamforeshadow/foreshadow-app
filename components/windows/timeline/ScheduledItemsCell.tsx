@@ -39,12 +39,10 @@ const getRowStyles = (status: string) => {
     case 'in_progress':
       return `${base} bg-indigo-50/55 dark:bg-indigo-500/[0.12] border border-indigo-300/40 dark:border-indigo-400/20`;
     case 'paused':
-      return `${base} bg-indigo-50/55 dark:bg-indigo-500/[0.12] border border-indigo-300/40 dark:border-indigo-400/20`;
+      return `${base} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`;
     case 'contingent':
       return `${base} bg-white/45 dark:bg-white/[0.05] border border-dashed border-neutral-400/50 dark:border-white/15`;
-    case 'on_hold':
-      return `${base} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`;
-    default: // not_started, reopened, etc.
+    default:
       return `${base} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`;
   }
 };
@@ -109,7 +107,7 @@ const getProjectFolderStatus = (projects: Project[]): 'not_started' | 'in_progre
   if (total === 0) return 'no_tasks';
   const completed = projects.filter(p => p.status === 'complete').length;
   if (completed === total) return 'complete';
-  const inProgress = projects.filter(p => p.status === 'in_progress' || p.status === 'on_hold').length;
+  const inProgress = projects.filter(p => p.status === 'in_progress' || p.status === 'paused').length;
   if (inProgress > 0 || completed > 0) return 'in_progress';
   return 'not_started';
 };

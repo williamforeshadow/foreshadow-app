@@ -112,14 +112,14 @@ function ProjectCard({
             className={`${
               project.status === 'complete' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' :
               project.status === 'in_progress' ? 'bg-blue-100 text-blue-700 border-blue-300' :
-              project.status === 'on_hold' ? 'bg-red-100 text-red-700 border-red-300' :
+              project.status === 'paused' ? 'bg-red-100 text-red-700 border-red-300' :
               'bg-neutral-100 text-neutral-600 border-neutral-300'
             }`}
           >
             {project.status === 'not_started' ? 'Not Started' :
              project.status === 'in_progress' ? 'In Progress' :
              project.status === 'complete' ? 'Complete' :
-             project.status === 'on_hold' ? 'On Hold' : project.status}
+             project.status === 'paused' ? 'Paused' : project.status}
           </Badge>
           {project.scheduled_date && (
             <span className="text-neutral-500">

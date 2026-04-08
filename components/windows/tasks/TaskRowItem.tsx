@@ -12,7 +12,6 @@ export const statusStyles: Record<TaskStatus, string> = {
   in_progress: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400',
   paused: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-400',
   complete: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400',
-  reopened: 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-400',
 };
 
 // Neutral department badge style (all departments use the same style)

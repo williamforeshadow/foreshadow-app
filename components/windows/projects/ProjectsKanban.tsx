@@ -5,8 +5,8 @@ import { cn } from '@/lib/utils';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useDepartments } from '@/lib/departmentsContext';
 import type { Project, ProjectStatus, ProjectPriority, PropertyOption, User, Department } from '@/lib/types';
-import type { ProjectViewMode } from '@/lib/useProjects';
-import { STATUS_LABELS, PRIORITY_LABELS, STATUS_ORDER, PRIORITY_ORDER } from '@/lib/useProjects';
+import type { ProjectViewMode } from '@/lib/types';
+import { STATUS_LABELS, PRIORITY_LABELS, STATUS_ORDER, PRIORITY_ORDER } from '@/lib/types';
 import type { KanbanItemProps, KanbanColumnDataProps } from '@/lib/kanban-helpers';
 import styles from './ProjectsKanban.module.css';
 
@@ -108,8 +108,8 @@ export function ProjectsKanban({
             ? styles.columnAccentNotStarted
             : status === 'in_progress'
             ? styles.columnAccentInProgress
-            : status === 'on_hold'
-            ? styles.columnAccentOnHold
+            : status === 'paused'
+            ? styles.columnAccentPaused
             : styles.columnAccentComplete,
       }));
     }
@@ -229,7 +229,7 @@ export function ProjectsKanban({
   const [items, setItems] = useState<DraggableProjectItem[]>(initialItems);
 
   // Sync items when source data changes
-  useMemo(() => {
+  useEffect(() => {
     setItems(initialItems);
   }, [initialItems]);
 
@@ -247,6 +247,35 @@ export function ProjectsKanban({
         const propName = value === 'No Property' ? '' : value;
         onColumnMove(realItemId, 'property_name', propName);
       } else if (fieldPrefix === 'status') {
+        const draggedProject = projects.find(p => p.id === realItemId);
+        if (draggedProject?.template_id) {
+          const hasBeenWorkedOn = draggedProject.status === 'in_progress' || draggedProject.status === 'paused' ||
+            (draggedProject.form_metadata && Object.keys(draggedProject.form_metadata).some(
+              k => !['property_name', 'template_id', 'template_name'].includes(k)
+            ));
+
+          if (value === 'not_started' && hasBeenWorkedOn) {
+            alert('This task has already been started. If progress needs to be delayed, move to "Paused".');
+            setItems([...initialItems]);
+            return;
+          }
+
+          if (value === 'complete' && draggedProject.status !== 'complete') {
+            const formData = draggedProject.form_metadata || {};
+            const hasIncompleteChecklist = Object.entries(formData).some(([k, v]) => {
+              if (['property_name', 'template_id', 'template_name'].includes(k)) return false;
+              const val = (v && typeof v === 'object' && 'value' in (v as Record<string, unknown>))
+                ? (v as Record<string, unknown>).value : v;
+              return val === false || val === '' || val === undefined || val === null;
+            });
+            if (hasIncompleteChecklist) {
+              if (!confirm('Are you sure you want to complete this task? The checklist has not been completed.')) {
+                setItems([...initialItems]);
+                return;
+              }
+            }
+          }
+        }
         onColumnMove(realItemId, 'status', value);
       } else if (fieldPrefix === 'priority') {
         onColumnMove(realItemId, 'priority', value);
@@ -295,7 +324,7 @@ export function ProjectsKanban({
         }
       }
     },
-    [onColumnMove, departments, users, projects]
+    [onColumnMove, departments, users, projects, initialItems]
   );
 
   // Use the kanban DnD hook
@@ -405,13 +434,13 @@ function ColumnIcon({ viewMode, columnId }: { viewMode: ProjectViewMode; columnI
     const colors: Record<ProjectStatus, { bg: string; color: string }> = {
       not_started: { bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
       in_progress: { bg: 'rgba(99,102,241,0.15)', color: '#818cf8' },
-      on_hold: { bg: 'rgba(163,163,163,0.15)', color: '#a3a3a3' },
+      paused: { bg: 'rgba(163,163,163,0.15)', color: '#a3a3a3' },
       complete: { bg: 'rgba(16,185,129,0.15)', color: '#34d399' },
     };
     const c = colors[status] || colors.not_started;
     return (
       <div className={styles.columnIcon} style={{ backgroundColor: c.bg, color: c.color }}>
-        {status === 'complete' ? '✓' : status === 'on_hold' ? '⏸' : '●'}
+        {status === 'complete' ? '✓' : status === 'paused' ? '⏸' : '●'}
       </div>
     );
   }
@@ -552,8 +581,8 @@ function ProjectCardContent({
         return styles.statusComplete;
       case 'in_progress':
         return styles.statusInProgress;
-      case 'on_hold':
-        return styles.statusOnHold;
+      case 'paused':
+        return styles.statusPaused;
       default:
         return styles.statusNotStarted;
     }

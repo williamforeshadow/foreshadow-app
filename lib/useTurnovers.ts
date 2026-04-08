@@ -93,7 +93,7 @@ export function useTurnovers() {
     const activeTasks = tasks.filter((t) => t.status !== 'contingent');
     const total = activeTasks.length;
     const completed = activeTasks.filter((t) => t.status === 'complete').length;
-    const inProgress = activeTasks.filter((t) => t.status === 'in_progress').length;
+    const inProgress = activeTasks.filter((t) => t.status === 'in_progress' || t.status === 'paused').length;
 
     if (total === 0) return 'no_tasks';
     if (completed === total) return 'complete';

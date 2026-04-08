@@ -35,6 +35,7 @@ interface DynamicCleaningFormProps {
   onSave: (formData: any) => Promise<void>;
   readOnly?: boolean;
   onValidationChange?: (allRequiredFilled: boolean) => void;
+  onChecklistInteraction?: () => void;
 }
 
 function DynamicCleaningForm({ 
@@ -45,6 +46,7 @@ function DynamicCleaningForm({
   onSave,
   readOnly = false,
   onValidationChange,
+  onChecklistInteraction,
 }: DynamicCleaningFormProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [formValues, setFormValues] = useState<Record<string, any>>({});
@@ -92,9 +94,14 @@ function DynamicCleaningForm({
     setFormValues(defaults);
   }, [template, formMetadata]);
 
+  const hasInteractedRef = useRef(false);
   const updateValue = useCallback((fieldId: string, value: any) => {
     setFormValues(prev => ({ ...prev, [fieldId]: value }));
-  }, []);
+    if (!hasInteractedRef.current && onChecklistInteraction) {
+      hasInteractedRef.current = true;
+      onChecklistInteraction();
+    }
+  }, [onChecklistInteraction]);
 
   // Check if all required fields are filled and notify parent
   useEffect(() => {

@@ -43,7 +43,7 @@ interface MobileProjectDetailProps {
 const STATUS_CONFIG: Record<string, { bg: string; dot: string; label: string }> = {
   not_started: { bg: 'bg-amber-500/15 text-white', dot: 'bg-amber-500', label: 'Not Started' },
   in_progress: { bg: 'bg-indigo-500/15 text-white', dot: 'bg-indigo-500', label: 'In Progress' },
-  on_hold: { bg: 'bg-neutral-400/15 text-white', dot: 'bg-neutral-400', label: 'On Hold' },
+  paused: { bg: 'bg-neutral-400/15 text-white', dot: 'bg-neutral-400', label: 'Paused' },
   complete: { bg: 'bg-emerald-500/15 text-white', dot: 'bg-emerald-500', label: 'Complete' },
 };
 
@@ -54,7 +54,7 @@ const PRIORITY_CONFIG: Record<string, { bg: string; label: string }> = {
   urgent: { bg: 'bg-red-500/15 text-white', label: 'Urgent' },
 };
 
-const STATUS_OPTIONS = ['not_started', 'in_progress', 'on_hold', 'complete'];
+const STATUS_OPTIONS = ['not_started', 'in_progress', 'paused', 'complete'];
 const PRIORITY_OPTIONS = ['low', 'medium', 'high', 'urgent'];
 
 // ============================================================================
@@ -93,6 +93,20 @@ export default function MobileProjectDetail({
     scheduled_time: project.scheduled_time || '',
   });
 
+  // Sync fields when project changes (e.g. parent swaps to different task)
+  useEffect(() => {
+    setFields({
+      title: project.title,
+      description: (project.description as TiptapJSON | null) || null,
+      status: project.status,
+      priority: project.priority,
+      assigned_staff: project.project_assignments?.map(a => a.user_id) || [],
+      department_id: project.department_id || '',
+      scheduled_date: project.scheduled_date || '',
+      scheduled_time: project.scheduled_time || '',
+    });
+  }, [project.id]);
+
   // UI state
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [showPriorityPicker, setShowPriorityPicker] = useState(false);
@@ -118,9 +132,9 @@ export default function MobileProjectDetail({
 
   // Load data on mount
   useEffect(() => {
-    commentsHook.fetchProjectComments(project.id);
-    attachmentsHook.fetchProjectAttachments(project.id);
-    timeTrackingHook.fetchProjectTimeEntries(project.id);
+    commentsHook.fetchProjectComments(project.id, 'task');
+    attachmentsHook.fetchProjectAttachments(project.id, 'task');
+    timeTrackingHook.fetchProjectTimeEntries(project.id, 'task');
   }, [project.id]);
 
   // Auto-save helper
@@ -134,8 +148,7 @@ export default function MobileProjectDetail({
   const updateField = useCallback((key: keyof ProjectFormFields, value: string | string[]) => {
     setFields(prev => {
       const updated = { ...prev, [key]: value };
-      // Auto-save after a brief delay
-      setTimeout(() => autoSave(updated), 0);
+      autoSave(updated);
       return updated;
     });
   }, [autoSave]);
@@ -150,7 +163,47 @@ export default function MobileProjectDetail({
 
   const hasChecklist = !!template;
   const isAssigned = currentUser ? fields.assigned_staff?.includes(currentUser.id) : false;
-  const isChecklistReadOnly = !isAssigned || fields.status === 'complete' || fields.status === 'contingent';
+  const timerNeverStarted = !!template && timeTrackingHook.displaySeconds === 0 && !timeTrackingHook.activeTimeEntry;
+  const isChecklistReadOnly = !isAssigned || fields.status === 'complete' || fields.status === 'contingent' || timerNeverStarted;
+
+  // Auto-status transitions for templated tasks
+  const autoSetStatus = useCallback((targetStatus: string) => {
+    if (!template) return;
+    setFields(prev => {
+      const updated = { ...prev, status: targetStatus };
+      autoSave(updated);
+      return updated;
+    });
+  }, [template, autoSave]);
+
+  const handleTimerStart = useCallback(() => {
+    timeTrackingHook.startProjectTimer(project.id, 'task');
+    if (template && (fields.status === 'not_started' || fields.status === 'paused')) {
+      autoSetStatus('in_progress');
+    }
+  }, [timeTrackingHook, project.id, template, fields.status, autoSetStatus]);
+
+  const handleTimerStop = useCallback(() => {
+    timeTrackingHook.stopProjectTimer();
+    if (template && fields.status === 'in_progress') {
+      autoSetStatus('paused');
+    }
+  }, [timeTrackingHook, template, fields.status, autoSetStatus]);
+
+  const handleChecklistInteraction = useCallback(() => {
+    if (template && fields.status === 'not_started') {
+      autoSetStatus('in_progress');
+    }
+  }, [template, fields.status, autoSetStatus]);
+
+  const prevAllFilledRef = useRef(false);
+  const handleValidationChange = useCallback((allRequiredFilled: boolean) => {
+    const wasAllFilled = prevAllFilledRef.current;
+    prevAllFilledRef.current = allRequiredFilled;
+    if (!wasAllFilled && allRequiredFilled && template && fields.status === 'in_progress') {
+      autoSetStatus('complete');
+    }
+  }, [template, fields.status, autoSetStatus]);
 
   const filteredTemplates = useMemo(() => {
     if (!templateSearch.trim()) return availableTemplates;
@@ -165,13 +218,13 @@ export default function MobileProjectDetail({
   // Post comment
   const handlePostComment = async () => {
     if (!newComment.trim()) return;
-    await commentsHook.postProjectComment(project.id, newComment.trim());
+    await commentsHook.postProjectComment(project.id, newComment.trim(), 'task');
     setNewComment('');
   };
 
   // Upload attachment
   const handleAttachmentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    attachmentsHook.handleAttachmentUpload(e, project.id);
+    attachmentsHook.handleAttachmentUpload(e, project.id, 'task');
   };
 
   return (
@@ -483,7 +536,32 @@ export default function MobileProjectDetail({
                   return (
                     <button
                       key={s}
-                      onClick={() => { updateField('status', s); setShowStatusPicker(false); }}
+                      onClick={() => {
+                        if (s === fields.status) { setShowStatusPicker(false); return; }
+                        if (project.template_id) {
+                          const hasBeenWorkedOn = fields.status === 'in_progress' || fields.status === 'paused' ||
+                            (formMetadata && Object.keys(formMetadata).some(
+                              k => !['property_name', 'template_id', 'template_name'].includes(k)
+                            ));
+                          if (s === 'not_started' && hasBeenWorkedOn) {
+                            alert('This task has already been started. If progress needs to be delayed, move to "Paused".');
+                            return;
+                          }
+                          if (s === 'complete' && fields.status !== 'complete') {
+                            const fd = formMetadata || {};
+                            const hasIncomplete = Object.entries(fd).some(([k, v]) => {
+                              if (['property_name', 'template_id', 'template_name'].includes(k)) return false;
+                              const val = (v && typeof v === 'object' && 'value' in (v as Record<string, unknown>))
+                                ? (v as Record<string, unknown>).value : v;
+                              return val === false || val === '' || val === undefined || val === null;
+                            });
+                            if (hasIncomplete && !confirm('Are you sure you want to complete this task? The checklist has not been completed.')) {
+                              return;
+                            }
+                          }
+                        }
+                        updateField('status', s); setShowStatusPicker(false);
+                      }}
                       className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
                         fields.status === s ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
                       }`}
@@ -749,35 +827,37 @@ export default function MobileProjectDetail({
               </div>
             </div>
 
-            {/* Time Tracking */}
-            <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 px-5 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="text-sm text-neutral-600 dark:text-neutral-400">Time tracked</span>
+            {/* Time Tracking (only shown here for non-templated tasks; templated tasks show timer on checklist tab) */}
+            {!hasChecklist && (
+              <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 px-5 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-sm text-neutral-600 dark:text-neutral-400">Time tracked</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <span className="text-base font-medium font-mono text-neutral-900 dark:text-white">
+                    {timeTrackingHook.formatTime(timeTrackingHook.displaySeconds)}
+                  </span>
+                  {timeTrackingHook.activeTimeEntry ? (
+                    <button
+                      onClick={timeTrackingHook.stopProjectTimer}
+                      className="text-xs font-medium px-3 py-1.5 rounded-full bg-red-500/10 text-white active:opacity-70 transition-opacity glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10"
+                    >
+                      Stop
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleTimerStart}
+                      className="text-xs font-medium px-3 py-1.5 rounded-full bg-emerald-500/10 text-white active:opacity-70 transition-opacity glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10"
+                    >
+                      {timeTrackingHook.displaySeconds > 0 ? 'Resume' : 'Start'}
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2.5">
-                <span className="text-base font-medium font-mono text-neutral-900 dark:text-white">
-                  {timeTrackingHook.formatTime(timeTrackingHook.displaySeconds)}
-                </span>
-                {timeTrackingHook.activeTimeEntry ? (
-                  <button
-                    onClick={timeTrackingHook.stopProjectTimer}
-                    className="text-xs font-medium px-3 py-1.5 rounded-full bg-red-500/10 text-white active:opacity-70 transition-opacity glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10"
-                  >
-                    Stop
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => timeTrackingHook.startProjectTimer(project.id)}
-                    className="text-xs font-medium px-3 py-1.5 rounded-full bg-emerald-500/10 text-white active:opacity-70 transition-opacity glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10"
-                  >
-                    {timeTrackingHook.displaySeconds > 0 ? 'Resume' : 'Start'}
-                  </button>
-                )}
-              </div>
-            </div>
+            )}
 
             {/* Bottom padding */}
             <div className="h-4" />
@@ -787,6 +867,71 @@ export default function MobileProjectDetail({
         {/* Checklist Section */}
         {activeSection === 'checklist' && (
           <div className="px-5 pt-5 pb-6">
+            {/* Action buttons row */}
+            <div className="flex items-center gap-2 mb-4">
+              {timeTrackingHook.activeTimeEntry ? (
+                <button
+                  onClick={handleTimerStop}
+                  className="flex-1 text-sm font-medium py-2.5 rounded-xl bg-red-500/15 text-red-400 active:opacity-70 transition-opacity border border-red-500/20"
+                >
+                  Stop
+                </button>
+              ) : (
+                <button
+                  onClick={handleTimerStart}
+                  className="flex-1 text-sm font-medium py-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 active:opacity-70 transition-opacity border border-emerald-500/20"
+                >
+                  {timeTrackingHook.displaySeconds > 0 ? 'Resume' : 'Start'}
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (fields.status === 'complete') {
+                    setFields(prev => {
+                      const updated = { ...prev, status: 'paused' };
+                      autoSave(updated);
+                      return updated;
+                    });
+                    return;
+                  }
+                  const fd = formMetadata || {};
+                  const hasIncomplete = Object.entries(fd).some(([k, v]) => {
+                    if (['property_name', 'template_id', 'template_name'].includes(k)) return false;
+                    const val = (v && typeof v === 'object' && 'value' in (v as Record<string, unknown>))
+                      ? (v as Record<string, unknown>).value : v;
+                    return val === false || val === '' || val === undefined || val === null;
+                  });
+                  if (hasIncomplete && !confirm('Are you sure you want to complete this task? The checklist has not been completed.')) return;
+                  if (timeTrackingHook.activeTimeEntry) timeTrackingHook.stopProjectTimer();
+                  setFields(prev => {
+                    const updated = { ...prev, status: 'complete' };
+                    autoSave(updated);
+                    return updated;
+                  });
+                }}
+                className={`flex-1 text-sm font-medium py-2.5 rounded-xl transition-opacity border ${
+                  fields.status === 'complete'
+                    ? 'bg-amber-500/15 text-amber-400 active:opacity-70 border-amber-500/20'
+                    : 'bg-blue-500/15 text-blue-400 active:opacity-70 border-blue-500/20'
+                }`}
+              >
+                {fields.status === 'complete' ? 'Reopen' : 'Complete'}
+              </button>
+            </div>
+
+            {/* Time display */}
+            <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 px-5 py-3 flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm text-neutral-600 dark:text-neutral-400">Time tracked</span>
+              </div>
+              <span className="text-base font-medium font-mono text-neutral-900 dark:text-white">
+                {timeTrackingHook.formatTime(timeTrackingHook.displaySeconds)}
+              </span>
+            </div>
+
             {loadingTemplate ? (
               <div className="flex items-center justify-center py-12">
                 <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
@@ -801,6 +946,8 @@ export default function MobileProjectDetail({
                   if (onSaveForm) await onSaveForm(formData);
                 }}
                 readOnly={isChecklistReadOnly}
+                onValidationChange={handleValidationChange}
+                onChecklistInteraction={handleChecklistInteraction}
               />
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-neutral-400">

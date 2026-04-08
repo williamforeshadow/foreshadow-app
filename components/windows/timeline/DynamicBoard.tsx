@@ -96,13 +96,12 @@ const TASK_STATUSES: { value: TaskStatus; label: string; icon: React.ReactNode }
   { value: 'in_progress', label: 'In Progress', icon: <Clock className="h-3 w-3 text-yellow-500" /> },
   { value: 'paused', label: 'Paused', icon: <Pause className="h-3 w-3 text-orange-500" /> },
   { value: 'complete', label: 'Complete', icon: <CheckCircle2 className="h-3 w-3 text-green-500" /> },
-  { value: 'reopened', label: 'Reopened', icon: <RotateCcw className="h-3 w-3 text-purple-500" /> },
 ];
 
 const PROJECT_STATUSES: { value: ProjectStatus; label: string; icon: React.ReactNode }[] = [
   { value: 'not_started', label: 'Not Started', icon: <AlertCircle className="h-3 w-3 text-red-500" /> },
   { value: 'in_progress', label: 'In Progress', icon: <Clock className="h-3 w-3 text-yellow-500" /> },
-  { value: 'on_hold', label: 'On Hold', icon: <Pause className="h-3 w-3 text-orange-500" /> },
+  { value: 'paused', label: 'Paused', icon: <Pause className="h-3 w-3 text-orange-500" /> },
   { value: 'complete', label: 'Complete', icon: <CheckCircle2 className="h-3 w-3 text-green-500" /> },
 ];
 

@@ -25,7 +25,7 @@ export interface AssignedUser {
 // Task Types
 // ============================================================================
 
-export type TaskStatus = 'contingent' | 'not_started' | 'in_progress' | 'paused' | 'complete' | 'reopened';
+export type TaskStatus = 'contingent' | 'not_started' | 'in_progress' | 'paused' | 'complete';
 export type TaskType = string;
 
 // ============================================================================
@@ -138,8 +138,27 @@ export interface ProjectBin {
 // Project Types
 // ============================================================================
 
-export type ProjectStatus = 'not_started' | 'in_progress' | 'on_hold' | 'complete';
+export type ProjectStatus = 'not_started' | 'in_progress' | 'paused' | 'complete';
 export type ProjectPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+export type ProjectViewMode = 'property' | 'status' | 'priority' | 'department' | 'assignee';
+
+export const STATUS_LABELS: Record<ProjectStatus, string> = {
+  'not_started': 'Not Started',
+  'in_progress': 'In Progress',
+  'paused': 'Paused',
+  'complete': 'Complete'
+};
+
+export const PRIORITY_LABELS: Record<ProjectPriority, string> = {
+  'urgent': 'Urgent',
+  'high': 'High',
+  'medium': 'Medium',
+  'low': 'Low'
+};
+
+export const STATUS_ORDER: ProjectStatus[] = ['paused', 'not_started', 'in_progress', 'complete'];
+export const PRIORITY_ORDER: ProjectPriority[] = ['urgent', 'high', 'medium', 'low'];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type TiptapJSON = Record<string, any>;

@@ -194,6 +194,12 @@ export function useKanbanDnd<
       isUpdatingRef.current = false;
       originalColumnRef.current = null;
 
+      if (!over) {
+        // Cancel or drop outside — revert to original data
+        onDragEnd?.(event);
+        return;
+      }
+
       // Notify about column change only if it actually changed (persistence happens here)
       if (originalColumnId && finalColumnId && originalColumnId !== finalColumnId) {
         onColumnChange?.(active.id as string, originalColumnId, finalColumnId);
@@ -201,7 +207,7 @@ export function useKanbanDnd<
 
       onDragEnd?.(event);
 
-      if (!over || active.id === over.id) {
+      if (active.id === over.id) {
         return;
       }
 

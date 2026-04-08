@@ -74,7 +74,7 @@ Tasks associated with turnovers (cleanings, maintenance between guests).
 | template_id | uuid | FK to templates |
 | type | text | Task type (legacy, e.g., 'cleaning', 'maintenance') |
 | department_id | uuid | FK to departments (preferred over type) |
-| status | text | Task status: 'not_started', 'in_progress', 'paused', 'complete', 'reopened' |
+| status | text | Task status: 'not_started', 'in_progress', 'paused', 'complete' |
 | scheduled_date | date | Scheduled date (YYYY-MM-DD) |
 | scheduled_time | time | Scheduled time (HH:MM, nullable) |
 | form_metadata | jsonb | Form responses with field labels |
@@ -122,7 +122,7 @@ Capital/renovation projects for properties.
 | property_name | text | Property name |
 | title | text | Project title |
 | description | text | Project description |
-| status | text | 'not_started', 'in_progress', 'on_hold', 'complete' |
+| status | text | 'not_started', 'in_progress', 'paused', 'complete' |
 | priority | text | 'low', 'medium', 'high', 'urgent' |
 | department_id | uuid | FK to departments (optional) |
 | scheduled_date | date | Project scheduled date (YYYY-MM-DD) |

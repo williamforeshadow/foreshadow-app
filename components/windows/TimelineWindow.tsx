@@ -28,12 +28,11 @@ const getRowStyles = (status: string) => {
     case 'complete':
       return `${base} bg-emerald-50/55 dark:bg-emerald-500/[0.12] border border-emerald-200/40 dark:border-emerald-400/20`;
     case 'in_progress':
-    case 'paused':
       return `${base} bg-indigo-50/55 dark:bg-indigo-500/[0.12] border border-indigo-300/40 dark:border-indigo-400/20`;
+    case 'paused':
+      return `${base} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`;
     case 'contingent':
       return `${base} bg-white/45 dark:bg-white/[0.05] border border-dashed border-neutral-400/50 dark:border-white/15`;
-    case 'on_hold':
-      return `${base} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`;
     default:
       return `${base} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`;
   }
@@ -582,8 +581,8 @@ export default function TimelineWindow({
   // ============================================================================
   // Project wrapper functions
   // ============================================================================
-  const handleSaveProject = useCallback(async () => {
-    const currentFields = projectFieldsRef.current;
+  const handleSaveProject = useCallback(async (directFields?: ProjectFormFields) => {
+    const currentFields = directFields || projectFieldsRef.current;
     if (floatingData?.type !== 'project' || !currentFields) return;
     const project = floatingData.item as Project;
     setSavingProjectEdit(true);
@@ -604,8 +603,19 @@ export default function TimelineWindow({
       });
       const data = await res.json();
       if (data.data) {
-        setProjects(prev => prev.map(p => p.id === project.id ? data.data : p));
-        setFloatingData(prev => prev ? { ...prev, item: data.data } : null);
+        const d = data.data;
+        setProjects(prev => prev.map(p => p.id === project.id ? d : p));
+        setFloatingData(prev => prev ? { ...prev, item: d } : null);
+        setProjectFields({
+          title: d.title,
+          description: d.description || null,
+          status: d.status,
+          priority: d.priority,
+          assigned_staff: d.project_assignments?.map((a: { user_id: string }) => a.user_id) || currentFields.assigned_staff || [],
+          department_id: d.department_id || '',
+          scheduled_date: d.scheduled_date || '',
+          scheduled_time: d.scheduled_time || '',
+        });
       }
     } catch (err) {
       console.error('Error saving project:', err);
@@ -660,9 +670,9 @@ export default function TimelineWindow({
   // ============================================================================
   // Task → ProjectDetailPanel: save handler + derived data
   // ============================================================================
-  const handleSaveTaskEditFields = useCallback(async () => {
+  const handleSaveTaskEditFields = useCallback(async (directFields?: ProjectFormFields) => {
     if (!localTask) return;
-    const fields = taskEditingFieldsRef.current;
+    const fields = directFields || taskEditingFieldsRef.current;
     if (!fields) return;
     const taskId = localTask.task_id;
 
@@ -701,6 +711,10 @@ export default function TimelineWindow({
       } catch (err) {
         console.error('Error updating task fields:', err);
       }
+    }
+
+    if (directFields) {
+      setTaskEditingFields(directFields);
     }
   }, [localTask, handleUpdateTaskStatus, updateTurnoverTaskSchedule, updateTurnoverTaskAssignment]);
 
@@ -1043,6 +1057,22 @@ export default function TimelineWindow({
           return updated;
         }));
 
+        // Sync floating detail panel if viewing this task
+        if (floatingData?.type === 'task' && localTask?.task_id === itemId) {
+          setLocalTask((prev: Task | null) => {
+            if (!prev) return prev;
+            const updated = { ...prev };
+            if (changes.scheduledDate !== undefined) updated.scheduled_date = changes.scheduledDate;
+            if (changes.scheduledTime !== undefined) updated.scheduled_time = changes.scheduledTime;
+            if (changes.assigneeId !== undefined) {
+              updated.assigned_users = changes.assigneeId
+                ? [{ user_id: changes.assigneeId, name: assignedUser?.name || '', avatar: assignedUser?.avatar || '', role: assignedUser?.role || '' }]
+                : [];
+            }
+            return updated;
+          });
+        }
+
       } else {
         // Project: build update payload with whatever changed
         const projectPayload: Record<string, any> = {
@@ -1071,15 +1101,29 @@ export default function TimelineWindow({
         }
 
         if (result.data) {
+          const d = result.data;
           setProjects(prev =>
-            prev.map(p => p.id === itemId ? result.data : p)
+            prev.map(p => p.id === itemId ? d : p)
           );
+          if (floatingData?.type === 'project' && (floatingData.item as Project).id === itemId) {
+            setFloatingData(prev => prev ? { ...prev, item: d } : null);
+            setProjectFields({
+              title: d.title,
+              description: d.description || null,
+              status: d.status,
+              priority: d.priority,
+              assigned_staff: d.project_assignments?.map((a: { user_id: string }) => a.user_id) || [],
+              department_id: d.department_id || '',
+              scheduled_date: d.scheduled_date || '',
+              scheduled_time: d.scheduled_time || '',
+            });
+          }
         }
       }
     } catch (err) {
       console.error('Error updating column move:', err);
     }
-  }, [currentUser?.id, setReservations, setRecurringTasks, users]);
+  }, [currentUser?.id, setReservations, setRecurringTasks, users, floatingData, localTask]);
 
   // Extract ALL tasks from reservations + recurring tasks, tagged with property_name
   const allTasksWithProperty = useMemo(() => {

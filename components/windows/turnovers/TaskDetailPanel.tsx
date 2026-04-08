@@ -191,15 +191,15 @@ export function TaskDetailPanel({
         </div>
       );
     }
-    if (task.status === 'complete' || task.status === 'reopened') {
+    if (task.status === 'complete') {
       return (
         <Button
           size="sm"
           variant="outline"
           className={tinyBtn}
           onClick={() => {
-            onUpdateStatus(task.task_id, 'not_started');
-            setTask({ ...task, status: 'not_started' });
+            onUpdateStatus(task.task_id, 'paused');
+            setTask({ ...task, status: 'paused' });
           }}
         >
           Reopen

@@ -328,7 +328,6 @@
   color: #ca8a04;
 }
 
-.statusOnHold,
 .statusPaused {
   background-color: rgba(249, 115, 22, 0.15);
   color: #ea580c;
@@ -339,10 +338,6 @@
   color: #16a34a;
 }
 
-.statusReopened {
-  background-color: rgba(168, 85, 247, 0.15);
-  color: #9333ea;
-}
 
 .cardType {
   font-size: 0.625rem;
@@ -410,7 +405,6 @@
   color: #facc15;
 }
 
-:global(.dark) .statusOnHold,
 :global(.dark) .statusPaused {
   background-color: rgba(249, 115, 22, 0.2);
   color: #fb923c;
@@ -421,10 +415,6 @@
   color: #4ade80;
 }
 
-:global(.dark) .statusReopened {
-  background-color: rgba(168, 85, 247, 0.2);
-  color: #c084fc;
-}
 
 /* Add Column Button */
 .addColumnButton {

@@ -250,8 +250,7 @@ export function useTasks() {
             'not_started': 1,
             'in_progress': 2,
             'paused': 3,
-            'reopened': 4,
-            'complete': 5
+            'complete': 4
           };
           comparison = statusOrder[a.status] - statusOrder[b.status];
           break;

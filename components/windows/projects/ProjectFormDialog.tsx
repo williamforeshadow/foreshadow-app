@@ -180,7 +180,7 @@ export function ProjectFormDialog({
                     <SelectContent>
                       <SelectItem value="not_started">Not Started</SelectItem>
                       <SelectItem value="in_progress">In Progress</SelectItem>
-                      <SelectItem value="on_hold">On Hold</SelectItem>
+                      <SelectItem value="paused">Paused</SelectItem>
                       <SelectItem value="complete">Complete</SelectItem>
                     </SelectContent>
                   </Select>
