@@ -177,9 +177,19 @@ export function ProjectDetailPanel({
   }, [template, editingFields.status, autoSetStatus]);
 
   const prevAllFilledRef = useRef(false);
+  const validationReadyRef = useRef(false);
+
+  useEffect(() => {
+    validationReadyRef.current = false;
+    prevAllFilledRef.current = false;
+    const timer = setTimeout(() => { validationReadyRef.current = true; }, 500);
+    return () => clearTimeout(timer);
+  }, [project.id]);
+
   const handleValidationChange = useCallback((allRequiredFilled: boolean) => {
     const wasAllFilled = prevAllFilledRef.current;
     prevAllFilledRef.current = allRequiredFilled;
+    if (!validationReadyRef.current) return;
     if (!wasAllFilled && allRequiredFilled && template && editingFields.status === 'in_progress') {
       autoSetStatus('complete');
     }
