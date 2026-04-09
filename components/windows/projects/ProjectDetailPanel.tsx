@@ -148,43 +148,54 @@ export function ProjectDetailPanel({
   const isAssigned = currentUser ? editingFields.assigned_staff?.includes(currentUser.id) : false;
   const isChecklistReadOnly = !isAssigned || editingFields.status === 'contingent';
 
-  // Auto-stop timer when status leaves in_progress (covers all change paths)
+  // Refs for fresh values in effects/callbacks (avoids stale closures)
+  const activeTimeEntryRef = useRef(activeTimeEntry);
+  activeTimeEntryRef.current = activeTimeEntry;
+  const displaySecondsRef = useRef(displaySeconds);
+  displaySecondsRef.current = displaySeconds;
+  const editingFieldsRef = useRef(editingFields);
+  editingFieldsRef.current = editingFields;
+
+  // Auto-stop/start timer when status changes (covers all change paths)
   useEffect(() => {
-    if (activeTimeEntry && editingFields.status !== 'in_progress') {
+    if (activeTimeEntryRef.current && editingFields.status !== 'in_progress') {
       onStopTimer();
     }
-    if (!activeTimeEntry && editingFields.status === 'in_progress' && displaySeconds > 0) {
+    if (!activeTimeEntryRef.current && editingFields.status === 'in_progress' && displaySecondsRef.current > 0) {
       onStartTimer();
     }
-  }, [editingFields.status]);
+  }, [editingFields.status, onStopTimer, onStartTimer]);
 
   // Auto-status transitions for templated tasks
   const autoSetStatus = useCallback((targetStatus: string) => {
-    if (!template || !editingFields) return;
-    const updated = { ...editingFields, status: targetStatus };
+    if (!template) return;
+    const current = editingFieldsRef.current;
+    if (!current) return;
+    const updated = { ...current, status: targetStatus };
     setEditingFields(updated);
     onSave(updated);
-  }, [template, editingFields, setEditingFields, onSave]);
+  }, [template, setEditingFields, onSave]);
 
   const handleTimerStart = useCallback(() => {
     onStartTimer();
-    if (template && (editingFields.status === 'not_started' || editingFields.status === 'paused')) {
+    const status = editingFieldsRef.current?.status;
+    if (template && (status === 'not_started' || status === 'paused')) {
       autoSetStatus('in_progress');
     }
-  }, [onStartTimer, template, editingFields.status, autoSetStatus]);
+  }, [onStartTimer, template, autoSetStatus]);
 
   const handleTimerStop = useCallback(() => {
     onStopTimer();
-    if (template && editingFields.status === 'in_progress') {
+    if (template && editingFieldsRef.current?.status === 'in_progress') {
       autoSetStatus('paused');
     }
-  }, [onStopTimer, template, editingFields.status, autoSetStatus]);
+  }, [onStopTimer, template, autoSetStatus]);
 
   const handleChecklistInteraction = useCallback(() => {
-    if (template && editingFields.status === 'not_started') {
+    if (template && editingFieldsRef.current?.status === 'not_started') {
       autoSetStatus('in_progress');
     }
-  }, [template, editingFields.status, autoSetStatus]);
+  }, [template, autoSetStatus]);
 
   const prevAllFilledRef = useRef(false);
   const validationReadyRef = useRef(false);
@@ -200,11 +211,11 @@ export function ProjectDetailPanel({
     const wasAllFilled = prevAllFilledRef.current;
     prevAllFilledRef.current = allRequiredFilled;
     if (!validationReadyRef.current) return;
-    if (!wasAllFilled && allRequiredFilled && template && editingFields.status === 'in_progress') {
+    if (!wasAllFilled && allRequiredFilled && template && editingFieldsRef.current?.status === 'in_progress') {
       autoSetStatus('complete');
     }
     onValidationChange?.(allRequiredFilled);
-  }, [template, editingFields.status, autoSetStatus, onValidationChange]);
+  }, [template, autoSetStatus, onValidationChange]);
 
   // Picker open states
   const [propertyOpen, setPropertyOpen] = useState(false);

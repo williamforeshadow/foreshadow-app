@@ -165,12 +165,20 @@ export default function MobileProjectDetail({
   const isAssigned = currentUser ? fields.assigned_staff?.includes(currentUser.id) : false;
   const isChecklistReadOnly = !isAssigned || fields.status === 'contingent';
 
+  // Refs for fresh values in effects/callbacks (avoids stale closures)
+  const activeTimeEntryRef = useRef(timeTrackingHook.activeTimeEntry);
+  activeTimeEntryRef.current = timeTrackingHook.activeTimeEntry;
+  const displaySecondsRef = useRef(timeTrackingHook.displaySeconds);
+  displaySecondsRef.current = timeTrackingHook.displaySeconds;
+  const fieldsRef = useRef(fields);
+  fieldsRef.current = fields;
+
   // Auto-stop/start timer when status changes (covers all change paths)
   useEffect(() => {
-    if (timeTrackingHook.activeTimeEntry && fields.status !== 'in_progress') {
+    if (activeTimeEntryRef.current && fields.status !== 'in_progress') {
       timeTrackingHook.stopProjectTimer();
     }
-    if (!timeTrackingHook.activeTimeEntry && fields.status === 'in_progress' && timeTrackingHook.displaySeconds > 0) {
+    if (!activeTimeEntryRef.current && fields.status === 'in_progress' && displaySecondsRef.current > 0) {
       timeTrackingHook.startProjectTimer(project.id, 'task');
     }
   }, [fields.status]);
@@ -187,23 +195,24 @@ export default function MobileProjectDetail({
 
   const handleTimerStart = useCallback(() => {
     timeTrackingHook.startProjectTimer(project.id, 'task');
-    if (template && (fields.status === 'not_started' || fields.status === 'paused')) {
+    const status = fieldsRef.current?.status;
+    if (template && (status === 'not_started' || status === 'paused')) {
       autoSetStatus('in_progress');
     }
-  }, [timeTrackingHook, project.id, template, fields.status, autoSetStatus]);
+  }, [timeTrackingHook, project.id, template, autoSetStatus]);
 
   const handleTimerStop = useCallback(() => {
     timeTrackingHook.stopProjectTimer();
-    if (template && fields.status === 'in_progress') {
+    if (template && fieldsRef.current?.status === 'in_progress') {
       autoSetStatus('paused');
     }
-  }, [timeTrackingHook, template, fields.status, autoSetStatus]);
+  }, [timeTrackingHook, template, autoSetStatus]);
 
   const handleChecklistInteraction = useCallback(() => {
-    if (template && fields.status === 'not_started') {
+    if (template && fieldsRef.current?.status === 'not_started') {
       autoSetStatus('in_progress');
     }
-  }, [template, fields.status, autoSetStatus]);
+  }, [template, autoSetStatus]);
 
   const prevAllFilledRef = useRef(false);
   const validationReadyRef = useRef(false);
@@ -219,10 +228,10 @@ export default function MobileProjectDetail({
     const wasAllFilled = prevAllFilledRef.current;
     prevAllFilledRef.current = allRequiredFilled;
     if (!validationReadyRef.current) return;
-    if (!wasAllFilled && allRequiredFilled && template && fields.status === 'in_progress') {
+    if (!wasAllFilled && allRequiredFilled && template && fieldsRef.current?.status === 'in_progress') {
       autoSetStatus('complete');
     }
-  }, [template, fields.status, autoSetStatus]);
+  }, [template, autoSetStatus]);
 
   const filteredTemplates = useMemo(() => {
     if (!templateSearch.trim()) return availableTemplates;
