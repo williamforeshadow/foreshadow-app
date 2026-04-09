@@ -163,8 +163,7 @@ export default function MobileProjectDetail({
 
   const hasChecklist = !!template;
   const isAssigned = currentUser ? fields.assigned_staff?.includes(currentUser.id) : false;
-  const timerNeverStarted = !!template && timeTrackingHook.displaySeconds === 0 && !timeTrackingHook.activeTimeEntry;
-  const isChecklistReadOnly = !isAssigned || fields.status === 'complete' || fields.status === 'contingent' || timerNeverStarted;
+  const isChecklistReadOnly = !isAssigned || fields.status === 'contingent';
 
   // Auto-status transitions for templated tasks
   const autoSetStatus = useCallback((targetStatus: string) => {
@@ -879,7 +878,12 @@ export default function MobileProjectDetail({
               ) : (
                 <button
                   onClick={handleTimerStart}
-                  className="flex-1 text-sm font-medium py-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 active:opacity-70 transition-opacity border border-emerald-500/20"
+                  disabled={!isAssigned}
+                  className={`flex-1 text-sm font-medium py-2.5 rounded-xl transition-opacity border ${
+                    isAssigned
+                      ? 'bg-emerald-500/15 text-emerald-400 active:opacity-70 border-emerald-500/20'
+                      : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-600 border-neutral-300 dark:border-neutral-700 cursor-not-allowed'
+                  }`}
                 >
                   {timeTrackingHook.displaySeconds > 0 ? 'Resume' : 'Start'}
                 </button>

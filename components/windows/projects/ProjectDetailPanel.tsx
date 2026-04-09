@@ -146,8 +146,7 @@ export function ProjectDetailPanel({
   const [showChecklist, setShowChecklist] = useState(false);
   const hasChecklist = !!template;
   const isAssigned = currentUser ? editingFields.assigned_staff?.includes(currentUser.id) : false;
-  const timerNeverStarted = !!template && displaySeconds === 0 && !activeTimeEntry;
-  const isChecklistReadOnly = !isAssigned || editingFields.status === 'complete' || editingFields.status === 'contingent' || timerNeverStarted;
+  const isChecklistReadOnly = !isAssigned || editingFields.status === 'contingent';
 
   // Auto-status transitions for templated tasks
   const autoSetStatus = useCallback((targetStatus: string) => {
@@ -351,7 +350,7 @@ export function ProjectDetailPanel({
                 </div>
                 {isChecklistReadOnly && (
                   <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                    {timerNeverStarted ? 'Start timer to unlock' : 'Read only'}
+                    Read only
                   </span>
                 )}
               </div>
@@ -368,7 +367,13 @@ export function ProjectDetailPanel({
                 ) : (
                   <button
                     onClick={handleTimerStart}
-                    className="flex-1 text-sm font-medium py-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 transition-colors border border-emerald-500/20"
+                    disabled={!isAssigned}
+                    className={cn(
+                      "flex-1 text-sm font-medium py-2.5 rounded-xl transition-colors border",
+                      isAssigned
+                        ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border-emerald-500/20"
+                        : "bg-muted text-muted-foreground border-muted cursor-not-allowed"
+                    )}
                   >
                     {displaySeconds > 0 ? 'Resume' : 'Start'}
                   </button>
