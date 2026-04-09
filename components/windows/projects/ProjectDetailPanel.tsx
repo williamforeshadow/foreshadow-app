@@ -148,6 +148,13 @@ export function ProjectDetailPanel({
   const isAssigned = currentUser ? editingFields.assigned_staff?.includes(currentUser.id) : false;
   const isChecklistReadOnly = !isAssigned || editingFields.status === 'contingent';
 
+  // Auto-stop timer when status leaves in_progress (covers all change paths)
+  useEffect(() => {
+    if (activeTimeEntry && editingFields.status !== 'in_progress') {
+      onStopTimer();
+    }
+  }, [editingFields.status]);
+
   // Auto-status transitions for templated tasks
   const autoSetStatus = useCallback((targetStatus: string) => {
     if (!template || !editingFields) return;

@@ -165,6 +165,13 @@ export default function MobileProjectDetail({
   const isAssigned = currentUser ? fields.assigned_staff?.includes(currentUser.id) : false;
   const isChecklistReadOnly = !isAssigned || fields.status === 'contingent';
 
+  // Auto-stop timer when status leaves in_progress (covers all change paths)
+  useEffect(() => {
+    if (timeTrackingHook.activeTimeEntry && fields.status !== 'in_progress') {
+      timeTrackingHook.stopProjectTimer();
+    }
+  }, [fields.status]);
+
   // Auto-status transitions for templated tasks
   const autoSetStatus = useCallback((targetStatus: string) => {
     if (!template) return;
