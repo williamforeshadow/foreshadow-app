@@ -153,6 +153,9 @@ export function ProjectDetailPanel({
     if (activeTimeEntry && editingFields.status !== 'in_progress') {
       onStopTimer();
     }
+    if (!activeTimeEntry && editingFields.status === 'in_progress' && displaySeconds > 0) {
+      onStartTimer();
+    }
   }, [editingFields.status]);
 
   // Auto-status transitions for templated tasks
@@ -837,6 +840,46 @@ export function ProjectDetailPanel({
             )}
           </div>
 
+          {/* ── Timer widget ── */}
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => {
+                if (activeTimeEntry) {
+                  handleTimerStop();
+                } else {
+                  handleTimerStart();
+                }
+              }}
+              disabled={!isAssigned}
+              className={cn(
+                "inline-flex items-center gap-2 text-xs font-medium pl-2 pr-3 py-1.5 rounded-full transition-colors border",
+                !isAssigned
+                  ? "bg-muted text-muted-foreground border-muted cursor-not-allowed"
+                  : activeTimeEntry
+                    ? "bg-red-500/12 text-red-400 border-red-500/20 hover:bg-red-500/20"
+                    : "bg-emerald-500/12 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20"
+              )}
+            >
+              {activeTimeEntry ? (
+                <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor">
+                  <rect x="1" y="1" width="4" height="10" rx="1" />
+                  <rect x="7" y="1" width="4" height="10" rx="1" />
+                </svg>
+              ) : (
+                <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor">
+                  <path d="M2 1.5a.5.5 0 0 1 .75-.43l8 4.5a.5.5 0 0 1 0 .86l-8 4.5A.5.5 0 0 1 2 10.5v-9z" />
+                </svg>
+              )}
+              <span className="font-mono text-[13px] tracking-wide">{formatTime(displaySeconds)}</span>
+            </button>
+            {activeTimeEntry && (
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+            )}
+          </div>
+
           {/* ── Description card ── */}
           <div className="rounded-xl bg-white/[0.04] backdrop-blur-sm border border-white/10 px-5 py-4 flex flex-col gap-2">
             <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Description</div>
@@ -1004,40 +1047,6 @@ export function ProjectDetailPanel({
             </div>
           </div>
 
-          {/* ── Timer row (only shown here for non-templated tasks; templated tasks show timer on checklist side) ── */}
-          {!hasChecklist && (
-            <div className="rounded-xl bg-white/[0.04] backdrop-blur-sm border border-white/10 px-5 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-muted-foreground" viewBox="0 0 16 16" fill="none">
-                  <circle cx="8" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.2" />
-                  <line x1="8" y1="9" x2="8" y2="6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                  <line x1="8" y1="9" x2="10" y2="9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                  <line x1="6.5" y1="2.5" x2="9.5" y2="2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                </svg>
-                <span className="text-[13px] text-muted-foreground">Time tracked</span>
-              </div>
-              <div className="flex items-center gap-2.5">
-                <span className="text-[15px] font-medium font-mono text-foreground tracking-wide">
-                  {formatTime(displaySeconds)}
-                </span>
-                {activeTimeEntry ? (
-                  <button
-                    onClick={onStopTimer}
-                    className="text-xs font-medium px-3.5 py-1.5 rounded-full bg-red-500/12 text-white hover:opacity-80 transition-opacity glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10"
-                  >
-                    Stop
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleTimerStart}
-                    className="text-xs font-medium px-3.5 py-1.5 rounded-full bg-emerald-500/12 text-white hover:opacity-80 transition-opacity glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10"
-                  >
-                    {displaySeconds > 0 ? 'Resume' : 'Start'}
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* ── Attachments ── */}
           <div className="flex flex-col gap-3">

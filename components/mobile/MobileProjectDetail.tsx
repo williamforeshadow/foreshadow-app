@@ -165,10 +165,13 @@ export default function MobileProjectDetail({
   const isAssigned = currentUser ? fields.assigned_staff?.includes(currentUser.id) : false;
   const isChecklistReadOnly = !isAssigned || fields.status === 'contingent';
 
-  // Auto-stop timer when status leaves in_progress (covers all change paths)
+  // Auto-stop/start timer when status changes (covers all change paths)
   useEffect(() => {
     if (timeTrackingHook.activeTimeEntry && fields.status !== 'in_progress') {
       timeTrackingHook.stopProjectTimer();
+    }
+    if (!timeTrackingHook.activeTimeEntry && fields.status === 'in_progress' && timeTrackingHook.displaySeconds > 0) {
+      timeTrackingHook.startProjectTimer(project.id, 'task');
     }
   }, [fields.status]);
 
@@ -680,6 +683,45 @@ export default function MobileProjectDetail({
           )}
         </div>
 
+        {/* Timer widget */}
+        <div className="flex items-center gap-2.5 px-4 pb-3">
+          <button
+            onClick={() => {
+              if (timeTrackingHook.activeTimeEntry) {
+                handleTimerStop();
+              } else {
+                handleTimerStart();
+              }
+            }}
+            disabled={!isAssigned}
+            className={`inline-flex items-center gap-2 text-xs font-medium pl-2 pr-3 py-1.5 rounded-full transition-colors border ${
+              !isAssigned
+                ? 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-600 border-neutral-300 dark:border-neutral-700 cursor-not-allowed'
+                : timeTrackingHook.activeTimeEntry
+                  ? 'bg-red-500/12 text-red-400 border-red-500/20 active:opacity-70'
+                  : 'bg-emerald-500/12 text-emerald-400 border-emerald-500/20 active:opacity-70'
+            }`}
+          >
+            {timeTrackingHook.activeTimeEntry ? (
+              <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor">
+                <rect x="1" y="1" width="4" height="10" rx="1" />
+                <rect x="7" y="1" width="4" height="10" rx="1" />
+              </svg>
+            ) : (
+              <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor">
+                <path d="M2 1.5a.5.5 0 0 1 .75-.43l8 4.5a.5.5 0 0 1 0 .86l-8 4.5A.5.5 0 0 1 2 10.5v-9z" />
+              </svg>
+            )}
+            <span className="font-mono text-[13px] tracking-wide">{timeTrackingHook.formatTime(timeTrackingHook.displaySeconds)}</span>
+          </button>
+          {timeTrackingHook.activeTimeEntry && (
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+          )}
+        </div>
+
         {/* Section tabs */}
         <div className="flex border-t border-neutral-100 dark:border-neutral-800">
           {(['details', ...(hasChecklist || loadingTemplate ? ['checklist'] : []), 'comments', 'attachments'] as const).map((section) => (
@@ -843,37 +885,6 @@ export default function MobileProjectDetail({
               </div>
             </div>
 
-            {/* Time Tracking (only shown here for non-templated tasks; templated tasks show timer on checklist tab) */}
-            {!hasChecklist && (
-              <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 px-5 py-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span className="text-sm text-neutral-600 dark:text-neutral-400">Time tracked</span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <span className="text-base font-medium font-mono text-neutral-900 dark:text-white">
-                    {timeTrackingHook.formatTime(timeTrackingHook.displaySeconds)}
-                  </span>
-                  {timeTrackingHook.activeTimeEntry ? (
-                    <button
-                      onClick={timeTrackingHook.stopProjectTimer}
-                      className="text-xs font-medium px-3 py-1.5 rounded-full bg-red-500/10 text-white active:opacity-70 transition-opacity glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10"
-                    >
-                      Stop
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleTimerStart}
-                      className="text-xs font-medium px-3 py-1.5 rounded-full bg-emerald-500/10 text-white active:opacity-70 transition-opacity glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10"
-                    >
-                      {timeTrackingHook.displaySeconds > 0 ? 'Resume' : 'Start'}
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
 
             {/* Bottom padding */}
             <div className="h-4" />
