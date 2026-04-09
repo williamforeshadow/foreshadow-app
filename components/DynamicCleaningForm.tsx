@@ -103,6 +103,36 @@ function DynamicCleaningForm({
     }
   }, [onChecklistInteraction]);
 
+  // Debounced auto-save on every field change
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initializedRef = useRef(false);
+  useEffect(() => {
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      return;
+    }
+    if (readOnly) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      const enrichedFields: Record<string, any> = {};
+      template?.fields.forEach(field => {
+        if (field.type === 'separator') return;
+        enrichedFields[field.id] = {
+          label: field.label,
+          type: field.type,
+          value: formValues[field.id]
+        };
+      });
+      onSave({
+        ...enrichedFields,
+        property_name: propertyName,
+        template_id: template?.id,
+        template_name: template?.name
+      });
+    }, 800);
+    return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
+  }, [formValues]);
+
   // Check if all required fields are filled and notify parent
   useEffect(() => {
     if (!onValidationChange || !template) return;

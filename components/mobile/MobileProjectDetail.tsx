@@ -165,6 +165,19 @@ export default function MobileProjectDetail({
   const isAssigned = currentUser ? fields.assigned_staff?.includes(currentUser.id) : false;
   const isChecklistReadOnly = !isAssigned || fields.status === 'contingent';
 
+  const hasIncompleteChecklist = useCallback(() => {
+    if (!project.template_id) return false;
+    const fd = formMetadata || {};
+    const checklistKeys = Object.keys(fd).filter(k => !['property_name', 'template_id', 'template_name'].includes(k));
+    if (checklistKeys.length === 0) return true;
+    return checklistKeys.some(k => {
+      const v = fd[k];
+      const val = (v && typeof v === 'object' && 'value' in (v as Record<string, unknown>))
+        ? (v as Record<string, unknown>).value : v;
+      return val === false || val === '' || val === undefined || val === null;
+    });
+  }, [project.template_id, formMetadata]);
+
   // Refs for fresh values in effects/callbacks (avoids stale closures)
   const activeTimeEntryRef = useRef(timeTrackingHook.activeTimeEntry);
   activeTimeEntryRef.current = timeTrackingHook.activeTimeEntry;
@@ -576,14 +589,7 @@ export default function MobileProjectDetail({
                             return;
                           }
                           if (s === 'complete' && fields.status !== 'complete') {
-                            const fd = formMetadata || {};
-                            const hasIncomplete = Object.entries(fd).some(([k, v]) => {
-                              if (['property_name', 'template_id', 'template_name'].includes(k)) return false;
-                              const val = (v && typeof v === 'object' && 'value' in (v as Record<string, unknown>))
-                                ? (v as Record<string, unknown>).value : v;
-                              return val === false || val === '' || val === undefined || val === null;
-                            });
-                            if (hasIncomplete && !confirm('Are you sure you want to complete this task? The checklist has not been completed.')) {
+                            if (hasIncompleteChecklist() && !confirm('Are you sure you want to complete this task? The checklist has not been completed.')) {
                               return;
                             }
                           }
@@ -935,14 +941,7 @@ export default function MobileProjectDetail({
                     });
                     return;
                   }
-                  const fd = formMetadata || {};
-                  const hasIncomplete = Object.entries(fd).some(([k, v]) => {
-                    if (['property_name', 'template_id', 'template_name'].includes(k)) return false;
-                    const val = (v && typeof v === 'object' && 'value' in (v as Record<string, unknown>))
-                      ? (v as Record<string, unknown>).value : v;
-                    return val === false || val === '' || val === undefined || val === null;
-                  });
-                  if (hasIncomplete && !confirm('Are you sure you want to complete this task? The checklist has not been completed.')) return;
+                  if (hasIncompleteChecklist() && !confirm('Are you sure you want to complete this task? The checklist has not been completed.')) return;
                   if (timeTrackingHook.activeTimeEntry) timeTrackingHook.stopProjectTimer();
                   setFields(prev => {
                     const updated = { ...prev, status: 'complete' };

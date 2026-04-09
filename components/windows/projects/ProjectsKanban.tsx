@@ -262,13 +262,16 @@ export function ProjectsKanban({
 
           if (value === 'complete' && draggedProject.status !== 'complete') {
             const formData = draggedProject.form_metadata || {};
-            const hasIncompleteChecklist = Object.entries(formData).some(([k, v]) => {
-              if (['property_name', 'template_id', 'template_name'].includes(k)) return false;
-              const val = (v && typeof v === 'object' && 'value' in (v as Record<string, unknown>))
-                ? (v as Record<string, unknown>).value : v;
-              return val === false || val === '' || val === undefined || val === null;
-            });
-            if (hasIncompleteChecklist) {
+            const checklistKeys = Object.keys(formData).filter(k => !['property_name', 'template_id', 'template_name'].includes(k));
+            const isIncomplete = checklistKeys.length === 0
+              ? !!draggedProject.template_id
+              : checklistKeys.some(k => {
+                  const v = formData[k];
+                  const val = (v && typeof v === 'object' && 'value' in (v as Record<string, unknown>))
+                    ? (v as Record<string, unknown>).value : v;
+                  return val === false || val === '' || val === undefined || val === null;
+                });
+            if (isIncomplete) {
               if (!confirm('Are you sure you want to complete this task? The checklist has not been completed.')) {
                 setItems([...initialItems]);
                 return;
