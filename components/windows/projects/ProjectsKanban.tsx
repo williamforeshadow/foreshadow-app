@@ -422,11 +422,10 @@ export function ProjectsKanban({
 
 function ColumnIcon({ viewMode, columnId }: { viewMode: ProjectViewMode; columnId: string }) {
   if (viewMode === 'property') {
-    // Building icon for properties
     return (
-      <div className={styles.columnIcon} style={{ backgroundColor: '#404040', color: '#a3a3a3' }}>
+      <div className={styles.columnIcon}>
         <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
       </div>
     );
@@ -434,51 +433,30 @@ function ColumnIcon({ viewMode, columnId }: { viewMode: ProjectViewMode; columnI
 
   if (viewMode === 'status') {
     const status = columnId.replace('status:', '') as ProjectStatus;
-    const colors: Record<ProjectStatus, { bg: string; color: string }> = {
-      not_started: { bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
-      in_progress: { bg: 'rgba(99,102,241,0.15)', color: '#818cf8' },
-      paused: { bg: 'rgba(163,163,163,0.15)', color: '#a3a3a3' },
-      complete: { bg: 'rgba(16,185,129,0.15)', color: '#34d399' },
-    };
-    const c = colors[status] || colors.not_started;
-    return (
-      <div className={styles.columnIcon} style={{ backgroundColor: c.bg, color: c.color }}>
-        {status === 'complete' ? '✓' : status === 'paused' ? '⏸' : '●'}
-      </div>
-    );
+    const symbol = status === 'complete' ? '✓' : status === 'paused' ? '‖' : '●';
+    return <div className={styles.columnIcon}>{symbol}</div>;
   }
 
   if (viewMode === 'priority') {
     const priority = columnId.replace('priority:', '') as ProjectPriority;
-    const colors: Record<ProjectPriority, { bg: string; color: string }> = {
-      urgent: { bg: 'rgba(239,68,68,0.15)', color: '#f87171' },
-      high: { bg: 'rgba(249,115,22,0.15)', color: '#fb923c' },
-      medium: { bg: 'rgba(59,130,246,0.15)', color: '#60a5fa' },
-      low: { bg: 'rgba(100,116,139,0.15)', color: '#94a3b8' },
-    };
-    const c = colors[priority] || colors.medium;
-    return (
-      <div className={styles.columnIcon} style={{ backgroundColor: c.bg, color: c.color }}>
-        {priority === 'urgent' ? '!!' : priority === 'high' ? '!' : '●'}
-      </div>
-    );
+    const symbol = priority === 'urgent' ? '!!' : priority === 'high' ? '!' : '●';
+    return <div className={styles.columnIcon}>{symbol}</div>;
   }
 
   if (viewMode === 'department') {
     return (
-      <div className={styles.columnIcon} style={{ backgroundColor: 'rgba(133,183,235,0.15)', color: '#85B7EB' }}>
+      <div className={styles.columnIcon}>
         <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
         </svg>
       </div>
     );
   }
 
-  // assignee
   return (
-    <div className={styles.columnIcon} style={{ backgroundColor: 'rgba(168,85,247,0.15)', color: '#c084fc' }}>
+    <div className={styles.columnIcon}>
       <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
       </svg>
     </div>
   );
@@ -614,7 +592,7 @@ function ProjectCardContent({
   return (
     <div
       className={cn(styles.card, isDragging && styles.cardDragging)}
-      style={isSelected ? { boxShadow: '0 0 0 2px #fbbf24', borderColor: '#fbbf24' } : undefined}
+      style={isSelected ? { boxShadow: '0 0 0 1.5px currentColor', opacity: 1 } : undefined}
     >
       {/* Unread badge */}
       {unreadCount > 0 && !isSelected && (
@@ -626,7 +604,7 @@ function ProjectCardContent({
             minWidth: 18,
             height: 18,
             borderRadius: 9,
-            backgroundColor: '#ef4444',
+            backgroundColor: '#d97757',
             color: '#fff',
             fontSize: '0.625rem',
             fontWeight: 700,
@@ -674,7 +652,7 @@ function ProjectCardContent({
             const ampm = h >= 12 ? 'pm' : 'am';
             const h12 = h % 12 || 12;
             return (
-              <span style={{ fontSize: '0.625rem', color: '#a3a3a3', whiteSpace: 'nowrap' }}>
+              <span className="text-neutral-400 dark:text-[#66645f]" style={{ fontSize: '0.625rem', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
                 {h12}:{String(m).padStart(2, '0')}{ampm}
               </span>
             );
@@ -688,18 +666,16 @@ function ProjectCardContent({
               {assignees.slice(0, 3).map((user, index) => (
                 <div
                   key={user.id}
+                  className="bg-neutral-200 dark:bg-neutral-700 ring-2 ring-white dark:ring-[#131315]"
                   style={{
                     width: 20,
                     height: 20,
                     borderRadius: '50%',
-                    backgroundColor: '#404040',
-                    border: '2px solid #373737',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     fontSize: '0.5rem',
                     fontWeight: 600,
-                    color: '#a3a3a3',
                     marginLeft: index > 0 ? -6 : 0,
                     overflow: 'hidden',
                     flexShrink: 0,
@@ -713,29 +689,29 @@ function ProjectCardContent({
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                   ) : (
-                    user.name
-                      .split(' ')
-                      .map((n) => n[0])
-                      .join('')
-                      .slice(0, 2)
-                      .toUpperCase()
+                    <span className="text-neutral-500 dark:text-[#a09e9a]">
+                      {user.name
+                        .split(' ')
+                        .map((n) => n[0])
+                        .join('')
+                        .slice(0, 2)
+                        .toUpperCase()}
+                    </span>
                   )}
                 </div>
               ))}
               {assignees.length > 3 && (
                 <div
+                  className="bg-neutral-300 dark:bg-neutral-600 ring-2 ring-white dark:ring-[#131315] text-neutral-500 dark:text-[#a09e9a]"
                   style={{
                     width: 20,
                     height: 20,
                     borderRadius: '50%',
-                    backgroundColor: '#525252',
-                    border: '2px solid #373737',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     fontSize: '0.5rem',
                     fontWeight: 600,
-                    color: '#a3a3a3',
                     marginLeft: -6,
                     flexShrink: 0,
                   }}

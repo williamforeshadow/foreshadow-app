@@ -70,17 +70,17 @@ function MobileViewModeToggle({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-xl bg-white/30 dark:bg-white/[0.08] backdrop-blur-sm border border-white/20 dark:border-white/10 text-neutral-900 dark:text-white"
+        className="flex items-center gap-1.5 h-9 px-3 text-[12px] font-medium rounded-[10px] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] text-neutral-600 dark:text-[#a09e9a]"
       >
         {VIEW_MODE_LABELS[viewMode]}
-        <svg className={`w-3.5 h-3.5 opacity-50 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className={`w-3 h-3 opacity-50 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 z-20 rounded-xl glass-card bg-white/85 dark:bg-neutral-900/90 border border-white/30 dark:border-white/10 min-w-[140px]">
-          <div className="relative overflow-hidden rounded-xl glass-sheen flex flex-col gap-0.5 p-1.5">
+        <div className="absolute right-0 top-full mt-1.5 z-20 rounded-xl bg-white dark:bg-[#1a1a1d] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] shadow-xl min-w-[140px]">
+          <div className="flex flex-col gap-0.5 p-1.5">
           {ALL_VIEW_MODES.map((mode) => (
             <button
               key={mode}
@@ -88,10 +88,10 @@ function MobileViewModeToggle({
                 setViewMode(mode);
                 setOpen(false);
               }}
-              className={`px-3.5 py-2 text-sm font-medium rounded-lg text-left transition-all ${
+              className={`px-3.5 py-2 text-[12px] font-medium rounded-lg text-left transition-all ${
                 viewMode === mode
-                  ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
-                  : 'text-neutral-500 dark:text-neutral-400 active:bg-white/30 dark:active:bg-white/10'
+                  ? 'bg-neutral-100 dark:bg-[rgba(255,255,255,0.06)] text-neutral-900 dark:text-[#f0efed]'
+                  : 'text-neutral-500 dark:text-[#66645f] active:bg-neutral-50 dark:active:bg-[rgba(255,255,255,0.03)]'
               }`}
             >
               {VIEW_MODE_LABELS[mode]}
@@ -439,23 +439,19 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
 
       {/* Kanban screen */}
       {screen.type === 'kanban' && (
-        <div className="flex flex-col h-full">
-          <div className="shrink-0 relative z-20 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 px-4 py-3">
-            <div className="flex items-center gap-2">
+        <div className="flex flex-col h-full relative">
+          {/* Header */}
+          <div className="shrink-0 px-[22px] pt-2 pb-3">
+            <div className="flex items-center gap-2 mb-3">
               <button
                 onClick={goBack}
-                className="flex items-center gap-1 text-sm text-neutral-500 dark:text-neutral-400"
+                className="w-9 h-9 rounded-[10px] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] flex items-center justify-center text-neutral-500 dark:text-[#a09e9a]"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
-              <div className="flex-1 min-w-0">
-                <h2 className="text-lg font-semibold text-neutral-900 dark:text-white truncate">{screen.binName}</h2>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                  {tasks.length} task{tasks.length !== 1 ? 's' : ''}
-                </p>
-              </div>
+              <div className="flex-1" />
               <MobileViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
               <ColumnPicker
                 columns={allColumnOptions}
@@ -464,31 +460,28 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
                 onSelectAll={() => columnVis.selectAll(allColumnOptions.map((c) => c.id))}
                 onClearAll={columnVis.clearAll}
               />
-              <button
-                onClick={handleNewTask}
-                className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 active:scale-95 transition-all"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-              </button>
+            </div>
+            <h1 className="text-[28px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed]">
+              {screen.binName}
+            </h1>
+            <div className="flex items-center gap-3 mt-2.5 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
+              <span>Operations board</span>
+              <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a]" />
+              <span>{tasks.length} total</span>
             </div>
           </div>
 
           <div className={`flex-1 min-h-0 flex flex-col mobile-kanban-wrapper${kanbanDragging ? ' is-dragging' : ''}`}>
             {loadingTasks ? (
               <div className="flex items-center justify-center h-full">
-                <p className="text-neutral-500">Loading tasks...</p>
+                <div className="w-7 h-7 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin" />
               </div>
             ) : tasks.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-neutral-400">
-                <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <p className="text-sm font-medium">No tasks yet</p>
+              <div className="flex flex-col items-center justify-center h-full">
+                <p className="text-sm font-medium text-neutral-400 dark:text-[#66645f]">No tasks yet</p>
                 <button
                   onClick={handleNewTask}
-                  className="mt-3 text-xs font-medium text-emerald-500 active:text-emerald-600"
+                  className="mt-3 text-xs font-medium text-neutral-600 dark:text-[#a09e9a] active:opacity-70"
                 >
                   + Create one
                 </button>
@@ -509,6 +502,16 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
               />
             )}
           </div>
+
+          {/* FAB */}
+          <button
+            onClick={handleNewTask}
+            className="absolute right-[22px] bottom-6 w-[52px] h-[52px] rounded-full bg-neutral-800 dark:bg-[#f0efed] text-white dark:text-[#0b0b0c] flex items-center justify-center shadow-[0_10px_30px_-8px_rgba(0,0,0,0.5)] active:scale-95 transition-transform z-30"
+          >
+            <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" viewBox="0 0 24 24">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
         </div>
       )}
 

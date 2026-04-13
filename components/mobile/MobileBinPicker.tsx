@@ -14,11 +14,10 @@ interface MobileBinPickerProps {
   onDeleteBin?: (binId: string) => Promise<void>;
 }
 
-const glassCard =
-  'w-full flex items-center gap-4 p-4 rounded-2xl text-left transition-all active:scale-[0.98] ' +
-  'glass-card glass-sheen relative overflow-hidden ' +
-  'bg-neutral-400/[0.08] dark:bg-white/[0.05] ' +
-  'border border-white/[0.12] dark:border-white/[0.08]';
+const binCard =
+  'w-full flex items-center gap-4 p-4 rounded-xl text-left transition-all active:scale-[0.98] ' +
+  'bg-neutral-100/80 dark:bg-[rgba(255,255,255,0.025)] ' +
+  'border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]';
 
 const MobileBinPicker = memo(function MobileBinPicker({
   bins,
@@ -79,30 +78,35 @@ const MobileBinPicker = memo(function MobileBinPicker({
   if (loadingBins) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="w-7 h-7 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-7 h-7 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="p-4 flex flex-col gap-4">
+    <div className="px-[22px] pt-2 pb-4 flex flex-col gap-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-neutral-900 dark:text-white">Task Bins</h2>
-        <button
-          onClick={() => setIsCreating(!isCreating)}
-          className="flex items-center gap-1.5 text-xs font-medium text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          New Bin
-        </button>
+      <div>
+        <h1 className="text-[28px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed]">Task Bins</h1>
+        <div className="flex items-center justify-between mt-2.5">
+          <span className="text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
+            {totalProjects} binned task{totalProjects !== 1 ? 's' : ''}
+          </span>
+          <button
+            onClick={() => setIsCreating(!isCreating)}
+            className="flex items-center gap-1.5 text-[12px] font-medium text-neutral-500 dark:text-[#a09e9a] active:opacity-70 transition-opacity"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            New Bin
+          </button>
+        </div>
       </div>
 
       {/* Create bin input */}
       {isCreating && (
-        <div className="flex flex-col gap-2 p-4 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800">
+        <div className="flex flex-col gap-2 p-4 rounded-xl bg-neutral-100/80 dark:bg-[rgba(255,255,255,0.025)] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
           <input
             type="text"
             value={newBinName}
@@ -110,7 +114,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
             placeholder="Bin name..."
             autoFocus
-            className="bg-transparent text-sm text-neutral-900 dark:text-white placeholder:text-neutral-400 outline-none"
+            className="bg-transparent text-sm text-neutral-900 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f] outline-none"
           />
           <input
             type="text"
@@ -118,19 +122,19 @@ const MobileBinPicker = memo(function MobileBinPicker({
             onChange={(e) => setNewBinDesc(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
             placeholder="Description (optional)"
-            className="bg-transparent text-xs text-neutral-600 dark:text-neutral-400 placeholder:text-neutral-400 outline-none"
+            className="bg-transparent text-xs text-neutral-600 dark:text-[#a09e9a] placeholder:text-neutral-400 dark:placeholder:text-[#66645f] outline-none"
           />
           <div className="flex items-center gap-2 pt-1">
             <button
               onClick={handleCreate}
               disabled={!newBinName.trim()}
-              className="text-xs font-medium px-3 py-1.5 rounded-lg bg-emerald-500 text-white disabled:opacity-40 active:bg-emerald-600 transition-colors"
+              className="text-xs font-medium px-3 py-1.5 rounded-lg bg-neutral-800 dark:bg-[#f0efed] text-white dark:text-[#0b0b0c] disabled:opacity-40 active:opacity-80 transition-opacity"
             >
               Create
             </button>
             <button
               onClick={() => { setIsCreating(false); setNewBinName(''); setNewBinDesc(''); }}
-              className="text-xs text-neutral-400 px-2 py-1.5"
+              className="text-xs text-neutral-400 dark:text-[#66645f] px-2 py-1.5"
             >
               Cancel
             </button>
@@ -139,22 +143,22 @@ const MobileBinPicker = memo(function MobileBinPicker({
       )}
 
       {/* All Binned Tasks Card */}
-      <button onClick={onSelectAll} className={glassCard}>
-        <div className="w-11 h-11 rounded-xl bg-white/[0.08] flex items-center justify-center">
-          <svg className="w-5 h-5 text-neutral-500 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+      <button onClick={onSelectAll} className={binCard}>
+        <div className="w-11 h-11 rounded-xl bg-neutral-200/60 dark:bg-[rgba(255,255,255,0.04)] flex items-center justify-center">
+          <svg className="w-5 h-5 text-neutral-500 dark:text-[#a09e9a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
           </svg>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-neutral-900 dark:text-white">All Binned Tasks</p>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">{totalProjects} task{totalProjects !== 1 ? 's' : ''}</p>
+          <p className="text-sm font-semibold text-neutral-900 dark:text-[#f0efed]">All Binned Tasks</p>
+          <p className="text-xs text-neutral-500 dark:text-[#66645f] mt-0.5">{totalProjects} task{totalProjects !== 1 ? 's' : ''}</p>
         </div>
       </button>
 
       {/* Bin List */}
       {bins.length > 0 && (
         <div className="flex flex-col gap-3">
-          <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider px-1 pt-2">
+          <p className="text-[11px] font-semibold text-neutral-500 dark:text-[#a09e9a] uppercase tracking-[0.08em] px-1 pt-2">
             Bins
           </p>
           {bins.map((bin) => {
@@ -166,7 +170,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
               return (
                 <div
                   key={bin.id}
-                  className="flex flex-col gap-2 p-4 rounded-2xl glass-card glass-sheen relative overflow-hidden bg-neutral-400/[0.08] dark:bg-white/[0.05] border border-white/[0.12] dark:border-white/[0.08]"
+                  className="flex flex-col gap-2 p-4 rounded-xl bg-neutral-100/80 dark:bg-[rgba(255,255,255,0.025)] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]"
                 >
                   <input
                     type="text"
@@ -174,7 +178,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
                     onChange={(e) => setEditName(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
                     autoFocus
-                    className="bg-transparent text-sm font-semibold text-neutral-900 dark:text-white placeholder:text-neutral-400 outline-none"
+                    className="bg-transparent text-sm font-semibold text-neutral-900 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f] outline-none"
                   />
                   <input
                     type="text"
@@ -182,13 +186,13 @@ const MobileBinPicker = memo(function MobileBinPicker({
                     onChange={(e) => setEditDesc(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
                     placeholder="Add a description..."
-                    className="bg-transparent text-xs text-neutral-500 dark:text-neutral-400 placeholder:text-neutral-400 outline-none"
+                    className="bg-transparent text-xs text-neutral-500 dark:text-[#a09e9a] placeholder:text-neutral-400 dark:placeholder:text-[#66645f] outline-none"
                   />
                   <div className="flex items-center gap-2 pt-1">
                     <button
                       onClick={handleSaveEdit}
                       disabled={!editName.trim()}
-                      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-emerald-500 text-white disabled:opacity-40 active:bg-emerald-600 transition-colors"
+                      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-neutral-800 dark:bg-[#f0efed] text-white dark:text-[#0b0b0c] disabled:opacity-40 active:opacity-80 transition-opacity"
                     >
                       Save
                     </button>
@@ -207,19 +211,19 @@ const MobileBinPicker = memo(function MobileBinPicker({
               <div key={bin.id} className="relative">
                 <button
                   onClick={() => onSelectBin(bin.id)}
-                  className={glassCard}
+                  className={binCard}
                 >
-                  <div className="w-11 h-11 rounded-xl bg-white/[0.08] flex items-center justify-center">
-                    <svg className="w-5 h-5 text-neutral-500 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  <div className="w-11 h-11 rounded-xl bg-neutral-200/60 dark:bg-[rgba(255,255,255,0.04)] flex items-center justify-center">
+                    <svg className="w-5 h-5 text-neutral-500 dark:text-[#a09e9a]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                     </svg>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-neutral-900 dark:text-white">{bin.name}</p>
+                    <p className="text-sm font-semibold text-neutral-900 dark:text-[#f0efed]">{bin.name}</p>
                     {bin.description && (
-                      <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 line-clamp-1">{bin.description}</p>
+                      <p className="text-xs text-neutral-500 dark:text-[#66645f] mt-0.5 line-clamp-1">{bin.description}</p>
                     )}
-                    <p className="text-[11px] text-neutral-400 dark:text-neutral-500 mt-0.5">
+                    <p className="text-[11px] text-neutral-400 dark:text-[#66645f] mt-0.5">
                       {bin.project_count ?? 0} task{(bin.project_count ?? 0) !== 1 ? 's' : ''}
                     </p>
                   </div>
@@ -233,7 +237,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
                       setMenuBinId(isMenuOpen ? null : bin.id);
                       setConfirmDeleteId(null);
                     }}
-                    className="absolute top-2 right-2 p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-white/10 transition-colors"
+                    className="absolute top-2 right-2 p-1.5 rounded-lg text-neutral-400 dark:text-[#66645f] hover:text-neutral-600 dark:hover:text-[#a09e9a] transition-colors"
                   >
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                       <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
@@ -245,7 +249,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
                 {isMenuOpen && (
                   <>
                     <div className="fixed inset-0 z-[39]" onClick={() => { setMenuBinId(null); setConfirmDeleteId(null); }} />
-                    <div className="absolute top-10 right-2 z-40 min-w-[140px] py-1 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-xl">
+                    <div className="absolute top-10 right-2 z-40 min-w-[140px] py-1 rounded-xl bg-white dark:bg-[#1a1a1d] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] shadow-xl">
                       {onUpdateBin && (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleStartEdit(bin); }}
