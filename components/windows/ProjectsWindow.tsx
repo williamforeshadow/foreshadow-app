@@ -108,7 +108,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
 
   // Bin navigation state
   const [selectedBinId, setSelectedBinId] = useState<string | null>(null);
-  const [selectedBinName, setSelectedBinName] = useState<string>('All Tasks');
+  const [selectedBinName, setSelectedBinName] = useState<string>('All Binned Tasks');
   const [showKanban, setShowKanban] = useState(false);
 
   // Task data (fetched from tasks-for-bin API)
@@ -326,7 +326,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     setExpandedProject(null);
 
     if (binId === null) {
-      setSelectedBinName('All Tasks');
+      setSelectedBinName('All Binned Tasks');
     } else if (binId === '__none__') {
       setSelectedBinName('Unbinned');
     } else {
@@ -341,7 +341,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     setShowKanban(false);
     setExpandedProject(null);
     setSelectedBinId(null);
-    setSelectedBinName('All Tasks');
+    setSelectedBinName('All Binned Tasks');
     binsHook.fetchBins();
   }, [binsHook.fetchBins]);
 
@@ -438,6 +438,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
         title: 'New Task',
         status: 'not_started',
         priority: 'medium',
+        is_binned: true,
       };
       if (selectedBinId && selectedBinId !== '__none__') {
         payload.bin_id = selectedBinId;
@@ -710,6 +711,25 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
               binsHook.fetchBins();
             } catch (err) {
               console.error('Error updating bin:', err);
+            }
+          }}
+          onIsBinnedChange={async (isBinned) => {
+            try {
+              const payload: Record<string, unknown> = { is_binned: isBinned };
+              if (!isBinned) payload.bin_id = null;
+              const res = await fetch(`/api/tasks-for-bin/${expandedProject.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+              });
+              const result = await res.json();
+              if (result.data) {
+                setExpandedProject(result.data);
+                setTasks(prev => prev.map(t => t.id === expandedProject.id ? result.data : t));
+              }
+              binsHook.fetchBins();
+            } catch (err) {
+              console.error('Error updating is_binned:', err);
             }
           }}
           comments={commentsHook.projectComments as Comment[]}

@@ -60,6 +60,7 @@ interface ProjectDetailPanelProps {
   // Bins
   bins?: ProjectBin[];
   onBinChange?: (binId: string | null, binName: string | null) => void;
+  onIsBinnedChange?: (isBinned: boolean) => void;
   // Comments
   comments: Comment[];
   loadingComments: boolean;
@@ -111,6 +112,7 @@ export function ProjectDetailPanel({
   onPropertyChange,
   bins = [],
   onBinChange,
+  onIsBinnedChange,
   comments,
   loadingComments,
   newComment,
@@ -601,61 +603,100 @@ export function ProjectDetailPanel({
                 )}
               </div>
 
-              {/* Bin — clickable to move to another bin */}
-              {bins.length > 0 && (
-                <div className="relative">
-                  <button
-                    onClick={() => { closeAllPickers(); setBinOpen(!binOpen); setBinSearch(''); }}
-                    className="flex items-center gap-1.5 pt-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors group"
-                  >
-                    <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                    </svg>
-                    <span className="truncate">{currentBin?.name || 'No bin'}</span>
-                    <svg className={`w-3 h-3 opacity-50 transition-transform flex-shrink-0 ${binOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  {binOpen && (
-                    <InlineDropdown onClose={() => setBinOpen(false)}>
-                      <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Bin</p>
-                      <div className="px-3 pb-2">
-                        <input
-                          type="text"
-                          placeholder="Search bins..."
-                          value={binSearch}
-                          onChange={(e) => setBinSearch(e.target.value)}
-                          className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
-                        />
+              {/* Bin — toggle binned + optional bin folder */}
+              <div className="relative">
+                <button
+                  onClick={() => { closeAllPickers(); setBinOpen(!binOpen); setBinSearch(''); }}
+                  className="flex items-center gap-1.5 pt-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors group"
+                >
+                  <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                  </svg>
+                  {project.is_binned ? (
+                    <span className="flex items-center gap-1 truncate">
+                      {currentBin ? currentBin.name : 'Binned'}
+                      <svg className="w-3 h-3 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </span>
+                  ) : (
+                    <span className="truncate">No bin</span>
+                  )}
+                  <svg className={`w-3 h-3 opacity-50 transition-transform flex-shrink-0 ${binOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {binOpen && (
+                  <InlineDropdown onClose={() => setBinOpen(false)}>
+                    {/* Sticky toggle: Add to Bins */}
+                    <button
+                      onClick={() => {
+                        const newVal = !project.is_binned;
+                        onIsBinnedChange?.(newVal);
+                        if (!newVal) {
+                          onBinChange?.(null, null);
+                          setBinOpen(false);
+                        }
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors sticky top-0 z-10 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-sm border-b border-neutral-200/40 dark:border-white/10 ${
+                        project.is_binned ? 'text-emerald-600 dark:text-emerald-400' : ''
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                        project.is_binned
+                          ? 'bg-emerald-500 border-emerald-500'
+                          : 'border-neutral-300 dark:border-neutral-600'
+                      }`}>
+                        {project.is_binned && (
+                          <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
                       </div>
-                      <button
-                        onClick={() => { onBinChange?.(null, null); setBinOpen(false); }}
-                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                          !project.bin_id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
-                        }`}
-                      >
-                        <span className="text-[15px] text-neutral-500 dark:text-neutral-400 italic">No Bin</span>
-                        {!project.bin_id && <GreenCheck />}
-                      </button>
-                      {filteredBins.map((bin) => (
+                      <span className="text-[15px] font-medium">Add to Bins</span>
+                    </button>
+
+                    {/* Bin folder options (only when binned) */}
+                    {project.is_binned && bins.length > 0 && (
+                      <>
+                        <div className="px-3 py-2">
+                          <input
+                            type="text"
+                            placeholder="Search bins..."
+                            value={binSearch}
+                            onChange={(e) => setBinSearch(e.target.value)}
+                            className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
+                          />
+                        </div>
                         <button
-                          key={bin.id}
-                          onClick={() => { onBinChange?.(bin.id, bin.name); setBinOpen(false); }}
+                          onClick={() => { onBinChange?.(null, null); setBinOpen(false); }}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                            project.bin_id === bin.id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                            !project.bin_id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
                           }`}
                         >
-                          <svg className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                          </svg>
-                          <span className="text-[15px] text-neutral-900 dark:text-white flex-1 truncate">{bin.name}</span>
-                          {project.bin_id === bin.id && <GreenCheck />}
+                          <span className="text-[15px] text-neutral-500 dark:text-neutral-400 italic">No specific bin</span>
+                          {!project.bin_id && <GreenCheck />}
                         </button>
-                      ))}
-                    </InlineDropdown>
-                  )}
-                </div>
-              )}
+                        {filteredBins.map((bin) => (
+                          <button
+                            key={bin.id}
+                            onClick={() => { onBinChange?.(bin.id, bin.name); setBinOpen(false); }}
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                              project.bin_id === bin.id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                            }`}
+                          >
+                            <svg className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                            </svg>
+                            <span className="text-[15px] text-neutral-900 dark:text-white flex-1 truncate">{bin.name}</span>
+                            {project.bin_id === bin.id && <GreenCheck />}
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </InlineDropdown>
+                )}
+              </div>
 
               {/* Template — clickable to assign/change a checklist template */}
               {onTemplateChange && availableTemplates.length > 0 && (

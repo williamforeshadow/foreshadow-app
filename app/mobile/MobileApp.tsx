@@ -72,6 +72,7 @@ export default function MobileApp() {
       property_id: null,
       property_name: task.property_name || null,
       bin_id: task.bin_id ?? null,
+      is_binned: task.is_binned ?? false,
       template_id: task.template_id ?? null,
       template_name: task.template_name ?? null,
       title: task.title || task.template_name || task.type || 'Task',
@@ -335,6 +336,17 @@ export default function MobileApp() {
             setMobileSelectedTask(prev => prev ? { ...prev, bin_id: binId } : null);
             binsHook.fetchBins();
           }}
+          onIsBinnedChange={async (isBinned) => {
+            const fields: Record<string, unknown> = { is_binned: isBinned };
+            if (!isBinned) fields.bin_id = null;
+            await fetch('/api/update-task-fields', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ task_id: mobileSelectedTask.task_id, fields }),
+            });
+            setMobileSelectedTask(prev => prev ? { ...prev, is_binned: isBinned, ...(isBinned ? {} : { bin_id: undefined }) } : null);
+            binsHook.fetchBins();
+          }}
           template={taskTemplate}
           formMetadata={mobileSelectedTask.form_metadata}
           onSaveForm={handleSaveTaskForm}
@@ -373,6 +385,20 @@ export default function MobileApp() {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ bin_id: binId || null }),
+            });
+            const result = await res.json();
+            if (result.data) {
+              setMobileSelectedProject(result.data);
+            }
+            binsHook.fetchBins();
+          }}
+          onIsBinnedChange={async (isBinned) => {
+            const payload: Record<string, unknown> = { is_binned: isBinned };
+            if (!isBinned) payload.bin_id = null;
+            const res = await fetch(`/api/tasks-for-bin/${mobileSelectedProject.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
             });
             const result = await res.json();
             if (result.data) {

@@ -48,6 +48,7 @@ export interface Task {
   description?: TiptapJSON | null;
   priority?: string | null;
   bin_id?: string | null;
+  is_binned?: boolean;
   type: TaskType;
   department_id?: string | null;
   department_name?: string | null;
@@ -168,6 +169,7 @@ export interface Project {
   property_id?: string | null;
   property_name?: string | null;
   bin_id?: string | null;
+  is_binned?: boolean;
   template_id?: string | null;
   template_name?: string | null;
   title: string;

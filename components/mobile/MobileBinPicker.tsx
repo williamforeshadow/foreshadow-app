@@ -142,7 +142,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
         </div>
       )}
 
-      {/* All Projects Card */}
+      {/* All Binned Tasks Card */}
       <button onClick={onSelectAll} className={glassCard}>
         <div className="w-11 h-11 rounded-xl bg-white/[0.08] flex items-center justify-center">
           <svg className="w-5 h-5 text-neutral-500 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -150,7 +150,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
           </svg>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-neutral-900 dark:text-white">All Tasks</p>
+          <p className="text-sm font-semibold text-neutral-900 dark:text-white">All Binned Tasks</p>
           <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">{totalProjects} task{totalProjects !== 1 ? 's' : ''}</p>
         </div>
       </button>

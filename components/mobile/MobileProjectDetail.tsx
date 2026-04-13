@@ -28,6 +28,7 @@ interface MobileProjectDetailProps {
   onPropertyChange?: (propertyId: string | null, propertyName: string | null) => void;
   bins?: ProjectBin[];
   onBinChange?: (binId: string | null, binName: string | null) => void;
+  onIsBinnedChange?: (isBinned: boolean) => void;
   template?: Template | null;
   formMetadata?: Record<string, unknown>;
   onSaveForm?: (formData: Record<string, unknown>) => Promise<void>;
@@ -71,6 +72,7 @@ export default function MobileProjectDetail({
   onPropertyChange,
   bins = [],
   onBinChange,
+  onIsBinnedChange,
   template,
   formMetadata,
   onSaveForm,
@@ -429,72 +431,113 @@ export default function MobileProjectDetail({
                 </InlineDropdown>
               )}
             </div>
-            {bins.length > 0 && (
-              <div className="relative">
-                <button
-                  onClick={() => { setShowBinPicker(!showBinPicker); setShowPropertyPicker(false); setShowTemplatePicker(false); }}
-                  className="flex items-center gap-1.5 mt-0.5 group"
-                >
-                  <svg className="w-3 h-3 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                  </svg>
-                  <span className="text-xs text-neutral-500 dark:text-neutral-400 truncate">
-                    {currentBin?.name || 'No bin'}
+            <div className="relative">
+              <button
+                onClick={() => { setShowBinPicker(!showBinPicker); setShowPropertyPicker(false); setShowTemplatePicker(false); }}
+                className="flex items-center gap-1.5 mt-0.5 group"
+              >
+                <svg className="w-3 h-3 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+                {project.is_binned ? (
+                  <span className="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400 truncate">
+                    {currentBin ? currentBin.name : 'Binned'}
+                    <svg className="w-3 h-3 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
                   </span>
-                  <svg className={`w-3 h-3 text-neutral-300 dark:text-neutral-600 transition-transform ${showBinPicker ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {showBinPicker && (
-                  <InlineDropdown onClose={() => { setShowBinPicker(false); setBinSearch(''); }}>
-                    <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Bin</p>
-                    <div className="px-3 pb-2">
-                      <input
-                        type="text"
-                        placeholder="Search bins..."
-                        value={binSearch}
-                        onChange={(e) => setBinSearch(e.target.value)}
-                        className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
-                      />
-                    </div>
-                    <button
-                      onClick={() => { onBinChange?.(null, null); setShowBinPicker(false); setBinSearch(''); }}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                        !project.bin_id ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
-                      }`}
-                    >
-                      <span className="text-[15px] text-neutral-500 italic">No Bin</span>
-                      {!project.bin_id && (
-                        <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                ) : (
+                  <span className="text-xs text-neutral-500 dark:text-neutral-400 truncate">No bin</span>
+                )}
+                <svg className={`w-3 h-3 text-neutral-300 dark:text-neutral-600 transition-transform ${showBinPicker ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showBinPicker && (
+                <InlineDropdown onClose={() => { setShowBinPicker(false); setBinSearch(''); }}>
+                  {/* Sticky toggle: Add to Bins */}
+                  <button
+                    onClick={() => {
+                      const newVal = !project.is_binned;
+                      onIsBinnedChange?.(newVal);
+                      if (!newVal) {
+                        onBinChange?.(null, null);
+                        setShowBinPicker(false);
+                        setBinSearch('');
+                      }
+                    }}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors sticky top-0 z-10 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-sm border-b border-neutral-200/40 dark:border-white/10 ${
+                      project.is_binned ? 'text-emerald-600 dark:text-emerald-400' : ''
+                    }`}
+                    style={{ touchAction: 'manipulation' }}
+                  >
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                      project.is_binned
+                        ? 'bg-emerald-500 border-emerald-500'
+                        : 'border-neutral-300 dark:border-neutral-600'
+                    }`}>
+                      {project.is_binned && (
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                         </svg>
                       )}
-                    </button>
-                    {bins
-                      .filter(bin => !binSearch.trim() || bin.name.toLowerCase().includes(binSearch.toLowerCase()))
-                      .map((bin) => (
+                    </div>
+                    <span className="text-[15px] font-medium">Add to Bins</span>
+                  </button>
+
+                  {/* Bin folder options (only when binned) */}
+                  {project.is_binned && bins.length > 0 && (
+                    <>
+                      <div className="px-3 py-2">
+                        <input
+                          type="text"
+                          placeholder="Search bins..."
+                          value={binSearch}
+                          onChange={(e) => setBinSearch(e.target.value)}
+                          className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
+                        />
+                      </div>
                       <button
-                        key={bin.id}
-                        onClick={() => { onBinChange?.(bin.id, bin.name); setShowBinPicker(false); setBinSearch(''); }}
+                        onClick={() => { onBinChange?.(null, null); setShowBinPicker(false); setBinSearch(''); }}
                         className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                          project.bin_id === bin.id ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
+                          !project.bin_id ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
                         }`}
+                        style={{ touchAction: 'manipulation' }}
                       >
-                        <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                        </svg>
-                        <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{bin.name}</span>
-                        {project.bin_id === bin.id && (
-                          <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <span className="text-[15px] text-neutral-500 italic">No specific bin</span>
+                        {!project.bin_id && (
+                          <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
                         )}
                       </button>
-                    ))}
-                  </InlineDropdown>
-                )}
-              </div>
-            )}
+                      {bins
+                        .filter(bin => !binSearch.trim() || bin.name.toLowerCase().includes(binSearch.toLowerCase()))
+                        .map((bin) => (
+                        <button
+                          key={bin.id}
+                          onClick={() => { onBinChange?.(bin.id, bin.name); setShowBinPicker(false); setBinSearch(''); }}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                            project.bin_id === bin.id ? 'bg-white/40 dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
+                          }`}
+                          style={{ touchAction: 'manipulation' }}
+                        >
+                          <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                          </svg>
+                          <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{bin.name}</span>
+                          {project.bin_id === bin.id && (
+                            <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                      ))}
+                    </>
+                  )}
+                </InlineDropdown>
+              )}
+            </div>
             {onTemplateChange && availableTemplates.length > 0 && (
               <div className="relative">
                 <button

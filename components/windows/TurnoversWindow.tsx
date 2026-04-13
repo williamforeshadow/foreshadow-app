@@ -586,6 +586,22 @@ function TurnoversWindowContent({
                   console.error('Error updating bin:', err);
                 }
               }}
+              onIsBinnedChange={async (isBinned) => {
+                if (!fullscreenTask) return;
+                try {
+                  const fields: Record<string, unknown> = { is_binned: isBinned };
+                  if (!isBinned) fields.bin_id = null;
+                  await fetch('/api/update-task-fields', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ taskId: fullscreenTask.task_id, fields }),
+                  });
+                  setFullscreenTask(prev => prev ? { ...prev, is_binned: isBinned, ...(isBinned ? {} : { bin_id: null }) } : prev);
+                  binsHook.fetchBins();
+                } catch (err) {
+                  console.error('Error updating is_binned:', err);
+                }
+              }}
             />
           ) : (
             /* Turnover Card Detail */

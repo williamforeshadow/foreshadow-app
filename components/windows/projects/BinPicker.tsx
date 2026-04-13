@@ -9,7 +9,7 @@ interface BinPickerProps {
   loadingBins: boolean;
   totalProjects: number;
   unbinnedCount: number;
-  onSelectBin: (binId: string | null) => void; // null = "All Projects"
+  onSelectBin: (binId: string | null) => void; // null = "All Binned Tasks"
   onCreateBin: (name: string, description?: string) => Promise<ProjectBin | null>;
   onDeleteBin: (binId: string) => void;
   onRenameBin: (binId: string, name: string) => void;
@@ -68,7 +68,7 @@ export function BinPicker({
         <div>
           <h2 className="text-xl font-semibold text-white">Task Bins</h2>
           <p className="text-sm text-white/40 mt-0.5">
-            {totalProjects} total task{totalProjects !== 1 ? 's' : ''} across {bins.length} bin{bins.length !== 1 ? 's' : ''}
+            {totalProjects} binned task{totalProjects !== 1 ? 's' : ''} across {bins.length} bin{bins.length !== 1 ? 's' : ''}
           </p>
         </div>
         <Button
@@ -86,7 +86,7 @@ export function BinPicker({
       {/* Bin Grid */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {/* All Projects Card */}
+          {/* All Binned Tasks Card */}
           <button
             onClick={() => onSelectBin(null)}
             className="group relative flex flex-col justify-between p-5 rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md hover:bg-white/[0.08] hover:border-white/20 transition-all duration-200 text-left min-h-[140px]"
@@ -98,15 +98,15 @@ export function BinPicker({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                   </svg>
                 </div>
-                <h3 className="text-base font-semibold text-white">All Projects</h3>
+                <h3 className="text-base font-semibold text-white">All Binned Tasks</h3>
               </div>
               <p className="text-xs text-white/30 line-clamp-2">
-                View every project across all bins
+                View every task across all bins
               </p>
             </div>
             <div className="flex items-center justify-between mt-3">
               <span className="text-sm font-medium text-white/40">
-                {totalProjects} project{totalProjects !== 1 ? 's' : ''}
+                {totalProjects} task{totalProjects !== 1 ? 's' : ''}
               </span>
               <svg className="w-4 h-4 text-white/20 group-hover:text-white/40 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -175,7 +175,7 @@ export function BinPicker({
               </div>
               <div className="flex items-center justify-between mt-3">
                 <span className="text-sm font-medium text-white/40">
-                  {bin.project_count || 0} project{(bin.project_count || 0) !== 1 ? 's' : ''}
+                  {bin.project_count || 0} task{(bin.project_count || 0) !== 1 ? 's' : ''}
                 </span>
                 <svg className="w-4 h-4 text-white/20 group-hover:text-white/40 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -201,7 +201,7 @@ export function BinPicker({
                   <button
                     className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-white/10 transition-colors"
                     onClick={() => {
-                      if (confirm(`Delete "${bin.name}"? Projects will be moved to unbinned.`)) {
+                      if (confirm(`Delete "${bin.name}"? Tasks will be moved to unbinned.`)) {
                         onDeleteBin(bin.id);
                       }
                       setContextMenuBinId(null);
@@ -230,12 +230,12 @@ export function BinPicker({
                   <h3 className="text-base font-semibold text-white/40">Unbinned</h3>
                 </div>
                 <p className="text-xs text-white/20 line-clamp-2">
-                  Projects not assigned to any bin
+                  Binned tasks not in a specific folder
                 </p>
               </div>
               <div className="flex items-center justify-between mt-3">
                 <span className="text-sm font-medium text-white/30">
-                  {unbinnedCount} project{unbinnedCount !== 1 ? 's' : ''}
+                  {unbinnedCount} task{unbinnedCount !== 1 ? 's' : ''}
                 </span>
                 <svg className="w-4 h-4 text-white/20 group-hover:text-white/40 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />

@@ -19,6 +19,7 @@ export async function PUT(
       department_id,
       property_name,
       bin_id,
+      is_binned,
       template_id,
     } = body;
 
@@ -35,6 +36,7 @@ export async function PUT(
     if (department_id !== undefined) updateData.department_id = department_id || null;
     if (property_name !== undefined) updateData.property_name = property_name || null;
     if (bin_id !== undefined) updateData.bin_id = bin_id || null;
+    if (is_binned !== undefined) updateData.is_binned = is_binned;
     if (template_id !== undefined) updateData.template_id = template_id || null;
 
     const { error: updateError } = await getSupabaseServer()
@@ -78,6 +80,7 @@ export async function PUT(
         description,
         priority,
         bin_id,
+        is_binned,
         type,
         department_id,
         status,
@@ -106,6 +109,7 @@ export async function PUT(
       id: data.id,
       property_name: data.property_name || null,
       bin_id: data.bin_id || null,
+      is_binned: data.is_binned ?? false,
       template_id: data.template_id || null,
       template_name: tmpl?.name || null,
       title: data.title || 'Untitled Task',

@@ -19,19 +19,20 @@ export async function GET() {
     // Get task counts per bin (tasks are the unified entity now)
     const { data: counts } = await supabase
       .from('turnover_tasks')
-      .select('bin_id')
-      .not('bin_id', 'is', null);
+      .select('bin_id, is_binned')
+      .eq('is_binned', true);
 
     const countMap: Record<string, number> = {};
+    let unbinnedCount = 0;
     (counts || []).forEach((row: any) => {
       if (row.bin_id) {
         countMap[row.bin_id] = (countMap[row.bin_id] || 0) + 1;
+      } else {
+        unbinnedCount++;
       }
     });
 
-    // Count binned tasks total (unbinned tasks are regular tasks, not shown here)
     const totalBinnedCount = counts?.length || 0;
-    const unbinnedCount = 0;
 
     const enrichedBins = (bins || []).map((bin: any) => ({
       ...bin,

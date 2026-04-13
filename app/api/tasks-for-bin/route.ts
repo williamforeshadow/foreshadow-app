@@ -15,6 +15,7 @@ export async function GET(request: Request) {
         description,
         priority,
         bin_id,
+        is_binned,
         type,
         department_id,
         status,
@@ -42,24 +43,25 @@ export async function GET(request: Request) {
         .is('reservation_id', null)
         .order('created_at', { ascending: false });
     } else if (binId === '__none__') {
+      // Binned tasks without a specific bin folder
       query = getSupabaseServer()
         .from('turnover_tasks')
         .select(selectFields)
+        .eq('is_binned', true)
         .is('bin_id', null)
         .order('created_at', { ascending: false });
     } else if (binId) {
       query = getSupabaseServer()
         .from('turnover_tasks')
         .select(selectFields)
-        .not('bin_id', 'is', null)
         .eq('bin_id', binId)
         .order('created_at', { ascending: false });
     } else {
-      // Default: all tasks with a bin assigned
+      // Default: all binned tasks
       query = getSupabaseServer()
         .from('turnover_tasks')
         .select(selectFields)
-        .not('bin_id', 'is', null)
+        .eq('is_binned', true)
         .order('created_at', { ascending: false });
     }
 
@@ -107,6 +109,7 @@ export async function GET(request: Request) {
         id: task.id,
         property_name: task.property_name || null,
         bin_id: task.bin_id || null,
+        is_binned: task.is_binned ?? false,
         template_id: task.template_id || null,
         template_name: template?.name || null,
         title: task.title || template?.name || 'Untitled Task',
@@ -151,6 +154,7 @@ export async function POST(request: Request) {
       scheduled_time,
       department_id,
       bin_id,
+      is_binned,
     } = body;
 
     if (!title) {
@@ -162,6 +166,7 @@ export async function POST(request: Request) {
       .insert({
         property_name: property_name || null,
         bin_id: bin_id || null,
+        is_binned: is_binned ?? (bin_id ? true : false),
         title,
         description: description || null,
         status: status || 'not_started',
@@ -203,6 +208,7 @@ export async function POST(request: Request) {
         description,
         priority,
         bin_id,
+        is_binned,
         type,
         department_id,
         status,
@@ -231,6 +237,7 @@ export async function POST(request: Request) {
       id: fullTask.id,
       property_name: fullTask.property_name || null,
       bin_id: fullTask.bin_id || null,
+      is_binned: fullTask.is_binned ?? false,
       template_id: fullTask.template_id || null,
       template_name: tmpl?.name || null,
       title: fullTask.title || 'Untitled Task',

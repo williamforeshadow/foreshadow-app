@@ -159,7 +159,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
       const res = await fetch(`/api/templates/${templateId}?${params.toString()}`);
       const result = await res.json();
       if (res.ok && result) {
-        setTaskTemplates(prev => ({ ...prev, [cacheKey]: result }));
+        setTaskTemplates(prev => ({ ...prev, [cacheKey]: result.template }));
       }
     } catch {
     } finally {
@@ -350,6 +350,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
         title: 'New Task',
         status: 'not_started',
         priority: 'medium',
+        is_binned: true,
       };
       const binId = screen.type === 'kanban' ? screen.binId : null;
       if (binId && binId !== '__none__') {
@@ -430,7 +431,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
             const bin = binsHook.bins.find(b => b.id === binId);
             navigateToBin(binId, bin?.name || 'Bin');
           }}
-          onSelectAll={() => navigateToBin(null, 'All Tasks')}
+          onSelectAll={() => navigateToBin(null, 'All Binned Tasks')}
           onSelectUnbinned={() => navigateToBin('__none__', 'Unbinned')}
           onCreateBin={binsHook.createBin}
           onUpdateBin={binsHook.updateBin}
@@ -540,6 +541,21 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ bin_id: binId || null }),
+            });
+            const result = await res.json();
+            if (result.data) {
+              setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
+              setTasks(prev => prev.map(t => t.id === screen.project.id ? result.data : t));
+            }
+            binsHook.fetchBins();
+          }}
+          onIsBinnedChange={async (isBinned) => {
+            const payload: Record<string, unknown> = { is_binned: isBinned };
+            if (!isBinned) payload.bin_id = null;
+            const res = await fetch(`/api/tasks-for-bin/${screen.project.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
             });
             const result = await res.json();
             if (result.data) {

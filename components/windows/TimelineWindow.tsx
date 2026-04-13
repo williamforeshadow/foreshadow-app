@@ -1794,6 +1794,22 @@ export default function TimelineWindow({
                   console.error('Error updating bin:', err);
                 }
               }}
+              onIsBinnedChange={async (isBinned) => {
+                const task = localTask || floatingData.item as Task;
+                try {
+                  const fields: Record<string, unknown> = { is_binned: isBinned };
+                  if (!isBinned) fields.bin_id = null;
+                  await fetch('/api/update-task-fields', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ taskId: task.task_id, fields }),
+                  });
+                  setLocalTask(prev => prev ? { ...prev, is_binned: isBinned, ...(isBinned ? {} : { bin_id: null }) } : prev);
+                  binsHook.fetchBins();
+                } catch (err) {
+                  console.error('Error updating is_binned:', err);
+                }
+              }}
             />
           ) : floatingData.type === 'project' && projectFields ? (
             <ProjectDetailPanel
@@ -1870,6 +1886,29 @@ export default function TimelineWindow({
                   }
                 } catch (err) {
                   console.error('Error updating bin:', err);
+                }
+                binsHook.fetchBins();
+              }}
+              onIsBinnedChange={async (isBinned) => {
+                const project = floatingData.item as Project;
+                try {
+                  const payload: Record<string, unknown> = { is_binned: isBinned };
+                  if (!isBinned) payload.bin_id = null;
+                  const res = await fetch(`/api/tasks-for-bin/${project.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                  });
+                  const data = await res.json();
+                  if (data.data) {
+                    setProjects(prev => prev.map(p => p.id === project.id ? data.data : p));
+                    setFloatingData(prev => {
+                      if (!prev || prev.type !== 'project') return prev;
+                      return { ...prev, item: data.data };
+                    });
+                  }
+                } catch (err) {
+                  console.error('Error updating is_binned:', err);
                 }
                 binsHook.fetchBins();
               }}

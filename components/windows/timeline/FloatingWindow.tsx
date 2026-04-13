@@ -53,6 +53,7 @@ interface FloatingWindowProps {
   allProperties?: Array<{ id: string | null; name: string }>;
   bins?: ProjectBin[];
   onBinChange?: (binId: string | null, binName: string | null) => void;
+  onIsBinnedChange?: (isBinned: boolean) => void;
   onPropertyChange?: (propertyId: string | null, propertyName: string | null) => void;
 }
 
@@ -97,6 +98,7 @@ export function FloatingWindow({
   allProperties,
   bins,
   onBinChange,
+  onIsBinnedChange,
   onPropertyChange,
 }: FloatingWindowProps) {
   // Position state - calculate initial position to be 3/4 to the right
@@ -244,6 +246,7 @@ export function FloatingWindow({
             onPropertyChange={onPropertyChange}
             bins={bins}
             onBinChange={onBinChange}
+            onIsBinnedChange={onIsBinnedChange}
             comments={comments}
             loadingComments={loadingComments}
             newComment={newComment}

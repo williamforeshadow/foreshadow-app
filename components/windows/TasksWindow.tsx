@@ -337,6 +337,21 @@ function TasksWindowContent({ currentUser, users }: TasksWindowProps) {
                 console.error('Error updating bin:', err);
               }
             }}
+            onIsBinnedChange={async (isBinned) => {
+              if (!selectedTask) return;
+              try {
+                const fields: Record<string, unknown> = { is_binned: isBinned };
+                if (!isBinned) fields.bin_id = null;
+                await fetch('/api/update-task-fields', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ taskId: selectedTask.task_id, fields }),
+                });
+                binsHook.fetchBins();
+              } catch (err) {
+                console.error('Error updating is_binned:', err);
+              }
+            }}
           />
         </div>
       )}

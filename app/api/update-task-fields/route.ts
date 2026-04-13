@@ -9,7 +9,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'taskId and fields object are required' }, { status: 400 });
     }
 
-    const allowedFields = ['title', 'description', 'priority', 'department_id', 'bin_id', 'template_id', 'property_name'];
+    const allowedFields = ['title', 'description', 'priority', 'department_id', 'bin_id', 'is_binned', 'template_id', 'property_name'];
     const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
