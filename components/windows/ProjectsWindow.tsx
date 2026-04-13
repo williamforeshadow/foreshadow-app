@@ -327,8 +327,6 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
 
     if (binId === null) {
       setSelectedBinName('All Binned Tasks');
-    } else if (binId === '__none__') {
-      setSelectedBinName('Unbinned');
     } else {
       const bin = binsHook.bins.find(b => b.id === binId);
       setSelectedBinName(bin?.name || 'Bin');
@@ -440,7 +438,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
         priority: 'medium',
         is_binned: true,
       };
-      if (selectedBinId && selectedBinId !== '__none__') {
+      if (selectedBinId) {
         payload.bin_id = selectedBinId;
       }
 
@@ -579,7 +577,6 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
         bins={binsHook.bins}
         loadingBins={binsHook.loadingBins}
         totalProjects={binsHook.totalProjects}
-        unbinnedCount={binsHook.unbinnedCount}
         onSelectBin={handleSelectBin}
         onCreateBin={handleCreateBin}
         onDeleteBin={handleDeleteBin}

@@ -11,7 +11,6 @@ export function useProjectBins({ currentUser }: UseProjectBinsProps) {
   const [bins, setBins] = useState<ProjectBin[]>([]);
   const [loadingBins, setLoadingBins] = useState(false);
   const [totalProjects, setTotalProjects] = useState(0);
-  const [unbinnedCount, setUnbinnedCount] = useState(0);
 
   const fetchBins = useCallback(async () => {
     setLoadingBins(true);
@@ -21,7 +20,6 @@ export function useProjectBins({ currentUser }: UseProjectBinsProps) {
       if (res.ok && result.data) {
         setBins(result.data);
         setTotalProjects(result.total_projects || 0);
-        setUnbinnedCount(result.unbinned_count || 0);
       }
     } catch (err) {
       console.error('Error fetching bins:', err);
@@ -91,7 +89,6 @@ export function useProjectBins({ currentUser }: UseProjectBinsProps) {
     bins,
     loadingBins,
     totalProjects,
-    unbinnedCount,
     fetchBins,
     createBin,
     updateBin,

@@ -6,11 +6,9 @@ import type { ProjectBin } from '@/lib/types';
 interface MobileBinPickerProps {
   bins: ProjectBin[];
   totalProjects: number;
-  unbinnedCount: number;
   loadingBins: boolean;
   onSelectBin: (binId: string) => void;
   onSelectAll: () => void;
-  onSelectUnbinned: () => void;
   onCreateBin: (name: string, description?: string) => Promise<ProjectBin | null>;
   onUpdateBin?: (binId: string, updates: Partial<Pick<ProjectBin, 'name' | 'description'>>) => Promise<void>;
   onDeleteBin?: (binId: string) => Promise<void>;
@@ -25,11 +23,9 @@ const glassCard =
 const MobileBinPicker = memo(function MobileBinPicker({
   bins,
   totalProjects,
-  unbinnedCount,
   loadingBins,
   onSelectBin,
   onSelectAll,
-  onSelectUnbinned,
   onCreateBin,
   onUpdateBin,
   onDeleteBin,
@@ -155,21 +151,6 @@ const MobileBinPicker = memo(function MobileBinPicker({
         </div>
       </button>
 
-      {/* Unbinned Card */}
-      {unbinnedCount > 0 && (
-        <button onClick={onSelectUnbinned} className={glassCard}>
-          <div className="w-11 h-11 rounded-xl bg-white/[0.08] flex items-center justify-center">
-            <svg className="w-5 h-5 text-neutral-500 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-            </svg>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-neutral-900 dark:text-white">Unbinned</p>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">{unbinnedCount} task{unbinnedCount !== 1 ? 's' : ''}</p>
-          </div>
-        </button>
-      )}
-
       {/* Bin List */}
       {bins.length > 0 && (
         <div className="flex flex-col gap-3">
@@ -290,7 +271,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
                       {isConfirmingDelete && (
                         <div className="px-3 py-2 flex flex-col gap-1.5">
                           <p className="text-xs text-red-500 font-medium">Delete this bin?</p>
-                          <p className="text-[11px] text-neutral-500">Tasks will be moved to Unbinned.</p>
+                          <p className="text-[11px] text-neutral-500">Tasks will remain in All Binned Tasks.</p>
                           <div className="flex gap-2 pt-1">
                             <button
                               onClick={(e) => { e.stopPropagation(); handleDelete(bin.id); }}

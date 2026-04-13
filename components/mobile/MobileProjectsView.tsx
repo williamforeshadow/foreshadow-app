@@ -353,7 +353,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
         is_binned: true,
       };
       const binId = screen.type === 'kanban' ? screen.binId : null;
-      if (binId && binId !== '__none__') {
+      if (binId) {
         payload.bin_id = binId;
       }
       const res = await fetch('/api/tasks-for-bin', {
@@ -425,14 +425,12 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
         <MobileBinPicker
           bins={binsHook.bins}
           totalProjects={binsHook.totalProjects}
-          unbinnedCount={binsHook.unbinnedCount}
           loadingBins={binsHook.loadingBins}
           onSelectBin={(binId) => {
             const bin = binsHook.bins.find(b => b.id === binId);
             navigateToBin(binId, bin?.name || 'Bin');
           }}
           onSelectAll={() => navigateToBin(null, 'All Binned Tasks')}
-          onSelectUnbinned={() => navigateToBin('__none__', 'Unbinned')}
           onCreateBin={binsHook.createBin}
           onUpdateBin={binsHook.updateBin}
           onDeleteBin={binsHook.deleteBin}

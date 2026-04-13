@@ -8,7 +8,6 @@ interface BinPickerProps {
   bins: ProjectBin[];
   loadingBins: boolean;
   totalProjects: number;
-  unbinnedCount: number;
   onSelectBin: (binId: string | null) => void; // null = "All Binned Tasks"
   onCreateBin: (name: string, description?: string) => Promise<ProjectBin | null>;
   onDeleteBin: (binId: string) => void;
@@ -19,7 +18,6 @@ export function BinPicker({
   bins,
   loadingBins,
   totalProjects,
-  unbinnedCount,
   onSelectBin,
   onCreateBin,
   onDeleteBin,
@@ -201,7 +199,7 @@ export function BinPicker({
                   <button
                     className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-white/10 transition-colors"
                     onClick={() => {
-                      if (confirm(`Delete "${bin.name}"? Tasks will be moved to unbinned.`)) {
+                      if (confirm(`Delete "${bin.name}"? Tasks will remain in All Binned Tasks.`)) {
                         onDeleteBin(bin.id);
                       }
                       setContextMenuBinId(null);
@@ -213,36 +211,6 @@ export function BinPicker({
               )}
             </div>
           ))}
-
-          {/* Unbinned Card (only show if there are unbinned projects) */}
-          {unbinnedCount > 0 && (
-            <button
-              onClick={() => onSelectBin('__none__')}
-              className="group relative flex flex-col justify-between p-5 rounded-xl border border-dashed border-white/10 bg-white/[0.02] backdrop-blur-md hover:bg-white/[0.06] hover:border-white/20 transition-all duration-200 text-left min-h-[140px]"
-            >
-              <div>
-                <div className="flex items-center gap-2.5 mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-white/[0.06] flex items-center justify-center">
-                    <svg className="w-4 h-4 text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                    </svg>
-                  </div>
-                  <h3 className="text-base font-semibold text-white/40">Unbinned</h3>
-                </div>
-                <p className="text-xs text-white/20 line-clamp-2">
-                  Binned tasks not in a specific folder
-                </p>
-              </div>
-              <div className="flex items-center justify-between mt-3">
-                <span className="text-sm font-medium text-white/30">
-                  {unbinnedCount} task{unbinnedCount !== 1 ? 's' : ''}
-                </span>
-                <svg className="w-4 h-4 text-white/20 group-hover:text-white/40 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </div>
-            </button>
-          )}
 
           {/* Create New Bin Card */}
           {!showCreateForm && (

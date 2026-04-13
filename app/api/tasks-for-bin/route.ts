@@ -42,14 +42,6 @@ export async function GET(request: Request) {
         .select(selectFields)
         .is('reservation_id', null)
         .order('created_at', { ascending: false });
-    } else if (binId === '__none__') {
-      // Binned tasks without a specific bin folder
-      query = getSupabaseServer()
-        .from('turnover_tasks')
-        .select(selectFields)
-        .eq('is_binned', true)
-        .is('bin_id', null)
-        .order('created_at', { ascending: false });
     } else if (binId) {
       query = getSupabaseServer()
         .from('turnover_tasks')
