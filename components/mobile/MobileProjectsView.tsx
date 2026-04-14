@@ -461,10 +461,10 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
                 onClearAll={columnVis.clearAll}
               />
             </div>
-            <h1 className="text-[28px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed]">
+            <h1 className="text-[30px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed]">
               {screen.binName}
             </h1>
-            <div className="flex items-center gap-3 mt-2.5 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
+            <div className="flex items-center gap-3 mt-2.5 text-[12.5px] text-neutral-500 dark:text-[#66645f] tracking-[0.01em] font-medium">
               <span>Operations board</span>
               <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a]" />
               <span>{tasks.length} total</span>

@@ -27,9 +27,9 @@ function InlineDropdown({ children, onClose, align = 'left' }: { children: React
   return (
     <div
       ref={ref}
-      className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} top-full mt-1.5 z-[70] min-w-[200px] max-w-[280px] rounded-xl glass-card bg-white/[0.97] dark:bg-neutral-900/[0.98] border border-white/30 dark:border-white/15`}
+      className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} top-full mt-1.5 z-[70] min-w-[200px] max-w-[280px] rounded-xl bg-white dark:bg-neutral-900/[0.98] border border-[rgba(30,25,20,0.08)] dark:border-white/15 shadow-[0_4px_16px_rgba(0,0,0,0.06)]`}
     >
-      <div className="relative overflow-hidden rounded-xl glass-sheen max-h-[50vh] overflow-y-auto py-1">
+      <div className="relative overflow-hidden rounded-xl max-h-[50vh] overflow-y-auto py-1">
         {children}
       </div>
     </div>
@@ -237,7 +237,6 @@ export function ProjectDetailPanel({
   const [binOpen, setBinOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [priorityOpen, setPriorityOpen] = useState(false);
-  const [deptIconOpen, setDeptIconOpen] = useState(false);
   const [deptPillOpen, setDeptPillOpen] = useState(false);
 
   // Template picker state
@@ -253,7 +252,6 @@ export function ProjectDetailPanel({
   const closeAllPickers = useCallback(() => {
     setStatusOpen(false);
     setPriorityOpen(false);
-    setDeptIconOpen(false);
     setDeptPillOpen(false);
     setPropertyOpen(false);
     setBinOpen(false);
@@ -300,11 +298,11 @@ export function ProjectDetailPanel({
 
   // Status config (unified: project + task statuses)
   const statusConfig: Record<string, { bg: string; dot: string; label: string }> = {
-    contingent: { bg: 'bg-neutral-400/10 text-white', dot: 'bg-neutral-500', label: 'Contingent' },
-    not_started: { bg: 'bg-amber-500/15 text-white', dot: 'bg-amber-400', label: 'Not Started' },
-    in_progress: { bg: 'bg-indigo-500/15 text-white', dot: 'bg-indigo-400', label: 'In Progress' },
-    paused: { bg: 'bg-neutral-400/15 text-white', dot: 'bg-neutral-400', label: 'Paused' },
-    complete: { bg: 'bg-emerald-500/15 text-white', dot: 'bg-emerald-400', label: 'Complete' },
+    contingent: { bg: 'bg-[rgba(139,127,168,0.08)] text-[#8B7FA8] dark:bg-neutral-400/10 dark:text-white', dot: 'bg-[#8B7FA8]', label: 'Contingent' },
+    not_started: { bg: 'bg-[rgba(167,139,250,0.08)] text-[#A78BFA] dark:bg-amber-500/15 dark:text-white', dot: 'bg-[#A78BFA]', label: 'Not started' },
+    in_progress: { bg: 'bg-[rgba(99,102,241,0.08)] text-[#6366F1] dark:bg-indigo-500/15 dark:text-white', dot: 'bg-[#6366F1]', label: 'In progress' },
+    paused: { bg: 'bg-[rgba(139,127,168,0.08)] text-[#8B7FA8] dark:bg-neutral-400/15 dark:text-white', dot: 'bg-[#8B7FA8]', label: 'Paused' },
+    complete: { bg: 'bg-[rgba(76,72,105,0.08)] text-[#4C4869] dark:bg-emerald-500/15 dark:text-white', dot: 'bg-[#4C4869]', label: 'Complete' },
   };
 
   // Priority config
@@ -448,7 +446,7 @@ export function ProjectDetailPanel({
               </div>
 
               {/* Time display */}
-              <div className="rounded-xl bg-white/[0.04] backdrop-blur-sm border border-white/10 px-5 py-3 flex items-center justify-between mb-5">
+              <div className="rounded-xl bg-[rgba(30,25,20,0.03)] dark:bg-white/[0.04] border border-[rgba(30,25,20,0.06)] dark:border-white/10 px-5 py-3 flex items-center justify-between mb-5">
                 <div className="flex items-center gap-2">
                   <svg className="w-4 h-4 text-muted-foreground" viewBox="0 0 16 16" fill="none">
                     <circle cx="8" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.2" />
@@ -493,223 +491,341 @@ export function ProjectDetailPanel({
         )}>
         <div className="flex flex-col gap-5 px-6 pb-6 pt-4">
 
-          {/* ── Header: Department icon + Title + Property + Bin ── */}
-          <div className="flex items-start gap-3.5">
-            {/* Department icon — large, clickable */}
-            <div className="relative">
+          {/* ── Title zone ── */}
+          <div className="flex flex-col gap-1.5">
+            <DebouncedNativeInput
+              type="text"
+              value={editingFields.title}
+              onChange={(value) => setEditingFields(prev => prev ? {...prev, title: value} : null)}
+              onBlur={onSave}
+              placeholder="Untitled Project"
+              className="text-[17px] font-medium bg-transparent border-none outline-none focus:outline-none p-0 w-full min-w-0 text-foreground placeholder:text-muted-foreground leading-snug"
+              delay={150}
+            />
+
+            {/* Inline metadata row: status · priority · department · timer */}
+            <div className="flex items-center gap-0 text-[11px] text-muted-foreground flex-wrap">
+              {/* Status */}
+              <div className="relative">
+                <button
+                  onClick={() => { closeAllPickers(); setStatusOpen(!statusOpen); }}
+                  className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors py-0.5"
+                >
+                  <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", status.dot)} />
+                  <span>{status.label}</span>
+                </button>
+                {statusOpen && (
+                  <InlineDropdown onClose={() => setStatusOpen(false)}>
+                    <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Status</p>
+                    {STATUS_OPTIONS.map((key) => {
+                      const cfg = statusConfig[key];
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => {
+                            if (key === editingFields.status) { setStatusOpen(false); return; }
+                            if (project.template_id) {
+                              const hasBeenWorkedOn = editingFields.status === 'in_progress' || editingFields.status === 'paused' ||
+                                (formMetadata && Object.keys(formMetadata).some(
+                                  k => !['property_name', 'template_id', 'template_name'].includes(k)
+                                ));
+                              if (key === 'not_started' && hasBeenWorkedOn) {
+                                alert('This task has already been started. If progress needs to be delayed, move to "Paused".');
+                                return;
+                              }
+                              if (key === 'complete' && editingFields.status !== 'complete') {
+                                if (hasIncompleteChecklist() && !confirm('Are you sure you want to complete this task? The checklist has not been completed.')) {
+                                  return;
+                                }
+                              }
+                            }
+                            const f = {...editingFields, status: key}; setEditingFields(f); onSave(f); setStatusOpen(false);
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                            editingFields.status === key ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                          }`}
+                        >
+                          <span className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
+                          <span className="text-[15px] text-neutral-900 dark:text-white">{cfg.label}</span>
+                          {editingFields.status === key && <GreenCheck />}
+                        </button>
+                      );
+                    })}
+                  </InlineDropdown>
+                )}
+              </div>
+
+              <span className="mx-1.5 text-[rgba(30,25,20,0.2)] dark:text-white/20 select-none">·</span>
+
+              {/* Priority */}
+              <div className="relative">
+                <button
+                  onClick={() => { closeAllPickers(); setPriorityOpen(!priorityOpen); }}
+                  className="inline-flex items-center gap-1 hover:text-foreground transition-colors py-0.5"
+                >
+                  <span>{priority.label} priority</span>
+                </button>
+                {priorityOpen && (
+                  <InlineDropdown onClose={() => setPriorityOpen(false)}>
+                    <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Priority</p>
+                    {PRIORITY_OPTIONS.map((key) => {
+                      const cfg = priorityConfig[key];
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => { const f = {...editingFields, priority: key}; setEditingFields(f); onSave(f); setPriorityOpen(false); }}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                            editingFields.priority === key ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                          }`}
+                        >
+                          <span className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
+                          <span className="text-[15px] text-neutral-900 dark:text-white">{cfg.label}</span>
+                          {editingFields.priority === key && <GreenCheck />}
+                        </button>
+                      );
+                    })}
+                  </InlineDropdown>
+                )}
+              </div>
+
+              <span className="mx-1.5 text-[rgba(30,25,20,0.2)] dark:text-white/20 select-none">·</span>
+
+              {/* Department */}
+              <div className="relative">
+                <button
+                  onClick={() => { closeAllPickers(); setDeptPillOpen(!deptPillOpen); }}
+                  className="inline-flex items-center gap-1 hover:text-foreground transition-colors py-0.5"
+                >
+                  <span>{dept?.name || 'No department'}</span>
+                </button>
+                {deptPillOpen && (
+                  <InlineDropdown onClose={() => setDeptPillOpen(false)}>
+                    <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Department</p>
+                    <button
+                      onClick={() => { const f = {...editingFields, department_id: ''}; setEditingFields(f); onSave(f); setDeptPillOpen(false); }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                        !editingFields.department_id ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                      }`}
+                    >
+                      <span className="text-[15px] text-neutral-500">No Department</span>
+                      {!editingFields.department_id && <GreenCheck />}
+                    </button>
+                    {departments.map((d) => {
+                      const DIcon2 = getDepartmentIcon(d.icon);
+                      return (
+                        <button
+                          key={d.id}
+                          onClick={() => { const f = {...editingFields, department_id: d.id}; setEditingFields(f); onSave(f); setDeptPillOpen(false); }}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                            editingFields.department_id === d.id ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                          }`}
+                        >
+                          <DIcon2 className="w-4 h-4 text-sky-500" />
+                          <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{d.name}</span>
+                          {editingFields.department_id === d.id && <GreenCheck />}
+                        </button>
+                      );
+                    })}
+                  </InlineDropdown>
+                )}
+              </div>
+
+              <span className="mx-1.5 text-[rgba(30,25,20,0.2)] dark:text-white/20 select-none">·</span>
+
+              {/* Timer — inline */}
+              <div className="inline-flex items-center gap-1.5">
+                <button
+                  onClick={() => { if (activeTimeEntry) { handleTimerStop(); } else { handleTimerStart(); } }}
+                  disabled={!isAssigned}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 transition-colors py-0.5",
+                    !isAssigned ? "opacity-40 cursor-not-allowed" : "hover:text-foreground"
+                  )}
+                >
+                  {activeTimeEntry ? (
+                    <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="currentColor">
+                      <rect x="1" y="1" width="4" height="10" rx="1" />
+                      <rect x="7" y="1" width="4" height="10" rx="1" />
+                    </svg>
+                  ) : (
+                    <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="currentColor">
+                      <path d="M2 1.5a.5.5 0 0 1 .75-.43l8 4.5a.5.5 0 0 1 0 .86l-8 4.5A.5.5 0 0 1 2 10.5v-9z" />
+                    </svg>
+                  )}
+                  <span className="font-mono text-[11px] tracking-wide">{formatTime(displaySeconds)}</span>
+                </button>
+                {activeTimeEntry && (
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Relationships row: Property · Bin · Template ── */}
+          <div className="rounded-xl bg-[rgba(30,25,20,0.03)] dark:bg-white/[0.04] border border-[rgba(30,25,20,0.06)] dark:border-white/10 px-2 py-2.5 flex items-start relative z-10">
+            {/* Property */}
+            <div className="relative flex-1 min-w-0 px-2">
               <button
-                onClick={() => { closeAllPickers(); setDeptIconOpen(!deptIconOpen); }}
-                className="w-[42px] h-[42px] rounded-xl flex items-center justify-center flex-shrink-0 transition-all hover:opacity-80 glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10"
-                style={{ backgroundColor: dept ? 'rgba(133,183,235,0.12)' : 'rgba(255,255,255,0.06)' }}
-                title={dept?.name || 'No Department — click to assign'}
+                onClick={() => { closeAllPickers(); setPropertyOpen(!propertyOpen); setPropertySearch(''); }}
+                className="flex items-center gap-1.5 w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-0.5"
               >
-                <DeptIcon className="w-5 h-5" style={{ color: dept ? '#85B7EB' : '#6a6a72' }} />
+                <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
+                </svg>
+                <span className="truncate flex-1 text-left">{project.property_name || 'No property'}</span>
+                <svg className={`w-3 h-3 opacity-40 transition-transform flex-shrink-0 ${propertyOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
               </button>
-              {deptIconOpen && (
-                <InlineDropdown onClose={() => setDeptIconOpen(false)}>
-                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Department</p>
+              {propertyOpen && (
+                <InlineDropdown onClose={() => setPropertyOpen(false)}>
+                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Property</p>
+                  <div className="px-3 pb-2">
+                    <input
+                      type="text"
+                      placeholder="Search properties..."
+                      value={propertySearch}
+                      onChange={(e) => setPropertySearch(e.target.value)}
+                      className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
+                    />
+                  </div>
                   <button
-                    onClick={() => { const f = {...editingFields, department_id: ''}; setEditingFields(f); onSave(f); setDeptIconOpen(false); }}
+                    onClick={() => { onPropertyChange?.(null, null); setPropertyOpen(false); }}
                     className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                      !editingFields.department_id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                      !project.property_name ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
                     }`}
                   >
-                    <span className="text-[15px] text-neutral-500">No Department</span>
-                    {!editingFields.department_id && <GreenCheck />}
+                    <span className="text-[15px] text-neutral-500 dark:text-neutral-400 italic">No Property</span>
+                    {!project.property_name && <GreenCheck />}
                   </button>
-                  {departments.map((d) => {
-                    const DIcon2 = getDepartmentIcon(d.icon);
-                    return (
-                      <button
-                        key={d.id}
-                        onClick={() => { const f = {...editingFields, department_id: d.id}; setEditingFields(f); onSave(f); setDeptIconOpen(false); }}
-                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                          editingFields.department_id === d.id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
-                        }`}
-                      >
-                        <DIcon2 className="w-4 h-4 text-sky-500" />
-                        <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{d.name}</span>
-                        {editingFields.department_id === d.id && <GreenCheck />}
-                      </button>
-                    );
-                  })}
+                  {filteredProperties.map((prop) => (
+                    <button
+                      key={prop.id || prop.name}
+                      onClick={() => { onPropertyChange?.(prop.id || null, prop.name); setPropertyOpen(false); }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                        project.property_name === prop.name ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                      }`}
+                    >
+                      <svg className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
+                      </svg>
+                      <span className="text-[15px] text-neutral-900 dark:text-white flex-1 truncate">{prop.name}</span>
+                      {project.property_name === prop.name && <GreenCheck />}
+                    </button>
+                  ))}
                 </InlineDropdown>
               )}
             </div>
 
-            <div className="flex-1 min-w-0 pt-0.5">
-              {/* Title */}
-              <DebouncedNativeInput
-                type="text"
-                value={editingFields.title}
-                onChange={(value) => setEditingFields(prev => prev ? {...prev, title: value} : null)}
-                onBlur={onSave}
-                placeholder="Untitled Project"
-                className="text-[17px] font-medium bg-transparent border-none outline-none focus:outline-none p-0 w-full min-w-0 text-foreground placeholder:text-muted-foreground leading-snug"
-                delay={150}
-              />
+            <div className="w-px self-stretch bg-[rgba(30,25,20,0.08)] dark:bg-white/10 flex-shrink-0" />
 
-              {/* Property — clickable to change */}
-              <div className="relative">
-                <button
-                  onClick={() => { closeAllPickers(); setPropertyOpen(!propertyOpen); setPropertySearch(''); }}
-                  className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground hover:text-foreground transition-colors group"
-                >
-                  <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
+            {/* Bin */}
+            <div className="relative flex-1 min-w-0 px-2">
+              <button
+                onClick={() => { closeAllPickers(); setBinOpen(!binOpen); setBinSearch(''); }}
+                className="flex items-center gap-1.5 w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-0.5"
+              >
+                <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+                <span className="truncate flex-1 text-left">
+                  {project.is_binned ? (currentBin ? currentBin.name : 'Binned') : 'No bin'}
+                </span>
+                {project.is_binned && (
+                  <svg className="w-3 h-3 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="truncate">{project.property_name || 'No property'}</span>
-                  <svg className={`w-3 h-3 opacity-50 transition-transform flex-shrink-0 ${propertyOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {propertyOpen && (
-                  <InlineDropdown onClose={() => setPropertyOpen(false)}>
-                    <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Property</p>
-                    <div className="px-3 pb-2">
-                      <input
-                        type="text"
-                        placeholder="Search properties..."
-                        value={propertySearch}
-                        onChange={(e) => setPropertySearch(e.target.value)}
-                        className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
-                      />
+                )}
+                <svg className={`w-3 h-3 opacity-40 transition-transform flex-shrink-0 ${binOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {binOpen && (
+                <InlineDropdown onClose={() => setBinOpen(false)}>
+                  <button
+                    onClick={() => {
+                      const newVal = !project.is_binned;
+                      onIsBinnedChange?.(newVal);
+                      if (!newVal) {
+                        onBinChange?.(null, null);
+                        setBinOpen(false);
+                      }
+                    }}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors sticky top-0 z-10 bg-white dark:bg-neutral-900/95 border-b border-[rgba(30,25,20,0.06)] dark:border-white/10 ${
+                      project.is_binned ? 'text-emerald-600 dark:text-emerald-400' : ''
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                      project.is_binned
+                        ? 'bg-emerald-500 border-emerald-500'
+                        : 'border-neutral-300 dark:border-neutral-600'
+                    }`}>
+                      {project.is_binned && (
+                        <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
                     </div>
-                    <button
-                      onClick={() => { onPropertyChange?.(null, null); setPropertyOpen(false); }}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                        !project.property_name ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
-                      }`}
-                    >
-                      <span className="text-[15px] text-neutral-500 dark:text-neutral-400 italic">No Property</span>
-                      {!project.property_name && <GreenCheck />}
-                    </button>
-                    {filteredProperties.map((prop) => (
+                    <span className="text-[15px] font-medium">Add to Bins</span>
+                  </button>
+                  {project.is_binned && bins.length > 0 && (
+                    <>
+                      <div className="px-3 py-2">
+                        <input
+                          type="text"
+                          placeholder="Search bins..."
+                          value={binSearch}
+                          onChange={(e) => setBinSearch(e.target.value)}
+                          className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
+                        />
+                      </div>
                       <button
-                        key={prop.id || prop.name}
-                        onClick={() => { onPropertyChange?.(prop.id || null, prop.name); setPropertyOpen(false); }}
+                        onClick={() => { onBinChange?.(null, null); setBinOpen(false); }}
                         className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                          project.property_name === prop.name ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                          !project.bin_id ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
                         }`}
                       >
-                        <svg className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
-                          <path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
-                        </svg>
-                        <span className="text-[15px] text-neutral-900 dark:text-white flex-1 truncate">{prop.name}</span>
-                        {project.property_name === prop.name && <GreenCheck />}
+                        <span className="text-[15px] text-neutral-500 dark:text-neutral-400 italic">No specific bin</span>
+                        {!project.bin_id && <GreenCheck />}
                       </button>
-                    ))}
-                  </InlineDropdown>
-                )}
-              </div>
-
-              {/* Bin — toggle binned + optional bin folder */}
-              <div className="relative">
-                <button
-                  onClick={() => { closeAllPickers(); setBinOpen(!binOpen); setBinSearch(''); }}
-                  className="flex items-center gap-1.5 pt-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors group"
-                >
-                  <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                  </svg>
-                  {project.is_binned ? (
-                    <span className="flex items-center gap-1 truncate">
-                      {currentBin ? currentBin.name : 'Binned'}
-                      <svg className="w-3 h-3 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </span>
-                  ) : (
-                    <span className="truncate">No bin</span>
-                  )}
-                  <svg className={`w-3 h-3 opacity-50 transition-transform flex-shrink-0 ${binOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {binOpen && (
-                  <InlineDropdown onClose={() => setBinOpen(false)}>
-                    {/* Sticky toggle: Add to Bins */}
-                    <button
-                      onClick={() => {
-                        const newVal = !project.is_binned;
-                        onIsBinnedChange?.(newVal);
-                        if (!newVal) {
-                          onBinChange?.(null, null);
-                          setBinOpen(false);
-                        }
-                      }}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors sticky top-0 z-10 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-sm border-b border-neutral-200/40 dark:border-white/10 ${
-                        project.is_binned ? 'text-emerald-600 dark:text-emerald-400' : ''
-                      }`}
-                    >
-                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                        project.is_binned
-                          ? 'bg-emerald-500 border-emerald-500'
-                          : 'border-neutral-300 dark:border-neutral-600'
-                      }`}>
-                        {project.is_binned && (
-                          <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </div>
-                      <span className="text-[15px] font-medium">Add to Bins</span>
-                    </button>
-
-                    {/* Bin folder options (only when binned) */}
-                    {project.is_binned && bins.length > 0 && (
-                      <>
-                        <div className="px-3 py-2">
-                          <input
-                            type="text"
-                            placeholder="Search bins..."
-                            value={binSearch}
-                            onChange={(e) => setBinSearch(e.target.value)}
-                            className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
-                          />
-                        </div>
+                      {filteredBins.map((bin) => (
                         <button
-                          onClick={() => { onBinChange?.(null, null); setBinOpen(false); }}
+                          key={bin.id}
+                          onClick={() => { onBinChange?.(bin.id, bin.name); setBinOpen(false); }}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                            !project.bin_id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                            project.bin_id === bin.id ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
                           }`}
                         >
-                          <span className="text-[15px] text-neutral-500 dark:text-neutral-400 italic">No specific bin</span>
-                          {!project.bin_id && <GreenCheck />}
+                          <svg className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                          </svg>
+                          <span className="text-[15px] text-neutral-900 dark:text-white flex-1 truncate">{bin.name}</span>
+                          {project.bin_id === bin.id && <GreenCheck />}
                         </button>
-                        {filteredBins.map((bin) => (
-                          <button
-                            key={bin.id}
-                            onClick={() => { onBinChange?.(bin.id, bin.name); setBinOpen(false); }}
-                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                              project.bin_id === bin.id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
-                            }`}
-                          >
-                            <svg className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                            </svg>
-                            <span className="text-[15px] text-neutral-900 dark:text-white flex-1 truncate">{bin.name}</span>
-                            {project.bin_id === bin.id && <GreenCheck />}
-                          </button>
-                        ))}
-                      </>
-                    )}
-                  </InlineDropdown>
-                )}
-              </div>
+                      ))}
+                    </>
+                  )}
+                </InlineDropdown>
+              )}
+            </div>
 
-              {/* Template — clickable to assign/change a checklist template */}
-              {onTemplateChange && availableTemplates.length > 0 && (
-                <div className="relative">
+            {/* Template (conditional) */}
+            {onTemplateChange && availableTemplates.length > 0 && (
+              <>
+                <div className="w-px self-stretch bg-[rgba(30,25,20,0.08)] dark:bg-white/10 flex-shrink-0" />
+                <div className="relative flex-1 min-w-0 px-2">
                   <button
                     onClick={() => { closeAllPickers(); setTemplateOpen(!templateOpen); setTemplateSearch(''); }}
-                    className="flex items-center gap-1.5 pt-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors group"
+                    className="flex items-center gap-1.5 w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-0.5"
                   >
                     <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                     </svg>
-                    <span className="truncate">{currentTemplateName || 'No template'}</span>
-                    <svg className={`w-3 h-3 opacity-50 transition-transform flex-shrink-0 ${templateOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <span className="truncate flex-1 text-left">{currentTemplateName || 'No template'}</span>
+                    <svg className={`w-3 h-3 opacity-40 transition-transform flex-shrink-0 ${templateOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
@@ -728,7 +844,7 @@ export function ProjectDetailPanel({
                       <button
                         onClick={() => { onTemplateChange(null); setTemplateOpen(false); }}
                         className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                          !project.template_id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                          !project.template_id ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
                         }`}
                       >
                         <span className="text-[15px] text-neutral-500 dark:text-neutral-400 italic">No Template</span>
@@ -739,7 +855,7 @@ export function ProjectDetailPanel({
                           key={tmpl.id}
                           onClick={() => { onTemplateChange(tmpl.id); setTemplateOpen(false); }}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                            project.template_id === tmpl.id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                            project.template_id === tmpl.id ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
                           }`}
                         >
                           <svg className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -757,183 +873,13 @@ export function ProjectDetailPanel({
                     </InlineDropdown>
                   )}
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── Status / Priority / Department pills ── */}
-          <div className="flex flex-wrap gap-2">
-            {/* Status pill */}
-            <div className="relative">
-              <button
-                onClick={() => { closeAllPickers(); setStatusOpen(!statusOpen); }}
-                className={cn("inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-opacity hover:opacity-80 glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10", status.bg)}
-              >
-                <span className={cn("w-1.5 h-1.5 rounded-full", status.dot)} />
-                {status.label}
-              </button>
-              {statusOpen && (
-                <InlineDropdown onClose={() => setStatusOpen(false)}>
-                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Status</p>
-                  {STATUS_OPTIONS.map((key) => {
-                    const cfg = statusConfig[key];
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => {
-                          if (key === editingFields.status) { setStatusOpen(false); return; }
-                          if (project.template_id) {
-                            const hasBeenWorkedOn = editingFields.status === 'in_progress' || editingFields.status === 'paused' ||
-                              (formMetadata && Object.keys(formMetadata).some(
-                                k => !['property_name', 'template_id', 'template_name'].includes(k)
-                              ));
-                            if (key === 'not_started' && hasBeenWorkedOn) {
-                              alert('This task has already been started. If progress needs to be delayed, move to "Paused".');
-                              return;
-                            }
-                            if (key === 'complete' && editingFields.status !== 'complete') {
-                              if (hasIncompleteChecklist() && !confirm('Are you sure you want to complete this task? The checklist has not been completed.')) {
-                                return;
-                              }
-                            }
-                          }
-                          const f = {...editingFields, status: key}; setEditingFields(f); onSave(f); setStatusOpen(false);
-                        }}
-                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                          editingFields.status === key ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
-                        }`}
-                      >
-                        <span className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
-                        <span className="text-[15px] text-neutral-900 dark:text-white">{cfg.label}</span>
-                        {editingFields.status === key && <GreenCheck />}
-                      </button>
-                    );
-                  })}
-                </InlineDropdown>
-              )}
-            </div>
-
-            {/* Priority pill */}
-            <div className="relative">
-              <button
-                onClick={() => { closeAllPickers(); setPriorityOpen(!priorityOpen); }}
-                className={cn("inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-opacity hover:opacity-80 glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10", priority.bg)}
-              >
-                <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
-                  <path d="M5 0l1.5 3.5L10 4l-2.5 2.5L8 10 5 8l-3 2 .5-3.5L0 4l3.5-.5z" />
-                </svg>
-                {priority.label} priority
-              </button>
-              {priorityOpen && (
-                <InlineDropdown onClose={() => setPriorityOpen(false)}>
-                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Priority</p>
-                  {PRIORITY_OPTIONS.map((key) => {
-                    const cfg = priorityConfig[key];
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => { const f = {...editingFields, priority: key}; setEditingFields(f); onSave(f); setPriorityOpen(false); }}
-                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                          editingFields.priority === key ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
-                        }`}
-                      >
-                        <span className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
-                        <span className="text-[15px] text-neutral-900 dark:text-white">{cfg.label}</span>
-                        {editingFields.priority === key && <GreenCheck />}
-                      </button>
-                    );
-                  })}
-                </InlineDropdown>
-              )}
-            </div>
-
-            {/* Department pill (only show if set) */}
-            {dept && (
-              <div className="relative">
-                <button
-                  onClick={() => { closeAllPickers(); setDeptPillOpen(!deptPillOpen); }}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full bg-sky-500/12 text-white transition-opacity hover:opacity-80 glass-card glass-sheen relative overflow-hidden border border-white/20 dark:border-white/10"
-                >
-                  <DeptIcon className="w-3 h-3" />
-                  {dept.name}
-                </button>
-                {deptPillOpen && (
-                  <InlineDropdown onClose={() => setDeptPillOpen(false)}>
-                    <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Department</p>
-                    <button
-                      onClick={() => { const f = {...editingFields, department_id: ''}; setEditingFields(f); onSave(f); setDeptPillOpen(false); }}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                        !editingFields.department_id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
-                      }`}
-                    >
-                      <span className="text-[15px] text-neutral-500">No Department</span>
-                      {!editingFields.department_id && <GreenCheck />}
-                    </button>
-                    {departments.map((d) => {
-                      const DIcon2 = getDepartmentIcon(d.icon);
-                      return (
-                        <button
-                          key={d.id}
-                          onClick={() => { const f = {...editingFields, department_id: d.id}; setEditingFields(f); onSave(f); setDeptPillOpen(false); }}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                            editingFields.department_id === d.id ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
-                          }`}
-                        >
-                          <DIcon2 className="w-4 h-4 text-sky-500" />
-                          <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{d.name}</span>
-                          {editingFields.department_id === d.id && <GreenCheck />}
-                        </button>
-                      );
-                    })}
-                  </InlineDropdown>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* ── Timer widget ── */}
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => {
-                if (activeTimeEntry) {
-                  handleTimerStop();
-                } else {
-                  handleTimerStart();
-                }
-              }}
-              disabled={!isAssigned}
-              className={cn(
-                "inline-flex items-center gap-2 text-xs font-medium pl-2 pr-3 py-1.5 rounded-full transition-colors border",
-                !isAssigned
-                  ? "bg-muted text-muted-foreground border-muted cursor-not-allowed"
-                  : activeTimeEntry
-                    ? "bg-red-500/12 text-red-400 border-red-500/20 hover:bg-red-500/20"
-                    : "bg-emerald-500/12 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20"
-              )}
-            >
-              {activeTimeEntry ? (
-                <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor">
-                  <rect x="1" y="1" width="4" height="10" rx="1" />
-                  <rect x="7" y="1" width="4" height="10" rx="1" />
-                </svg>
-              ) : (
-                <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor">
-                  <path d="M2 1.5a.5.5 0 0 1 .75-.43l8 4.5a.5.5 0 0 1 0 .86l-8 4.5A.5.5 0 0 1 2 10.5v-9z" />
-                </svg>
-              )}
-              <span className="font-mono text-[13px] tracking-wide">{formatTime(displaySeconds)}</span>
-            </button>
-            {activeTimeEntry && (
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-              </span>
+              </>
             )}
           </div>
 
           {/* ── Description card ── */}
-          <div className="rounded-xl bg-white/[0.04] backdrop-blur-sm border border-white/10 px-5 py-4 flex flex-col gap-2">
-            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Description</div>
+          <div className="rounded-xl bg-[rgba(30,25,20,0.03)] dark:bg-white/[0.04] border border-[rgba(30,25,20,0.06)] dark:border-white/10 px-5 py-4 flex flex-col gap-2">
+            <div className="text-[11px] font-medium text-muted-foreground tracking-wider">Description</div>
             <RichTextEditor
               content={editingFields.description}
               onChange={(json) => setEditingFields(prev => prev ? {...prev, description: json} : null)}
@@ -945,8 +891,8 @@ export function ProjectDetailPanel({
           {/* ── Assigned + Scheduled grid ── */}
           <div className="grid grid-cols-2 gap-3.5 relative z-10">
             {/* Assigned to */}
-            <div className="rounded-xl bg-white/[0.04] backdrop-blur-sm border border-white/10 px-5 py-4 flex flex-col gap-3">
-              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Assigned to</div>
+            <div className="rounded-xl bg-[rgba(30,25,20,0.03)] dark:bg-white/[0.04] border border-[rgba(30,25,20,0.06)] dark:border-white/10 px-5 py-4 flex flex-col gap-3">
+              <div className="text-[11px] font-medium text-muted-foreground tracking-wider">Assigned to</div>
               <div className="relative">
                 <button
                   onClick={() => { closeAllPickers(); setStaffOpen(!staffOpen); setStaffSearch(''); }}
@@ -1035,7 +981,7 @@ export function ProjectDetailPanel({
                             onSave(f);
                           }}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                            isAssigned ? 'bg-white/40 dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                            isAssigned ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
                           }`}
                         >
                           {user.avatar ? (
@@ -1056,8 +1002,8 @@ export function ProjectDetailPanel({
             </div>
 
             {/* Scheduled */}
-            <div className="rounded-xl bg-white/[0.04] backdrop-blur-sm border border-white/10 px-5 py-4 flex flex-col gap-3">
-              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Scheduled</div>
+            <div className="rounded-xl bg-[rgba(30,25,20,0.03)] dark:bg-white/[0.04] border border-[rgba(30,25,20,0.06)] dark:border-white/10 px-5 py-4 flex flex-col gap-3">
+              <div className="text-[11px] font-medium text-muted-foreground tracking-wider">Scheduled</div>
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-1.5">
                   <svg className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" viewBox="0 0 16 16" fill="none">
@@ -1074,7 +1020,7 @@ export function ProjectDetailPanel({
                       setEditingFields(f);
                       onSave(f);
                     }}
-                    className="bg-transparent border-none outline-none text-[13px] text-muted-foreground focus:text-foreground p-0 w-full min-w-0 [color-scheme:dark]"
+                    className="bg-transparent border-none outline-none text-[13px] text-muted-foreground focus:text-foreground p-0 w-full min-w-0 dark:[color-scheme:dark]"
                   />
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -1091,7 +1037,7 @@ export function ProjectDetailPanel({
                       setEditingFields(f);
                       onSave(f);
                     }}
-                    className="bg-transparent border-none outline-none text-[13px] text-muted-foreground focus:text-foreground p-0 w-full min-w-0 [color-scheme:dark]"
+                    className="bg-transparent border-none outline-none text-[13px] text-muted-foreground focus:text-foreground p-0 w-full min-w-0 dark:[color-scheme:dark]"
                   />
                 </div>
               </div>
@@ -1101,7 +1047,7 @@ export function ProjectDetailPanel({
 
           {/* ── Attachments ── */}
           <div className="flex flex-col gap-3">
-            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Attachments</div>
+            <div className="text-[11px] font-medium text-muted-foreground tracking-wider">Attachments</div>
             <div className="flex gap-2.5 flex-wrap">
               {loadingAttachments ? (
                 <span className="text-xs text-muted-foreground">Loading...</span>
@@ -1109,7 +1055,7 @@ export function ProjectDetailPanel({
                 attachments.map((attachment, index) => (
                   <div
                     key={attachment.id}
-                    className="relative w-[72px] h-[72px] rounded-lg overflow-hidden border border-white/10 bg-white/[0.04] flex-shrink-0 cursor-pointer hover:bg-white/[0.08] transition-all flex flex-col items-center justify-center"
+                    className="relative w-[72px] h-[72px] rounded-lg overflow-hidden border border-[rgba(30,25,20,0.06)] dark:border-white/10 bg-[rgba(30,25,20,0.03)] dark:bg-white/[0.04] flex-shrink-0 cursor-pointer hover:bg-[rgba(30,25,20,0.06)] dark:hover:bg-white/[0.08] transition-all flex flex-col items-center justify-center"
                     onClick={(e) => { e.stopPropagation(); onViewAttachment(index); }}
                   >
                     {attachment.file_type === 'image' ? (
@@ -1130,7 +1076,7 @@ export function ProjectDetailPanel({
               )}
               {/* Upload button */}
               <button
-                className="w-[72px] h-[72px] rounded-lg border border-dashed border-white/10 flex items-center justify-center cursor-pointer hover:bg-white/[0.06] transition-all"
+                className="w-[72px] h-[72px] rounded-lg border border-dashed border-[rgba(30,25,20,0.08)] dark:border-white/10 flex items-center justify-center cursor-pointer hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-white/[0.06] transition-all"
                 onClick={() => attachmentInputRef.current?.click()}
                 disabled={uploadingAttachment}
               >
@@ -1149,11 +1095,11 @@ export function ProjectDetailPanel({
           </div>
 
           {/* ── Divider ── */}
-          <div className="border-t border-white/10" />
+          <div className="border-t border-[rgba(30,25,20,0.06)] dark:border-white/10" />
 
           {/* ── Activity / Comments ── */}
           <div className="flex flex-col gap-4">
-            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Activity</div>
+            <div className="text-[11px] font-medium text-muted-foreground tracking-wider">Activity</div>
 
             {loadingComments ? (
               <p className="text-sm text-muted-foreground text-center py-4">Loading comments...</p>
@@ -1175,7 +1121,7 @@ export function ProjectDetailPanel({
                           })}
                         </span>
                       </div>
-                      <div className="text-[13px] text-muted-foreground leading-relaxed bg-white/[0.04] border border-white/10 px-3.5 py-2.5 rounded-r-lg rounded-bl-lg whitespace-pre-wrap">
+                      <div className="text-[13px] text-muted-foreground leading-relaxed bg-[rgba(30,25,20,0.03)] dark:bg-white/[0.04] border border-[rgba(30,25,20,0.06)] dark:border-white/10 px-3.5 py-2.5 rounded-r-lg rounded-bl-lg whitespace-pre-wrap">
                         {comment.comment_content}
                       </div>
                     </div>
@@ -1189,8 +1135,8 @@ export function ProjectDetailPanel({
       </div>
 
       {/* ── Comment input — sticky bottom (hidden when checklist is open) ── */}
-      <div className="flex-shrink-0 border-t border-white/10 px-6 py-3.5 bg-transparent">
-        <div className="flex items-center gap-2.5 bg-white/[0.04] backdrop-blur-sm rounded-xl px-4 py-3 border border-white/10">
+      <div className="flex-shrink-0 border-t border-[rgba(30,25,20,0.06)] dark:border-white/10 px-6 py-3.5 bg-transparent">
+        <div className="flex items-center gap-2.5 bg-[rgba(30,25,20,0.03)] dark:bg-white/[0.04] rounded-xl px-4 py-3 border border-[rgba(30,25,20,0.06)] dark:border-white/10">
           {/* Hidden file input */}
           <input
             ref={attachmentInputRef}

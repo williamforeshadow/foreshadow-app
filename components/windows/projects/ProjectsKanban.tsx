@@ -363,6 +363,10 @@ export function ProjectsKanban({
       accessibility={{ announcements }}
     >
       <div className={styles.board}>
+        <div
+          className={styles.boardTexture}
+          style={{ backgroundImage: "url('/images/kanban-bg-doodles.svg')" }}
+        />
         {columns.map((column) => (
           <div key={column.id} className={cn(styles.column, column.accent)}>
             {/* Column Header */}
@@ -421,45 +425,20 @@ export function ProjectsKanban({
 // ============================================================================
 
 function ColumnIcon({ viewMode, columnId }: { viewMode: ProjectViewMode; columnId: string }) {
-  if (viewMode === 'property') {
-    return (
-      <div className={styles.columnIcon}>
-        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-        </svg>
-      </div>
-    );
-  }
-
   if (viewMode === 'status') {
     const status = columnId.replace('status:', '') as ProjectStatus;
-    const symbol = status === 'complete' ? '✓' : status === 'paused' ? '‖' : '●';
-    return <div className={styles.columnIcon}>{symbol}</div>;
+    const marbleClass =
+      status === 'not_started'
+        ? styles.columnIconNotStarted
+        : status === 'in_progress'
+        ? styles.columnIconInProgress
+        : status === 'paused'
+        ? styles.columnIconPaused
+        : styles.columnIconComplete;
+    return <div className={cn(styles.columnIcon, marbleClass)} />;
   }
 
-  if (viewMode === 'priority') {
-    const priority = columnId.replace('priority:', '') as ProjectPriority;
-    const symbol = priority === 'urgent' ? '!!' : priority === 'high' ? '!' : '●';
-    return <div className={styles.columnIcon}>{symbol}</div>;
-  }
-
-  if (viewMode === 'department') {
-    return (
-      <div className={styles.columnIcon}>
-        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-        </svg>
-      </div>
-    );
-  }
-
-  return (
-    <div className={styles.columnIcon}>
-      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-      </svg>
-    </div>
-  );
+  return <div className={cn(styles.columnIcon, styles.columnIconDefault)} />;
 }
 
 // ============================================================================
@@ -569,6 +548,19 @@ function ProjectCardContent({
     }
   };
 
+  const getCardStatusClass = (status: string | undefined) => {
+    switch (status) {
+      case 'complete':
+        return styles.cardStatusComplete;
+      case 'in_progress':
+        return styles.cardStatusInProgress;
+      case 'paused':
+        return styles.cardStatusPaused;
+      default:
+        return styles.cardStatusNotStarted;
+    }
+  };
+
   const getPriorityClass = (priority: string | undefined) => {
     switch (priority) {
       case 'urgent':
@@ -591,7 +583,7 @@ function ProjectCardContent({
 
   return (
     <div
-      className={cn(styles.card, isDragging && styles.cardDragging)}
+      className={cn(styles.card, getCardStatusClass(project.status), project.status === 'complete' && styles.cardDimmed, isDragging && styles.cardDragging)}
       style={isSelected ? { boxShadow: '0 0 0 1.5px currentColor', opacity: 1 } : undefined}
     >
       {/* Unread badge */}
@@ -619,47 +611,42 @@ function ProjectCardContent({
         </div>
       )}
 
-      {/* Card Header */}
+      {/* Card Header — title left, dept icon right */}
       <div className={styles.cardHeader}>
-        <div className={styles.cardIcon}>
-          <DeptIcon className="w-3 h-3" />
-        </div>
         <div className={styles.cardContent}>
           <p className={styles.cardTitle}>{project.title}</p>
           {subtitle && <p className={styles.cardSubtitle}>{subtitle}</p>}
+        </div>
+        <div className={styles.cardIcon}>
+          <DeptIcon className="w-3 h-3" />
         </div>
       </div>
 
       {/* Card Footer */}
       <div className={styles.cardFooter}>
         {/* Left: status + priority + time */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', flexWrap: 'wrap' }}>
-          {/* Show status badge unless we're in status view */}
-          {viewMode !== 'status' && (
-            <span className={cn(styles.statusBadge, getStatusClass(project.status))}>
-              {project.status?.replace('_', ' ')}
-            </span>
-          )}
-          {/* Show priority badge unless we're in priority view */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4375rem', flexWrap: 'wrap' }}>
+          <span className={cn(styles.statusBadge, getStatusClass(project.status))}>
+            {project.status?.replace('_', ' ').replace(/^\w/, c => c.toUpperCase())}
+          </span>
           {viewMode !== 'priority' && (
             <span className={cn(styles.priorityBadge, getPriorityClass(project.priority))}>
-              {project.priority}
+              {project.priority?.replace(/^\w/, c => c.toUpperCase())}
             </span>
           )}
-          {/* Scheduled time */}
           {project.scheduled_time && (() => {
             const [h, m] = project.scheduled_time!.split(':').map(Number);
-            const ampm = h >= 12 ? 'pm' : 'am';
+            const ampm = h >= 12 ? 'PM' : 'AM';
             const h12 = h % 12 || 12;
             return (
-              <span className="text-neutral-400 dark:text-[#66645f]" style={{ fontSize: '0.625rem', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
-                {h12}:{String(m).padStart(2, '0')}{ampm}
+              <span style={{ fontSize: '0.6625rem', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: 'rgba(30, 25, 20, 0.35)' }} className="dark:!text-[#66645f]">
+                {h12}:{String(m).padStart(2, '0')} {ampm}
               </span>
             );
           })()}
         </div>
 
-        {/* Right: assignee avatars (hide in assignee view — column is the user) */}
+        {/* Right: assignee avatars */}
         <div style={{ display: 'flex', alignItems: 'center' }}>
           {viewMode !== 'assignee' && assignees.length > 0 && (
             <>
@@ -668,13 +655,13 @@ function ProjectCardContent({
                   key={user.id}
                   className="bg-neutral-200 dark:bg-neutral-700 ring-2 ring-white dark:ring-[#131315]"
                   style={{
-                    width: 20,
-                    height: 20,
+                    width: 21,
+                    height: 21,
                     borderRadius: '50%',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '0.5rem',
+                    fontSize: '0.53125rem',
                     fontWeight: 600,
                     marginLeft: index > 0 ? -6 : 0,
                     overflow: 'hidden',
@@ -704,13 +691,13 @@ function ProjectCardContent({
                 <div
                   className="bg-neutral-300 dark:bg-neutral-600 ring-2 ring-white dark:ring-[#131315] text-neutral-500 dark:text-[#a09e9a]"
                   style={{
-                    width: 20,
-                    height: 20,
+                    width: 21,
+                    height: 21,
                     borderRadius: '50%',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '0.5rem',
+                    fontSize: '0.53125rem',
                     fontWeight: 600,
                     marginLeft: -6,
                     flexShrink: 0,

@@ -664,7 +664,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
           : null;
 
         return (
-        <div className="w-1/3 flex-shrink-0 border-l border-white/20 dark:border-white/10 bg-white/30 dark:bg-white/[0.03] backdrop-blur-xl">
+        <div className="w-1/3 flex-shrink-0 border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 bg-white dark:bg-white/[0.03]">
         <ProjectDetailPanel
           project={expandedProject}
           editingFields={editingProjectFields}
