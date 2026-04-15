@@ -6,6 +6,7 @@ import type { ProjectViewMode } from '@/lib/types';
 import { STATUS_LABELS, STATUS_ORDER, PRIORITY_LABELS, PRIORITY_ORDER } from '@/lib/types';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
+import { useKanbanTexture } from '@/lib/hooks/useKanbanTexture';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
@@ -263,6 +264,9 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
 
   // Column visibility
   const columnVis = useColumnVisibility(selectedBinId, viewMode);
+
+  // Board texture preference
+  const { enabled: showBoardTexture } = useKanbanTexture();
 
   const allColumnOptions = useMemo(() => {
     if (viewMode === 'property') {
@@ -650,6 +654,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
             getUnreadCommentCount={getUnreadCommentCount}
             onColumnMove={handleColumnMove}
             visibleColumnIds={columnVis.visibleIds}
+            showTexture={showBoardTexture}
           />
         )}
       </div>

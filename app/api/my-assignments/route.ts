@@ -121,6 +121,7 @@ export async function GET(request: Request) {
           task_id: task.id,
           reservation_id: task.reservation_id,
           template_id: task.template_id,
+          title: task.title || null,
           template_name: template?.name || 'Unnamed Task',
           type: task.type || template?.type || 'cleaning',
           department_id: task.department_id || template?.department_id || null,

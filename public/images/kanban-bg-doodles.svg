@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">
+  <defs>
+    <style>
+      .d  { fill: none; stroke: #000; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+      .df { fill: #000; stroke: none; }
+    </style>
+    <symbol id="key" overflow="visible"><circle cx="0" cy="0" r="9" class="d"/><circle cx="0" cy="0" r="3" class="df"/><path d="M9 0 L34 0 M28 0 L28 6 M22 0 L22 5" class="d"/></symbol>
+    <symbol id="house" overflow="visible"><path d="M-14 0 L-14 -12 L0 -22 L14 -12 L14 0 Z" class="d"/><rect x="-4" y="-8" width="8" height="8" class="d"/></symbol>
+    <symbol id="suitcase" overflow="visible"><path d="M4 0 L20 0 L20 -5 Q20 -8 17 -8 L7 -8 Q4 -8 4 -5 Z" class="d"/><rect x="0" y="0" width="24" height="22" rx="2" class="d"/><line x1="12" y1="4" x2="12" y2="18" class="d"/></symbol>
+    <symbol id="coffee" overflow="visible"><path d="M0 0 L20 0 L18 18 Q18 22 14 22 L6 22 Q2 22 2 18 Z" class="d"/><path d="M20 4 Q28 4 28 10 Q28 16 20 16" class="d"/><path d="M6 -5 Q6 -9 9 -7 M12 -5 Q12 -9 15 -7" class="d"/></symbol>
+    <symbol id="pin" overflow="visible"><path d="M0 0 Q-8 0 -8 -10 Q-8 -20 0 -20 Q8 -20 8 -10 Q8 0 0 0 Z" class="d"/><circle cx="0" cy="-12" r="3" class="d"/></symbol>
+    <symbol id="wifi" overflow="visible"><path d="M-12 0 Q0 -12 12 0 M-7 5 Q0 -2 7 5 M-2 10 Q0 8 2 10" class="d"/><circle cx="0" cy="13" r="1.5" class="df"/></symbol>
+    <symbol id="leaf" overflow="visible"><path d="M0 12 L0 -10 M0 -10 Q-8 -14 -10 -6 Q-4 -4 0 -10 M0 -6 Q6 -10 10 -2 Q4 0 0 -6" class="d"/></symbol>
+    <symbol id="sprig" overflow="visible"><path d="M-12 6 Q-6 -8 0 0 Q6 8 12 -6" class="d"/><circle cx="-12" cy="6" r="1.5" class="df"/><circle cx="12" cy="-6" r="1.5" class="df"/></symbol>
+    <symbol id="berries" overflow="visible"><circle r="3" class="df"/><circle cx="8" cy="-5" r="2" class="df"/><circle cx="-6" cy="6" r="2" class="df"/><circle cx="7" cy="7" r="1.5" class="df"/></symbol>
+    <symbol id="petal" overflow="visible"><path d="M-10 4 Q-4 -10 10 -8 Q4 6 -10 4 Z" class="d"/></symbol>
+    <symbol id="flower" overflow="visible"><circle r="4" class="d"/><path d="M-4 0 Q-12 -4 -14 0 M4 0 Q12 -4 14 0 M0 -4 Q-4 -12 0 -14 Q4 -12 0 -4 M0 4 Q-4 12 0 14 Q4 12 0 4" class="d"/></symbol>
+    <symbol id="apple" overflow="visible"><path d="M0 12 Q-10 6 -10 -4 Q0 -14 10 -4 Q10 6 0 12" class="d"/><path d="M0 -10 L0 -14 Q2 -16 5 -15" class="d"/></symbol>
+  </defs>
+  <g id="doodles" stroke="#000" fill="#000">
+    <use href="#key" x="35" y="40" transform="rotate(-15 35 40)"/>
+    <use href="#leaf" x="95" y="55" transform="rotate(20 95 55)"/>
+    <use href="#berries" x="150" y="35"/>
+    <use href="#house" x="210" y="50"/>
+    <use href="#sprig" x="280" y="40" transform="rotate(-25 280 40)"/>
+    <use href="#coffee" x="340" y="30"/>
+    <use href="#flower" x="410" y="55"/>
+    <use href="#pin" x="470" y="65"/>
+    <use href="#leaf" x="525" y="35" transform="rotate(-40 525 35)"/>
+    <use href="#apple" x="580" y="50"/>
+    <use href="#petal" x="25" y="115" transform="rotate(30 25 115)"/>
+    <use href="#suitcase" x="70" y="105" transform="rotate(-8 70 105)"/>
+    <use href="#wifi" x="135" y="105"/>
+    <use href="#berries" x="190" y="120" transform="rotate(15 190 120)"/>
+    <use href="#key" x="245" y="115" transform="rotate(10 245 115)"/>
+    <use href="#flower" x="315" y="115"/>
+    <use href="#leaf" x="370" y="105" transform="rotate(50 370 105)"/>
+    <use href="#house" x="430" y="115" transform="rotate(5 430 115)"/>
+    <use href="#sprig" x="505" y="110" transform="rotate(35 505 110)"/>
+    <use href="#apple" x="565" y="115"/>
+    <use href="#coffee" x="35" y="175"/>
+    <use href="#flower" x="105" y="185"/>
+    <use href="#pin" x="165" y="195"/>
+    <use href="#leaf" x="220" y="180" transform="rotate(-30 220 180)"/>
+    <use href="#petal" x="285" y="185" transform="rotate(60 285 185)"/>
+    <use href="#suitcase" x="340" y="175" transform="rotate(12 340 175)"/>
+    <use href="#berries" x="410" y="190"/>
+    <use href="#sprig" x="470" y="185" transform="rotate(-15 470 185)"/>
+    <use href="#key" x="530" y="180" transform="rotate(25 530 180)"/>
+    <use href="#wifi" x="590" y="180"/>
+    <use href="#house" x="45" y="260" transform="rotate(-5 45 260)"/>
+    <use href="#sprig" x="115" y="260" transform="rotate(-20 115 260)"/>
+    <use href="#apple" x="170" y="260"/>
+    <use href="#flower" x="230" y="255"/>
+    <use href="#leaf" x="290" y="260" transform="rotate(15 290 260)"/>
+    <use href="#coffee" x="345" y="250"/>
+    <use href="#pin" x="420" y="270"/>
+    <use href="#petal" x="480" y="260" transform="rotate(-45 480 260)"/>
+    <use href="#berries" x="540" y="265" transform="rotate(10 540 265)"/>
+    <use href="#key" x="595" y="265" transform="rotate(-10 595 265)"/>
+    <use href="#berries" x="25" y="340"/>
+    <use href="#wifi" x="80" y="335"/>
+    <use href="#key" x="140" y="340" transform="rotate(-20 140 340)"/>
+    <use href="#suitcase" x="200" y="325" transform="rotate(-10 200 325)"/>
+    <use href="#sprig" x="275" y="340" transform="rotate(25 275 340)"/>
+    <use href="#house" x="340" y="345"/>
+    <use href="#leaf" x="405" y="335" transform="rotate(-50 405 335)"/>
+    <use href="#flower" x="465" y="340"/>
+    <use href="#apple" x="525" y="340"/>
+    <use href="#coffee" x="575" y="330"/>
+    <use href="#flower" x="40" y="415"/>
+    <use href="#pin" x="100" y="425"/>
+    <use href="#leaf" x="160" y="415" transform="rotate(60 160 415)"/>
+    <use href="#berries" x="220" y="420" transform="rotate(-15 220 420)"/>
+    <use href="#coffee" x="275" y="405"/>
+    <use href="#petal" x="345" y="415" transform="rotate(20 345 415)"/>
+    <use href="#key" x="400" y="415" transform="rotate(15 400 415)"/>
+    <use href="#sprig" x="470" y="420" transform="rotate(-30 470 420)"/>
+    <use href="#house" x="530" y="425" transform="rotate(3 530 425)"/>
+    <use href="#apple" x="595" y="420"/>
+    <use href="#sprig" x="30" y="490" transform="rotate(40 30 490)"/>
+    <use href="#apple" x="85" y="490"/>
+    <use href="#wifi" x="145" y="490"/>
+    <use href="#flower" x="205" y="495"/>
+    <use href="#house" x="265" y="500"/>
+    <use href="#petal" x="335" y="490" transform="rotate(-25 335 490)"/>
+    <use href="#berries" x="395" y="495"/>
+    <use href="#leaf" x="450" y="490" transform="rotate(30 450 490)"/>
+    <use href="#suitcase" x="505" y="480" transform="rotate(8 505 480)"/>
+    <use href="#pin" x="580" y="510"/>
+    <use href="#leaf" x="55" y="560" transform="rotate(-20 55 560)"/>
+    <use href="#key" x="115" y="560" transform="rotate(5 115 560)"/>
+    <use href="#coffee" x="175" y="550"/>
+    <use href="#berries" x="245" y="565" transform="rotate(20 245 565)"/>
+    <use href="#sprig" x="305" y="560" transform="rotate(-10 305 560)"/>
+    <use href="#apple" x="365" y="560"/>
+    <use href="#flower" x="425" y="560"/>
+    <use href="#pin" x="485" y="570"/>
+    <use href="#petal" x="540" y="560" transform="rotate(50 540 560)"/>
+    <use href="#house" x="595" y="565"/>
+    <use href="#key" x="635" y="40" transform="rotate(-15 635 40)"/>
+    <use href="#key" x="35" y="640" transform="rotate(-15 35 640)"/>
+    <use href="#apple" x="-20" y="50"/>
+    <use href="#apple" x="580" y="-50"/>
+    <use href="#pin" x="-10" y="425"/>
+    <use href="#pin" x="100" y="-25"/>
+    <use href="#leaf" x="95" y="655" transform="rotate(20 95 655)"/>
+    <use href="#leaf" x="-15" y="180" transform="rotate(-30 -15 180)"/>
+    <use href="#flower" x="615" y="185"/>
+    <use href="#berries" x="410" y="-10"/>
+    <use href="#sprig" x="620" y="340" transform="rotate(25 620 340)"/>
+    <use href="#coffee" x="575" y="630"/>
+  </g>
+</svg>

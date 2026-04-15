@@ -6,6 +6,7 @@ import MobileProjectDetail from '@/components/mobile/MobileProjectDetail';
 import { ProjectsKanban } from '@/components/windows/projects/ProjectsKanban';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
+import { useKanbanTexture } from '@/lib/hooks/useKanbanTexture';
 import { useAuth } from '@/lib/authContext';
 import { useDepartments } from '@/lib/departmentsContext';
 import { STATUS_ORDER, STATUS_LABELS, PRIORITY_ORDER, PRIORITY_LABELS } from '@/lib/types';
@@ -239,6 +240,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
   // Column visibility for the kanban
   const activeBinId = screen.type !== 'bins' ? (screen as any).binId : null;
   const columnVis = useColumnVisibility(activeBinId, viewMode);
+  const { enabled: showBoardTexture } = useKanbanTexture();
 
   const allColumnOptions = useMemo(() => {
     if (viewMode === 'property') {
@@ -499,6 +501,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
                 onColumnMove={handleColumnMove}
                 visibleColumnIds={columnVis.visibleIds}
                 onDraggingChange={setKanbanDragging}
+                showTexture={showBoardTexture}
               />
             )}
           </div>

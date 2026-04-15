@@ -53,6 +53,7 @@ interface ProjectsKanbanProps {
   onColumnMove: (projectId: string, field: string, value: string) => void;
   visibleColumnIds?: Set<string>;
   onDraggingChange?: (isDragging: boolean) => void;
+  showTexture?: boolean;
 }
 
 // ============================================================================
@@ -71,6 +72,7 @@ export function ProjectsKanban({
   onColumnMove,
   visibleColumnIds,
   onDraggingChange,
+  showTexture = true,
 }: ProjectsKanbanProps) {
   // Build columns based on view mode
   const allColumns: KanbanColumn[] = useMemo(() => {
@@ -363,10 +365,12 @@ export function ProjectsKanban({
       accessibility={{ announcements }}
     >
       <div className={styles.board}>
-        <div
-          className={styles.boardTexture}
-          style={{ backgroundImage: "url('/images/kanban-bg-doodles.svg')" }}
-        />
+        {showTexture && (
+          <div
+            className={styles.boardTexture}
+            style={{ backgroundImage: "url('/images/kanban-bg-doodles.png')" }}
+          />
+        )}
         {columns.map((column) => (
           <div key={column.id} className={cn(styles.column, column.accent)}>
             {/* Column Header */}

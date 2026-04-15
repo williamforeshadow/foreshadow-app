@@ -6,6 +6,8 @@ import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { useRouter } from 'next/navigation';
+import { useDepartments } from '@/lib/departmentsContext';
+import { getDepartmentIcon } from '@/lib/departmentIcons';
 
 interface Assignee {
   user_id: string;
@@ -40,30 +42,26 @@ interface MobileMyAssignmentsViewProps {
   refreshTrigger?: number;
 }
 
-function StatusDot({ status }: { status: string }) {
-  switch (status) {
-    case 'not_started':
-      return (
-        <span className="w-[6px] h-[6px] rounded-full bg-neutral-800 dark:bg-[#f0efed] shadow-[0_0_0_3px_rgba(0,0,0,0.06)] dark:shadow-[0_0_0_3px_rgba(240,239,237,0.08)] shrink-0" />
-      );
-    case 'in_progress':
-      return (
-        <span className="w-[7px] h-[7px] rounded-full border-[1.5px] border-neutral-400 dark:border-[#8a8884] shrink-0" />
-      );
-    case 'paused':
-      return (
-        <span className="w-[6px] h-[6px] rounded-full bg-amber-500 dark:bg-[#d97757] shadow-[0_0_0_3px_rgba(217,119,87,0.12)] dark:shadow-[0_0_0_3px_rgba(217,119,87,0.15)] shrink-0" />
-      );
-    case 'complete':
-      return (
-        <span className="w-[6px] h-[6px] rounded-full bg-neutral-300 dark:bg-[#4a4946] shrink-0" />
-      );
-    default:
-      return (
-        <span className="w-[6px] h-[6px] rounded-full bg-neutral-400 dark:bg-[#66645f] shrink-0" />
-      );
-  }
-}
+const STATUS_COLORS: Record<string, string> = {
+  not_started: '#A78BFA',
+  in_progress: '#6366F1',
+  paused: '#8B7FA8',
+  complete: '#4C4869',
+};
+
+const STATUS_MARBLE: Record<string, string> = {
+  not_started: 'radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.35) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.18) 10%, transparent 40%, rgba(255,255,255,0.12) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #A78BFA',
+  in_progress: 'radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.3) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.18) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.15) 10%, transparent 40%, rgba(255,255,255,0.1) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.1) 0%, transparent 55%), #6366F1',
+  paused: 'radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.3) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.15) 10%, transparent 40%, rgba(255,255,255,0.1) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #8B7FA8',
+  complete: 'radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.25) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.15) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.12) 10%, transparent 40%, rgba(255,255,255,0.08) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.1) 0%, transparent 55%), #4C4869',
+};
+
+const PRIORITY_LABELS: Record<string, string> = {
+  urgent: 'Urgent',
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+};
 
 function PriorityTag({ priority }: { priority: string }) {
   if (!priority || priority === 'low') return null;
@@ -74,8 +72,8 @@ function PriorityTag({ priority }: { priority: string }) {
         ? 'text-neutral-800 dark:text-[#f0efed]'
         : 'text-neutral-500 dark:text-[#a09e9a]';
   return (
-    <span className={`text-[10.5px] uppercase tracking-[0.06em] font-medium pl-2 border-l border-neutral-200 dark:border-[rgba(255,255,255,0.07)] ${colorClass}`}>
-      {priority}
+    <span className={`text-[10.5px] tracking-[0.02em] font-medium pl-2 border-l border-neutral-200 dark:border-[rgba(255,255,255,0.07)] ${colorClass}`}>
+      {PRIORITY_LABELS[priority] || priority}
     </span>
   );
 }
@@ -94,9 +92,11 @@ export default function MobileMyAssignmentsView({
 }: MobileMyAssignmentsViewProps) {
   const { user, loading: authLoading, allUsers, role, switchUser } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { departments: allDepts } = useDepartments();
   const [rawData, setRawData] = useState<{ tasks: any[]; projects: any[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -187,14 +187,15 @@ export default function MobileMyAssignmentsView({
 
   const { groups, todayTurnoverCount, openCount } = useMemo(() => {
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
     const endOfWeek = new Date(now);
     const dayOfWeek = now.getDay();
     const daysUntilSunday = 7 - dayOfWeek;
     endOfWeek.setDate(now.getDate() + daysUntilSunday);
-    const endOfWeekStr = endOfWeek.toISOString().split('T')[0];
+    const endOfWeekStr = `${endOfWeek.getFullYear()}-${String(endOfWeek.getMonth() + 1).padStart(2, '0')}-${String(endOfWeek.getDate()).padStart(2, '0')}`;
 
+    const overdue: UnifiedItem[] = [];
     const today: UnifiedItem[] = [];
     const thisWeek: UnifiedItem[] = [];
     const later: UnifiedItem[] = [];
@@ -203,7 +204,8 @@ export default function MobileMyAssignmentsView({
     let open = 0;
 
     for (const item of items) {
-      if (item.status !== 'complete') open++;
+      if (item.status === 'complete') continue;
+      open++;
       const d = item.scheduled_date;
       if (!d) {
         unscheduled.push(item);
@@ -215,35 +217,36 @@ export default function MobileMyAssignmentsView({
       } else if (d > endOfWeekStr) {
         later.push(item);
       } else {
-        // Past dates still show under today
-        today.push(item);
+        overdue.push(item);
       }
     }
 
-    const sortByTime = (a: UnifiedItem, b: UnifiedItem) => {
-      const ta = a.scheduled_time || '';
-      const tb = b.scheduled_time || '';
-      return ta.localeCompare(tb);
+    const statusOrder: Record<string, number> = { in_progress: 0, paused: 1, not_started: 2 };
+    const sortItems = (a: UnifiedItem, b: UnifiedItem, dateAsc = true) => {
+      const da = a.scheduled_date || '';
+      const db = b.scheduled_date || '';
+      if (da !== db) return dateAsc ? da.localeCompare(db) : db.localeCompare(da);
+      const sa = statusOrder[a.status] ?? 3;
+      const sb = statusOrder[b.status] ?? 3;
+      if (sa !== sb) return sa - sb;
+      return (a.scheduled_time || '').localeCompare(b.scheduled_time || '');
     };
-    today.sort(sortByTime);
-    thisWeek.sort((a, b) => {
-      const da = a.scheduled_date || '';
-      const db = b.scheduled_date || '';
-      if (da !== db) return da.localeCompare(db);
-      return sortByTime(a, b);
-    });
-    later.sort((a, b) => {
-      const da = a.scheduled_date || '';
-      const db = b.scheduled_date || '';
-      if (da !== db) return da.localeCompare(db);
-      return sortByTime(a, b);
+    overdue.sort((a, b) => sortItems(a, b, false));
+    today.sort((a, b) => sortItems(a, b));
+    thisWeek.sort((a, b) => sortItems(a, b));
+    later.sort((a, b) => sortItems(a, b));
+    unscheduled.sort((a, b) => {
+      const sa = statusOrder[a.status] ?? 3;
+      const sb = statusOrder[b.status] ?? 3;
+      return sa - sb;
     });
 
     const result: DateGroup[] = [];
+    if (overdue.length > 0) result.push({ label: 'Overdue', sublabel: `${overdue.length}`, items: overdue });
     if (today.length > 0) result.push({ label: 'Today', sublabel: `${today.length} scheduled`, items: today });
     if (thisWeek.length > 0) result.push({ label: 'This week', sublabel: `${thisWeek.length} scheduled`, items: thisWeek });
     if (later.length > 0) result.push({ label: 'Later', sublabel: `${later.length} scheduled`, items: later });
-    if (unscheduled.length > 0) result.push({ label: 'Unscheduled', sublabel: `${unscheduled.length}`, items: unscheduled });
+    if (unscheduled.length > 0) result.push({ label: 'No Date', sublabel: `${unscheduled.length}`, items: unscheduled });
 
     return { groups: result, todayTurnoverCount: turnoverCount, openCount: open };
   }, [items]);
@@ -416,26 +419,47 @@ export default function MobileMyAssignmentsView({
             <p className="text-sm text-neutral-500 dark:text-[#66645f] mt-1">You're all caught up</p>
           </div>
         ) : (
-          groups.map((group) => (
+          groups.map((group) => {
+            const isCollapsed = collapsedSections.has(group.label);
+            return (
             <div key={group.label} className="px-[22px] pt-5">
               {/* Section header */}
-              <div className="flex items-baseline justify-between mb-3">
-                <span className="text-[11px] font-semibold text-neutral-600 dark:text-[#a09e9a] uppercase tracking-[0.08em]">
-                  {group.label}
-                </span>
+              <button
+                onClick={() => setCollapsedSections(prev => {
+                  const next = new Set(prev);
+                  if (next.has(group.label)) next.delete(group.label);
+                  else next.add(group.label);
+                  return next;
+                })}
+                className="flex items-center justify-between w-full mb-3"
+              >
+                <div className="flex items-center gap-1.5">
+                  <svg
+                    className={`w-3 h-3 text-neutral-400 dark:text-[#66645f] transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                  <span className="text-[11px] font-semibold text-neutral-600 dark:text-[#a09e9a] uppercase tracking-[0.08em]">
+                    {group.label}
+                  </span>
+                </div>
                 {group.sublabel && (
                   <span className="text-[11px] text-neutral-400 dark:text-[#66645f] tracking-[0.05em] tabular-nums uppercase">
                     {group.sublabel}
                   </span>
                 )}
-              </div>
+              </button>
 
               {/* Assignment rows */}
+              {!isCollapsed && (
               <div className="flex flex-col">
                 {group.items.map((item, idx) => {
                   const timeInfo = formatTimeCol(item.scheduled_time);
                   const isToday = group.label === 'Today';
                   const dayLabel = !isToday ? getDayLabel(item.scheduled_date) : null;
+                  const dept = allDepts.find(d => d.id === item.department_id);
+                  const DeptIcon = getDepartmentIcon(dept?.icon);
 
                   return (
                     <button
@@ -444,8 +468,8 @@ export default function MobileMyAssignmentsView({
                         if (item.source === 'task') onTaskClick?.(item.raw);
                         else onProjectClick?.(item.raw);
                       }}
-                      className={`grid grid-cols-[44px_1fr_auto] gap-3.5 py-3.5 text-left transition-colors active:bg-neutral-100/50 dark:active:bg-[rgba(255,255,255,0.03)] ${
-                        idx < group.items.length - 1 ? 'border-b border-neutral-100 dark:border-[rgba(255,255,255,0.07)]' : ''
+                      className={`grid grid-cols-[44px_1fr] gap-3.5 py-3.5 text-left transition-colors active:bg-neutral-100/50 dark:active:bg-[rgba(255,255,255,0.03)] ${
+                        idx < group.items.length - 1 ? 'border-b border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.07)]' : ''
                       }`}
                     >
                       {/* Time column */}
@@ -467,50 +491,61 @@ export default function MobileMyAssignmentsView({
 
                       {/* Body */}
                       <div className="min-w-0">
-                        <div className="text-[14.5px] font-medium text-neutral-800 dark:text-[#f0efed] leading-snug tracking-tight mb-0.5 line-clamp-2">
-                          {item.title}
+                        {/* Title row with dept icon on right */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="text-[14.5px] font-medium text-neutral-800 dark:text-[#f0efed] leading-snug tracking-tight mb-0.5 line-clamp-2 min-w-0">
+                            {item.title}
+                          </div>
+                          {dept && (
+                            <DeptIcon className="w-[15px] h-[15px] text-neutral-400 dark:text-[#66645f] shrink-0 mt-0.5" />
+                          )}
                         </div>
                         {item.property_name && (
                           <div className="text-[12px] text-neutral-500 dark:text-[#66645f] leading-snug truncate">
                             {item.property_name}
                           </div>
                         )}
+                        {/* Metadata row: marble dot, status, priority, avatars */}
                         <div className="flex items-center gap-2 mt-2">
-                          <StatusDot status={item.status} />
-                          <span className="text-[10.5px] text-neutral-500 dark:text-[#a09e9a] uppercase tracking-[0.06em] font-medium">
+                          <span
+                            className="w-[7px] h-[7px] rounded-full shrink-0"
+                            style={{ background: STATUS_MARBLE[item.status] || STATUS_MARBLE.not_started }}
+                          />
+                          <span
+                            className="text-[10.5px] tracking-[0.02em] font-medium"
+                            style={{ color: STATUS_COLORS[item.status] || '#A78BFA' }}
+                          >
                             {STATUS_LABELS[item.status] || item.status}
                           </span>
                           <PriorityTag priority={item.priority} />
+                          {item.assignees.length > 0 && (
+                            <div className="flex ml-auto">
+                              {item.assignees.slice(0, 3).map((u, i) => (
+                                <div
+                                  key={u.user_id}
+                                  className="w-[20px] h-[20px] rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-[8px] font-semibold text-neutral-600 dark:text-[#a09e9a] overflow-hidden ring-[1.5px] ring-white dark:ring-[#0b0b0c]"
+                                  style={{ marginLeft: i > 0 ? '-6px' : 0 }}
+                                  title={u.name}
+                                >
+                                  {u.avatar ? (
+                                    <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    u.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      </div>
-
-                      {/* Right — avatars */}
-                      <div className="flex flex-col items-end gap-2 pt-0.5">
-                        {item.assignees.length > 0 && (
-                          <div className="flex">
-                            {item.assignees.slice(0, 3).map((u, i) => (
-                              <div
-                                key={u.user_id}
-                                className="w-[22px] h-[22px] rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-[8.5px] font-semibold text-neutral-600 dark:text-[#a09e9a] overflow-hidden ring-[2px] ring-white dark:ring-[#0b0b0c]"
-                                style={{ marginLeft: i > 0 ? '-7px' : 0 }}
-                                title={u.name}
-                              >
-                                {u.avatar ? (
-                                  <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" />
-                                ) : (
-                                  u.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     </button>
                   );
                 })}
               </div>
+              )}
             </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

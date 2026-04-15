@@ -297,12 +297,12 @@ export function ProjectDetailPanel({
   }, [users, staffSearch]);
 
   // Status config (unified: project + task statuses)
-  const statusConfig: Record<string, { bg: string; dot: string; label: string }> = {
-    contingent: { bg: 'bg-[rgba(139,127,168,0.08)] text-[#8B7FA8] dark:bg-neutral-400/10 dark:text-white', dot: 'bg-[#8B7FA8]', label: 'Contingent' },
-    not_started: { bg: 'bg-[rgba(167,139,250,0.08)] text-[#A78BFA] dark:bg-amber-500/15 dark:text-white', dot: 'bg-[#A78BFA]', label: 'Not started' },
-    in_progress: { bg: 'bg-[rgba(99,102,241,0.08)] text-[#6366F1] dark:bg-indigo-500/15 dark:text-white', dot: 'bg-[#6366F1]', label: 'In progress' },
-    paused: { bg: 'bg-[rgba(139,127,168,0.08)] text-[#8B7FA8] dark:bg-neutral-400/15 dark:text-white', dot: 'bg-[#8B7FA8]', label: 'Paused' },
-    complete: { bg: 'bg-[rgba(76,72,105,0.08)] text-[#4C4869] dark:bg-emerald-500/15 dark:text-white', dot: 'bg-[#4C4869]', label: 'Complete' },
+  const statusConfig: Record<string, { bg: string; dot: string; label: string; color: string }> = {
+    contingent: { bg: 'bg-[rgba(139,127,168,0.08)] text-[#8B7FA8] dark:bg-neutral-400/10 dark:text-white', dot: 'bg-[#8B7FA8]', label: 'Contingent', color: '#8B7FA8' },
+    not_started: { bg: 'bg-[rgba(167,139,250,0.08)] text-[#A78BFA] dark:bg-amber-500/15 dark:text-white', dot: 'bg-[#A78BFA]', label: 'Not started', color: '#A78BFA' },
+    in_progress: { bg: 'bg-[rgba(99,102,241,0.08)] text-[#6366F1] dark:bg-indigo-500/15 dark:text-white', dot: 'bg-[#6366F1]', label: 'In progress', color: '#6366F1' },
+    paused: { bg: 'bg-[rgba(139,127,168,0.08)] text-[#8B7FA8] dark:bg-neutral-400/15 dark:text-white', dot: 'bg-[#8B7FA8]', label: 'Paused', color: '#8B7FA8' },
+    complete: { bg: 'bg-[rgba(76,72,105,0.08)] text-[#4C4869] dark:bg-emerald-500/15 dark:text-white', dot: 'bg-[#4C4869]', label: 'Complete', color: '#4C4869' },
   };
 
   // Priority config
@@ -504,15 +504,15 @@ export function ProjectDetailPanel({
             />
 
             {/* Inline metadata row: status · priority · department · timer */}
-            <div className="flex items-center gap-0 text-[11px] text-muted-foreground flex-wrap">
+            <div className="flex items-center gap-0 text-[12.5px] text-muted-foreground flex-wrap">
               {/* Status */}
               <div className="relative">
                 <button
                   onClick={() => { closeAllPickers(); setStatusOpen(!statusOpen); }}
-                  className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors py-0.5"
+                  className="inline-flex items-center hover:opacity-70 transition-opacity py-0.5"
+                  style={{ color: status.color }}
                 >
-                  <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", status.dot)} />
-                  <span>{status.label}</span>
+                  {status.label}
                 </button>
                 {statusOpen && (
                   <InlineDropdown onClose={() => setStatusOpen(false)}>
