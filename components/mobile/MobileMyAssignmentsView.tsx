@@ -265,6 +265,13 @@ export default function MobileMyAssignmentsView({
     return date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
   };
 
+  const getShortDate = (dateStr?: string | null) => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr + 'T00:00:00');
+    const month = date.toLocaleDateString('en-US', { month: 'short' });
+    return { month, day: date.getDate() };
+  };
+
   const todayFormatted = useMemo(() => {
     const now = new Date();
     const weekday = now.toLocaleDateString('en-US', { weekday: 'long' });
@@ -456,8 +463,7 @@ export default function MobileMyAssignmentsView({
               <div className="flex flex-col">
                 {group.items.map((item, idx) => {
                   const timeInfo = formatTimeCol(item.scheduled_time);
-                  const isToday = group.label === 'Today';
-                  const dayLabel = !isToday ? getDayLabel(item.scheduled_date) : null;
+                  const dayLabel = getDayLabel(item.scheduled_date);
                   const dept = allDepts.find(d => d.id === item.department_id);
                   const DeptIcon = getDepartmentIcon(dept?.icon);
 
@@ -472,15 +478,28 @@ export default function MobileMyAssignmentsView({
                         idx < group.items.length - 1 ? 'border-b border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.07)]' : ''
                       }`}
                     >
-                      {/* Time column */}
+                      {/* Time column — show all available date/time info */}
                       <div className="text-right pt-0.5">
-                        {timeInfo ? (
+                        {item.scheduled_date || timeInfo ? (
                           <>
-                            {dayLabel && (
-                              <div className="text-[10px] text-neutral-400 dark:text-[#66645f] uppercase tracking-[0.08em] font-medium mb-0.5">{dayLabel}</div>
+                            {item.scheduled_date && (() => {
+                              const sd = getShortDate(item.scheduled_date);
+                              return sd ? (
+                                <>
+                                  {dayLabel && (
+                                    <div className="text-[9px] text-neutral-400 dark:text-[#66645f] uppercase tracking-[0.06em] font-medium mb-0.5">{dayLabel}</div>
+                                  )}
+                                  <div className="text-[12px] font-semibold text-neutral-800 dark:text-[#f0efed] leading-none tracking-tight whitespace-nowrap">{sd.month} {sd.day}</div>
+                                </>
+                              ) : null;
+                            })()}
+                            {timeInfo && (
+                              <div className={item.scheduled_date ? 'mt-1' : ''}>
+                                <div className="text-[10px] font-medium text-neutral-400 dark:text-[#66645f] leading-none tracking-tight tabular-nums whitespace-nowrap">
+                                  {timeInfo.time}{timeInfo.meridiem.toLowerCase()}
+                                </div>
+                              </div>
                             )}
-                            <div className="font-mono text-[14px] font-medium text-neutral-800 dark:text-[#f0efed] leading-none tracking-tight tabular-nums">{timeInfo.time}</div>
-                            <div className="text-[9px] text-neutral-400 dark:text-[#66645f] uppercase tracking-[0.08em] font-medium mt-0.5">{timeInfo.meridiem}</div>
                           </>
                         ) : (
                           <div className="text-[9px] text-neutral-300 dark:text-[#3e3d3a] uppercase tracking-[0.08em] font-medium leading-snug pt-0.5">
