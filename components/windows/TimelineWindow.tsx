@@ -166,6 +166,7 @@ export default function TimelineWindow({
   const taskAttachmentRef = useRef<HTMLInputElement>(null);
   const [taskNewComment, setTaskNewComment] = useState('');
   const [taskViewingAttachmentIndex, setTaskViewingAttachmentIndex] = useState<number | null>(null);
+  const [creatingTask, setCreatingTask] = useState(false);
 
   const taskCommentsHook = useProjectComments({ currentUser });
   const taskAttachmentsHook = useProjectAttachments({ currentUser });
@@ -240,17 +241,17 @@ export default function TimelineWindow({
         scheduled_date: task.scheduled_date || '',
         scheduled_time: task.scheduled_time || '',
       });
-      // Fetch template if needed (with property context for overrides)
-      const propName = floatingData.propertyName || task.property_name;
-      const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
-      if (task.template_id && !taskTemplates[cacheKey!]) {
-        fetchTaskTemplate(task.template_id, propName);
+      const isDraftTask = task.task_id.startsWith('draft-');
+      if (!isDraftTask) {
+        const propName = floatingData.propertyName || task.property_name;
+        const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
+        if (task.template_id && !taskTemplates[cacheKey!]) {
+          fetchTaskTemplate(task.template_id, propName);
+        }
+        taskCommentsHook.fetchProjectComments(task.task_id, 'task');
+        taskAttachmentsHook.fetchProjectAttachments(task.task_id, 'task');
+        taskTimeTrackingHook.fetchProjectTimeEntries(task.task_id, 'task');
       }
-      // Fetch comments, attachments, time entries for this task
-      taskCommentsHook.fetchProjectComments(task.task_id, 'task');
-      taskAttachmentsHook.fetchProjectAttachments(task.task_id, 'task');
-      taskTimeTrackingHook.fetchProjectTimeEntries(task.task_id, 'task');
-      // Ensure available templates are loaded for the picker
       if (availableTemplates.length === 0) fetchAvailableTemplates();
     } else {
       setProjectFields(null);
@@ -672,6 +673,7 @@ export default function TimelineWindow({
   // ============================================================================
   const handleSaveTaskEditFields = useCallback(async (directFields?: ProjectFormFields) => {
     if (!localTask) return;
+    if (localTask.task_id.startsWith('draft-')) return;
     const fields = directFields || taskEditingFieldsRef.current;
     if (!fields) return;
     const taskId = localTask.task_id;
@@ -886,73 +888,111 @@ export default function TimelineWindow({
     }
   }, [expandedProjectInTurnover, turnoverActivityHook]);
 
-  const createTaskViaApi = useCallback(async (payload: Record<string, unknown>): Promise<Task | null> => {
+  const createDraftTask = useCallback((payload: Record<string, unknown>): Task => {
+    return {
+      task_id: `draft-${Date.now()}`,
+      template_id: undefined,
+      template_name: undefined,
+      title: (payload.title as string) || 'New Task',
+      description: null,
+      priority: (payload.priority as string) || 'medium',
+      bin_id: (payload.bin_id as string) || null,
+      type: 'project',
+      department_id: null,
+      department_name: null,
+      status: (payload.status as Task['status']) || 'not_started',
+      property_name: (payload.property_name as string) || undefined,
+      scheduled_date: (payload.scheduled_date as string) || null,
+      scheduled_time: (payload.scheduled_time as string) || null,
+      assigned_users: [],
+    } as Task;
+  }, []);
+
+  const handleConfirmCreateTaskTimeline = useCallback(async () => {
+    if (!localTask || !localTask.task_id.startsWith('draft-')) return;
+    setCreatingTask(true);
     try {
+      const fields = taskEditingFieldsRef.current;
+      const payload: Record<string, unknown> = {
+        title: fields?.title || localTask.title || 'New Task',
+        status: fields?.status || 'not_started',
+        priority: fields?.priority || 'medium',
+        description: fields?.description || null,
+        department_id: fields?.department_id || null,
+        scheduled_date: fields?.scheduled_date || localTask.scheduled_date || null,
+        scheduled_time: fields?.scheduled_time || localTask.scheduled_time || null,
+      };
+      if (localTask.property_name) payload.property_name = localTask.property_name;
+      if (localTask.template_id) payload.template_id = localTask.template_id;
+      if (fields?.assigned_staff?.length) payload.assigned_user_ids = fields.assigned_staff;
+
       const res = await fetch('/api/tasks-for-bin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'New Task', status: 'not_started', priority: 'medium', ...payload }),
+        body: JSON.stringify(payload),
       });
       const result = await res.json();
       const data = result.data;
-      if (!data) return null;
-      return {
-        task_id: data.id,
-        template_id: undefined,
-        template_name: undefined,
-        title: data.title || 'New Task',
-        description: data.description || null,
-        priority: data.priority || 'medium',
-        bin_id: data.bin_id || null,
-        type: 'project',
-        department_id: data.department_id || null,
-        department_name: data.department_name || null,
-        status: data.status || 'not_started',
-        property_name: data.property_name || undefined,
-        scheduled_date: data.scheduled_date || null,
-        scheduled_time: data.scheduled_time || null,
-        assigned_users: (data.project_assignments || []).map((a: any) => ({
-          user_id: a.user_id,
-          name: a.user?.name || '',
-          avatar: a.user?.avatar || '',
-          role: a.user?.role || '',
-        })),
-      } as Task;
+      if (data) {
+        const createdTask: Task = {
+          task_id: data.id,
+          template_id: data.template_id || undefined,
+          template_name: data.template_name || undefined,
+          title: data.title || 'New Task',
+          description: data.description || null,
+          priority: data.priority || 'medium',
+          bin_id: data.bin_id || null,
+          type: 'project',
+          department_id: data.department_id || null,
+          department_name: data.department_name || null,
+          status: data.status || 'not_started',
+          property_name: data.property_name || undefined,
+          scheduled_date: data.scheduled_date || null,
+          scheduled_time: data.scheduled_time || null,
+          assigned_users: (data.project_assignments || []).map((a: any) => ({
+            user_id: a.user_id,
+            name: a.user?.name || '',
+            avatar: a.user?.avatar || '',
+            role: a.user?.role || '',
+          })),
+        } as Task;
+        setLocalTask(createdTask);
+        if (floatingData) {
+          setFloatingData({ ...floatingData, item: createdTask });
+        }
+      }
     } catch (err) {
       console.error('Error creating task:', err);
-      return null;
+    } finally {
+      setCreatingTask(false);
     }
-  }, []);
+  }, [localTask, floatingData]);
 
   const handleTurnoverCreateProject = useCallback(async (propertyName: string) => {
-    const newTask = await createTaskViaApi({ property_name: propertyName });
-    if (newTask) {
-      setExpandedProjectInTurnover(newTask as any);
-    }
-  }, [createTaskViaApi]);
+    const draft = createDraftTask({ property_name: propertyName });
+    setExpandedProjectInTurnover(draft as any);
+  }, [createDraftTask]);
 
-  const handleCreateProjectFromTimelineCell = useCallback(async (propertyName: string, date: Date) => {
+  const handleCreateProjectFromTimelineCell = useCallback((propertyName: string, date: Date) => {
     const scheduledDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    const newTask = await createTaskViaApi({ property_name: propertyName, scheduled_date: scheduledDate });
-    if (!newTask) return;
+    const draft = createDraftTask({ property_name: propertyName, scheduled_date: scheduledDate });
 
     setFloatingData({
       type: 'task',
-      item: newTask,
+      item: draft,
       propertyName,
     });
-  }, [createTaskViaApi]);
+  }, [createDraftTask]);
 
-  const handleCreateProjectFromHeader = useCallback(async () => {
-    const newTask = await createTaskViaApi({});
-    if (!newTask) return;
+  const handleCreateProjectFromHeader = useCallback(() => {
+    const draft = createDraftTask({});
 
     setFloatingData({
       type: 'task',
-      item: newTask,
+      item: draft,
       propertyName: '',
     });
-  }, [createTaskViaApi]);
+  }, [createDraftTask]);
 
   // Handle column moves from kanban drag/drop (assignment + schedule changes, atomically)
   const handleKanbanColumnMove = useCallback(async (
@@ -1698,8 +1738,15 @@ export default function TimelineWindow({
               allProperties={allProperties}
               savingEdit={false}
               onSave={handleSaveTaskEditFields}
+              isNewTask={localTask?.task_id?.startsWith('draft-') ?? false}
+              onConfirmCreate={localTask?.task_id?.startsWith('draft-') ? handleConfirmCreateTaskTimeline : undefined}
+              creatingTask={creatingTask}
               onDelete={async () => {
                 const task = localTask || floatingData.item as Task;
+                if (task.task_id.startsWith('draft-')) {
+                  handleCloseFloatingWindow();
+                  return;
+                }
                 try {
                   await fetch(`/api/tasks-for-bin/${task.task_id}`, { method: 'DELETE' });
                   setRecurringTasks(prev => prev.filter((t: any) => t.task_id !== task.task_id));
@@ -1711,6 +1758,12 @@ export default function TimelineWindow({
               }}
               onClose={handleCloseFloatingWindow}
               onOpenActivity={() => {}}
+              onPropertyChange={localTask?.task_id?.startsWith('draft-')
+                ? (_propertyId, propertyName) => {
+                    setLocalTask(prev => prev ? { ...prev, property_name: propertyName || undefined } : prev);
+                  }
+                : undefined
+              }
               staffOpen={taskStaffOpen}
               setStaffOpen={setTaskStaffOpen}
               // Template / checklist slide-over
@@ -1724,22 +1777,28 @@ export default function TimelineWindow({
               currentUser={currentUser}
               // Template picker
               availableTemplates={availableTemplates}
-              onTemplateChange={async (templateId) => {
-                const task = localTask || floatingData.item as Task;
-                try {
-                  await fetch('/api/update-task-fields', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ taskId: task.task_id, fields: { template_id: templateId || null } }),
-                  });
-                  setLocalTask(prev => prev ? { ...prev, template_id: templateId || undefined } : prev);
-                  if (templateId) {
-                    fetchTaskTemplate(templateId, task.property_name);
+              onTemplateChange={localTask?.task_id?.startsWith('draft-')
+                ? (templateId) => {
+                    const tmpl = availableTemplates.find(t => t.id === templateId);
+                    setLocalTask(prev => prev ? { ...prev, template_id: templateId || undefined, template_name: tmpl?.name || undefined } : prev);
                   }
-                } catch (err) {
-                  console.error('Error changing template:', err);
-                }
-              }}
+                : async (templateId) => {
+                    const task = localTask || floatingData.item as Task;
+                    try {
+                      await fetch('/api/update-task-fields', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ taskId: task.task_id, fields: { template_id: templateId || null } }),
+                      });
+                      setLocalTask(prev => prev ? { ...prev, template_id: templateId || undefined } : prev);
+                      if (templateId) {
+                        fetchTaskTemplate(templateId, task.property_name);
+                      }
+                    } catch (err) {
+                      console.error('Error changing template:', err);
+                    }
+                  }
+              }
               // Turnover context
               onShowTurnover={
                 (localTask || floatingData.item as any)?.is_recurring

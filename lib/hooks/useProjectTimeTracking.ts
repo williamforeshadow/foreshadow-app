@@ -14,6 +14,14 @@ export function useProjectTimeTracking({ currentUser }: UseProjectTimeTrackingPr
   const [displaySeconds, setDisplaySeconds] = useState(0);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Ref always tracks latest activeTimeEntry — avoids stale closures in stopProjectTimer
+  const activeTimeEntryRef = useRef<TimeEntry | null>(null);
+  activeTimeEntryRef.current = activeTimeEntry;
+
+  // Guards against concurrent start/stop calls
+  const startingRef = useRef(false);
+  const stoppingRef = useRef(false);
+
   // Fetch time entries for a project or task
   const fetchProjectTimeEntries = useCallback(async (entityId: string, entityType: 'project' | 'task' = 'project') => {
     try {
@@ -43,9 +51,12 @@ export function useProjectTimeTracking({ currentUser }: UseProjectTimeTrackingPr
     }
   }, []);
 
-  // Start timer
+  // Start timer — guarded against duplicate concurrent calls
   const startProjectTimer = useCallback(async (entityId: string, entityType: 'project' | 'task' = 'project') => {
     if (!entityId || !currentUser) return;
+    if (activeTimeEntryRef.current) return;
+    if (startingRef.current) return;
+    startingRef.current = true;
 
     try {
       const bodyData: Record<string, string> = {
@@ -70,19 +81,27 @@ export function useProjectTimeTracking({ currentUser }: UseProjectTimeTrackingPr
       }
     } catch (err) {
       console.error('Error starting timer:', err);
+    } finally {
+      startingRef.current = false;
     }
   }, [currentUser]);
 
-  // Stop timer
+  // Stop timer — reads from ref so it never has a stale closure
   const stopProjectTimer = useCallback(async () => {
-    if (!activeTimeEntry) return;
+    const entry = activeTimeEntryRef.current;
+    if (!entry) return;
+    if (stoppingRef.current) return;
+    stoppingRef.current = true;
+
+    // Optimistically clear so no duplicate calls can slip through
+    setActiveTimeEntry(null);
 
     try {
       const res = await fetch('/api/project-time-entries', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          entry_id: activeTimeEntry.id
+          entry_id: entry.id
         })
       });
 
@@ -95,12 +114,15 @@ export function useProjectTimeTracking({ currentUser }: UseProjectTimeTrackingPr
           (new Date(data.data.end_time).getTime() - new Date(data.data.start_time).getTime()) / 1000
         );
         setTotalTrackedSeconds(prev => prev + entryDuration);
-        setActiveTimeEntry(null);
       }
     } catch (err) {
       console.error('Error stopping timer:', err);
+      // Restore on failure so UI stays consistent
+      setActiveTimeEntry(entry);
+    } finally {
+      stoppingRef.current = false;
     }
-  }, [activeTimeEntry]);
+  }, []);
 
   // Format time as HH:MM:SS
   const formatTime = useCallback((seconds: number) => {
@@ -110,12 +132,12 @@ export function useProjectTimeTracking({ currentUser }: UseProjectTimeTrackingPr
     return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }, []);
 
-  // Clear time tracking state (for when project is deselected)
+  // Clear all time tracking state (when switching tasks or closing panel)
   const clearTimeTracking = useCallback(() => {
     setProjectTimeEntries([]);
     setTotalTrackedSeconds(0);
     setDisplaySeconds(0);
-    // Note: we don't clear activeTimeEntry here as timer might still be running
+    setActiveTimeEntry(null);
   }, []);
 
   // Timer interval effect - updates display every second when timer is active

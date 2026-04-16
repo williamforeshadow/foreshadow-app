@@ -39,6 +39,24 @@ export async function PUT(
     if (is_binned !== undefined) updateData.is_binned = is_binned;
     if (template_id !== undefined) updateData.template_id = template_id || null;
 
+    // Guard: reject property_name/template_id changes if already set
+    if (property_name !== undefined || template_id !== undefined) {
+      const { data: existing } = await getSupabaseServer()
+        .from('turnover_tasks')
+        .select('property_name, template_id')
+        .eq('id', id)
+        .single();
+
+      if (existing) {
+        if (property_name !== undefined) {
+          return NextResponse.json({ error: 'Property cannot be changed after task creation' }, { status: 400 });
+        }
+        if (template_id !== undefined) {
+          return NextResponse.json({ error: 'Template cannot be changed after task creation' }, { status: 400 });
+        }
+      }
+    }
+
     const { error: updateError } = await getSupabaseServer()
       .from('turnover_tasks')
       .update(updateData)

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ProjectDetailPanel } from '../projects';
-import type { Project, Comment, User, ProjectFormFields, Attachment, TimeEntry } from '@/lib/types';
+import type { Project, Comment, User, ProjectFormFields, Attachment, TimeEntry, TaskTemplate } from '@/lib/types';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useDepartments } from '@/lib/departmentsContext';
 import { tiptapToPlainText, tiptapHasContent } from '@/lib/utils';
@@ -48,6 +48,13 @@ interface TurnoverProjectsPanelProps {
   onStopTimer: () => void;
   // Activity
   onOpenActivity: () => void;
+  // Draft/creation flow
+  isNewTask?: boolean;
+  onConfirmCreate?: () => void;
+  creatingTask?: boolean;
+  onPropertyChange?: (propertyId: string | null, propertyName: string | null) => void;
+  onTemplateChange?: (templateId: string | null) => void;
+  availableTemplates?: TaskTemplate[];
 }
 
 function ProjectCard({
@@ -170,6 +177,13 @@ export function TurnoverProjectsPanel({
   onStopTimer,
   // Activity
   onOpenActivity,
+  // Draft/creation flow
+  isNewTask = false,
+  onConfirmCreate,
+  creatingTask = false,
+  onPropertyChange,
+  onTemplateChange,
+  availableTemplates = [],
 }: TurnoverProjectsPanelProps) {
   const propertyProjects = projects.filter(p => p.property_name === propertyName);
   const { deptIconMap } = useDepartments();
@@ -196,6 +210,12 @@ export function TurnoverProjectsPanel({
               setProjectFields(null);
             }}
             onOpenActivity={onOpenActivity}
+            isNewTask={isNewTask}
+            onConfirmCreate={onConfirmCreate}
+            creatingTask={creatingTask}
+            onPropertyChange={onPropertyChange}
+            availableTemplates={availableTemplates}
+            onTemplateChange={onTemplateChange}
             // Comments
             comments={projectComments}
             loadingComments={loadingComments}

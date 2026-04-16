@@ -332,6 +332,17 @@ export function ProjectsKanban({
     [onColumnMove, departments, users, projects, initialItems]
   );
 
+  const canMoveToColumn = useCallback((item: DraggableProjectItem, targetColumnId: string) => {
+    if (viewMode !== 'property') return true;
+    const project = item.project;
+    const currentColumnId = `prop:${project.property_name || 'No Property'}`;
+    if (targetColumnId !== currentColumnId) {
+      alert('Property can\'t be changed after a task is created.');
+      return false;
+    }
+    return true;
+  }, [viewMode]);
+
   // Use the kanban DnD hook
   const { activeItem, isDragging, sensors, announcements, handleDragStart, handleDragOver, handleDragEnd } =
     useKanbanDnd<DraggableProjectItem, KanbanColumn>({
@@ -340,6 +351,7 @@ export function ProjectsKanban({
       enabled: true,
       onDataChange: setItems,
       onColumnChange: handleColumnChange,
+      canMoveToColumn,
     });
 
   useEffect(() => {

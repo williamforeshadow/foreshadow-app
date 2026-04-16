@@ -24,6 +24,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
     }
 
+    // Guard: reject property_name/template_id changes if already set
+    if ('property_name' in updateData || 'template_id' in updateData) {
+      const { data: existing } = await getSupabaseServer()
+        .from('turnover_tasks')
+        .select('property_name, template_id')
+        .eq('id', taskId)
+        .single();
+
+      if (existing) {
+        if ('property_name' in updateData) {
+          return NextResponse.json({ error: 'Property cannot be changed after task creation' }, { status: 400 });
+        }
+        if ('template_id' in updateData) {
+          return NextResponse.json({ error: 'Template cannot be changed after task creation' }, { status: 400 });
+        }
+      }
+    }
+
     const { data, error } = await getSupabaseServer()
       .from('turnover_tasks')
       .update(updateData)

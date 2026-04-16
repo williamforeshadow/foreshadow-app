@@ -96,6 +96,11 @@ interface ProjectDetailPanelProps {
   onTemplateChange?: (templateId: string | null) => void;
   // Turnover context (optional)
   onShowTurnover?: () => void;
+  // Creation flow — when true, property/template are editable with a warning;
+  // when false (existing task), they are locked.
+  isNewTask?: boolean;
+  onConfirmCreate?: () => void;
+  creatingTask?: boolean;
 }
 
 export function ProjectDetailPanel({
@@ -141,6 +146,9 @@ export function ProjectDetailPanel({
   availableTemplates = [],
   onTemplateChange,
   onShowTurnover,
+  isNewTask = false,
+  onConfirmCreate,
+  creatingTask = false,
 }: ProjectDetailPanelProps) {
   const { departments } = useDepartments();
 
@@ -170,16 +178,27 @@ export function ProjectDetailPanel({
   displaySecondsRef.current = displaySeconds;
   const editingFieldsRef = useRef(editingFields);
   editingFieldsRef.current = editingFields;
+  const onStopTimerRef = useRef(onStopTimer);
+  onStopTimerRef.current = onStopTimer;
 
-  // Auto-stop/start timer when status changes (covers all change paths)
+  // Flag: when handleTimerStart/Stop already initiated the action + status change,
+  // the useEffect should not duplicate it.
+  const manualTimerActionRef = useRef(false);
+
+  // Auto-stop timer when status leaves 'in_progress' via dropdown or other external paths.
+  // Skips when handleTimerStart/Stop already handled it (manualTimerActionRef).
+  // Note: we intentionally do NOT auto-start the timer here — starting is always an
+  // explicit user action (or driven by handleChecklistInteraction for templated tasks).
+  // The fetchProjectTimeEntries call already restores any truly-running server-side timer.
   useEffect(() => {
+    if (manualTimerActionRef.current) {
+      manualTimerActionRef.current = false;
+      return;
+    }
     if (activeTimeEntryRef.current && editingFields.status !== 'in_progress') {
-      onStopTimer();
+      onStopTimerRef.current();
     }
-    if (!activeTimeEntryRef.current && editingFields.status === 'in_progress' && displaySecondsRef.current > 0) {
-      onStartTimer();
-    }
-  }, [editingFields.status, onStopTimer, onStartTimer]);
+  }, [editingFields.status]);
 
   // Auto-status transitions for templated tasks
   const autoSetStatus = useCallback((targetStatus: string) => {
@@ -195,6 +214,7 @@ export function ProjectDetailPanel({
     onStartTimer();
     const status = editingFieldsRef.current?.status;
     if (template && (status === 'not_started' || status === 'paused')) {
+      manualTimerActionRef.current = true;
       autoSetStatus('in_progress');
     }
   }, [onStartTimer, template, autoSetStatus]);
@@ -202,6 +222,7 @@ export function ProjectDetailPanel({
   const handleTimerStop = useCallback(() => {
     onStopTimer();
     if (template && editingFieldsRef.current?.status === 'in_progress') {
+      manualTimerActionRef.current = true;
       autoSetStatus('paused');
     }
   }, [onStopTimer, template, autoSetStatus]);
@@ -429,7 +450,10 @@ export function ProjectDetailPanel({
                       return;
                     }
                     if (hasIncompleteChecklist() && !confirm('Are you sure you want to complete this task? The checklist has not been completed.')) return;
-                    if (activeTimeEntry) onStopTimer();
+                    if (activeTimeEntry) {
+                      manualTimerActionRef.current = true;
+                      onStopTimer();
+                    }
                     const f = { ...editingFields, status: 'complete' };
                     setEditingFields(f);
                     onSave(f);
@@ -668,55 +692,75 @@ export function ProjectDetailPanel({
           <div className="rounded-xl bg-[rgba(30,25,20,0.03)] dark:bg-white/[0.04] border border-[rgba(30,25,20,0.06)] dark:border-white/10 px-2 py-2.5 flex items-start relative z-10">
             {/* Property */}
             <div className="relative flex-1 min-w-0 px-2">
-              <button
-                onClick={() => { closeAllPickers(); setPropertyOpen(!propertyOpen); setPropertySearch(''); }}
-                className="flex items-center gap-1.5 w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-0.5"
-              >
-                <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
-                </svg>
-                <span className="truncate flex-1 text-left">{project.property_name || 'No property'}</span>
-                <svg className={`w-3 h-3 opacity-40 transition-transform flex-shrink-0 ${propertyOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              {propertyOpen && (
-                <InlineDropdown onClose={() => setPropertyOpen(false)}>
-                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Property</p>
-                  <div className="px-3 pb-2">
-                    <input
-                      type="text"
-                      placeholder="Search properties..."
-                      value={propertySearch}
-                      onChange={(e) => setPropertySearch(e.target.value)}
-                      className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
-                    />
+              {!isNewTask ? (
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-1.5 w-full text-xs text-muted-foreground py-0.5 opacity-60 cursor-not-allowed">
+                    <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
+                    </svg>
+                    <span className="truncate flex-1 text-left">{project.property_name || 'No property'}</span>
+                    <svg className="w-3 h-3 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <rect x="5" y="11" width="14" height="10" rx="2" strokeWidth={1.5} />
+                      <path d="M8 11V7a4 4 0 118 0v4" strokeWidth={1.5} strokeLinecap="round" />
+                    </svg>
                   </div>
+                </div>
+              ) : (
+                <>
                   <button
-                    onClick={() => { onPropertyChange?.(null, null); setPropertyOpen(false); }}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                      !project.property_name ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
-                    }`}
+                    onClick={() => { closeAllPickers(); setPropertyOpen(!propertyOpen); setPropertySearch(''); }}
+                    className="flex items-center gap-1.5 w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-0.5"
                   >
-                    <span className="text-[15px] text-neutral-500 dark:text-neutral-400 italic">No Property</span>
-                    {!project.property_name && <GreenCheck />}
+                    <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
+                    </svg>
+                    <span className="truncate flex-1 text-left">{project.property_name || 'No property'}</span>
+                    <svg className={`w-3 h-3 opacity-40 transition-transform flex-shrink-0 ${propertyOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
                   </button>
-                  {filteredProperties.map((prop) => (
-                    <button
-                      key={prop.id || prop.name}
-                      onClick={() => { onPropertyChange?.(prop.id || null, prop.name); setPropertyOpen(false); }}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                        project.property_name === prop.name ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
-                      }`}
-                    >
-                      <svg className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
-                      </svg>
-                      <span className="text-[15px] text-neutral-900 dark:text-white flex-1 truncate">{prop.name}</span>
-                      {project.property_name === prop.name && <GreenCheck />}
-                    </button>
-                  ))}
-                </InlineDropdown>
+                  {isNewTask && (
+                    <span className="text-[9px] text-amber-500/70 mt-0.5 block leading-tight">* Can&apos;t be changed once created</span>
+                  )}
+                  {propertyOpen && (
+                    <InlineDropdown onClose={() => setPropertyOpen(false)}>
+                      <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Property</p>
+                      <div className="px-3 pb-2">
+                        <input
+                          type="text"
+                          placeholder="Search properties..."
+                          value={propertySearch}
+                          onChange={(e) => setPropertySearch(e.target.value)}
+                          className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
+                        />
+                      </div>
+                      <button
+                        onClick={() => { onPropertyChange?.(null, null); setPropertyOpen(false); }}
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                          !project.property_name ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                        }`}
+                      >
+                        <span className="text-[15px] text-neutral-500 dark:text-neutral-400 italic">No Property</span>
+                        {!project.property_name && <GreenCheck />}
+                      </button>
+                      {filteredProperties.map((prop) => (
+                        <button
+                          key={prop.id || prop.name}
+                          onClick={() => { onPropertyChange?.(prop.id || null, prop.name); setPropertyOpen(false); }}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                            project.property_name === prop.name ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                          }`}
+                        >
+                          <svg className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
+                          </svg>
+                          <span className="text-[15px] text-neutral-900 dark:text-white flex-1 truncate">{prop.name}</span>
+                          {project.property_name === prop.name && <GreenCheck />}
+                        </button>
+                      ))}
+                    </InlineDropdown>
+                  )}
+                </>
               )}
             </div>
 
@@ -817,60 +861,80 @@ export function ProjectDetailPanel({
               <>
                 <div className="w-px self-stretch bg-[rgba(30,25,20,0.08)] dark:bg-white/10 flex-shrink-0" />
                 <div className="relative flex-1 min-w-0 px-2">
-                  <button
-                    onClick={() => { closeAllPickers(); setTemplateOpen(!templateOpen); setTemplateSearch(''); }}
-                    className="flex items-center gap-1.5 w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-0.5"
-                  >
-                    <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                    </svg>
-                    <span className="truncate flex-1 text-left">{currentTemplateName || 'No template'}</span>
-                    <svg className={`w-3 h-3 opacity-40 transition-transform flex-shrink-0 ${templateOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  {templateOpen && (
-                    <InlineDropdown onClose={() => setTemplateOpen(false)}>
-                      <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Template</p>
-                      <div className="px-3 pb-2">
-                        <input
-                          type="text"
-                          placeholder="Search templates..."
-                          value={templateSearch}
-                          onChange={(e) => setTemplateSearch(e.target.value)}
-                          className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
-                        />
+                  {!isNewTask ? (
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-1.5 w-full text-xs text-muted-foreground py-0.5 opacity-60 cursor-not-allowed">
+                        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                        <span className="truncate flex-1 text-left">{currentTemplateName || 'No template'}</span>
+                        <svg className="w-3 h-3 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <rect x="5" y="11" width="14" height="10" rx="2" strokeWidth={1.5} />
+                          <path d="M8 11V7a4 4 0 118 0v4" strokeWidth={1.5} strokeLinecap="round" />
+                        </svg>
                       </div>
+                    </div>
+                  ) : (
+                    <>
                       <button
-                        onClick={() => { onTemplateChange(null); setTemplateOpen(false); }}
-                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                          !project.template_id ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
-                        }`}
+                        onClick={() => { closeAllPickers(); setTemplateOpen(!templateOpen); setTemplateSearch(''); }}
+                        className="flex items-center gap-1.5 w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-0.5"
                       >
-                        <span className="text-[15px] text-neutral-500 dark:text-neutral-400 italic">No Template</span>
-                        {!project.template_id && <GreenCheck />}
+                        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                        <span className="truncate flex-1 text-left">{currentTemplateName || 'No template'}</span>
+                        <svg className={`w-3 h-3 opacity-40 transition-transform flex-shrink-0 ${templateOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
                       </button>
-                      {filteredTemplates.map((tmpl) => (
-                        <button
-                          key={tmpl.id}
-                          onClick={() => { onTemplateChange(tmpl.id); setTemplateOpen(false); }}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                            project.template_id === tmpl.id ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
-                          }`}
-                        >
-                          <svg className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                          </svg>
-                          <div className="flex-1 min-w-0">
-                            <span className="text-[15px] text-neutral-900 dark:text-white truncate block">{tmpl.name}</span>
-                            {tmpl.department_name && (
-                              <span className="text-[11px] text-neutral-400 dark:text-neutral-500">{tmpl.department_name}</span>
-                            )}
+                      {isNewTask && (
+                        <span className="text-[9px] text-amber-500/70 mt-0.5 block leading-tight">* Can&apos;t be changed once created</span>
+                      )}
+                      {templateOpen && (
+                        <InlineDropdown onClose={() => setTemplateOpen(false)}>
+                          <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Template</p>
+                          <div className="px-3 pb-2">
+                            <input
+                              type="text"
+                              placeholder="Search templates..."
+                              value={templateSearch}
+                              onChange={(e) => setTemplateSearch(e.target.value)}
+                              className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
+                            />
                           </div>
-                          {project.template_id === tmpl.id && <GreenCheck />}
-                        </button>
-                      ))}
-                    </InlineDropdown>
+                          <button
+                            onClick={() => { onTemplateChange(null); setTemplateOpen(false); }}
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                              !project.template_id ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                            }`}
+                          >
+                            <span className="text-[15px] text-neutral-500 dark:text-neutral-400 italic">No Template</span>
+                            {!project.template_id && <GreenCheck />}
+                          </button>
+                          {filteredTemplates.map((tmpl) => (
+                            <button
+                              key={tmpl.id}
+                              onClick={() => { onTemplateChange(tmpl.id); setTemplateOpen(false); }}
+                              className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                                project.template_id === tmpl.id ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                              }`}
+                            >
+                              <svg className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                              </svg>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-[15px] text-neutral-900 dark:text-white truncate block">{tmpl.name}</span>
+                                {tmpl.department_name && (
+                                  <span className="text-[11px] text-neutral-400 dark:text-neutral-500">{tmpl.department_name}</span>
+                                )}
+                              </div>
+                              {project.template_id === tmpl.id && <GreenCheck />}
+                            </button>
+                          ))}
+                        </InlineDropdown>
+                      )}
+                    </>
                   )}
                 </div>
               </>
@@ -1134,8 +1198,26 @@ export function ProjectDetailPanel({
         </div>
       </div>
 
+      {/* ── Create Task confirmation button (draft mode only) ── */}
+      {isNewTask && onConfirmCreate && (
+        <div className="flex-shrink-0 px-6 py-3 border-t border-[rgba(30,25,20,0.06)] dark:border-white/10">
+          <button
+            onClick={onConfirmCreate}
+            disabled={creatingTask}
+            className={cn(
+              "w-full text-sm font-medium py-2.5 rounded-xl transition-colors border",
+              creatingTask
+                ? "bg-muted text-muted-foreground border-muted cursor-not-allowed"
+                : "bg-indigo-500/15 text-indigo-400 hover:bg-indigo-500/25 border-indigo-500/20"
+            )}
+          >
+            {creatingTask ? 'Creating...' : 'Create Task'}
+          </button>
+        </div>
+      )}
+
       {/* ── Comment input — sticky bottom (hidden when checklist is open) ── */}
-      <div className="flex-shrink-0 border-t border-[rgba(30,25,20,0.06)] dark:border-white/10 px-6 py-3.5 bg-transparent">
+      {!isNewTask && <div className="flex-shrink-0 border-t border-[rgba(30,25,20,0.06)] dark:border-white/10 px-6 py-3.5 bg-transparent">
         <div className="flex items-center gap-2.5 bg-[rgba(30,25,20,0.03)] dark:bg-white/[0.04] rounded-xl px-4 py-3 border border-[rgba(30,25,20,0.06)] dark:border-white/10">
           {/* Hidden file input */}
           <input
@@ -1176,7 +1258,7 @@ export function ProjectDetailPanel({
             </svg>
           </button>
         </div>
-      </div>
+      </div>}
 
       {/* ── Associated Turnover footer (when linked to a reservation) ── */}
       {onShowTurnover && !showChecklist && (

@@ -90,26 +90,29 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if user already has an active timer on this entity
-    let activeQuery = getSupabaseServer()
+    // Close any orphan entries (no end_time) for this user on this entity before starting
+    let orphanQuery = getSupabaseServer()
       .from('project_time_entries')
-      .select('id')
+      .select('id, start_time')
       .eq('user_id', user_id)
       .is('end_time', null);
 
     if (task_id) {
-      activeQuery = activeQuery.eq('task_id', task_id);
+      orphanQuery = orphanQuery.eq('task_id', task_id);
     } else {
-      activeQuery = activeQuery.eq('project_id', project_id);
+      orphanQuery = orphanQuery.eq('project_id', project_id);
     }
 
-    const { data: existingActive } = await activeQuery.single();
+    const { data: orphans } = await orphanQuery;
 
-    if (existingActive) {
-      return NextResponse.json(
-        { error: 'Timer already running', activeEntryId: existingActive.id },
-        { status: 409 }
-      );
+    if (orphans && orphans.length > 0) {
+      for (const orphan of orphans) {
+        await getSupabaseServer()
+          .from('project_time_entries')
+          .update({ end_time: new Date().toISOString() })
+          .eq('id', orphan.id)
+          .is('end_time', null);
+      }
     }
 
     // Create new time entry with start_time

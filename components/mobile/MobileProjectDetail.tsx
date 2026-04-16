@@ -188,14 +188,23 @@ export default function MobileProjectDetail({
   displaySecondsRef.current = timeTrackingHook.displaySeconds;
   const fieldsRef = useRef(fields);
   fieldsRef.current = fields;
+  const stopTimerRef = useRef(timeTrackingHook.stopProjectTimer);
+  stopTimerRef.current = timeTrackingHook.stopProjectTimer;
 
-  // Auto-stop/start timer when status changes (covers all change paths)
+  // Flag: when handleTimerStart/Stop already initiated the action + status change,
+  // the useEffect should not duplicate it.
+  const manualTimerActionRef = useRef(false);
+
+  // Auto-stop timer when status leaves 'in_progress' via dropdown or other external paths.
+  // Skips when handleTimerStart/Stop already handled it (manualTimerActionRef).
+  // Note: we intentionally do NOT auto-start — starting is always an explicit user action.
   useEffect(() => {
-    if (activeTimeEntryRef.current && fields.status !== 'in_progress') {
-      timeTrackingHook.stopProjectTimer();
+    if (manualTimerActionRef.current) {
+      manualTimerActionRef.current = false;
+      return;
     }
-    if (!activeTimeEntryRef.current && fields.status === 'in_progress' && displaySecondsRef.current > 0) {
-      timeTrackingHook.startProjectTimer(project.id, 'task');
+    if (activeTimeEntryRef.current && fields.status !== 'in_progress') {
+      stopTimerRef.current();
     }
   }, [fields.status]);
 
@@ -213,6 +222,7 @@ export default function MobileProjectDetail({
     timeTrackingHook.startProjectTimer(project.id, 'task');
     const status = fieldsRef.current?.status;
     if (template && (status === 'not_started' || status === 'paused')) {
+      manualTimerActionRef.current = true;
       autoSetStatus('in_progress');
     }
   }, [timeTrackingHook, project.id, template, autoSetStatus]);
@@ -220,6 +230,7 @@ export default function MobileProjectDetail({
   const handleTimerStop = useCallback(() => {
     timeTrackingHook.stopProjectTimer();
     if (template && fieldsRef.current?.status === 'in_progress') {
+      manualTimerActionRef.current = true;
       autoSetStatus('paused');
     }
   }, [timeTrackingHook, template, autoSetStatus]);
@@ -862,7 +873,7 @@ export default function MobileProjectDetail({
                 onClick={() => {
                   if (fields.status === 'complete') { setFields(prev => { const updated = { ...prev, status: 'paused' }; autoSave(updated); return updated; }); return; }
                   if (hasIncompleteChecklist() && !confirm('Are you sure you want to complete this task? The checklist has not been completed.')) return;
-                  if (timeTrackingHook.activeTimeEntry) timeTrackingHook.stopProjectTimer();
+                  if (timeTrackingHook.activeTimeEntry) { manualTimerActionRef.current = true; timeTrackingHook.stopProjectTimer(); }
                   setFields(prev => { const updated = { ...prev, status: 'complete' }; autoSave(updated); return updated; });
                 }}
                 className={`flex-1 text-sm font-medium py-2.5 rounded-xl transition-opacity border ${fields.status === 'complete' ? 'bg-amber-500/15 text-amber-400 active:opacity-70 border-amber-500/20' : 'bg-blue-500/15 text-blue-400 active:opacity-70 border-blue-500/20'}`}>

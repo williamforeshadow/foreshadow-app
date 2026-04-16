@@ -238,6 +238,8 @@ function TurnoversWindowContent({
   // ============================================================================
   // Initialize project fields when expanding a project
   // ============================================================================
+  const isProjectDraft = expandedProject?.id?.startsWith('draft-') ?? false;
+
   useEffect(() => {
     if (expandedProject) {
       setProjectFields({
@@ -250,12 +252,13 @@ function TurnoversWindowContent({
         scheduled_date: expandedProject.scheduled_date || '',
         scheduled_time: expandedProject.scheduled_time || ''
       });
-      // Use LOCAL hook instances
-      commentsHook.fetchProjectComments(expandedProject.id);
-      attachmentsHook.fetchProjectAttachments(expandedProject.id);
-      timeTrackingHook.fetchProjectTimeEntries(expandedProject.id);
+      if (!expandedProject.id.startsWith('draft-')) {
+        commentsHook.fetchProjectComments(expandedProject.id);
+        attachmentsHook.fetchProjectAttachments(expandedProject.id);
+        timeTrackingHook.fetchProjectTimeEntries(expandedProject.id);
+      }
     }
-  }, [expandedProject?.id]); // Only re-run when project ID changes
+  }, [expandedProject?.id]);
 
   // ============================================================================
   // Wrapper functions that use LOCAL state with LOCAL hook mutations
@@ -263,6 +266,7 @@ function TurnoversWindowContent({
   const handleSaveProject = useCallback(async () => {
     const currentFields = projectFieldsRef.current;
     if (!expandedProject || !currentFields) return;
+    if (expandedProject.id.startsWith('draft-')) return;
     const updatedProject = await saveProjectById(expandedProject.id, currentFields);
     if (updatedProject) {
       setExpandedProject(updatedProject);
@@ -300,27 +304,68 @@ function TurnoversWindowContent({
     }
   }, [expandedProject, activityHook]);
 
-  const handleCreateProjectForTurnover = useCallback(async (propertyName: string) => {
+  const [draftProject, setDraftProject] = useState<Project | null>(null);
+  const [creatingProject, setCreatingProject] = useState(false);
+
+  const handleCreateProjectForTurnover = useCallback((propertyName: string) => {
+    const draft: Project = {
+      id: `draft-${Date.now()}`,
+      property_name: propertyName,
+      bin_id: null,
+      is_binned: false,
+      template_id: null,
+      template_name: null,
+      title: 'New Task',
+      description: null,
+      status: 'not_started' as Project['status'],
+      priority: 'medium' as Project['priority'],
+      department_id: null,
+      department_name: null,
+      scheduled_date: null,
+      scheduled_time: null,
+      form_metadata: undefined,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setDraftProject(draft);
+    setExpandedProject(draft);
+  }, []);
+
+  const handleConfirmCreateProject = useCallback(async () => {
+    if (!draftProject) return;
+    setCreatingProject(true);
     try {
+      const fields = projectFieldsRef.current;
+      const payload: Record<string, unknown> = {
+        title: fields?.title || draftProject.title || 'New Task',
+        status: fields?.status || 'not_started',
+        priority: fields?.priority || 'medium',
+        description: fields?.description || null,
+        department_id: fields?.department_id || null,
+        scheduled_date: fields?.scheduled_date || null,
+        scheduled_time: fields?.scheduled_time || null,
+      };
+      if (draftProject.property_name) payload.property_name = draftProject.property_name;
+      if (draftProject.template_id) payload.template_id = draftProject.template_id;
+      if (fields?.assigned_staff?.length) payload.assigned_user_ids = fields.assigned_staff;
+
       const res = await fetch('/api/tasks-for-bin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          property_name: propertyName,
-          title: 'New Task',
-          status: 'not_started',
-          priority: 'medium',
-        }),
+        body: JSON.stringify(payload),
       });
       const result = await res.json();
       if (result.data) {
         setProjects(prev => [...prev, result.data]);
+        setDraftProject(null);
         setExpandedProject(result.data);
       }
     } catch (err) {
       console.error('Error creating project:', err);
+    } finally {
+      setCreatingProject(false);
     }
-  }, []);
+  }, [draftProject]);
 
   // ============================================================================
   // Task → ProjectDetailPanel: save handler + derived data
@@ -791,6 +836,32 @@ function TurnoversWindowContent({
                     onStopTimer={timeTrackingHook.stopProjectTimer}
                     // Activity
                     onOpenActivity={handleOpenActivity}
+                    // Draft/creation flow
+                    isNewTask={isProjectDraft}
+                    onConfirmCreate={isProjectDraft ? handleConfirmCreateProject : undefined}
+                    creatingTask={creatingProject}
+                    onPropertyChange={isProjectDraft
+                      ? (_propertyId, propertyName) => {
+                          if (expandedProject) {
+                            const updated = { ...expandedProject, property_name: propertyName };
+                            setExpandedProject(updated);
+                            setDraftProject(updated);
+                          }
+                        }
+                      : undefined
+                    }
+                    availableTemplates={availableTemplates}
+                    onTemplateChange={isProjectDraft
+                      ? (templateId) => {
+                          if (expandedProject) {
+                            const tmpl = availableTemplates.find(t => t.id === templateId);
+                            const updated = { ...expandedProject, template_id: templateId, template_name: tmpl?.name || null };
+                            setExpandedProject(updated);
+                            setDraftProject(updated);
+                          }
+                        }
+                      : undefined
+                    }
                   />
                 )}
               </div>
