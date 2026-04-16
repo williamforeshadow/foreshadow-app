@@ -21,20 +21,26 @@ import type { Template } from '@/components/DynamicCleaningForm';
 import { cn } from '@/lib/utils';
 import { UserAvatar } from '@/components/ui/user-avatar';
 
-// Status-colored row styles — matches hover dropdown / TaskDetailPanel / TurnoverTaskList
+const marbleBackground: Record<string, string> = {
+  not_started: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.35) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.18) 10%, transparent 40%, rgba(255,255,255,0.12) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #A78BFA`,
+  in_progress: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.3) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.18) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.15) 10%, transparent 40%, rgba(255,255,255,0.1) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.1) 0%, transparent 55%), #6366F1`,
+  paused: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.3) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.15) 10%, transparent 40%, rgba(255,255,255,0.1) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #8B7FA8`,
+  complete: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.25) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.15) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.12) 10%, transparent 40%, rgba(255,255,255,0.08) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.1) 0%, transparent 55%), #4C4869`,
+};
+
 const getRowStyles = (status: string) => {
-  const base = 'glass-card glass-sheen relative overflow-hidden rounded-lg';
+  const base = 'relative overflow-hidden rounded-lg';
   switch (status) {
     case 'complete':
-      return `${base} bg-emerald-50/55 dark:bg-emerald-500/[0.12] border border-emerald-200/40 dark:border-emerald-400/20`;
+      return `${base} bg-[rgba(76,72,105,0.06)] dark:bg-[rgba(76,72,105,0.12)] border border-[rgba(76,72,105,0.14)] dark:border-[rgba(76,72,105,0.22)]`;
     case 'in_progress':
-      return `${base} bg-indigo-50/55 dark:bg-indigo-500/[0.12] border border-indigo-300/40 dark:border-indigo-400/20`;
+      return `${base} bg-[rgba(99,102,241,0.06)] dark:bg-[rgba(99,102,241,0.12)] border border-[rgba(99,102,241,0.16)] dark:border-[rgba(99,102,241,0.25)]`;
     case 'paused':
-      return `${base} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`;
+      return `${base} bg-[rgba(139,133,168,0.06)] dark:bg-[rgba(139,133,168,0.10)] border border-[rgba(139,133,168,0.14)] dark:border-[rgba(139,133,168,0.22)]`;
     case 'contingent':
-      return `${base} bg-white/45 dark:bg-white/[0.05] border border-dashed border-neutral-400/50 dark:border-white/15`;
+      return `${base} bg-white/45 dark:bg-white/[0.03] border border-dashed border-[rgba(30,25,20,0.15)] dark:border-[rgba(255,255,255,0.10)]`;
     default:
-      return `${base} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`;
+      return `${base} bg-[rgba(167,139,250,0.06)] dark:bg-[rgba(167,139,250,0.10)] border border-[rgba(167,139,250,0.14)] dark:border-[rgba(167,139,250,0.22)]`;
   }
 };
 
@@ -1201,11 +1207,11 @@ export default function TimelineWindow({
     const day = date.getDate();
 
     return (
-      <div className="text-center">
-        <div className={`text-[11px] ${isTodayDate ? 'text-neutral-800 dark:text-neutral-200' : 'text-neutral-600 dark:text-neutral-400'}`}>
+      <div className="text-left">
+        <div className={`text-[11px] uppercase tracking-[0.08em] font-semibold ${isTodayDate ? 'text-[#1a1a18] dark:text-[#e8e7e3]' : 'text-[#9a9892] dark:text-[#66645f]'}`}>
           {date.toLocaleDateString('en-US', { weekday: 'short' })}
         </div>
-        <div className={`text-xs ${isTodayDate ? 'text-neutral-900 dark:text-white font-semibold' : 'text-neutral-900 dark:text-white'}`}>
+        <div className={`text-[15px] font-medium tabular-nums tracking-[-0.01em] mt-0.5 ${isTodayDate ? 'text-[#8b7fc9] dark:text-[#a78bfa]' : 'text-[#1a1a18] dark:text-[#e8e7e3]'}`}>
           {month}/{day}
         </div>
       </div>
@@ -1225,7 +1231,7 @@ export default function TimelineWindow({
   return (
     <div className="h-full flex flex-col relative">
       {/* Header with navigation - fixed at top */}
-      <div className="flex-shrink-0 px-4 py-3 glass-panel bg-white/40 dark:bg-white/[0.06] border-b border-white/20 dark:border-white/[0.08]">
+      <div className="flex-shrink-0 px-4 py-3 bg-white dark:bg-[#0d0d10] border-b border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)]">
         <div className="flex items-center gap-4 mb-2">
           {/* View Mode Icons */}
           <div className="flex items-center gap-1">
@@ -1233,8 +1239,8 @@ export default function TimelineWindow({
               onClick={() => setViewMode('grid')}
               className={`p-1.5 rounded transition-colors ${
                 viewMode === 'grid' 
-                  ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm' 
-                  : 'text-neutral-500 hover:bg-white/30 dark:hover:bg-white/10 hover:text-neutral-700 dark:hover:text-neutral-300'
+                  ? 'bg-[rgba(30,25,20,0.06)] dark:bg-[rgba(255,255,255,0.08)] text-[#1a1a18] dark:text-[#e8e7e3]' 
+                  : 'text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-[#6b6963] dark:hover:text-[#9a9893]'
               }`}
               title="Grid View"
             >
@@ -1244,8 +1250,8 @@ export default function TimelineWindow({
               onClick={() => setViewMode('kanban')}
               className={`p-1.5 rounded transition-colors ${
                 viewMode === 'kanban' 
-                  ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm' 
-                  : 'text-neutral-500 hover:bg-white/30 dark:hover:bg-white/10 hover:text-neutral-700 dark:hover:text-neutral-300'
+                  ? 'bg-[rgba(30,25,20,0.06)] dark:bg-[rgba(255,255,255,0.08)] text-[#1a1a18] dark:text-[#e8e7e3]' 
+                  : 'text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-[#6b6963] dark:hover:text-[#9a9893]'
               }`}
               title="Kanban View"
             >
@@ -1341,18 +1347,17 @@ export default function TimelineWindow({
       {/* Content Area - Grid or Kanban based on viewMode */}
       {viewMode === 'grid' ? (
       <div className="flex-1 overflow-auto px-4 pb-4">
-        <div className="overflow-hidden">
           <div
-            className="grid border border-white/30 dark:border-white/[0.08] w-full"
+            className="grid border border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] w-full overflow-x-clip"
             style={{
               gridTemplateColumns: `200px repeat(${dateRange.length}, minmax(0, 1fr))`
             }}
           >
             {/* Header Row - will stick when scrolling */}
-            <div className="bg-white/50 dark:bg-white/[0.10] backdrop-blur-xl px-2 py-1 text-xs font-semibold text-neutral-900 dark:text-white sticky left-0 top-0 z-20 flex items-center gap-1.5">
+            <div className="bg-white dark:bg-[#0d0d10] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] px-2 py-1 text-xs font-semibold text-[#6b6963] dark:text-[#9a9893] uppercase tracking-[0.06em] sticky left-0 top-0 z-30 flex items-center gap-1.5">
               <button
                 onClick={toggleAllExpanded}
-                className="p-0.5 rounded hover:bg-white/30 dark:hover:bg-white/10 transition-colors"
+                className="p-0.5 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.05)] transition-colors"
                 title={expandedProperties.size === properties.length ? 'Collapse all' : 'Expand all'}
               >
                 <svg className={`w-3 h-3 transition-transform duration-200 ${expandedProperties.size === properties.length ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1366,10 +1371,10 @@ export default function TimelineWindow({
               return (
                 <div 
                   key={idx} 
-                  className={`px-1 py-1 border-b border-r border-white/20 dark:border-white/[0.07] sticky top-0 z-10 cursor-pointer transition-colors ${
+                  className={`px-3 py-2.5 border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] sticky top-0 z-20 cursor-pointer transition-colors ${
                     isTodayDate 
-                      ? 'bg-neutral-500/20 dark:bg-white/[0.13] hover:bg-neutral-500/30 dark:hover:bg-white/[0.16] backdrop-blur-sm' 
-                      : 'bg-white/40 dark:bg-white/[0.08] hover:bg-white/55 dark:hover:bg-white/[0.11] backdrop-blur-sm'
+                      ? 'today-tint' 
+                      : 'bg-white dark:bg-[#0d0d10] hover:bg-[rgba(30,25,20,0.02)] dark:hover:bg-[rgba(255,255,255,0.03)]'
                   }`}
                   onClick={() => {
                     setKanbanDate(date);
@@ -1386,26 +1391,7 @@ export default function TimelineWindow({
               const propertyReservations = getReservationsForProperty(property);
               const activeTurnover = getActiveTurnoverForProperty(propertyReservations);
 
-              // Cell background tint matching active turnover card colors
-              const propertyCellBg = activeTurnover
-                ? (() => {
-                    switch (activeTurnover.turnover_status) {
-                      case 'not_started':
-                        // Rose gold — warm peachy-gold
-                        return 'bg-amber-50/55 dark:bg-amber-400/[0.12]';
-                      case 'in_progress':
-                        // Midnight blue
-                        return 'bg-indigo-50/55 dark:bg-indigo-500/[0.12]';
-                      case 'complete':
-                        // Emerald green
-                        return 'bg-emerald-50/55 dark:bg-emerald-500/[0.12]';
-                      case 'no_tasks':
-                        return 'bg-white/55 dark:bg-white/[0.09]';
-                      default:
-                        return 'bg-white/45 dark:bg-white/[0.07]';
-                    }
-                  })()
-                : 'bg-white/45 dark:bg-white/[0.07]';
+              const propertyCellBg = 'bg-white dark:bg-[#0d0d10]';
 
               return (
                 <div
@@ -1413,68 +1399,50 @@ export default function TimelineWindow({
                   className="contents"
                 >
                   {/* Property Name with Status Indicator */}
-                  <div className={`glass-card glass-sheen relative overflow-hidden px-2 py-1 text-xs font-medium text-neutral-900 dark:text-white sticky left-0 z-10 ${propertyCellBg} flex items-center gap-1.5`}>
+                  <div className={`relative overflow-hidden px-2 py-3 text-[12px] font-medium text-[#1a1a18] dark:text-[#e8e7e3] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] sticky left-0 z-10 min-h-[56px] ${propertyCellBg} flex items-center gap-1.5`}>
                     <button
                       onClick={() => togglePropertyExpanded(property)}
-                      className="p-0.5 rounded hover:bg-white/30 dark:hover:bg-white/10 transition-colors shrink-0"
+                      className="p-0.5 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.05)] transition-colors shrink-0"
                     >
                       <svg className={`w-3 h-3 transition-transform duration-200 ${expandedProperties.has(property) ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                     </button>
-                    <span className="truncate pr-24">{property}</span>
+                    <span className="truncate pr-14">{property}</span>
                     {activeTurnover && (() => {
-                      const propertyProjects = projects.filter(p => p.property_name === activeTurnover.property_name);
-                      
                       return (
                         <Popover>
                           <PopoverTrigger asChild>
-                            <div className="absolute right-0 top-0 bottom-0 w-28 flex items-center justify-end pr-2 cursor-pointer">
-                              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-black/10 dark:bg-black/40 text-neutral-500 dark:text-neutral-400 hover:bg-black/15 dark:hover:bg-black/50 transition-colors">
-                                {/* Tasks icon + count */}
+                            <div className="absolute right-0 top-0 bottom-0 w-16 flex items-center justify-end pr-2 cursor-pointer">
+                              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[rgba(30,25,20,0.06)] dark:bg-[rgba(255,255,255,0.06)] text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.10)] dark:hover:bg-[rgba(255,255,255,0.10)] transition-colors">
                                 <div className="flex items-center gap-0.5">
                                   <ClipboardCheck className="w-3 h-3" />
                                   <span className="text-[10px] font-medium w-3 text-right">
                                     {activeTurnover.tasks?.filter(t => t.status !== 'complete').length || 0}
                                   </span>
                                 </div>
-                                {/* Projects icon + count */}
-                                <div className="flex items-center gap-0.5">
-                                  <ClipboardCheck className="w-3 h-3" />
-                                  <span className="text-[10px] font-medium w-3 text-right">
-                                    {propertyProjects.filter(p => p.status !== 'complete').length}
-                                  </span>
-                                </div>
                               </div>
                             </div>
                           </PopoverTrigger>
-                          <PopoverContent side="right" align="start" sideOffset={4} collisionPadding={16} className="w-72 p-0 glass-card bg-white/90 dark:bg-neutral-900/95 border-white/30 dark:border-white/10">
+                          <PopoverContent side="right" align="start" sideOffset={4} collisionPadding={16} className="w-72 p-0 bg-white dark:bg-[#141418] border border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.08)] shadow-lg">
                             {/* Header with close button */}
-                            <div className="flex items-center justify-between px-3 py-2 border-b border-white/20 dark:border-white/10">
+                            <div className="flex items-center justify-between px-3 py-2 border-b border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)]">
                               <p className="text-sm font-medium">{property}</p>
-                              <PopoverClose className="p-1 hover:bg-white/20 dark:hover:bg-white/10 rounded-md transition-colors text-neutral-500 dark:text-neutral-400">
+                              <PopoverClose className="p-1 hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.05)] rounded-md transition-colors text-[#9a9892] dark:text-[#66645f]">
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                               </PopoverClose>
                             </div>
                             
-                            {/* Tasks Section */}
-                            <div className="px-2 py-2 border-b border-white/20 dark:border-white/10">
+                            <div className="px-2 py-2">
                               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
                                 Active Turnover: ({activeTurnover.completed_tasks || 0}/{activeTurnover.total_tasks || 0})
                               </p>
                               <div className="flex flex-col gap-2 max-h-40 overflow-y-auto subtle-scrollbar">
                                 {activeTurnover.tasks && activeTurnover.tasks.length > 0 ? (
                                   activeTurnover.tasks.map((task) => {
-                                    const rowBase = 'glass-card glass-sheen relative overflow-hidden rounded-lg';
-                                    const rowStyle = task.status === 'complete'
-                                      ? `${rowBase} bg-emerald-50/55 dark:bg-emerald-500/[0.12] border border-emerald-200/40 dark:border-emerald-400/20`
-                                      : task.status === 'in_progress' || task.status === 'paused'
-                                      ? `${rowBase} bg-indigo-50/55 dark:bg-indigo-500/[0.12] border border-indigo-300/40 dark:border-indigo-400/20`
-                                      : task.status === 'contingent'
-                                      ? `${rowBase} bg-white/45 dark:bg-white/[0.05] border border-dashed border-neutral-400/50 dark:border-white/15`
-                                      : `${rowBase} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`;
+                                    const rowStyle = getRowStyles(task.status);
                                     return (
                                       <div 
                                         key={task.task_id} 
@@ -1491,40 +1459,6 @@ export default function TimelineWindow({
                                   })
                                 ) : (
                                   <p className="text-sm text-muted-foreground px-1">No tasks</p>
-                                )}
-                              </div>
-                            </div>
-                            
-                            {/* Projects Section */}
-                            <div className="px-2 py-2">
-                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
-                                Projects ({propertyProjects.length})
-                              </p>
-                              <div className="flex flex-col gap-2 max-h-40 overflow-y-auto subtle-scrollbar">
-                                {propertyProjects.length > 0 ? (
-                                  propertyProjects.map((project) => {
-                                    const rowBase = 'glass-card glass-sheen relative overflow-hidden rounded-lg';
-                                    const rowStyle = project.status === 'complete'
-                                      ? `${rowBase} bg-emerald-50/55 dark:bg-emerald-500/[0.12] border border-emerald-200/40 dark:border-emerald-400/20`
-                                      : project.status === 'in_progress'
-                                      ? `${rowBase} bg-indigo-50/55 dark:bg-indigo-500/[0.12] border border-indigo-300/40 dark:border-indigo-400/20`
-                                      : `${rowBase} bg-amber-50/55 dark:bg-amber-400/[0.10] border border-amber-200/40 dark:border-amber-400/18`;
-                                    return (
-                                      <div 
-                                        key={project.id} 
-                                        className={`flex items-center justify-between gap-2 py-2 px-2.5 shrink-0 cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.01] active:scale-[0.99] ${rowStyle}`}
-                                        onClick={() => setFloatingData({
-                                          type: 'project',
-                                          item: project,
-                                          propertyName: activeTurnover.property_name,
-                                        })}
-                                      >
-                                        <span className="truncate text-sm">{project.title}</span>
-                                      </div>
-                                    );
-                                  })
-                                ) : (
-                                  <p className="text-sm text-muted-foreground px-1">No projects</p>
                                 )}
                               </div>
                             </div>
@@ -1545,7 +1479,7 @@ export default function TimelineWindow({
                     return (
                       <div
                         key={idx}
-                        className={`group border-b border-r border-white/20 dark:border-white/[0.07] h-[30px] relative overflow-visible ${isTodayDate ? 'bg-neutral-500/10 dark:bg-white/[0.07]' : 'bg-white/30 dark:bg-white/[0.045]'}`}
+                        className={`group border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] h-[56px] relative overflow-visible ${isTodayDate ? 'today-tint' : 'bg-white dark:bg-transparent'}`}
                         onClick={() => {
                           const res = propertyReservations.find(r => {
                             const pos = getBlockPosition(r.check_in, r.check_out);
@@ -1559,25 +1493,45 @@ export default function TimelineWindow({
                         {startingReservation && (() => {
                           const { span, startsBeforeRange, endsAfterRange } = getBlockPosition(startingReservation.check_in, startingReservation.check_out);
 
+                          const reachesLastColumn = idx + span >= dateRange.length;
+                          const flushRight = endsAfterRange || reachesLastColumn;
+
                           const leftOffset = startsBeforeRange ? 0 : 50;
-                          const rightOffset = endsAfterRange ? 0 : 50;
+                          const rightOffset = flushRight ? 0 : 50;
                           const totalWidth = (span * 100) - leftOffset - rightOffset;
 
                           const diagonalPx = 12;
                           const leftDiagonal = startsBeforeRange ? '0px' : `${diagonalPx}px`;
-                          const rightDiagonal = endsAfterRange ? '0px' : `${diagonalPx}px`;
+                          const rightDiagonal = flushRight ? '0px' : `${diagonalPx}px`;
                           const clipPath = `polygon(${leftDiagonal} 0%, 100% 0%, calc(100% - ${rightDiagonal}) 100%, 0% 100%)`;
+
+                          // Status-aware bar colors (purple family)
+                          const barStatus = activeTurnover?.turnover_status || 'not_started';
+                          const barColorClass = barStatus === 'complete'
+                            ? 'bg-[rgba(76,72,105,0.18)] dark:bg-[rgba(76,72,105,0.25)] border-[rgba(76,72,105,0.28)] dark:border-[rgba(76,72,105,0.35)]'
+                            : barStatus === 'in_progress'
+                            ? 'bg-[rgba(99,102,241,0.16)] dark:bg-[rgba(99,102,241,0.22)] border-[rgba(99,102,241,0.26)] dark:border-[rgba(99,102,241,0.32)]'
+                            : 'bg-[rgba(167,139,250,0.16)] dark:bg-[rgba(167,139,250,0.18)] border-[rgba(167,139,250,0.26)] dark:border-[rgba(167,139,250,0.30)]';
 
                           return (
                             <div
-                              className={`absolute pointer-events-none transition-all duration-150 text-neutral-800 dark:text-white text-[11px] font-medium flex items-center glass-card glass-sheen overflow-hidden bg-neutral-400/35 dark:bg-white/[0.10] border border-white/40 dark:border-white/[0.12] ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-white/70 dark:ring-white shadow-lg z-30' : ''}`}
+                              className={`absolute pointer-events-none transition-all duration-150 text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium flex items-center overflow-hidden border ${barColorClass} ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-[rgba(99,102,241,0.5)] dark:ring-[rgba(167,139,250,0.6)] shadow-lg z-30' : ''}`}
                               style={{
                                 left: `${leftOffset}%`,
-                                top: 0,
-                                bottom: 0,
-                                width: `${totalWidth}%`,
+                                top: '10px',
+                                height: '36px',
+                                width: flushRight
+                                  ? `${totalWidth + 20}%`
+                                  : `${totalWidth}%`,
                                 zIndex: 15,
                                 clipPath,
+                                borderRadius: startsBeforeRange && flushRight
+                                  ? '0'
+                                  : startsBeforeRange
+                                  ? '0 8px 8px 0'
+                                  : flushRight
+                                  ? '8px 0 0 8px'
+                                  : '8px',
                               }}
                               title={`${startingReservation.guest_name || 'No guest'} - ${formatDate(new Date(startingReservation.check_in))} to ${formatDate(new Date(startingReservation.check_out))}`}
                             >
@@ -1606,7 +1560,7 @@ export default function TimelineWindow({
                         />
 
                         <button
-                          className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-white/40 dark:border-white/20 bg-white/70 dark:bg-white/10 text-neutral-600 dark:text-neutral-300 hover:bg-white/90 dark:hover:bg-white/20 hover:text-neutral-900 dark:hover:text-white transition-all z-20 flex items-center justify-center opacity-0 group-hover:opacity-100"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-[rgba(30,25,20,0.10)] dark:border-[rgba(255,255,255,0.10)] bg-white dark:bg-[#141418] text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.08)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3] transition-all z-20 flex items-center justify-center opacity-0 group-hover:opacity-100"
                           title="Create task for this day"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1625,7 +1579,7 @@ export default function TimelineWindow({
                   {expandedProperties.has(property) && (
                     <>
                       {/* Property column for expanded row — empty */}
-                      <div className={`sticky left-0 z-10 border-b border-white/20 dark:border-white/[0.07] ${propertyCellBg} backdrop-blur-sm`} />
+                      <div className={`sticky left-0 z-10 border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] ${propertyCellBg}`} />
 
                       {/* Date columns for expanded row */}
                       {dateRange.map((date, idx) => {
@@ -1639,8 +1593,8 @@ export default function TimelineWindow({
                         return (
                           <div
                             key={`expanded-${idx}`}
-                            className={`border-b border-r border-white/20 dark:border-white/[0.07] p-1.5 ${
-                              isTodayDate ? 'bg-neutral-500/10 dark:bg-white/[0.045]' : 'bg-white/20 dark:bg-white/[0.025]'
+                            className={`border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] p-1.5 ${
+                              isTodayDate ? 'today-tint' : 'bg-white dark:bg-transparent'
                             }`}
                           >
                             {hasItems && (
@@ -1648,10 +1602,12 @@ export default function TimelineWindow({
                                 {dateTasks.map((task) => (
                                   <div
                                     key={task.task_id}
-                                    className={cn(
-                                      "flex items-center justify-between gap-2 py-2 px-2.5 shrink-0 cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.01] active:scale-[0.99]",
-                                      getRowStyles(task.status)
-                                    )}
+                                    className={`flex items-center justify-between gap-2 py-2 px-2.5 shrink-0 cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.01] active:scale-[0.99] relative overflow-hidden rounded-lg text-sm ${
+                                      task.status === 'contingent'
+                                        ? 'bg-white dark:bg-[#1a1a1d] border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[rgba(255,255,255,0.25)] text-[#1a1a18] dark:text-[#e8e7e3]'
+                                        : 'text-white'
+                                    }`}
+                                    style={task.status !== 'contingent' ? { background: marbleBackground[task.status] || marbleBackground.not_started } : undefined}
                                     title={task.title || task.template_name || task.type}
                                     onClick={() => setFloatingData({
                                       type: 'task',
@@ -1659,7 +1615,7 @@ export default function TimelineWindow({
                                       propertyName: property,
                                     })}
                                   >
-                                    <span className="truncate text-sm">{task.title || task.template_name || task.type}</span>
+                                    <span className="truncate">{task.title || task.template_name || task.type}</span>
                                     <div className="flex items-center gap-1.5 flex-shrink-0">
                                       {task.assigned_users?.slice(0, 1).map((user) => (
                                         <div key={user.user_id} className="relative">
@@ -1689,7 +1645,6 @@ export default function TimelineWindow({
               );
             })}
           </div>
-        </div>
       </div>
       ) : (
         /* Full-screen Kanban View */

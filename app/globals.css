@@ -256,6 +256,16 @@ a {
   );
 }
 
+/* Today column tint — lilac wash */
+.today-tint {
+  background-color: #fbfaff !important;
+  background-image: none !important;
+}
+.dark .today-tint {
+  background-color: #141222 !important;
+  background-image: none !important;
+}
+
 /* ============================================================
    Liquid Animated Border (occupied cards)
    A conic-gradient rotates around the card perimeter.
