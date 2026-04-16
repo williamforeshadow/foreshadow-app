@@ -105,7 +105,7 @@ export function useKanbanDnd<
       activationConstraint: { distance: 8 },
     }),
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 250, tolerance: 8 },
+      activationConstraint: { delay: 250, tolerance: 25 },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
