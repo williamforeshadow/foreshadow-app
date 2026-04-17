@@ -147,6 +147,7 @@ export async function POST(request: Request) {
       department_id,
       bin_id,
       is_binned,
+      template_id,
     } = body;
 
     if (!title) {
@@ -167,6 +168,7 @@ export async function POST(request: Request) {
         scheduled_date: scheduled_date || null,
         scheduled_time: scheduled_time || null,
         department_id: department_id || null,
+        template_id: template_id || null,
       })
       .select()
       .single();

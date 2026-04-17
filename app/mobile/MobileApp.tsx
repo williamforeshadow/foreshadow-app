@@ -52,6 +52,7 @@ export default function MobileApp() {
   const [mobileSelectedTask, setMobileSelectedTask] = useState<Task | null>(null);
   const [mobileSelectedProject, setMobileSelectedProject] = useState<Project | null>(null);
   const [mobileRefreshTrigger, setMobileRefreshTrigger] = useState(0);
+  const [hideNav, setHideNav] = useState(false);
 
   const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
 
@@ -249,6 +250,7 @@ export default function MobileApp() {
       <MobileLayout
         activeTab={mobileTab}
         onTabChange={setMobileTab}
+        hideNav={hideNav}
       >
         {mobileTab === 'assignments' && (
           <MobileMyAssignmentsView
@@ -284,6 +286,7 @@ export default function MobileApp() {
           <MobileTimelineView 
             onCardClick={() => {}}
             refreshTrigger={mobileRefreshTrigger}
+            onSheetOpen={setHideNav}
             onTaskClick={async (task: any) => {
               const propName = task.property_name;
               const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
