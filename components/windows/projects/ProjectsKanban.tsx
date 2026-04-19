@@ -729,7 +729,7 @@ function ProjectCardContent({
   // bin has auto-dismiss enabled.
   const autoDismissActive =
     project.status === 'complete' &&
-    project.is_binned &&
+    !!project.is_binned &&
     !!project.completed_at &&
     !!bin?.auto_dismiss_enabled;
   useMinuteTick(autoDismissActive);
