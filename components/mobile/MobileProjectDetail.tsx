@@ -175,8 +175,13 @@ export default function MobileProjectDetail({
   const currentBin = bins.find(b => b.id === project.bin_id);
 
   const hasChecklist = !!template;
+  const isTemplated = !!project.template_id;
   const isAssigned = currentUser ? fields.assigned_staff?.includes(currentUser.id) : false;
-  const isChecklistReadOnly = !isAssigned || fields.status === 'contingent';
+  // Templated tasks: checklist only writable while status === 'in_progress' (and assigned).
+  // Non-templated tasks: unchanged (writable for assignees, except when contingent).
+  const isChecklistReadOnly = !isAssigned
+    || fields.status === 'contingent'
+    || (isTemplated && fields.status !== 'in_progress');
 
   const hasIncompleteChecklist = useCallback(() => {
     if (!project.template_id) return false;
@@ -201,12 +206,13 @@ export default function MobileProjectDetail({
   const stopTimerRef = useRef(timeTrackingHook.stopProjectTimer);
   stopTimerRef.current = timeTrackingHook.stopProjectTimer;
 
-  // Flag: when handleTimerStart/Stop already initiated the action + status change,
-  // the useEffect should not duplicate it.
+  // Flag: when an action handler already initiated the timer change + status change,
+  // the useEffect below should not duplicate it.
   const manualTimerActionRef = useRef(false);
 
-  // Auto-stop timer when status leaves 'in_progress' via dropdown or other external paths.
-  // Skips when handleTimerStart/Stop already handled it (manualTimerActionRef).
+  // Auto-stop timer when status leaves 'in_progress' via external paths
+  // (e.g. non-templated tasks changing status through the dropdown).
+  // Skips when an action button already handled it (manualTimerActionRef).
   // Note: we intentionally do NOT auto-start — starting is always an explicit user action.
   useEffect(() => {
     if (manualTimerActionRef.current) {
@@ -218,57 +224,57 @@ export default function MobileProjectDetail({
     }
   }, [fields.status]);
 
-  // Auto-status transitions for templated tasks
-  const autoSetStatus = useCallback((targetStatus: string) => {
-    if (!template) return;
+  // Helper: write a status update through the same save pipeline used elsewhere.
+  const writeStatus = useCallback((targetStatus: string) => {
     setFields(prev => {
       const updated = { ...prev, status: targetStatus };
       autoSave(updated);
       return updated;
     });
-  }, [template, autoSave]);
+  }, [autoSave]);
 
+  // Inline timer pill (non-templated tasks only) — pure timer toggle, no side effects.
   const handleTimerStart = useCallback(() => {
     timeTrackingHook.startProjectTimer(project.id, 'task');
-    const status = fieldsRef.current?.status;
-    if (template && (status === 'not_started' || status === 'paused')) {
-      manualTimerActionRef.current = true;
-      autoSetStatus('in_progress');
-    }
-  }, [timeTrackingHook, project.id, template, autoSetStatus]);
+  }, [timeTrackingHook, project.id]);
 
   const handleTimerStop = useCallback(() => {
     timeTrackingHook.stopProjectTimer();
-    if (template && fieldsRef.current?.status === 'in_progress') {
+  }, [timeTrackingHook]);
+
+  // Templated-task action buttons: single source of truth for status + timer.
+  const handleStart = useCallback(() => {
+    manualTimerActionRef.current = true;
+    timeTrackingHook.startProjectTimer(project.id, 'task');
+    writeStatus('in_progress');
+  }, [timeTrackingHook, project.id, writeStatus]);
+
+  const handlePause = useCallback(() => {
+    manualTimerActionRef.current = true;
+    timeTrackingHook.stopProjectTimer();
+    writeStatus('paused');
+  }, [timeTrackingHook, writeStatus]);
+
+  const handleComplete = useCallback(() => {
+    if (hasIncompleteChecklist() && !confirm('Are you sure you want to complete this task? The checklist has not been completed.')) return;
+    if (activeTimeEntryRef.current) {
       manualTimerActionRef.current = true;
-      autoSetStatus('paused');
+      timeTrackingHook.stopProjectTimer();
     }
-  }, [timeTrackingHook, template, autoSetStatus]);
+    writeStatus('complete');
+  }, [hasIncompleteChecklist, timeTrackingHook, writeStatus]);
 
-  const handleChecklistInteraction = useCallback(() => {
-    if (template && fieldsRef.current?.status === 'not_started') {
-      autoSetStatus('in_progress');
-    }
-  }, [template, autoSetStatus]);
+  // Reopen: go to paused. Do NOT start the timer and do NOT unlock the checklist
+  // (checklist stays muted until the user clicks Resume/Start).
+  const handleReopen = useCallback(() => {
+    writeStatus('paused');
+  }, [writeStatus]);
 
-  const prevAllFilledRef = useRef(false);
-  const validationReadyRef = useRef(false);
-
-  useEffect(() => {
-    validationReadyRef.current = false;
-    prevAllFilledRef.current = false;
-    const timer = setTimeout(() => { validationReadyRef.current = true; }, 500);
-    return () => clearTimeout(timer);
-  }, [project.id]);
-
-  const handleValidationChange = useCallback((allRequiredFilled: boolean) => {
-    const wasAllFilled = prevAllFilledRef.current;
-    prevAllFilledRef.current = allRequiredFilled;
-    if (!validationReadyRef.current) return;
-    if (!wasAllFilled && allRequiredFilled && template && fieldsRef.current?.status === 'in_progress') {
-      autoSetStatus('complete');
-    }
-  }, [template, autoSetStatus]);
+  // Auto-complete on "all required filled" is intentionally removed — Complete
+  // must be an explicit user action.
+  const handleValidationChange = useCallback((_allRequiredFilled: boolean) => {
+    // no-op; kept for API compatibility with DynamicCleaningForm.
+  }, []);
 
   const filteredTemplates = useMemo(() => {
     if (!templateSearch.trim()) return availableTemplates;
@@ -345,57 +351,55 @@ export default function MobileProjectDetail({
 
           {/* Inline metadata row: status · priority · department · timer */}
           <div className="flex items-center gap-0 text-[12.5px] text-muted-foreground flex-wrap">
-            {/* Status */}
+            {/* Status — display-only for templated tasks (fully checklist-driven);
+                interactive dropdown for non-templated tasks. */}
             <div className="relative">
-              <button
-                onClick={() => { setShowStatusPicker(!showStatusPicker); setShowPriorityPicker(false); setShowDeptPicker(false); }}
-                className="inline-flex items-center hover:opacity-70 transition-opacity py-0.5"
-                style={{ color: status.color }}
-              >
-                {status.label}
-              </button>
-              {showStatusPicker && (
-                <InlineDropdown onClose={() => setShowStatusPicker(false)}>
-                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Status</p>
-                  {STATUS_OPTIONS.map((s) => {
-                    const cfg = STATUS_CONFIG[s];
-                    return (
-                      <button
-                        key={s}
-                        onClick={() => {
-                          if (s === fields.status) { setShowStatusPicker(false); return; }
-                          if (project.template_id) {
-                            const hasBeenWorkedOn = fields.status === 'in_progress' || fields.status === 'paused' ||
-                              (formMetadata && Object.keys(formMetadata).some(
-                                k => !['property_name', 'template_id', 'template_name'].includes(k)
-                              ));
-                            if (s === 'not_started' && hasBeenWorkedOn) {
-                              alert('This task has already been started. If progress needs to be delayed, move to "Paused".');
-                              return;
-                            }
-                            if (s === 'complete' && fields.status !== 'complete') {
-                              if (hasIncompleteChecklist() && !confirm('Are you sure you want to complete this task? The checklist has not been completed.')) {
-                                return;
-                              }
-                            }
-                          }
-                          updateField('status', s); setShowStatusPicker(false);
-                        }}
-                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                          fields.status === s ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
-                        }`}
-                      >
-                        <span className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
-                        <span className="text-[15px] text-neutral-900 dark:text-white">{cfg.label}</span>
-                        {fields.status === s && (
-                          <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </button>
-                    );
-                  })}
-                </InlineDropdown>
+              {isTemplated ? (
+                <span
+                  className="inline-flex items-center py-0.5 cursor-default"
+                  style={{ color: status.color }}
+                  title="Status is set automatically by checklist actions"
+                >
+                  {status.label}
+                </span>
+              ) : (
+                <>
+                  <button
+                    onClick={() => { setShowStatusPicker(!showStatusPicker); setShowPriorityPicker(false); setShowDeptPicker(false); }}
+                    className="inline-flex items-center hover:opacity-70 transition-opacity py-0.5"
+                    style={{ color: status.color }}
+                  >
+                    {status.label}
+                  </button>
+                  {showStatusPicker && (
+                    <InlineDropdown onClose={() => setShowStatusPicker(false)}>
+                      <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Status</p>
+                      {STATUS_OPTIONS.map((s) => {
+                        const cfg = STATUS_CONFIG[s];
+                        return (
+                          <button
+                            key={s}
+                            onClick={() => {
+                              if (s === fields.status) { setShowStatusPicker(false); return; }
+                              updateField('status', s); setShowStatusPicker(false);
+                            }}
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                              fields.status === s ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'
+                            }`}
+                          >
+                            <span className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
+                            <span className="text-[15px] text-neutral-900 dark:text-white">{cfg.label}</span>
+                            {fields.status === s && (
+                              <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </InlineDropdown>
+                  )}
+                </>
               )}
             </div>
 
@@ -488,27 +492,47 @@ export default function MobileProjectDetail({
 
             <span className="mx-1.5 text-[rgba(30,25,20,0.2)] dark:text-white/20 select-none">·</span>
 
-            {/* Timer — inline */}
+            {/* Timer — inline. Display-only for templated tasks (controlled by
+                checklist action buttons); interactive for non-templated tasks. */}
             <div className="inline-flex items-center gap-1.5">
-              <button
-                onClick={() => { if (timeTrackingHook.activeTimeEntry) { handleTimerStop(); } else { handleTimerStart(); } }}
-                disabled={!isAssigned}
-                className={`inline-flex items-center gap-1.5 transition-colors py-0.5 ${
-                  !isAssigned ? 'opacity-40 cursor-not-allowed' : 'hover:text-foreground'
-                }`}
-              >
-                {timeTrackingHook.activeTimeEntry ? (
-                  <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="currentColor">
-                    <rect x="1" y="1" width="4" height="10" rx="1" />
-                    <rect x="7" y="1" width="4" height="10" rx="1" />
-                  </svg>
-                ) : (
-                  <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="currentColor">
-                    <path d="M2 1.5a.5.5 0 0 1 .75-.43l8 4.5a.5.5 0 0 1 0 .86l-8 4.5A.5.5 0 0 1 2 10.5v-9z" />
-                  </svg>
-                )}
-                <span className="font-mono text-[11px] tracking-wide">{timeTrackingHook.formatTime(timeTrackingHook.displaySeconds)}</span>
-              </button>
+              {isTemplated ? (
+                <span
+                  className="inline-flex items-center gap-1.5 py-0.5 cursor-default"
+                  title="Timer is controlled by checklist actions"
+                >
+                  {timeTrackingHook.activeTimeEntry ? (
+                    <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="currentColor">
+                      <rect x="1" y="1" width="4" height="10" rx="1" />
+                      <rect x="7" y="1" width="4" height="10" rx="1" />
+                    </svg>
+                  ) : (
+                    <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="currentColor">
+                      <path d="M2 1.5a.5.5 0 0 1 .75-.43l8 4.5a.5.5 0 0 1 0 .86l-8 4.5A.5.5 0 0 1 2 10.5v-9z" />
+                    </svg>
+                  )}
+                  <span className="font-mono text-[11px] tracking-wide">{timeTrackingHook.formatTime(timeTrackingHook.displaySeconds)}</span>
+                </span>
+              ) : (
+                <button
+                  onClick={() => { if (timeTrackingHook.activeTimeEntry) { handleTimerStop(); } else { handleTimerStart(); } }}
+                  disabled={!isAssigned}
+                  className={`inline-flex items-center gap-1.5 transition-colors py-0.5 ${
+                    !isAssigned ? 'opacity-40 cursor-not-allowed' : 'hover:text-foreground'
+                  }`}
+                >
+                  {timeTrackingHook.activeTimeEntry ? (
+                    <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="currentColor">
+                      <rect x="1" y="1" width="4" height="10" rx="1" />
+                      <rect x="7" y="1" width="4" height="10" rx="1" />
+                    </svg>
+                  ) : (
+                    <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="currentColor">
+                      <path d="M2 1.5a.5.5 0 0 1 .75-.43l8 4.5a.5.5 0 0 1 0 .86l-8 4.5A.5.5 0 0 1 2 10.5v-9z" />
+                    </svg>
+                  )}
+                  <span className="font-mono text-[11px] tracking-wide">{timeTrackingHook.formatTime(timeTrackingHook.displaySeconds)}</span>
+                </button>
+              )}
               {timeTrackingHook.activeTimeEntry && (
                 <span className="relative flex h-1.5 w-1.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -895,28 +919,67 @@ export default function MobileProjectDetail({
         {/* Checklist Section */}
         {activeSection === 'checklist' && (
           <div className="px-5 pt-5 pb-6">
+            {/* Action buttons row — driven by status (templated tasks) */}
             <div className="flex items-center gap-2 mb-4">
-              {timeTrackingHook.activeTimeEntry ? (
-                <button onClick={handleTimerStop}
-                  className="flex-1 text-sm font-medium py-2.5 rounded-xl bg-red-500/15 text-red-400 active:opacity-70 transition-opacity border border-red-500/20">
-                  Stop
-                </button>
-              ) : (
-                <button onClick={handleTimerStart} disabled={!isAssigned}
-                  className={`flex-1 text-sm font-medium py-2.5 rounded-xl transition-opacity border ${isAssigned ? 'bg-emerald-500/15 text-emerald-400 active:opacity-70 border-emerald-500/20' : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-600 border-neutral-300 dark:border-neutral-700 cursor-not-allowed'}`}>
-                  {timeTrackingHook.displaySeconds > 0 ? 'Resume' : 'Start'}
+              {fields.status === 'not_started' && (
+                <button
+                  onClick={handleStart}
+                  disabled={!isAssigned}
+                  className={`flex-1 text-sm font-medium py-2.5 rounded-xl transition-opacity border ${isAssigned ? 'bg-emerald-500/15 text-emerald-400 active:opacity-70 border-emerald-500/20' : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-600 border-neutral-300 dark:border-neutral-700 cursor-not-allowed'}`}
+                >
+                  Start
                 </button>
               )}
-              <button
-                onClick={() => {
-                  if (fields.status === 'complete') { setFields(prev => { const updated = { ...prev, status: 'paused' }; autoSave(updated); return updated; }); return; }
-                  if (hasIncompleteChecklist() && !confirm('Are you sure you want to complete this task? The checklist has not been completed.')) return;
-                  if (timeTrackingHook.activeTimeEntry) { manualTimerActionRef.current = true; timeTrackingHook.stopProjectTimer(); }
-                  setFields(prev => { const updated = { ...prev, status: 'complete' }; autoSave(updated); return updated; });
-                }}
-                className={`flex-1 text-sm font-medium py-2.5 rounded-xl transition-opacity border ${fields.status === 'complete' ? 'bg-amber-500/15 text-amber-400 active:opacity-70 border-amber-500/20' : 'bg-blue-500/15 text-blue-400 active:opacity-70 border-blue-500/20'}`}>
-                {fields.status === 'complete' ? 'Reopen' : 'Complete'}
-              </button>
+
+              {fields.status === 'in_progress' && (
+                <>
+                  <button
+                    onClick={handlePause}
+                    className="flex-1 text-sm font-medium py-2.5 rounded-xl bg-amber-500/15 text-amber-400 active:opacity-70 transition-opacity border border-amber-500/20"
+                  >
+                    Pause
+                  </button>
+                  <button
+                    onClick={handleComplete}
+                    className="flex-1 text-sm font-medium py-2.5 rounded-xl bg-blue-500/15 text-blue-400 active:opacity-70 transition-opacity border border-blue-500/20"
+                  >
+                    Complete
+                  </button>
+                </>
+              )}
+
+              {fields.status === 'paused' && (
+                <>
+                  <button
+                    onClick={handleStart}
+                    disabled={!isAssigned}
+                    className={`flex-1 text-sm font-medium py-2.5 rounded-xl transition-opacity border ${isAssigned ? 'bg-emerald-500/15 text-emerald-400 active:opacity-70 border-emerald-500/20' : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-600 border-neutral-300 dark:border-neutral-700 cursor-not-allowed'}`}
+                  >
+                    Resume
+                  </button>
+                  <button
+                    onClick={handleComplete}
+                    className="flex-1 text-sm font-medium py-2.5 rounded-xl bg-blue-500/15 text-blue-400 active:opacity-70 transition-opacity border border-blue-500/20"
+                  >
+                    Complete
+                  </button>
+                </>
+              )}
+
+              {fields.status === 'complete' && (
+                <button
+                  onClick={handleReopen}
+                  className="flex-1 text-sm font-medium py-2.5 rounded-xl bg-amber-500/15 text-amber-400 active:opacity-70 transition-opacity border border-amber-500/20"
+                >
+                  Reopen
+                </button>
+              )}
+
+              {fields.status === 'contingent' && (
+                <div className="flex-1 text-sm text-center py-2.5 text-neutral-500 dark:text-neutral-400 italic border border-dashed border-[rgba(139,127,168,0.3)] rounded-xl">
+                  Contingent — awaiting approval
+                </div>
+              )}
             </div>
 
             <div className="rounded-xl bg-[rgba(30,25,20,0.03)] dark:bg-white/[0.04] border border-[rgba(30,25,20,0.06)] dark:border-white/10 px-5 py-3 flex items-center justify-between mb-5">
@@ -944,7 +1007,6 @@ export default function MobileProjectDetail({
                 onSave={async (formData) => { if (onSaveForm) await onSaveForm(formData); }}
                 readOnly={isChecklistReadOnly}
                 onValidationChange={handleValidationChange}
-                onChecklistInteraction={handleChecklistInteraction}
               />
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-neutral-400">

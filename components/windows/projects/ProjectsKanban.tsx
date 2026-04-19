@@ -250,36 +250,13 @@ export function ProjectsKanban({
         onColumnMove(realItemId, 'property_name', propName);
       } else if (fieldPrefix === 'status') {
         const draggedProject = projects.find(p => p.id === realItemId);
+        // Templated tasks: status is fully driven by checklist actions.
+        // Block any drag-based status change and revert the visual drag.
+        // This is a backup to canMoveToColumn, which already prevents the drop.
         if (draggedProject?.template_id) {
-          const hasBeenWorkedOn = draggedProject.status === 'in_progress' || draggedProject.status === 'paused' ||
-            (draggedProject.form_metadata && Object.keys(draggedProject.form_metadata).some(
-              k => !['property_name', 'template_id', 'template_name'].includes(k)
-            ));
-
-          if (value === 'not_started' && hasBeenWorkedOn) {
-            alert('This task has already been started. If progress needs to be delayed, move to "Paused".');
-            setItems([...initialItems]);
-            return;
-          }
-
-          if (value === 'complete' && draggedProject.status !== 'complete') {
-            const formData = draggedProject.form_metadata || {};
-            const checklistKeys = Object.keys(formData).filter(k => !['property_name', 'template_id', 'template_name'].includes(k));
-            const isIncomplete = checklistKeys.length === 0
-              ? !!draggedProject.template_id
-              : checklistKeys.some(k => {
-                  const v = formData[k];
-                  const val = (v && typeof v === 'object' && 'value' in (v as Record<string, unknown>))
-                    ? (v as Record<string, unknown>).value : v;
-                  return val === false || val === '' || val === undefined || val === null;
-                });
-            if (isIncomplete) {
-              if (!confirm('Are you sure you want to complete this task? The checklist has not been completed.')) {
-                setItems([...initialItems]);
-                return;
-              }
-            }
-          }
+          alert('This task uses a checklist template. Open the task and use Start, Pause, Complete, or Reopen to change its status.');
+          setItems([...initialItems]);
+          return;
         }
         onColumnMove(realItemId, 'status', value);
       } else if (fieldPrefix === 'priority') {
@@ -333,13 +310,25 @@ export function ProjectsKanban({
   );
 
   const canMoveToColumn = useCallback((item: DraggableProjectItem, targetColumnId: string) => {
-    if (viewMode !== 'property') return true;
     const project = item.project;
-    const currentColumnId = `prop:${project.property_name || 'No Property'}`;
-    if (targetColumnId !== currentColumnId) {
-      alert('Property can\'t be changed after a task is created.');
-      return false;
+
+    if (viewMode === 'property') {
+      const currentColumnId = `prop:${project.property_name || 'No Property'}`;
+      if (targetColumnId !== currentColumnId) {
+        alert('Property can\'t be changed after a task is created.');
+        return false;
+      }
+      return true;
     }
+
+    // Templated tasks: status is fully driven by checklist actions, so
+    // silently reject any cross-column drop in status view. (Silent is
+    // intentional — this callback fires repeatedly on drag-over.)
+    if (viewMode === 'status' && project.template_id) {
+      const currentColumnId = `status:${project.status}`;
+      if (targetColumnId !== currentColumnId) return false;
+    }
+
     return true;
   }, [viewMode]);
 
@@ -726,6 +715,18 @@ function ProjectCardContent({
           )}
         </div>
       </div>
+
+      {/* Template row — signals that status is checklist-driven.
+          Only shown for templated tasks. */}
+      {project.template_id && project.template_name && (
+        <div className={styles.templateRow} title="Status is controlled by this task's checklist">
+          <svg className={styles.templateIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+          </svg>
+          <span className={styles.templateName}>{project.template_name}</span>
+        </div>
+      )}
     </div>
   );
 }
