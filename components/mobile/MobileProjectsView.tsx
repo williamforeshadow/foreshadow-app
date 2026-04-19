@@ -122,6 +122,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
   const [viewMode, setViewMode] = useState<ProjectViewMode>('status');
+  const [kanbanSelectionMode, setKanbanSelectionMode] = useState(false);
 
   // Template state
   const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
@@ -323,6 +324,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
       setScreen({ type: 'kanban', binId: screen.binId, binName: screen.binName });
       fetchTasksForBin(screen.binId);
     } else if (screen.type === 'kanban') {
+      setKanbanSelectionMode(false);
       setScreen({ type: 'bins' });
       binsHook.fetchBins();
     }
@@ -526,6 +528,17 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
               <span>Operations board</span>
               <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a]" />
               <span>{tasks.length} total</span>
+              {tasks.length > 0 && !kanbanSelectionMode && (
+                <button
+                  onClick={() => setKanbanSelectionMode(true)}
+                  className="ml-auto flex items-center gap-1 text-neutral-600 dark:text-[#a09e9a] active:opacity-70 transition-opacity"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7l-3 3-1.5-1.5" />
+                  </svg>
+                  Select
+                </button>
+              )}
             </div>
           </div>
 
@@ -558,6 +571,30 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
                 visibleColumnIds={columnVis.visibleIds}
                 onDraggingChange={setKanbanDragging}
                 showTexture={showBoardTexture}
+                bins={binsHook.bins}
+                selectionMode={kanbanSelectionMode}
+                onSelectionModeChange={setKanbanSelectionMode}
+                onBulkDismiss={async (taskIds) => {
+                  if (taskIds.length === 0) return;
+                  try {
+                    const res = await fetch('/api/tasks-bulk-dismiss', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ taskIds }),
+                    });
+                    const result = await res.json();
+                    if (res.ok) {
+                      const dismissed: string[] = result?.dismissed_ids || taskIds;
+                      const dismissedSet = new Set(dismissed);
+                      setTasks(prev => prev.filter(t => !dismissedSet.has(t.id)));
+                      binsHook.fetchBins();
+                    } else {
+                      console.error('Bulk dismiss failed:', result?.error);
+                    }
+                  } catch (err) {
+                    console.error('Error bulk dismissing tasks:', err);
+                  }
+                }}
               />
             )}
           </div>
@@ -633,8 +670,15 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
               });
               const result = await res.json();
               if (result.data) {
-                setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
-                setTasks(prev => prev.map(t => t.id === screen.project.id ? result.data : t));
+                if (!isBinned) {
+                  // Dismissed from bin — drop from this bin view and return to the board.
+                  const dismissedId = screen.project.id;
+                  setTasks(prev => prev.filter(t => t.id !== dismissedId));
+                  goBack();
+                } else {
+                  setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
+                  setTasks(prev => prev.map(t => t.id === screen.project.id ? result.data : t));
+                }
               }
               binsHook.fetchBins();
             }}

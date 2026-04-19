@@ -51,7 +51,7 @@ export function useProjectBins({ currentUser }: UseProjectBinsProps) {
     }
   }, [currentUser?.id]);
 
-  const updateBin = useCallback(async (binId: string, updates: Partial<Pick<ProjectBin, 'name' | 'description' | 'sort_order'>>) => {
+  const updateBin = useCallback(async (binId: string, updates: Partial<Pick<ProjectBin, 'name' | 'description' | 'sort_order' | 'auto_dismiss_enabled' | 'auto_dismiss_days'>>) => {
     try {
       const res = await fetch(`/api/project-bins/${binId}`, {
         method: 'PUT',

@@ -107,6 +107,7 @@ export async function PUT(
         form_metadata,
         created_at,
         updated_at,
+        completed_at,
         templates(id, name),
         departments(id, name),
         task_assignments(
@@ -141,6 +142,7 @@ export async function PUT(
       form_metadata: data.form_metadata || null,
       created_at: data.created_at,
       updated_at: data.updated_at,
+      completed_at: (data as any).completed_at || null,
       project_assignments: (data.task_assignments as any[])?.map((a: any) => ({
         ...a,
         user: a.users || null,

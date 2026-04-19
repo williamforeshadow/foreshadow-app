@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import type { ProjectViewMode } from '@/lib/types';
+import type { ProjectViewMode, ProjectBin } from '@/lib/types';
 import { STATUS_LABELS, STATUS_ORDER, PRIORITY_LABELS, PRIORITY_ORDER } from '@/lib/types';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
@@ -124,6 +124,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
 
   // View mode
   const [viewMode, setViewMode] = useState<ProjectViewMode>('status');
+  const [kanbanSelectionMode, setKanbanSelectionMode] = useState(false);
 
   // Sub-hooks for detail panel features
   const commentsHook = useProjectComments({ currentUser });
@@ -348,6 +349,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     setExpandedProject(null);
     setSelectedBinId(null);
     setSelectedBinName('All Binned Tasks');
+    setKanbanSelectionMode(false);
     binsHook.fetchBins();
   }, [binsHook.fetchBins]);
 
@@ -359,9 +361,12 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     binsHook.deleteBin(binId);
   }, [binsHook.deleteBin]);
 
-  const handleRenameBin = useCallback((binId: string, name: string) => {
-    binsHook.updateBin(binId, { name });
-  }, [binsHook.updateBin]);
+  const handleUpdateBin = useCallback(
+    (binId: string, updates: Partial<Pick<ProjectBin, 'name' | 'description' | 'auto_dismiss_enabled' | 'auto_dismiss_days'>>) => {
+      return binsHook.updateBin(binId, updates);
+    },
+    [binsHook.updateBin]
+  );
 
   // ============================================================================
   // Detail panel initialization
@@ -639,7 +644,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
         onSelectBin={handleSelectBin}
         onCreateBin={handleCreateBin}
         onDeleteBin={handleDeleteBin}
-        onRenameBin={handleRenameBin}
+        onUpdateBin={handleUpdateBin}
       />
     );
   }
@@ -679,6 +684,19 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
               </svg>
               New Task
             </Button>
+            {tasks.length > 0 && !kanbanSelectionMode && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setKanbanSelectionMode(true)}
+                title="Select tasks to dismiss in bulk"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7l-3 3-1.5-1.5" />
+                </svg>
+                Select
+              </Button>
+            )}
           </div>
         </div>
 
@@ -710,6 +728,33 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
             onColumnMove={handleColumnMove}
             visibleColumnIds={columnVis.visibleIds}
             showTexture={showBoardTexture}
+            bins={binsHook.bins}
+            selectionMode={kanbanSelectionMode}
+            onSelectionModeChange={setKanbanSelectionMode}
+            onBulkDismiss={async (taskIds) => {
+              if (taskIds.length === 0) return;
+              try {
+                const res = await fetch('/api/tasks-bulk-dismiss', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ taskIds }),
+                });
+                const result = await res.json();
+                if (res.ok) {
+                  const dismissed: string[] = result?.dismissed_ids || taskIds;
+                  const dismissedSet = new Set(dismissed);
+                  setTasks(prev => prev.filter(t => !dismissedSet.has(t.id)));
+                  if (expandedProject && dismissedSet.has(expandedProject.id)) {
+                    setExpandedProject(null);
+                  }
+                  binsHook.fetchBins();
+                } else {
+                  console.error('Bulk dismiss failed:', result?.error);
+                }
+              } catch (err) {
+                console.error('Error bulk dismissing tasks:', err);
+              }
+            }}
           />
         )}
       </div>
@@ -791,8 +836,14 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
               });
               const result = await res.json();
               if (result.data) {
-                setExpandedProject(result.data);
-                setTasks(prev => prev.map(t => t.id === expandedProject.id ? result.data : t));
+                if (!isBinned) {
+                  // Dismissed from bin — drop from this bin view and close the panel.
+                  setTasks(prev => prev.filter(t => t.id !== expandedProject.id));
+                  setExpandedProject(null);
+                } else {
+                  setExpandedProject(result.data);
+                  setTasks(prev => prev.map(t => t.id === expandedProject.id ? result.data : t));
+                }
               }
               binsHook.fetchBins();
             } catch (err) {

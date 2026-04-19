@@ -567,13 +567,18 @@ a {
    Narrows columns and adds scroll-snap for swipe navigation.
    Scroll-snap is disabled while dragging (.is-dragging) so
    dnd-kit pointer tracking isn't fought by the snap engine.
+
+   Selectors target `[data-kanban-board]` / `[data-kanban-column]`
+   because ProjectsKanban now wraps its board in a
+   `.kanbanContainer` flex-column (for the selection toolbar),
+   which would otherwise break `> div:first-child` descent.
    ============================================================ */
 .mobile-kanban-wrapper {
   overflow: hidden;
 }
 
 @media (max-width: 768px) {
-  .mobile-kanban-wrapper > div:first-child {
+  .mobile-kanban-wrapper [data-kanban-board] {
     gap: 0.75rem;
     padding: 0.75rem;
     scroll-snap-type: x mandatory;
@@ -581,18 +586,18 @@ a {
     touch-action: pan-x;
   }
 
-  .mobile-kanban-wrapper.is-dragging > div:first-child {
+  .mobile-kanban-wrapper.is-dragging [data-kanban-board] {
     scroll-snap-type: none;
   }
 
-  .mobile-kanban-wrapper > div:first-child > div {
+  .mobile-kanban-wrapper [data-kanban-board] [data-kanban-column] {
     width: 260px;
     min-width: 260px;
     scroll-snap-align: start;
     touch-action: pan-y;
   }
 
-  .mobile-kanban-wrapper.is-dragging > div:first-child > div {
+  .mobile-kanban-wrapper.is-dragging [data-kanban-board] [data-kanban-column] {
     scroll-snap-align: none;
   }
 }

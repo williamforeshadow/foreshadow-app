@@ -132,6 +132,16 @@ export interface ProjectBin {
   created_at: string;
   updated_at: string;
   sort_order: number;
+  /** When true, completed tasks in this bin are auto-dismissed after `auto_dismiss_days` days */
+  auto_dismiss_enabled?: boolean;
+  /** Number of elapsed days after status=complete before auto-dismissal (default 7) */
+  auto_dismiss_days?: number;
+  /**
+   * When true, this is a protected system bin (e.g. the "All Binned Tasks" container
+   * that owns orphan binned tasks — those with `is_binned = true` but no `bin_id`).
+   * System bins cannot be renamed or deleted; only their auto-dismiss config is editable.
+   */
+  is_system?: boolean;
   project_count?: number; // computed client-side
 }
 
@@ -186,6 +196,8 @@ export interface Project {
   form_metadata?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  /** Timestamp of the most recent transition to status=complete (reset on re-complete) */
+  completed_at?: string | null;
 }
 
 export interface ProjectFormData {

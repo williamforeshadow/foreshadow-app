@@ -24,6 +24,7 @@ export async function GET(request: Request) {
         form_metadata,
         created_at,
         updated_at,
+        completed_at,
         templates(id, name),
         departments(id, name),
         task_assignments(
@@ -115,6 +116,7 @@ export async function GET(request: Request) {
         form_metadata: task.form_metadata || null,
         created_at: task.created_at,
         updated_at: task.updated_at,
+        completed_at: task.completed_at || null,
         unread_comment_count: unreadCounts[task.id] || 0,
         project_assignments: task.task_assignments?.map((a: any) => ({
           ...a,
@@ -211,6 +213,7 @@ export async function POST(request: Request) {
         form_metadata,
         created_at,
         updated_at,
+        completed_at,
         templates(id, name),
         departments(id, name),
         task_assignments(
@@ -245,6 +248,7 @@ export async function POST(request: Request) {
       form_metadata: fullTask.form_metadata || null,
       created_at: fullTask.created_at,
       updated_at: fullTask.updated_at,
+      completed_at: (fullTask as any).completed_at || null,
       unread_comment_count: 0,
       project_assignments: (fullTask.task_assignments as any[])?.map((a: any) => ({
         ...a,

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import type { ProjectBin } from '@/lib/types';
 
 interface BinPickerProps {
@@ -11,7 +12,10 @@ interface BinPickerProps {
   onSelectBin: (binId: string | null) => void; // null = "All Binned Tasks"
   onCreateBin: (name: string, description?: string) => Promise<ProjectBin | null>;
   onDeleteBin: (binId: string) => void;
-  onRenameBin: (binId: string, name: string) => void;
+  onUpdateBin: (
+    binId: string,
+    updates: Partial<Pick<ProjectBin, 'name' | 'description' | 'auto_dismiss_enabled' | 'auto_dismiss_days'>>
+  ) => void | Promise<void>;
 }
 
 export function BinPicker({
@@ -21,15 +25,23 @@ export function BinPicker({
   onSelectBin,
   onCreateBin,
   onDeleteBin,
-  onRenameBin,
+  onUpdateBin,
 }: BinPickerProps) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newBinName, setNewBinName] = useState('');
   const [newBinDescription, setNewBinDescription] = useState('');
   const [creating, setCreating] = useState(false);
-  const [editingBinId, setEditingBinId] = useState<string | null>(null);
-  const [editName, setEditName] = useState('');
+  const [settingsBinId, setSettingsBinId] = useState<string | null>(null);
+  const [settingsIsSystem, setSettingsIsSystem] = useState(false);
+  const [settingsName, setSettingsName] = useState('');
+  const [settingsAutoEnabled, setSettingsAutoEnabled] = useState(false);
+  const [settingsAutoDays, setSettingsAutoDays] = useState<number>(7);
   const [contextMenuBinId, setContextMenuBinId] = useState<string | null>(null);
+
+  // Split system bin (the "All Binned Tasks" container that owns orphan tasks)
+  // from the regular user-managed bins.
+  const systemBin = useMemo(() => bins.find((b) => b.is_system) ?? null, [bins]);
+  const userBins = useMemo(() => bins.filter((b) => !b.is_system), [bins]);
 
   const handleCreate = useCallback(async () => {
     if (!newBinName.trim()) return;
@@ -43,13 +55,38 @@ export function BinPicker({
     setCreating(false);
   }, [newBinName, newBinDescription, onCreateBin]);
 
-  const handleRename = useCallback((binId: string) => {
-    if (editName.trim()) {
-      onRenameBin(binId, editName.trim());
+  const openSettings = useCallback((bin: ProjectBin) => {
+    setSettingsBinId(bin.id);
+    setSettingsIsSystem(!!bin.is_system);
+    setSettingsName(bin.name);
+    setSettingsAutoEnabled(!!bin.auto_dismiss_enabled);
+    setSettingsAutoDays(
+      typeof bin.auto_dismiss_days === 'number' ? bin.auto_dismiss_days : 7
+    );
+  }, []);
+
+  const closeSettings = useCallback(() => {
+    setSettingsBinId(null);
+    setSettingsIsSystem(false);
+  }, []);
+
+  const handleSaveSettings = useCallback(async () => {
+    if (!settingsBinId) return;
+    const days = Math.max(0, Math.min(365, Math.round(Number(settingsAutoDays) || 0)));
+    // System bins: only auto-dismiss config is editable.
+    const updates: Partial<Pick<ProjectBin, 'name' | 'auto_dismiss_enabled' | 'auto_dismiss_days'>> = {
+      auto_dismiss_enabled: settingsAutoEnabled,
+      auto_dismiss_days: days,
+    };
+    if (!settingsIsSystem) {
+      const trimmedName = settingsName.trim();
+      if (!trimmedName) return;
+      updates.name = trimmedName;
     }
-    setEditingBinId(null);
-    setEditName('');
-  }, [editName, onRenameBin]);
+    await onUpdateBin(settingsBinId, updates);
+    setSettingsBinId(null);
+    setSettingsIsSystem(false);
+  }, [settingsBinId, settingsIsSystem, settingsName, settingsAutoEnabled, settingsAutoDays, onUpdateBin]);
 
   if (loadingBins) {
     return (
@@ -66,7 +103,7 @@ export function BinPicker({
         <div>
           <h2 className="text-xl font-semibold text-white">Task Bins</h2>
           <p className="text-sm text-white/40 mt-0.5">
-            {totalProjects} binned task{totalProjects !== 1 ? 's' : ''} across {bins.length} bin{bins.length !== 1 ? 's' : ''}
+            {totalProjects} binned task{totalProjects !== 1 ? 's' : ''} across {userBins.length} bin{userBins.length !== 1 ? 's' : ''}
           </p>
         </div>
         <Button
@@ -84,11 +121,38 @@ export function BinPicker({
       {/* Bin Grid */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {/* All Binned Tasks Card */}
-          <button
+          {/* All Binned Tasks Card — backed by the system bin row for its auto-dismiss config */}
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() => onSelectBin(null)}
-            className="group relative flex flex-col justify-between p-5 rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md hover:bg-white/[0.08] hover:border-white/20 transition-all duration-200 text-left min-h-[140px]"
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectBin(null); } }}
+            className={cn(
+              'group relative flex flex-col justify-between p-5 rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md hover:bg-white/[0.08] hover:border-white/20 transition-all duration-200 text-left min-h-[140px] cursor-pointer',
+              // Lift the card above the context-menu close overlay (z-10) so clicks
+              // reach the dropdown. Without this, `backdrop-blur-md` creates a new
+              // stacking context and the overlay ends up on top of the dropdown.
+              systemBin && contextMenuBinId === systemBin.id && 'z-20'
+            )}
           >
+            {/* ⋯ menu button — visible on hover, only when we have a system bin row to configure */}
+            {systemBin && (
+              <div
+                className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => setContextMenuBinId(contextMenuBinId === systemBin.id ? null : systemBin.id)}
+                  className="p-1 rounded-md hover:bg-white/10 transition-colors"
+                  title="Auto-dismiss options"
+                >
+                  <svg className="w-4 h-4 text-white/40" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
             <div>
               <div className="flex items-center gap-2.5 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center">
@@ -110,20 +174,40 @@ export function BinPicker({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </div>
-          </button>
+
+            {/* Context menu dropdown — system bin only has Settings */}
+            {systemBin && contextMenuBinId === systemBin.id && (
+              <div
+                className="absolute top-10 right-3 z-20 bg-neutral-900/90 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl py-1 min-w-[140px]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  className="w-full text-left px-3 py-1.5 text-xs text-white/70 hover:bg-white/10 transition-colors"
+                  onClick={() => {
+                    openSettings(systemBin);
+                    setContextMenuBinId(null);
+                  }}
+                >
+                  Settings
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Individual Bin Cards */}
-          {bins.map((bin) => (
+          {userBins.map((bin) => (
             <div
               key={bin.id}
               role="button"
               tabIndex={0}
-              onClick={() => {
-                if (editingBinId === bin.id) return;
-                onSelectBin(bin.id);
-              }}
+              onClick={() => onSelectBin(bin.id)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectBin(bin.id); } }}
-              className="group relative flex flex-col justify-between p-5 rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md hover:bg-white/[0.08] hover:border-white/20 transition-all duration-200 text-left min-h-[140px] cursor-pointer"
+              className={cn(
+                'group relative flex flex-col justify-between p-5 rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md hover:bg-white/[0.08] hover:border-white/20 transition-all duration-200 text-left min-h-[140px] cursor-pointer',
+                // Same fix as above: lift the card above the close overlay
+                // while its context menu is open so the buttons are clickable.
+                contextMenuBinId === bin.id && 'z-20'
+              )}
             >
               {/* ⋯ menu button — visible on hover */}
               <div
@@ -148,22 +232,7 @@ export function BinPicker({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                     </svg>
                   </div>
-                  {editingBinId === bin.id ? (
-                    <input
-                      autoFocus
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      onBlur={() => handleRename(bin.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleRename(bin.id);
-                        if (e.key === 'Escape') { setEditingBinId(null); setEditName(''); }
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-base font-semibold text-white bg-transparent border-b border-white/20 outline-none flex-1 min-w-0"
-                    />
-                  ) : (
-                    <h3 className="text-base font-semibold text-white truncate">{bin.name}</h3>
-                  )}
+                  <h3 className="text-base font-semibold text-white truncate">{bin.name}</h3>
                 </div>
                 {bin.description && (
                   <p className="text-xs text-white/30 line-clamp-2">
@@ -183,18 +252,17 @@ export function BinPicker({
               {/* Context menu dropdown */}
               {contextMenuBinId === bin.id && (
                 <div
-                  className="absolute top-10 right-3 z-20 bg-neutral-900/90 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl py-1 min-w-[120px]"
+                  className="absolute top-10 right-3 z-20 bg-neutral-900/90 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl py-1 min-w-[140px]"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
                     className="w-full text-left px-3 py-1.5 text-xs text-white/70 hover:bg-white/10 transition-colors"
                     onClick={() => {
-                      setEditingBinId(bin.id);
-                      setEditName(bin.name);
+                      openSettings(bin);
                       setContextMenuBinId(null);
                     }}
                   >
-                    Rename
+                    Settings
                   </button>
                   <button
                     className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-white/10 transition-colors"
@@ -280,6 +348,118 @@ export function BinPicker({
           className="fixed inset-0 z-10"
           onClick={() => setContextMenuBinId(null)}
         />
+      )}
+
+      {/* Settings modal */}
+      {settingsBinId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={closeSettings}
+        >
+          <div
+            className="w-full max-w-md mx-4 p-6 rounded-2xl border border-white/10 bg-neutral-900/95 backdrop-blur-xl shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-base font-semibold text-white">
+                {settingsIsSystem ? 'All Binned Tasks Settings' : 'Bin Settings'}
+              </h3>
+              <button
+                onClick={closeSettings}
+                className="p-1 rounded-md hover:bg-white/10 transition-colors text-white/40"
+                aria-label="Close"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              {/* Name — editable for user bins, locked for system bin */}
+              {!settingsIsSystem ? (
+                <div>
+                  <label className="block text-[11px] font-medium text-white/50 uppercase tracking-wide mb-1.5">
+                    Name
+                  </label>
+                  <input
+                    type="text"
+                    value={settingsName}
+                    onChange={(e) => setSettingsName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-white/[0.06] border border-white/10 text-white text-sm outline-none focus:border-white/20"
+                  />
+                </div>
+              ) : (
+                <p className="text-xs text-white/50 leading-relaxed">
+                  Auto-dismiss settings here apply to <strong className="text-white/80">orphan binned tasks</strong> —
+                  tasks you've binned without assigning them to a specific bin. Named
+                  bins have their own auto-dismiss settings.
+                </p>
+              )}
+
+              <div className={settingsIsSystem ? '' : 'pt-2 border-t border-white/10'}>
+                <div className="flex items-center justify-between mb-1">
+                  <div>
+                    <p className="text-sm font-medium text-white">Auto-dismiss completed tasks</p>
+                    <p className="text-xs text-white/40 mt-0.5">
+                      Remove completed tasks from this bin after a set number of days.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={settingsAutoEnabled}
+                    onClick={() => setSettingsAutoEnabled((v) => !v)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                      settingsAutoEnabled ? 'bg-amber-500/80' : 'bg-white/10'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                        settingsAutoEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {settingsAutoEnabled && (
+                  <div className="mt-3 flex items-center gap-3">
+                    <label className="text-xs text-white/50">Dismiss after</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={365}
+                      value={settingsAutoDays}
+                      onChange={(e) => setSettingsAutoDays(Number(e.target.value))}
+                      className="w-20 px-2 py-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white text-sm outline-none focus:border-white/20 text-center"
+                    />
+                    <span className="text-xs text-white/50">
+                      day{settingsAutoDays === 1 ? '' : 's'} of being completed
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 mt-6 pt-4 border-t border-white/10">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-white/60"
+                onClick={closeSettings}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                disabled={!settingsIsSystem && !settingsName.trim()}
+                onClick={handleSaveSettings}
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

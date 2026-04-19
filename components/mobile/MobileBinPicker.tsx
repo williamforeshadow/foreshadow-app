@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, memo, useRef } from 'react';
+import { useState, memo, useMemo } from 'react';
 import type { ProjectBin } from '@/lib/types';
 
 interface MobileBinPickerProps {
@@ -10,7 +10,10 @@ interface MobileBinPickerProps {
   onSelectBin: (binId: string) => void;
   onSelectAll: () => void;
   onCreateBin: (name: string, description?: string) => Promise<ProjectBin | null>;
-  onUpdateBin?: (binId: string, updates: Partial<Pick<ProjectBin, 'name' | 'description'>>) => Promise<void>;
+  onUpdateBin?: (
+    binId: string,
+    updates: Partial<Pick<ProjectBin, 'name' | 'description' | 'auto_dismiss_enabled' | 'auto_dismiss_days'>>
+  ) => Promise<void> | void;
   onDeleteBin?: (binId: string) => Promise<void>;
 }
 
@@ -35,14 +38,21 @@ const MobileBinPicker = memo(function MobileBinPicker({
 
   // Editing state
   const [editingBinId, setEditingBinId] = useState<string | null>(null);
+  const [editingIsSystem, setEditingIsSystem] = useState(false);
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
+  const [editAutoEnabled, setEditAutoEnabled] = useState(false);
+  const [editAutoDays, setEditAutoDays] = useState<number>(7);
 
   // Menu state (which bin's "..." menu is open)
   const [menuBinId, setMenuBinId] = useState<string | null>(null);
 
   // Confirm delete
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // Split system bin (owner of orphan binned-task auto-dismiss config) from user bins.
+  const systemBin = useMemo(() => bins.find((b) => b.is_system) ?? null, [bins]);
+  const userBins = useMemo(() => bins.filter((b) => !b.is_system), [bins]);
 
   const handleCreate = async () => {
     if (!newBinName.trim()) return;
@@ -54,18 +64,29 @@ const MobileBinPicker = memo(function MobileBinPicker({
 
   const handleStartEdit = (bin: ProjectBin) => {
     setEditingBinId(bin.id);
+    setEditingIsSystem(!!bin.is_system);
     setEditName(bin.name);
     setEditDesc(bin.description || '');
+    setEditAutoEnabled(!!bin.auto_dismiss_enabled);
+    setEditAutoDays(typeof bin.auto_dismiss_days === 'number' ? bin.auto_dismiss_days : 7);
     setMenuBinId(null);
   };
 
   const handleSaveEdit = async () => {
-    if (!editingBinId || !editName.trim() || !onUpdateBin) return;
-    await onUpdateBin(editingBinId, {
-      name: editName.trim(),
-      description: editDesc.trim() || null,
-    });
+    if (!editingBinId || !onUpdateBin) return;
+    const days = Math.max(0, Math.min(365, Math.round(Number(editAutoDays) || 0)));
+    const updates: Partial<Pick<ProjectBin, 'name' | 'description' | 'auto_dismiss_enabled' | 'auto_dismiss_days'>> = {
+      auto_dismiss_enabled: editAutoEnabled,
+      auto_dismiss_days: days,
+    };
+    if (!editingIsSystem) {
+      if (!editName.trim()) return;
+      updates.name = editName.trim();
+      updates.description = editDesc.trim() || null;
+    }
+    await onUpdateBin(editingBinId, updates);
     setEditingBinId(null);
+    setEditingIsSystem(false);
   };
 
   const handleDelete = async (binId: string) => {
@@ -82,6 +103,11 @@ const MobileBinPicker = memo(function MobileBinPicker({
       </div>
     );
   }
+
+  // When the user taps "Edit" on the system bin, render the edit form in place
+  // of the "All Binned Tasks" tile (same pattern as user bins).
+  const systemIsEditing = !!systemBin && editingBinId === systemBin.id;
+  const systemMenuOpen = !!systemBin && menuBinId === systemBin.id;
 
   return (
     <div className="px-[22px] pt-2 pb-4 flex flex-col gap-4">
@@ -142,26 +168,132 @@ const MobileBinPicker = memo(function MobileBinPicker({
         </div>
       )}
 
-      {/* All Binned Tasks Card */}
-      <button onClick={onSelectAll} className={binCard}>
-        <div className="w-11 h-11 rounded-xl bg-neutral-200/60 dark:bg-[rgba(255,255,255,0.04)] flex items-center justify-center">
-          <svg className="w-5 h-5 text-neutral-500 dark:text-[#a09e9a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-          </svg>
-        </div>
-        <div className="flex-1 min-w-0">
+      {/* All Binned Tasks — render the inline edit form if system bin is being edited */}
+      {systemIsEditing && systemBin ? (
+        <div
+          className="flex flex-col gap-2 p-4 rounded-xl bg-neutral-100/80 dark:bg-[rgba(255,255,255,0.025)] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]"
+        >
           <p className="text-sm font-semibold text-neutral-900 dark:text-[#f0efed]">All Binned Tasks</p>
-          <p className="text-xs text-neutral-500 dark:text-[#66645f] mt-0.5">{totalProjects} task{totalProjects !== 1 ? 's' : ''}</p>
+          <p className="text-[11px] text-neutral-500 dark:text-[#66645f] leading-snug">
+            Auto-dismiss applies to orphan binned tasks (binned without an assigned bin).
+          </p>
+
+          {/* Auto-dismiss controls */}
+          <div className="mt-2 pt-2 border-t border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-neutral-900 dark:text-[#f0efed]">Auto-dismiss completed</p>
+                <p className="text-[11px] text-neutral-500 dark:text-[#66645f] leading-snug">
+                  Remove completed tasks after N days.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={editAutoEnabled}
+                onClick={() => setEditAutoEnabled((v) => !v)}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                  editAutoEnabled ? 'bg-amber-500' : 'bg-neutral-300 dark:bg-[rgba(255,255,255,0.12)]'
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                    editAutoEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+            {editAutoEnabled && (
+              <div className="flex items-center gap-2">
+                <label className="text-[11px] text-neutral-500 dark:text-[#66645f]">After</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={365}
+                  value={editAutoDays}
+                  onChange={(e) => setEditAutoDays(Number(e.target.value))}
+                  className="w-16 px-2 py-1 rounded-md bg-white dark:bg-[rgba(255,255,255,0.04)] border border-neutral-200 dark:border-[rgba(255,255,255,0.1)] text-sm text-neutral-900 dark:text-[#f0efed] outline-none text-center"
+                />
+                <span className="text-[11px] text-neutral-500 dark:text-[#66645f]">
+                  day{editAutoDays === 1 ? '' : 's'}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={handleSaveEdit}
+              className="text-xs font-medium px-3 py-1.5 rounded-lg bg-neutral-800 dark:bg-[#f0efed] text-white dark:text-[#0b0b0c] active:opacity-80 transition-opacity"
+            >
+              Save
+            </button>
+            <button
+              onClick={() => { setEditingBinId(null); setEditingIsSystem(false); }}
+              className="text-xs text-neutral-400 px-2 py-1.5"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
-      </button>
+      ) : (
+        <div className="relative">
+          <button onClick={onSelectAll} className={binCard}>
+            <div className="w-11 h-11 rounded-xl bg-neutral-200/60 dark:bg-[rgba(255,255,255,0.04)] flex items-center justify-center">
+              <svg className="w-5 h-5 text-neutral-500 dark:text-[#a09e9a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-neutral-900 dark:text-[#f0efed]">All Binned Tasks</p>
+              <p className="text-xs text-neutral-500 dark:text-[#66645f] mt-0.5">{totalProjects} task{totalProjects !== 1 ? 's' : ''}</p>
+            </div>
+          </button>
+
+          {/* "..." menu trigger — only when we have a system bin row and onUpdateBin */}
+          {systemBin && onUpdateBin && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuBinId(systemMenuOpen ? null : systemBin.id);
+                setConfirmDeleteId(null);
+              }}
+              className="absolute top-2 right-2 p-1.5 rounded-lg text-neutral-400 dark:text-[#66645f] hover:text-neutral-600 dark:hover:text-[#a09e9a] transition-colors"
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+              </svg>
+            </button>
+          )}
+
+          {/* Dropdown menu for system bin — only Edit (no Delete) */}
+          {systemMenuOpen && systemBin && (
+            <>
+              <div className="fixed inset-0 z-[39]" onClick={() => setMenuBinId(null)} />
+              <div className="absolute top-10 right-2 z-40 min-w-[140px] py-1 rounded-xl bg-white dark:bg-[#1a1a1d] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] shadow-xl">
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleStartEdit(systemBin); }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Settings
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Bin List */}
-      {bins.length > 0 && (
+      {userBins.length > 0 && (
         <div className="flex flex-col gap-3">
           <p className="text-[11px] font-semibold text-neutral-500 dark:text-[#a09e9a] uppercase tracking-[0.08em] px-1 pt-2">
             Bins
           </p>
-          {bins.map((bin) => {
+          {userBins.map((bin) => {
             const isEditing = editingBinId === bin.id;
             const isMenuOpen = menuBinId === bin.id;
             const isConfirmingDelete = confirmDeleteId === bin.id;
@@ -188,6 +320,50 @@ const MobileBinPicker = memo(function MobileBinPicker({
                     placeholder="Add a description..."
                     className="bg-transparent text-xs text-neutral-500 dark:text-[#a09e9a] placeholder:text-neutral-400 dark:placeholder:text-[#66645f] outline-none"
                   />
+
+                  {/* Auto-dismiss controls */}
+                  <div className="mt-2 pt-2 border-t border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] flex flex-col gap-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-neutral-900 dark:text-[#f0efed]">Auto-dismiss completed</p>
+                        <p className="text-[11px] text-neutral-500 dark:text-[#66645f] leading-snug">
+                          Remove completed tasks after N days.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={editAutoEnabled}
+                        onClick={() => setEditAutoEnabled((v) => !v)}
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                          editAutoEnabled ? 'bg-amber-500' : 'bg-neutral-300 dark:bg-[rgba(255,255,255,0.12)]'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                            editAutoEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    {editAutoEnabled && (
+                      <div className="flex items-center gap-2">
+                        <label className="text-[11px] text-neutral-500 dark:text-[#66645f]">After</label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={365}
+                          value={editAutoDays}
+                          onChange={(e) => setEditAutoDays(Number(e.target.value))}
+                          className="w-16 px-2 py-1 rounded-md bg-white dark:bg-[rgba(255,255,255,0.04)] border border-neutral-200 dark:border-[rgba(255,255,255,0.1)] text-sm text-neutral-900 dark:text-[#f0efed] outline-none text-center"
+                        />
+                        <span className="text-[11px] text-neutral-500 dark:text-[#66645f]">
+                          day{editAutoDays === 1 ? '' : 's'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex items-center gap-2 pt-1">
                     <button
                       onClick={handleSaveEdit}
