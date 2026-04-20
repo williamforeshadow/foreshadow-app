@@ -125,7 +125,8 @@ export async function POST(request: Request) {
     // Get automation config for this property-template pair.
     // Prefer property_id lookup (canonical); fall back to property_name for
     // any legacy rows where property_id wasn't backfilled.
-    let propertyTemplate: { automation_config: AutomationConfig | null } | null = null;
+    type PropertyTemplateConfig = { automation_config: AutomationConfig | null };
+    let propertyTemplate: PropertyTemplateConfig | null = null;
     if (reservation.property_id) {
       const { data } = await supabase
         .from('property_templates')
@@ -133,7 +134,7 @@ export async function POST(request: Request) {
         .eq('property_id', reservation.property_id)
         .eq('template_id', template_id)
         .maybeSingle();
-      propertyTemplate = data as typeof propertyTemplate;
+      propertyTemplate = (data as PropertyTemplateConfig | null) ?? null;
     }
     if (!propertyTemplate && reservation.property_name) {
       const { data } = await supabase
@@ -142,10 +143,11 @@ export async function POST(request: Request) {
         .eq('property_name', reservation.property_name)
         .eq('template_id', template_id)
         .maybeSingle();
-      propertyTemplate = data as typeof propertyTemplate;
+      propertyTemplate = (data as PropertyTemplateConfig | null) ?? null;
     }
 
-    const automationConfig = propertyTemplate?.automation_config as AutomationConfig | null;
+    const automationConfig: AutomationConfig | null =
+      propertyTemplate?.automation_config ?? null;
 
     // Calculate scheduled date/time if automation is configured
     let scheduledDate: string | null = null;

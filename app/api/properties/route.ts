@@ -38,7 +38,14 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const properties = (data || []).map((p) => ({
+    const properties = (data || []).map((p: {
+      id: string;
+      name: string;
+      hostaway_name: string | null;
+      hostaway_listing_id: number | null;
+      created_at: string;
+      updated_at: string;
+    }) => ({
       id: p.id,
       name: p.name,
       hostaway_name: p.hostaway_name ?? null,

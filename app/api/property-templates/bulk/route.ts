@@ -36,6 +36,8 @@ export async function POST(request: Request) {
     let pairs: Array<{ property_id: string; property_name: string }> = [];
     let missing: string[] = [];
 
+    type PropRow = { id: string; name: string };
+
     if (hasIds && property_ids.length > 0) {
       const { data: props, error: propErr } = await supabase
         .from('properties')
@@ -44,9 +46,10 @@ export async function POST(request: Request) {
       if (propErr) {
         return NextResponse.json({ error: propErr.message }, { status: 500 });
       }
-      const foundIds = new Set((props || []).map(p => p.id));
+      const rows: PropRow[] = (props as PropRow[] | null) || [];
+      const foundIds = new Set(rows.map((p) => p.id));
       missing = property_ids.filter((pid: string) => !foundIds.has(pid));
-      pairs = (props || []).map(p => ({ property_id: p.id, property_name: p.name }));
+      pairs = rows.map((p) => ({ property_id: p.id, property_name: p.name }));
     } else if (hasNames && property_names.length > 0) {
       const { data: props, error: propErr } = await supabase
         .from('properties')
@@ -55,9 +58,10 @@ export async function POST(request: Request) {
       if (propErr) {
         return NextResponse.json({ error: propErr.message }, { status: 500 });
       }
-      const foundNames = new Set((props || []).map(p => p.name));
+      const rows: PropRow[] = (props as PropRow[] | null) || [];
+      const foundNames = new Set(rows.map((p) => p.name));
       missing = property_names.filter((n: string) => !foundNames.has(n));
-      pairs = (props || []).map(p => ({ property_id: p.id, property_name: p.name }));
+      pairs = rows.map((p) => ({ property_id: p.id, property_name: p.name }));
     }
 
     if (missing.length > 0) {
