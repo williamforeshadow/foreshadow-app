@@ -11,6 +11,8 @@ import {
   MobileMyAssignmentsView,
   MobileProjectsView,
   MobileProjectDetail,
+  MobileDrawer,
+  MobilePropertiesView,
   type MobileTab 
 } from '@/components/mobile';
 import MessagesWindow from '@/components/windows/MessagesWindow';
@@ -48,11 +50,17 @@ export default function MobileApp() {
   }, []);
 
   // Mobile-specific state
-  const [mobileTab, setMobileTab] = useState<MobileTab>('assignments');
+  type MobileView = MobileTab | 'properties';
+  const [mobileView, setMobileView] = useState<MobileView>('assignments');
   const [mobileSelectedTask, setMobileSelectedTask] = useState<Task | null>(null);
   const [mobileSelectedProject, setMobileSelectedProject] = useState<Project | null>(null);
   const [mobileRefreshTrigger, setMobileRefreshTrigger] = useState(0);
   const [hideNav, setHideNav] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const isTabView = (v: MobileView): v is MobileTab =>
+    v === 'assignments' || v === 'projects' || v === 'timeline' || v === 'messages';
+  const activeTabForNav: MobileTab | null = isTabView(mobileView) ? mobileView : null;
 
   const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
 
@@ -248,11 +256,12 @@ export default function MobileApp() {
   return (
     <>
       <MobileLayout
-        activeTab={mobileTab}
-        onTabChange={setMobileTab}
+        activeTab={activeTabForNav}
+        onTabChange={(tab) => setMobileView(tab)}
+        onMenuTap={() => setDrawerOpen(true)}
         hideNav={hideNav}
       >
-        {mobileTab === 'assignments' && (
+        {mobileView === 'assignments' && (
           <MobileMyAssignmentsView
             onTaskClick={async (task: any) => {
               const propName = task.property_name;
@@ -276,13 +285,13 @@ export default function MobileApp() {
           />
         )}
 
-        {mobileTab === 'projects' && (
+        {mobileView === 'projects' && (
           <MobileProjectsView
             users={users}
           />
         )}
         
-        {mobileTab === 'timeline' && (
+        {mobileView === 'timeline' && (
           <MobileTimelineView 
             onCardClick={() => {}}
             refreshTrigger={mobileRefreshTrigger}
@@ -298,10 +307,21 @@ export default function MobileApp() {
           />
         )}
 
-        {mobileTab === 'messages' && (
+        {mobileView === 'messages' && (
           <MessagesWindow currentUser={currentUser} users={users} />
         )}
+
+        {mobileView === 'properties' && (
+          <MobilePropertiesView />
+        )}
       </MobileLayout>
+
+      <MobileDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onNavigateProperties={() => setMobileView('properties')}
+        activeView={mobileView}
+      />
 
       {/* Task Detail overlay */}
       {mobileSelectedTask && taskAsProject && (

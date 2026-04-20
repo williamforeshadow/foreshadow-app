@@ -5,7 +5,7 @@ import { memo, useCallback } from 'react';
 export type MobileTab = 'assignments' | 'projects' | 'timeline' | 'messages';
 
 interface MobileNavProps {
-  activeTab: MobileTab;
+  activeTab: MobileTab | null;
   onTabChange: (tab: MobileTab) => void;
   hidden?: boolean;
 }
