@@ -10,6 +10,7 @@ export async function GET(request: Request) {
     const selectFields = `
         id,
         property_name,
+        property_id,
         template_id,
         title,
         description,
@@ -101,6 +102,7 @@ export async function GET(request: Request) {
       return {
         id: task.id,
         property_name: task.property_name || null,
+        property_id: (task as any).property_id || null,
         bin_id: task.bin_id || null,
         is_binned: task.is_binned ?? false,
         template_id: task.template_id || null,
@@ -139,6 +141,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const {
       property_name,
+      property_id,
       title,
       description,
       status,
@@ -156,10 +159,43 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'title is required' }, { status: 400 });
     }
 
-    const { data: task, error } = await getSupabaseServer()
+    const supabase = getSupabaseServer();
+
+    // Resolve (property_name, property_id) pair for dual-write.
+    // Both can remain null for free-floating tasks. If only one side is given,
+    // we try to resolve the other via the properties table; if resolution
+    // fails we keep the provided value and leave the counterpart null (lax,
+    // matches pre-migration behavior for orphan task scenarios).
+    let resolvedPropertyName: string | null = property_name || null;
+    let resolvedPropertyId: string | null = property_id || null;
+
+    if (resolvedPropertyId && !resolvedPropertyName) {
+      const { data: prop } = await supabase
+        .from('properties')
+        .select('name')
+        .eq('id', resolvedPropertyId)
+        .maybeSingle();
+      if (prop) {
+        resolvedPropertyName = prop.name;
+      } else {
+        resolvedPropertyId = null;
+      }
+    } else if (resolvedPropertyName && !resolvedPropertyId) {
+      const { data: prop } = await supabase
+        .from('properties')
+        .select('id')
+        .eq('name', resolvedPropertyName)
+        .maybeSingle();
+      if (prop) {
+        resolvedPropertyId = prop.id;
+      }
+    }
+
+    const { data: task, error } = await supabase
       .from('turnover_tasks')
       .insert({
-        property_name: property_name || null,
+        property_name: resolvedPropertyName,
+        property_id: resolvedPropertyId,
         bin_id: bin_id || null,
         is_binned: is_binned ?? (bin_id ? true : false),
         title,
@@ -194,11 +230,12 @@ export async function POST(request: Request) {
       await getSupabaseServer().from('task_assignments').insert(assignments);
     }
 
-    const { data: fullTask, error: fetchError } = await getSupabaseServer()
+    const { data: fullTask, error: fetchError } = await supabase
       .from('turnover_tasks')
       .select(`
         id,
         property_name,
+        property_id,
         template_id,
         title,
         description,
@@ -233,6 +270,7 @@ export async function POST(request: Request) {
     const transformed = {
       id: fullTask.id,
       property_name: fullTask.property_name || null,
+      property_id: (fullTask as any).property_id || null,
       bin_id: fullTask.bin_id || null,
       is_binned: fullTask.is_binned ?? false,
       template_id: fullTask.template_id || null,

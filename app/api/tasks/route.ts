@@ -111,7 +111,7 @@ export async function POST(request: Request) {
     // Get reservation details for scheduling calculation
     const { data: reservation, error: reservationError } = await supabase
       .from('reservations')
-      .select('id, property_name, check_out, next_check_in')
+      .select('id, property_id, property_name, check_out, next_check_in')
       .eq('id', reservation_id)
       .single();
 
@@ -122,13 +122,28 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get automation config for this property-template pair
-    const { data: propertyTemplate } = await supabase
-      .from('property_templates')
-      .select('automation_config')
-      .eq('property_name', reservation.property_name)
-      .eq('template_id', template_id)
-      .single();
+    // Get automation config for this property-template pair.
+    // Prefer property_id lookup (canonical); fall back to property_name for
+    // any legacy rows where property_id wasn't backfilled.
+    let propertyTemplate: { automation_config: AutomationConfig | null } | null = null;
+    if (reservation.property_id) {
+      const { data } = await supabase
+        .from('property_templates')
+        .select('automation_config')
+        .eq('property_id', reservation.property_id)
+        .eq('template_id', template_id)
+        .maybeSingle();
+      propertyTemplate = data as typeof propertyTemplate;
+    }
+    if (!propertyTemplate && reservation.property_name) {
+      const { data } = await supabase
+        .from('property_templates')
+        .select('automation_config')
+        .eq('property_name', reservation.property_name)
+        .eq('template_id', template_id)
+        .maybeSingle();
+      propertyTemplate = data as typeof propertyTemplate;
+    }
 
     const automationConfig = propertyTemplate?.automation_config as AutomationConfig | null;
 
@@ -164,11 +179,16 @@ export async function POST(request: Request) {
       assignUserIds = automationConfig.auto_assign.user_ids || [];
     }
 
-    // Insert new task with calculated schedule
+    // Insert new task with calculated schedule.
+    // Dual-write property_id + property_name from the reservation so DB
+    // triggers and downstream joins can rely on either column during the
+    // property_name → property_id migration.
     const { data: newTask, error: insertError } = await supabase
       .from('turnover_tasks')
       .insert({
         reservation_id,
+        property_id: reservation.property_id || null,
+        property_name: reservation.property_name || null,
         template_id,
         type: template.type,
         department_id: template.department_id || null,

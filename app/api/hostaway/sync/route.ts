@@ -11,20 +11,75 @@ export async function POST() {
     const supabase = getSupabaseServer();
 
     // 1. Sync listings → properties
+    //
+    // We split INSERT vs UPDATE so user-customized `properties.name` (the
+    // "property code") is preserved across syncs. Hostaway's name snapshot
+    // lives in `hostaway_name` and is the only name-related field we ever
+    // overwrite for existing rows.
     const listingsMap = await fetchListings();
     console.log(`[Hostaway Sync] Fetched ${listingsMap.size} listings`);
 
-    const propertyRows = Array.from(listingsMap.entries()).map(([id, name]) => ({
-      hostaway_listing_id: id,
-      name,
-      updated_at: new Date().toISOString(),
-    }));
-
-    await supabase
+    const { data: existingPropsRaw } = await supabase
       .from('properties')
-      .upsert(propertyRows, { onConflict: 'hostaway_listing_id' });
+      .select('id, hostaway_listing_id');
 
-    // Build lookup: hostaway_listing_id → property uuid
+    const existingPropIdMap = new Map<number, string>();
+    for (const p of existingPropsRaw || []) {
+      if (p.hostaway_listing_id != null) {
+        existingPropIdMap.set(p.hostaway_listing_id, p.id);
+      }
+    }
+
+    const nowIso = new Date().toISOString();
+    const newListingRows: Array<{
+      hostaway_listing_id: number;
+      name: string;
+      hostaway_name: string;
+      updated_at: string;
+    }> = [];
+    const existingListingUpdates: Array<{
+      hostaway_listing_id: number;
+      hostaway_name: string;
+    }> = [];
+
+    for (const [listingId, listingName] of listingsMap.entries()) {
+      if (existingPropIdMap.has(listingId)) {
+        existingListingUpdates.push({
+          hostaway_listing_id: listingId,
+          hostaway_name: listingName,
+        });
+      } else {
+        newListingRows.push({
+          hostaway_listing_id: listingId,
+          name: listingName,
+          hostaway_name: listingName,
+          updated_at: nowIso,
+        });
+      }
+    }
+
+    // INSERT brand-new listings (populate both name + hostaway_name)
+    if (newListingRows.length > 0) {
+      const { error: insertPropErr } = await supabase
+        .from('properties')
+        .insert(newListingRows);
+      if (insertPropErr) {
+        console.error('[Hostaway Sync] property insert error:', insertPropErr.message);
+      }
+    }
+
+    // UPDATE existing listings — only touch hostaway_name, never overwrite `name`
+    for (const row of existingListingUpdates) {
+      const { error: updatePropErr } = await supabase
+        .from('properties')
+        .update({ hostaway_name: row.hostaway_name, updated_at: nowIso })
+        .eq('hostaway_listing_id', row.hostaway_listing_id);
+      if (updatePropErr) {
+        console.error('[Hostaway Sync] property update error:', updatePropErr.message);
+      }
+    }
+
+    // Refresh the hostaway_listing_id → property uuid lookup to include newly-inserted rows
     const { data: props } = await supabase
       .from('properties')
       .select('id, hostaway_listing_id');
@@ -146,24 +201,25 @@ export async function POST() {
 
     console.log(`[Hostaway Sync] Inserted ${inserted} new, updated ${updated} existing`);
 
-    // 5. Correct property names to match reservation data
+    // 5. Refresh hostaway_name snapshots from reservation payload
+    //
+    // Hostaway returns `listingName` on each reservation; we treat that as the
+    // authoritative Hostaway-side name and push it to `properties.hostaway_name`.
+    // We never touch `properties.name` here — that's user-controlled.
     const nameCorrections = new Map<number, string>();
     for (const r of reservations) {
       if (r.listingMapId && r.listingName) {
         nameCorrections.set(r.listingMapId, r.listingName);
       }
     }
-    if (nameCorrections.size > 0) {
-      const correctionRows = Array.from(nameCorrections.entries()).map(
-        ([listingId, name]) => ({
-          hostaway_listing_id: listingId,
-          name,
-          updated_at: new Date().toISOString(),
-        })
-      );
-      await supabase
+    for (const [listingId, hostawayName] of nameCorrections.entries()) {
+      const { error: correctionErr } = await supabase
         .from('properties')
-        .upsert(correctionRows, { onConflict: 'hostaway_listing_id' });
+        .update({ hostaway_name: hostawayName, updated_at: nowIso })
+        .eq('hostaway_listing_id', listingId);
+      if (correctionErr) {
+        console.error('[Hostaway Sync] name correction error:', correctionErr.message);
+      }
     }
 
     // 6. Remove cancelled reservations
@@ -201,7 +257,9 @@ export async function POST() {
 
     const result = {
       success: true,
-      properties: propertyRows.length,
+      properties: listingsMap.size,
+      properties_inserted: newListingRows.length,
+      properties_updated: existingListingUpdates.length,
       reservations_fetched: reservations.length,
       reservations_inserted: inserted,
       reservations_updated: updated,

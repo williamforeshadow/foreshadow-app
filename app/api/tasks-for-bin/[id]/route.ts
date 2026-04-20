@@ -18,6 +18,7 @@ export async function PUT(
       scheduled_time,
       department_id,
       property_name,
+      property_id,
       bin_id,
       is_binned,
       template_id,
@@ -35,20 +36,26 @@ export async function PUT(
     if (scheduled_time !== undefined) updateData.scheduled_time = scheduled_time;
     if (department_id !== undefined) updateData.department_id = department_id || null;
     if (property_name !== undefined) updateData.property_name = property_name || null;
+    if (property_id !== undefined) updateData.property_id = property_id || null;
     if (bin_id !== undefined) updateData.bin_id = bin_id || null;
     if (is_binned !== undefined) updateData.is_binned = is_binned;
     if (template_id !== undefined) updateData.template_id = template_id || null;
 
-    // Guard: reject property_name/template_id changes if already set
-    if (property_name !== undefined || template_id !== undefined) {
+    // Hard-block property/template reassignment on existing tasks.
+    // Either side of the (property_name, property_id) pair is blocked.
+    if (
+      property_name !== undefined ||
+      property_id !== undefined ||
+      template_id !== undefined
+    ) {
       const { data: existing } = await getSupabaseServer()
         .from('turnover_tasks')
-        .select('property_name, template_id')
+        .select('property_name, property_id, template_id')
         .eq('id', id)
         .single();
 
       if (existing) {
-        if (property_name !== undefined) {
+        if (property_name !== undefined || property_id !== undefined) {
           return NextResponse.json({ error: 'Property cannot be changed after task creation' }, { status: 400 });
         }
         if (template_id !== undefined) {
@@ -93,6 +100,7 @@ export async function PUT(
       .select(`
         id,
         property_name,
+        property_id,
         template_id,
         title,
         description,
@@ -127,6 +135,7 @@ export async function PUT(
     const transformed = {
       id: data.id,
       property_name: data.property_name || null,
+      property_id: (data as any).property_id || null,
       bin_id: data.bin_id || null,
       is_binned: data.is_binned ?? false,
       template_id: data.template_id || null,

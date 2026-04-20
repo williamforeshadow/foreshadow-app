@@ -25,47 +25,98 @@ export async function GET() {
 }
 
 // POST/UPDATE property-template assignment
+//
+// Accepts either `property_name` (legacy) or `property_id` (canonical UUID).
+// Whichever is provided, we resolve to the other via the `properties` table and
+// dual-write both into `property_templates` so the DB functions can join on
+// either column during the property_name → property_id migration.
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { property_name, template_id, enabled = true, automation_config, field_overrides } = body;
+    const {
+      property_name: inputPropertyName,
+      property_id: inputPropertyId,
+      template_id,
+      enabled = true,
+      automation_config,
+      field_overrides,
+    } = body;
 
-    if (!property_name || !template_id) {
+    if (!template_id) {
       return NextResponse.json(
-        { error: 'Property name and template ID are required' },
+        { error: 'template_id is required' },
         { status: 400 }
       );
     }
 
-    // Build the upsert payload
+    if (!inputPropertyName && !inputPropertyId) {
+      return NextResponse.json(
+        { error: 'property_name or property_id is required' },
+        { status: 400 }
+      );
+    }
+
+    const supabase = getSupabaseServer();
+
+    // Resolve the missing half of (property_name, property_id)
+    let resolvedName: string | null = inputPropertyName || null;
+    let resolvedId: string | null = inputPropertyId || null;
+
+    if (resolvedId && !resolvedName) {
+      const { data: prop } = await supabase
+        .from('properties')
+        .select('name')
+        .eq('id', resolvedId)
+        .maybeSingle();
+      if (!prop) {
+        return NextResponse.json(
+          { error: `No property found with id ${resolvedId}` },
+          { status: 400 }
+        );
+      }
+      resolvedName = prop.name;
+    } else if (resolvedName && !resolvedId) {
+      const { data: prop } = await supabase
+        .from('properties')
+        .select('id')
+        .eq('name', resolvedName)
+        .maybeSingle();
+      if (!prop) {
+        return NextResponse.json(
+          { error: `No property found with name "${resolvedName}"` },
+          { status: 400 }
+        );
+      }
+      resolvedId = prop.id;
+    }
+
     const upsertPayload: {
       property_name: string;
+      property_id: string;
       template_id: string;
       enabled: boolean;
       automation_config?: object | null;
       field_overrides?: object | null;
     } = {
-      property_name,
+      property_name: resolvedName!,
+      property_id: resolvedId!,
       template_id,
-      enabled
+      enabled,
     };
 
-    // Only include automation_config if it was provided in the request
     if (automation_config !== undefined) {
       upsertPayload.automation_config = automation_config;
     }
 
-    // Only include field_overrides if it was provided in the request
     if (field_overrides !== undefined) {
       upsertPayload.field_overrides = field_overrides;
     }
 
-    // Use upsert to handle both insert and update
-    // The unique constraint is now on (property_name, template_id)
-    const { data, error } = await getSupabaseServer()
+    // Upsert on the canonical (property_id, template_id) unique constraint.
+    const { data, error } = await supabase
       .from('property_templates')
       .upsert(upsertPayload, {
-        onConflict: 'property_name,template_id'
+        onConflict: 'property_id,template_id',
       })
       .select()
       .single();
@@ -87,26 +138,33 @@ export async function POST(request: Request) {
 }
 
 // DELETE property-template assignment
+//
+// Accepts either ?property_name=... (legacy) or ?property_id=... (canonical).
+// property_id is preferred when both are supplied.
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const property_name = searchParams.get('property_name');
+    const property_id = searchParams.get('property_id');
     const template_id = searchParams.get('template_id');
 
-    if (!property_name) {
+    if (!property_name && !property_id) {
       return NextResponse.json(
-        { error: 'Property name is required' },
+        { error: 'property_name or property_id is required' },
         { status: 400 }
       );
     }
 
-    // Build query - can delete specific template or all for property
     let query = getSupabaseServer()
       .from('property_templates')
-      .delete()
-      .eq('property_name', property_name);
-    
-    // If template_id is provided, only delete that specific assignment
+      .delete();
+
+    if (property_id) {
+      query = query.eq('property_id', property_id);
+    } else {
+      query = query.eq('property_name', property_name as string);
+    }
+
     if (template_id) {
       query = query.eq('template_id', template_id);
     }
@@ -128,4 +186,3 @@ export async function DELETE(request: Request) {
     );
   }
 }
-

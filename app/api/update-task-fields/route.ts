@@ -9,7 +9,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'taskId and fields object are required' }, { status: 400 });
     }
 
-    const allowedFields = ['title', 'description', 'priority', 'department_id', 'bin_id', 'is_binned', 'template_id', 'property_name'];
+    const allowedFields = [
+      'title',
+      'description',
+      'priority',
+      'department_id',
+      'bin_id',
+      'is_binned',
+      'template_id',
+      'property_name',
+      'property_id',
+    ];
     const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
@@ -24,16 +34,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
     }
 
-    // Guard: reject property_name/template_id changes if already set
-    if ('property_name' in updateData || 'template_id' in updateData) {
+    // Hard-block property/template reassignment on existing tasks.
+    // Either side of (property_name, property_id) is rejected symmetrically.
+    if (
+      'property_name' in updateData ||
+      'property_id' in updateData ||
+      'template_id' in updateData
+    ) {
       const { data: existing } = await getSupabaseServer()
         .from('turnover_tasks')
-        .select('property_name, template_id')
+        .select('property_name, property_id, template_id')
         .eq('id', taskId)
         .single();
 
       if (existing) {
-        if ('property_name' in updateData) {
+        if ('property_name' in updateData || 'property_id' in updateData) {
           return NextResponse.json({ error: 'Property cannot be changed after task creation' }, { status: 400 });
         }
         if ('template_id' in updateData) {
