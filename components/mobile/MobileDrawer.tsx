@@ -1,7 +1,7 @@
 'use client';
 
 import { memo, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { useAuth } from '@/lib/authContext';
 import { UserAvatar } from '@/components/ui/user-avatar';
@@ -9,8 +9,6 @@ import { UserAvatar } from '@/components/ui/user-avatar';
 interface MobileDrawerProps {
   open: boolean;
   onClose: () => void;
-  onNavigateProperties: () => void;
-  activeView: string;
 }
 
 const roleColors: Record<string, string> = {
@@ -19,13 +17,24 @@ const roleColors: Record<string, string> = {
   staff: 'bg-emerald-500',
 };
 
-const MobileDrawer = memo(function MobileDrawer({
-  open,
-  onClose,
-  onNavigateProperties,
-  activeView,
-}: MobileDrawerProps) {
+// Routes the drawer can navigate to. Active state is derived from the
+// current pathname so the drawer stays correct whether it's rendered from
+// MobileApp (at /) or from a MobileRouteShell on any other route.
+const NAV_ROUTES = {
+  home: '/',
+  properties: '/properties',
+  profile: '/profile',
+} as const;
+
+function isActiveRoute(pathname: string | null, route: string): boolean {
+  if (!pathname) return false;
+  if (route === '/') return pathname === '/';
+  return pathname === route || pathname.startsWith(`${route}/`);
+}
+
+const MobileDrawer = memo(function MobileDrawer({ open, onClose }: MobileDrawerProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, allUsers, role, switchUser } = useAuth();
   const { theme, setTheme } = useTheme();
 
@@ -45,14 +54,10 @@ const MobileDrawer = memo(function MobileDrawer({
     }
   }, [open]);
 
-  const handleEditProfile = () => {
+  const navigate = (path: string) => {
     onClose();
-    router.push('/profile');
-  };
-
-  const handleNavigateProperties = () => {
-    onClose();
-    onNavigateProperties();
+    // Avoid noisy history entries when tapping the route you're already on.
+    if (pathname !== path) router.push(path);
   };
 
   const handleSwitchUser = (id: string) => {
@@ -104,9 +109,19 @@ const MobileDrawer = memo(function MobileDrawer({
         <nav className="flex-1 overflow-auto hide-scrollbar">
           <div className="py-2">
             <DrawerNavItem
-              active={activeView === 'properties'}
+              active={isActiveRoute(pathname, NAV_ROUTES.home)}
+              label="Home"
+              onClick={() => navigate(NAV_ROUTES.home)}
+              icon={
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l9-9 9 9M5 10v10h4v-6h6v6h4V10" />
+                </svg>
+              }
+            />
+            <DrawerNavItem
+              active={isActiveRoute(pathname, NAV_ROUTES.properties)}
               label="Properties"
-              onClick={handleNavigateProperties}
+              onClick={() => navigate(NAV_ROUTES.properties)}
               icon={
                 <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -114,9 +129,9 @@ const MobileDrawer = memo(function MobileDrawer({
               }
             />
             <DrawerNavItem
-              active={false}
+              active={isActiveRoute(pathname, NAV_ROUTES.profile)}
               label="Edit Profile"
-              onClick={handleEditProfile}
+              onClick={() => navigate(NAV_ROUTES.profile)}
               icon={
                 <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />

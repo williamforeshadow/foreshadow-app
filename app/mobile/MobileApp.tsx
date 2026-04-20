@@ -12,7 +12,6 @@ import {
   MobileProjectsView,
   MobileProjectDetail,
   MobileDrawer,
-  MobilePropertiesView,
   type MobileTab 
 } from '@/components/mobile';
 import MessagesWindow from '@/components/windows/MessagesWindow';
@@ -49,18 +48,15 @@ export default function MobileApp() {
     })();
   }, []);
 
-  // Mobile-specific state
-  type MobileView = MobileTab | 'properties';
-  const [mobileView, setMobileView] = useState<MobileView>('assignments');
+  // Mobile-specific state. Admin surfaces (Properties, Profile, etc.) live on
+  // their own routes and are opened from the drawer; they don't need inline
+  // state here. The bottom-tab views remain fully local.
+  const [mobileView, setMobileView] = useState<MobileTab>('assignments');
   const [mobileSelectedTask, setMobileSelectedTask] = useState<Task | null>(null);
   const [mobileSelectedProject, setMobileSelectedProject] = useState<Project | null>(null);
   const [mobileRefreshTrigger, setMobileRefreshTrigger] = useState(0);
   const [hideNav, setHideNav] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-
-  const isTabView = (v: MobileView): v is MobileTab =>
-    v === 'assignments' || v === 'projects' || v === 'timeline' || v === 'messages';
-  const activeTabForNav: MobileTab | null = isTabView(mobileView) ? mobileView : null;
 
   const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
 
@@ -256,7 +252,7 @@ export default function MobileApp() {
   return (
     <>
       <MobileLayout
-        activeTab={activeTabForNav}
+        activeTab={mobileView}
         onTabChange={(tab) => setMobileView(tab)}
         onMenuTap={() => setDrawerOpen(true)}
         hideNav={hideNav}
@@ -310,17 +306,11 @@ export default function MobileApp() {
         {mobileView === 'messages' && (
           <MessagesWindow currentUser={currentUser} users={users} />
         )}
-
-        {mobileView === 'properties' && (
-          <MobilePropertiesView />
-        )}
       </MobileLayout>
 
       <MobileDrawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        onNavigateProperties={() => setMobileView('properties')}
-        activeView={mobileView}
       />
 
       {/* Task Detail overlay */}
