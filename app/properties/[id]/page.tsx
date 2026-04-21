@@ -1,28 +1,28 @@
 'use client';
 
-import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { useCallback, useMemo, useState } from 'react';
 import { LinkHostawayModal } from '@/components/properties/LinkHostawayModal';
+import {
+  usePropertyContext,
+  type PropertyProfile,
+} from '@/components/properties/PropertyContext';
+import {
+  Field,
+  FieldGroup,
+  FloatingSaveBar,
+  Input,
+  ReadonlyRow,
+  SectionCaption,
+  SectionHeader,
+  Subheading,
+  Toast,
+  useToast,
+} from '@/components/properties/form/FormPrimitives';
 
-interface PropertyProfile {
-  id: string;
-  name: string;
-  hostaway_name: string | null;
-  hostaway_listing_id: number | null;
-  is_active: boolean;
-  address_street: string | null;
-  address_city: string | null;
-  address_state: string | null;
-  address_zip: string | null;
-  address_country: string | null;
-  latitude: number | null;
-  longitude: number | null;
-  bedrooms: number | null;
-  bathrooms: number | null;
-  created_at: string;
-  updated_at: string;
-}
+// Information tab: name, address, bed/bath, active-state toggle, and
+// Hostaway linkage. Rendered inside the PropertyShell layout, so no
+// header/back link/tab strip here — the shell owns those.
 
 interface DraftFields {
   name: string;
@@ -65,15 +65,18 @@ function formatDate(s?: string | null) {
   });
 }
 
-export default function PropertyProfilePage() {
+export default function PropertyInformationTab() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const propertyId = params?.id as string;
+  const { property, applyLocalPatch, refresh } = usePropertyContext();
 
-  const [property, setProperty] = useState<PropertyProfile | null>(null);
-  const [draft, setDraft] = useState<DraftFields | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Drafts are seeded from the context property but then diverge freely.
+  // When refresh() lands with new values we re-seed on demand via Discard
+  // so the user never loses unsaved work silently.
+  const [draft, setDraft] = useState<DraftFields | null>(() =>
+    property ? toDraft(property) : null
+  );
+
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [locationOpen, setLocationOpen] = useState(false);
@@ -82,22 +85,55 @@ export default function PropertyProfilePage() {
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [unlinking, setUnlinking] = useState(false);
   const [linkageError, setLinkageError] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { toast, showToast } = useToast();
 
-  const showToast = useCallback((kind: 'success' | 'error', message: string) => {
-    setToast({ kind, message });
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToast(null), 4500);
-  }, []);
+  // Seed draft when property first arrives (on mount the shell gate may
+  // already have resolved, but on slow connections it fires later).
+  if (property && !draft) {
+    setDraft(toDraft(property));
+  }
 
-  useEffect(() => {
-    return () => {
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    };
-  }, []);
+  const isDirty = useMemo(() => {
+    if (!property || !draft) return false;
+    const current = toDraft(property);
+    return (Object.keys(current) as (keyof DraftFields)[]).some(
+      (k) => current[k] !== draft[k]
+    );
+  }, [property, draft]);
 
-  const handleUnlink = async () => {
+  const updateDraft = (key: keyof DraftFields, value: string) => {
+    setDraft((prev) => (prev ? { ...prev, [key]: value } : prev));
+  };
+
+  const handleDiscard = () => {
+    if (property) setDraft(toDraft(property));
+    setSaveError(null);
+  };
+
+  const handleToggleActive = useCallback(
+    async (next: boolean) => {
+      if (!property || togglingActive) return;
+      setTogglingActive(true);
+      setStatusError(null);
+      try {
+        const res = await fetch(`/api/properties/${propertyId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_active: next }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to update status');
+        applyLocalPatch(data.property);
+      } catch (err: any) {
+        setStatusError(err.message || 'Failed to update status');
+      } finally {
+        setTogglingActive(false);
+      }
+    },
+    [property, togglingActive, propertyId, applyLocalPatch]
+  );
+
+  const handleUnlink = useCallback(async () => {
     if (!property || unlinking) return;
     if (property.hostaway_listing_id == null) return;
     const proceed = window.confirm(
@@ -112,7 +148,7 @@ export default function PropertyProfilePage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Unlink failed');
-      setProperty(data.property);
+      applyLocalPatch(data.property);
       setDraft(toDraft(data.property));
       showToast('success', 'Unlinked from Hostaway');
     } catch (err: any) {
@@ -120,74 +156,13 @@ export default function PropertyProfilePage() {
     } finally {
       setUnlinking(false);
     }
-  };
-
-  // Fetch
-  const fetchProperty = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/properties/${propertyId}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to fetch property');
-      setProperty(data.property);
-      setDraft(toDraft(data.property));
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch property');
-    } finally {
-      setLoading(false);
-    }
-  }, [propertyId]);
-
-  useEffect(() => {
-    if (propertyId) fetchProperty();
-  }, [propertyId, fetchProperty]);
-
-  // Dirty detection
-  const isDirty = useMemo(() => {
-    if (!property || !draft) return false;
-    const current = toDraft(property);
-    return (Object.keys(current) as (keyof DraftFields)[]).some((k) => current[k] !== draft[k]);
-  }, [property, draft]);
-
-  const updateDraft = (key: keyof DraftFields, value: string) => {
-    setDraft((prev) => (prev ? { ...prev, [key]: value } : prev));
-  };
-
-  // Active toggle is intentionally outside the dirty-tracked form — flipping
-  // a property's active state is a switch, not a staged edit. It PATCHes
-  // immediately and refreshes the local record.
-  const handleToggleActive = async (next: boolean) => {
-    if (!property || togglingActive) return;
-    setTogglingActive(true);
-    setStatusError(null);
-    try {
-      const res = await fetch(`/api/properties/${propertyId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_active: next }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update status');
-      setProperty(data.property);
-    } catch (err: any) {
-      setStatusError(err.message || 'Failed to update status');
-    } finally {
-      setTogglingActive(false);
-    }
-  };
-
-  const handleDiscard = () => {
-    if (property) setDraft(toDraft(property));
-    setSaveError(null);
-  };
+  }, [property, unlinking, propertyId, applyLocalPatch, showToast]);
 
   const handleSave = async () => {
     if (!draft || !property) return;
     setSaving(true);
     setSaveError(null);
 
-    // Build PATCH body: only include changed fields; cast numerics.
     const original = toDraft(property);
     const patch: Record<string, unknown> = {};
 
@@ -211,10 +186,8 @@ export default function PropertyProfilePage() {
     };
 
     try {
-      // Name is special — validated server-side too, but surface early
       if (draft.name.trim() === '') throw new Error('Name cannot be empty');
       if (draft.name !== original.name) patch.name = draft.name.trim();
-
       diffString('address_street');
       diffString('address_city');
       diffString('address_state');
@@ -243,7 +216,7 @@ export default function PropertyProfilePage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save');
-      setProperty(data.property);
+      applyLocalPatch(data.property);
       setDraft(toDraft(data.property));
     } catch (err: any) {
       setSaveError(err.message || 'Failed to save');
@@ -252,80 +225,23 @@ export default function PropertyProfilePage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="w-7 h-7 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (error || !property || !draft) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full px-6 text-center">
-        <p className="text-neutral-500 dark:text-[#a09e9a] text-sm mb-4">
-          {error || 'Property not found'}
-        </p>
-        <button
-          onClick={() => router.push('/properties')}
-          className="text-[13px] text-neutral-700 dark:text-[#f0efed] underline"
-        >
-          ← Back to Properties
-        </button>
-      </div>
-    );
+  if (!property || !draft) {
+    // The shell renders its own loading/error state; once it lets us
+    // render, property should be present. The check stays as a belt-and-
+    // suspenders guard for the "property arrives after mount" edge case.
+    return null;
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Content */}
+    <>
       <div className="flex-1 overflow-auto">
-        <div className="max-w-[760px] mx-auto px-5 sm:px-8 pt-4 sm:pt-6 pb-32">
-          {/* Back link — hidden on mobile (the shell's top-bar back arrow handles this). */}
-          <Link
-            href="/properties"
-            className="hidden sm:inline-flex items-center gap-1.5 text-[12px] text-neutral-500 dark:text-[#66645f] hover:text-neutral-800 dark:hover:text-[#f0efed] uppercase tracking-[0.04em] font-medium mb-4 transition-colors"
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-            All Properties
-          </Link>
-
-          {/* Header: property name as h1 and hostaway ID */}
-          <div className="mb-6">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <h1 className="text-[24px] sm:text-[28px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed] leading-tight">
-                {property.name}
-              </h1>
-              {!property.is_active && (
-                <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] rounded-md bg-neutral-200 dark:bg-[#2a2825] text-neutral-600 dark:text-[#a09e9a]">
-                  Inactive
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-3 mt-1.5 text-[11px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
-              {property.hostaway_listing_id != null ? (
-                <>
-                  <span className="tabular-nums">Hostaway ID · {property.hostaway_listing_id}</span>
-                  {property.hostaway_name && property.hostaway_name !== property.name && (
-                    <>
-                      <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a]" />
-                      <span className="normal-case tracking-normal text-neutral-500 dark:text-[#66645f]">
-                        Hostaway: {property.hostaway_name}
-                      </span>
-                    </>
-                  )}
-                </>
-              ) : (
-                <span>Not linked to Hostaway</span>
-              )}
-            </div>
-          </div>
-
-          {/* Property Profile */}
+        <div className="max-w-[760px] mx-auto px-5 sm:px-8 pt-5 sm:pt-6 pb-32">
           <section className="mb-8">
             <SectionHeader label="Property Profile" />
+            <SectionCaption>
+              Basic details about the unit. Name is the internal "property code"
+              you'll see across tasks, calendars, and reservations.
+            </SectionCaption>
 
             <FieldGroup>
               <Field label="Internal name / property code">
@@ -380,7 +296,6 @@ export default function PropertyProfilePage() {
               </div>
             </FieldGroup>
 
-            {/* Location (collapsed by default — lat/lng is rarely typed manually) */}
             <button
               onClick={() => setLocationOpen((v) => !v)}
               className="flex items-center gap-1.5 mt-5 mb-2 py-1 text-left"
@@ -446,7 +361,6 @@ export default function PropertyProfilePage() {
             </FieldGroup>
           </section>
 
-          {/* Status */}
           <section className="mb-8">
             <SectionHeader label="Status" />
             <div className="flex items-start justify-between gap-4 py-2">
@@ -486,31 +400,30 @@ export default function PropertyProfilePage() {
             </div>
           </section>
 
-          {/* Hostaway (readonly) */}
           <section className="mb-8">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[11px] font-semibold text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.08em]">
-                Hostaway
-              </h2>
-              {property.hostaway_listing_id != null ? (
-                <button
-                  type="button"
-                  onClick={handleUnlink}
-                  disabled={unlinking}
-                  className="text-[11px] font-medium text-neutral-500 dark:text-[#a09e9a] uppercase tracking-[0.04em] px-2 py-0.5 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-700 dark:hover:text-[#f0efed] transition-colors disabled:opacity-50"
-                >
-                  {unlinking ? 'Unlinking…' : 'Unlink'}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowLinkModal(true)}
-                  className="text-[11px] font-medium text-neutral-500 dark:text-[#a09e9a] uppercase tracking-[0.04em] px-2 py-0.5 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-700 dark:hover:text-[#f0efed] transition-colors"
-                >
-                  Link to Hostaway
-                </button>
-              )}
-            </div>
+            <SectionHeader
+              label="Hostaway"
+              right={
+                property.hostaway_listing_id != null ? (
+                  <button
+                    type="button"
+                    onClick={handleUnlink}
+                    disabled={unlinking}
+                    className="text-[11px] font-medium text-neutral-500 dark:text-[#a09e9a] uppercase tracking-[0.04em] px-2 py-0.5 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-700 dark:hover:text-[#f0efed] transition-colors disabled:opacity-50"
+                  >
+                    {unlinking ? 'Unlinking…' : 'Unlink'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowLinkModal(true)}
+                    className="text-[11px] font-medium text-neutral-500 dark:text-[#a09e9a] uppercase tracking-[0.04em] px-2 py-0.5 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-700 dark:hover:text-[#f0efed] transition-colors"
+                  >
+                    Link to Hostaway
+                  </button>
+                )
+              }
+            />
             {property.hostaway_listing_id != null ? (
               <FieldGroup>
                 <ReadonlyRow
@@ -527,7 +440,7 @@ export default function PropertyProfilePage() {
             ) : (
               <div className="py-3 text-[13px] text-neutral-500 dark:text-[#66645f] leading-snug">
                 Not linked to Hostaway. Link this property to a Hostaway
-                listing to merge its reservations and sync future updates.
+                listing to pull in its reservations and sync future updates.
               </div>
             )}
             {linkageError && (
@@ -539,36 +452,13 @@ export default function PropertyProfilePage() {
         </div>
       </div>
 
-      {/* Floating save bar */}
-      {isDirty && (
-        <div className="flex-shrink-0 border-t border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] bg-white/95 dark:bg-[#0b0b0c]/95 backdrop-blur-sm">
-          <div className="max-w-[760px] mx-auto px-5 sm:px-8 py-3 flex items-center justify-between gap-4">
-            <div className="min-w-0 flex-1 text-[13px]">
-              {saveError ? (
-                <span className="text-red-600 dark:text-red-400">{saveError}</span>
-              ) : (
-                <span className="text-neutral-600 dark:text-[#a09e9a]">Unsaved changes</span>
-              )}
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={handleDiscard}
-                disabled={saving}
-                className="px-3 py-1.5 text-[13px] font-medium text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] rounded-md transition-colors disabled:opacity-50"
-              >
-                Discard
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-4 py-1.5 text-[13px] font-medium bg-neutral-900 dark:bg-[#f0efed] text-white dark:text-[#0b0b0c] rounded-md hover:bg-neutral-800 dark:hover:bg-white transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Saving…' : 'Save Changes'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <FloatingSaveBar
+        dirty={isDirty}
+        saving={saving}
+        error={saveError}
+        onSave={handleSave}
+        onDiscard={handleDiscard}
+      />
 
       {showLinkModal && property && (
         <LinkHostawayModal
@@ -582,92 +472,12 @@ export default function PropertyProfilePage() {
               'success',
               `Linked to Hostaway${chosen.hostaway_listing_id != null ? ` (ID ${chosen.hostaway_listing_id})` : ''}`
             );
-            await fetchProperty();
+            await refresh();
           }}
         />
       )}
 
-      {toast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] max-w-[90vw]"
-        >
-          <div
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-[13px] font-medium whitespace-nowrap overflow-hidden text-ellipsis border ${
-              toast.kind === 'success'
-                ? 'bg-neutral-900 dark:bg-[#f0efed] text-white dark:text-[#0b0b0c] border-neutral-800 dark:border-neutral-300'
-                : 'bg-red-600 text-white border-red-700'
-            }`}
-          >
-            {toast.kind === 'success' ? (
-              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            ) : (
-              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-              </svg>
-            )}
-            <span className="truncate">{toast.message}</span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// --- Small reusable building blocks (local to this page) ---
-
-function SectionHeader({ label }: { label: string }) {
-  return (
-    <h2 className="text-[11px] font-semibold text-neutral-600 dark:text-[#a09e9a] uppercase tracking-[0.08em] mb-3">
-      {label}
-    </h2>
-  );
-}
-
-function Subheading({ label }: { label: string }) {
-  return (
-    <h3 className="text-[10px] font-semibold text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.08em] mt-5 mb-2">
-      {label}
-    </h3>
-  );
-}
-
-function FieldGroup({ children }: { children: React.ReactNode }) {
-  return <div className="space-y-3">{children}</div>;
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="block text-[11px] font-medium text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] mb-1">
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      {...props}
-      className="w-full px-3 py-2 text-[14px] bg-white dark:bg-[rgba(255,255,255,0.02)] text-neutral-900 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f] border border-neutral-200 dark:border-[rgba(255,255,255,0.07)] rounded-md focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:focus:ring-[rgba(255,255,255,0.15)] focus:border-transparent transition-colors"
-    />
-  );
-}
-
-function ReadonlyRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between py-2 border-b border-neutral-100 dark:border-[rgba(255,255,255,0.05)] last:border-b-0">
-      <span className="text-[11px] font-medium text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em]">
-        {label}
-      </span>
-      <span className="text-[13px] text-neutral-800 dark:text-[#f0efed] tabular-nums">
-        {value}
-      </span>
-    </div>
+      {toast && <Toast kind={toast.kind} message={toast.message} />}
+    </>
   );
 }
