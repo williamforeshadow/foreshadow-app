@@ -2,13 +2,15 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LinkHostawayModal } from '@/components/properties/LinkHostawayModal';
 
 interface PropertyProfile {
   id: string;
   name: string;
   hostaway_name: string | null;
   hostaway_listing_id: number | null;
+  is_active: boolean;
   address_street: string | null;
   address_city: string | null;
   address_state: string | null;
@@ -75,6 +77,50 @@ export default function PropertyProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [locationOpen, setLocationOpen] = useState(false);
+  const [togglingActive, setTogglingActive] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [unlinking, setUnlinking] = useState(false);
+  const [linkageError, setLinkageError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((kind: 'success' | 'error', message: string) => {
+    setToast({ kind, message });
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 4500);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
+
+  const handleUnlink = async () => {
+    if (!property || unlinking) return;
+    if (property.hostaway_listing_id == null) return;
+    const proceed = window.confirm(
+      `Unlink "${property.name}" from Hostaway (listing ${property.hostaway_listing_id})? Existing reservations and tasks stay, but Hostaway syncs will no longer update this property.`
+    );
+    if (!proceed) return;
+    setUnlinking(true);
+    setLinkageError(null);
+    try {
+      const res = await fetch(`/api/properties/${propertyId}/unlink`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unlink failed');
+      setProperty(data.property);
+      setDraft(toDraft(data.property));
+      showToast('success', 'Unlinked from Hostaway');
+    } catch (err: any) {
+      setLinkageError(err.message || 'Unlink failed');
+    } finally {
+      setUnlinking(false);
+    }
+  };
 
   // Fetch
   const fetchProperty = useCallback(async () => {
@@ -106,6 +152,29 @@ export default function PropertyProfilePage() {
 
   const updateDraft = (key: keyof DraftFields, value: string) => {
     setDraft((prev) => (prev ? { ...prev, [key]: value } : prev));
+  };
+
+  // Active toggle is intentionally outside the dirty-tracked form — flipping
+  // a property's active state is a switch, not a staged edit. It PATCHes
+  // immediately and refreshes the local record.
+  const handleToggleActive = async (next: boolean) => {
+    if (!property || togglingActive) return;
+    setTogglingActive(true);
+    setStatusError(null);
+    try {
+      const res = await fetch(`/api/properties/${propertyId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: next }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update status');
+      setProperty(data.property);
+    } catch (err: any) {
+      setStatusError(err.message || 'Failed to update status');
+    } finally {
+      setTogglingActive(false);
+    }
   };
 
   const handleDiscard = () => {
@@ -225,9 +294,16 @@ export default function PropertyProfilePage() {
 
           {/* Header: property name as h1 and hostaway ID */}
           <div className="mb-6">
-            <h1 className="text-[24px] sm:text-[28px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed] leading-tight">
-              {property.name}
-            </h1>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-[24px] sm:text-[28px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed] leading-tight">
+                {property.name}
+              </h1>
+              {!property.is_active && (
+                <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] rounded-md bg-neutral-200 dark:bg-[#2a2825] text-neutral-600 dark:text-[#a09e9a]">
+                  Inactive
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-3 mt-1.5 text-[11px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
               {property.hostaway_listing_id != null ? (
                 <>
@@ -370,24 +446,95 @@ export default function PropertyProfilePage() {
             </FieldGroup>
           </section>
 
+          {/* Status */}
+          <section className="mb-8">
+            <SectionHeader label="Status" />
+            <div className="flex items-start justify-between gap-4 py-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-medium text-neutral-800 dark:text-[#f0efed]">
+                  {property.is_active ? 'Active' : 'Inactive'}
+                </div>
+                <p className="text-[12px] text-neutral-500 dark:text-[#66645f] mt-0.5 leading-snug">
+                  {property.is_active
+                    ? 'Receives Hostaway syncs, imports reservations, and generates tasks.'
+                    : "Frozen — Hostaway won't update this property and no new tasks will be generated. Existing tasks stay untouched."}
+                </p>
+                {statusError && (
+                  <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">
+                    {statusError}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => handleToggleActive(!property.is_active)}
+                disabled={togglingActive}
+                role="switch"
+                aria-checked={property.is_active}
+                aria-label="Toggle active status"
+                className={`relative inline-flex h-[24px] w-[44px] shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+                  property.is_active
+                    ? 'bg-emerald-500 dark:bg-emerald-500'
+                    : 'bg-neutral-300 dark:bg-[#3e3d3a]'
+                }`}
+              >
+                <span
+                  className={`inline-block h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform ${
+                    property.is_active ? 'translate-x-[23px]' : 'translate-x-[3px]'
+                  }`}
+                />
+              </button>
+            </div>
+          </section>
+
           {/* Hostaway (readonly) */}
           <section className="mb-8">
-            <SectionHeader label="Hostaway" />
-            <FieldGroup>
-              <ReadonlyRow
-                label="Listing ID"
-                value={property.hostaway_listing_id != null ? String(property.hostaway_listing_id) : '—'}
-              />
-              <ReadonlyRow
-                label="Listing Name"
-                value={property.hostaway_name || '—'}
-              />
-              <ReadonlyRow label="Created" value={formatDate(property.created_at)} />
-              <ReadonlyRow label="Updated" value={formatDate(property.updated_at)} />
-            </FieldGroup>
-            <p className="text-[11px] text-neutral-400 dark:text-[#66645f] mt-2">
-              Hostaway fields are read-only. Linking / unlinking will be editable in Phase 2.3.
-            </p>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-[11px] font-semibold text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.08em]">
+                Hostaway
+              </h2>
+              {property.hostaway_listing_id != null ? (
+                <button
+                  type="button"
+                  onClick={handleUnlink}
+                  disabled={unlinking}
+                  className="text-[11px] font-medium text-neutral-500 dark:text-[#a09e9a] uppercase tracking-[0.04em] px-2 py-0.5 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-700 dark:hover:text-[#f0efed] transition-colors disabled:opacity-50"
+                >
+                  {unlinking ? 'Unlinking…' : 'Unlink'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowLinkModal(true)}
+                  className="text-[11px] font-medium text-neutral-500 dark:text-[#a09e9a] uppercase tracking-[0.04em] px-2 py-0.5 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-700 dark:hover:text-[#f0efed] transition-colors"
+                >
+                  Link to Hostaway
+                </button>
+              )}
+            </div>
+            {property.hostaway_listing_id != null ? (
+              <FieldGroup>
+                <ReadonlyRow
+                  label="Listing ID"
+                  value={String(property.hostaway_listing_id)}
+                />
+                <ReadonlyRow
+                  label="Listing Name"
+                  value={property.hostaway_name || '—'}
+                />
+                <ReadonlyRow label="Created" value={formatDate(property.created_at)} />
+                <ReadonlyRow label="Updated" value={formatDate(property.updated_at)} />
+              </FieldGroup>
+            ) : (
+              <div className="py-3 text-[13px] text-neutral-500 dark:text-[#66645f] leading-snug">
+                Not linked to Hostaway. Link this property to a Hostaway
+                listing to merge its reservations and sync future updates.
+              </div>
+            )}
+            {linkageError && (
+              <p className="mt-2 text-[12px] text-red-600 dark:text-red-400">
+                {linkageError}
+              </p>
+            )}
           </section>
         </div>
       </div>
@@ -419,6 +566,50 @@ export default function PropertyProfilePage() {
                 {saving ? 'Saving…' : 'Save Changes'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showLinkModal && property && (
+        <LinkHostawayModal
+          survivorId={property.id}
+          survivorName={property.name}
+          survivorIsInactive={!property.is_active}
+          onClose={() => setShowLinkModal(false)}
+          onLinked={async ({ chosen }) => {
+            setShowLinkModal(false);
+            showToast(
+              'success',
+              `Linked to Hostaway${chosen.hostaway_listing_id != null ? ` (ID ${chosen.hostaway_listing_id})` : ''}`
+            );
+            await fetchProperty();
+          }}
+        />
+      )}
+
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] max-w-[90vw]"
+        >
+          <div
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-[13px] font-medium whitespace-nowrap overflow-hidden text-ellipsis border ${
+              toast.kind === 'success'
+                ? 'bg-neutral-900 dark:bg-[#f0efed] text-white dark:text-[#0b0b0c] border-neutral-800 dark:border-neutral-300'
+                : 'bg-red-600 text-white border-red-700'
+            }`}
+          >
+            {toast.kind === 'success' ? (
+              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+            )}
+            <span className="truncate">{toast.message}</span>
           </div>
         </div>
       )}

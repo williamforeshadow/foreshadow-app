@@ -12,60 +12,57 @@ export async function POST() {
 
     // 1. Sync listings → properties
     //
-    // We split INSERT vs UPDATE so user-customized `properties.name` (the
-    // "property code") is preserved across syncs. Hostaway's name snapshot
-    // lives in `hostaway_name` and is the only name-related field we ever
-    // overwrite for existing rows.
+    // Explicit-import model: sync NEVER creates property rows. It only
+    // refreshes `hostaway_name` on existing, already-linked rows so the
+    // Hostaway snapshot stays current. User-customized `properties.name`
+    // (the "property code") is never touched. Listings that aren't yet
+    // bound to an app property are counted in `skippedUnlinked` and
+    // otherwise ignored — users import them on demand via the UI.
     const listingsMap = await fetchListings();
     console.log(`[Hostaway Sync] Fetched ${listingsMap.size} listings`);
 
     const { data: existingPropsRaw } = await supabase
       .from('properties')
-      .select('id, hostaway_listing_id');
+      .select('id, hostaway_listing_id, is_active');
 
+    // hostaway_listing_id → property uuid, for ALL existing properties.
     const existingPropIdMap = new Map<number, string>();
+    // Set of inactive property UUIDs. Inactive properties are treated as
+    // "frozen": no Hostaway-name overwrites, no reservation inserts/updates,
+    // no cancellation deletes — sync leaves them alone until reactivated.
+    const inactivePropIds = new Set<string>();
     for (const p of existingPropsRaw || []) {
       if (p.hostaway_listing_id != null) {
         existingPropIdMap.set(p.hostaway_listing_id, p.id);
       }
+      if (p.is_active === false) {
+        inactivePropIds.add(p.id);
+      }
     }
 
     const nowIso = new Date().toISOString();
-    const newListingRows: Array<{
-      hostaway_listing_id: number;
-      name: string;
-      hostaway_name: string;
-      updated_at: string;
-    }> = [];
     const existingListingUpdates: Array<{
       hostaway_listing_id: number;
       hostaway_name: string;
     }> = [];
+    // Tracks listings that were seen from Hostaway but have no app row bound
+    // to them yet. These are intentionally ignored — under the explicit-
+    // import model, listings don't auto-materialize as properties. Users
+    // import them via the "Add Property → From Hostaway" flow.
+    let skippedUnlinked = 0;
 
     for (const [listingId, listingName] of listingsMap.entries()) {
-      if (existingPropIdMap.has(listingId)) {
-        existingListingUpdates.push({
-          hostaway_listing_id: listingId,
-          hostaway_name: listingName,
-        });
-      } else {
-        newListingRows.push({
-          hostaway_listing_id: listingId,
-          name: listingName,
-          hostaway_name: listingName,
-          updated_at: nowIso,
-        });
+      const existingUuid = existingPropIdMap.get(listingId);
+      if (!existingUuid) {
+        skippedUnlinked += 1;
+        continue;
       }
-    }
-
-    // INSERT brand-new listings (populate both name + hostaway_name)
-    if (newListingRows.length > 0) {
-      const { error: insertPropErr } = await supabase
-        .from('properties')
-        .insert(newListingRows);
-      if (insertPropErr) {
-        console.error('[Hostaway Sync] property insert error:', insertPropErr.message);
-      }
+      // Skip hostaway_name refresh for inactive properties.
+      if (inactivePropIds.has(existingUuid)) continue;
+      existingListingUpdates.push({
+        hostaway_listing_id: listingId,
+        hostaway_name: listingName,
+      });
     }
 
     // UPDATE existing listings — only touch hostaway_name, never overwrite `name`
@@ -79,13 +76,12 @@ export async function POST() {
       }
     }
 
-    // Refresh the hostaway_listing_id → property uuid lookup to include newly-inserted rows
-    const { data: props } = await supabase
-      .from('properties')
-      .select('id, hostaway_listing_id');
-
+    // Build the hostaway_listing_id → property uuid lookup from current state.
+    // (No newly-inserted rows to account for anymore.)
     const propIdMap = new Map<number, string>();
-    for (const p of props || []) propIdMap.set(p.hostaway_listing_id, p.id);
+    for (const p of existingPropsRaw || []) {
+      if (p.hostaway_listing_id != null) propIdMap.set(p.hostaway_listing_id, p.id);
+    }
 
     // 2. Fetch current + future reservations from Hostaway
     const today = new Date().toISOString().split('T')[0];
@@ -93,9 +89,10 @@ export async function POST() {
     console.log(`[Hostaway Sync] Fetched ${reservations.length} reservations from Hostaway`);
 
     // 3. Load existing Hostaway reservation IDs from Supabase so we know what's new
+    //    (property_id included so we can gate inactive properties below)
     const { data: existingRows } = await supabase
       .from('reservations')
-      .select('id, hostaway_reservation_id, check_in, check_out, guest_name')
+      .select('id, hostaway_reservation_id, check_in, check_out, guest_name, property_id')
       .not('hostaway_reservation_id', 'is', null);
 
     const existingMap = new Map<number, {
@@ -103,6 +100,7 @@ export async function POST() {
       check_in: string;
       check_out: string;
       guest_name: string;
+      property_id: string | null;
     }>();
     for (const row of existingRows || []) {
       existingMap.set(row.hostaway_reservation_id, {
@@ -110,6 +108,7 @@ export async function POST() {
         check_in: row.check_in,
         check_out: row.check_out,
         guest_name: row.guest_name,
+        property_id: row.property_id ?? null,
       });
     }
 
@@ -138,11 +137,22 @@ export async function POST() {
 
       const existing = existingMap.get(r.id);
 
+      // Resolve the canonical property_id this reservation maps to, so we can
+      // gate inactive properties. Existing rows may already carry property_id
+      // (from a prior sync); fall back to the current listingMapId → uuid.
+      const resolvedPropertyId =
+        existing?.property_id || propIdMap.get(r.listingMapId) || null;
+
+      // Inactive properties are frozen: no inserts, no updates.
+      if (resolvedPropertyId && inactivePropIds.has(resolvedPropertyId)) {
+        continue;
+      }
+
       if (!existing) {
         // Brand new reservation → INSERT (will trigger automations correctly)
         newRows.push({
           hostaway_reservation_id: r.id,
-          property_id: propIdMap.get(r.listingMapId) || null,
+          property_id: resolvedPropertyId,
           property_name: propertyName,
           guest_name: guestName,
           check_in: r.arrivalDate,
@@ -213,6 +223,8 @@ export async function POST() {
       }
     }
     for (const [listingId, hostawayName] of nameCorrections.entries()) {
+      const uuid = propIdMap.get(listingId);
+      if (uuid && inactivePropIds.has(uuid)) continue;
       const { error: correctionErr } = await supabase
         .from('properties')
         .update({ hostaway_name: hostawayName, updated_at: nowIso })
@@ -231,9 +243,13 @@ export async function POST() {
       (row: any) => row.check_out >= today
     );
 
-    const toDelete = futureExisting.filter(
-      (row: any) => !freshHostawayIds.has(row.hostaway_reservation_id)
-    );
+    const toDelete = futureExisting.filter((row: any) => {
+      if (freshHostawayIds.has(row.hostaway_reservation_id)) return false;
+      // Don't delete reservations belonging to inactive properties; sync is
+      // frozen for those.
+      if (row.property_id && inactivePropIds.has(row.property_id)) return false;
+      return true;
+    });
 
     if (toDelete.length > 0) {
       console.log(`[Hostaway Sync] Removing ${toDelete.length} cancelled/declined reservations`);
@@ -258,8 +274,11 @@ export async function POST() {
     const result = {
       success: true,
       properties: listingsMap.size,
-      properties_inserted: newListingRows.length,
+      // Always 0 under the explicit-import model; retained for client
+      // compatibility (the list page's toast summary reads it).
+      properties_inserted: 0,
       properties_updated: existingListingUpdates.length,
+      properties_skipped_unlinked: skippedUnlinked,
       reservations_fetched: reservations.length,
       reservations_inserted: inserted,
       reservations_updated: updated,

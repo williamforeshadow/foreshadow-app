@@ -24,7 +24,7 @@ export async function GET(
     const { data, error } = await supabase
       .from('properties')
       .select(
-        'id, name, hostaway_name, hostaway_listing_id, address_street, address_city, address_state, address_zip, address_country, latitude, longitude, bedrooms, bathrooms, created_at, updated_at'
+        'id, name, hostaway_name, hostaway_listing_id, is_active, address_street, address_city, address_state, address_zip, address_country, latitude, longitude, bedrooms, bathrooms, created_at, updated_at'
       )
       .eq('id', id)
       .maybeSingle();
@@ -51,6 +51,7 @@ export async function GET(
 // stay in sync.
 const EDITABLE_FIELDS = new Set([
   'name',
+  'is_active',
   'address_street',
   'address_city',
   'address_state',
@@ -87,6 +88,14 @@ export async function PATCH(
           );
         }
         newName = value.trim();
+      } else if (key === 'is_active') {
+        if (typeof value !== 'boolean') {
+          return NextResponse.json(
+            { error: 'is_active must be a boolean' },
+            { status: 400 }
+          );
+        }
+        directUpdates[key] = value;
       } else {
         directUpdates[key] = value;
       }
@@ -103,6 +112,15 @@ export async function PATCH(
         p_new_name: newName,
       });
       if (renameErr) {
+        // Surface the case-insensitive uniqueness collision with a friendlier
+        // message. rename_property wraps UPDATE, so the unique index still
+        // fires and bubbles up as 23505.
+        if ((renameErr as any).code === '23505') {
+          return NextResponse.json(
+            { error: `A property named "${newName}" already exists` },
+            { status: 409 }
+          );
+        }
         return NextResponse.json(
           { error: `Rename failed: ${renameErr.message}` },
           { status: 500 }
@@ -127,7 +145,7 @@ export async function PATCH(
     const { data, error: fetchErr } = await supabase
       .from('properties')
       .select(
-        'id, name, hostaway_name, hostaway_listing_id, address_street, address_city, address_state, address_zip, address_country, latitude, longitude, bedrooms, bathrooms, created_at, updated_at'
+        'id, name, hostaway_name, hostaway_listing_id, is_active, address_street, address_city, address_state, address_zip, address_country, latitude, longitude, bedrooms, bathrooms, created_at, updated_at'
       )
       .eq('id', id)
       .maybeSingle();
