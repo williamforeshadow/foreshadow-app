@@ -226,7 +226,7 @@ export default function PropertiesPage() {
               </button>
               <button
                 onClick={() => setShowAddModal(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium bg-neutral-900 dark:bg-[#f0efed] text-white dark:text-[#0b0b0c] rounded-md hover:bg-neutral-800 dark:hover:bg-white transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium bg-[var(--accent-3)] text-white rounded-md hover:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] transition-colors"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -554,7 +554,7 @@ function AddPropertyModal({
                   onClick={() => setTab(t.id)}
                   className={`px-3 py-2 text-[13px] font-medium -mb-px border-b-2 transition-colors ${
                     tab === t.id
-                      ? 'border-neutral-900 dark:border-[#f0efed] text-neutral-900 dark:text-[#f0efed]'
+                      ? 'border-[var(--accent-3)] dark:border-[var(--accent-1)] text-neutral-900 dark:text-[#f0efed]'
                       : 'border-transparent text-neutral-500 dark:text-[#66645f] hover:text-neutral-800 dark:hover:text-[#a09e9a]'
                   }`}
                 >
@@ -691,7 +691,7 @@ function AddPropertyModal({
                 <button
                   type="submit"
                   disabled={submitting || !manualName.trim()}
-                  className="px-4 py-1.5 text-[13px] font-medium bg-neutral-900 dark:bg-[#f0efed] text-white dark:text-[#0b0b0c] rounded-md hover:bg-neutral-800 dark:hover:bg-white transition-colors disabled:opacity-50"
+                  className="px-4 py-1.5 text-[13px] font-medium bg-[var(--accent-3)] text-white rounded-md hover:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] transition-colors disabled:opacity-50"
                 >
                   {submitting ? 'Creating…' : 'Create'}
                 </button>

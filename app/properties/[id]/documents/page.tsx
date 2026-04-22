@@ -220,7 +220,7 @@ export default function PropertyDocumentsTab() {
                 type="button"
                 onClick={() => inputRef.current?.click()}
                 disabled={uploading}
-                className="px-3 py-2 text-[13px] font-medium bg-neutral-900 dark:bg-[#f0efed] text-white dark:text-[#0b0b0c] rounded-md hover:bg-neutral-800 dark:hover:bg-white transition-colors disabled:opacity-50"
+                className="px-3 py-2 text-[13px] font-medium bg-[var(--accent-3)] text-white rounded-md hover:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] transition-colors disabled:opacity-50"
               >
                 {uploading ? 'Uploading…' : 'Upload file'}
               </button>

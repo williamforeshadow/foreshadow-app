@@ -53,6 +53,20 @@
   /* ROI UI card mix colors */
   --mix-card-33-bg: color-mix(in srgb, var(--card) 33%, var(--background));
   --mix-card-50-bg: color-mix(in srgb, var(--card) 50%, var(--background));
+
+  /* Shared purple accent ramp — mirrors Timeline / Bins / My Assignments /
+     Projects Kanban status colors so every data surface feels cohesive.
+     Use for interactive affordances (active tab, CTAs, focus rings,
+     hovers) — NOT for body text or borders. */
+  --accent-1: #a78bfa; /* lightest, subtle accents + dark-mode hovers */
+  --accent-2: #8b7fc9; /* light-mode hovers / secondary text */
+  --accent-3: #6366f1; /* primary — active tabs, CTAs, light-mode rings */
+  --accent-4: #8b7fa8; /* muted */
+  --accent-5: #4c4869; /* deepest, rarely used */
+  --accent-ring: rgba(99, 102, 241, 0.45);
+  --accent-ring-dark: rgba(167, 139, 250, 0.55);
+  --accent-bg-soft: rgba(99, 102, 241, 0.08);
+  --accent-bg-soft-dark: rgba(167, 139, 250, 0.1);
 }
 
 .dark {

@@ -78,7 +78,7 @@ export const Input = React.forwardRef<
     <input
       ref={ref}
       {...props}
-      className={`w-full px-3 py-2 text-[14px] bg-white dark:bg-[rgba(255,255,255,0.02)] text-neutral-900 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f] border border-neutral-200 dark:border-[rgba(255,255,255,0.07)] rounded-md focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:focus:ring-[rgba(255,255,255,0.15)] focus:border-transparent transition-colors ${props.className ?? ''}`}
+      className={`w-full px-3 py-2 text-[14px] bg-white dark:bg-[rgba(255,255,255,0.02)] text-neutral-900 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f] border border-neutral-200 dark:border-[rgba(255,255,255,0.07)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)] dark:focus:ring-[var(--accent-ring-dark)] focus:border-transparent transition-colors ${props.className ?? ''}`}
     />
   );
 });
@@ -91,7 +91,7 @@ export const Textarea = React.forwardRef<
     <textarea
       ref={ref}
       {...props}
-      className={`w-full px-3 py-2 text-[14px] bg-white dark:bg-[rgba(255,255,255,0.02)] text-neutral-900 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f] border border-neutral-200 dark:border-[rgba(255,255,255,0.07)] rounded-md focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:focus:ring-[rgba(255,255,255,0.15)] focus:border-transparent transition-colors resize-y min-h-[80px] leading-snug ${props.className ?? ''}`}
+      className={`w-full px-3 py-2 text-[14px] bg-white dark:bg-[rgba(255,255,255,0.02)] text-neutral-900 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f] border border-neutral-200 dark:border-[rgba(255,255,255,0.07)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)] dark:focus:ring-[var(--accent-ring-dark)] focus:border-transparent transition-colors resize-y min-h-[80px] leading-snug ${props.className ?? ''}`}
     />
   );
 });
@@ -104,7 +104,7 @@ export const Select = React.forwardRef<
     <select
       ref={ref}
       {...props}
-      className={`w-full px-3 py-2 text-[14px] bg-white dark:bg-[rgba(255,255,255,0.02)] text-neutral-900 dark:text-[#f0efed] border border-neutral-200 dark:border-[rgba(255,255,255,0.07)] rounded-md focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:focus:ring-[rgba(255,255,255,0.15)] focus:border-transparent transition-colors appearance-none bg-[url('data:image/svg+xml;utf8,<svg%20fill=%22none%22%20stroke=%22%2366645f%22%20viewBox=%220%200%2024%2024%22%20xmlns=%22http://www.w3.org/2000/svg%22><path%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%20stroke-width=%222%22%20d=%22M19%209l-7%207-7-7%22/></svg>')] bg-[length:14px] bg-[right_10px_center] bg-no-repeat pr-8 ${props.className ?? ''}`}
+      className={`w-full px-3 py-2 text-[14px] bg-white dark:bg-[rgba(255,255,255,0.02)] text-neutral-900 dark:text-[#f0efed] border border-neutral-200 dark:border-[rgba(255,255,255,0.07)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)] dark:focus:ring-[var(--accent-ring-dark)] focus:border-transparent transition-colors appearance-none bg-[url('data:image/svg+xml;utf8,<svg%20fill=%22none%22%20stroke=%22%2366645f%22%20viewBox=%220%200%2024%2024%22%20xmlns=%22http://www.w3.org/2000/svg%22><path%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%20stroke-width=%222%22%20d=%22M19%209l-7%207-7-7%22/></svg>')] bg-[length:14px] bg-[right_10px_center] bg-no-repeat pr-8 ${props.className ?? ''}`}
     />
   );
 });
@@ -165,7 +165,7 @@ export function FloatingSaveBar({
           <button
             onClick={onSave}
             disabled={saving}
-            className="px-4 py-1.5 text-[13px] font-medium bg-neutral-900 dark:bg-[#f0efed] text-white dark:text-[#0b0b0c] rounded-md hover:bg-neutral-800 dark:hover:bg-white transition-colors disabled:opacity-50"
+            className="px-4 py-1.5 text-[13px] font-medium bg-[var(--accent-3)] text-white rounded-md hover:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] transition-colors disabled:opacity-50"
           >
             {saving ? 'Saving…' : 'Save Changes'}
           </button>

@@ -13,7 +13,11 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 //    access: { ... property_access row ... } | null,
 //    notes: Array<{ scope, title, body, ... }>,
 //    contacts: Array<{ category, name, phone, ... }>,
-//    cards: Array<{ scope, group_label, category, title, body, category_data, ... }>,
+//    rooms: Array<{
+//      id, scope, type, title,
+//      photos: [...],
+//      cards: Array<{ tag, title, body, tag_data, photos: [...] }>,
+//    }>,
 //    documents: Array<{ tag, title, notes, storage_path, ... }>,
 //  }
 
@@ -29,7 +33,7 @@ export async function GET(
     accessRes,
     notesRes,
     contactsRes,
-    cardsRes,
+    roomsRes,
     docsRes,
   ] = await Promise.all([
     supabase
@@ -57,13 +61,19 @@ export async function GET(
       .order('category', { ascending: true })
       .order('sort_order', { ascending: true }),
     supabase
-      .from('property_cards')
+      .from('property_rooms')
       .select(
-        'id, scope, group_label, category, title, location, body, category_data, sort_order, property_card_photos(id, storage_path, caption, sort_order)'
+        `
+        id, scope, type, title, sort_order,
+        property_room_photos (id, storage_path, caption, sort_order),
+        property_cards (
+          id, tag, title, body, tag_data, sort_order,
+          property_card_photos (id, storage_path, caption, sort_order)
+        )
+        `
       )
       .eq('property_id', id)
       .order('scope', { ascending: true })
-      .order('group_label', { ascending: true })
       .order('sort_order', { ascending: true }),
     supabase
       .from('property_documents')
@@ -90,7 +100,7 @@ export async function GET(
     ['access', accessRes],
     ['notes', notesRes],
     ['contacts', contactsRes],
-    ['cards', cardsRes],
+    ['rooms', roomsRes],
     ['documents', docsRes],
   ] as const) {
     if (res.error) {
@@ -103,7 +113,7 @@ export async function GET(
     access: accessRes.error ? null : accessRes.data ?? null,
     notes: notesRes.error ? [] : notesRes.data ?? [],
     contacts: contactsRes.error ? [] : contactsRes.data ?? [],
-    cards: cardsRes.error ? [] : cardsRes.data ?? [],
+    rooms: roomsRes.error ? [] : roomsRes.data ?? [],
     documents: docsRes.error ? [] : docsRes.data ?? [],
     ...(warnings.length > 0 ? { warnings } : {}),
   });

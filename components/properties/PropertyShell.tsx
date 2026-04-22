@@ -149,7 +149,7 @@ function ShellBody({
                   href={href as any}
                   className={`shrink-0 px-3 py-2 text-[13px] font-medium -mb-px border-b-2 transition-colors whitespace-nowrap ${
                     isActive
-                      ? 'border-neutral-900 dark:border-[#f0efed] text-neutral-900 dark:text-[#f0efed]'
+                      ? 'border-[var(--accent-3)] dark:border-[var(--accent-1)] text-neutral-900 dark:text-[#f0efed]'
                       : 'border-transparent text-neutral-500 dark:text-[#66645f] hover:text-neutral-800 dark:hover:text-[#a09e9a]'
                   }`}
                 >

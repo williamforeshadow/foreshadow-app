@@ -208,7 +208,7 @@ export default function PropertyVendorsTab() {
                   <button
                     type="button"
                     onClick={() => handleCreate(cat.id)}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-neutral-500 dark:text-[#a09e9a] hover:text-neutral-800 dark:hover:text-[#f0efed] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] rounded transition-colors"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-neutral-500 dark:text-[#a09e9a] hover:text-[var(--accent-3)] dark:hover:text-[var(--accent-1)] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] rounded transition-colors"
                   >
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -386,7 +386,9 @@ function ContactCard({
 
       <div className="mt-1.5 h-4 text-[10px] font-medium text-neutral-400 dark:text-[#66645f] uppercase tracking-[0.04em]">
         {savedState === 'saving' && 'Saving…'}
-        {savedState === 'saved' && 'Saved'}
+        {savedState === 'saved' && (
+          <span className="text-[var(--accent-2)] dark:text-[var(--accent-1)]">Saved</span>
+        )}
       </div>
     </div>
   );
