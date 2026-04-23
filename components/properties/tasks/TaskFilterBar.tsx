@@ -1,0 +1,438 @@
+'use client';
+
+import React, { useEffect, useRef, useState } from 'react';
+
+// Filter + sort header for the Property Tasks ledger.
+//
+// All state is owned by the parent (PropertyTasksView). This component is a
+// controlled UI that emits changes. Multi-select filters use a toggle-button
+// popover pattern; sort is a single-select select; search + new-task are plain
+// buttons.
+
+export interface FilterOption {
+  value: string;
+  label: string;
+  // Optional count shown on the right of the option row.
+  count?: number;
+}
+
+export type RecurringFilter = 'all' | 'recurring' | 'reservation';
+
+export type SortKey = 'scheduled' | 'completed' | 'created' | 'updated';
+export type SortDir = 'asc' | 'desc';
+
+interface TaskFilterBarProps {
+  search: string;
+  onSearchChange: (v: string) => void;
+
+  statusOptions: FilterOption[];
+  statusSelected: Set<string>;
+  onStatusChange: (next: Set<string>) => void;
+
+  assigneeOptions: FilterOption[];
+  assigneeSelected: Set<string>;
+  onAssigneeChange: (next: Set<string>) => void;
+
+  departmentOptions: FilterOption[];
+  departmentSelected: Set<string>;
+  onDepartmentChange: (next: Set<string>) => void;
+
+  // Bin filter. The special value '__none__' means "no bin / not binned"; a
+  // UUID means "tasks in this specific bin"; empty selection means no filter.
+  binOptions: FilterOption[];
+  binSelected: Set<string>;
+  onBinChange: (next: Set<string>) => void;
+
+  recurring: RecurringFilter;
+  onRecurringChange: (v: RecurringFilter) => void;
+
+  sortKey: SortKey;
+  sortDir: SortDir;
+  onSortChange: (k: SortKey, d: SortDir) => void;
+
+  onClearAll: () => void;
+  anyFilterActive: boolean;
+
+  onNewTask: () => void;
+
+  totalCount: number;
+  filteredCount: number;
+}
+
+export function TaskFilterBar(props: TaskFilterBarProps) {
+  return (
+    <div className="flex flex-col gap-3 px-8 pt-5 pb-3">
+      {/* Row 1: Search + New Task */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-md">
+          <svg
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 dark:text-[#66645f] pointer-events-none"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
+          </svg>
+          <input
+            type="text"
+            value={props.search}
+            onChange={(e) => props.onSearchChange(e.target.value)}
+            placeholder="Search tasks by title or description..."
+            className="w-full pl-9 pr-3 py-2 text-[13px] bg-transparent border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] rounded-md focus:outline-none focus:border-[var(--accent-3)] dark:focus:border-[var(--accent-1)] focus:ring-1 focus:ring-[var(--accent-ring)] dark:focus:ring-[var(--accent-ring-dark)] text-neutral-800 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f]"
+          />
+        </div>
+
+        <div className="ml-auto flex items-center gap-2">
+          <div className="text-[12px] text-neutral-500 dark:text-[#66645f] tabular-nums">
+            {props.anyFilterActive
+              ? `${props.filteredCount} of ${props.totalCount}`
+              : `${props.totalCount} total`}
+          </div>
+          {props.anyFilterActive && (
+            <button
+              onClick={props.onClearAll}
+              className="text-[11px] font-medium text-neutral-500 dark:text-[#a09e9a] uppercase tracking-[0.04em] px-2 py-1 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-700 dark:hover:text-[#f0efed] transition-colors"
+            >
+              Clear
+            </button>
+          )}
+          <button
+            onClick={props.onNewTask}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.5}
+                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+              />
+            </svg>
+            New task
+          </button>
+        </div>
+      </div>
+
+      {/* Row 2: Filter chips + sort */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <MultiSelect
+          label="Status"
+          options={props.statusOptions}
+          selected={props.statusSelected}
+          onChange={props.onStatusChange}
+        />
+        <MultiSelect
+          label="Assignee"
+          options={props.assigneeOptions}
+          selected={props.assigneeSelected}
+          onChange={props.onAssigneeChange}
+        />
+        <MultiSelect
+          label="Department"
+          options={props.departmentOptions}
+          selected={props.departmentSelected}
+          onChange={props.onDepartmentChange}
+        />
+        <MultiSelect
+          label="Bin"
+          options={props.binOptions}
+          selected={props.binSelected}
+          onChange={props.onBinChange}
+        />
+        <RecurringSelect
+          value={props.recurring}
+          onChange={props.onRecurringChange}
+        />
+
+        <div className="ml-auto">
+          <SortSelect
+            sortKey={props.sortKey}
+            sortDir={props.sortDir}
+            onChange={props.onSortChange}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---- MultiSelect popover ---------------------------------------------------
+
+interface MultiSelectProps {
+  label: string;
+  options: FilterOption[];
+  selected: Set<string>;
+  onChange: (next: Set<string>) => void;
+}
+
+function MultiSelect({ label, options, selected, onChange }: MultiSelectProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const active = selected.size > 0;
+  const summary = active
+    ? selected.size === 1
+      ? options.find((o) => selected.has(o.value))?.label || `${selected.size}`
+      : `${selected.size} selected`
+    : '';
+
+  const toggle = (value: string) => {
+    const next = new Set(selected);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    onChange(next);
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors ${
+          active
+            ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)] border-[var(--accent-3)]/30 dark:border-[var(--accent-1)]/30'
+            : 'bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-800 dark:hover:text-[#f0efed]'
+        }`}
+      >
+        <span>{label}</span>
+        {active && (
+          <span className="text-[10px] tabular-nums opacity-80">
+            · {summary}
+          </span>
+        )}
+        <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full mt-1.5 z-50 min-w-[220px] max-h-[320px] overflow-auto rounded-lg border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] bg-white dark:bg-[#1a1a1a] shadow-lg py-1">
+          {options.length === 0 ? (
+            <div className="px-3 py-2 text-[12px] text-neutral-400 dark:text-[#66645f]">
+              No options
+            </div>
+          ) : (
+            <>
+              {active && (
+                <button
+                  onClick={() => onChange(new Set())}
+                  className="w-full px-3 py-1.5 text-left text-[11px] text-neutral-500 dark:text-[#a09e9a] uppercase tracking-[0.04em] font-medium hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] border-b border-neutral-100 dark:border-[rgba(255,255,255,0.06)]"
+                >
+                  Clear
+                </button>
+              )}
+              {options.map((opt) => {
+                const on = selected.has(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => toggle(opt.value)}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] text-neutral-700 dark:text-[#f0efed]"
+                  >
+                    <span
+                      className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
+                        on
+                          ? 'bg-[var(--accent-3)] dark:bg-[var(--accent-2)] border-[var(--accent-3)] dark:border-[var(--accent-2)]'
+                          : 'border-neutral-300 dark:border-[rgba(255,255,255,0.15)]'
+                      }`}
+                    >
+                      {on && (
+                        <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className="flex-1 truncate">{opt.label}</span>
+                    {opt.count != null && (
+                      <span className="text-[10px] tabular-nums text-neutral-400 dark:text-[#66645f]">
+                        {opt.count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---- Recurring radio ------------------------------------------------------
+
+function RecurringSelect({
+  value,
+  onChange,
+}: {
+  value: RecurringFilter;
+  onChange: (v: RecurringFilter) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const active = value !== 'all';
+  const label =
+    value === 'recurring'
+      ? 'Recurring only'
+      : value === 'reservation'
+      ? 'Reservation only'
+      : 'Origin';
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors ${
+          active
+            ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)] border-[var(--accent-3)]/30 dark:border-[var(--accent-1)]/30'
+            : 'bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-800 dark:hover:text-[#f0efed]'
+        }`}
+      >
+        <span>{label}</span>
+        <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full mt-1.5 z-50 min-w-[200px] rounded-lg border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] bg-white dark:bg-[#1a1a1a] shadow-lg py-1">
+          {(
+            [
+              { value: 'all', label: 'All tasks' },
+              { value: 'recurring', label: 'Recurring / auto-generated only' },
+              { value: 'reservation', label: 'Reservation-based only' },
+            ] as { value: RecurringFilter; label: string }[]
+          ).map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => {
+                onChange(opt.value);
+                setOpen(false);
+              }}
+              className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] ${
+                value === opt.value
+                  ? 'text-[var(--accent-3)] dark:text-[var(--accent-1)] font-medium'
+                  : 'text-neutral-700 dark:text-[#f0efed]'
+              }`}
+            >
+              <span className="flex-1 truncate">{opt.label}</span>
+              {value === opt.value && (
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---- Sort select ----------------------------------------------------------
+
+function SortSelect({
+  sortKey,
+  sortDir,
+  onChange,
+}: {
+  sortKey: SortKey;
+  sortDir: SortDir;
+  onChange: (k: SortKey, d: SortDir) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const keyLabels: Record<SortKey, string> = {
+    scheduled: 'Scheduled date',
+    completed: 'Completed date',
+    created: 'Created date',
+    updated: 'Updated date',
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-800 dark:hover:text-[#f0efed] transition-colors"
+      >
+        <span className="text-neutral-400 dark:text-[#66645f]">Sort:</span>
+        <span>{keyLabels[sortKey]}</span>
+        <span className="text-neutral-400 dark:text-[#66645f]">
+          {sortDir === 'asc' ? '↑' : '↓'}
+        </span>
+        <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1.5 z-50 min-w-[200px] rounded-lg border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] bg-white dark:bg-[#1a1a1a] shadow-lg py-1">
+          {(Object.keys(keyLabels) as SortKey[]).map((k) => (
+            <div key={k} className="flex items-stretch">
+              <button
+                onClick={() => {
+                  onChange(k, sortDir);
+                  setOpen(false);
+                }}
+                className={`flex-1 px-3 py-1.5 text-left text-[12px] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] ${
+                  sortKey === k
+                    ? 'text-[var(--accent-3)] dark:text-[var(--accent-1)] font-medium'
+                    : 'text-neutral-700 dark:text-[#f0efed]'
+                }`}
+              >
+                {keyLabels[k]}
+              </button>
+              <button
+                onClick={() => {
+                  onChange(k, sortKey === k && sortDir === 'asc' ? 'desc' : 'asc');
+                  setOpen(false);
+                }}
+                title={
+                  sortKey === k ? `Currently ${sortDir === 'asc' ? 'ascending' : 'descending'}` : 'Ascending'
+                }
+                className="px-2 text-[12px] text-neutral-400 dark:text-[#66645f] hover:text-neutral-700 dark:hover:text-[#f0efed] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)]"
+              >
+                {sortKey === k ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

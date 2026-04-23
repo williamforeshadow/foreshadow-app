@@ -5,17 +5,45 @@ import { usePathname, useRouter } from 'next/navigation';
 import React from 'react';
 import { PropertyProvider, usePropertyContext } from './PropertyContext';
 
-interface TabDef {
+// ---- Tab definitions -------------------------------------------------------
+// The detail routes now live on two tiers:
+//
+//   /properties/[id]/knowledge[/...]    ← primary tab "Knowledge"
+//   /properties/[id]/tasks              ← primary tab "Tasks"
+//   /properties/[id]/schedule           ← primary tab "Schedule"
+//
+// "Knowledge" expands into a second row of pill tabs for the eight knowledge
+// sub-sections. Tasks and Schedule have no sub-tabs for now.
+//
+// The root `/properties/[id]` URL redirects to `./knowledge`, so every rendered
+// path falls under exactly one primary tab.
+
+interface PrimaryTab {
+  id: 'knowledge' | 'tasks' | 'schedule';
+  label: string;
+  // First path segment after `/properties/:id`. "knowledge" for the knowledge
+  // group, "tasks" / "schedule" for the siblings.
+  segment: string;
+}
+
+const PRIMARY_TABS: PrimaryTab[] = [
+  { id: 'knowledge', label: 'Knowledge', segment: 'knowledge' },
+  { id: 'tasks', label: 'Tasks', segment: 'tasks' },
+  { id: 'schedule', label: 'Schedule', segment: 'schedule' },
+];
+
+interface KnowledgePill {
   id: string;
   label: string;
-  // Trailing slug appended to `/properties/:id`. Empty string for the
-  // index tab (Information).
+  // Trailing slug appended to `/properties/:id/knowledge`. Empty string for
+  // the index (Information).
   slug: string;
 }
 
-const TABS: TabDef[] = [
+const KNOWLEDGE_PILLS: KnowledgePill[] = [
   { id: 'info', label: 'Information', slug: '' },
   { id: 'access', label: 'Access', slug: 'access' },
+  { id: 'connectivity', label: 'Connectivity', slug: 'connectivity' },
   { id: 'interior', label: 'Interior', slug: 'interior' },
   { id: 'exterior', label: 'Exterior', slug: 'exterior' },
   { id: 'vendors', label: 'Vendors', slug: 'vendors' },
@@ -25,7 +53,7 @@ const TABS: TabDef[] = [
 
 // Client wrapper around the property detail shell. Responsible for
 // fetching the property (via PropertyProvider), rendering the shared
-// header and tab strip, and routing tab children.
+// header + two-tier tab strip, and routing tab children.
 export function PropertyShell({
   propertyId,
   children,
@@ -51,17 +79,32 @@ function ShellBody({
   const router = useRouter();
   const pathname = usePathname() || '';
 
-  // Determine which tab is active by comparing the trailing path segment
-  // after /properties/:id. We match the longest-matching slug so that
-  // nested routes (e.g. future /interior/rooms/foo) still highlight the
-  // parent tab.
-  const activeTabId = React.useMemo(() => {
+  // Derive the active primary tab + (if Knowledge) the active pill from the
+  // current URL. We split the path into segments after `/properties/:id`:
+  //   /properties/:id                           → primary=knowledge (redirect target), pill=info
+  //   /properties/:id/knowledge                 → primary=knowledge, pill=info
+  //   /properties/:id/knowledge/access          → primary=knowledge, pill=access
+  //   /properties/:id/tasks                     → primary=tasks
+  //   /properties/:id/schedule                  → primary=schedule
+  const { activePrimaryId, activePillId } = React.useMemo(() => {
     const base = `/properties/${propertyId}`;
-    if (pathname === base || pathname === `${base}/`) return 'info';
-    const trail = pathname.slice(base.length + 1); // strip "base/"
-    const firstSeg = trail.split('/')[0];
-    const match = TABS.find((t) => t.slug && t.slug === firstSeg);
-    return match?.id ?? 'info';
+    const trail = pathname.startsWith(base)
+      ? pathname.slice(base.length).replace(/^\/+/, '')
+      : '';
+    const segs = trail === '' ? [] : trail.split('/');
+    const first = segs[0] ?? '';
+
+    const primary = PRIMARY_TABS.find((t) => t.segment === first);
+    const primaryId = (primary?.id ?? 'knowledge') as PrimaryTab['id'];
+
+    // Pill resolution is only meaningful when the primary tab is Knowledge.
+    let pillId: string = 'info';
+    if (primaryId === 'knowledge') {
+      const sub = segs[1] ?? '';
+      const match = KNOWLEDGE_PILLS.find((p) => p.slug && p.slug === sub);
+      pillId = match?.id ?? 'info';
+    }
+    return { activePrimaryId: primaryId, activePillId: pillId };
   }, [pathname, propertyId]);
 
   if (loading) {
@@ -135,14 +178,14 @@ function ShellBody({
             </div>
           </div>
 
-          {/* Tab strip: horizontal scroll on mobile, overflow-visible on
-              desktop. Scrollbar hidden; arrow-key / swipe works naturally. */}
-          <nav className="flex items-end gap-0.5 overflow-x-auto -mx-5 sm:-mx-8 px-5 sm:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {TABS.map((tab) => {
-              const href = tab.slug
-                ? `/properties/${propertyId}/${tab.slug}`
-                : `/properties/${propertyId}`;
-              const isActive = activeTabId === tab.id;
+          {/* Primary tab strip: Knowledge / Tasks / Schedule */}
+          <nav
+            aria-label="Property sections"
+            className="flex items-end gap-0.5 overflow-x-auto -mx-5 sm:-mx-8 px-5 sm:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {PRIMARY_TABS.map((tab) => {
+              const href = `/properties/${propertyId}/${tab.segment}`;
+              const isActive = activePrimaryId === tab.id;
               return (
                 <Link
                   key={tab.id}
@@ -158,6 +201,34 @@ function ShellBody({
               );
             })}
           </nav>
+
+          {/* Secondary pill row — renders only under the Knowledge primary tab */}
+          {activePrimaryId === 'knowledge' && (
+            <nav
+              aria-label="Knowledge sub-sections"
+              className="flex items-center gap-1.5 overflow-x-auto -mx-5 sm:-mx-8 px-5 sm:px-8 pt-3 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {KNOWLEDGE_PILLS.map((pill) => {
+                const href = pill.slug
+                  ? `/properties/${propertyId}/knowledge/${pill.slug}`
+                  : `/properties/${propertyId}/knowledge`;
+                const isActive = activePillId === pill.id;
+                return (
+                  <Link
+                    key={pill.id}
+                    href={href as any}
+                    className={`shrink-0 px-3 py-1 rounded-full text-[12px] font-medium border whitespace-nowrap transition-colors ${
+                      isActive
+                        ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)] border-[var(--accent-3)]/30 dark:border-[var(--accent-1)]/30'
+                        : 'bg-transparent text-neutral-600 dark:text-[#a09e9a] border-transparent hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-800 dark:hover:text-[#f0efed]'
+                    }`}
+                  >
+                    {pill.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          )}
         </div>
       </div>
 

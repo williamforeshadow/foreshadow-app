@@ -11,6 +11,8 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 //  {
 //    property: { ... summary fields },
 //    access: { ... property_access row ... } | null,
+//    connectivity: { wifi_ssid, wifi_password, wifi_router_location } | null,
+//    tech_accounts: Array<{ kind, service_name, username, password, notes, photos: [...] }>,
 //    notes: Array<{ scope, title, body, ... }>,
 //    contacts: Array<{ category, name, phone, ... }>,
 //    rooms: Array<{
@@ -31,6 +33,8 @@ export async function GET(
   const [
     propertyRes,
     accessRes,
+    connectivityRes,
+    techAccountsRes,
     notesRes,
     contactsRes,
     roomsRes,
@@ -48,6 +52,21 @@ export async function GET(
       .select('*')
       .eq('property_id', id)
       .maybeSingle(),
+    supabase
+      .from('property_connectivity')
+      .select('*')
+      .eq('property_id', id)
+      .maybeSingle(),
+    supabase
+      .from('property_tech_accounts')
+      .select(
+        `
+        id, kind, service_name, username, password, notes, sort_order,
+        property_tech_account_photos (id, storage_path, sort_order)
+        `
+      )
+      .eq('property_id', id)
+      .order('sort_order', { ascending: true }),
     supabase
       .from('property_notes')
       .select('id, scope, title, body, sort_order, updated_at')
@@ -98,6 +117,8 @@ export async function GET(
   const warnings: string[] = [];
   for (const [key, res] of [
     ['access', accessRes],
+    ['connectivity', connectivityRes],
+    ['tech_accounts', techAccountsRes],
     ['notes', notesRes],
     ['contacts', contactsRes],
     ['rooms', roomsRes],
@@ -111,6 +132,8 @@ export async function GET(
   return NextResponse.json({
     property: propertyRes.data,
     access: accessRes.error ? null : accessRes.data ?? null,
+    connectivity: connectivityRes.error ? null : connectivityRes.data ?? null,
+    tech_accounts: techAccountsRes.error ? [] : techAccountsRes.data ?? [],
     notes: notesRes.error ? [] : notesRes.data ?? [],
     contacts: contactsRes.error ? [] : contactsRes.data ?? [],
     rooms: roomsRes.error ? [] : roomsRes.data ?? [],

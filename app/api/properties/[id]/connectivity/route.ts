@@ -1,30 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 
-// Whitelist of editable fields for property_access. Kept narrow so a
-// client can't accidentally (or maliciously) set `property_id`,
-// `updated_at`, or anything else server-owned.
+// Singleton-style, one row per property in `property_connectivity`.
+// Mirrors the shape of /api/properties/[id]/access — explicit PUT with a
+// whitelist + empty-string-to-NULL normalization.
+
 const EDITABLE_FIELDS = [
-  'guest_code',
-  'cleaner_code',
-  'backup_code',
-  'code_rotation_notes',
-  'outer_door_code',
-  'gate_code',
-  'elevator_notes',
-  'unit_door_code',
-  'key_location',
-  'lockbox_code',
-  'parking_spot_number',
-  'parking_type',
-  'parking_instructions',
+  'wifi_ssid',
+  'wifi_password',
+  'wifi_router_location',
 ] as const;
 
-const PARKING_TYPES = new Set(['assigned', 'street', 'garage', 'other']);
-
-// Empty-object default used on GET when no row exists yet. Matches what
-// the client expects so it doesn't have to branch on 404 vs empty.
-function emptyAccess(propertyId: string) {
+function emptyConnectivity(propertyId: string) {
   const out: Record<string, string | null> = { property_id: propertyId };
   for (const f of EDITABLE_FIELDS) out[f] = null;
   return out;
@@ -38,7 +25,7 @@ export async function GET(
   const supabase = getSupabaseServer();
 
   const { data, error } = await supabase
-    .from('property_access')
+    .from('property_connectivity')
     .select('*')
     .eq('property_id', id)
     .maybeSingle();
@@ -47,11 +34,9 @@ export async function GET(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ access: data ?? emptyAccess(id) });
+  return NextResponse.json({ connectivity: data ?? emptyConnectivity(id) });
 }
 
-// PUT: upsert the full row. Only whitelisted keys are persisted; empty
-// strings are coerced to NULL so the DB stays clean for agent queries.
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -74,23 +59,11 @@ export async function PUT(
       );
     }
     const trimmed = v.trim();
-    if (trimmed === '') {
-      payload[field] = null;
-      continue;
-    }
-    if (field === 'parking_type' && !PARKING_TYPES.has(trimmed)) {
-      return NextResponse.json(
-        { error: 'parking_type must be one of: assigned, street, garage, other' },
-        { status: 400 }
-      );
-    }
-    payload[field] = trimmed;
+    payload[field] = trimmed === '' ? null : trimmed;
   }
 
   const supabase = getSupabaseServer();
 
-  // Ensure the parent property exists to give a clean 404 instead of a
-  // confusing FK violation from Postgres.
   const { data: prop, error: propErr } = await supabase
     .from('properties')
     .select('id')
@@ -104,7 +77,7 @@ export async function PUT(
   }
 
   const { data, error } = await supabase
-    .from('property_access')
+    .from('property_connectivity')
     .upsert(
       { ...payload, updated_at: new Date().toISOString() },
       { onConflict: 'property_id' }
@@ -116,5 +89,5 @@ export async function PUT(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ access: data });
+  return NextResponse.json({ connectivity: data });
 }

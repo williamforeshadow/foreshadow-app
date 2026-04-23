@@ -16,11 +16,9 @@ import {
   useToast,
 } from '@/components/properties/form/FormPrimitives';
 
-// Access & Connectivity tab.
-//
-// Singleton-style: one row per property in `property_access`. Explicit
-// Save semantics (we kept autosave off for secrets-ish fields so users
-// get visible confirmation). Empty strings are persisted as NULL.
+// Access tab. Singleton row in `property_access`. Explicit Save (no
+// autosave) so secret-ish fields get visible confirmation. Empty strings
+// are persisted as NULL. WiFi lives on the Connectivity tab now.
 
 type AccessDraft = {
   guest_code: string;
@@ -30,17 +28,12 @@ type AccessDraft = {
   outer_door_code: string;
   gate_code: string;
   elevator_notes: string;
-  parking_entry_instructions: string;
   unit_door_code: string;
   key_location: string;
   lockbox_code: string;
-  wifi_ssid: string;
-  wifi_password: string;
-  wifi_router_location: string;
   parking_spot_number: string;
   parking_type: string;
   parking_instructions: string;
-  parking_owner_vs_guest_notes: string;
 };
 
 const EMPTY_DRAFT: AccessDraft = {
@@ -51,17 +44,12 @@ const EMPTY_DRAFT: AccessDraft = {
   outer_door_code: '',
   gate_code: '',
   elevator_notes: '',
-  parking_entry_instructions: '',
   unit_door_code: '',
   key_location: '',
   lockbox_code: '',
-  wifi_ssid: '',
-  wifi_password: '',
-  wifi_router_location: '',
   parking_spot_number: '',
   parking_type: '',
   parking_instructions: '',
-  parking_owner_vs_guest_notes: '',
 };
 
 function fromServer(row: any | null | undefined): AccessDraft {
@@ -83,7 +71,6 @@ export default function PropertyAccessTab() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [showWifiPwd, setShowWifiPwd] = useState(false);
   const { toast, showToast } = useToast();
 
   const load = useCallback(async () => {
@@ -169,9 +156,10 @@ export default function PropertyAccessTab() {
       <div className="flex-1 overflow-auto">
         <div className="max-w-[760px] mx-auto px-5 sm:px-8 pt-5 sm:pt-6 pb-32">
           <section className="mb-8">
-            <SectionHeader label="Access & Connectivity" />
+            <SectionHeader label="Access" />
             <SectionCaption>
-              Codes, passwords, and anything needed to get in and get connected.
+              Codes and entry instructions — how guests, cleaners, and vendors
+              get in the door.
             </SectionCaption>
           </section>
 
@@ -247,16 +235,6 @@ export default function PropertyAccessTab() {
                   rows={2}
                 />
               </Field>
-              <Field label="Parking entry instructions">
-                <Textarea
-                  value={draft.parking_entry_instructions}
-                  onChange={(e) =>
-                    update('parking_entry_instructions', e.target.value)
-                  }
-                  placeholder="How to get into the garage/lot"
-                  rows={2}
-                />
-              </Field>
             </FieldGroup>
           </section>
 
@@ -295,48 +273,6 @@ export default function PropertyAccessTab() {
           </section>
 
           <section className="mb-8">
-            <Subheading label="WiFi" />
-            <FieldGroup>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="SSID">
-                  <Input
-                    value={draft.wifi_ssid}
-                    onChange={(e) => update('wifi_ssid', e.target.value)}
-                    placeholder="Network name"
-                    autoComplete="off"
-                  />
-                </Field>
-                <Field label="Password">
-                  <div className="relative">
-                    <Input
-                      value={draft.wifi_password}
-                      onChange={(e) => update('wifi_password', e.target.value)}
-                      placeholder="WiFi password"
-                      type={showWifiPwd ? 'text' : 'password'}
-                      autoComplete="off"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowWifiPwd((v) => !v)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-neutral-500 dark:text-[#66645f] hover:text-neutral-800 dark:hover:text-[#f0efed] transition-colors"
-                      tabIndex={-1}
-                    >
-                      {showWifiPwd ? 'Hide' : 'Show'}
-                    </button>
-                  </div>
-                </Field>
-              </div>
-              <Field label="Router location">
-                <Input
-                  value={draft.wifi_router_location}
-                  onChange={(e) => update('wifi_router_location', e.target.value)}
-                  placeholder="Hallway closet, kitchen cabinet, etc."
-                />
-              </Field>
-            </FieldGroup>
-          </section>
-
-          <section className="mb-8">
             <Subheading label="Parking" />
             <FieldGroup>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -365,19 +301,6 @@ export default function PropertyAccessTab() {
                   value={draft.parking_instructions}
                   onChange={(e) => update('parking_instructions', e.target.value)}
                   placeholder="How to use the spot, permits required, etc."
-                  rows={2}
-                />
-              </Field>
-              <Field
-                label="Guest vs. owner spot notes"
-                hint="Which spots are for guests, which are owner-only, overflow options."
-              >
-                <Textarea
-                  value={draft.parking_owner_vs_guest_notes}
-                  onChange={(e) =>
-                    update('parking_owner_vs_guest_notes', e.target.value)
-                  }
-                  placeholder="Free text"
                   rows={2}
                 />
               </Field>
