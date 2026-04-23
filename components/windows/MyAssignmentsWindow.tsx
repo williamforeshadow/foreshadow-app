@@ -11,7 +11,7 @@ import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import type { User, Project, ProjectFormFields, TaskTemplate, PropertyOption } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 import { ProjectDetailPanel, AttachmentLightbox } from './projects';
-import { TaskRow } from '@/components/tasks/TaskRow';
+import { TaskRow, TaskListHeader } from '@/components/tasks/TaskRow';
 
 interface Assignee {
   user_id: string;
@@ -434,6 +434,9 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
             </div>
           ) : (
             <div className="px-8 pb-8">
+              <div className="pt-5">
+                <TaskListHeader />
+              </div>
               {groups.map((group) => {
                 const isCollapsed = collapsedSections.has(group.label);
                 return (

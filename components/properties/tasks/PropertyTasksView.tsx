@@ -28,7 +28,7 @@ import {
   ProjectDetailPanel,
   AttachmentLightbox,
 } from '@/components/windows/projects';
-import { TaskRow, type TaskRowItem } from '@/components/tasks/TaskRow';
+import { TaskRow, TaskListHeader, type TaskRowItem } from '@/components/tasks/TaskRow';
 import {
   TaskFilterBar,
   type SortKey,
@@ -981,6 +981,9 @@ function PropertyTasksViewContent({
             </div>
           ) : (
             <div className="px-8 pb-8">
+              <div className="pt-5">
+                <TaskListHeader />
+              </div>
               {groups.map((group) => {
                 const isCollapsed = collapsedSections.has(group.id);
                 return (

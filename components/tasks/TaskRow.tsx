@@ -165,6 +165,30 @@ export function getShortDate(
   return { month, day: date.getDate() };
 }
 
+// ---- TaskListHeader --------------------------------------------------------
+// Column labels aligned with the TaskRow grid. Render once at the top of a
+// task list (before the group headers) to label the assignee / department /
+// bin / comments columns. Italic lowercase to feel annotative rather than
+// table-like.
+
+export const TASK_ROW_GRID_CLASS =
+  'grid grid-cols-[56px_minmax(0,1fr)_96px_120px_128px_56px] gap-4 px-3 -mx-3';
+
+export function TaskListHeader() {
+  return (
+    <div
+      className={`${TASK_ROW_GRID_CLASS} items-center pb-2 border-b border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.07)] text-[10px] italic font-medium tracking-[0.02em] text-neutral-400 dark:text-[#66645f] select-none`}
+    >
+      <div className="text-right">when</div>
+      <div>task</div>
+      <div>assignee</div>
+      <div>department</div>
+      <div>bin</div>
+      <div className="text-right">comments</div>
+    </div>
+  );
+}
+
 // ---- TaskRow ---------------------------------------------------------------
 
 interface TaskRowProps {
