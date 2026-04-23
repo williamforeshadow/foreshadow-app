@@ -28,7 +28,11 @@ export default function PropertiesLayout({ children }: { children: React.ReactNo
   return (
     <div className="flex h-screen bg-white dark:bg-neutral-900">
       <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">{children}</div>
+      {/* `relative` so descendants inside a detail tab (e.g. PropertyTasksView's
+          right-side detail panel) can render as an absolute overlay that
+          spans from the top of the viewport down past the PropertyShell
+          header. */}
+      <div className="flex-1 flex flex-col overflow-hidden relative">{children}</div>
     </div>
   );
 }

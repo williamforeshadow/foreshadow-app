@@ -188,7 +188,7 @@ export default function PropertyVendorsTab() {
   return (
     <>
       <div className="flex-1 overflow-auto">
-        <div className="max-w-[760px] mx-auto px-5 sm:px-8 pt-5 sm:pt-6 pb-32">
+        <div className="max-w-[760px] px-5 sm:px-8 pt-5 sm:pt-6 pb-32">
           <section className="mb-8">
             <SectionHeader label="Vendors & Contacts" />
             <SectionCaption>

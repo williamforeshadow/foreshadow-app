@@ -9,8 +9,8 @@
 export default function PropertyScheduleTab() {
   return (
     <div className="flex-1 overflow-auto">
-      <div className="max-w-[760px] mx-auto px-5 sm:px-8 pt-10 sm:pt-16 pb-16">
-        <div className="flex flex-col items-center text-center gap-2 py-16">
+      <div className="max-w-[760px] px-5 sm:px-8 pt-10 sm:pt-16 pb-16">
+        <div className="flex flex-col gap-2 py-16">
           <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-[#66645f]">
             Schedule
           </div>

@@ -146,7 +146,7 @@ export function FloatingSaveBar({
   if (!dirty) return null;
   return (
     <div className="flex-shrink-0 border-t border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] bg-white/95 dark:bg-[#0b0b0c]/95 backdrop-blur-sm">
-      <div className="max-w-[760px] mx-auto px-5 sm:px-8 py-3 flex items-center justify-between gap-4">
+      <div className="max-w-[760px] px-5 sm:px-8 py-3 flex items-center justify-between gap-4">
         <div className="min-w-0 flex-1 text-[13px]">
           {error ? (
             <span className="text-red-600 dark:text-red-400">{error}</span>

@@ -52,7 +52,9 @@ export async function GET(request: Request) {
           status,
           form_metadata,
           templates(id, name, type, department_id),
-          departments(id, name)
+          departments(id, name),
+          project_bins(id, name, is_system),
+          project_comments(count)
         `)
         .in('id', taskIds);
 
@@ -117,18 +119,26 @@ export async function GET(request: Request) {
         const department = task.departments as any;
         const reservation = task.reservation_id ? reservationsMap[task.reservation_id] : null;
         const assignment = assignmentMap[task.id];
-        
+        const commentAgg = task.project_comments as any;
+        const commentCount = Array.isArray(commentAgg)
+          ? Number(commentAgg[0]?.count ?? 0)
+          : 0;
+        const bin = task.project_bins as any;
+
         return {
           task_id: task.id,
           reservation_id: task.reservation_id,
           template_id: task.template_id,
           title: task.title || null,
           template_name: template?.name || 'Unnamed Task',
+          priority: task.priority || 'medium',
           type: task.type || template?.type || 'cleaning',
           department_id: task.department_id || template?.department_id || null,
           department_name: department?.name || null,
           description: task.description || null,
           bin_id: task.bin_id || null,
+          bin_name: bin?.name || null,
+          bin_is_system: !!bin?.is_system,
           is_binned: task.is_binned ?? false,
           scheduled_date: task.scheduled_date,
           scheduled_time: task.scheduled_time,
@@ -139,7 +149,8 @@ export async function GET(request: Request) {
           property_name: reservation?.property_name || task.property_name || null,
           check_out: reservation?.check_out,
           check_in: reservation?.check_in,
-          guest_name: reservation?.guest_name
+          guest_name: reservation?.guest_name,
+          comment_count: commentCount,
         };
       }) || [];
     }

@@ -19,7 +19,7 @@ export default function PropertyConnectivityTab() {
   // single Save button to span a singleton + a collection.
   return (
     <div className="flex-1 overflow-auto">
-      <div className="max-w-[760px] mx-auto px-5 sm:px-8 pt-5 sm:pt-6 pb-32">
+      <div className="max-w-[760px] px-5 sm:px-8 pt-5 sm:pt-6 pb-32">
         <section className="mb-6">
           <SectionHeader label="Connectivity" />
           <SectionCaption>

@@ -135,7 +135,7 @@ function ShellBody({
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header + tab strip */}
       <div className="flex-shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
-        <div className="max-w-[760px] mx-auto px-5 sm:px-8 pt-4 sm:pt-6 pb-0">
+        <div className="max-w-[760px] px-5 sm:px-8 pt-4 sm:pt-6 pb-0">
           <Link
             href="/properties"
             className="hidden sm:inline-flex items-center gap-1.5 text-[12px] text-neutral-500 dark:text-[#66645f] hover:text-neutral-800 dark:hover:text-[#f0efed] uppercase tracking-[0.04em] font-medium mb-4 transition-colors"

@@ -11,6 +11,7 @@ import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import type { User, Project, ProjectFormFields, TaskTemplate, PropertyOption } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 import { ProjectDetailPanel, AttachmentLightbox } from './projects';
+import { TaskRow } from '@/components/tasks/TaskRow';
 
 interface Assignee {
   user_id: string;
@@ -26,10 +27,15 @@ interface UnifiedItem {
   status: string;
   priority: string;
   department_id: string | null;
+  department_name: string | null;
   scheduled_date?: string | null;
   scheduled_time?: string | null;
   type?: string;
   assignees: Assignee[];
+  bin_id: string | null;
+  bin_name: string | null;
+  is_binned: boolean;
+  comment_count: number;
   raw: any;
 }
 
@@ -42,49 +48,6 @@ interface DateGroup {
 interface MyAssignmentsWindowProps {
   users: User[];
   currentUser: User | null;
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  not_started: '#A78BFA',
-  in_progress: '#6366F1',
-  paused: '#8B7FA8',
-  complete: '#4C4869',
-};
-
-const STATUS_MARBLE: Record<string, string> = {
-  not_started: 'radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.35) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.18) 10%, transparent 40%, rgba(255,255,255,0.12) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #A78BFA',
-  in_progress: 'radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.3) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.18) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.15) 10%, transparent 40%, rgba(255,255,255,0.1) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.1) 0%, transparent 55%), #6366F1',
-  paused: 'radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.3) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.15) 10%, transparent 40%, rgba(255,255,255,0.1) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #8B7FA8',
-  complete: 'radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.25) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.15) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.12) 10%, transparent 40%, rgba(255,255,255,0.08) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.1) 0%, transparent 55%), #4C4869',
-};
-
-const PRIORITY_LABELS: Record<string, string> = {
-  urgent: 'Urgent',
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  not_started: 'Not started',
-  in_progress: 'In progress',
-  paused: 'Paused',
-  complete: 'Complete',
-};
-
-function PriorityTag({ priority }: { priority: string }) {
-  if (!priority || priority === 'low') return null;
-  const colorClass =
-    priority === 'urgent'
-      ? 'text-red-500 dark:text-[#d97757]'
-      : priority === 'high'
-        ? 'text-neutral-800 dark:text-[#f0efed]'
-        : 'text-neutral-500 dark:text-[#a09e9a]';
-  return (
-    <span className={`text-[11px] tracking-[0.02em] font-medium pl-2 border-l border-neutral-200 dark:border-[rgba(255,255,255,0.07)] ${colorClass}`}>
-      {PRIORITY_LABELS[priority] || priority}
-    </span>
-  );
 }
 
 function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowProps) {
@@ -193,6 +156,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
         status: task.status || 'not_started',
         priority: task.priority || 'medium',
         department_id: task.department_id || null,
+        department_name: task.department_name || null,
         scheduled_date: task.scheduled_date,
         scheduled_time: task.scheduled_time,
         type: task.type,
@@ -201,6 +165,10 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
           name: u.name || 'Unknown',
           avatar: u.avatar || null,
         })),
+        bin_id: task.bin_id || null,
+        bin_name: task.bin_name || null,
+        is_binned: !!task.is_binned,
+        comment_count: Number(task.comment_count ?? 0),
         raw: task,
       });
     }
@@ -269,28 +237,6 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
 
     return { groups: result, openCount: open };
   }, [items]);
-
-  // Date/time formatting
-  const formatTimeCol = (timeString?: string | null) => {
-    if (!timeString) return null;
-    const [h, m] = timeString.split(':').map(Number);
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const hour12 = h % 12 || 12;
-    return { time: `${hour12}:${String(m).padStart(2, '0')}`, meridiem: ampm };
-  };
-
-  const getDayLabel = (dateStr?: string | null) => {
-    if (!dateStr) return null;
-    const date = new Date(dateStr + 'T00:00:00');
-    return date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
-  };
-
-  const getShortDate = (dateStr?: string | null) => {
-    if (!dateStr) return null;
-    const date = new Date(dateStr + 'T00:00:00');
-    const month = date.toLocaleDateString('en-US', { month: 'short' });
-    return { month, day: date.getDate() };
-  };
 
   const todayFormatted = useMemo(() => {
     const now = new Date();
@@ -524,105 +470,19 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
                     {!isCollapsed && (
                       <div className="flex flex-col">
                         {group.items.map((item, idx) => {
-                          const timeInfo = formatTimeCol(item.scheduled_time);
-                          const dayLabel = getDayLabel(item.scheduled_date);
                           const dept = allDepts.find(d => d.id === item.department_id);
                           const DeptIcon = getDepartmentIcon(dept?.icon);
                           const isSelected = selectedItem?.key === item.key;
-
                           return (
-                            <button
+                            <TaskRow
                               key={item.key}
+                              item={item}
+                              selected={isSelected}
+                              isLast={idx === group.items.length - 1}
                               onClick={() => setSelectedItem(isSelected ? null : item)}
-                              className={`grid grid-cols-[56px_1fr] gap-4 py-3.5 text-left transition-colors ${
-                                isSelected
-                                  ? 'bg-[rgba(30,25,20,0.04)] dark:bg-[rgba(255,255,255,0.04)]'
-                                  : 'hover:bg-[rgba(30,25,20,0.02)] dark:hover:bg-[rgba(255,255,255,0.02)]'
-                              } ${
-                                idx < group.items.length - 1 ? 'border-b border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.07)]' : ''
-                              } rounded-lg px-3 -mx-3`}
-                            >
-                              {/* Date/time column */}
-                              <div className="text-right pt-0.5">
-                                {item.scheduled_date || timeInfo ? (
-                                  <>
-                                    {item.scheduled_date && (() => {
-                                      const sd = getShortDate(item.scheduled_date);
-                                      return sd ? (
-                                        <>
-                                          {dayLabel && (
-                                            <div className="text-[9px] text-neutral-400 dark:text-[#66645f] uppercase tracking-[0.06em] font-medium mb-0.5">{dayLabel}</div>
-                                          )}
-                                          <div className="text-[12px] font-semibold text-neutral-800 dark:text-[#f0efed] leading-none tracking-tight whitespace-nowrap">{sd.month} {sd.day}</div>
-                                        </>
-                                      ) : null;
-                                    })()}
-                                    {timeInfo && (
-                                      <div className={item.scheduled_date ? 'mt-1' : ''}>
-                                        <div className="text-[10px] font-medium text-neutral-400 dark:text-[#66645f] leading-none tracking-tight tabular-nums whitespace-nowrap">
-                                          {timeInfo.time}{timeInfo.meridiem.toLowerCase()}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </>
-                                ) : (
-                                  <div className="text-[9px] text-neutral-300 dark:text-[#3e3d3a] uppercase tracking-[0.08em] font-medium leading-snug pt-0.5">
-                                    no<br />date
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Body */}
-                              <div className="min-w-0">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0 flex-1">
-                                    <div className="text-[14px] font-medium text-neutral-800 dark:text-[#f0efed] leading-snug tracking-tight mb-0.5 truncate">
-                                      {item.title}
-                                    </div>
-                                    {item.property_name && (
-                                      <div className="text-[12px] text-neutral-500 dark:text-[#66645f] leading-snug truncate">
-                                        {item.property_name}
-                                      </div>
-                                    )}
-                                  </div>
-                                  {dept && (
-                                    <DeptIcon className="w-[15px] h-[15px] text-neutral-400 dark:text-[#66645f] shrink-0 mt-0.5" />
-                                  )}
-                                </div>
-                                {/* Metadata row */}
-                                <div className="flex items-center gap-2 mt-2">
-                                  <span
-                                    className="w-[7px] h-[7px] rounded-full shrink-0"
-                                    style={{ background: STATUS_MARBLE[item.status] || STATUS_MARBLE.not_started }}
-                                  />
-                                  <span
-                                    className="text-[11px] tracking-[0.02em] font-medium"
-                                    style={{ color: STATUS_COLORS[item.status] || '#A78BFA' }}
-                                  >
-                                    {STATUS_LABELS[item.status] || item.status}
-                                  </span>
-                                  <PriorityTag priority={item.priority} />
-                                  {item.assignees.length > 0 && (
-                                    <div className="flex ml-auto">
-                                      {item.assignees.slice(0, 3).map((u, i) => (
-                                        <div
-                                          key={u.user_id}
-                                          className="w-[20px] h-[20px] rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-[8px] font-semibold text-neutral-600 dark:text-[#a09e9a] overflow-hidden ring-[1.5px] ring-white dark:ring-[#0b0b0c]"
-                                          style={{ marginLeft: i > 0 ? '-6px' : 0 }}
-                                          title={u.name}
-                                        >
-                                          {u.avatar ? (
-                                            <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" />
-                                          ) : (
-                                            u.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </button>
+                              showBinPill
+                              departmentIcon={DeptIcon}
+                            />
                           );
                         })}
                       </div>

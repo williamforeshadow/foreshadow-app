@@ -65,7 +65,8 @@ export async function GET(
       departments(id, name),
       project_bins(id, name, is_system),
       reservations(id, property_name, guest_name, check_in, check_out),
-      task_assignments(user_id, users(id, name, email, role, avatar))
+      task_assignments(user_id, users(id, name, email, role, avatar)),
+      project_comments(count)
     `
     )
     .or(`property_id.eq.${propertyId},property_name.eq.${property.name}`);
@@ -80,6 +81,11 @@ export async function GET(
     const reservation = task.reservations as any;
     const bin = task.project_bins as any;
     const assignments = (task.task_assignments || []) as any[];
+    // Supabase embedded count returns `[{ count: N }]`. Flatten.
+    const commentAgg = task.project_comments as any;
+    const commentCount = Array.isArray(commentAgg)
+      ? Number(commentAgg[0]?.count ?? 0)
+      : 0;
 
     return {
       task_id: task.id,
@@ -105,9 +111,11 @@ export async function GET(
       bin_name: bin?.name || null,
       bin_is_system: !!bin?.is_system,
       is_binned: task.is_binned ?? false,
-      // Recurring / auto-generated tasks have no reservation attached. Tasks
-      // spawned by reservation turnovers always have one.
-      is_recurring: task.reservation_id == null,
+      // Automation-generated tasks — reservation-based turnovers, recurring
+      // rules, templated spawns — all insert with a non-"project" type.
+      // Manually created tasks (New Task button → tasks-for-bin POST) always
+      // get type="project". See app/api/tasks-for-bin/route.ts.
+      is_automated: (task.type || '') !== 'project',
       guest_name: reservation?.guest_name || null,
       check_in: reservation?.check_in || null,
       check_out: reservation?.check_out || null,
@@ -117,6 +125,7 @@ export async function GET(
         avatar: a.users?.avatar || null,
         role: a.users?.role || '',
       })),
+      comment_count: commentCount,
     };
   });
 

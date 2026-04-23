@@ -33,8 +33,9 @@ import {
   TaskFilterBar,
   type SortKey,
   type SortDir,
-  type RecurringFilter,
   type FilterOption,
+  ORIGIN_MANUAL,
+  ORIGIN_AUTOMATED,
 } from './TaskFilterBar';
 
 // Property Tasks ledger — shows every task ever linked to the property.
@@ -72,7 +73,7 @@ interface RawTask {
   bin_name: string | null;
   bin_is_system: boolean;
   is_binned: boolean;
-  is_recurring: boolean;
+  is_automated: boolean;
   guest_name: string | null;
   check_in: string | null;
   check_out: string | null;
@@ -82,6 +83,7 @@ interface RawTask {
     avatar: string | null;
     role: string;
   }[];
+  comment_count: number;
 }
 
 interface UnifiedItem extends TaskRowItem {
@@ -108,7 +110,7 @@ const URL_KEYS = {
   assignee: 'assignee',
   department: 'dept',
   bin: 'bin',
-  recurring: 'origin',
+  origin: 'origin',
   sortKey: 'sort',
   sortDir: 'dir',
 } as const;
@@ -175,10 +177,9 @@ function PropertyTasksViewContent({
   const [binSelected, setBinSelected] = useState<Set<string>>(() =>
     parseSet(searchParams?.get(URL_KEYS.bin) || null)
   );
-  const [recurring, setRecurring] = useState<RecurringFilter>(() => {
-    const v = searchParams?.get(URL_KEYS.recurring);
-    return v === 'recurring' || v === 'reservation' ? v : 'all';
-  });
+  const [originSelected, setOriginSelected] = useState<Set<string>>(() =>
+    parseSet(searchParams?.get(URL_KEYS.origin) || null)
+  );
   const [sortKey, setSortKey] = useState<SortKey>(() => {
     const v = searchParams?.get(URL_KEYS.sortKey);
     return v === 'completed' || v === 'created' || v === 'updated' ? v : 'scheduled';
@@ -200,7 +201,8 @@ function PropertyTasksViewContent({
     if (dept) params.set(URL_KEYS.department, dept);
     const bin = serializeSet(binSelected);
     if (bin) params.set(URL_KEYS.bin, bin);
-    if (recurring !== 'all') params.set(URL_KEYS.recurring, recurring);
+    const origin = serializeSet(originSelected);
+    if (origin) params.set(URL_KEYS.origin, origin);
     if (sortKey !== 'scheduled') params.set(URL_KEYS.sortKey, sortKey);
     if (sortDir !== 'desc') params.set(URL_KEYS.sortDir, sortDir);
 
@@ -214,7 +216,7 @@ function PropertyTasksViewContent({
     assigneeSelected,
     departmentSelected,
     binSelected,
-    recurring,
+    originSelected,
     sortKey,
     sortDir,
   ]);
@@ -307,6 +309,7 @@ function PropertyTasksViewContent({
       status: task.status || 'not_started',
       priority: task.priority || 'medium',
       department_id: task.department_id,
+      department_name: task.department_name,
       scheduled_date: task.scheduled_date,
       scheduled_time: task.scheduled_time,
       assignees: task.assigned_users.map((u) => ({
@@ -317,7 +320,8 @@ function PropertyTasksViewContent({
       bin_id: task.bin_id,
       bin_name: task.bin_name,
       is_binned: task.is_binned,
-      is_recurring: task.is_recurring,
+      is_automated: task.is_automated,
+      comment_count: task.comment_count ?? 0,
       completed_at: task.completed_at,
       created_at: task.created_at,
       updated_at: task.updated_at,
@@ -372,36 +376,52 @@ function PropertyTasksViewContent({
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [allItems, allDepts]);
 
+  // Bin filter options:
+  //   1. Not binned
+  //   2. All binned tasks (matches is_binned=true; orphan binned tasks with
+  //      no bin_id are implicitly included here — that's exactly how the
+  //      system "All Binned Tasks" bin behaves in the Bins tab)
+  //   3. Each named bin, counted by bin_id
+  // No separate "any bin" / "orphan" entries — those collapsed into #2.
   const binOptions: FilterOption[] = useMemo(() => {
-    const counts: Record<string, { name: string; count: number }> = {};
+    const namedCounts: Record<string, { name: string; count: number }> = {};
     let notBinnedCount = 0;
+    let allBinnedCount = 0;
     allItems.forEach((i) => {
       if (!i.is_binned) {
         notBinnedCount++;
         return;
       }
+      allBinnedCount++;
       if (i.bin_id) {
-        const existing = counts[i.bin_id];
-        counts[i.bin_id] = {
+        const existing = namedCounts[i.bin_id];
+        namedCounts[i.bin_id] = {
           name: i.bin_name || 'Bin',
-          count: (existing?.count || 0) + 1,
-        };
-      } else {
-        const existing = counts['__orphan__'];
-        counts['__orphan__'] = {
-          name: 'Binned (no bin)',
           count: (existing?.count || 0) + 1,
         };
       }
     });
-    const opts: FilterOption[] = [
+    return [
       { value: '__none__', label: 'Not binned', count: notBinnedCount },
-      { value: '__any__', label: 'Any bin', count: allItems.length - notBinnedCount },
-      ...Object.entries(counts)
+      { value: '__any__', label: 'All binned tasks', count: allBinnedCount },
+      ...Object.entries(namedCounts)
         .map(([id, v]) => ({ value: id, label: v.name, count: v.count }))
         .sort((a, b) => a.label.localeCompare(b.label)),
     ];
-    return opts;
+  }, [allItems]);
+
+  // Origin filter options. Empty set == both selected == "no filter".
+  const originOptions: FilterOption[] = useMemo(() => {
+    let manual = 0;
+    let automated = 0;
+    allItems.forEach((i) => {
+      if (i.is_automated) automated++;
+      else manual++;
+    });
+    return [
+      { value: ORIGIN_MANUAL, label: 'Manual', count: manual },
+      { value: ORIGIN_AUTOMATED, label: 'Automated', count: automated },
+    ];
   }, [allItems]);
 
   // ---- Filter + sort ------------------------------------------------------
@@ -427,14 +447,17 @@ function PropertyTasksViewContent({
         const matches = Array.from(binSelected).some((val) => {
           if (val === '__none__') return !item.is_binned;
           if (val === '__any__') return item.is_binned;
-          if (val === '__orphan__') return item.is_binned && !item.bin_id;
           return item.bin_id === val;
         });
         if (!matches) return false;
       }
 
-      if (recurring === 'recurring' && !item.is_recurring) return false;
-      if (recurring === 'reservation' && item.is_recurring) return false;
+      // Origin: empty set OR both values selected == no filter. Exactly one
+      // selection narrows to manual- or automated-only.
+      if (originSelected.size === 1) {
+        const wantAutomated = originSelected.has(ORIGIN_AUTOMATED);
+        if (wantAutomated !== item.is_automated) return false;
+      }
 
       return true;
     });
@@ -445,7 +468,7 @@ function PropertyTasksViewContent({
     assigneeSelected,
     departmentSelected,
     binSelected,
-    recurring,
+    originSelected,
   ]);
 
   const sortedItems = useMemo(() => {
@@ -542,8 +565,11 @@ function PropertyTasksViewContent({
       assigneeSelected.size > 0 ||
       departmentSelected.size > 0 ||
       binSelected.size > 0 ||
-      recurring !== 'all',
-    [search, statusSelected, assigneeSelected, departmentSelected, binSelected, recurring]
+      // Only count origin as active when it actually narrows results.
+      // Empty set or both values selected = pass-through, so no chip
+      // highlight and no "clear" required.
+      originSelected.size === 1,
+    [search, statusSelected, assigneeSelected, departmentSelected, binSelected, originSelected]
   );
 
   const clearAll = useCallback(() => {
@@ -552,7 +578,7 @@ function PropertyTasksViewContent({
     setAssigneeSelected(new Set());
     setDepartmentSelected(new Set());
     setBinSelected(new Set());
-    setRecurring('all');
+    setOriginSelected(new Set());
   }, []);
 
   // Collapsible section state. "Completed" starts collapsed; user toggles are
@@ -878,7 +904,11 @@ function PropertyTasksViewContent({
 
   return (
     <div className="flex-1 min-h-0 flex overflow-hidden">
-      {/* List side — full-width when no detail; 2/3 when detail is open */}
+      {/* List side — full-width when no detail; 2/3 when detail is open.
+          When the detail panel opens, it renders as an absolute overlay
+          anchored to the outer `/properties` layout column (see
+          app/properties/layout.tsx → `relative`), so it can extend all the
+          way to the top of the viewport past the property header. */}
       <div className={`${detailOpen ? 'w-2/3' : 'w-full'} flex flex-col min-w-0 transition-all`}>
         {/* Header + filters */}
         <div className="flex-shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
@@ -897,8 +927,9 @@ function PropertyTasksViewContent({
             binOptions={binOptions}
             binSelected={binSelected}
             onBinChange={setBinSelected}
-            recurring={recurring}
-            onRecurringChange={setRecurring}
+            originOptions={originOptions}
+            originSelected={originSelected}
+            onOriginChange={setOriginSelected}
             sortKey={sortKey}
             sortDir={sortDir}
             onSortChange={(k, d) => {
@@ -1004,7 +1035,6 @@ function PropertyTasksViewContent({
                               }}
                               hideProperty
                               showBinPill
-                              showRecurringPill
                               departmentIcon={DeptIcon}
                             />
                           );
@@ -1019,7 +1049,10 @@ function PropertyTasksViewContent({
         </div>
       </div>
 
-      {/* Detail panel — right 1/3, exact match to ProjectsWindow kanban detail */}
+      {/* Detail panel — anchored as an absolute overlay to the outer
+          /properties main column so it spans from the top of the viewport
+          (overriding the property header) down to the bottom. Width matches
+          the right 1/3 of the main column. */}
       {detailOpen && itemAsProject && editingFields && (() => {
         const raw = selectedItem?.raw;
         const resolvedTemplate = raw?.template_id
@@ -1029,7 +1062,7 @@ function PropertyTasksViewContent({
           : undefined;
         const isDraft = draftTask != null;
         return (
-          <div className="w-1/3 flex-shrink-0 border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 bg-white dark:bg-white/[0.03]">
+          <div className="absolute inset-y-0 right-0 w-1/3 z-20 border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 bg-white dark:bg-[#0b0b0c] overflow-hidden flex flex-col">
             <ProjectDetailPanel
               project={itemAsProject}
               editingFields={editingFields}
