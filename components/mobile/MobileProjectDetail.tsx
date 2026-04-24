@@ -157,14 +157,22 @@ export default function MobileProjectDetail({
     setSaving(false);
   }, [project.id, onSave, isNewTask]);
 
-  // Field update + auto-save
+  // Field update + auto-save.
+  //
+  // NOTE: Do NOT call `autoSave` inside a `setFields(prev => …)` updater.
+  // React may invoke state updater functions during reconciliation, so a
+  // side effect inside the updater can end up calling `setState` on a
+  // parent component *during render*, which triggers the
+  // "Cannot update a component while rendering a different component"
+  // warning (hit by PropertyTasksView's onSave → setSavingEdit pipeline).
+  // Computing `updated` from `fields` (captured via the hook deps) and
+  // invoking `setFields` + `autoSave` sequentially keeps the updater pure
+  // and defers the cross-component setState until after the commit.
   const updateField = useCallback((key: keyof ProjectFormFields, value: string | string[]) => {
-    setFields(prev => {
-      const updated = { ...prev, [key]: value };
-      autoSave(updated);
-      return updated;
-    });
-  }, [autoSave]);
+    const updated = { ...fields, [key]: value };
+    setFields(updated);
+    autoSave(updated);
+  }, [fields, autoSave]);
 
   // Derived data
   const assignedUsers = users.filter(u => fields.assigned_staff?.includes(u.id));
@@ -224,14 +232,16 @@ export default function MobileProjectDetail({
     }
   }, [fields.status]);
 
-  // Helper: write a status update through the same save pipeline used elsewhere.
+  // Helper: write a status update through the same save pipeline used
+  // elsewhere. Same no-side-effects-in-updater rule as `updateField`
+  // above — compute the next fields outside the updater so our
+  // `onSave` can safely touch parent state without "setState during
+  // render" warnings.
   const writeStatus = useCallback((targetStatus: string) => {
-    setFields(prev => {
-      const updated = { ...prev, status: targetStatus };
-      autoSave(updated);
-      return updated;
-    });
-  }, [autoSave]);
+    const updated = { ...fields, status: targetStatus };
+    setFields(updated);
+    autoSave(updated);
+  }, [fields, autoSave]);
 
   // Inline timer pill (non-templated tasks only) — pure timer toggle, no side effects.
   const handleTimerStart = useCallback(() => {
@@ -704,8 +714,14 @@ export default function MobileProjectDetail({
           </>)}
         </div>
 
-        {/* Section tabs — only Details + Checklist */}
-        {(hasChecklist || loadingTemplate) && (
+        {/* Section tabs — only Details + Checklist.
+            Guard by `isTemplated` too: some callers compute
+            `loadingTemplate` as `loadingTaskTemplate === task.template_id`,
+            which is `null === null = true` for non-templated tasks and
+            would make the checklist tab appear on tasks without a
+            template. Only show tabs when the task actually has a
+            template_id. */}
+        {isTemplated && (hasChecklist || loadingTemplate) && (
           <div className="flex border-t border-[rgba(30,25,20,0.06)] dark:border-neutral-800">
             {(['details', 'checklist'] as const).map((section) => (
               <button

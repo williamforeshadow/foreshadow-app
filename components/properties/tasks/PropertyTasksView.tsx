@@ -28,7 +28,10 @@ import {
   ProjectDetailPanel,
   AttachmentLightbox,
 } from '@/components/windows/projects';
+import MobileProjectDetail from '@/components/mobile/MobileProjectDetail';
 import { TaskRow, TaskListHeader, type TaskRowItem } from '@/components/tasks/TaskRow';
+import { MobileTaskRow } from '@/components/tasks/MobileTaskRow';
+import { useIsMobile } from '@/lib/useIsMobile';
 import {
   TaskFilterBar,
   type SortKey,
@@ -154,6 +157,7 @@ function PropertyTasksViewContent({
   const searchParams = useSearchParams();
   const { user: authUser, allUsers } = useAuth();
   const { departments: allDepts } = useDepartments();
+  const isMobile = useIsMobile();
 
   // The detail panel props type `User[]` from lib/types; AppUser is
   // structurally compatible for the fields used. Cast once at the boundary.
@@ -676,42 +680,145 @@ function PropertyTasksViewContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItem?.key, draftTask?.id]);
 
-  const handleSaveFields = useCallback(async () => {
-    if (!selectedItem) return;
-    const fields = editingFieldsRef.current;
-    if (!fields) return;
-    const raw = selectedItem.raw;
-    const taskId = raw.task_id;
+  // ProjectDetailPanel passes fresh fields synchronously when toggling
+  // assignees (onSave(f)). Honor `directFields` so we don't read a stale
+  // ref, and fan the save out to the right endpoints — same pattern as
+  // TimelineWindow's handleSaveTaskEditFields:
+  //   /api/update-task-fields      title, description, priority, department_id
+  //   /api/update-task-action      status (server-side allow-list on the action)
+  //   /api/update-task-schedule    scheduled_date + scheduled_time
+  //   /api/update-task-assignment  assignees
+  // `/api/update-task-fields`'s server allow-list silently drops status /
+  // scheduled_date / scheduled_time, which is why sending those through it
+  // used to appear to update the row (optimistic patch) and then revert on
+  // reopen. All four endpoints can run in parallel — they touch different
+  // DB columns / tables.
+  const handleSaveFields = useCallback(
+    async (directFields?: ProjectFormFields) => {
+      if (!selectedItem) return;
+      const fields = directFields ?? editingFieldsRef.current;
+      if (!fields) return;
+      const raw = selectedItem.raw;
+      const taskId = raw.task_id;
 
-    const fieldUpdates: Record<string, unknown> = {};
-    if (fields.status !== (raw.status || 'not_started')) fieldUpdates.status = fields.status;
-    if (fields.title !== (raw.title || raw.template_name || 'Task')) fieldUpdates.title = fields.title;
-    if (JSON.stringify(fields.description) !== JSON.stringify(raw.description || null))
-      fieldUpdates.description = fields.description;
-    if (fields.priority !== (raw.priority || 'medium')) fieldUpdates.priority = fields.priority;
-    if (fields.department_id !== (raw.department_id || ''))
-      fieldUpdates.department_id = fields.department_id || null;
-    if (fields.scheduled_date !== (raw.scheduled_date || ''))
-      fieldUpdates.scheduled_date = fields.scheduled_date || null;
-    if (fields.scheduled_time !== (raw.scheduled_time || ''))
-      fieldUpdates.scheduled_time = fields.scheduled_time || null;
+      const oldAssignees = raw.assigned_users
+        .map((u) => u.user_id)
+        .sort()
+        .join(',');
+      const newAssignees = (fields.assigned_staff || []).slice().sort().join(',');
+      const assigneesChanged = oldAssignees !== newAssignees;
 
-    if (Object.keys(fieldUpdates).length === 0) return;
-    setSavingEdit(true);
-    updateSelectedRaw(fieldUpdates);
-    try {
-      await fetch('/api/update-task-fields', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId, fields: fieldUpdates }),
-      });
-      fetchTasks();
-    } catch (err) {
-      console.error('Error updating task fields:', err);
-    } finally {
-      setSavingEdit(false);
-    }
-  }, [selectedItem, fetchTasks, updateSelectedRaw]);
+      // Plain-field diffs — allowed through /api/update-task-fields.
+      const fieldUpdates: Record<string, unknown> = {};
+      if (fields.title !== (raw.title || raw.template_name || 'Task'))
+        fieldUpdates.title = fields.title;
+      if (JSON.stringify(fields.description) !== JSON.stringify(raw.description || null))
+        fieldUpdates.description = fields.description;
+      if (fields.priority !== (raw.priority || 'medium'))
+        fieldUpdates.priority = fields.priority;
+      if (fields.department_id !== (raw.department_id || ''))
+        fieldUpdates.department_id = fields.department_id || null;
+
+      // Status has its own action endpoint so the server can validate the
+      // transition and keep a single write path across the app.
+      const oldStatus = raw.status || 'not_started';
+      const newStatus = fields.status || 'not_started';
+      const statusChanged = newStatus !== oldStatus;
+
+      // Schedule has its own endpoint; compare normalized empty strings.
+      const oldDate = raw.scheduled_date || '';
+      const oldTime = raw.scheduled_time || '';
+      const newDate = fields.scheduled_date || '';
+      const newTime = fields.scheduled_time || '';
+      const scheduleChanged = newDate !== oldDate || newTime !== oldTime;
+
+      const hasFieldChanges = Object.keys(fieldUpdates).length > 0;
+      if (!hasFieldChanges && !assigneesChanged && !statusChanged && !scheduleChanged)
+        return;
+
+      setSavingEdit(true);
+
+      // Optimistic local patches so the detail panel + list row reflect
+      // the change immediately, before any network round-trip.
+      if (hasFieldChanges) updateSelectedRaw(fieldUpdates);
+      if (statusChanged) updateSelectedRaw({ status: newStatus });
+      if (scheduleChanged)
+        updateSelectedRaw({
+          scheduled_date: newDate || null,
+          scheduled_time: newTime || null,
+        });
+      if (assigneesChanged) {
+        const nextAssignedUsers = (fields.assigned_staff || []).map((uid) => {
+          const u = users.find((x) => x.id === uid);
+          if (!u) {
+            const existing = raw.assigned_users.find((a) => a.user_id === uid);
+            return existing || { user_id: uid, name: '', avatar: null, role: '' };
+          }
+          return {
+            user_id: u.id,
+            name: u.name || '',
+            avatar: u.avatar || null,
+            role: u.role || '',
+          };
+        });
+        updateSelectedRaw({ assigned_users: nextAssignedUsers });
+      }
+
+      try {
+        const calls: Promise<Response>[] = [];
+        if (hasFieldChanges) {
+          calls.push(
+            fetch('/api/update-task-fields', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ taskId, fields: fieldUpdates }),
+            })
+          );
+        }
+        if (statusChanged) {
+          calls.push(
+            fetch('/api/update-task-action', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ taskId, action: newStatus }),
+            })
+          );
+        }
+        if (scheduleChanged) {
+          calls.push(
+            fetch('/api/update-task-schedule', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                taskId,
+                scheduledDate: newDate || null,
+                scheduledTime: newTime || null,
+              }),
+            })
+          );
+        }
+        if (assigneesChanged) {
+          calls.push(
+            fetch('/api/update-task-assignment', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                taskId,
+                userIds: fields.assigned_staff || [],
+              }),
+            })
+          );
+        }
+        await Promise.all(calls);
+        fetchTasks();
+      } catch (err) {
+        console.error('Error updating task fields:', err);
+      } finally {
+        setSavingEdit(false);
+      }
+    },
+    [selectedItem, fetchTasks, updateSelectedRaw, users]
+  );
 
   const handleTemplateChange = useCallback(
     async (templateId: string | null) => {
@@ -815,43 +922,49 @@ function PropertyTasksViewContent({
     setDraftTask(draft);
   }, [propertyName]);
 
-  const handleConfirmCreateTask = useCallback(async () => {
-    if (!draftTask) return;
-    setCreatingTask(true);
-    try {
-      const fields = editingFieldsRef.current;
-      const payload: Record<string, unknown> = {
-        title: fields?.title || draftTask.title || 'New Task',
-        status: fields?.status || 'not_started',
-        priority: fields?.priority || 'medium',
-        is_binned: false,
-        description: fields?.description || null,
-        department_id: fields?.department_id || null,
-        scheduled_date: fields?.scheduled_date || null,
-        scheduled_time: fields?.scheduled_time || null,
-        property_id: propertyId,
-        property_name: propertyName,
-      };
-      if (fields?.assigned_staff?.length) payload.assigned_user_ids = fields.assigned_staff;
+  // Accept fields either from the ref (desktop ProjectDetailPanel flow) or
+  // directly from the caller (MobileProjectDetail passes fields to
+  // onConfirmCreate) so both surfaces can share the same create logic.
+  const handleConfirmCreateTask = useCallback(
+    async (directFields?: ProjectFormFields) => {
+      if (!draftTask) return;
+      setCreatingTask(true);
+      try {
+        const fields = directFields ?? editingFieldsRef.current;
+        const payload: Record<string, unknown> = {
+          title: fields?.title || draftTask.title || 'New Task',
+          status: fields?.status || 'not_started',
+          priority: fields?.priority || 'medium',
+          is_binned: false,
+          description: fields?.description || null,
+          department_id: fields?.department_id || null,
+          scheduled_date: fields?.scheduled_date || null,
+          scheduled_time: fields?.scheduled_time || null,
+          property_id: propertyId,
+          property_name: propertyName,
+        };
+        if (fields?.assigned_staff?.length) payload.assigned_user_ids = fields.assigned_staff;
 
-      const res = await fetch('/api/tasks-for-bin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const result = await res.json();
-      if (result.data) {
-        setDraftTask(null);
-        await fetchTasks();
-      } else {
-        console.error('Create failed:', result.error);
+        const res = await fetch('/api/tasks-for-bin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const result = await res.json();
+        if (result.data) {
+          setDraftTask(null);
+          await fetchTasks();
+        } else {
+          console.error('Create failed:', result.error);
+        }
+      } catch (err) {
+        console.error('Error creating task:', err);
+      } finally {
+        setCreatingTask(false);
       }
-    } catch (err) {
-      console.error('Error creating task:', err);
-    } finally {
-      setCreatingTask(false);
-    }
-  }, [draftTask, propertyId, propertyName, fetchTasks]);
+    },
+    [draftTask, propertyId, propertyName, fetchTasks]
+  );
 
   const handleDeleteDraft = useCallback(() => {
     setDraftTask(null);
@@ -904,12 +1017,15 @@ function PropertyTasksViewContent({
 
   return (
     <div className="flex-1 min-h-0 flex overflow-hidden">
-      {/* List side — full-width when no detail; 2/3 when detail is open.
-          When the detail panel opens, it renders as an absolute overlay
-          anchored to the outer `/properties` layout column (see
-          app/properties/layout.tsx → `relative`), so it can extend all the
-          way to the top of the viewport past the property header. */}
-      <div className={`${detailOpen ? 'w-2/3' : 'w-full'} flex flex-col min-w-0 transition-all`}>
+      {/* List side — full-width when no detail; 2/3 when detail is open on
+          desktop (the detail panel renders as an absolute overlay on the
+          outer `/properties` column, anchored by app/properties/layout.tsx
+          → `relative`, so it spans from the viewport top past the
+          property header). On mobile the detail panel is a full-screen
+          sheet, so the list stays at full width underneath. */}
+      <div
+        className={`${!isMobile && detailOpen ? 'w-2/3' : 'w-full'} flex flex-col min-w-0 transition-all`}
+      >
         {/* Header + filters */}
         <div className="flex-shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
           <TaskFilterBar
@@ -980,10 +1096,14 @@ function PropertyTasksViewContent({
               </p>
             </div>
           ) : (
-            <div className="px-8 pb-8">
-              <div className="pt-5">
-                <TaskListHeader />
-              </div>
+            <div className={isMobile ? 'px-5 pb-8' : 'px-8 pb-8'}>
+              {/* Column labels are desktop-only — mobile doesn't have the
+                  extra assignee/department/bin/comments columns to label. */}
+              {!isMobile && (
+                <div className="pt-5">
+                  <TaskListHeader />
+                </div>
+              )}
               {groups.map((group) => {
                 const isCollapsed = collapsedSections.has(group.id);
                 return (
@@ -1024,18 +1144,32 @@ function PropertyTasksViewContent({
                         {group.items.map((item, idx) => {
                           const dept = allDepts.find((d) => d.id === item.department_id);
                           const DeptIcon = getDepartmentIcon(dept?.icon);
+                          const isSelected = selectedItem?.key === item.key;
+                          const isLast = idx === group.items.length - 1;
+                          const handleClick = () => {
+                            setDraftTask(null);
+                            setSelectedItem(isSelected ? null : item);
+                          };
+                          if (isMobile) {
+                            return (
+                              <MobileTaskRow
+                                key={item.key}
+                                item={item}
+                                selected={isSelected}
+                                isLast={isLast}
+                                onClick={handleClick}
+                                hideProperty
+                                departmentIcon={DeptIcon}
+                              />
+                            );
+                          }
                           return (
                             <TaskRow
                               key={item.key}
                               item={item}
-                              selected={selectedItem?.key === item.key}
-                              isLast={idx === group.items.length - 1}
-                              onClick={() => {
-                                setDraftTask(null);
-                                setSelectedItem(
-                                  selectedItem?.key === item.key ? null : item
-                                );
-                              }}
+                              selected={isSelected}
+                              isLast={isLast}
+                              onClick={handleClick}
                               hideProperty
                               showBinPill
                               departmentIcon={DeptIcon}
@@ -1052,10 +1186,11 @@ function PropertyTasksViewContent({
         </div>
       </div>
 
-      {/* Detail panel — anchored as an absolute overlay to the outer
-          /properties main column so it spans from the top of the viewport
-          (overriding the property header) down to the bottom. Width matches
-          the right 1/3 of the main column. */}
+      {/* Detail panel — desktop renders the shared ProjectDetailPanel as
+          an absolute right-1/3 overlay anchored to the outer /properties
+          column (so it spans from the viewport top past the property
+          header). Mobile renders MobileProjectDetail, which owns its own
+          `fixed inset-0` full-screen chrome. */}
       {detailOpen && itemAsProject && editingFields && (() => {
         const raw = selectedItem?.raw;
         const resolvedTemplate = raw?.template_id
@@ -1064,6 +1199,96 @@ function PropertyTasksViewContent({
               undefined)
           : undefined;
         const isDraft = draftTask != null;
+
+        if (isMobile) {
+          return (
+            <MobileProjectDetail
+              project={itemAsProject}
+              users={users}
+              onClose={() => {
+                setSelectedItem(null);
+                setDraftTask(null);
+              }}
+              onSave={async (_projectId, nextFields) => {
+                // Drafts shouldn't hit the server per keystroke — their
+                // state is captured on "Create Task". For existing tasks
+                // route through the shared handler so fields + assignment
+                // diffs go to the right endpoints.
+                if (isDraft) {
+                  setEditingFields(nextFields);
+                  return itemAsProject;
+                }
+                await handleSaveFields(nextFields);
+                return itemAsProject;
+              }}
+              onDelete={isDraft ? handleDeleteDraft : handleDeleteTask}
+              allProperties={allProperties}
+              onPropertyChange={isDraft
+                ? (_pid, name) => {
+                    setDraftTask((prev) =>
+                      prev ? { ...prev, property_name: name } : prev
+                    );
+                  }
+                : handlePropertyChange}
+              bins={binsHook.bins}
+              onBinChange={async (binId) => {
+                if (!selectedItem) return;
+                const taskId = selectedItem.raw.task_id;
+                updateSelectedRaw({ bin_id: binId || null });
+                try {
+                  await fetch('/api/update-task-fields', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      taskId,
+                      fields: { bin_id: binId || null },
+                    }),
+                  });
+                  binsHook.fetchBins();
+                  fetchTasks();
+                } catch (err) {
+                  console.error('Error updating bin:', err);
+                }
+              }}
+              onIsBinnedChange={async (isBinned) => {
+                if (!selectedItem) return;
+                const taskId = selectedItem.raw.task_id;
+                const patch: Record<string, unknown> = { is_binned: isBinned };
+                if (!isBinned) patch.bin_id = null;
+                updateSelectedRaw(patch);
+                try {
+                  const fields: Record<string, unknown> = { is_binned: isBinned };
+                  if (!isBinned) fields.bin_id = null;
+                  await fetch('/api/update-task-fields', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ taskId, fields }),
+                  });
+                  binsHook.fetchBins();
+                  fetchTasks();
+                } catch (err) {
+                  console.error('Error updating is_binned:', err);
+                }
+              }}
+              template={resolvedTemplate ?? null}
+              formMetadata={raw?.form_metadata ?? undefined}
+              onSaveForm={handleSaveTaskForm}
+              loadingTemplate={
+                !!raw?.template_id && loadingTaskTemplate === raw.template_id
+              }
+              availableTemplates={availableTemplates}
+              onTemplateChange={handleTemplateChange}
+              isNewTask={isDraft}
+              onConfirmCreate={
+                isDraft
+                  ? (fields) => handleConfirmCreateTask(fields)
+                  : undefined
+              }
+              creatingTask={creatingTask}
+            />
+          );
+        }
+
         return (
           <div className="absolute inset-y-0 right-0 w-1/3 z-20 border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 bg-white dark:bg-[#0b0b0c] overflow-hidden flex flex-col">
             <ProjectDetailPanel
@@ -1093,7 +1318,7 @@ function PropertyTasksViewContent({
               template={resolvedTemplate}
               formMetadata={raw?.form_metadata ?? undefined}
               onSaveForm={handleSaveTaskForm}
-              loadingTemplate={raw ? loadingTaskTemplate === raw.template_id : false}
+              loadingTemplate={!!raw?.template_id && loadingTaskTemplate === raw.template_id}
               currentUser={currentUser}
               comments={commentsHook.projectComments}
               loadingComments={commentsHook.loadingComments}
