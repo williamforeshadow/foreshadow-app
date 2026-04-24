@@ -293,36 +293,136 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
     }
   }, [selectedItem?.key]);
 
-  const handleSaveFields = useCallback(async () => {
+  // ProjectDetailPanel calls `onSave(f)` synchronously after
+  // `setEditingFields(f)` when the user picks a status/priority/
+  // department pill. The ref-syncing `useEffect` hasn't run at that
+  // point, so reading `editingFieldsRef.current` here returns stale
+  // fields and the diff below would find no change. Honor `directFields`
+  // so pill updates save.
+  //
+  // Fan the writes out to the right endpoints — `/api/update-task-fields`
+  // has a server-side allow-list and silently drops status /
+  // scheduled_date / scheduled_time / assignees, so those need their
+  // own endpoints (matches TimelineWindow + PropertyTasksView):
+  //   /api/update-task-fields      title, description, priority, department_id
+  //   /api/update-task-action      status
+  //   /api/update-task-schedule    scheduled_date + scheduled_time
+  //   /api/update-task-assignment  assignees
+  const handleSaveFields = useCallback(async (directFields?: ProjectFormFields) => {
     if (!selectedItem) return;
-    const fields = editingFieldsRef.current;
+    const fields = directFields ?? editingFieldsRef.current;
     if (!fields) return;
     const raw = selectedItem.raw;
     const taskId = raw.task_id || raw.id;
 
-    const fieldUpdates: Record<string, unknown> = {};
-    if (fields.status !== (raw.status || 'not_started')) fieldUpdates.status = fields.status;
-    if (fields.title !== (raw.title || raw.template_name || 'Task')) fieldUpdates.title = fields.title;
-    if (JSON.stringify(fields.description) !== JSON.stringify(raw.description || null)) fieldUpdates.description = fields.description;
-    if (fields.priority !== (raw.priority || 'medium')) fieldUpdates.priority = fields.priority;
-    if (fields.department_id !== (raw.department_id || '')) fieldUpdates.department_id = fields.department_id || null;
-    if (fields.scheduled_date !== (raw.scheduled_date || '')) fieldUpdates.scheduled_date = fields.scheduled_date || null;
-    if (fields.scheduled_time !== (raw.scheduled_time || '')) fieldUpdates.scheduled_time = fields.scheduled_time || null;
+    const oldAssignees = (raw.assigned_users || [])
+      .map((u: Assignee) => u.user_id)
+      .sort()
+      .join(',');
+    const newAssignees = (fields.assigned_staff || []).slice().sort().join(',');
+    const assigneesChanged = oldAssignees !== newAssignees;
 
-    if (Object.keys(fieldUpdates).length > 0) {
-      updateSelectedRaw(fieldUpdates);
-      try {
-        await fetch('/api/update-task-fields', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ taskId, fields: fieldUpdates }),
-        });
-        fetchAssignments();
-      } catch (err) {
-        console.error('Error updating task fields:', err);
-      }
+    const fieldUpdates: Record<string, unknown> = {};
+    if (fields.title !== (raw.title || raw.template_name || 'Task'))
+      fieldUpdates.title = fields.title;
+    if (JSON.stringify(fields.description) !== JSON.stringify(raw.description || null))
+      fieldUpdates.description = fields.description;
+    if (fields.priority !== (raw.priority || 'medium'))
+      fieldUpdates.priority = fields.priority;
+    if (fields.department_id !== (raw.department_id || ''))
+      fieldUpdates.department_id = fields.department_id || null;
+
+    const oldStatus = raw.status || 'not_started';
+    const newStatus = fields.status || 'not_started';
+    const statusChanged = newStatus !== oldStatus;
+
+    const oldDate = raw.scheduled_date || '';
+    const oldTime = raw.scheduled_time || '';
+    const newDate = fields.scheduled_date || '';
+    const newTime = fields.scheduled_time || '';
+    const scheduleChanged = newDate !== oldDate || newTime !== oldTime;
+
+    const hasFieldChanges = Object.keys(fieldUpdates).length > 0;
+    if (!hasFieldChanges && !assigneesChanged && !statusChanged && !scheduleChanged)
+      return;
+
+    if (hasFieldChanges) updateSelectedRaw(fieldUpdates);
+    if (statusChanged) updateSelectedRaw({ status: newStatus });
+    if (scheduleChanged)
+      updateSelectedRaw({
+        scheduled_date: newDate || null,
+        scheduled_time: newTime || null,
+      });
+    if (assigneesChanged) {
+      const nextAssignedUsers = (fields.assigned_staff || []).map((uid) => {
+        const u = users.find((x) => x.id === uid);
+        if (!u) {
+          const existing = (raw.assigned_users || []).find(
+            (a: Assignee) => a.user_id === uid
+          );
+          return existing || { user_id: uid, name: '', avatar: null, role: '' };
+        }
+        return {
+          user_id: u.id,
+          name: u.name || '',
+          avatar: u.avatar || null,
+          role: u.role || '',
+        };
+      });
+      updateSelectedRaw({ assigned_users: nextAssignedUsers });
     }
-  }, [selectedItem, fetchAssignments, updateSelectedRaw]);
+
+    try {
+      const calls: Promise<Response>[] = [];
+      if (hasFieldChanges) {
+        calls.push(
+          fetch('/api/update-task-fields', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ taskId, fields: fieldUpdates }),
+          })
+        );
+      }
+      if (statusChanged) {
+        calls.push(
+          fetch('/api/update-task-action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ taskId, action: newStatus }),
+          })
+        );
+      }
+      if (scheduleChanged) {
+        calls.push(
+          fetch('/api/update-task-schedule', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              taskId,
+              scheduledDate: newDate || null,
+              scheduledTime: newTime || null,
+            }),
+          })
+        );
+      }
+      if (assigneesChanged) {
+        calls.push(
+          fetch('/api/update-task-assignment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              taskId,
+              userIds: fields.assigned_staff || [],
+            }),
+          })
+        );
+      }
+      await Promise.all(calls);
+      fetchAssignments();
+    } catch (err) {
+      console.error('Error updating task fields:', err);
+    }
+  }, [selectedItem, fetchAssignments, updateSelectedRaw, users]);
 
   const handleTemplateChange = useCallback(async (templateId: string | null) => {
     if (!selectedItem) return;

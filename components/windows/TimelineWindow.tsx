@@ -13,6 +13,9 @@ import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { ScheduledItemsCell, DayKanban } from './timeline';
 import { AttachmentLightbox, ProjectActivitySheet, ProjectDetailPanel } from './projects';
 import { TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
+import { DayDetailPanel, type DayPanelReservation } from '@/components/tasks/DayDetailPanel';
+import type { TaskRowItem } from '@/components/tasks/TaskRow';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { ClipboardCheck } from 'lucide-react';
 import Rhombus16FilledIcon from '@/components/icons/Rhombus16FilledIcon';
 import RectangleStackIcon from '@/components/icons/RectangleStackIcon';
@@ -68,6 +71,13 @@ export default function TimelineWindow({
   
   // State for kanban - use current date as default when in kanban view mode
   const [kanbanDate, setKanbanDate] = useState<Date>(new Date());
+
+  // State for the day detail panel (clicking a day header in the grid view).
+  // Kanban access is preserved via the top-left view-mode toggle; clicking a
+  // day in the grid now pops this shared panel instead of navigating away.
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+
+  const isMobile = useIsMobile();
 
   // ============================================================================
   // LOCAL project data (fetched from tasks-for-bin API)
@@ -1199,6 +1209,92 @@ export default function TimelineWindow({
     return allTasksWithProperty.filter(task => task.scheduled_date);
   }, [allTasksWithProperty]);
 
+  // ---- Day detail panel (clicking a day header in grid view) -----------
+  // Flat list of tasks + reservations intersecting the selected day,
+  // across all properties. Handlers route task/reservation clicks back
+  // into the existing Timeline detail panels so there's one canonical
+  // editor per item type.
+  const dayPanelData = useMemo(() => {
+    if (!selectedDay) return null;
+    const dayKey = `${selectedDay.getFullYear()}-${String(selectedDay.getMonth() + 1).padStart(2, '0')}-${String(selectedDay.getDate()).padStart(2, '0')}`;
+    // Task is defined with a narrow shape in lib/types; ledger fields
+    // (bin_name, is_automated) exist on the row payload but aren't on the
+    // interface yet — widen locally.
+    type TaskRowSource = Task & {
+      property_name: string;
+      bin_name?: string | null;
+      is_automated?: boolean;
+    };
+    const dayTasks: TaskRowItem[] = (allScheduledTasks as TaskRowSource[])
+      .filter((t) => (t.scheduled_date || '').slice(0, 10) === dayKey)
+      .map((t) => ({
+        key: t.task_id,
+        title: t.title || t.template_name || 'Task',
+        property_name: t.property_name || null,
+        status: t.status || 'not_started',
+        priority: t.priority || 'medium',
+        department_id: t.department_id ?? null,
+        department_name: t.department_name ?? null,
+        scheduled_date: t.scheduled_date ?? null,
+        scheduled_time: t.scheduled_time ?? null,
+        assignees: (t.assigned_users || []).map((u) => ({
+          user_id: u.user_id,
+          name: u.name,
+          avatar: u.avatar ?? null,
+        })),
+        bin_id: t.bin_id ?? null,
+        bin_name: t.bin_name ?? null,
+        is_binned: !!t.is_binned,
+        is_automated: t.is_automated,
+      }));
+    const dayReservations: DayPanelReservation[] = (reservations as Turnover[])
+      .filter((r) => {
+        const ci = (r.check_in || '').slice(0, 10);
+        const co = (r.check_out || '').slice(0, 10);
+        return dayKey >= ci && dayKey <= co;
+      })
+      .map((r) => ({
+        id: r.id,
+        guest_name: r.guest_name ?? null,
+        check_in: r.check_in ?? '',
+        check_out: r.check_out ?? '',
+        property_name: r.property_name ?? null,
+      }));
+    return { dayKey, dayTasks, dayReservations };
+  }, [selectedDay, allScheduledTasks, reservations]);
+
+  const handleOpenTaskFromDay = useCallback((taskKey: string) => {
+    const task = allScheduledTasks.find((t) => t.task_id === taskKey);
+    if (!task) return;
+    setSelectedDay(null);
+    setFloatingData({
+      type: 'task',
+      item: task,
+      propertyName: task.property_name || '',
+    });
+  }, [allScheduledTasks]);
+
+  const handleOpenReservationFromDay = useCallback((r: DayPanelReservation) => {
+    const full = (reservations as Turnover[]).find((x) => x.id === r.id);
+    if (!full) return;
+    setSelectedDay(null);
+    setFloatingData({
+      type: 'turnover',
+      item: full,
+      propertyName: full.property_name || '',
+    });
+  }, [reservations]);
+
+  const handleNewTaskFromDay = useCallback((dateStr: string) => {
+    const draft = createDraftTask({ scheduled_date: dateStr });
+    setSelectedDay(null);
+    setFloatingData({
+      type: 'task',
+      item: draft,
+      propertyName: '',
+    });
+  }, [createDraftTask]);
+
   // Note: projects state is kept for TurnoverProjectsPanel but NOT shown on the
   // grid — useTimeline's recurringTasks already includes all non-reservation tasks.
 
@@ -1236,7 +1332,10 @@ export default function TimelineWindow({
           {/* View Mode Icons */}
           <div className="flex items-center gap-1">
             <button
-              onClick={() => setViewMode('grid')}
+              onClick={() => {
+                setViewMode('grid');
+                setSelectedDay(null);
+              }}
               className={`p-1.5 rounded transition-colors ${
                 viewMode === 'grid' 
                   ? 'bg-[rgba(30,25,20,0.06)] dark:bg-[rgba(255,255,255,0.08)] text-[#1a1a18] dark:text-[#e8e7e3]' 
@@ -1247,7 +1346,10 @@ export default function TimelineWindow({
               <Rhombus16FilledIcon size={18} />
             </button>
             <button
-              onClick={() => setViewMode('kanban')}
+              onClick={() => {
+                setViewMode('kanban');
+                setSelectedDay(null);
+              }}
               className={`p-1.5 rounded transition-colors ${
                 viewMode === 'kanban' 
                   ? 'bg-[rgba(30,25,20,0.06)] dark:bg-[rgba(255,255,255,0.08)] text-[#1a1a18] dark:text-[#e8e7e3]' 
@@ -1376,10 +1478,7 @@ export default function TimelineWindow({
                       ? 'today-tint' 
                       : 'bg-white dark:bg-[#0d0d10] hover:bg-[rgba(30,25,20,0.02)] dark:hover:bg-[rgba(255,255,255,0.03)]'
                   }`}
-                  onClick={() => {
-                    setKanbanDate(date);
-                    setViewMode('kanban');
-                  }}
+                  onClick={() => setSelectedDay(date)}
                 >
                   {formatHeaderDate(date, isTodayDate)}
                 </div>
@@ -1674,6 +1773,34 @@ export default function TimelineWindow({
             allProjects={projects}
             properties={properties}
             isFullScreen
+          />
+        </div>
+      )}
+
+      {/* Day Detail Panel - opens when a day header in the grid is clicked.
+          Shared component also used on the per-property Schedule tab. Task
+          clicks / reservation clicks / "New task" route into the existing
+          Timeline detail-panel pipeline via setFloatingData, keeping one
+          canonical editor for each item type. */}
+      {selectedDay && dayPanelData && !floatingData && (
+        <div
+          className={
+            isMobile
+              ? 'fixed inset-0 z-40 bg-white dark:bg-[#0b0b0c] safe-area-top safe-area-bottom flex flex-col'
+              : 'absolute top-0 right-0 h-full w-[30%] min-w-[320px] bg-white dark:bg-[#0b0b0c] border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 shadow-xl z-30 overflow-hidden flex flex-col'
+          }
+          onWheel={(e) => e.stopPropagation()}
+        >
+          <DayDetailPanel
+            date={selectedDay}
+            title="All properties"
+            onClose={() => setSelectedDay(null)}
+            reservations={dayPanelData.dayReservations}
+            onReservationClick={handleOpenReservationFromDay}
+            tasks={dayPanelData.dayTasks}
+            onTaskClick={handleOpenTaskFromDay}
+            showPropertyOnRows
+            onNewTask={handleNewTaskFromDay}
           />
         </div>
       )}

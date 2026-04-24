@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { addMonths, format, subMonths } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useProperty } from '../PropertyContext';
 import { MonthGrid, type ScheduleReservation, type ScheduleTask } from './MonthGrid';
 import { ReservationDetailPanel } from './ReservationDetailPanel';
@@ -10,6 +11,11 @@ import {
   PropertyTaskDetailOverlay,
   type OverlayTaskInput,
 } from '../tasks/PropertyTaskDetailOverlay';
+import {
+  DayDetailPanel,
+  type DayPanelReservation,
+} from '@/components/tasks/DayDetailPanel';
+import type { TaskRowItem } from '@/components/tasks/TaskRow';
 import { useIsMobile } from '@/lib/useIsMobile';
 
 // Per-property Schedule tab. Month calendar with reservation bars + task
@@ -29,6 +35,7 @@ interface ScheduleApiResponse {
 export default function PropertyScheduleView() {
   const property = useProperty();
   const isMobile = useIsMobile();
+  const router = useRouter();
 
   const [monthDate, setMonthDate] = useState<Date>(() => {
     const now = new Date();
@@ -44,6 +51,7 @@ export default function PropertyScheduleView() {
   const [selectedTask, setSelectedTask] = useState<OverlayTaskInput | null>(
     null
   );
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
 
   const year = monthDate.getFullYear();
   const month = monthDate.getMonth() + 1;
@@ -100,39 +108,141 @@ export default function PropertyScheduleView() {
   // All the fields the panel needs are already on the ScheduleTask payload;
   // we map to the overlay's input shape and rely on the reservation panel
   // closing when a task is selected (only one detail overlay at a time).
-  const handleTaskClick = (task: ScheduleTask) => {
-    const overlayInput: OverlayTaskInput = {
-      task_id: task.task_id,
-      reservation_id: task.reservation_id,
-      property_id: task.property_id ?? property.id,
-      property_name: task.property_name ?? property.name,
-      template_id: task.template_id ?? null,
-      template_name: task.template_name ?? null,
-      title: task.title ?? null,
-      description: task.description ?? null,
-      priority: task.priority ?? 'medium',
-      type: task.type,
-      department_id: task.department_id ?? null,
-      department_name: task.department_name ?? null,
-      status: task.status,
-      scheduled_date: task.scheduled_date,
-      scheduled_time: task.scheduled_time,
-      form_metadata: task.form_metadata ?? null,
-      bin_id: task.bin_id ?? null,
-      bin_name: task.bin_name ?? null,
-      is_binned: !!task.is_binned,
-      created_at: task.created_at ?? '',
-      updated_at: task.updated_at ?? '',
-      assigned_users: (task.assigned_users || []).map((u) => ({
-        user_id: u.user_id,
-        name: u.name,
-        avatar: u.avatar,
-        role: u.role,
-      })),
-    };
+  const taskById = useMemo(() => {
+    const m = new Map<string, ScheduleTask>();
+    for (const t of tasks) m.set(t.task_id, t);
+    return m;
+  }, [tasks]);
+
+  const handleTaskClick = useCallback(
+    (task: ScheduleTask) => {
+      const overlayInput: OverlayTaskInput = {
+        task_id: task.task_id,
+        reservation_id: task.reservation_id,
+        property_id: task.property_id ?? property.id,
+        property_name: task.property_name ?? property.name,
+        template_id: task.template_id ?? null,
+        template_name: task.template_name ?? null,
+        title: task.title ?? null,
+        description: task.description ?? null,
+        priority: task.priority ?? 'medium',
+        type: task.type,
+        department_id: task.department_id ?? null,
+        department_name: task.department_name ?? null,
+        status: task.status,
+        scheduled_date: task.scheduled_date,
+        scheduled_time: task.scheduled_time,
+        form_metadata: task.form_metadata ?? null,
+        bin_id: task.bin_id ?? null,
+        bin_name: task.bin_name ?? null,
+        is_binned: !!task.is_binned,
+        created_at: task.created_at ?? '',
+        updated_at: task.updated_at ?? '',
+        assigned_users: (task.assigned_users || []).map((u) => ({
+          user_id: u.user_id,
+          name: u.name,
+          avatar: u.avatar,
+          role: u.role,
+        })),
+      };
+      setSelectedReservation(null);
+      setSelectedTask(overlayInput);
+    },
+    [property.id, property.name]
+  );
+
+  // Day panel support: filter tasks + reservations to a single calendar day
+  // and hand off to the shared <DayDetailPanel />. Clicking a task row
+  // inside the day panel reuses the same task overlay pipeline as the
+  // calendar cell.
+  const handleDayClick = useCallback((day: Date) => {
     setSelectedReservation(null);
-    setSelectedTask(overlayInput);
-  };
+    setSelectedTask(null);
+    setSelectedDay((prev) => {
+      if (!prev) return day;
+      return prev.getFullYear() === day.getFullYear() &&
+        prev.getMonth() === day.getMonth() &&
+        prev.getDate() === day.getDate()
+        ? null
+        : day;
+    });
+  }, []);
+
+  const dayPanelData = useMemo(() => {
+    if (!selectedDay) return null;
+    const dayKey = format(selectedDay, 'yyyy-MM-dd');
+    const dayTasks: TaskRowItem[] = tasks
+      .filter((t) => (t.scheduled_date || '').slice(0, 10) === dayKey)
+      .map((t) => ({
+        key: t.task_id,
+        title: t.title || t.template_name || 'Task',
+        property_name: t.property_name ?? property.name,
+        status: t.status,
+        priority: t.priority || 'medium',
+        department_id: t.department_id ?? null,
+        department_name: t.department_name ?? null,
+        scheduled_date: t.scheduled_date,
+        scheduled_time: t.scheduled_time,
+        assignees: (t.assigned_users || []).map((u) => ({
+          user_id: u.user_id,
+          name: u.name,
+          avatar: u.avatar,
+        })),
+        bin_id: t.bin_id ?? null,
+        bin_name: t.bin_name ?? null,
+        is_binned: !!t.is_binned,
+        is_automated: t.is_automated,
+      }));
+    const dayReservations: DayPanelReservation[] = reservations
+      .filter((r) => {
+        const ci = r.check_in.slice(0, 10);
+        const co = r.check_out.slice(0, 10);
+        return dayKey >= ci && dayKey <= co;
+      })
+      .map((r) => ({
+        id: r.id,
+        guest_name: r.guest_name,
+        check_in: r.check_in,
+        check_out: r.check_out,
+      }));
+    return { dayKey, dayTasks, dayReservations };
+  }, [selectedDay, tasks, reservations, property.name]);
+
+  const selectedDayKey = dayPanelData?.dayKey ?? null;
+
+  // "New task" from the day panel: navigate to the Tasks tab with the
+  // selected date pre-filled. PropertyTasksView owns the draft/POST flow —
+  // keeping that concentrated there avoids duplicating the draft machinery.
+  const handleNewTaskFromDay = useCallback(
+    (dateStr: string) => {
+      router.push(`/properties/${property.id}/tasks?newTaskDate=${dateStr}`);
+    },
+    [router, property.id]
+  );
+
+  // Resolve a reservation id (from the day panel) back to the full
+  // ScheduleReservation for the existing reservation detail panel.
+  const handleOpenReservationFromDay = useCallback(
+    (r: DayPanelReservation) => {
+      const full = reservations.find((x) => x.id === r.id);
+      if (full) {
+        setSelectedDay(null);
+        setSelectedReservation(full);
+      }
+    },
+    [reservations]
+  );
+
+  // Day-panel task click → same overlay pipeline as calendar cell clicks.
+  const handleOpenTaskFromDay = useCallback(
+    (taskKey: string) => {
+      const t = taskById.get(taskKey);
+      if (!t) return;
+      setSelectedDay(null);
+      handleTaskClick(t);
+    },
+    [taskById, handleTaskClick]
+  );
 
   return (
     <div className="flex-1 overflow-auto">
@@ -190,13 +300,46 @@ export default function PropertyScheduleView() {
             reservations={reservations}
             tasks={tasks}
             selectedReservationId={selectedReservation?.id ?? null}
-            onReservationClick={(r) =>
-              setSelectedReservation((prev) => (prev?.id === r.id ? null : r))
-            }
-            onTaskClick={handleTaskClick}
+            selectedDayKey={selectedDayKey}
+            onReservationClick={(r) => {
+              setSelectedDay(null);
+              setSelectedReservation((prev) => (prev?.id === r.id ? null : r));
+            }}
+            onTaskClick={(t) => {
+              setSelectedDay(null);
+              handleTaskClick(t);
+            }}
+            onDayClick={handleDayClick}
           />
         </div>
       </div>
+
+      {/* Day detail panel.
+          Opens when a calendar day is clicked. Shows reservations active
+          that day + a flat task list for the same day. Clicking a task
+          closes the day panel and opens the full task overlay; clicking a
+          reservation closes the day panel and opens the reservation panel.
+          Mutually exclusive with the other two panels. */}
+      {selectedDay && dayPanelData && !selectedTask && !selectedReservation && (
+        <div
+          className={
+            isMobile
+              ? 'fixed inset-0 z-[60] bg-white dark:bg-[#0b0b0c] safe-area-top safe-area-bottom flex flex-col'
+              : 'absolute inset-y-0 right-0 w-1/3 z-20 border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 bg-white dark:bg-[#0b0b0c] overflow-hidden flex flex-col'
+          }
+        >
+          <DayDetailPanel
+            date={selectedDay}
+            title={property.name}
+            onClose={() => setSelectedDay(null)}
+            reservations={dayPanelData.dayReservations}
+            onReservationClick={handleOpenReservationFromDay}
+            tasks={dayPanelData.dayTasks}
+            onTaskClick={handleOpenTaskFromDay}
+            onNewTask={handleNewTaskFromDay}
+          />
+        </div>
+      )}
 
       {/* Reservation detail panel.
           Desktop: absolute right-1/3 overlay anchored to the outer

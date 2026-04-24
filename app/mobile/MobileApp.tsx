@@ -126,9 +126,9 @@ export default function MobileApp() {
     }
     if (Object.keys(updates).length > 0) {
       await fetch('/api/update-task-fields', {
-        method: 'PUT',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ task_id: projectId, fields: updates }),
+        body: JSON.stringify({ taskId: projectId, fields: updates }),
       });
     }
     setMobileSelectedTask(prev => {
@@ -150,9 +150,9 @@ export default function MobileApp() {
   const handleTaskTemplateChange = useCallback(async (templateId: string | null) => {
     if (!mobileSelectedTask) return;
     await fetch('/api/update-task-fields', {
-      method: 'PUT',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ task_id: mobileSelectedTask.task_id, fields: { template_id: templateId } }),
+      body: JSON.stringify({ taskId: mobileSelectedTask.task_id, fields: { template_id: templateId } }),
     });
     setMobileSelectedTask(prev => prev ? { ...prev, template_id: templateId || undefined } : null);
     if (templateId) {
@@ -327,10 +327,10 @@ export default function MobileApp() {
           allProperties={allProperties}
           onPropertyChange={async (propertyId, propertyName) => {
             await fetch('/api/update-task-fields', {
-              method: 'PUT',
+              method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                task_id: mobileSelectedTask.task_id,
+                taskId: mobileSelectedTask.task_id,
                 fields: { property_name: propertyName || null },
               }),
             });
@@ -339,10 +339,10 @@ export default function MobileApp() {
           bins={binsHook.bins}
           onBinChange={async (binId) => {
             await fetch('/api/update-task-fields', {
-              method: 'PUT',
+              method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                task_id: mobileSelectedTask.task_id,
+                taskId: mobileSelectedTask.task_id,
                 fields: { bin_id: binId || null },
               }),
             });
@@ -353,9 +353,9 @@ export default function MobileApp() {
             const fields: Record<string, unknown> = { is_binned: isBinned };
             if (!isBinned) fields.bin_id = null;
             await fetch('/api/update-task-fields', {
-              method: 'PUT',
+              method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ task_id: mobileSelectedTask.task_id, fields }),
+              body: JSON.stringify({ taskId: mobileSelectedTask.task_id, fields }),
             });
             setMobileSelectedTask(prev => prev ? { ...prev, is_binned: isBinned, ...(isBinned ? {} : { bin_id: undefined }) } : null);
             binsHook.fetchBins();

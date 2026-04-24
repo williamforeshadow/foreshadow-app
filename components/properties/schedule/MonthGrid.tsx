@@ -66,8 +66,10 @@ interface MonthGridProps {
   reservations: ScheduleReservation[];
   tasks: ScheduleTask[];
   selectedReservationId?: string | null;
+  selectedDayKey?: string | null; // YYYY-MM-DD of the currently-open day panel
   onReservationClick?: (reservation: ScheduleReservation) => void;
   onTaskClick?: (task: ScheduleTask) => void;
+  onDayClick?: (day: Date) => void;
 }
 
 // ---- Helpers -------------------------------------------------------------
@@ -175,8 +177,10 @@ export function MonthGrid({
   reservations,
   tasks,
   selectedReservationId,
+  selectedDayKey,
   onReservationClick,
   onTaskClick,
+  onDayClick,
 }: MonthGridProps) {
   // Build the 6-week grid (always 42 days for consistent layout).
   const weeks = useMemo(() => {
@@ -290,11 +294,17 @@ export function MonthGrid({
                 );
                 const hiddenBarCount = hiddenCountByCol[day.getDay()] || 0;
 
+                const isSelectedDay = selectedDayKey === dayKey;
                 return (
                   <div
                     key={day.toISOString()}
-                    className={`relative border-r border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.07)] last:border-r-0 ${
+                    onClick={() => onDayClick?.(day)}
+                    className={`group relative border-r border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.07)] last:border-r-0 cursor-pointer transition-colors ${
                       inMonth ? '' : 'bg-[rgba(30,25,20,0.015)] dark:bg-[rgba(255,255,255,0.015)]'
+                    } ${
+                      isSelectedDay
+                        ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)]'
+                        : 'hover:bg-[rgba(30,25,20,0.025)] dark:hover:bg-[rgba(255,255,255,0.02)]'
                     }`}
                   >
                     {/* Day number */}

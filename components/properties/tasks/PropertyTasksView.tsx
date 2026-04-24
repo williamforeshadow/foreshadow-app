@@ -898,7 +898,7 @@ function PropertyTasksViewContent({
 
   // ---- New task (draft → POST) -------------------------------------------
 
-  const handleNewTask = useCallback(() => {
+  const handleNewTask = useCallback((prefilledDate?: string) => {
     const draft: Project = {
       id: `draft-${Date.now()}`,
       property_name: propertyName,
@@ -912,7 +912,7 @@ function PropertyTasksViewContent({
       priority: 'medium' as Project['priority'],
       department_id: null,
       department_name: null,
-      scheduled_date: null,
+      scheduled_date: prefilledDate ?? null,
       scheduled_time: null,
       form_metadata: undefined,
       created_at: new Date().toISOString(),
@@ -921,6 +921,24 @@ function PropertyTasksViewContent({
     setSelectedItem(null);
     setDraftTask(draft);
   }, [propertyName]);
+
+  // The Schedule tab's DayDetailPanel deep-links "New task" here by pushing
+  // `?newTaskDate=YYYY-MM-DD`. We pop the draft with that date pre-filled
+  // and strip the param so a refresh doesn't re-open the draft.
+  useEffect(() => {
+    const prefilled = searchParams?.get('newTaskDate');
+    if (!prefilled) return;
+    handleNewTask(prefilled);
+    const current = new URLSearchParams(searchParams?.toString() || '');
+    current.delete('newTaskDate');
+    const next = current.toString();
+    router.replace(
+      next ? `?${next}` : `/properties/${propertyId}/tasks`,
+      { scroll: false }
+    );
+    // Intentionally run only when the query param appears (or changes).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams?.get('newTaskDate')]);
 
   // Accept fields either from the ref (desktop ProjectDetailPanel flow) or
   // directly from the caller (MobileProjectDetail passes fields to
