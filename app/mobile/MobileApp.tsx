@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
 import { useUsers } from '@/lib/useUsers';
 import { useTurnovers } from '@/lib/useTurnovers';
@@ -19,6 +20,7 @@ import type { Project, Task, TaskTemplate, PropertyOption } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 
 export default function MobileApp() {
+  const router = useRouter();
   const { user: currentUser } = useAuth();
   const { users } = useUsers();
 
@@ -299,6 +301,15 @@ export default function MobileApp() {
                 await fetchTaskTemplate(task.template_id, propName);
               }
               setMobileSelectedTask(task);
+            }}
+            onNewTask={({ propertyName, dateStr }) => {
+              // Mobile timeline only knows property *names*, but the task
+              // ledger route is keyed by id. Resolve via allProperties; if
+              // the lookup fails we silently no-op rather than push a
+              // broken URL.
+              const match = allProperties.find((p) => p.name === propertyName);
+              if (!match) return;
+              router.push(`/properties/${match.id}/tasks?newTaskDate=${dateStr}`);
             }}
           />
         )}

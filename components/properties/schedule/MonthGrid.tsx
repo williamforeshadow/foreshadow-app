@@ -12,8 +12,10 @@ import {
   startOfMonth,
   startOfWeek,
 } from 'date-fns';
+import { ClipboardCheck } from 'lucide-react';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { marbleBackground } from '@/components/windows/timeline/ScheduledItemsCell';
+import { useIsMobile } from '@/lib/useIsMobile';
 
 // ---- Types ---------------------------------------------------------------
 
@@ -85,6 +87,23 @@ function compareYMD(a: Date, b: Date): number {
   const au = a.getFullYear() * 10000 + (a.getMonth() + 1) * 100 + a.getDate();
   const bu = b.getFullYear() * 10000 + (b.getMonth() + 1) * 100 + b.getDate();
   return au - bu;
+}
+
+// Aggregate status for a group of tasks scheduled on the same day.
+// Mirrors the mobile-Timeline / ScheduledItemsCell folder logic so the
+// single-icon mobile view here reads identically.
+function getFolderStatus(
+  items: ScheduleTask[]
+): 'not_started' | 'in_progress' | 'paused' | 'complete' | 'no_tasks' {
+  const active = items.filter((t) => t.status !== 'contingent');
+  if (active.length === 0) return 'no_tasks';
+  const completed = active.filter((t) => t.status === 'complete').length;
+  if (completed === active.length) return 'complete';
+  const inProgress = active.filter((t) => t.status === 'in_progress').length;
+  if (inProgress > 0) return 'in_progress';
+  const paused = active.filter((t) => t.status === 'paused').length;
+  if (paused > 0 || completed > 0) return 'paused';
+  return 'not_started';
 }
 
 // For each week row, we lay reservation bars horizontally. This function
@@ -182,6 +201,8 @@ export function MonthGrid({
   onTaskClick,
   onDayClick,
 }: MonthGridProps) {
+  const isMobile = useIsMobile();
+
   // Build the 6-week grid (always 42 days for consistent layout).
   const weeks = useMemo(() => {
     const gridStart = startOfWeek(startOfMonth(monthDate), { weekStartsOn: 0 });
@@ -266,14 +287,19 @@ export function MonthGrid({
           const barsBlockHeight =
             renderedLanes * BAR_HEIGHT + Math.max(0, renderedLanes - 1) * BAR_GAP;
 
-          // Minimum cell height: day number + bars block + task cards + padding.
+          // Minimum cell height: day number + bars block + task region + padding.
+          // Desktop reserves room for two full task pill rows; mobile only
+          // needs room for the single folder icon (~22px).
+          const taskRegionHeight = isMobile
+            ? 22 + 6
+            : MAX_TASKS_PER_CELL * (TASK_CARD_HEIGHT + 4) + 12;
+          const minCellFloor = isMobile ? 84 : 124;
           const minCellHeight = Math.max(
-            124,
+            minCellFloor,
             BAR_TRACK_OFFSET +
               barsBlockHeight +
               (barsBlockHeight > 0 ? 8 : 0) +
-              MAX_TASKS_PER_CELL * (TASK_CARD_HEIGHT + 4) +
-              12
+              taskRegionHeight
           );
 
           return (
@@ -330,72 +356,122 @@ export function MonthGrid({
                       )}
                     </div>
 
-                    {/* Task cards — mirrors Timeline's expanded-row cards:
-                        marble-gradient bg keyed on status with white text,
-                        or dashed white-on-bg for contingent. Shrunk to fit
-                        calendar density (py-1 px-1.5, text-[11px]). */}
-                    <div
-                      className="absolute left-1.5 right-1.5 flex flex-col gap-1"
-                      style={{
-                        top:
-                          BAR_TRACK_OFFSET +
-                          barsBlockHeight +
-                          (barsBlockHeight > 0 ? 6 : 0),
-                      }}
-                    >
-                      {cellTasks.slice(0, MAX_TASKS_PER_CELL).map((t) => {
-                        const isContingent = t.status === 'contingent';
-                        const marble =
-                          marbleBackground[t.status] ||
-                          marbleBackground.not_started;
-                        const firstUser = t.assigned_users?.[0];
-                        const overflowAssignees =
-                          (t.assigned_users?.length ?? 0) - 1;
-                        return (
-                          <button
-                            key={t.task_id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onTaskClick?.(t);
-                            }}
-                            title={t.title || t.template_name || 'Task'}
-                            style={
-                              isContingent
-                                ? undefined
-                                : { background: marble }
-                            }
-                            className={`flex items-center justify-between gap-1.5 py-1 px-1.5 rounded-md text-[11px] leading-tight font-medium text-left relative overflow-hidden shadow-sm transition-all duration-150 hover:shadow-md ${
-                              isContingent
-                                ? 'bg-white dark:bg-[#1a1a1d] border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[rgba(255,255,255,0.25)] text-[#1a1a18] dark:text-[#e8e7e3]'
-                                : 'text-white'
-                            }`}
-                          >
-                            <span className="truncate flex-1">
-                              {t.title || t.template_name || 'Task'}
-                            </span>
-                            {firstUser && (
-                              <div className="relative shrink-0">
-                                <UserAvatar
-                                  src={firstUser.avatar || undefined}
-                                  name={firstUser.name || 'Unknown'}
-                                  size="xs"
-                                />
-                                {overflowAssignees > 0 && (
-                                  <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-neutral-700 dark:bg-neutral-200 text-[9px] font-medium text-white dark:text-neutral-800 border border-white dark:border-neutral-900">
-                                    +{overflowAssignees}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </button>
+                    {/* Task region.
+                        Desktop: up to MAX_TASKS_PER_CELL marble pills with
+                                 title + assignee, "+N more" overflow. Each
+                                 pill is its own click target → opens the
+                                 task overlay directly.
+                        Mobile:  a single ClipboardCheck folder icon tinted
+                                 by aggregate status, mirroring
+                                 MobileTimelineView. The cell's own onClick
+                                 already routes to onDayClick → fullscreen
+                                 DayDetailPanel, so the icon doesn't need
+                                 its own handler. */}
+                    {isMobile ? (
+                      cellTasks.length > 0 && (() => {
+                        const folderStatus = getFolderStatus(cellTasks);
+                        const hasActive = folderStatus !== 'no_tasks';
+                        const hasContingent = cellTasks.some(
+                          (t) => t.status === 'contingent'
                         );
-                      })}
-                      {taskOverflow > 0 && (
-                        <div className="text-[10px] font-medium text-neutral-400 dark:text-[#66645f] pl-1">
-                          +{taskOverflow} more
-                        </div>
-                      )}
-                    </div>
+                        const onlyContingent = !hasActive && hasContingent;
+                        return (
+                          <div
+                            className="absolute left-1.5 flex items-center gap-0.5 pointer-events-none"
+                            style={{
+                              top:
+                                BAR_TRACK_OFFSET +
+                                barsBlockHeight +
+                                (barsBlockHeight > 0 ? 6 : 0),
+                            }}
+                          >
+                            <div
+                              className={`flex items-center justify-center w-[18px] h-[18px] rounded shadow-sm ${
+                                onlyContingent
+                                  ? 'bg-white dark:bg-[#1a1a1d] border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[rgba(255,255,255,0.25)] text-[#1a1a18] dark:text-[#e8e7e3]'
+                                  : hasActive && hasContingent
+                                    ? 'border-[1.5px] border-dashed border-[rgba(30,25,20,0.35)] dark:border-[rgba(255,255,255,0.35)] text-white'
+                                    : 'text-white'
+                              }`}
+                              style={
+                                hasActive
+                                  ? {
+                                      background:
+                                        marbleBackground[folderStatus] ||
+                                        marbleBackground.not_started,
+                                    }
+                                  : undefined
+                              }
+                            >
+                              <ClipboardCheck className="w-3 h-3" />
+                            </div>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <div
+                        className="absolute left-1.5 right-1.5 flex flex-col gap-1"
+                        style={{
+                          top:
+                            BAR_TRACK_OFFSET +
+                            barsBlockHeight +
+                            (barsBlockHeight > 0 ? 6 : 0),
+                        }}
+                      >
+                        {cellTasks.slice(0, MAX_TASKS_PER_CELL).map((t) => {
+                          const isContingent = t.status === 'contingent';
+                          const marble =
+                            marbleBackground[t.status] ||
+                            marbleBackground.not_started;
+                          const firstUser = t.assigned_users?.[0];
+                          const overflowAssignees =
+                            (t.assigned_users?.length ?? 0) - 1;
+                          return (
+                            <button
+                              key={t.task_id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onTaskClick?.(t);
+                              }}
+                              title={t.title || t.template_name || 'Task'}
+                              style={
+                                isContingent
+                                  ? undefined
+                                  : { background: marble }
+                              }
+                              className={`flex items-center justify-between gap-1.5 py-1 px-1.5 rounded-md text-[11px] leading-tight font-medium text-left relative overflow-hidden shadow-sm transition-all duration-150 hover:shadow-md ${
+                                isContingent
+                                  ? 'bg-white dark:bg-[#1a1a1d] border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[rgba(255,255,255,0.25)] text-[#1a1a18] dark:text-[#e8e7e3]'
+                                  : 'text-white'
+                              }`}
+                            >
+                              <span className="truncate flex-1">
+                                {t.title || t.template_name || 'Task'}
+                              </span>
+                              {firstUser && (
+                                <div className="relative shrink-0">
+                                  <UserAvatar
+                                    src={firstUser.avatar || undefined}
+                                    name={firstUser.name || 'Unknown'}
+                                    size="xs"
+                                  />
+                                  {overflowAssignees > 0 && (
+                                    <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-neutral-700 dark:bg-neutral-200 text-[9px] font-medium text-white dark:text-neutral-800 border border-white dark:border-neutral-900">
+                                      +{overflowAssignees}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                        {taskOverflow > 0 && (
+                          <div className="text-[10px] font-medium text-neutral-400 dark:text-[#66645f] pl-1">
+                            +{taskOverflow} more
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}

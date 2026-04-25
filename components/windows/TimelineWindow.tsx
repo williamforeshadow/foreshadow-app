@@ -13,9 +13,8 @@ import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { ScheduledItemsCell, DayKanban } from './timeline';
 import { AttachmentLightbox, ProjectActivitySheet, ProjectDetailPanel } from './projects';
 import { TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
-import { DayDetailPanel, type DayPanelReservation } from '@/components/tasks/DayDetailPanel';
+import { DayDetailPanel } from '@/components/tasks/DayDetailPanel';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
-import { useIsMobile } from '@/lib/useIsMobile';
 import { ClipboardCheck } from 'lucide-react';
 import Rhombus16FilledIcon from '@/components/icons/Rhombus16FilledIcon';
 import RectangleStackIcon from '@/components/icons/RectangleStackIcon';
@@ -76,8 +75,6 @@ export default function TimelineWindow({
   // Kanban access is preserved via the top-left view-mode toggle; clicking a
   // day in the grid now pops this shared panel instead of navigating away.
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
-
-  const isMobile = useIsMobile();
 
   // ============================================================================
   // LOCAL project data (fetched from tasks-for-bin API)
@@ -1247,21 +1244,8 @@ export default function TimelineWindow({
         is_binned: !!t.is_binned,
         is_automated: t.is_automated,
       }));
-    const dayReservations: DayPanelReservation[] = (reservations as Turnover[])
-      .filter((r) => {
-        const ci = (r.check_in || '').slice(0, 10);
-        const co = (r.check_out || '').slice(0, 10);
-        return dayKey >= ci && dayKey <= co;
-      })
-      .map((r) => ({
-        id: r.id,
-        guest_name: r.guest_name ?? null,
-        check_in: r.check_in ?? '',
-        check_out: r.check_out ?? '',
-        property_name: r.property_name ?? null,
-      }));
-    return { dayKey, dayTasks, dayReservations };
-  }, [selectedDay, allScheduledTasks, reservations]);
+    return { dayKey, dayTasks };
+  }, [selectedDay, allScheduledTasks]);
 
   const handleOpenTaskFromDay = useCallback((taskKey: string) => {
     const task = allScheduledTasks.find((t) => t.task_id === taskKey);
@@ -1273,17 +1257,6 @@ export default function TimelineWindow({
       propertyName: task.property_name || '',
     });
   }, [allScheduledTasks]);
-
-  const handleOpenReservationFromDay = useCallback((r: DayPanelReservation) => {
-    const full = (reservations as Turnover[]).find((x) => x.id === r.id);
-    if (!full) return;
-    setSelectedDay(null);
-    setFloatingData({
-      type: 'turnover',
-      item: full,
-      propertyName: full.property_name || '',
-    });
-  }, [reservations]);
 
   const handleNewTaskFromDay = useCallback((dateStr: string) => {
     const draft = createDraftTask({ scheduled_date: dateStr });
@@ -1784,19 +1757,13 @@ export default function TimelineWindow({
           canonical editor for each item type. */}
       {selectedDay && dayPanelData && !floatingData && (
         <div
-          className={
-            isMobile
-              ? 'fixed inset-0 z-40 bg-white dark:bg-[#0b0b0c] safe-area-top safe-area-bottom flex flex-col'
-              : 'absolute top-0 right-0 h-full w-[30%] min-w-[320px] bg-white dark:bg-[#0b0b0c] border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 shadow-xl z-30 overflow-hidden flex flex-col'
-          }
+          className="absolute top-0 right-0 h-full w-[30%] min-w-[320px] bg-white dark:bg-[#0b0b0c] border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 shadow-xl z-30 overflow-hidden flex flex-col"
           onWheel={(e) => e.stopPropagation()}
         >
           <DayDetailPanel
             date={selectedDay}
             title="All properties"
             onClose={() => setSelectedDay(null)}
-            reservations={dayPanelData.dayReservations}
-            onReservationClick={handleOpenReservationFromDay}
             tasks={dayPanelData.dayTasks}
             onTaskClick={handleOpenTaskFromDay}
             showPropertyOnRows

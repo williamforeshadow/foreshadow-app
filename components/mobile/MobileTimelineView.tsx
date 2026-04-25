@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { ClipboardCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Task } from '@/lib/types';
+import { DayDetailPanel } from '@/components/tasks/DayDetailPanel';
+import type { TaskRowItem } from '@/components/tasks/TaskRow';
 
 const marbleBackground: Record<string, string> = {
   not_started: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.35) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.18) 10%, transparent 40%, rgba(255,255,255,0.12) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #A78BFA`,
@@ -36,6 +38,13 @@ interface MobileTimelineViewProps {
   onTaskClick?: (task: any) => void;
   refreshTrigger?: number;
   onSheetOpen?: (open: boolean) => void;
+  /**
+   * Optional "New task" handler invoked from the day-cell drawer. The
+   * parent receives the cell's property name + day so it can resolve a
+   * property_id and route to the property's task ledger with the date
+   * pre-filled (matches the Property Schedule drawer behavior).
+   */
+  onNewTask?: (params: { propertyName: string; dateStr: string }) => void;
 }
 
 export default function MobileTimelineView({
@@ -43,6 +52,7 @@ export default function MobileTimelineView({
   onTaskClick,
   refreshTrigger,
   onSheetOpen,
+  onNewTask,
 }: MobileTimelineViewProps) {
   const {
     properties,
@@ -235,23 +245,19 @@ export default function MobileTimelineView({
                     <div
                       key={idx}
                       className={cn(
-                        'border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] relative overflow-visible',
+                        'border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] relative overflow-visible cursor-pointer',
                         todayDate ? 'today-tint' : 'bg-white dark:bg-[#0d0d10]'
                       )}
                       style={{ width: cellWidth, minWidth: cellWidth, height: rowHeight }}
                       onClick={() => {
-                        if (hasItems) {
-                          const dateStr = toDateString(date);
-                          setExpandedCell(prev =>
-                            prev?.property === property && prev?.dateStr === dateStr ? null : { property, dateStr }
-                          );
-                          return;
-                        }
-                        const res = propReservations.find(r => {
-                          const pos = getBlockPosition(r.check_in, r.check_out);
-                          return idx >= pos.start && idx < pos.start + pos.span;
-                        });
-                        if (res) onCardClick?.(res);
+                        // Every cell — empty or not — opens the day-drawer
+                        // for this property + date. The drawer's empty
+                        // state surfaces the "New task" CTA, mirroring
+                        // the property-calendar behavior on empty days.
+                        const dateStr = toDateString(date);
+                        setExpandedCell(prev =>
+                          prev?.property === property && prev?.dateStr === dateStr ? null : { property, dateStr }
+                        );
                       }}
                     >
                       {startingRes && (() => {
@@ -343,78 +349,68 @@ export default function MobileTimelineView({
         </div>
       </div>
 
-      {/* Bottom sheet for expanded cell items */}
+      {/* Bottom-sheet drawer for expanded cell items.
+          Reuses DayDetailPanel for parity with the property-calendar
+          drawer: same row design (MobileTaskRow), same "New task"
+          shortcut, same header layout. The drawer wrapper supplies the
+          backdrop + bottom-anchored sheet styling. */}
       {expandedCell && (() => {
         const date = new Date(expandedCell.dateStr + 'T00:00:00');
         const cellTasks = getCellTasks(expandedCell.property, date);
 
-        if (cellTasks.length === 0) return null;
+        const dayTasks: TaskRowItem[] = cellTasks.map((t) => ({
+          key: t.task_id,
+          title: t.title || t.template_name || t.type || 'Task',
+          property_name: t.property_name || expandedCell.property,
+          status: t.status || 'not_started',
+          priority: t.priority || 'medium',
+          department_id: t.department_id ?? null,
+          department_name: t.department_name ?? null,
+          scheduled_date: t.scheduled_date ?? null,
+          scheduled_time: t.scheduled_time ?? null,
+          assignees: (t.assigned_users || []).map((u) => ({
+            user_id: u.user_id,
+            name: u.name,
+            avatar: u.avatar ?? null,
+          })),
+          bin_id: (t as Task & { bin_id?: string | null }).bin_id ?? null,
+          bin_name: (t as Task & { bin_name?: string | null }).bin_name ?? null,
+          is_binned: !!(t as Task & { is_binned?: boolean }).is_binned,
+          is_automated: (t as Task & { is_automated?: boolean }).is_automated,
+        }));
+
+        const handleTaskClickFromDrawer = (taskKey: string) => {
+          const t = cellTasks.find((x) => x.task_id === taskKey);
+          if (!t) return;
+          setExpandedCell(null);
+          onTaskClick?.(t);
+        };
 
         return (
-          <>
-            {/* Backdrop */}
+          <div className="fixed inset-0 z-50">
             <div
-              className="fixed inset-0 z-40 bg-black/20 dark:bg-black/40"
+              className="absolute inset-0 bg-black/20 dark:bg-black/40"
               onClick={() => setExpandedCell(null)}
             />
-            {/* Sheet */}
-            <div className="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-neutral-900 border-t border-neutral-200 dark:border-neutral-700 rounded-t-2xl shadow-2xl max-h-[60vh] overflow-y-auto pb-6">
-              {/* Drag handle */}
-              <div className="flex justify-center pt-2 pb-1">
-                <div className="w-10 h-1 rounded-full bg-neutral-300 dark:bg-neutral-600" />
-              </div>
-
-              {/* Header */}
-              <div className="px-4 pb-2 flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-semibold text-neutral-900 dark:text-white">{expandedCell.property}</div>
-                  <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                    {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                  </div>
-                </div>
-                <button
-                  onClick={() => setExpandedCell(null)}
-                  className="p-2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              {/* Items */}
-              <div className="px-4 pb-6 space-y-3">
-                <div>
-                  <div className="text-[10px] font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                    <ClipboardCheck className="w-2.5 h-2.5" /> Tasks ({cellTasks.length})
-                  </div>
-                  <div className="space-y-1.5">
-                    {cellTasks.map(task => (
-                      <div
-                        key={task.task_id}
-                        className={cn(
-                          'flex items-center justify-between gap-2 py-2.5 px-3 cursor-pointer transition-all duration-150 active:scale-[0.98] rounded-lg overflow-hidden',
-                          task.status === 'contingent'
-                            ? 'bg-white dark:bg-[#1a1a1d] border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[rgba(255,255,255,0.25)] text-[#1a1a18] dark:text-[#e8e7e3]'
-                            : 'text-white border border-transparent'
-                        )}
-                        style={task.status !== 'contingent' ? { background: marbleBackground[task.status] || marbleBackground.not_started } : undefined}
-                        onClick={() => {
-                          onTaskClick?.(task);
-                          setExpandedCell(null);
-                        }}
-                      >
-                        <span className="truncate text-sm font-medium">{task.title || task.template_name || task.type}</span>
-                        <svg className={cn('w-4 h-4 shrink-0', task.status === 'contingent' ? 'text-[rgba(30,25,20,0.3)]' : 'text-white/60')} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+            <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-[#0b0b0c] border-t border-[rgba(30,25,20,0.08)] dark:border-white/10 rounded-t-2xl shadow-2xl max-h-[75vh] flex flex-col safe-area-bottom">
+              <DayDetailPanel
+                date={date}
+                title={expandedCell.property}
+                onClose={() => setExpandedCell(null)}
+                tasks={dayTasks}
+                onTaskClick={handleTaskClickFromDrawer}
+                onNewTask={
+                  onNewTask
+                    ? (dateStr) => {
+                        const property = expandedCell.property;
+                        setExpandedCell(null);
+                        onNewTask({ propertyName: property, dateStr });
+                      }
+                    : undefined
+                }
+              />
             </div>
-          </>
+          </div>
         );
       })()}
     </div>

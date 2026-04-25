@@ -11,10 +11,7 @@ import {
   PropertyTaskDetailOverlay,
   type OverlayTaskInput,
 } from '../tasks/PropertyTaskDetailOverlay';
-import {
-  DayDetailPanel,
-  type DayPanelReservation,
-} from '@/components/tasks/DayDetailPanel';
+import { DayDetailPanel } from '@/components/tasks/DayDetailPanel';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
 import { useIsMobile } from '@/lib/useIsMobile';
 
@@ -193,19 +190,19 @@ export default function PropertyScheduleView() {
         is_binned: !!t.is_binned,
         is_automated: t.is_automated,
       }));
-    const dayReservations: DayPanelReservation[] = reservations
-      .filter((r) => {
-        const ci = r.check_in.slice(0, 10);
-        const co = r.check_out.slice(0, 10);
-        return dayKey >= ci && dayKey <= co;
-      })
-      .map((r) => ({
-        id: r.id,
-        guest_name: r.guest_name,
-        check_in: r.check_in,
-        check_out: r.check_out,
-      }));
-    return { dayKey, dayTasks, dayReservations };
+    // The day panel doesn't list reservations any more — the calendar bars
+    // already show them. Just compute a single occupancy flag for the
+    // header pill.
+    const occupied = reservations.some((r) => {
+      const ci = r.check_in.slice(0, 10);
+      const co = r.check_out.slice(0, 10);
+      return dayKey >= ci && dayKey <= co;
+    });
+    return {
+      dayKey,
+      dayTasks,
+      occupancy: (occupied ? 'occupied' : 'vacant') as 'occupied' | 'vacant',
+    };
   }, [selectedDay, tasks, reservations, property.name]);
 
   const selectedDayKey = dayPanelData?.dayKey ?? null;
@@ -218,19 +215,6 @@ export default function PropertyScheduleView() {
       router.push(`/properties/${property.id}/tasks?newTaskDate=${dateStr}`);
     },
     [router, property.id]
-  );
-
-  // Resolve a reservation id (from the day panel) back to the full
-  // ScheduleReservation for the existing reservation detail panel.
-  const handleOpenReservationFromDay = useCallback(
-    (r: DayPanelReservation) => {
-      const full = reservations.find((x) => x.id === r.id);
-      if (full) {
-        setSelectedDay(null);
-        setSelectedReservation(full);
-      }
-    },
-    [reservations]
   );
 
   // Day-panel task click → same overlay pipeline as calendar cell clicks.
@@ -315,30 +299,46 @@ export default function PropertyScheduleView() {
       </div>
 
       {/* Day detail panel.
-          Opens when a calendar day is clicked. Shows reservations active
-          that day + a flat task list for the same day. Clicking a task
-          closes the day panel and opens the full task overlay; clicking a
-          reservation closes the day panel and opens the reservation panel.
-          Mutually exclusive with the other two panels. */}
+          Opens when a calendar day is clicked. Shows a flat task list for
+          the same day plus an occupied/vacant header pill (the calendar
+          bars handle reservation context). Clicking a task closes the day
+          panel and opens the full task overlay. Mutually exclusive with
+          the other two panels.
+          Desktop: right-1/3 absolute panel.
+          Mobile: bottom-sheet drawer with backdrop dismiss. Matches the
+                  mobile Timeline pattern so both surfaces feel identical. */}
       {selectedDay && dayPanelData && !selectedTask && !selectedReservation && (
-        <div
-          className={
-            isMobile
-              ? 'fixed inset-0 z-[60] bg-white dark:bg-[#0b0b0c] safe-area-top safe-area-bottom flex flex-col'
-              : 'absolute inset-y-0 right-0 w-1/3 z-20 border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 bg-white dark:bg-[#0b0b0c] overflow-hidden flex flex-col'
-          }
-        >
-          <DayDetailPanel
-            date={selectedDay}
-            title={property.name}
-            onClose={() => setSelectedDay(null)}
-            reservations={dayPanelData.dayReservations}
-            onReservationClick={handleOpenReservationFromDay}
-            tasks={dayPanelData.dayTasks}
-            onTaskClick={handleOpenTaskFromDay}
-            onNewTask={handleNewTaskFromDay}
-          />
-        </div>
+        isMobile ? (
+          <div className="fixed inset-0 z-[60]">
+            <div
+              className="absolute inset-0 bg-black/20 dark:bg-black/40"
+              onClick={() => setSelectedDay(null)}
+            />
+            <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-[#0b0b0c] border-t border-[rgba(30,25,20,0.08)] dark:border-white/10 rounded-t-2xl shadow-2xl max-h-[75vh] flex flex-col safe-area-bottom">
+              <DayDetailPanel
+                date={selectedDay}
+                title={property.name}
+                onClose={() => setSelectedDay(null)}
+                occupancy={dayPanelData.occupancy}
+                tasks={dayPanelData.dayTasks}
+                onTaskClick={handleOpenTaskFromDay}
+                onNewTask={handleNewTaskFromDay}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="absolute inset-y-0 right-0 w-1/3 z-20 border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 bg-white dark:bg-[#0b0b0c] overflow-hidden flex flex-col">
+            <DayDetailPanel
+              date={selectedDay}
+              title={property.name}
+              onClose={() => setSelectedDay(null)}
+              occupancy={dayPanelData.occupancy}
+              tasks={dayPanelData.dayTasks}
+              onTaskClick={handleOpenTaskFromDay}
+              onNewTask={handleNewTaskFromDay}
+            />
+          </div>
+        )
       )}
 
       {/* Reservation detail panel.
