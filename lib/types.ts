@@ -488,9 +488,13 @@ export function createDefaultAutomationConfig(): AutomationConfig {
   return {
     enabled: false,
     trigger_type: 'turnover',
-    // Turnover-specific defaults
+    // Turnover-specific defaults.
+    // schedule.enabled is hard-coded true now — Auto-Scheduling is implicit
+    // (all auto-generated tasks must carry a scheduled date). The field is
+    // retained on the type for backward-compat with rows in JSONB but is
+    // ignored by both the SQL functions and the manual-add API route.
     schedule: {
-      enabled: false,
+      enabled: true,
       type: 'on',
       relative_to: 'check_out',
       days_offset: 0,
@@ -511,7 +515,7 @@ export function createDefaultAutomationConfig(): AutomationConfig {
       days: 7,
     },
     occupancy_schedule: {
-      enabled: false,
+      enabled: true,
       day_of_occupancy: 1,
       time: '10:00',
       repeat: {
@@ -525,7 +529,7 @@ export function createDefaultAutomationConfig(): AutomationConfig {
       days: 7,
     },
     vacancy_schedule: {
-      enabled: false,
+      enabled: true,
       day_of_vacancy: 1,
       time: '10:00',
       repeat: {

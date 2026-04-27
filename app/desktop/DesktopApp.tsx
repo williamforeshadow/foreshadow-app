@@ -72,7 +72,6 @@ export default function DesktopApp() {
             <TurnoversWindow
               users={users}
               currentUser={currentUser}
-              onOpenProjectInWindow={() => setActiveView('projects')}
             />
           </div>
 

@@ -1577,17 +1577,21 @@ export default function TimelineWindow({
                           const rightDiagonal = flushRight ? '0px' : `${diagonalPx}px`;
                           const clipPath = `polygon(${leftDiagonal} 0%, 100% 0%, calc(100% - ${rightDiagonal}) 100%, 0% 100%)`;
 
-                          // Status-aware bar colors (purple family)
+                          // Status-aware bar colors (purple family).
+                          // Top-only stroke (border-t-2) gives the bar a "lit
+                          // top edge" / dimensional feel — shared across the
+                          // mobile timeline + property schedule grid so the
+                          // reservation bar reads as one component everywhere.
                           const barStatus = activeTurnover?.turnover_status || 'not_started';
                           const barColorClass = barStatus === 'complete'
-                            ? 'bg-[rgba(76,72,105,0.18)] dark:bg-[rgba(76,72,105,0.25)] border-[rgba(76,72,105,0.28)] dark:border-[rgba(76,72,105,0.35)]'
+                            ? 'bg-[rgba(76,72,105,0.18)] dark:bg-[rgba(76,72,105,0.25)] border-[rgba(76,72,105,0.38)] dark:border-[rgba(76,72,105,0.45)]'
                             : barStatus === 'in_progress'
-                            ? 'bg-[rgba(99,102,241,0.16)] dark:bg-[rgba(99,102,241,0.22)] border-[rgba(99,102,241,0.26)] dark:border-[rgba(99,102,241,0.32)]'
-                            : 'bg-[rgba(167,139,250,0.16)] dark:bg-[rgba(167,139,250,0.18)] border-[rgba(167,139,250,0.26)] dark:border-[rgba(167,139,250,0.30)]';
+                            ? 'bg-[rgba(99,102,241,0.16)] dark:bg-[rgba(99,102,241,0.22)] border-[rgba(99,102,241,0.38)] dark:border-[rgba(99,102,241,0.45)]'
+                            : 'bg-[rgba(167,139,250,0.16)] dark:bg-[rgba(167,139,250,0.18)] border-[rgba(167,139,250,0.38)] dark:border-[rgba(167,139,250,0.45)]';
 
                           return (
                             <div
-                              className={`absolute pointer-events-none transition-all duration-150 text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium flex items-center overflow-hidden border ${barColorClass} ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-[rgba(99,102,241,0.5)] dark:ring-[rgba(167,139,250,0.6)] shadow-lg z-30' : ''}`}
+                              className={`absolute pointer-events-none transition-all duration-150 text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium flex items-center overflow-hidden border-t ${barColorClass} ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-[rgba(99,102,241,0.5)] dark:ring-[rgba(167,139,250,0.6)] shadow-lg z-30' : ''}`}
                               style={{
                                 left: `${leftOffset}%`,
                                 top: '10px',

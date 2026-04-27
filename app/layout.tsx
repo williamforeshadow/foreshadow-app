@@ -4,6 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/lib/authContext";
 import { DepartmentsProvider } from "@/lib/departmentsContext";
+import { OperationsSettingsProvider } from "@/lib/operationsSettingsContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -54,7 +55,9 @@ export default function RootLayout({
         >
           <AuthProvider>
             <DepartmentsProvider>
-              {children}
+              <OperationsSettingsProvider>
+                {children}
+              </OperationsSettingsProvider>
             </DepartmentsProvider>
           </AuthProvider>
         </ThemeProvider>

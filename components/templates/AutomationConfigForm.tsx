@@ -131,7 +131,6 @@ function PeriodScheduleUI({
 }: {
   label: string; // "occupancy" or "vacancy"
   schedule: {
-    enabled: boolean;
     day_of_period: number;
     time: string;
     repeat: { enabled: boolean; interval_days: number };
@@ -139,66 +138,62 @@ function PeriodScheduleUI({
   onUpdateField: (field: string, value: unknown) => void;
   onUpdateRepeat: (field: string, value: unknown) => void;
 }) {
+  // Auto-Scheduling is implicit — the wrapping toggle was removed because
+  // every auto-generated task must carry a scheduled date for the panel to
+  // associate it with a reservation's turnover window.
   return (
     <div className="border rounded-lg p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="font-medium text-sm">Auto-Scheduling</div>
-          <InfoTooltip text={`Schedule task during ${label} period`} />
-        </div>
-        <Toggle checked={schedule.enabled} onChange={() => onUpdateField('enabled', !schedule.enabled)} />
+      <div className="flex items-center gap-2">
+        <div className="font-medium text-sm">Schedule</div>
+        <InfoTooltip text={`When tasks are scheduled during the ${label} period`} />
       </div>
 
-      {schedule.enabled && (
-        <div className="space-y-4 pt-2">
-          {/* Day of period */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-neutral-600 dark:text-neutral-400">Schedule task on day</span>
-            <Input
-              type="number"
-              min={1}
-              value={schedule.day_of_period}
-              onChange={(e) => onUpdateField('day_of_period', parseInt(e.target.value) || 1)}
-              className="w-20 h-9"
-            />
-            <span className="text-sm text-neutral-600 dark:text-neutral-400">of {label} at</span>
-            <Input
-              type="time"
-              value={schedule.time || '10:00'}
-              onChange={(e) => onUpdateField('time', e.target.value)}
-              className="w-32 h-9"
-            />
-          </div>
-
-          {/* Repeat scheduling */}
-          <div className="py-3">
-            <hr className="border-neutral-200 dark:border-neutral-800" />
-          </div>
-          <div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="font-medium text-sm">Repeat Scheduling</div>
-                <InfoTooltip text={`Create recurring tasks during the ${label}`} />
-              </div>
-              <Toggle checked={schedule.repeat.enabled} onChange={() => onUpdateRepeat('enabled', !schedule.repeat.enabled)} />
-            </div>
-
-            {schedule.repeat.enabled && (
-              <div className="flex items-center gap-2 flex-wrap pt-3">
-                <span className="text-sm text-neutral-600 dark:text-neutral-400">Repeats every</span>
-                <Input
-                  type="number"
-                  min={1}
-                  value={schedule.repeat.interval_days}
-                  onChange={(e) => onUpdateRepeat('interval_days', parseInt(e.target.value) || 1)}
-                  className="w-20 h-9"
-                />
-                <span className="text-sm text-neutral-600 dark:text-neutral-400">day(s)</span>
-              </div>
-            )}
-          </div>
+      <div className="space-y-4 pt-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm text-neutral-600 dark:text-neutral-400">Schedule task on day</span>
+          <Input
+            type="number"
+            min={1}
+            value={schedule.day_of_period}
+            onChange={(e) => onUpdateField('day_of_period', parseInt(e.target.value) || 1)}
+            className="w-20 h-9"
+          />
+          <span className="text-sm text-neutral-600 dark:text-neutral-400">of {label} at</span>
+          <Input
+            type="time"
+            value={schedule.time || '10:00'}
+            onChange={(e) => onUpdateField('time', e.target.value)}
+            className="w-32 h-9"
+          />
         </div>
-      )}
+
+        <div className="py-3">
+          <hr className="border-neutral-200 dark:border-neutral-800" />
+        </div>
+        <div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="font-medium text-sm">Repeat Scheduling</div>
+              <InfoTooltip text={`Create recurring tasks during the ${label}`} />
+            </div>
+            <Toggle checked={schedule.repeat.enabled} onChange={() => onUpdateRepeat('enabled', !schedule.repeat.enabled)} />
+          </div>
+
+          {schedule.repeat.enabled && (
+            <div className="flex items-center gap-2 flex-wrap pt-3">
+              <span className="text-sm text-neutral-600 dark:text-neutral-400">Repeats every</span>
+              <Input
+                type="number"
+                min={1}
+                value={schedule.repeat.interval_days}
+                onChange={(e) => onUpdateRepeat('interval_days', parseInt(e.target.value) || 1)}
+                className="w-20 h-9"
+              />
+              <span className="text-sm text-neutral-600 dark:text-neutral-400">day(s)</span>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -400,143 +395,143 @@ export default function AutomationConfigForm({
           ================================================================ */}
       {config.enabled && (
         <>
-          {/* TURNOVER: Schedule Configuration */}
+          {/* TURNOVER: Schedule Configuration
+              Auto-Scheduling is implicit now — every auto-generated task
+              must have a date so it can render under a reservation's
+              "Associated tasks" section (which filters purely by
+              scheduled_date in the turnover window). The toggle that
+              previously gated this block was removed. */}
           {config.trigger_type === 'turnover' && (
             <div className="border rounded-lg p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="font-medium text-sm">Auto-Scheduling</div>
-                  <InfoTooltip text="Automatically set task scheduled time" />
-                </div>
-                <Toggle checked={config.schedule.enabled} onChange={() => updateSchedule('enabled', !config.schedule.enabled)} />
+              <div className="flex items-center gap-2">
+                <div className="font-medium text-sm">Schedule</div>
+                <InfoTooltip text="When auto-generated tasks are scheduled relative to the reservation" />
               </div>
 
-              {config.schedule.enabled && (
-                <div className="space-y-4 pt-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Select
-                      value={config.schedule.type}
-                      onValueChange={(value) => updateSchedule('type', value as AutomationScheduleType)}
-                    >
-                      <SelectTrigger className="w-32 h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="on">On</SelectItem>
-                        <SelectItem value="before">Before</SelectItem>
-                        <SelectItem value="after">After</SelectItem>
-                      </SelectContent>
-                    </Select>
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Select
+                    value={config.schedule.type}
+                    onValueChange={(value) => updateSchedule('type', value as AutomationScheduleType)}
+                  >
+                    <SelectTrigger className="w-32 h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="on">On</SelectItem>
+                      <SelectItem value="before">Before</SelectItem>
+                      <SelectItem value="after">After</SelectItem>
+                    </SelectContent>
+                  </Select>
 
-                    {config.schedule.type !== 'on' && (
-                      <Input
-                        type="number"
-                        min={0}
-                        value={config.schedule.days_offset}
-                        onChange={(e) => updateSchedule('days_offset', parseInt(e.target.value) || 0)}
-                        className="w-20 h-9"
-                      />
-                    )}
-
-                    {config.schedule.type !== 'on' && (
-                      <span className="text-sm text-neutral-600 dark:text-neutral-400">day(s)</span>
-                    )}
-
-                    <Select
-                      value={config.schedule.relative_to}
-                      onValueChange={(value) => updateSchedule('relative_to', value as AutomationScheduleRelativeTo)}
-                    >
-                      <SelectTrigger className="w-40 h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="check_out">Check-out</SelectItem>
-                        <SelectItem value="next_check_in">Next Check-in</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    <span className="text-sm text-neutral-600 dark:text-neutral-400">at</span>
+                  {config.schedule.type !== 'on' && (
                     <Input
-                      type="time"
-                      value={config.schedule.time}
-                      onChange={(e) => updateSchedule('time', e.target.value)}
-                      className="w-32 h-9"
+                      type="number"
+                      min={0}
+                      value={config.schedule.days_offset}
+                      onChange={(e) => updateSchedule('days_offset', parseInt(e.target.value) || 0)}
+                      className="w-20 h-9"
+                    />
+                  )}
+
+                  {config.schedule.type !== 'on' && (
+                    <span className="text-sm text-neutral-600 dark:text-neutral-400">day(s)</span>
+                  )}
+
+                  <Select
+                    value={config.schedule.relative_to}
+                    onValueChange={(value) => updateSchedule('relative_to', value as AutomationScheduleRelativeTo)}
+                  >
+                    <SelectTrigger className="w-40 h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="check_out">Check-out</SelectItem>
+                      <SelectItem value="next_check_in">Next Check-in</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <span className="text-sm text-neutral-600 dark:text-neutral-400">at</span>
+                  <Input
+                    type="time"
+                    value={config.schedule.time}
+                    onChange={(e) => updateSchedule('time', e.target.value)}
+                    className="w-32 h-9"
+                  />
+                </div>
+
+                {/* Same-day override */}
+                <div className="py-3">
+                  <hr className="border-neutral-200 dark:border-neutral-800" />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="font-medium text-sm">Same-Day Turnover Override</div>
+                      <InfoTooltip text="Different schedule when checkout & next check-in are same day" />
+                    </div>
+                    <Toggle
+                      checked={config.same_day_override.enabled}
+                      onChange={() => updateConfig('same_day_override', {
+                        ...config.same_day_override,
+                        enabled: !config.same_day_override.enabled,
+                      })}
                     />
                   </div>
 
-                  {/* Same-day override */}
-                  <div className="py-3">
-                    <hr className="border-neutral-200 dark:border-neutral-800" />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <div className="font-medium text-sm">Same-Day Turnover Override</div>
-                        <InfoTooltip text="Different schedule when checkout & next check-in are same day" />
-                      </div>
-                      <Toggle
-                        checked={config.same_day_override.enabled}
-                        onChange={() => updateConfig('same_day_override', {
-                          ...config.same_day_override,
-                          enabled: !config.same_day_override.enabled,
-                        })}
+                  {config.same_day_override.enabled && (
+                    <div className="flex items-center gap-2 flex-wrap pt-2">
+                      <Select
+                        value={config.same_day_override.schedule.type}
+                        onValueChange={(value) => updateSameDaySchedule('type', value as AutomationScheduleType)}
+                      >
+                        <SelectTrigger className="w-32 h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="on">On</SelectItem>
+                          <SelectItem value="before">Before</SelectItem>
+                          <SelectItem value="after">After</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      {config.same_day_override.schedule.type !== 'on' && (
+                        <>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={config.same_day_override.schedule.days_offset}
+                            onChange={(e) => updateSameDaySchedule('days_offset', parseInt(e.target.value) || 0)}
+                            className="w-20 h-9"
+                          />
+                          <span className="text-sm text-neutral-600 dark:text-neutral-400">day(s)</span>
+                        </>
+                      )}
+
+                      <Select
+                        value={config.same_day_override.schedule.relative_to}
+                        onValueChange={(value) => updateSameDaySchedule('relative_to', value as AutomationScheduleRelativeTo)}
+                      >
+                        <SelectTrigger className="w-40 h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="check_out">Check-out</SelectItem>
+                          <SelectItem value="next_check_in">Next Check-in</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      <span className="text-sm text-neutral-600 dark:text-neutral-400">at</span>
+                      <Input
+                        type="time"
+                        value={config.same_day_override.schedule.time}
+                        onChange={(e) => updateSameDaySchedule('time', e.target.value)}
+                        className="w-32 h-9"
                       />
                     </div>
-
-                    {config.same_day_override.enabled && (
-                      <div className="flex items-center gap-2 flex-wrap pt-2">
-                        <Select
-                          value={config.same_day_override.schedule.type}
-                          onValueChange={(value) => updateSameDaySchedule('type', value as AutomationScheduleType)}
-                        >
-                          <SelectTrigger className="w-32 h-9">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="on">On</SelectItem>
-                            <SelectItem value="before">Before</SelectItem>
-                            <SelectItem value="after">After</SelectItem>
-                          </SelectContent>
-                        </Select>
-
-                        {config.same_day_override.schedule.type !== 'on' && (
-                          <>
-                            <Input
-                              type="number"
-                              min={0}
-                              value={config.same_day_override.schedule.days_offset}
-                              onChange={(e) => updateSameDaySchedule('days_offset', parseInt(e.target.value) || 0)}
-                              className="w-20 h-9"
-                            />
-                            <span className="text-sm text-neutral-600 dark:text-neutral-400">day(s)</span>
-                          </>
-                        )}
-
-                        <Select
-                          value={config.same_day_override.schedule.relative_to}
-                          onValueChange={(value) => updateSameDaySchedule('relative_to', value as AutomationScheduleRelativeTo)}
-                        >
-                          <SelectTrigger className="w-40 h-9">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="check_out">Check-out</SelectItem>
-                            <SelectItem value="next_check_in">Next Check-in</SelectItem>
-                          </SelectContent>
-                        </Select>
-
-                        <span className="text-sm text-neutral-600 dark:text-neutral-400">at</span>
-                        <Input
-                          type="time"
-                          value={config.same_day_override.schedule.time}
-                          onChange={(e) => updateSameDaySchedule('time', e.target.value)}
-                          className="w-32 h-9"
-                        />
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           )}
 
@@ -545,13 +540,11 @@ export default function AutomationConfigForm({
             <PeriodScheduleUI
               label="occupancy"
               schedule={{
-                enabled: config.occupancy_schedule.enabled,
                 day_of_period: config.occupancy_schedule.day_of_occupancy,
                 time: config.occupancy_schedule.time,
                 repeat: config.occupancy_schedule.repeat,
               }}
               onUpdateField={(field, value) => {
-                // Map day_of_period back to day_of_occupancy
                 const mappedField = field === 'day_of_period' ? 'day_of_occupancy' : field;
                 updateOccupancySchedule(mappedField, value);
               }}
@@ -559,13 +552,14 @@ export default function AutomationConfigForm({
             />
           )}
 
-          {/* VACANCY: Schedule Configuration */}
+          {/* VACANCY: Schedule Configuration. Task Generation Limit is
+              always shown now (it used to be hidden behind the Auto-Scheduling
+              toggle). */}
           {config.trigger_type === 'vacancy' && config.vacancy_schedule && (
             <>
               <PeriodScheduleUI
                 label="vacancy"
                 schedule={{
-                  enabled: config.vacancy_schedule.enabled,
                   day_of_period: config.vacancy_schedule.day_of_vacancy,
                   time: config.vacancy_schedule.time,
                   repeat: config.vacancy_schedule.repeat,
@@ -577,26 +571,23 @@ export default function AutomationConfigForm({
                 onUpdateRepeat={updateVacancyRepeat}
               />
 
-              {/* Vacancy-specific: Max days ahead */}
-              {config.vacancy_schedule.enabled && (
-                <div className="border rounded-lg p-4 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="font-medium text-sm">Task Generation Limit</div>
-                    <InfoTooltip text="When there is no upcoming booking, limit how far ahead tasks are generated" />
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap pt-2">
-                    <span className="text-sm text-neutral-600 dark:text-neutral-400">Generate tasks up to</span>
-                    <Input
-                      type="number"
-                      min={7}
-                      value={config.vacancy_schedule.max_days_ahead}
-                      onChange={(e) => updateVacancySchedule('max_days_ahead', parseInt(e.target.value) || 90)}
-                      className="w-20 h-9"
-                    />
-                    <span className="text-sm text-neutral-600 dark:text-neutral-400">days ahead when no next booking exists</span>
-                  </div>
+              <div className="border rounded-lg p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="font-medium text-sm">Task Generation Limit</div>
+                  <InfoTooltip text="When there is no upcoming booking, limit how far ahead tasks are generated" />
                 </div>
-              )}
+                <div className="flex items-center gap-2 flex-wrap pt-2">
+                  <span className="text-sm text-neutral-600 dark:text-neutral-400">Generate tasks up to</span>
+                  <Input
+                    type="number"
+                    min={7}
+                    value={config.vacancy_schedule.max_days_ahead}
+                    onChange={(e) => updateVacancySchedule('max_days_ahead', parseInt(e.target.value) || 90)}
+                    className="w-20 h-9"
+                  />
+                  <span className="text-sm text-neutral-600 dark:text-neutral-400">days ahead when no next booking exists</span>
+                </div>
+              </div>
             </>
           )}
 

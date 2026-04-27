@@ -4,17 +4,31 @@ import React from 'react';
 import { format, parseISO, differenceInCalendarDays } from 'date-fns';
 import { X, Calendar, User, Clock, CheckCircle2, Circle, Sparkles } from 'lucide-react';
 import type { ScheduleReservation, ScheduleTask } from './MonthGrid';
+import { useOperationsSettings } from '@/lib/operationsSettingsContext';
 
 // Lightweight detail panel for a reservation. Mirrors the absolute-overlay
 // shape of PropertyTasksView's task panel so it can sit on the same anchor
 // (the /properties main column with `relative`). Shows:
 //   - guest + date window
 //   - nights, "Turnover in N days" countdown if applicable
-//   - list of scheduled tasks that fall inside the stay window (clicking
-//     one surfaces a lightweight read-only task peek below)
+//   - list of "associated tasks" — i.e. any task whose scheduled moment falls
+//     inside this reservation's turnover window:
+//         [check_in @ defaultCheckInTime, next_check_in @ defaultCheckInTime)
+//     The default check-in time comes from operations_settings (org-wide) so
+//     that on same-day turnovers, tasks scheduled before the changeover hour
+//     belong to the outgoing reservation while tasks at or after belong to
+//     the incoming one. When next_check_in is null the upper bound is
+//     open-ended (the caller supplies tasks accordingly).
 //
-// Full task editing still lives on the Tasks tab; this panel is for quick
-// orientation, matching the "relatively simple" scope the user asked for.
+//     Tasks no longer need a reservation_id match — scheduled-moment-in-window
+//     is the sole qualifier so that re-scheduling a task naturally
+//     re-associates it with whichever reservation owns the new slot.
+//
+//     Comparisons are done as 'YYYY-MM-DDTHH:MM' string lex compares to stay
+//     timezone-agnostic, matching the rest of the app.
+//
+// Clicking a task hands off to the parent's `onOpenTask`, which surfaces
+// the full shared task overlay.
 
 interface ReservationDetailPanelProps {
   reservation: ScheduleReservation & { property_name?: string };
@@ -55,6 +69,9 @@ export function ReservationDetailPanel({
   onClose,
   onOpenTask,
 }: ReservationDetailPanelProps) {
+  const { settings } = useOperationsSettings();
+  const defaultCheckInTime = (settings.default_check_in_time || '15:00').slice(0, 5);
+
   const checkIn = toDateOnly(reservation.check_in);
   const checkOut = toDateOnly(reservation.check_out);
   const nights = Math.max(1, differenceInCalendarDays(checkOut, checkIn));
@@ -66,22 +83,44 @@ export function ReservationDetailPanel({
     ? differenceInCalendarDays(nextCheckIn, checkOut)
     : null;
 
-  const stayTasks = React.useMemo(() => {
-    const ciKey = format(checkIn, 'yyyy-MM-dd');
-    const coKey = format(checkOut, 'yyyy-MM-dd');
+  // Turnover window = [check_in @ defaultCheckInTime, next_check_in @
+  // defaultCheckInTime). Open-ended when there's no next_check_in.
+  //
+  // We compose 'YYYY-MM-DDTHH:MM' strings on both sides and compare
+  // lexicographically — never instantiating Date objects — so the comparison
+  // is wall-clock and timezone-agnostic, matching the rest of the app's
+  // convention.
+  //
+  // Tasks missing scheduled_time fall back to '00:00' so they sort with the
+  // earliest moment of their day. With Auto-Scheduling now mandatory for
+  // automated tasks this is rare in practice.
+  //
+  // Scheduled-moment-in-window is the sole qualifier — we deliberately do
+  // NOT short-circuit on reservation_id, so re-scheduling a task naturally
+  // re-associates it to whichever reservation owns the new slot.
+  const associatedTasks = React.useMemo(() => {
+    const ciDate = format(checkIn, 'yyyy-MM-dd');
+    const startKey = `${ciDate}T${defaultCheckInTime}`;
+    const endKey = nextCheckIn
+      ? `${format(nextCheckIn, 'yyyy-MM-dd')}T${defaultCheckInTime}`
+      : null;
+
     return allTasks
       .filter((t) => {
         if (!t.scheduled_date) return false;
-        if (t.reservation_id && t.reservation_id === reservation.id) return true;
         const d = t.scheduled_date.slice(0, 10);
-        return d >= ciKey && d <= coKey;
+        const time = (t.scheduled_time || '').slice(0, 5) || '00:00';
+        const key = `${d}T${time}`;
+        if (key < startKey) return false;
+        if (endKey && key >= endKey) return false;
+        return true;
       })
       .sort((a, b) => {
         const ad = (a.scheduled_date || '').localeCompare(b.scheduled_date || '');
         if (ad !== 0) return ad;
         return (a.scheduled_time || '').localeCompare(b.scheduled_time || '');
       });
-  }, [allTasks, checkIn, checkOut, reservation.id]);
+  }, [allTasks, checkIn, nextCheckIn, defaultCheckInTime]);
 
   return (
     <div className="h-full w-full flex flex-col bg-white dark:bg-[#0b0b0c]">
@@ -164,24 +203,24 @@ export function ReservationDetailPanel({
             )}
           </section>
 
-          {/* Tasks in this stay */}
+          {/* Tasks scheduled inside this reservation's turnover window */}
           <section className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <div className="text-[10px] italic font-medium tracking-[0.08em] uppercase text-neutral-400 dark:text-[#66645f]">
-                Tasks during stay
+                Associated tasks
               </div>
               <div className="text-[11px] font-medium text-neutral-500 dark:text-[#a09e9a] tabular-nums">
-                {stayTasks.length}
+                {associatedTasks.length}
               </div>
             </div>
 
-            {stayTasks.length === 0 ? (
+            {associatedTasks.length === 0 ? (
               <div className="text-[12px] text-neutral-400 dark:text-[#66645f] italic py-4">
                 No scheduled tasks in this window.
               </div>
             ) : (
               <ul className="flex flex-col gap-1">
-                {stayTasks.map((task) => {
+                {associatedTasks.map((task) => {
                   const meta =
                     STATUS_META[task.status] || STATUS_META.not_started;
                   const Icon = meta.icon;

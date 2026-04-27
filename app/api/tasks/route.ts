@@ -26,14 +26,16 @@ interface AutomationConfig {
 /**
  * Calculate scheduled date and time based on automation config and reservation dates.
  * Returns { date: 'YYYY-MM-DD', time: 'HH:MM' } or { date: null, time: null }.
+ *
+ * Note: the legacy `config.enabled` gate was removed. Auto-Scheduling is
+ * implicit now — if the caller decided to schedule (because the parent
+ * automation_config.enabled is true), we always compute a date.
  */
 function calculateSchedule(
   config: AutomationScheduleConfig,
   checkOut: string | null,
   nextCheckIn: string | null
 ): { date: string | null; time: string | null } {
-  if (!config.enabled) return { date: null, time: null };
-
   // Determine the base date based on relative_to
   const baseDateStr = config.relative_to === 'check_out' ? checkOut : nextCheckIn;
   if (!baseDateStr) return { date: null, time: null };
@@ -154,11 +156,15 @@ export async function POST(request: Request) {
     let scheduledTime: string | null = null;
     let assignUserIds: string[] = [];
 
-    if (automationConfig?.enabled && automationConfig.schedule.enabled) {
+    // Auto-Scheduling is implicit when automation is enabled — the legacy
+    // `automationConfig.schedule.enabled` sub-toggle was removed (see also
+    // generate_tasks_for_reservation / sync_automation_to_future_tasks
+    // which dropped the same gate). If `automationConfig.enabled` is false,
+    // the manual-add stays unscheduled (matches today's behavior).
+    if (automationConfig?.enabled) {
       const isSameDay = isSameDayTurnover(reservation.check_out, reservation.next_check_in);
-      
+
       let schedule: { date: string | null; time: string | null };
-      // Use same-day override config if applicable
       if (isSameDay && automationConfig.same_day_override.enabled) {
         schedule = calculateSchedule(
           { ...automationConfig.same_day_override.schedule, enabled: true },

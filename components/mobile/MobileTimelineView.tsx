@@ -277,30 +277,33 @@ export default function MobileTimelineView({
 
                         const borderRadius = `${startsBeforeRange ? '0' : '8'}px ${flushRight ? '0' : '8'}px ${flushRight ? '0' : '8'}px ${startsBeforeRange ? '0' : '8'}px`;
 
+                        // Top-only stroke (border-t-2) matches the desktop
+                        // Timeline + property Schedule grid so reservation
+                        // bars read identically across web/mobile/schedule.
                         const turnoverStatus = activeTurnover?.turnover_status || 'not_started';
                         let bgClass: string;
                         switch (turnoverStatus) {
                           case 'complete':
-                            bgClass = 'bg-[rgba(76,72,105,0.16)] dark:bg-[rgba(76,72,105,0.20)] border-[rgba(76,72,105,0.22)] dark:border-[rgba(76,72,105,0.28)]';
+                            bgClass = 'bg-[rgba(76,72,105,0.18)] dark:bg-[rgba(76,72,105,0.25)] border-[rgba(76,72,105,0.38)] dark:border-[rgba(76,72,105,0.45)]';
                             break;
                           case 'in_progress':
-                            bgClass = 'bg-[rgba(99,102,241,0.16)] dark:bg-[rgba(99,102,241,0.20)] border-[rgba(99,102,241,0.22)] dark:border-[rgba(99,102,241,0.28)]';
+                            bgClass = 'bg-[rgba(99,102,241,0.16)] dark:bg-[rgba(99,102,241,0.22)] border-[rgba(99,102,241,0.38)] dark:border-[rgba(99,102,241,0.45)]';
                             break;
                           default:
-                            bgClass = 'bg-[rgba(167,139,250,0.16)] dark:bg-[rgba(167,139,250,0.18)] border-[rgba(167,139,250,0.22)] dark:border-[rgba(167,139,250,0.26)]';
+                            bgClass = 'bg-[rgba(167,139,250,0.16)] dark:bg-[rgba(167,139,250,0.18)] border-[rgba(167,139,250,0.38)] dark:border-[rgba(167,139,250,0.45)]';
                             break;
                         }
 
                         return (
                           <div
                             className={cn(
-                              'absolute pointer-events-none text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium flex items-center overflow-hidden border',
+                              'absolute pointer-events-none text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium flex items-center overflow-hidden border-t',
                               bgClass
                             )}
                             style={{
                               left: `${leftOffset}%`,
-                              top: 0,
-                              bottom: 0,
+                              top: 6,
+                              height: 24,
                               width: widthValue,
                               zIndex: 15,
                               clipPath,

@@ -3,9 +3,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import type { CleaningFilters } from '@/lib/cleaningFilters';
-import type { Turnover, Task, TurnoverStatus, TaskTemplate } from '@/lib/types';
+import type { Turnover, Task, TurnoverStatus } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 
+// Drives the Turnovers window (cards list + reservation detail) and is also
+// consumed by the mobile shell for the shared task-edit pipeline (status /
+// schedule / assignments / template cache). The TurnoversWindow itself no
+// longer mutates tasks directly — it hands clicked tasks off to the shared
+// PropertyTaskDetailOverlay, which owns its own mutation surface — so the
+// per-task helpers below exist solely to keep MobileApp.tsx's task editor
+// working until that surface migrates to PropertyTaskDetailOverlay too.
 export function useTurnovers() {
   // Core data state
   const [response, setResponse] = useState<Turnover[] | null>(null);
@@ -21,17 +28,16 @@ export function useTurnovers() {
   });
   const [sortBy, setSortBy] = useState('status-priority');
 
-  // Selection state
+  // Selection state — the Turnovers window owns its own selectedTask /
+  // overlay state now; we just track the highlighted card here.
   const [selectedCard, setSelectedCard] = useState<Turnover | null>(null);
-  const [fullscreenTask, setFullscreenTask] = useState<Task | null>(null);
-  const [rightPanelView, setRightPanelView] = useState<'tasks' | 'projects'>('tasks');
 
-  // Task state - using Template from DynamicCleaningForm
+  // Per-task template cache + loading. Keyed by `${templateId}__${propertyName}`
+  // so property-level overrides resolve correctly. Mobile's task editor
+  // consumes this directly; TurnoversWindow no longer needs it (the shared
+  // overlay maintains its own cache).
   const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
   const [loadingTaskTemplate, setLoadingTaskTemplate] = useState<string | null>(null);
-  const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
-  const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
-  const [addingTask, setAddingTask] = useState(false);
 
   // Refs
   const rightPanelRef = useRef<HTMLDivElement>(null);
@@ -87,9 +93,10 @@ export function useTurnovers() {
     return filters.turnoverStatus.length + filters.occupancyStatus.length + filters.timeline.length;
   }, [filters]);
 
-  // Helper to calculate turnover_status
+  // Helper to recalculate turnover_status on the cached card after a task
+  // mutation. Contingent tasks intentionally don't count toward turnover
+  // progress.
   const calculateTurnoverStatus = (tasks: Task[]): TurnoverStatus => {
-    // Exclude contingent tasks from turnover status calculation
     const activeTasks = tasks.filter((t) => t.status !== 'contingent');
     const total = activeTasks.length;
     const completed = activeTasks.filter((t) => t.status === 'complete').length;
@@ -101,7 +108,8 @@ export function useTurnovers() {
     return 'not_started';
   };
 
-  // Task actions
+  // ---- Task mutators (mobile-only consumers post-refactor) ---------------
+
   const updateTaskAction = useCallback(async (taskId: string, action: string) => {
     try {
       // Save form data if there's a form open
@@ -190,12 +198,14 @@ export function useTurnovers() {
       }
 
       // Transform task_assignments to assigned_users format expected by UI
-      const assignedUsers = (result.data?.task_assignments || []).map((ta: { user_id: string; users?: { name?: string; avatar?: string; role?: string } }) => ({
-        user_id: ta.user_id,
-        name: ta.users?.name || '',
-        avatar: ta.users?.avatar || '',
-        role: ta.users?.role || ''
-      }));
+      const assignedUsers = (result.data?.task_assignments || []).map(
+        (ta: { user_id: string; users?: { name?: string; avatar?: string; role?: string } }) => ({
+          user_id: ta.user_id,
+          name: ta.users?.name || '',
+          avatar: ta.users?.avatar || '',
+          role: ta.users?.role || ''
+        })
+      );
 
       // Update the task in selectedCard
       setSelectedCard((prev) => {
@@ -208,12 +218,6 @@ export function useTurnovers() {
         );
 
         return { ...prev, tasks: updatedTasks };
-      });
-
-      // Also update fullscreenTask if it's the same task
-      setFullscreenTask((prev) => {
-        if (!prev || prev.task_id !== taskId) return prev;
-        return { ...prev, assigned_users: assignedUsers };
       });
 
       // Update response array
@@ -237,129 +241,43 @@ export function useTurnovers() {
     }
   }, []);
 
-  const updateTaskSchedule = useCallback(async (taskId: string, scheduledDate: string | null, scheduledTime: string | null) => {
-    try {
-      const res = await fetch('/api/update-task-schedule', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId, scheduledDate, scheduledTime })
-      });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        throw new Error(result.error || 'Failed to update task schedule');
-      }
-
-      // Update the task in selectedCard
-      setSelectedCard((prev) => {
-        if (!prev || !prev.tasks) return prev;
-
-        const updatedTasks = prev.tasks.map((task) =>
-          task.task_id === taskId
-            ? { ...task, scheduled_date: scheduledDate, scheduled_time: scheduledTime }
-            : task
-        );
-
-        return { ...prev, tasks: updatedTasks };
-      });
-
-      // Also update fullscreenTask if it's the same task
-      setFullscreenTask((prev) => {
-        if (!prev || prev.task_id !== taskId) return prev;
-        return { ...prev, scheduled_date: scheduledDate, scheduled_time: scheduledTime };
-      });
-
-      // Update response array
-      setResponse((prevResponse) => {
-        if (!prevResponse) return prevResponse;
-
-        return prevResponse.map((item) => {
-          if (item.id === selectedCardIdRef.current && item.tasks) {
-            const updatedTasks = item.tasks.map((task) =>
-              task.task_id === taskId
-                ? { ...task, scheduled_date: scheduledDate, scheduled_time: scheduledTime }
-                : task
-            );
-            return { ...item, tasks: updatedTasks };
-          }
-          return item;
+  const updateTaskSchedule = useCallback(
+    async (taskId: string, scheduledDate: string | null, scheduledTime: string | null) => {
+      try {
+        const res = await fetch('/api/update-task-schedule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskId, scheduledDate, scheduledTime })
         });
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update task schedule');
-    }
-  }, []);
 
-  const fetchTaskTemplate = useCallback(async (templateId: string, propertyName?: string) => {
-    // Cache key includes property name so property-level overrides are handled correctly
-    const cacheKey = propertyName ? `${templateId}__${propertyName}` : templateId;
+        const result = await res.json();
 
-    if (taskTemplates[cacheKey]) {
-      return taskTemplates[cacheKey];
-    }
+        if (!res.ok) {
+          throw new Error(result.error || 'Failed to update task schedule');
+        }
 
-    setLoadingTaskTemplate(templateId);
-    try {
-      const url = propertyName
-        ? `/api/templates/${templateId}?property_name=${encodeURIComponent(propertyName)}`
-        : `/api/templates/${templateId}`;
-      const res = await fetch(url);
-      const result = await res.json();
+        // Update the task in selectedCard
+        setSelectedCard((prev) => {
+          if (!prev || !prev.tasks) return prev;
 
-      if (!res.ok) {
-        throw new Error(result.error || 'Failed to fetch template');
-      }
+          const updatedTasks = prev.tasks.map((task) =>
+            task.task_id === taskId
+              ? { ...task, scheduled_date: scheduledDate, scheduled_time: scheduledTime }
+              : task
+          );
 
-      setTaskTemplates(prev => ({ ...prev, [cacheKey]: result.template }));
-      return result.template;
-    } catch (err) {
-      console.error('Error fetching template:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch template');
-      return null;
-    } finally {
-      setLoadingTaskTemplate(null);
-    }
-  }, [taskTemplates]);
+          return { ...prev, tasks: updatedTasks };
+        });
 
-  const saveTaskForm = useCallback(async (taskId: string, formData: Record<string, unknown>) => {
-    try {
-      const res = await fetch('/api/save-task-form', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId, formData })
-      });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        throw new Error(result.error || 'Failed to save task form');
-      }
-
-      // Update the task in selectedCard
-      setSelectedCard((prev) => {
-        if (!prev || !prev.tasks) return prev;
-
-        const updatedTasks = prev.tasks.map((task) =>
-          task.task_id === taskId
-            ? { ...task, form_metadata: formData }
-            : task
-        );
-
-        return { ...prev, tasks: updatedTasks };
-      });
-
-      // Update response array
-      const currentSelectedCardId = selectedCardIdRef.current;
-      if (currentSelectedCardId) {
+        // Update response array
         setResponse((prevResponse) => {
           if (!prevResponse) return prevResponse;
 
           return prevResponse.map((item) => {
-            if (item.id === currentSelectedCardId && item.tasks) {
+            if (item.id === selectedCardIdRef.current && item.tasks) {
               const updatedTasks = item.tasks.map((task) =>
                 task.task_id === taskId
-                  ? { ...task, form_metadata: formData }
+                  ? { ...task, scheduled_date: scheduledDate, scheduled_time: scheduledTime }
                   : task
               );
               return { ...item, tasks: updatedTasks };
@@ -367,160 +285,111 @@ export function useTurnovers() {
             return item;
           });
         });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to update task schedule');
+      }
+    },
+    []
+  );
+
+  const fetchTaskTemplate = useCallback(
+    async (templateId: string, propertyName?: string) => {
+      // Cache key includes property name so property-level overrides are
+      // handled correctly.
+      const cacheKey = propertyName ? `${templateId}__${propertyName}` : templateId;
+
+      if (taskTemplates[cacheKey]) {
+        return taskTemplates[cacheKey];
       }
 
-      return result;
-    } catch (err) {
-      console.error('Error saving task form:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save task form');
-      throw err;
-    }
-  }, []);
+      setLoadingTaskTemplate(templateId);
+      try {
+        const url = propertyName
+          ? `/api/templates/${templateId}?property_name=${encodeURIComponent(propertyName)}`
+          : `/api/templates/${templateId}`;
+        const res = await fetch(url);
+        const result = await res.json();
 
-  const fetchAvailableTemplates = useCallback(async () => {
-    try {
-      const res = await fetch('/api/tasks');
-      const result = await res.json();
-      if (res.ok && result.data) {
-        setAvailableTemplates(result.data);
+        if (!res.ok) {
+          throw new Error(result.error || 'Failed to fetch template');
+        }
+
+        setTaskTemplates(prev => ({ ...prev, [cacheKey]: result.template }));
+        return result.template;
+      } catch (err) {
+        console.error('Error fetching template:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch template');
+        return null;
+      } finally {
+        setLoadingTaskTemplate(null);
       }
-    } catch (err) {
-      console.error('Error fetching templates:', err);
-    }
-  }, []);
+    },
+    [taskTemplates]
+  );
 
-  const addTaskToCard = useCallback(async (templateId: string) => {
-    if (!selectedCard) return;
-
-    setAddingTask(true);
-    try {
-      const res = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reservation_id: selectedCard.id,
-          template_id: templateId
-        })
-      });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        throw new Error(result.error || 'Failed to add task');
-      }
-
-      const newTask = result.data as Task;
-
-      // Update selectedCard with new task
-      setSelectedCard((prev) => {
-        if (!prev) return prev;
-
-        const updatedTasks = [...(prev.tasks || []), newTask];
-        const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
-
-        return {
-          ...prev,
-          tasks: updatedTasks,
-          total_tasks: updatedTasks.length,
-          completed_tasks: updatedTasks.filter((t) => t.status === 'complete').length,
-          tasks_in_progress: updatedTasks.filter((t) => t.status === 'in_progress').length,
-          turnover_status: newTurnoverStatus
-        };
-      });
-
-      // Update response array
-      setResponse((prevResponse) => {
-        if (!prevResponse) return prevResponse;
-
-        return prevResponse.map((item) => {
-          if (item.id === selectedCard.id) {
-            const updatedTasks = [...(item.tasks || []), newTask];
-            const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
-
-            return {
-              ...item,
-              tasks: updatedTasks,
-              total_tasks: updatedTasks.length,
-              completed_tasks: updatedTasks.filter((t) => t.status === 'complete').length,
-              tasks_in_progress: updatedTasks.filter((t) => t.status === 'in_progress').length,
-              turnover_status: newTurnoverStatus
-            };
-          }
-          return item;
+  const saveTaskForm = useCallback(
+    async (taskId: string, formData: Record<string, unknown>) => {
+      try {
+        const res = await fetch('/api/save-task-form', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskId, formData })
         });
-      });
 
-      setShowAddTaskDialog(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add task');
-    } finally {
-      setAddingTask(false);
-    }
-  }, [selectedCard]);
+        const result = await res.json();
 
-  const deleteTaskFromCard = useCallback(async (taskId: string) => {
-    if (!selectedCard) return;
+        if (!res.ok) {
+          throw new Error(result.error || 'Failed to save task form');
+        }
 
-    try {
-      const res = await fetch(`/api/tasks/${taskId}`, {
-        method: 'DELETE'
-      });
+        // Update the task in selectedCard
+        setSelectedCard((prev) => {
+          if (!prev || !prev.tasks) return prev;
 
-      const result = await res.json();
+          const updatedTasks = prev.tasks.map((task) =>
+            task.task_id === taskId
+              ? { ...task, form_metadata: formData }
+              : task
+          );
 
-      if (!res.ok) {
-        throw new Error(result.error || 'Failed to delete task');
-      }
-
-      // Update selectedCard
-      setSelectedCard((prev) => {
-        if (!prev) return prev;
-
-        const updatedTasks = (prev.tasks || []).filter((t) => t.task_id !== taskId);
-        const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
-
-        return {
-          ...prev,
-          tasks: updatedTasks,
-          total_tasks: updatedTasks.length,
-          completed_tasks: updatedTasks.filter((t) => t.status === 'complete').length,
-          tasks_in_progress: updatedTasks.filter((t) => t.status === 'in_progress').length,
-          turnover_status: newTurnoverStatus
-        };
-      });
-
-      // Update response array
-      setResponse((prevResponse) => {
-        if (!prevResponse) return prevResponse;
-
-        return prevResponse.map((item) => {
-          if (item.id === selectedCard.id) {
-            const updatedTasks = (item.tasks || []).filter((t) => t.task_id !== taskId);
-            const newTurnoverStatus = calculateTurnoverStatus(updatedTasks);
-
-            return {
-              ...item,
-              tasks: updatedTasks,
-              total_tasks: updatedTasks.length,
-              completed_tasks: updatedTasks.filter((t) => t.status === 'complete').length,
-              tasks_in_progress: updatedTasks.filter((t) => t.status === 'in_progress').length,
-              turnover_status: newTurnoverStatus
-            };
-          }
-          return item;
+          return { ...prev, tasks: updatedTasks };
         });
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete task');
-    }
-  }, [selectedCard]);
 
-  // Close selected card
+        // Update response array
+        const currentSelectedCardId = selectedCardIdRef.current;
+        if (currentSelectedCardId) {
+          setResponse((prevResponse) => {
+            if (!prevResponse) return prevResponse;
+
+            return prevResponse.map((item) => {
+              if (item.id === currentSelectedCardId && item.tasks) {
+                const updatedTasks = item.tasks.map((task) =>
+                  task.task_id === taskId
+                    ? { ...task, form_metadata: formData }
+                    : task
+                );
+                return { ...item, tasks: updatedTasks };
+              }
+              return item;
+            });
+          });
+        }
+
+        return result;
+      } catch (err) {
+        console.error('Error saving task form:', err);
+        setError(err instanceof Error ? err.message : 'Failed to save task form');
+        throw err;
+      }
+    },
+    []
+  );
+
+  // Close selected card. The Turnovers window's selectedTask state is local,
+  // so we just clear the card selection here; the window's effect on
+  // selectedCard?.id handles overlay teardown.
   const closeSelectedCard = useCallback(() => {
     setSelectedCard(null);
-    setShowAddTaskDialog(false);
-    setFullscreenTask(null);
-    setRightPanelView('tasks');
   }, []);
 
   return {
@@ -546,28 +415,17 @@ export function useTurnovers() {
     selectedCard,
     setSelectedCard,
     closeSelectedCard,
-    fullscreenTask,
-    setFullscreenTask,
-    rightPanelView,
-    setRightPanelView,
 
-    // Task state
+    // Task template cache (mobile-only)
     taskTemplates,
     loadingTaskTemplate,
-    availableTemplates,
-    showAddTaskDialog,
-    setShowAddTaskDialog,
-    addingTask,
 
-    // Task actions
+    // Task actions (mobile-only)
     updateTaskAction,
     updateTaskAssignment,
     updateTaskSchedule,
     fetchTaskTemplate,
     saveTaskForm,
-    fetchAvailableTemplates,
-    addTaskToCard,
-    deleteTaskFromCard,
 
     // Refs
     rightPanelRef,
