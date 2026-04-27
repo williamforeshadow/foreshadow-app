@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { applyCleaningFilters, type CleaningFilters } from '@/lib/cleaningFilters';
-import FlagCheckeredIcon from '@/components/ui/FlagCheckeredIcon';
+import { LogIn, LogOut } from 'lucide-react';
 import type { Turnover } from '@/lib/types';
 
 interface TurnoverCardsProps {
@@ -163,42 +163,35 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
     });
   };
 
-  // Get glass card styling based on status, position, and whether guest has checked in
-  // Color is driven purely by turnover status (shimmer handles occupancy signal)
-  const getCardStyles = (status: string, isFirstInRow: boolean, checkInDate: string | undefined | null, isPast?: boolean, hasLiquidBorder?: boolean) => {
+  // Card styling — three states only:
+  //   - Past: muted grey, slightly faded
+  //   - Upcoming (not first-in-row OR check-in hasn't happened yet): grey
+  //     with dashed ("checkered") border indicating a future stay
+  //   - Active: shared purple — same color tokens as Timeline reservation
+  //     bars + the day-cell drawer rows so the whole app reads as one
+  //     system. Status (not_started / in_progress / complete) no longer
+  //     affects color — progress is communicated by the progress bar +
+  //     "N/N tasks complete" line.
+  const getCardStyles = (
+    isFirstInRow: boolean,
+    checkInDate: string | undefined | null,
+    isPast?: boolean
+  ) => {
     const glassBase = 'glass-card glass-sheen';
 
-    // Past turnovers — muted frosted glass
     if (isPast) {
-      return `${glassBase} bg-white/50 dark:bg-white/[0.07] border border-neutral-300/40 dark:border-white/10 opacity-75`;
+      return `${glassBase} bg-neutral-100 dark:bg-white/[0.07] border border-neutral-200 dark:border-white/10 opacity-75`;
     }
 
     const now = new Date();
     const checkIn = checkInDate ? new Date(checkInDate) : null;
     const hasCheckedIn = checkIn && now >= checkIn;
 
-    // Inactive (upcoming) — neutral glass, dashed border
     if (!isFirstInRow || !hasCheckedIn) {
-      return `${glassBase} bg-white/55 dark:bg-white/[0.08] border border-dashed border-neutral-400/70 dark:border-white/30`;
+      return `${glassBase} bg-neutral-100 dark:bg-white/[0.08] border border-dashed border-neutral-400 dark:border-white/30`;
     }
 
-    // Active cards — color by turnover status only
-    // When liquid border is present, card border is transparent (the shimmer IS the border)
-    switch (status) {
-      case 'not_started':
-        // Rose gold — warm peachy-gold
-        return `${glassBase} bg-amber-50/55 dark:bg-amber-400/[0.12] border ${hasLiquidBorder ? 'border-transparent' : 'border-amber-200/40 dark:border-amber-400/20'}`;
-      case 'in_progress':
-        // Midnight blue — deep, actively being worked on
-        return `${glassBase} bg-indigo-50/55 dark:bg-indigo-500/[0.12] border ${hasLiquidBorder ? 'border-transparent' : 'border-indigo-300/40 dark:border-indigo-400/20'}`;
-      case 'complete':
-        // Emerald green — done, completed
-        return `${glassBase} bg-emerald-50/55 dark:bg-emerald-500/[0.12] border ${hasLiquidBorder ? 'border-transparent' : 'border-emerald-200/40 dark:border-emerald-400/20'}`;
-      case 'no_tasks':
-        return `${glassBase} bg-white/55 dark:bg-white/[0.08] border border-neutral-300/35 dark:border-white/12`;
-      default:
-        return `${glassBase} bg-white/60 dark:bg-white/[0.09] border border-neutral-300/35 dark:border-white/12`;
-    }
+    return `${glassBase} bg-[rgba(167,139,250,0.16)] dark:bg-[rgba(167,139,250,0.18)] border border-[rgba(167,139,250,0.38)] dark:border-[rgba(167,139,250,0.45)]`;
   };
 
   // Card width - slightly narrower in compact mode
@@ -208,16 +201,12 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
   const renderCard = (item: Turnover, isFirstInRow: boolean, isPast: boolean) => {
     const checkIn = item.check_in ? new Date(item.check_in) : null;
     const isInPlay = isFirstInRow && checkIn && now >= checkIn && !isPast;
-    const isOut = isInPlay && item.occupancy_status !== 'occupied';
-    const status = item.turnover_status || 'no_tasks';
-    // Cards that are out and not yet complete need attention → liquid border
-    const needsAttention = isOut && (status === 'not_started' || status === 'in_progress');
 
-    const card = (
+    return (
       <Card
-        key={needsAttention ? undefined : item.id}
+        key={item.id}
         onClick={() => onCardClick(item)}
-        className={`group cursor-pointer hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ease-out !flex !flex-col !p-4 gap-4 ${needsAttention ? 'w-full' : `flex-shrink-0 ${cardWidth}`} ${getCardStyles(status, isFirstInRow, item.check_in, isPast, !!needsAttention)} relative overflow-hidden rounded-2xl`}
+        className={`group cursor-pointer hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ease-out !flex !flex-col !p-4 gap-4 flex-shrink-0 ${cardWidth} ${getCardStyles(isFirstInRow, item.check_in, isPast)} relative overflow-hidden rounded-2xl`}
       >
         {/* Dismiss button for past cards */}
         {isPast && (
@@ -290,37 +279,19 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
           );
         })()}
 
-        {/* 5) Check out & next check in */}
+        {/* 5) Check-in (this reservation) → Check-out (this reservation) */}
         <div className="flex w-full justify-between text-xs text-muted-foreground/60">
-          <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-white/20 dark:border-white/15 bg-white/25 dark:bg-white/[0.08] backdrop-blur-sm px-2 py-1 ${!item.check_out ? 'opacity-40' : ''}`}>
-            <svg className="w-3.5 h-3.5 text-blue-400 dark:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            <span>{formatDate(item.check_out) || 'Out'}</span>
+          <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-white/20 dark:border-white/15 bg-white/25 dark:bg-white/[0.08] backdrop-blur-sm px-2 py-1 ${!item.check_in ? 'opacity-40' : ''}`}>
+            <LogIn className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400" />
+            <span>{formatDate(item.check_in) || 'In'}</span>
           </div>
-          <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-white/20 dark:border-white/15 bg-white/25 dark:bg-white/[0.08] backdrop-blur-sm px-2 py-1 ${!item.next_check_in ? 'opacity-40' : ''}`}>
-            <FlagCheckeredIcon className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400" />
-            <span>{formatDate(item.next_check_in) || 'In'}</span>
+          <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-white/20 dark:border-white/15 bg-white/25 dark:bg-white/[0.08] backdrop-blur-sm px-2 py-1 ${!item.check_out ? 'opacity-40' : ''}`}>
+            <LogOut className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400" />
+            <span>{formatDate(item.check_out) || 'Out'}</span>
           </div>
         </div>
       </Card>
     );
-
-    // Active + out + incomplete cards get the animated liquid border wrapper
-    if (needsAttention) {
-      const liquidHue = status === 'not_started' ? 40 : 270; // warm amber or midnight blue
-      return (
-        <div
-          key={item.id}
-          className={`liquid-border flex-shrink-0 ${cardWidth}`}
-          style={{ '--liquid-hue': liquidHue } as React.CSSProperties}
-        >
-          {card}
-        </div>
-      );
-    }
-
-    return card;
   };
 
   return (
