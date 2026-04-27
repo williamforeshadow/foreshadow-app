@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { format } from 'date-fns';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, ChevronRight } from 'lucide-react';
 import { type TaskRowItem } from './TaskRow';
 import { MobileTaskRow } from './MobileTaskRow';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
@@ -24,6 +24,23 @@ import { getDepartmentIcon } from '@/lib/departmentIcons';
 // This component renders content only; the parent owns the outer
 // positioning (absolute right-1/3 on desktop, fixed inset-0 on mobile) —
 // same contract as ReservationDetailPanel / MobileProjectDetail.
+
+export interface DayDetailReservation {
+  id: string;
+  guest_name?: string | null;
+  /**
+   * Whether the panel's date is this reservation's check-in day. Drives a
+   * left-side diagonal cut on the row (mirroring the "starting tip" of a
+   * reservation bar in the timeline).
+   */
+  isCheckIn?: boolean;
+  /**
+   * Whether the panel's date is this reservation's check-out day. Drives a
+   * right-side diagonal cut on the row (mirroring the "ending tip" of a
+   * reservation bar in the timeline).
+   */
+  isCheckOut?: boolean;
+}
 
 interface DayDetailPanelProps {
   date: Date;
@@ -56,6 +73,22 @@ interface DayDetailPanelProps {
    * day so consumers can pre-fill the draft.
    */
   onNewTask?: (dateStr: string) => void;
+  /**
+   * Reservations whose stay window covers this day (check_in <= date <=
+   * check_out). When provided + non-empty, an "Active reservation(s)"
+   * section renders above "Tasks scheduled" with one clickable row per
+   * reservation. On same-day flips this naturally yields two entries
+   * (outgoing + incoming). Surfaces that don't want this section can
+   * simply omit the prop.
+   */
+  activeReservations?: DayDetailReservation[];
+  /**
+   * Click handler for a row in the Active reservation(s) section. Receives
+   * the reservation_id; surfaces typically forward this to
+   * `useReservationViewer().open(id)` to open the global reservation
+   * detail overlay.
+   */
+  onReservationClick?: (reservationId: string) => void;
 }
 
 function OccupancyPill({ occupancy }: { occupancy: 'occupied' | 'vacant' }) {
@@ -81,6 +114,8 @@ export function DayDetailPanel({
   onTaskClick,
   showPropertyOnRows = false,
   onNewTask,
+  activeReservations,
+  onReservationClick,
 }: DayDetailPanelProps) {
   const dateStr = format(date, 'yyyy-MM-dd');
 
@@ -142,6 +177,94 @@ export function DayDetailPanel({
       {/* Body */}
       <div className="flex-1 overflow-auto">
         <div className="px-5 sm:px-6 py-5 flex flex-col gap-6">
+          {/* Active reservation(s) — renders one timeline-style bar per
+              reservation covering this day. Each row mirrors the bar
+              geometry on the calendar/timeline grids: a left diagonal cut
+              when this day is the reservation's check-in, a right diagonal
+              cut when it's the check-out, and a flat rounded pill when
+              it's mid-stay. On a same-day flip the section naturally
+              renders two rows with opposite-side cuts (outgoing first,
+              incoming second), which traces the handover between the two
+              stays. Geometry uses the same diagonalPx/clipPath formula as
+              TimelineWindow's reservation bar (~line 1592) so the two
+              surfaces read as one component. */}
+          {activeReservations && activeReservations.length > 0 && (
+            <section className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] italic font-medium tracking-[0.08em] uppercase text-neutral-400 dark:text-[#66645f]">
+                  {activeReservations.length === 1
+                    ? 'Active reservation'
+                    : 'Active reservations'}
+                </div>
+                {activeReservations.length > 1 && (
+                  <div className="text-[11px] font-medium text-neutral-500 dark:text-[#a09e9a] tabular-nums">
+                    {activeReservations.length}
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {activeReservations.map((res) => {
+                  const clickable = !!onReservationClick;
+                  const cutLeft = !!res.isCheckIn;
+                  const cutRight = !!res.isCheckOut;
+                  const diagonalPx = 12;
+                  const leftCut = cutLeft ? `${diagonalPx}px` : '0px';
+                  const rightCut = cutRight ? `${diagonalPx}px` : '0px';
+                  const clipPath =
+                    cutLeft || cutRight
+                      ? `polygon(${leftCut} 0%, 100% 0%, calc(100% - ${rightCut}) 100%, 0% 100%)`
+                      : undefined;
+                  // Mirror the timeline bar's borderRadius rule: zero out
+                  // any corner that's been clipped, full radius elsewhere.
+                  const borderRadius =
+                    cutLeft && cutRight
+                      ? '0'
+                      : cutLeft
+                      ? '0 8px 8px 0'
+                      : cutRight
+                      ? '8px 0 0 8px'
+                      : '8px';
+                  // Extra horizontal padding on cut sides so the title +
+                  // chevron clear the diagonal edges (matches the timeline
+                  // bar's diagonalPx + 6 inner padding pattern).
+                  const paddingLeft = cutLeft ? diagonalPx + 8 : 12;
+                  const paddingRight = cutRight ? diagonalPx + 8 : 12;
+                  return (
+                    <button
+                      key={res.id}
+                      type="button"
+                      onClick={
+                        clickable ? () => onReservationClick!(res.id) : undefined
+                      }
+                      disabled={!clickable}
+                      style={{
+                        clipPath,
+                        borderRadius,
+                        paddingLeft,
+                        paddingRight,
+                      }}
+                      className={`w-full flex items-center justify-between gap-3 py-2.5 text-left border-t bg-[rgba(167,139,250,0.16)] dark:bg-[rgba(167,139,250,0.18)] border-[rgba(167,139,250,0.38)] dark:border-[rgba(167,139,250,0.45)] transition-colors ${
+                        clickable
+                          ? 'hover:bg-[rgba(167,139,250,0.24)] dark:hover:bg-[rgba(167,139,250,0.28)] cursor-pointer'
+                          : 'cursor-default'
+                      }`}
+                    >
+                      <span className="text-[13px] font-medium text-[#1a1a18] dark:text-[#f0efed] truncate">
+                        {res.guest_name || 'No guest'}
+                      </span>
+                      {clickable && (
+                        <ChevronRight
+                          size={14}
+                          className="text-[var(--accent-3)] dark:text-[var(--accent-1)] shrink-0"
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
           {/* Tasks */}
           <section className="flex flex-col gap-2">
             <div className="flex items-center justify-between">

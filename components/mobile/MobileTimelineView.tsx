@@ -3,11 +3,12 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTimeline } from '@/lib/useTimeline';
 import { getActiveTurnoverForProperty } from '@/lib/turnoverUtils';
+import { useReservationViewer } from '@/lib/reservationViewerContext';
 import { Button } from '@/components/ui/button';
 import { ClipboardCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Task } from '@/lib/types';
-import { DayDetailPanel } from '@/components/tasks/DayDetailPanel';
+import { DayDetailPanel, type DayDetailReservation } from '@/components/tasks/DayDetailPanel';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
 
 const marbleBackground: Record<string, string> = {
@@ -71,6 +72,11 @@ export default function MobileTimelineView({
     recurringTasks,
     fetchReservations,
   } = useTimeline();
+
+  // Global reservation viewer — used by the day-cell drawer's
+  // "Active reservation(s)" rows so tapping a guest opens the same
+  // ReservationDetailOverlay that the desktop timeline + key icon use.
+  const { open: openReservationViewer } = useReservationViewer();
 
   const [expandedCell, setExpandedCell] = useState<{ property: string; dateStr: string } | null>(null);
 
@@ -379,6 +385,40 @@ export default function MobileTimelineView({
         const date = new Date(expandedCell.dateStr + 'T00:00:00');
         const cellTasks = getCellTasks(expandedCell.property, date);
 
+        // Active reservation(s) covering this cell. Range is inclusive on
+        // both ends (check_in <= dateStr <= check_out) so a same-day flip
+        // surfaces both the outgoing reservation (whose check_out === today)
+        // and the incoming one (whose check_in === today). Sorted by
+        // check_in asc → outgoing first, then incoming.
+        // isCheckIn / isCheckOut flags drive the diagonal-cut row geometry
+        // in DayDetailPanel: left cut for check-in day, right cut for
+        // check-out day, flat for mid-stay.
+        const activeReservations: DayDetailReservation[] = (
+          getReservationsForProperty(expandedCell.property) as Array<{
+            id: string;
+            guest_name?: string | null;
+            check_in?: string | null;
+            check_out?: string | null;
+          }>
+        )
+          .filter((r) => {
+            const ci = r.check_in?.slice(0, 10);
+            const co = r.check_out?.slice(0, 10);
+            if (!ci || !co) return false;
+            return ci <= expandedCell.dateStr && expandedCell.dateStr <= co;
+          })
+          .sort((a, b) => {
+            const ai = a.check_in?.slice(0, 10) || '';
+            const bi = b.check_in?.slice(0, 10) || '';
+            return ai.localeCompare(bi);
+          })
+          .map((r) => ({
+            id: r.id,
+            guest_name: r.guest_name ?? null,
+            isCheckIn: r.check_in?.slice(0, 10) === expandedCell.dateStr,
+            isCheckOut: r.check_out?.slice(0, 10) === expandedCell.dateStr,
+          }));
+
         const dayTasks: TaskRowItem[] = cellTasks.map((t) => ({
           key: t.task_id,
           title: t.title || t.template_name || t.type || 'Task',
@@ -421,6 +461,11 @@ export default function MobileTimelineView({
                 onClose={() => setExpandedCell(null)}
                 tasks={dayTasks}
                 onTaskClick={handleTaskClickFromDrawer}
+                activeReservations={activeReservations}
+                onReservationClick={(reservationId) => {
+                  setExpandedCell(null);
+                  openReservationViewer(reservationId);
+                }}
                 onNewTask={
                   onNewTask
                     ? (dateStr) => {

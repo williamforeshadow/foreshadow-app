@@ -95,8 +95,6 @@ interface ProjectDetailPanelProps {
   // Template picker (optional — for tasks without a template)
   availableTemplates?: TaskTemplate[];
   onTemplateChange?: (templateId: string | null) => void;
-  // Turnover context (optional)
-  onShowTurnover?: () => void;
   // Creation flow — when true, property/template are editable with a warning;
   // when false (existing task), they are locked.
   isNewTask?: boolean;
@@ -146,7 +144,6 @@ export function ProjectDetailPanel({
   onValidationChange,
   availableTemplates = [],
   onTemplateChange,
-  onShowTurnover,
   isNewTask = false,
   onConfirmCreate,
   creatingTask = false,
@@ -1315,20 +1312,6 @@ export function ProjectDetailPanel({
         </div>
       </div>}
 
-      {/* ── Associated Turnover footer (when linked to a reservation) ── */}
-      {onShowTurnover && !showChecklist && (
-        <div className="flex-shrink-0 border-t border-white/10 px-6 py-3">
-          <button
-            onClick={onShowTurnover}
-            className="w-full flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-1.5"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-            </svg>
-            Associated Turnover
-          </button>
-        </div>
-      )}
     </div>
   );
 }

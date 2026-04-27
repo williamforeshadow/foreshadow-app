@@ -26,7 +26,7 @@ import type { Project, Task, User, ProjectFormFields, Turnover, TaskTemplate, Pr
 import type { Template } from '@/components/DynamicCleaningForm';
 import { cn } from '@/lib/utils';
 import { UserAvatar } from '@/components/ui/user-avatar';
-import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
+import { useExclusiveDetailPanelHost, useReservationViewer } from '@/lib/reservationViewerContext';
 
 const marbleBackground: Record<string, string> = {
   not_started: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.35) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.18) 10%, transparent 40%, rgba(255,255,255,0.12) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #A78BFA`,
@@ -141,6 +141,12 @@ export default function TimelineWindow({
     setSelectedDay(null);
     setSelectedReservation(null);
   });
+
+  // Reservation viewer (global) — clicking a purple block on the timeline
+  // opens the same ReservationDetailOverlay that the key icon and the
+  // Properties → Schedule tab use, so the panel slots into the standard
+  // detail-panel geometry and obeys strict-swap with any other panel.
+  const { open: openReservationViewer } = useReservationViewer();
 
   // ============================================================================
   // LOCAL instances of sub-hooks for projects (independent from other windows)
@@ -791,33 +797,6 @@ export default function TimelineWindow({
     setExpandedProjectInTurnover(null);
     setTurnoverProjectFields(null);
   }, []);
-
-  // ============================================================================
-  // Show turnover handler - called when clicking "Associated Turnover" button
-  // ============================================================================
-  const handleShowTurnover = useCallback(() => {
-    if (!floatingData || floatingData.type !== 'task') return;
-    
-    const task = floatingData.item as Task;
-    
-    // Find the turnover that contains this task
-    const associatedTurnover = reservations.find((r: Turnover) => 
-      r.tasks?.some((t: Task) => t.task_id === task.task_id)
-    );
-    
-    if (associatedTurnover) {
-      setFloatingData({
-        type: 'turnover',
-        item: associatedTurnover,
-        propertyName: floatingData.propertyName,
-      });
-      setTurnoverRightPanelView('tasks');
-      setExpandedProjectInTurnover(null);
-      setTurnoverProjectFields(null);
-      setLocalTask(null);
-      setProjectFields(null);
-    }
-  }, [floatingData, reservations]);
 
   // ============================================================================
   // Turnover projects panel handlers
@@ -1593,7 +1572,7 @@ export default function TimelineWindow({
                             return idx >= pos.start && idx < pos.start + pos.span;
                           });
                           if (res) {
-                            setSelectedReservation(selectedReservation?.id === res.id ? null : res);
+                            openReservationViewer(res.id);
                           }
                         }}
                       >
@@ -1889,12 +1868,6 @@ export default function TimelineWindow({
                       console.error('Error changing template:', err);
                     }
                   }
-              }
-              // Turnover context
-              onShowTurnover={
-                (localTask || floatingData.item as any)?.is_recurring
-                  ? undefined
-                  : handleShowTurnover
               }
               // Comments
               comments={taskCommentsHook.projectComments}

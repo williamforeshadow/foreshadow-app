@@ -48,7 +48,6 @@ interface FloatingWindowProps {
   onSaveForm?: (formData: Record<string, unknown>) => Promise<void>;
   loadingTemplate?: boolean;
   onValidationChange?: (allRequiredFilled: boolean) => void;
-  onShowTurnover?: () => void;
   // Optional extras
   allProperties?: Array<{ id: string | null; name: string }>;
   bins?: ProjectBin[];
@@ -94,7 +93,6 @@ export function FloatingWindow({
   onSaveForm,
   loadingTemplate,
   onValidationChange,
-  onShowTurnover,
   allProperties,
   bins,
   onBinChange,
@@ -273,7 +271,6 @@ export function FloatingWindow({
             loadingTemplate={loadingTemplate}
             currentUser={currentUser}
             onValidationChange={onValidationChange}
-            onShowTurnover={onShowTurnover}
           />
         ) : (
           <div className="flex items-center justify-center h-full">
