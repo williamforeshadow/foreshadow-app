@@ -1,7 +1,7 @@
 'use client';
 
 import { memo } from 'react';
-import { Key } from 'lucide-react';
+import { KeyAffordance } from '@/components/tasks/KeyAffordance';
 import { Badge } from '@/components/ui/badge';
 import type { TaskRow } from '@/lib/useTasks';
 import type { TaskStatus } from '@/lib/types';
@@ -62,15 +62,12 @@ export const TaskRowItem = memo(function TaskRowItem({
           <div className="font-medium text-sm text-neutral-900 dark:text-white truncate min-w-0">
             {task.template_name}
           </div>
-          {task.reservation_id && (
-            <span
-              className="inline-flex shrink-0"
-              title="Scheduled relative to reservation"
-              aria-label="Scheduled relative to reservation"
-            >
-              <Key className="w-[12px] h-[12px] text-neutral-400 dark:text-neutral-500" />
-            </span>
-          )}
+          <KeyAffordance
+            reservationId={task.reservation_id}
+            size={12}
+            iconClassName="text-neutral-400 dark:text-neutral-500"
+          />
+
         </div>
         <div className="text-xs text-neutral-500 dark:text-neutral-400 truncate">
           {task.property_name}

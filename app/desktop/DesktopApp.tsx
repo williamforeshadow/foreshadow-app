@@ -11,6 +11,8 @@ import ProjectsWindow from '@/components/windows/ProjectsWindow';
 import TasksWindow from '@/components/windows/TasksWindow';
 import MessagesWindow from '@/components/windows/MessagesWindow';
 import { AiChat } from '@/components/AiChat';
+import { ReservationDetailOverlay } from '@/components/reservations/ReservationDetailOverlay';
+import { ContextTaskDetailOverlay } from '@/components/reservations/ContextTaskDetailOverlay';
 
 type ViewType = 'turnovers' | 'timeline' | 'projects' | 'tasks' | 'messages';
 
@@ -96,6 +98,15 @@ export default function DesktopApp() {
 
           {/* AI Chat */}
           <AiChat />
+
+          {/* Reservation + context task overlays
+              ------------------------------------
+              Both anchor to the `flex-1 relative` content area above so they
+              line up with per-tab task overlays (same `absolute right-0 w-1/3`
+              slot). Strict mutual exclusion is enforced by
+              ReservationViewerProvider — only one of the two ever renders. */}
+          <ReservationDetailOverlay />
+          <ContextTaskDetailOverlay />
         </div>
       </div>
     </div>

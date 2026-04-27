@@ -9,6 +9,7 @@ import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { MobileTaskRow } from '@/components/tasks/MobileTaskRow';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
+import { ReservationContextOverride } from '@/lib/reservationViewerContext';
 
 // Lightweight detail panel for a reservation. Mirrors the absolute-overlay
 // shape of PropertyTasksView's task panel so it can sit on the same anchor
@@ -117,6 +118,7 @@ export function ReservationDetailPanel({
   }, [allTasks, checkIn, nextCheckIn, defaultCheckInTime]);
 
   return (
+    <ReservationContextOverride id={reservation.id}>
     <div className="h-full w-full flex flex-col bg-white dark:bg-[#0b0b0c]">
       {/* Header */}
       <div className="flex items-start justify-between gap-3 px-6 pt-6 pb-4 border-b border-[rgba(30,25,20,0.06)] dark:border-white/5">
@@ -260,5 +262,6 @@ export function ReservationDetailPanel({
         </div>
       </div>
     </div>
+    </ReservationContextOverride>
   );
 }

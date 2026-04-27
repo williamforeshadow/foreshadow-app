@@ -26,6 +26,7 @@ import {
 } from '@/components/windows/projects';
 import MobileProjectDetail from '@/components/mobile/MobileProjectDetail';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
 
 // Self-contained detail overlay for a property-scoped task. Wraps the shared
 // ProjectDetailPanel with all the plumbing each consumer previously had to
@@ -592,7 +593,7 @@ export function PropertyTaskDetailOverlay({
 
   return (
     <>
-      <div className="absolute inset-y-0 right-0 w-1/3 z-20 border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 bg-white dark:bg-[#0b0b0c] overflow-hidden flex flex-col">
+      <div className={DESKTOP_DETAIL_PANEL_FLEX}>
         <ProjectDetailPanel
           project={taskAsProject}
           editingFields={editingFields}

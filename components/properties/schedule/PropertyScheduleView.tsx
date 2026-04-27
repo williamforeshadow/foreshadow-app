@@ -14,6 +14,8 @@ import {
 import { DayDetailPanel } from '@/components/tasks/DayDetailPanel';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
+import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 
 // Per-property Schedule tab. Month calendar with reservation bars + task
 // pills, styled in the shared purple accent system to stay cohesive with
@@ -49,6 +51,14 @@ export default function PropertyScheduleView() {
     null
   );
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+
+  // Strict single-panel rule: when any global detail panel (reservation
+  // overlay or context task overlay) opens, close every local panel here.
+  useExclusiveDetailPanelHost(() => {
+    setSelectedReservation(null);
+    setSelectedTask(null);
+    setSelectedDay(null);
+  });
 
   const year = monthDate.getFullYear();
   const month = monthDate.getMonth() + 1;
@@ -331,7 +341,7 @@ export default function PropertyScheduleView() {
             </div>
           </div>
         ) : (
-          <div className="absolute inset-y-0 right-0 w-1/3 z-20 border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 bg-white dark:bg-[#0b0b0c] overflow-hidden flex flex-col">
+          <div className={DESKTOP_DETAIL_PANEL_FLEX}>
             <DayDetailPanel
               date={selectedDay}
               title={property.name}
@@ -357,7 +367,7 @@ export default function PropertyScheduleView() {
           className={
             isMobile
               ? 'fixed inset-0 z-[60] bg-white dark:bg-[#0b0b0c] safe-area-top safe-area-bottom flex flex-col'
-              : 'absolute inset-y-0 right-0 w-1/3 z-20 border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 bg-white dark:bg-[#0b0b0c] overflow-hidden flex flex-col'
+              : DESKTOP_DETAIL_PANEL_FLEX
           }
         >
           <ReservationDetailPanel

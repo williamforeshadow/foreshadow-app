@@ -14,6 +14,7 @@ import type { ProjectViewMode } from '@/lib/types';
 import { ColumnPicker } from '@/components/windows/projects/ColumnPicker';
 import type { Project, User, PropertyOption, TaskTemplate } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
+import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 
 // ============================================================================
 // Types
@@ -116,6 +117,12 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
 
   const [screen, setScreen] = useState<Screen>({ type: 'bins' });
   const [kanbanDragging, setKanbanDragging] = useState(false);
+
+  // Strict single-panel rule: when any global detail panel (reservation
+  // overlay or context task overlay) opens, drop the local detail screen.
+  useExclusiveDetailPanelHost(() => {
+    setScreen((prev) => (prev.type === 'detail' ? { type: 'bins' } : prev));
+  });
 
   // Task data (fetched via tasks-for-bin API, same as desktop ProjectsWindow)
   const [tasks, setTasks] = useState<Project[]>([]);

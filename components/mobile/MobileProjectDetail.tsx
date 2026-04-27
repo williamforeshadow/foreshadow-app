@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Key } from 'lucide-react';
+import { KeyAffordance } from '@/components/tasks/KeyAffordance';
 import { Button } from '@/components/ui/button';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { useAuth } from '@/lib/authContext';
@@ -828,15 +828,12 @@ export default function MobileProjectDetail({
               <div className="rounded-xl bg-[rgba(30,25,20,0.03)] dark:bg-white/[0.04] border border-[rgba(30,25,20,0.06)] dark:border-white/10 px-5 py-4">
                 <div className="flex items-center gap-1.5 mb-3">
                   <p className="text-[11px] font-medium text-muted-foreground tracking-wider">Schedule</p>
-                  {project.reservation_id && (
-                    <span
-                      className="inline-flex"
-                      title="Default schedule relative to reservation"
-                      aria-label="Default schedule relative to reservation"
-                    >
-                      <Key className="w-[11px] h-[11px] text-muted-foreground" />
-                    </span>
-                  )}
+                  <KeyAffordance
+                    reservationId={project.reservation_id}
+                    size={11}
+                    tooltip="Default schedule relative to reservation"
+                    iconClassName="text-muted-foreground"
+                  />
                 </div>
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center gap-1.5">

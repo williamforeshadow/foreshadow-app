@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Key } from 'lucide-react';
+import { KeyAffordance } from './KeyAffordance';
 
 // Shared row + visual constants used across task-list surfaces (My Assignments,
 // Property Tasks, and anywhere else we render the "status marble" list design).
@@ -283,9 +283,17 @@ export function TaskRow({
   const commentCount = item.comment_count ?? 0;
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className={`grid grid-cols-[56px_minmax(0,1fr)_96px_120px_128px_56px] gap-4 py-3.5 text-left transition-colors items-center ${
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
+      className={`grid grid-cols-[56px_minmax(0,1fr)_96px_120px_128px_56px] gap-4 py-3.5 text-left transition-colors items-center cursor-pointer ${
         selected
           ? 'bg-[rgba(30,25,20,0.04)] dark:bg-[rgba(255,255,255,0.04)]'
           : 'hover:bg-[rgba(30,25,20,0.02)] dark:hover:bg-[rgba(255,255,255,0.02)]'
@@ -335,15 +343,8 @@ export function TaskRow({
           <div className="text-[14px] font-medium text-neutral-800 dark:text-[#f0efed] leading-snug tracking-tight truncate min-w-0">
             {item.title}
           </div>
-          {item.reservation_id && (
-            <span
-              className="inline-flex shrink-0"
-              title="Scheduled relative to reservation"
-              aria-label="Scheduled relative to reservation"
-            >
-              <Key className="w-[12px] h-[12px] text-neutral-400 dark:text-[#66645f]" />
-            </span>
-          )}
+          <KeyAffordance reservationId={item.reservation_id} size={12} />
+
         </div>
         {!hideProperty && item.property_name && (
           <div className="text-[12px] text-neutral-500 dark:text-[#66645f] leading-snug truncate">
@@ -409,6 +410,6 @@ export function TaskRow({
           {commentCount}
         </span>
       </div>
-    </button>
+    </div>
   );
 }

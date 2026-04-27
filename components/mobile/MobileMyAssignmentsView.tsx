@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Key } from 'lucide-react';
+import { KeyAffordance } from '@/components/tasks/KeyAffordance';
 import { useAuth } from '@/lib/authContext';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
@@ -473,14 +473,23 @@ export default function MobileMyAssignmentsView({
                   const dept = allDepts.find(d => d.id === item.department_id);
                   const DeptIcon = getDepartmentIcon(dept?.icon);
 
+                  const handleRowClick = () => {
+                    if (item.source === 'task') onTaskClick?.(item.raw);
+                    else onProjectClick?.(item.raw);
+                  };
                   return (
-                    <button
+                    <div
+                      role="button"
+                      tabIndex={0}
                       key={item.key}
-                      onClick={() => {
-                        if (item.source === 'task') onTaskClick?.(item.raw);
-                        else onProjectClick?.(item.raw);
+                      onClick={handleRowClick}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleRowClick();
+                        }
                       }}
-                      className={`grid grid-cols-[44px_1fr] gap-3.5 py-3.5 text-left transition-colors active:bg-neutral-100/50 dark:active:bg-[rgba(255,255,255,0.03)] ${
+                      className={`grid grid-cols-[44px_1fr] gap-3.5 py-3.5 text-left transition-colors cursor-pointer active:bg-neutral-100/50 dark:active:bg-[rgba(255,255,255,0.03)] ${
                         idx < group.items.length - 1 ? 'border-b border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.07)]' : ''
                       }`}
                     >
@@ -522,15 +531,8 @@ export default function MobileMyAssignmentsView({
                             <div className="text-[14.5px] font-medium text-neutral-800 dark:text-[#f0efed] leading-snug tracking-tight line-clamp-2 min-w-0">
                               {item.title}
                             </div>
-                            {item.reservation_id && (
-                              <span
-                                className="inline-flex shrink-0"
-                                title="Scheduled relative to reservation"
-                                aria-label="Scheduled relative to reservation"
-                              >
-                                <Key className="w-[12px] h-[12px] text-neutral-400 dark:text-[#66645f]" />
-                              </span>
-                            )}
+                            <KeyAffordance reservationId={item.reservation_id} size={12} />
+
                           </div>
                           {dept && (
                             <DeptIcon className="w-[15px] h-[15px] text-neutral-400 dark:text-[#66645f] shrink-0 mt-0.5" />
@@ -574,7 +576,7 @@ export default function MobileMyAssignmentsView({
                           )}
                         </div>
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>

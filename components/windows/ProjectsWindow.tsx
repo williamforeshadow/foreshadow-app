@@ -20,6 +20,8 @@ import {
 import { ColumnPicker } from './projects/ColumnPicker';
 import { ProjectsKanban } from './projects/ProjectsKanban';
 import { useDepartments } from '@/lib/departmentsContext';
+import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
+import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import type { User, Project, Attachment, Comment, ProjectFormFields, PropertyOption, TaskTemplate } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 
@@ -135,6 +137,11 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   // UI state
   const [expandedProject, setExpandedProject] = useState<Project | null>(null);
   const [editingProjectFields, setEditingProjectFields] = useState<ProjectFormFields | null>(null);
+
+  // Strict single-panel rule: when any global detail panel (reservation
+  // overlay or context task overlay) opens, close this surface's local
+  // detail panel.
+  useExclusiveDetailPanelHost(() => setExpandedProject(null));
   const [newComment, setNewComment] = useState('');
   const [staffOpen, setStaffOpen] = useState(false);
   const [viewingAttachmentIndex, setViewingAttachmentIndex] = useState<number | null>(null);
@@ -650,9 +657,12 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   }
 
   return (
-    <div className="flex h-full overflow-hidden glass-bg-neutral">
+    // `relative` so the detail overlay below anchors here. List always
+    // takes full width — when a project is expanded the panel hovers
+    // over the right 1/3 (matches Tasks / Properties / Timeline).
+    <div className="relative h-full overflow-hidden glass-bg-neutral">
       {/* Left Panel - Kanban Board */}
-      <div className={`${expandedProject ? 'w-2/3' : 'w-full'} h-full flex flex-col transition-[width] duration-200 ease-out`}>
+      <div className="w-full h-full flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/20 dark:border-white/10 glass-panel bg-white/40 dark:bg-white/[0.05] flex-shrink-0 relative z-20">
           <div className="flex items-center gap-3">
             <button
@@ -769,7 +779,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
           : null;
 
         return (
-        <div className="w-1/3 flex-shrink-0 border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 bg-white dark:bg-white/[0.03]">
+        <div className={DESKTOP_DETAIL_PANEL_FLEX}>
         <ProjectDetailPanel
           project={expandedProject}
           editingFields={editingProjectFields}

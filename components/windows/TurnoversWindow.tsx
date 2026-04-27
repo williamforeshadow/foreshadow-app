@@ -14,6 +14,8 @@ import type {
   ScheduleTask,
 } from '@/components/properties/schedule/MonthGrid';
 import type { Turnover, User } from '@/lib/types';
+import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
+import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 
 // Turnovers window. Two-pane layout:
 //   - Left: filterable + sortable list of turnover cards (one per active /
@@ -126,6 +128,13 @@ function TurnoversWindowContent(_: TurnoversWindowProps) {
   // hides the reservation panel beneath.
   const [selectedTask, setSelectedTask] = useState<OverlayTaskInput | null>(null);
 
+  // Strict single-panel rule: when any global detail panel (reservation
+  // overlay or context task overlay) opens, close every local panel here.
+  useExclusiveDetailPanelHost(() => {
+    closeSelectedCard();
+    setSelectedTask(null);
+  });
+
   const fetchWindowTasks = useCallback(async () => {
     if (!selectedCard?.property_name || !selectedCard.check_in) {
       setWindowTasks([]);
@@ -193,15 +202,12 @@ function TurnoversWindowContent(_: TurnoversWindowProps) {
   );
 
   return (
-    <div className="relative flex h-full overflow-hidden glass-bg-neutral">
-      {/* Left Panel — Cards */}
-      <div
-        className={`${
-          selectedCard
-            ? 'flex-1 min-w-0 border-r border-neutral-200/30 dark:border-white/10'
-            : 'w-full'
-        } overflow-y-auto hide-scrollbar p-6 space-y-4`}
-      >
+    <div className="relative h-full overflow-hidden glass-bg-neutral">
+      {/* Left Panel — Cards. Always full-width; the detail panel below
+          floats over the right 1/3 (overlay) instead of compressing the
+          list, matching every other detail panel in the app. */}
+      <div className="w-full h-full overflow-y-auto hide-scrollbar p-6 space-y-4">
+
         {response !== null && (
           <div className="space-y-3">
             <TurnoverFilterBar
@@ -275,12 +281,12 @@ function TurnoversWindowContent(_: TurnoversWindowProps) {
       </div>
 
       {/* Right Panel — Reservation detail (same component the Schedule tab
-          uses). Hidden while a task overlay is open so we never stack two
-          detail layers. */}
+          uses). Absolute right-side overlay (shared geometry); hidden while
+          a task overlay is open so we never stack two detail layers. */}
       {selectedCard && reservationForPanel && !selectedTask && (
         <div
           ref={rightPanelRef}
-          className="w-[30%] min-w-[320px] flex-shrink-0 h-full overflow-hidden border-l border-white/20 dark:border-white/10 bg-white dark:bg-[#0b0b0c]"
+          className={DESKTOP_DETAIL_PANEL_FLEX}
           onScroll={(e) => {
             scrollPositionRef.current = (
               e.currentTarget as HTMLDivElement

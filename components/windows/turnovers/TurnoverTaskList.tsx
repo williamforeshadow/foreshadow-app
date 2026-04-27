@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Key } from 'lucide-react';
+import { KeyAffordance } from '@/components/tasks/KeyAffordance';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -235,18 +235,16 @@ export function TurnoverTaskList({
           <div className="flex flex-col gap-2 flex-1 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="text-sm font-medium truncate min-w-0">{task.template_name || 'Unnamed Task'}</span>
-              {/* Every row in TurnoverTaskList is by definition tied to the
-                  selected turnover's reservation, so the icon renders
-                  unconditionally here — recurring tasks never reach this
-                  panel because get_property_turnovers filters by
-                  reservation_id. */}
-              <span
-                className="inline-flex shrink-0"
-                title="Scheduled relative to reservation"
-                aria-label="Scheduled relative to reservation"
-              >
-                <Key className="w-[12px] h-[12px] text-neutral-400 dark:text-neutral-500" />
-              </span>
+              {/* Every row here is reservation-bound by construction. The
+                  TurnoversWindow wraps this panel in <ReservationContextOverride>
+                  so KeyAffordance sees `currentReservationId === task.reservation_id`
+                  and renders its static (no-op) variant — clicking the same key
+                  the user just opened the panel from would be confusing. */}
+              <KeyAffordance
+                reservationId={task.reservation_id ?? selectedCard?.id ?? null}
+                size={12}
+                iconClassName="text-neutral-400 dark:text-neutral-500"
+              />
             </div>
             <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 dark:text-neutral-400 px-2 py-1 rounded-lg bg-black/10 dark:bg-black/40 w-fit">
               <svg className="w-3 h-3 shrink-0 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">

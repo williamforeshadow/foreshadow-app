@@ -60,6 +60,13 @@ export interface Task {
   scheduled_time?: string | null;
   form_metadata?: Record<string, unknown>;
   guest_name?: string;
+  /**
+   * FK to the reservation that auto-generated this task. null for recurring
+   * or manually-created tasks. Drives the key-icon affordance everywhere
+   * a task title is rendered — see lib/reservationViewerContext + the
+   * KeyAffordance component.
+   */
+  reservation_id?: string | null;
 }
 
 export interface TaskTemplate {

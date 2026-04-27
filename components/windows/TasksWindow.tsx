@@ -13,6 +13,8 @@ import {
   TaskFilterBar,
 } from './tasks';
 import { ProjectDetailPanel, AttachmentLightbox } from './projects';
+import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
+import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 
 interface TasksWindowProps {
   currentUser: User | null;
@@ -46,6 +48,11 @@ function TasksWindowContent({ currentUser, users }: TasksWindowProps) {
     saveTaskForm,
     updateTaskStatus,
   } = useTasks();
+
+  // Strict single-panel rule: when a global detail panel (reservation
+  // overlay or context task overlay) opens, close this surface's local
+  // task panel.
+  useExclusiveDetailPanelHost(() => setSelectedTask(null));
 
   // Task → ProjectDetailPanel state
   const [taskEditingFields, setTaskEditingFields] = useState<ProjectFormFields | null>(null);
@@ -197,9 +204,13 @@ function TasksWindowContent({ currentUser, users }: TasksWindowProps) {
   }, []);
 
   return (
-    <div className="flex h-full overflow-hidden">
+    // `relative` anchors the detail overlay below; `h-full overflow-hidden`
+    // matches the previous flex shell. The list always takes the full width
+    // — when a task is selected, the detail overlay floats in over the
+    // right third (matches Properties / Timeline behaviour).
+    <div className="relative h-full overflow-hidden">
       {/* Main Content - container resizes, content stays full width via min-w-max */}
-      <div className={`${selectedTask ? 'w-1/2' : 'w-full'} flex flex-col min-w-0`}>
+      <div className="w-full h-full flex flex-col min-w-0">
         {/* Header with filters */}
         <TaskFilterBar
           filters={filters}
@@ -270,9 +281,11 @@ function TasksWindowContent({ currentUser, users }: TasksWindowProps) {
         </div>
       </div>
 
-      {/* Detail Panel - flex sibling so scrollbar stays accessible */}
+      {/* Detail Panel — absolute right-side overlay (shared geometry).
+          List underneath stays full-width; the panel hovers over the
+          right 1/3, matching every other detail panel in the app. */}
       {selectedTask && taskAsProject && taskEditingFields && (
-        <div className="w-1/2 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex-shrink-0">
+        <div className={DESKTOP_DETAIL_PANEL_FLEX}>
           <ProjectDetailPanel
             project={taskAsProject}
             editingFields={taskEditingFields}

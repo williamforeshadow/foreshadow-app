@@ -15,6 +15,10 @@ import { AttachmentLightbox, ProjectActivitySheet, ProjectDetailPanel } from './
 import { TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
 import { DayDetailPanel } from '@/components/tasks/DayDetailPanel';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
+import {
+  DESKTOP_DETAIL_PANEL_CLASS,
+  DESKTOP_DETAIL_PANEL_FLEX,
+} from '@/lib/detailPanelGeometry';
 import { ClipboardCheck } from 'lucide-react';
 import Rhombus16FilledIcon from '@/components/icons/Rhombus16FilledIcon';
 import RectangleStackIcon from '@/components/icons/RectangleStackIcon';
@@ -22,6 +26,7 @@ import type { Project, Task, User, ProjectFormFields, Turnover, TaskTemplate, Pr
 import type { Template } from '@/components/DynamicCleaningForm';
 import { cn } from '@/lib/utils';
 import { UserAvatar } from '@/components/ui/user-avatar';
+import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 
 const marbleBackground: Record<string, string> = {
   not_started: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.35) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.18) 10%, transparent 40%, rgba(255,255,255,0.12) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #A78BFA`,
@@ -128,6 +133,14 @@ export default function TimelineWindow({
     setRecurringTasks,
     fetchReservations,
   } = useTimeline();
+
+  // Strict single-panel rule: when any global detail panel (reservation
+  // overlay or context task overlay) opens, close every local panel here.
+  useExclusiveDetailPanelHost(() => {
+    setFloatingData(null);
+    setSelectedDay(null);
+    setSelectedReservation(null);
+  });
 
   // ============================================================================
   // LOCAL instances of sub-hooks for projects (independent from other windows)
@@ -747,9 +760,7 @@ export default function TimelineWindow({
     department_name: localTask.department_name || null,
     scheduled_date: localTask.scheduled_date || null,
     scheduled_time: localTask.scheduled_time || null,
-    reservation_id:
-      (localTask as Task & { reservation_id?: string | null })
-        .reservation_id ?? null,
+    reservation_id: localTask.reservation_id ?? null,
     form_metadata: localTask.form_metadata || undefined,
     project_assignments: (localTask.assigned_users || []).map(u => ({
       user_id: u.user_id,
@@ -1785,7 +1796,7 @@ export default function TimelineWindow({
           canonical editor for each item type. */}
       {selectedDay && dayPanelData && !floatingData && (
         <div
-          className="absolute top-0 right-0 h-full w-[30%] min-w-[320px] bg-white dark:bg-[#0b0b0c] border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 shadow-xl z-30 overflow-hidden flex flex-col"
+          className={DESKTOP_DETAIL_PANEL_FLEX}
           onWheel={(e) => e.stopPropagation()}
         >
           <DayDetailPanel
@@ -1800,10 +1811,13 @@ export default function TimelineWindow({
         </div>
       )}
 
-      {/* Right Panel Overlay - Detail View */}
+      {/* Right Panel Overlay - Detail View
+          Uses block layout + overflow-y-auto since the contained
+          ProjectDetailPanel / TurnoverProjectsPanel manage their own
+          interior layout and expect the outer container to scroll. */}
       {floatingData && (
-        <div 
-          className="absolute top-0 right-0 h-full w-[30%] min-w-[320px] bg-white/30 dark:bg-white/[0.03] backdrop-blur-xl border-l border-white/20 dark:border-white/10 shadow-xl z-30 overflow-y-auto"
+        <div
+          className={`${DESKTOP_DETAIL_PANEL_CLASS} overflow-y-auto`}
           onWheel={(e) => e.stopPropagation()}
         >
           {floatingData.type === 'task' && taskAsProject && taskEditingFields ? (

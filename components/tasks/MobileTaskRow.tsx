@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Key } from 'lucide-react';
+import { KeyAffordance } from './KeyAffordance';
 import {
   formatTimeCol,
   getDayLabel,
@@ -112,9 +112,17 @@ export function MobileTaskRow({
   const shortDate = getShortDate(item.scheduled_date);
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className={`grid grid-cols-[44px_1fr] gap-3.5 py-3.5 text-left transition-colors w-full ${
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
+      className={`grid grid-cols-[44px_1fr] gap-3.5 py-3.5 text-left transition-colors w-full cursor-pointer ${
         selected
           ? 'bg-[rgba(30,25,20,0.04)] dark:bg-[rgba(255,255,255,0.04)]'
           : 'active:bg-neutral-100/50 dark:active:bg-[rgba(255,255,255,0.03)]'
@@ -165,15 +173,8 @@ export function MobileTaskRow({
             <div className="text-[14.5px] font-medium text-neutral-800 dark:text-[#f0efed] leading-snug tracking-tight line-clamp-2 min-w-0">
               {item.title}
             </div>
-            {item.reservation_id && (
-              <span
-                className="inline-flex shrink-0"
-                title="Scheduled relative to reservation"
-                aria-label="Scheduled relative to reservation"
-              >
-                <Key className="w-[12px] h-[12px] text-neutral-400 dark:text-[#66645f]" />
-              </span>
-            )}
+            <KeyAffordance reservationId={item.reservation_id} size={12} />
+
           </div>
           {DeptIcon && item.department_id && (
             <DeptIcon className="w-[15px] h-[15px] text-neutral-400 dark:text-[#66645f] shrink-0 mt-0.5" />
@@ -203,6 +204,6 @@ export function MobileTaskRow({
           <AssigneeStack assignees={item.assignees} />
         </div>
       </div>
-    </button>
+    </div>
   );
 }

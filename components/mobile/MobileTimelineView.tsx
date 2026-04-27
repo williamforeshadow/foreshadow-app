@@ -398,9 +398,7 @@ export default function MobileTimelineView({
           bin_name: (t as Task & { bin_name?: string | null }).bin_name ?? null,
           is_binned: !!(t as Task & { is_binned?: boolean }).is_binned,
           is_automated: (t as Task & { is_automated?: boolean }).is_automated,
-          reservation_id:
-            (t as Task & { reservation_id?: string | null }).reservation_id ??
-            null,
+          reservation_id: (t as Task).reservation_id ?? null,
         }));
 
         const handleTaskClickFromDrawer = (taskKey: string) => {

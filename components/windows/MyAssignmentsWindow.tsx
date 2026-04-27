@@ -12,6 +12,8 @@ import type { User, Project, ProjectFormFields, TaskTemplate, PropertyOption } f
 import type { Template } from '@/components/DynamicCleaningForm';
 import { ProjectDetailPanel, AttachmentLightbox } from './projects';
 import { TaskRow, TaskListHeader } from '@/components/tasks/TaskRow';
+import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
+import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 
 interface Assignee {
   user_id: string;
@@ -36,6 +38,9 @@ interface UnifiedItem {
   bin_name: string | null;
   is_binned: boolean;
   comment_count: number;
+  // FK to the linked reservation when present. Drives the small "key"
+  // badge next to the row title in <TaskRow> via KeyAffordance.
+  reservation_id: string | null;
   raw: any;
 }
 
@@ -57,6 +62,11 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
   const [error, setError] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [selectedItem, setSelectedItem] = useState<UnifiedItem | null>(null);
+
+  // Strict single-panel rule: when any global detail panel (reservation
+  // overlay or context task overlay) opens, close this surface's local
+  // detail panel.
+  useExclusiveDetailPanelHost(() => setSelectedItem(null));
 
   // Detail panel state (mirrors TasksWindow pattern)
   const [editingFields, setEditingFields] = useState<ProjectFormFields | null>(null);
@@ -169,6 +179,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
         bin_name: task.bin_name || null,
         is_binned: !!task.is_binned,
         comment_count: Number(task.comment_count ?? 0),
+        reservation_id: task.reservation_id ?? null,
         raw: task,
       });
     }
@@ -503,9 +514,11 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
 
   // --- Render ---
   return (
-    <div className="flex h-full overflow-hidden">
+    // List always takes full width; detail panel below floats over the
+    // right 1/3 (overlay), matching every other detail panel in the app.
+    <div className="relative h-full overflow-hidden">
       {/* Assignment list */}
-      <div className={`${selectedItem ? 'w-1/2' : 'w-full'} flex flex-col min-w-0 transition-all`}>
+      <div className="w-full h-full flex flex-col min-w-0">
         {/* Header */}
         <div className="flex-shrink-0 px-8 pt-6 pb-4">
           <h1 className="text-[24px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed]">
@@ -610,7 +623,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
           : undefined;
 
         return (
-        <div className="w-1/2 border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 bg-white dark:bg-white/[0.03] flex-shrink-0">
+        <div className={DESKTOP_DETAIL_PANEL_FLEX}>
           <ProjectDetailPanel
             project={itemAsProject}
             editingFields={editingFields}

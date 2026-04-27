@@ -18,6 +18,9 @@ import {
 import MessagesWindow from '@/components/windows/MessagesWindow';
 import type { Project, Task, TaskTemplate, PropertyOption } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
+import { ReservationDetailOverlay } from '@/components/reservations/ReservationDetailOverlay';
+import { ContextTaskDetailOverlay } from '@/components/reservations/ContextTaskDetailOverlay';
+import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 
 export default function MobileApp() {
   const router = useRouter();
@@ -62,6 +65,13 @@ export default function MobileApp() {
 
   const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
 
+  // Strict single-panel rule: when any global detail panel (reservation
+  // overlay or context task overlay) opens, close the mobile-shell panels.
+  useExclusiveDetailPanelHost(() => {
+    setMobileSelectedTask(null);
+    setMobileSelectedProject(null);
+  });
+
   useEffect(() => {
     if ((mobileSelectedTask || mobileSelectedProject) && availableTemplates.length === 0) {
       fetch('/api/tasks').then(r => r.json()).then(result => {
@@ -95,9 +105,7 @@ export default function MobileApp() {
       department_name: task.department_name || null,
       scheduled_date: task.scheduled_date || null,
       scheduled_time: task.scheduled_time || null,
-      reservation_id:
-        (task as Task & { reservation_id?: string | null }).reservation_id ??
-        null,
+      reservation_id: task.reservation_id ?? null,
       form_metadata: task.form_metadata,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -441,6 +449,12 @@ export default function MobileApp() {
           onTemplateChange={handleProjectTemplateChange}
         />
       )}
+      {/* Reservation + context task overlays.
+          Mobile renders both as `fixed inset-0` sheets, so anchor location
+          doesn't matter — only one is rendered at a time (mutual exclusion
+          enforced in ReservationViewerProvider). */}
+      <ReservationDetailOverlay />
+      <ContextTaskDetailOverlay />
     </>
   );
 }
