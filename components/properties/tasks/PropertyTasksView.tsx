@@ -325,6 +325,7 @@ function PropertyTasksViewContent({
       bin_name: task.bin_name,
       is_binned: task.is_binned,
       is_automated: task.is_automated,
+      reservation_id: task.reservation_id,
       comment_count: task.comment_count ?? 0,
       completed_at: task.completed_at,
       created_at: task.created_at,
@@ -1009,6 +1010,7 @@ function PropertyTasksViewContent({
       department_name: raw.department_name || null,
       scheduled_date: raw.scheduled_date || null,
       scheduled_time: raw.scheduled_time || null,
+      reservation_id: raw.reservation_id || null,
       form_metadata: raw.form_metadata || undefined,
       project_assignments: raw.assigned_users.map((u) => ({
         user_id: u.user_id,

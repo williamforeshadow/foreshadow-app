@@ -84,15 +84,33 @@ export default function MobileTimelineView({
     }
   }, [refreshTrigger, fetchReservations]);
 
+  // Mirrors TimelineWindow's synthesis: stamp reservation_id at this point
+  // so downstream surfaces (DayDetailPanel) can render the
+  // "scheduled relative to reservation" key icon. The
+  // get_property_turnovers RPC's tasks JSONB doesn't carry reservation_id
+  // per row, but every task inside res.tasks belongs to res by
+  // construction. Recurring tasks pass their own (null) reservation_id
+  // through.
   const allTasksWithProperty = useMemo(() => {
-    const tasks: (Task & { property_name: string })[] = [];
+    const tasks: (Task & {
+      property_name: string;
+      reservation_id?: string | null;
+    })[] = [];
     reservations.forEach((res: any) => {
       (res.tasks || []).forEach((task: Task) => {
-        tasks.push({ ...task, property_name: res.property_name });
+        tasks.push({
+          ...task,
+          property_name: res.property_name,
+          reservation_id: res.id,
+        });
       });
     });
     recurringTasks.forEach((task: any) => {
-      tasks.push({ ...task, property_name: task.property_name });
+      tasks.push({
+        ...task,
+        property_name: task.property_name,
+        reservation_id: task.reservation_id ?? null,
+      });
     });
     return tasks;
   }, [reservations, recurringTasks]);
@@ -380,6 +398,9 @@ export default function MobileTimelineView({
           bin_name: (t as Task & { bin_name?: string | null }).bin_name ?? null,
           is_binned: !!(t as Task & { is_binned?: boolean }).is_binned,
           is_automated: (t as Task & { is_automated?: boolean }).is_automated,
+          reservation_id:
+            (t as Task & { reservation_id?: string | null }).reservation_id ??
+            null,
         }));
 
         const handleTaskClickFromDrawer = (taskKey: string) => {

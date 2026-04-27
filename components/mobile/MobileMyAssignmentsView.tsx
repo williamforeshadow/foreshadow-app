@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Key } from 'lucide-react';
 import { useAuth } from '@/lib/authContext';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,10 @@ interface UnifiedItem {
   scheduled_time?: string | null;
   type?: string;
   assignees: Assignee[];
+  // Reservation FK on tasks. Drives the small "key" badge after the title.
+  // Always null for projects (they live in tasks-for-bin land which filters
+  // out reservation-bound rows).
+  reservation_id?: string | null;
   raw: any;
 }
 
@@ -158,6 +163,7 @@ export default function MobileMyAssignmentsView({
           name: u.name || 'Unknown',
           avatar: u.avatar || null,
         })),
+        reservation_id: task.reservation_id || null,
         raw: task,
       });
     }
@@ -512,8 +518,19 @@ export default function MobileMyAssignmentsView({
                       <div className="min-w-0">
                         {/* Title row with dept icon on right */}
                         <div className="flex items-start justify-between gap-2">
-                          <div className="text-[14.5px] font-medium text-neutral-800 dark:text-[#f0efed] leading-snug tracking-tight mb-0.5 line-clamp-2 min-w-0">
-                            {item.title}
+                          <div className="flex items-center gap-1.5 min-w-0 mb-0.5">
+                            <div className="text-[14.5px] font-medium text-neutral-800 dark:text-[#f0efed] leading-snug tracking-tight line-clamp-2 min-w-0">
+                              {item.title}
+                            </div>
+                            {item.reservation_id && (
+                              <span
+                                className="inline-flex shrink-0"
+                                title="Scheduled relative to reservation"
+                                aria-label="Scheduled relative to reservation"
+                              >
+                                <Key className="w-[12px] h-[12px] text-neutral-400 dark:text-[#66645f]" />
+                              </span>
+                            )}
                           </div>
                           {dept && (
                             <DeptIcon className="w-[15px] h-[15px] text-neutral-400 dark:text-[#66645f] shrink-0 mt-0.5" />

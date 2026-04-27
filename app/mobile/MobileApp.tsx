@@ -95,6 +95,9 @@ export default function MobileApp() {
       department_name: task.department_name || null,
       scheduled_date: task.scheduled_date || null,
       scheduled_time: task.scheduled_time || null,
+      reservation_id:
+        (task as Task & { reservation_id?: string | null }).reservation_id ??
+        null,
       form_metadata: task.form_metadata,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),

@@ -189,6 +189,10 @@ export default function PropertyScheduleView() {
         bin_name: t.bin_name ?? null,
         is_binned: !!t.is_binned,
         is_automated: t.is_automated,
+        // Drives the small "key" badge next to the row title in
+        // DayDetailPanel — present iff this task is bound to a
+        // reservation (and therefore subject to date recalibration).
+        reservation_id: t.reservation_id ?? null,
       }));
     // The day panel doesn't list reservations any more — the calendar bars
     // already show them. Just compute a single occupancy flag for the

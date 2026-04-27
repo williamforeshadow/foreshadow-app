@@ -180,6 +180,7 @@ function TasksWindowContent({ currentUser, users }: TasksWindowProps) {
     department_name: selectedTask.department_name || null,
     scheduled_date: selectedTask.scheduled_date || null,
     scheduled_time: selectedTask.scheduled_time || null,
+    reservation_id: selectedTask.reservation_id || null,
     form_metadata: selectedTask.form_metadata || undefined,
     project_assignments: (selectedTask.assigned_users || []).map(u => ({
       user_id: u.user_id,

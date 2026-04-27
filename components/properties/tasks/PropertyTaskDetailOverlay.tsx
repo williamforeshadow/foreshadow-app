@@ -500,6 +500,7 @@ export function PropertyTaskDetailOverlay({
       department_name: t.department_name || null,
       scheduled_date: t.scheduled_date || null,
       scheduled_time: t.scheduled_time || null,
+      reservation_id: t.reservation_id || null,
       form_metadata: t.form_metadata || undefined,
       project_assignments: t.assigned_users.map((u) => ({
         user_id: u.user_id,

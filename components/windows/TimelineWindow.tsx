@@ -747,6 +747,9 @@ export default function TimelineWindow({
     department_name: localTask.department_name || null,
     scheduled_date: localTask.scheduled_date || null,
     scheduled_time: localTask.scheduled_time || null,
+    reservation_id:
+      (localTask as Task & { reservation_id?: string | null })
+        .reservation_id ?? null,
     form_metadata: localTask.form_metadata || undefined,
     project_assignments: (localTask.assigned_users || []).map(u => ({
       user_id: u.user_id,
@@ -1180,14 +1183,28 @@ export default function TimelineWindow({
 
   // Extract ALL tasks from reservations + recurring tasks, tagged with property_name
   const allTasksWithProperty = useMemo(() => {
-    const tasks: (Task & { property_name: string })[] = [];
+    // We stamp reservation_id onto each row at synthesis time so downstream
+    // surfaces (DayDetailPanel, kanban, etc.) can render the "scheduled
+    // relative to reservation" key icon without re-fetching. The
+    // get_property_turnovers RPC's tasks JSONB doesn't include
+    // reservation_id per row, but every task inside res.tasks belongs to
+    // res by construction. Recurring tasks are fetched with
+    // reservation_id IS NULL so they pass through unchanged.
+    const tasks: (Task & {
+      property_name: string;
+      reservation_id?: string | null;
+    })[] = [];
     const seen = new Set<string>();
     // Tasks from reservations (turnover, occupancy, vacancy triggers)
     reservations.forEach((res: any) => {
       (res.tasks || []).forEach((task: Task) => {
         if (!seen.has(task.task_id)) {
           seen.add(task.task_id);
-          tasks.push({ ...task, property_name: res.property_name });
+          tasks.push({
+            ...task,
+            property_name: res.property_name,
+            reservation_id: res.id,
+          });
         }
       });
     });
@@ -1195,7 +1212,11 @@ export default function TimelineWindow({
     recurringTasks.forEach((task: any) => {
       if (!seen.has(task.task_id)) {
         seen.add(task.task_id);
-        tasks.push({ ...task, property_name: task.property_name });
+        tasks.push({
+          ...task,
+          property_name: task.property_name,
+          reservation_id: task.reservation_id ?? null,
+        });
       }
     });
     return tasks;
@@ -1215,12 +1236,14 @@ export default function TimelineWindow({
     if (!selectedDay) return null;
     const dayKey = `${selectedDay.getFullYear()}-${String(selectedDay.getMonth() + 1).padStart(2, '0')}-${String(selectedDay.getDate()).padStart(2, '0')}`;
     // Task is defined with a narrow shape in lib/types; ledger fields
-    // (bin_name, is_automated) exist on the row payload but aren't on the
-    // interface yet — widen locally.
+    // (bin_name, is_automated, reservation_id) exist on the row payload
+    // but aren't on the interface yet — widen locally. reservation_id is
+    // stamped on by allTasksWithProperty above.
     type TaskRowSource = Task & {
       property_name: string;
       bin_name?: string | null;
       is_automated?: boolean;
+      reservation_id?: string | null;
     };
     const dayTasks: TaskRowItem[] = (allScheduledTasks as TaskRowSource[])
       .filter((t) => (t.scheduled_date || '').slice(0, 10) === dayKey)
@@ -1243,6 +1266,7 @@ export default function TimelineWindow({
         bin_name: t.bin_name ?? null,
         is_binned: !!t.is_binned,
         is_automated: t.is_automated,
+        reservation_id: t.reservation_id ?? null,
       }));
     return { dayKey, dayTasks };
   }, [selectedDay, allScheduledTasks]);

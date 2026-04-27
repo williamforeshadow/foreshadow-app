@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { Key } from 'lucide-react';
 import {
   formatTimeCol,
   getDayLabel,
@@ -160,8 +161,19 @@ export function MobileTaskRow({
       {/* Body */}
       <div className="min-w-0">
         <div className="flex items-start justify-between gap-2">
-          <div className="text-[14.5px] font-medium text-neutral-800 dark:text-[#f0efed] leading-snug tracking-tight mb-0.5 line-clamp-2 min-w-0">
-            {item.title}
+          <div className="flex items-center gap-1.5 min-w-0 mb-0.5">
+            <div className="text-[14.5px] font-medium text-neutral-800 dark:text-[#f0efed] leading-snug tracking-tight line-clamp-2 min-w-0">
+              {item.title}
+            </div>
+            {item.reservation_id && (
+              <span
+                className="inline-flex shrink-0"
+                title="Scheduled relative to reservation"
+                aria-label="Scheduled relative to reservation"
+              >
+                <Key className="w-[12px] h-[12px] text-neutral-400 dark:text-[#66645f]" />
+              </span>
+            )}
           </div>
           {DeptIcon && item.department_id && (
             <DeptIcon className="w-[15px] h-[15px] text-neutral-400 dark:text-[#66645f] shrink-0 mt-0.5" />

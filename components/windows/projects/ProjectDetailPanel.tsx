@@ -1,6 +1,7 @@
 'use client';
 
 import { RefObject, useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { Key } from 'lucide-react';
 import { DebouncedNativeInput, DebouncedTextarea } from '@/components/ui/debounced-input';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useDepartments } from '@/lib/departmentsContext';
@@ -1113,7 +1114,18 @@ export function ProjectDetailPanel({
 
             {/* Scheduled */}
             <div className="rounded-xl bg-[rgba(30,25,20,0.03)] dark:bg-white/[0.04] border border-[rgba(30,25,20,0.06)] dark:border-white/10 px-5 py-4 flex flex-col gap-3">
-              <div className="text-[11px] font-medium text-muted-foreground tracking-wider">Scheduled</div>
+              <div className="flex items-center gap-1.5">
+                <div className="text-[11px] font-medium text-muted-foreground tracking-wider">Scheduled</div>
+                {project.reservation_id && (
+                  <span
+                    className="inline-flex"
+                    title="Default schedule relative to reservation"
+                    aria-label="Default schedule relative to reservation"
+                  >
+                    <Key className="w-[11px] h-[11px] text-muted-foreground" />
+                  </span>
+                )}
+              </div>
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-1.5">
                   <svg className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" viewBox="0 0 16 16" fill="none">

@@ -491,6 +491,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
     department_name: selectedItem.raw.department_name || null,
     scheduled_date: selectedItem.raw.scheduled_date || null,
     scheduled_time: selectedItem.raw.scheduled_time || null,
+    reservation_id: selectedItem.raw.reservation_id || null,
     form_metadata: selectedItem.raw.form_metadata || undefined,
     project_assignments: (selectedItem.raw.assigned_users || []).map((u: any) => ({
       user_id: u.user_id,

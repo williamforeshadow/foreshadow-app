@@ -227,6 +227,9 @@ export function FloatingWindow({
               department_name: (item as Task).department_name || null,
               scheduled_date: (item as Task).scheduled_date || null,
               scheduled_time: (item as Task).scheduled_time || null,
+              reservation_id:
+                (item as Task & { reservation_id?: string | null })
+                  .reservation_id ?? null,
               project_assignments: ((item as Task).assigned_users || []).map(u => ({
                 user_id: u.user_id,
                 user: { id: u.user_id, name: u.name, avatar: u.avatar, role: u.role }

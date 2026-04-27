@@ -2,9 +2,13 @@
 
 import React from 'react';
 import { format, parseISO, differenceInCalendarDays } from 'date-fns';
-import { X, Calendar, User, Clock, CheckCircle2, Circle, Sparkles } from 'lucide-react';
+import { X, Calendar, User, Clock } from 'lucide-react';
 import type { ScheduleReservation, ScheduleTask } from './MonthGrid';
 import { useOperationsSettings } from '@/lib/operationsSettingsContext';
+import { useDepartments } from '@/lib/departmentsContext';
+import { getDepartmentIcon } from '@/lib/departmentIcons';
+import { MobileTaskRow } from '@/components/tasks/MobileTaskRow';
+import type { TaskRowItem } from '@/components/tasks/TaskRow';
 
 // Lightweight detail panel for a reservation. Mirrors the absolute-overlay
 // shape of PropertyTasksView's task panel so it can sit on the same anchor
@@ -27,6 +31,16 @@ import { useOperationsSettings } from '@/lib/operationsSettingsContext';
 //     Comparisons are done as 'YYYY-MM-DDTHH:MM' string lex compares to stay
 //     timezone-agnostic, matching the rest of the app.
 //
+// Rows render through the shared <MobileTaskRow /> so the visual is
+// identical to My Assignments (mobile) and Property Tasks (mobile). On
+// desktop the panel is narrow (~1/3 column), so the mobile-style row fits
+// both surfaces — no separate desktop variant is needed here.
+//
+// Tasks with a non-null reservation_id render a small key icon next to
+// the title (hover reveals "Scheduled relative to reservation").
+// Recurring tasks have no reservation_id, so they render plain — same as
+// manually-created tasks.
+//
 // Clicking a task hands off to the parent's `onOpenTask`, which surfaces
 // the full shared task overlay.
 
@@ -42,27 +56,6 @@ function toDateOnly(raw: string): Date {
   return parseISO(`${slice}T00:00:00`);
 }
 
-const STATUS_META: Record<
-  string,
-  { label: string; icon: typeof Circle; className: string }
-> = {
-  complete: {
-    label: 'Complete',
-    icon: CheckCircle2,
-    className: 'text-emerald-600 dark:text-emerald-400',
-  },
-  in_progress: {
-    label: 'In progress',
-    icon: Sparkles,
-    className: 'text-[var(--accent-3)] dark:text-[var(--accent-1)]',
-  },
-  not_started: {
-    label: 'Not started',
-    icon: Circle,
-    className: 'text-neutral-400 dark:text-[#66645f]',
-  },
-};
-
 export function ReservationDetailPanel({
   reservation,
   allTasks,
@@ -70,6 +63,7 @@ export function ReservationDetailPanel({
   onOpenTask,
 }: ReservationDetailPanelProps) {
   const { settings } = useOperationsSettings();
+  const { departments: allDepts } = useDepartments();
   const defaultCheckInTime = (settings.default_check_in_time || '15:00').slice(0, 5);
 
   const checkIn = toDateOnly(reservation.check_in);
@@ -219,47 +213,48 @@ export function ReservationDetailPanel({
                 No scheduled tasks in this window.
               </div>
             ) : (
-              <ul className="flex flex-col gap-1">
-                {associatedTasks.map((task) => {
-                  const meta =
-                    STATUS_META[task.status] || STATUS_META.not_started;
-                  const Icon = meta.icon;
-                  const dateLabel = task.scheduled_date
-                    ? format(toDateOnly(task.scheduled_date), 'MMM d')
-                    : '';
+              <div className="flex flex-col">
+                {associatedTasks.map((task, idx) => {
+                  const item: TaskRowItem = {
+                    key: task.task_id,
+                    title: task.title || task.template_name || 'Task',
+                    property_name: task.property_name || null,
+                    status: task.status || 'not_started',
+                    priority: task.priority || 'medium',
+                    department_id: task.department_id || null,
+                    department_name: task.department_name || null,
+                    scheduled_date: task.scheduled_date,
+                    scheduled_time: task.scheduled_time,
+                    assignees: (task.assigned_users || []).map((u) => ({
+                      user_id: u.user_id,
+                      name: u.name,
+                      avatar: u.avatar,
+                    })),
+                    bin_id: task.bin_id || null,
+                    bin_name: task.bin_name || null,
+                    is_binned: !!task.is_binned,
+                    // The row paints a small key icon next to the title
+                    // when this is set. Recurring tasks have no
+                    // reservation_id, so they render plain — same as
+                    // manual tasks.
+                    reservation_id: task.reservation_id || null,
+                  };
+                  const dept = allDepts.find(
+                    (d) => d.id === task.department_id
+                  );
+                  const DeptIcon = getDepartmentIcon(dept?.icon);
                   return (
-                    <li key={task.task_id}>
-                      <button
-                        onClick={() => onOpenTask?.(task)}
-                        className="w-full text-left flex items-start gap-3 px-3 py-2 rounded-lg hover:bg-[var(--accent-bg-soft)] dark:hover:bg-[var(--accent-bg-soft-dark)] transition-colors"
-                      >
-                        <Icon
-                          size={14}
-                          className={`${meta.className} mt-0.5 shrink-0`}
-                        />
-                        <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                          <div className="text-[13px] font-medium text-neutral-800 dark:text-[#e5e4e2] truncate">
-                            {task.title || task.template_name || 'Task'}
-                          </div>
-                          <div className="flex items-center gap-2 text-[11px] text-neutral-500 dark:text-[#a09e9a]">
-                            <span>{dateLabel}</span>
-                            {task.scheduled_time && (
-                              <>
-                                <span aria-hidden>·</span>
-                                <span className="tabular-nums">
-                                  {task.scheduled_time.slice(0, 5)}
-                                </span>
-                              </>
-                            )}
-                            <span aria-hidden>·</span>
-                            <span className={meta.className}>{meta.label}</span>
-                          </div>
-                        </div>
-                      </button>
-                    </li>
+                    <MobileTaskRow
+                      key={task.task_id}
+                      item={item}
+                      isLast={idx === associatedTasks.length - 1}
+                      onClick={() => onOpenTask?.(task)}
+                      hideProperty
+                      departmentIcon={DeptIcon}
+                    />
                   );
                 })}
-              </ul>
+              </div>
             )}
           </section>
         </div>
