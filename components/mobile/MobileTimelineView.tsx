@@ -3,7 +3,10 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTimeline } from '@/lib/useTimeline';
 import { getActiveTurnoverForProperty } from '@/lib/turnoverUtils';
-import { useReservationViewer } from '@/lib/reservationViewerContext';
+import {
+  useExclusiveDetailPanelHost,
+  useReservationViewer,
+} from '@/lib/reservationViewerContext';
 import { Button } from '@/components/ui/button';
 import { ClipboardCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -79,6 +82,11 @@ export default function MobileTimelineView({
   const { open: openReservationViewer } = useReservationViewer();
 
   const [expandedCell, setExpandedCell] = useState<{ property: string; dateStr: string } | null>(null);
+
+  // Strict single-panel rule (both directions): close our drawer when a
+  // context overlay opens; close any active context overlay before
+  // opening our drawer so the global doesn't sit on top of the drawer.
+  const closeGlobals = useExclusiveDetailPanelHost(() => setExpandedCell(null));
 
   useEffect(() => {
     onSheetOpen?.(expandedCell !== null);
@@ -278,10 +286,19 @@ export default function MobileTimelineView({
                         // for this property + date. The drawer's empty
                         // state surfaces the "New task" CTA, mirroring
                         // the property-calendar behavior on empty days.
+                        // closeGlobals() runs in the event handler (not
+                        // inside the updater) so it doesn't fire during
+                        // React's render phase.
                         const dateStr = toDateString(date);
-                        setExpandedCell(prev =>
-                          prev?.property === property && prev?.dateStr === dateStr ? null : { property, dateStr }
-                        );
+                        const isSameCell =
+                          expandedCell?.property === property &&
+                          expandedCell?.dateStr === dateStr;
+                        if (isSameCell) {
+                          setExpandedCell(null);
+                          return;
+                        }
+                        closeGlobals();
+                        setExpandedCell({ property, dateStr });
                       }}
                     >
                       {startingRes && (() => {

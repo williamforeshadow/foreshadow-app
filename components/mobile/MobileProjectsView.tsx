@@ -120,7 +120,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
 
   // Strict single-panel rule: when any global detail panel (reservation
   // overlay or context task overlay) opens, drop the local detail screen.
-  useExclusiveDetailPanelHost(() => {
+  const closeGlobals = useExclusiveDetailPanelHost(() => {
     setScreen((prev) => (prev.type === 'detail' ? { type: 'bins' } : prev));
   });
 
@@ -321,8 +321,9 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
         body: JSON.stringify({ project_id: project.id, user_id: currentUser.id }),
       }).catch(() => {});
     }
+    closeGlobals();
     setScreen({ type: 'detail', project, binId, binName });
-  }, [currentUser?.id]);
+  }, [currentUser?.id, closeGlobals]);
 
   const goBack = useCallback(() => {
     if (screen.type === 'detail') {
@@ -383,9 +384,10 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+    closeGlobals();
     setDraftTask(draft);
     setScreen({ type: 'detail', project: draft, binId: screen.binId, binName: screen.binName });
-  }, [screen]);
+  }, [screen, closeGlobals]);
 
   const draftFieldsRef = useRef<any>(null);
   const draftTaskRef = useRef<Project | null>(null);

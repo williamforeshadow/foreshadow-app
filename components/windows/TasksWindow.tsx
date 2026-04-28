@@ -52,7 +52,7 @@ function TasksWindowContent({ currentUser, users }: TasksWindowProps) {
   // Strict single-panel rule: when a global detail panel (reservation
   // overlay or context task overlay) opens, close this surface's local
   // task panel.
-  useExclusiveDetailPanelHost(() => setSelectedTask(null));
+  const closeGlobals = useExclusiveDetailPanelHost(() => setSelectedTask(null));
 
   // Task → ProjectDetailPanel state
   const [taskEditingFields, setTaskEditingFields] = useState<ProjectFormFields | null>(null);
@@ -271,9 +271,14 @@ function TasksWindowContent({ currentUser, users }: TasksWindowProps) {
                   key={task.task_id}
                   task={task}
                   isSelected={selectedTask?.task_id === task.task_id}
-                  onSelect={() => setSelectedTask(
-                    selectedTask?.task_id === task.task_id ? null : task
-                  )}
+                  onSelect={() => {
+                    if (selectedTask?.task_id === task.task_id) {
+                      setSelectedTask(null);
+                    } else {
+                      closeGlobals();
+                      setSelectedTask(task);
+                    }
+                  }}
                 />
               ))}
             </div>

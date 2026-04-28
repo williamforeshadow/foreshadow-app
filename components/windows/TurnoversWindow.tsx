@@ -130,7 +130,7 @@ function TurnoversWindowContent(_: TurnoversWindowProps) {
 
   // Strict single-panel rule: when any global detail panel (reservation
   // overlay or context task overlay) opens, close every local panel here.
-  useExclusiveDetailPanelHost(() => {
+  const closeGlobals = useExclusiveDetailPanelHost(() => {
     closeSelectedCard();
     setSelectedTask(null);
   });
@@ -185,6 +185,7 @@ function TurnoversWindowContent(_: TurnoversWindowProps) {
 
   const handleOpenTask = useCallback(
     (task: ScheduleTask) => {
+      closeGlobals();
       setSelectedTask(
         scheduleTaskToOverlay(
           task,
@@ -193,7 +194,7 @@ function TurnoversWindowContent(_: TurnoversWindowProps) {
         )
       );
     },
-    [windowPropertyId, selectedCard?.property_name]
+    [windowPropertyId, selectedCard?.property_name, closeGlobals]
   );
 
   const reservationForPanel = useMemo(
@@ -250,6 +251,7 @@ function TurnoversWindowContent(_: TurnoversWindowProps) {
               filters={filters}
               sortBy={sortBy}
               onCardClick={(card: Turnover) => {
+                closeGlobals();
                 setSelectedTask(null);
                 setSelectedCard(card);
               }}

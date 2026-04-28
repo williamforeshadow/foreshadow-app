@@ -63,10 +63,13 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [selectedItem, setSelectedItem] = useState<UnifiedItem | null>(null);
 
-  // Strict single-panel rule: when any global detail panel (reservation
-  // overlay or context task overlay) opens, close this surface's local
-  // detail panel.
-  useExclusiveDetailPanelHost(() => setSelectedItem(null));
+  // Strict single-panel rule (both directions):
+  //   global → local: close our local panel when context overlays open
+  //   local → global: call closeGlobals() before opening our panel so it
+  //                   doesn't render behind a still-open context overlay.
+  const closeGlobals = useExclusiveDetailPanelHost(() =>
+    setSelectedItem(null)
+  );
 
   // Detail panel state (mirrors TasksWindow pattern)
   const [editingFields, setEditingFields] = useState<ProjectFormFields | null>(null);
@@ -596,7 +599,14 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
                               item={item}
                               selected={isSelected}
                               isLast={idx === group.items.length - 1}
-                              onClick={() => setSelectedItem(isSelected ? null : item)}
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedItem(null);
+                                } else {
+                                  closeGlobals();
+                                  setSelectedItem(item);
+                                }
+                              }}
                               showBinPill
                               departmentIcon={DeptIcon}
                             />

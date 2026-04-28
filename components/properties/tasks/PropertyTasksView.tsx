@@ -608,9 +608,12 @@ function PropertyTasksViewContent({
   const [draftTask, setDraftTask] = useState<Project | null>(null);
   const [creatingTask, setCreatingTask] = useState(false);
 
-  // Strict single-panel rule: when any global detail panel (reservation
-  // overlay or context task overlay) opens, close every local panel here.
-  useExclusiveDetailPanelHost(() => {
+  // Strict single-panel rule (both directions):
+  //   global → local: close our locals when context overlays open
+  //   local → global: call closeGlobals() before opening any local panel
+  //                   so the new local doesn't render behind a still-open
+  //                   context overlay (same z-20 slot).
+  const closeGlobals = useExclusiveDetailPanelHost(() => {
     setSelectedItem(null);
     setDraftTask(null);
   });
@@ -928,9 +931,10 @@ function PropertyTasksViewContent({
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+    closeGlobals();
     setSelectedItem(null);
     setDraftTask(draft);
-  }, [propertyName]);
+  }, [propertyName, closeGlobals]);
 
   // The Schedule tab's DayDetailPanel deep-links "New task" here by pushing
   // `?newTaskDate=YYYY-MM-DD`. We pop the draft with that date pre-filled
@@ -1176,8 +1180,14 @@ function PropertyTasksViewContent({
                           const isSelected = selectedItem?.key === item.key;
                           const isLast = idx === group.items.length - 1;
                           const handleClick = () => {
-                            setDraftTask(null);
-                            setSelectedItem(isSelected ? null : item);
+                            if (isSelected) {
+                              setDraftTask(null);
+                              setSelectedItem(null);
+                            } else {
+                              closeGlobals();
+                              setDraftTask(null);
+                              setSelectedItem(item);
+                            }
                           };
                           if (isMobile) {
                             return (

@@ -210,7 +210,16 @@ export function ScheduledItemsCell({
                           "flex items-center justify-between gap-2 py-2 px-2.5 shrink-0 cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.01] active:scale-[0.99]",
                           getRowStyles(task.status)
                         )}
-                        onClick={() => onTaskClick?.(task)}
+                        // Stop propagation: HoverCardContent renders in a DOM
+                        // portal but React routes synthetic events through the
+                        // *component* tree, so without this the click would
+                        // bubble up to the date cell's onClick (which calls
+                        // openReservationViewer) and the reservation panel
+                        // would clobber the task panel we just opened.
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onTaskClick?.(task);
+                        }}
                       >
                         <span className="truncate text-sm">{task.title || task.template_name || task.type}</span>
                         <div className="flex items-center gap-1.5 flex-shrink-0">

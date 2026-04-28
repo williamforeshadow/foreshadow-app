@@ -52,9 +52,12 @@ export default function PropertyScheduleView() {
   );
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
 
-  // Strict single-panel rule: when any global detail panel (reservation
-  // overlay or context task overlay) opens, close every local panel here.
-  useExclusiveDetailPanelHost(() => {
+  // Strict single-panel rule (both directions):
+  //   global → local: close our locals when context overlays open
+  //   local → global: call closeGlobals() before opening any local panel
+  //                   so the new local doesn't render behind a still-open
+  //                   context overlay (same z-20 slot).
+  const closeGlobals = useExclusiveDetailPanelHost(() => {
     setSelectedReservation(null);
     setSelectedTask(null);
     setSelectedDay(null);
@@ -152,28 +155,38 @@ export default function PropertyScheduleView() {
           role: u.role,
         })),
       };
+      closeGlobals();
       setSelectedReservation(null);
       setSelectedTask(overlayInput);
     },
-    [property.id, property.name]
+    [property.id, property.name, closeGlobals]
   );
 
   // Day panel support: filter tasks + reservations to a single calendar day
   // and hand off to the shared <DayDetailPanel />. Clicking a task row
   // inside the day panel reuses the same task overlay pipeline as the
   // calendar cell.
+  //
+  // closeGlobals() must be invoked from the event-handler scope, NOT inside
+  // a state-updater callback — React runs updater fns during the render
+  // phase, and a setState call into another component during render trips
+  // the "Cannot update a component while rendering a different component"
+  // warning. We compare the latest selectedDay from the closure instead.
   const handleDayClick = useCallback((day: Date) => {
+    const isSameDay =
+      selectedDay !== null &&
+      selectedDay.getFullYear() === day.getFullYear() &&
+      selectedDay.getMonth() === day.getMonth() &&
+      selectedDay.getDate() === day.getDate();
     setSelectedReservation(null);
     setSelectedTask(null);
-    setSelectedDay((prev) => {
-      if (!prev) return day;
-      return prev.getFullYear() === day.getFullYear() &&
-        prev.getMonth() === day.getMonth() &&
-        prev.getDate() === day.getDate()
-        ? null
-        : day;
-    });
-  }, []);
+    if (isSameDay) {
+      setSelectedDay(null);
+      return;
+    }
+    closeGlobals();
+    setSelectedDay(day);
+  }, [selectedDay, closeGlobals]);
 
   const dayPanelData = useMemo(() => {
     if (!selectedDay) return null;
@@ -301,7 +314,19 @@ export default function PropertyScheduleView() {
             selectedDayKey={selectedDayKey}
             onReservationClick={(r) => {
               setSelectedDay(null);
-              setSelectedReservation((prev) => (prev?.id === r.id ? null : r));
+              // Toggle off only when the reservation panel is the panel
+              // currently visible. If a task panel is on top, clicking any
+              // reservation block (even the one matching selectedReservation)
+              // is interpreted as a swap to the reservation panel — the user
+              // can't see the reservation panel right now, so a "toggle off"
+              // would feel like the click was ignored.
+              if (selectedReservation?.id === r.id && !selectedTask) {
+                setSelectedReservation(null);
+                return;
+              }
+              closeGlobals();
+              setSelectedTask(null);
+              setSelectedReservation(r);
             }}
             onTaskClick={(t) => {
               setSelectedDay(null);

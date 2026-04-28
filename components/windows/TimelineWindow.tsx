@@ -134,9 +134,12 @@ export default function TimelineWindow({
     fetchReservations,
   } = useTimeline();
 
-  // Strict single-panel rule: when any global detail panel (reservation
-  // overlay or context task overlay) opens, close every local panel here.
-  useExclusiveDetailPanelHost(() => {
+  // Strict single-panel rule (both directions):
+  //   global → local: close our locals when context overlays open
+  //   local → global: call closeGlobals() before opening any local panel
+  //                   so the new local panel doesn't render behind the
+  //                   still-open context overlay (same z-20 slot).
+  const closeGlobals = useExclusiveDetailPanelHost(() => {
     setFloatingData(null);
     setSelectedDay(null);
     setSelectedReservation(null);
@@ -983,22 +986,24 @@ export default function TimelineWindow({
     const scheduledDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     const draft = createDraftTask({ property_name: propertyName, scheduled_date: scheduledDate });
 
+    closeGlobals();
     setFloatingData({
       type: 'task',
       item: draft,
       propertyName,
     });
-  }, [createDraftTask]);
+  }, [createDraftTask, closeGlobals]);
 
   const handleCreateProjectFromHeader = useCallback(() => {
     const draft = createDraftTask({});
 
+    closeGlobals();
     setFloatingData({
       type: 'task',
       item: draft,
       propertyName: '',
     });
-  }, [createDraftTask]);
+  }, [createDraftTask, closeGlobals]);
 
   // Handle column moves from kanban drag/drop (assignment + schedule changes, atomically)
   const handleKanbanColumnMove = useCallback(async (
@@ -1264,23 +1269,25 @@ export default function TimelineWindow({
   const handleOpenTaskFromDay = useCallback((taskKey: string) => {
     const task = allScheduledTasks.find((t) => t.task_id === taskKey);
     if (!task) return;
+    closeGlobals();
     setSelectedDay(null);
     setFloatingData({
       type: 'task',
       item: task,
       propertyName: task.property_name || '',
     });
-  }, [allScheduledTasks]);
+  }, [allScheduledTasks, closeGlobals]);
 
   const handleNewTaskFromDay = useCallback((dateStr: string) => {
     const draft = createDraftTask({ scheduled_date: dateStr });
+    closeGlobals();
     setSelectedDay(null);
     setFloatingData({
       type: 'task',
       item: draft,
       propertyName: '',
     });
-  }, [createDraftTask]);
+  }, [createDraftTask, closeGlobals]);
 
   // Note: projects state is kept for TurnoverProjectsPanel but NOT shown on the
   // grid — useTimeline's recurringTasks already includes all non-reservation tasks.
@@ -1465,7 +1472,7 @@ export default function TimelineWindow({
                       ? 'today-tint' 
                       : 'bg-white dark:bg-[#0d0d10] hover:bg-[rgba(30,25,20,0.02)] dark:hover:bg-[rgba(255,255,255,0.03)]'
                   }`}
-                  onClick={() => setSelectedDay(date)}
+                  onClick={() => { closeGlobals(); setSelectedDay(date); }}
                 >
                   {formatHeaderDate(date, isTodayDate)}
                 </div>
@@ -1533,11 +1540,14 @@ export default function TimelineWindow({
                                       <div 
                                         key={task.task_id} 
                                         className={`flex items-center justify-between gap-2 py-2 px-2.5 shrink-0 cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.01] active:scale-[0.99] ${rowStyle}`}
-                                        onClick={() => setFloatingData({
-                                          type: 'task',
-                                          item: task,
-                                          propertyName: activeTurnover.property_name,
-                                        })}
+                                        onClick={() => {
+                                          closeGlobals();
+                                          setFloatingData({
+                                            type: 'task',
+                                            item: task,
+                                            propertyName: activeTurnover.property_name,
+                                          });
+                                        }}
                                       >
                                         <span className="truncate text-sm">{task.title || task.template_name || task.type}</span>
                                       </div>
@@ -1642,11 +1652,14 @@ export default function TimelineWindow({
                           projects={[]}
                           viewMode={view}
                           expanded={expandedProperties.has(property)}
-                          onTaskClick={(task) => setFloatingData({
-                            type: 'task',
-                            item: task,
-                            propertyName: property,
-                          })}
+                          onTaskClick={(task) => {
+                            closeGlobals();
+                            setFloatingData({
+                              type: 'task',
+                              item: task,
+                              propertyName: property,
+                            });
+                          }}
                         />
 
                         <button
@@ -1699,11 +1712,14 @@ export default function TimelineWindow({
                                     }`}
                                     style={task.status !== 'contingent' ? { background: marbleBackground[task.status] || marbleBackground.not_started } : undefined}
                                     title={task.title || task.template_name || task.type}
-                                    onClick={() => setFloatingData({
-                                      type: 'task',
-                                      item: task,
-                                      propertyName: property,
-                                    })}
+                                    onClick={() => {
+                                      closeGlobals();
+                                      setFloatingData({
+                                        type: 'task',
+                                        item: task,
+                                        propertyName: property,
+                                      });
+                                    }}
                                   >
                                     <span className="truncate">{task.title || task.template_name || task.type}</span>
                                     <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -1746,6 +1762,7 @@ export default function TimelineWindow({
             users={users as any}
             onClose={() => setViewMode('grid')}
             onTaskClick={(task, propertyName) => {
+              closeGlobals();
               setFloatingData({
                 type: 'task',
                 item: task,
@@ -1753,6 +1770,7 @@ export default function TimelineWindow({
               });
             }}
             onProjectClick={(project, propertyName) => {
+              closeGlobals();
               setFloatingData({
                 type: 'project',
                 item: project,

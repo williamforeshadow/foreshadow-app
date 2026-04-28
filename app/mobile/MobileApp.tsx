@@ -67,7 +67,7 @@ export default function MobileApp() {
 
   // Strict single-panel rule: when any global detail panel (reservation
   // overlay or context task overlay) opens, close the mobile-shell panels.
-  useExclusiveDetailPanelHost(() => {
+  const closeGlobals = useExclusiveDetailPanelHost(() => {
     setMobileSelectedTask(null);
     setMobileSelectedProject(null);
   });
@@ -278,6 +278,7 @@ export default function MobileApp() {
               if (task.template_id && !taskTemplates[cacheKey]) {
                 await fetchTaskTemplate(task.template_id, propName);
               }
+              closeGlobals();
               setMobileSelectedTask(task);
             }}
             onProjectClick={async (project: any) => {
@@ -288,6 +289,7 @@ export default function MobileApp() {
                   await fetchTaskTemplate(project.template_id, propName);
                 }
               }
+              closeGlobals();
               setMobileSelectedProject(project);
             }}
             refreshTrigger={mobileRefreshTrigger}
@@ -311,6 +313,7 @@ export default function MobileApp() {
               if (task.template_id && !taskTemplates[cacheKey]) {
                 await fetchTaskTemplate(task.template_id, propName);
               }
+              closeGlobals();
               setMobileSelectedTask(task);
             }}
             onNewTask={({ propertyName, dateStr }) => {

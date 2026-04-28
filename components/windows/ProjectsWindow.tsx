@@ -138,10 +138,16 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   const [expandedProject, setExpandedProject] = useState<Project | null>(null);
   const [editingProjectFields, setEditingProjectFields] = useState<ProjectFormFields | null>(null);
 
+  // Strict single-panel rule (both directions): close our local panel
+  // when a context overlay opens; surfaces call closeGlobals() before
+  // opening their own panel so it doesn't render behind the overlay.
+  // (Original comment retained for context.)
   // Strict single-panel rule: when any global detail panel (reservation
   // overlay or context task overlay) opens, close this surface's local
   // detail panel.
-  useExclusiveDetailPanelHost(() => setExpandedProject(null));
+  const closeGlobals = useExclusiveDetailPanelHost(() =>
+    setExpandedProject(null)
+  );
   const [newComment, setNewComment] = useState('');
   const [staffOpen, setStaffOpen] = useState(false);
   const [viewingAttachmentIndex, setViewingAttachmentIndex] = useState<number | null>(null);
@@ -476,9 +482,10 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+    closeGlobals();
     setDraftTask(draft);
     setExpandedProject(draft);
-  }, [selectedBinId]);
+  }, [selectedBinId, closeGlobals]);
 
   const handleConfirmCreateTask = useCallback(async () => {
     if (!draftTask) return;
@@ -634,10 +641,11 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     if (expandedProject?.id === project.id) {
       setExpandedProject(null);
     } else {
+      closeGlobals();
       setExpandedProject(project);
       recordView(project.id);
     }
-  }, [expandedProject?.id, recordView]);
+  }, [expandedProject?.id, recordView, closeGlobals]);
 
   // ============================================================================
   // RENDER

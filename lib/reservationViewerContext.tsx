@@ -233,15 +233,31 @@ export function ReservationViewerProvider({
  * Surfaces (PropertyScheduleView, TimelineWindow, MyAssignmentsWindow,
  * TasksWindow, ProjectsWindow, TurnoversWindow, etc.) each own their own
  * local detail-panel state (e.g. `selectedTask`, `selectedDay`). Strict
- * mutual exclusion requires that opening a *global* detail panel
- * (reservation panel via key click, or context-owned task overlay) closes
- * any surface-local panels.
+ * mutual exclusion runs in *both* directions:
  *
- * Surfaces call this hook with a single `closeLocal` callback. Whenever
- * the global context opens any panel, the callback fires once.
+ *   1. Global → Local: when the context opens a reservation or task
+ *      overlay, the surface's `closeLocal()` callback fires once so its
+ *      own panel state is reset. Wired by the useEffect below.
+ *
+ *   2. Local → Global: when the surface opens its *own* panel (in
+ *      response to a user gesture), it must close any active context
+ *      overlay first. Surfaces call the returned `closeGlobals()`
+ *      callback at the click handler before flipping their own state:
+ *
+ *        const closeGlobals = useExclusiveDetailPanelHost(() => {
+ *          setSelectedDay(null);
+ *          setFloatingData(null);
+ *        });
+ *        ...
+ *        onClick={() => { closeGlobals(); setSelectedDay(date); }}
+ *
+ * Without (2) the local panel mounts at the same `z-20` slot as the
+ * still-open context overlay and gets hidden behind it — visible only
+ * after the user manually dismisses the global panel.
  */
 export function useExclusiveDetailPanelHost(closeLocal: () => void) {
-  const { modalReservationId, selectedTask } = useReservationViewer();
+  const { modalReservationId, selectedTask, close, setSelectedTask } =
+    useReservationViewer();
   const closeRef = React.useRef(closeLocal);
   closeRef.current = closeLocal;
   useEffect(() => {
@@ -249,6 +265,11 @@ export function useExclusiveDetailPanelHost(closeLocal: () => void) {
       closeRef.current();
     }
   }, [modalReservationId, selectedTask]);
+
+  return useCallback(() => {
+    close();
+    setSelectedTask(null);
+  }, [close, setSelectedTask]);
 }
 
 /**
