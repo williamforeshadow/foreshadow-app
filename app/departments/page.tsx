@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Sidebar from '@/components/Sidebar';
+import { SidebarToggleButton } from '@/components/SidebarToggleButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -181,29 +182,36 @@ export default function DepartmentsPage() {
   );
 
   return (
-    <div className="flex h-screen bg-white dark:bg-neutral-900">
-      <Sidebar />
+    <div className="flex flex-col h-screen bg-white dark:bg-neutral-900">
+      {/* Top bar with sidebar toggle + page title. The descriptive sub-header
+          (badge + create button) lives below in the content column. */}
+      <div className="flex-shrink-0 px-3 py-2 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-2">
+        <SidebarToggleButton />
+        <h1 className="text-base font-semibold text-neutral-900 dark:text-white truncate">
+          Departments
+        </h1>
+      </div>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex-shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-6 pt-6 pb-4">
-          <h1 className="text-2xl font-bold text-neutral-900 dark:text-white">
-            Departments
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Manage departments for templates, tasks, and projects.
-          </p>
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar />
 
-          <div className="flex items-center justify-between mt-4">
-            <Badge variant="secondary" className="text-xs">
-              {departments.length} department{departments.length !== 1 ? 's' : ''}
-            </Badge>
-            <Button onClick={() => setShowCreateDialog(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              New Department
-            </Button>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Sub-header: description + actions */}
+          <div className="flex-shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-6 pt-6 pb-4">
+            <p className="text-sm text-muted-foreground">
+              Manage departments for templates, tasks, and projects.
+            </p>
+
+            <div className="flex items-center justify-between mt-4">
+              <Badge variant="secondary" className="text-xs">
+                {departments.length} department{departments.length !== 1 ? 's' : ''}
+              </Badge>
+              <Button onClick={() => setShowCreateDialog(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                New Department
+              </Button>
+            </div>
           </div>
-        </div>
 
         {/* Error banner */}
         {error && (
@@ -328,15 +336,16 @@ export default function DepartmentsPage() {
           )}
         </div>
 
-        {/* Delete error toast */}
-        {deleteError && (
-          <div className="fixed bottom-6 right-6 max-w-md p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg shadow-lg text-sm text-red-700 dark:text-red-300 z-50">
-            <div className="flex items-start justify-between gap-3">
-              <span>{deleteError}</span>
-              <button onClick={() => { setDeleteError(null); setDeletingId(null); }} className="text-red-500 hover:text-red-700 flex-shrink-0">✕</button>
+          {/* Delete error toast */}
+          {deleteError && (
+            <div className="fixed bottom-6 right-6 max-w-md p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg shadow-lg text-sm text-red-700 dark:text-red-300 z-50">
+              <div className="flex items-start justify-between gap-3">
+                <span>{deleteError}</span>
+                <button onClick={() => { setDeleteError(null); setDeletingId(null); }} className="text-red-500 hover:text-red-700 flex-shrink-0">✕</button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Create Department Dialog */}

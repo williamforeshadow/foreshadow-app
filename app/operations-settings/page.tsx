@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
+import { SidebarToggleButton } from '@/components/SidebarToggleButton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useOperationsSettings } from '@/lib/operationsSettingsContext';
@@ -53,18 +54,22 @@ export default function OperationsSettingsPage() {
   };
 
   return (
-    <div className="flex h-screen bg-white dark:bg-neutral-900">
-      <Sidebar />
+    <div className="flex flex-col h-screen bg-white dark:bg-neutral-900">
+      {/* Top bar — sidebar toggle + page title in a single full-width row
+          above the sidebar. */}
+      <div className="flex-shrink-0 px-3 py-2 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-2">
+        <SidebarToggleButton />
+        <h1 className="text-base font-semibold text-neutral-900 dark:text-white truncate">
+          Operations Settings
+        </h1>
+      </div>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-6 pt-6 pb-4">
-          <h1 className="text-2xl font-bold text-neutral-900 dark:text-white">
-            Operations Settings
-          </h1>
-        </div>
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar />
 
-        <div className="flex-1 overflow-auto p-6">
-          <div className="max-w-2xl space-y-6">
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-auto p-6">
+            <div className="max-w-2xl space-y-6">
             {migrationPending && (
               <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-800 dark:text-amber-200 flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -153,6 +158,7 @@ export default function OperationsSettingsPage() {
               </footer>
             </section>
           </div>
+        </div>
         </div>
       </div>
     </div>

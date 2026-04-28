@@ -2,10 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState } from 'react';
 import { ModeToggle } from '@/components/mode-toggle';
 import { useKanbanTexture } from '@/lib/hooks/useKanbanTexture';
 import { useAuth } from '@/lib/authContext';
+import { useSidebar } from '@/lib/sidebarContext';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import {
   DropdownMenu,
@@ -15,10 +15,16 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
+// Global navigation rail.
+//
+// Open/closed state lives in `SidebarProvider` so any page-level header can
+// host a `<SidebarToggleButton />` and stay in sync with the rail. The
+// component itself is purely presentational + nav: when hidden the wrapper
+// animates to width 0; the actual toggle UI lives outside this file.
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [isOpen, setIsOpen] = useState(true);
+  const { isOpen, isReady } = useSidebar();
   const { user, allUsers, role, canEditTemplates, switchUser } = useAuth();
   const kanbanTexture = useKanbanTexture();
 
@@ -94,60 +100,35 @@ export default function Sidebar() {
   };
 
   return (
-    <>
-      {/* Sidebar */}
-      <div className={`${isOpen ? 'w-64' : 'w-16'} h-screen bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 flex flex-col transition-all duration-300 relative`}>
-        {/* Toggle Button */}
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          className="absolute -right-3 top-6 w-6 h-6 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-full flex items-center justify-center text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors shadow-sm"
-        >
-          <svg 
-            className={`w-4 h-4 transition-transform duration-300 ${isOpen ? '' : 'rotate-180'}`} 
-            fill="none" 
-            stroke="currentColor" 
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-
-        {/* Logo/Title */}
-        <div className={`p-6 border-b border-neutral-200 dark:border-neutral-800 ${isOpen ? '' : 'px-3'}`}>
-          {isOpen ? (
-            <>
-              <h1 className="text-xl font-bold text-neutral-900 dark:text-white flex items-center gap-2">
-                Property Management
-                <svg className="w-4 h-4 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                </svg>
-              </h1>
-            </>
-          ) : (
-            <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 text-center">
-              F
-            </div>
-          )}
-        </div>
-
-        {/* Navigation Items */}
-        <nav className="flex-1 p-4">
-          <div className="space-y-2">
+    // Animated wrapper. Width transitions between w-64 (open) and w-0
+    // (hidden); overflow-hidden clips the inner panel during the slide.
+    // The inner panel keeps its w-64 so its contents don't reflow while
+    // the wrapper is mid-animation. The transition class is gated on
+    // `isReady` so the initial paint snaps to the persisted state.
+    <div
+      className={`h-full overflow-hidden flex-shrink-0 ${
+        isReady ? 'transition-[width] duration-300 ease-in-out' : ''
+      } ${isOpen ? 'w-64' : 'w-0'}`}
+      aria-hidden={!isOpen}
+    >
+      <div className="w-64 h-full bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 flex flex-col">
+        <nav className="flex-1 p-4 pt-5">
+          <div className="space-y-1.5">
             {navItems.map((item) => {
               const isActive = pathname === item.path;
               return (
                 <Link
                   key={item.path}
                   href={item.path}
-                  className={`flex items-center ${isOpen ? 'gap-3 px-4' : 'justify-center px-2'} py-3 rounded-lg transition-colors ${
+                  tabIndex={isOpen ? 0 : -1}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                     isActive
                       ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-white font-semibold'
                       : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-white'
                   }`}
-                  title={!isOpen ? item.name : undefined}
                 >
                   {item.icon}
-                  {isOpen && <span>{item.name}</span>}
+                  <span>{item.name}</span>
                 </Link>
               );
             })}
@@ -159,34 +140,30 @@ export default function Sidebar() {
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button 
-                  className={`w-full flex items-center ${isOpen ? 'gap-3 px-4' : 'justify-center px-2'} py-4 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors`}
-                  title={!isOpen ? user.name : undefined}
+                <button
+                  className="w-full flex items-center gap-3 px-4 py-4 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+                  tabIndex={isOpen ? 0 : -1}
                 >
                   <UserAvatar src={user.avatar} name={user.name} size="md" />
-                  {isOpen && (
-                    <div className="flex-1 text-left min-w-0">
-                      <p className="text-sm font-medium text-neutral-900 dark:text-white truncate">
-                        {user.name}
-                      </p>
-                      <div className="flex items-center gap-1.5">
-                        <span className={`w-2 h-2 rounded-full ${roleColors[role || 'staff']}`} />
-                        <span className="text-xs text-neutral-500 dark:text-neutral-400 capitalize">
-                          {role}
-                        </span>
-                      </div>
+                  <div className="flex-1 text-left min-w-0">
+                    <p className="text-sm font-medium text-neutral-900 dark:text-white truncate">
+                      {user.name}
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full ${roleColors[role || 'staff']}`} />
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400 capitalize">
+                        {role}
+                      </span>
                     </div>
-                  )}
-                  {isOpen && (
-                    <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
-                    </svg>
-                  )}
+                  </div>
+                  <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                  </svg>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent 
-                side={isOpen ? "top" : "right"} 
-                align={isOpen ? "start" : "center"}
+              <DropdownMenuContent
+                side="top"
+                align="start"
                 className="w-56 mb-2"
               >
                 {/* User Info Header */}
@@ -195,7 +172,7 @@ export default function Sidebar() {
                   <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate">{user.email}</p>
                 </div>
                 <DropdownMenuSeparator />
-                
+
                 {/* Edit Profile */}
                 <DropdownMenuItem onClick={() => router.push('/profile')}>
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -203,7 +180,7 @@ export default function Sidebar() {
                   </svg>
                   Edit Profile
                 </DropdownMenuItem>
-                
+
                 {/* Theme Toggle */}
                 <div className="px-2 py-1.5">
                   <div className="flex items-center justify-between">
@@ -253,8 +230,8 @@ export default function Sidebar() {
                             key={u.id}
                             onClick={() => switchUser(u.id)}
                             className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left text-sm transition-colors ${
-                              u.id === user?.id 
-                                ? 'bg-primary/10 text-primary' 
+                              u.id === user?.id
+                                ? 'bg-primary/10 text-primary'
                                 : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'
                             }`}
                           >
@@ -277,7 +254,7 @@ export default function Sidebar() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <div className={`${isOpen ? 'px-4' : 'px-2'} py-4`}>
+            <div className="px-4 py-4">
               <div className="flex items-center justify-center">
                 <ModeToggle />
               </div>
@@ -285,6 +262,6 @@ export default function Sidebar() {
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }

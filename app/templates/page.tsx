@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import { SidebarToggleButton } from '@/components/SidebarToggleButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -68,18 +69,23 @@ export default function TemplatesPage() {
   };
 
   return (
-    <div className="flex h-screen bg-white dark:bg-neutral-900">
-      <Sidebar />
-      
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex-shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-6 pt-6 pb-4">
-          <h1 className="text-2xl font-bold text-neutral-900 dark:text-white">
-            Templates & Automations
-          </h1>
-          
+    <div className="flex flex-col h-screen bg-white dark:bg-neutral-900">
+      {/* Top bar — sidebar toggle + page title in a single row that spans
+          the full viewport above the sidebar. The view tabs + create
+          button live in a sub-header inside the content column below. */}
+      <div className="flex-shrink-0 px-3 py-2 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-2">
+        <SidebarToggleButton />
+        <h1 className="text-base font-semibold text-neutral-900 dark:text-white truncate">
+          Templates &amp; Automations
+        </h1>
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar />
+
+        <div className="flex-1 flex flex-col overflow-hidden">
           {/* View Tabs + Create Button */}
-          <div className="flex items-center justify-between mt-4">
+          <div className="flex-shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-6 py-4 flex items-center justify-between">
             <div className="flex gap-2">
               <Button
                 onClick={() => setActiveView('templates')}
@@ -102,65 +108,65 @@ export default function TemplatesPage() {
               </Button>
             )}
           </div>
-        </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-auto p-6">
-          {activeView === 'templates' ? (
-            // Templates View
-            <>
-              {loading ? (
-                <div className="text-center py-12 text-neutral-500">
-                  Loading templates...
-                </div>
-              ) : templates.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-neutral-500 dark:text-neutral-400 mb-4">
-                    No templates yet. Create your first task template!
-                  </p>
-                  <Button onClick={() => router.push('/templates/new')}>
-                    Create Template
-                  </Button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                  {templates.map((template) => (
-                    <Card
-                      key={template.id}
-                      className="cursor-pointer hover:border-neutral-400 dark:hover:border-neutral-500 transition-colors"
-                      onClick={() => router.push(`/templates/${template.id}`)}
-                    >
-                      <CardHeader>
-                        <CardTitle className="truncate">{template.name}</CardTitle>
-                        {template.description && (
-                          <CardDescription className="line-clamp-1">{template.description}</CardDescription>
-                        )}
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex items-center gap-2">
-                          <Badge 
-                            variant="secondary"
-                            className="bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300 dark:border-neutral-600"
-                          >
-                            {template.department_name || template.type}
-                          </Badge>
-                          <Badge variant="secondary">
-                            {template.fields.length} field{template.fields.length !== 1 ? 's' : ''}
-                          </Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </>
-          ) : (
-            // Automations View
-            <AutomationsView
-              templates={templates}
-              properties={properties}
-            />
-          )}
+          {/* Content */}
+          <div className="flex-1 overflow-auto p-6">
+            {activeView === 'templates' ? (
+              // Templates View
+              <>
+                {loading ? (
+                  <div className="text-center py-12 text-neutral-500">
+                    Loading templates...
+                  </div>
+                ) : templates.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-neutral-500 dark:text-neutral-400 mb-4">
+                      No templates yet. Create your first task template!
+                    </p>
+                    <Button onClick={() => router.push('/templates/new')}>
+                      Create Template
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                    {templates.map((template) => (
+                      <Card
+                        key={template.id}
+                        className="cursor-pointer hover:border-neutral-400 dark:hover:border-neutral-500 transition-colors"
+                        onClick={() => router.push(`/templates/${template.id}`)}
+                      >
+                        <CardHeader>
+                          <CardTitle className="truncate">{template.name}</CardTitle>
+                          {template.description && (
+                            <CardDescription className="line-clamp-1">{template.description}</CardDescription>
+                          )}
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant="secondary"
+                              className="bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300 dark:border-neutral-600"
+                            >
+                              {template.department_name || template.type}
+                            </Badge>
+                            <Badge variant="secondary">
+                              {template.fields.length} field{template.fields.length !== 1 ? 's' : ''}
+                            </Badge>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              // Automations View
+              <AutomationsView
+                templates={templates}
+                properties={properties}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>

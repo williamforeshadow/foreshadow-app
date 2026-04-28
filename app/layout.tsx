@@ -6,6 +6,7 @@ import { AuthProvider } from "@/lib/authContext";
 import { DepartmentsProvider } from "@/lib/departmentsContext";
 import { OperationsSettingsProvider } from "@/lib/operationsSettingsContext";
 import { ReservationViewerProvider } from "@/lib/reservationViewerContext";
+import { SidebarProvider } from "@/lib/sidebarContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -58,7 +59,9 @@ export default function RootLayout({
             <DepartmentsProvider>
               <OperationsSettingsProvider>
                 <ReservationViewerProvider>
-                  {children}
+                  <SidebarProvider>
+                    {children}
+                  </SidebarProvider>
                 </ReservationViewerProvider>
               </OperationsSettingsProvider>
             </DepartmentsProvider>
