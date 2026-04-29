@@ -243,9 +243,9 @@ export function DayDetailPanel({
                         paddingLeft,
                         paddingRight,
                       }}
-                      className={`w-full flex items-center justify-between gap-3 py-2.5 text-left border-t bg-[rgba(167,139,250,0.16)] dark:bg-[rgba(167,139,250,0.18)] border-[rgba(167,139,250,0.38)] dark:border-[rgba(167,139,250,0.45)] transition-colors ${
+                      className={`w-full flex items-center justify-between gap-3 py-2.5 text-left border-t bg-[var(--turnover-purple-bg)] border-[var(--turnover-purple-border)] transition-colors ${
                         clickable
-                          ? 'hover:bg-[rgba(167,139,250,0.24)] dark:hover:bg-[rgba(167,139,250,0.28)] cursor-pointer'
+                          ? 'hover:bg-[var(--turnover-purple-bg-hover)] cursor-pointer'
                           : 'cursor-default'
                       }`}
                     >

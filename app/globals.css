@@ -67,6 +67,17 @@
   --accent-ring-dark: rgba(167, 139, 250, 0.55);
   --accent-bg-soft: rgba(99, 102, 241, 0.08);
   --accent-bg-soft-dark: rgba(167, 139, 250, 0.1);
+
+  /* Turnover / reservation purple — single source of truth for the
+     "active turnover" surfaces: TurnoverCards (active card), Timeline
+     reservation bars (desktop + mobile + property Schedule grid),
+     and the DayDetailPanel "active reservation" rows. Light-mode
+     alphas are intentionally heavier than dark so the lavender reads
+     with the same vibrance against a near-white canvas as it does
+     against the near-black dark surface. */
+  --turnover-purple-bg:       rgba(167, 139, 250, 0.30);
+  --turnover-purple-bg-hover: rgba(167, 139, 250, 0.40);
+  --turnover-purple-border:   rgba(167, 139, 250, 0.55);
 }
 
 .dark {
@@ -102,6 +113,12 @@
   --sidebar-accent-foreground: #f0efed;
   --sidebar-border: rgba(255,255,255,0.07);
   --sidebar-ring: rgba(255,255,255,0.2);
+
+  /* Dark-mode turnover purple — the values that ship today and that
+     the user has signed off on. Light-mode counterparts live in :root. */
+  --turnover-purple-bg:       rgba(167, 139, 250, 0.18);
+  --turnover-purple-bg-hover: rgba(167, 139, 250, 0.28);
+  --turnover-purple-border:   rgba(167, 139, 250, 0.45);
 }
 
 @theme inline {

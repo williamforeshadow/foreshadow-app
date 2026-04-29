@@ -1,8 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTimeline } from '@/lib/useTimeline';
-import { getActiveTurnoverForProperty } from '@/lib/turnoverUtils';
 import {
   useExclusiveDetailPanelHost,
   useReservationViewer,
@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { ClipboardCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Task } from '@/lib/types';
+import type { Task, PropertyOption } from '@/lib/types';
 import { DayDetailPanel, type DayDetailReservation } from '@/components/tasks/DayDetailPanel';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
 
@@ -83,6 +83,25 @@ export default function MobileTimelineView({
 
   const [expandedCell, setExpandedCell] = useState<{ property: string; dateStr: string } | null>(null);
 
+  // Property catalog → name→id lookup. Used to make the y-axis property
+  // labels clickable (open the property's detail page in a new tab).
+  // Mirrors the desktop TimelineWindow behavior. Names that don't resolve
+  // (orphaned reservation strings) fall back to plain text.
+  const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
+  useEffect(() => {
+    fetch('/api/properties')
+      .then(r => r.json())
+      .then(result => { if (result.properties) setAllProperties(result.properties); })
+      .catch(err => console.error('Error fetching properties:', err));
+  }, []);
+  const propertyIdByName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of allProperties) {
+      if (p.id) map.set(p.name, p.id);
+    }
+    return map;
+  }, [allProperties]);
+
   // Strict single-panel rule (both directions): close our drawer when a
   // context overlay opens; close any active context overlay before
   // opening our drawer so the global doesn't sit on top of the drawer.
@@ -98,13 +117,13 @@ export default function MobileTimelineView({
     }
   }, [refreshTrigger, fetchReservations]);
 
-  // Mirrors TimelineWindow's synthesis: stamp reservation_id at this point
-  // so downstream surfaces (DayDetailPanel) can render the
-  // "scheduled relative to reservation" key icon. The
-  // get_property_turnovers RPC's tasks JSONB doesn't carry reservation_id
-  // per row, but every task inside res.tasks belongs to res by
-  // construction. Recurring tasks pass their own (null) reservation_id
-  // through.
+  // Mirrors TimelineWindow's synthesis: each task carries its own
+  // `reservation_id` FK from the get_property_turnovers RPC payload —
+  // it points at the reservation that auto-generated the task, which
+  // may NOT be the reservation whose window the task currently appears
+  // in. We forward the FK as-is so downstream surfaces (DayDetailPanel,
+  // key icon) navigate to the source reservation. Manual / recurring
+  // tasks have no FK and render plain.
   const allTasksWithProperty = useMemo(() => {
     const tasks: (Task & {
       property_name: string;
@@ -115,7 +134,7 @@ export default function MobileTimelineView({
         tasks.push({
           ...task,
           property_name: res.property_name,
-          reservation_id: res.id,
+          reservation_id: task.reservation_id ?? null,
         });
       });
     });
@@ -246,7 +265,6 @@ export default function MobileTimelineView({
           {/* Property rows */}
           {properties.map((property) => {
             const propReservations = getReservationsForProperty(property);
-            const activeTurnover = getActiveTurnoverForProperty(propReservations);
 
             return (
               <div key={property}>
@@ -258,7 +276,19 @@ export default function MobileTimelineView({
                   <div
                     className="relative overflow-hidden w-full h-full px-1.5 text-xs font-medium text-[#1a1a18] dark:text-[#e8e7e3] flex items-center"
                   >
-                    <span className="truncate">{property}</span>
+                    {(() => {
+                      const propertyId = propertyIdByName.get(property);
+                      return propertyId ? (
+                        <Link
+                          href={`/properties/${propertyId}`}
+                          className="truncate cursor-pointer"
+                        >
+                          {property}
+                        </Link>
+                      ) : (
+                        <span className="truncate">{property}</span>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -318,22 +348,12 @@ export default function MobileTimelineView({
 
                         const borderRadius = `${startsBeforeRange ? '0' : '8'}px ${flushRight ? '0' : '8'}px ${flushRight ? '0' : '8'}px ${startsBeforeRange ? '0' : '8'}px`;
 
-                        // Top-only stroke (border-t-2) matches the desktop
-                        // Timeline + property Schedule grid so reservation
-                        // bars read identically across web/mobile/schedule.
-                        const turnoverStatus = activeTurnover?.turnover_status || 'not_started';
-                        let bgClass: string;
-                        switch (turnoverStatus) {
-                          case 'complete':
-                            bgClass = 'bg-[rgba(76,72,105,0.18)] dark:bg-[rgba(76,72,105,0.25)] border-[rgba(76,72,105,0.38)] dark:border-[rgba(76,72,105,0.45)]';
-                            break;
-                          case 'in_progress':
-                            bgClass = 'bg-[rgba(99,102,241,0.16)] dark:bg-[rgba(99,102,241,0.22)] border-[rgba(99,102,241,0.38)] dark:border-[rgba(99,102,241,0.45)]';
-                            break;
-                          default:
-                            bgClass = 'bg-[rgba(167,139,250,0.16)] dark:bg-[rgba(167,139,250,0.18)] border-[rgba(167,139,250,0.38)] dark:border-[rgba(167,139,250,0.45)]';
-                            break;
-                        }
+                        // Reservation bar color — single shared lavender,
+                        // sourced from --turnover-purple-* tokens so this
+                        // bar matches TurnoverCards + the desktop Timeline +
+                        // the property Schedule MonthGrid in both themes.
+                        const bgClass =
+                          'bg-[var(--turnover-purple-bg)] border-[var(--turnover-purple-border)]';
 
                         return (
                           <div

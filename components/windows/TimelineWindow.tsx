@@ -109,6 +109,19 @@ export default function TimelineWindow({
       .catch(err => console.error('Error fetching properties:', err));
   }, []);
 
+  // Property name → id lookup. Powers the clickable property labels in the
+  // y-axis column: clicking a property opens its detail page in a new tab
+  // (target="_blank"). A reservation can carry a property_name string that
+  // doesn't have a matching row in `properties` (orphaned imports, name
+  // drift) — those rows render as plain text instead of broken links.
+  const propertyIdByName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of allProperties) {
+      if (p.id) map.set(p.name, p.id);
+    }
+    return map;
+  }, [allProperties]);
+
   // ============================================================================
   // Timeline hook (needed early for fetchReservations)
   // ============================================================================
@@ -1178,13 +1191,14 @@ export default function TimelineWindow({
 
   // Extract ALL tasks from reservations + recurring tasks, tagged with property_name
   const allTasksWithProperty = useMemo(() => {
-    // We stamp reservation_id onto each row at synthesis time so downstream
-    // surfaces (DayDetailPanel, kanban, etc.) can render the "scheduled
-    // relative to reservation" key icon without re-fetching. The
-    // get_property_turnovers RPC's tasks JSONB doesn't include
-    // reservation_id per row, but every task inside res.tasks belongs to
-    // res by construction. Recurring tasks are fetched with
-    // reservation_id IS NULL so they pass through unchanged.
+    // Each task carries its own `reservation_id` FK from the
+    // get_property_turnovers RPC payload — it points at the reservation
+    // that auto-generated the task (via automation), which may NOT be
+    // the reservation whose window the task currently appears in (a
+    // contingent task generated for a future stay can fall inside an
+    // earlier reservation's window). We forward the FK as-is so downstream
+    // surfaces (DayDetailPanel, kanban, key icon) navigate to the source
+    // reservation. Manual / recurring tasks have no FK and render plain.
     const tasks: (Task & {
       property_name: string;
       reservation_id?: string | null;
@@ -1198,7 +1212,7 @@ export default function TimelineWindow({
           tasks.push({
             ...task,
             property_name: res.property_name,
-            reservation_id: res.id,
+            reservation_id: task.reservation_id ?? null,
           });
         }
       });
@@ -1232,8 +1246,9 @@ export default function TimelineWindow({
     const dayKey = `${selectedDay.getFullYear()}-${String(selectedDay.getMonth() + 1).padStart(2, '0')}-${String(selectedDay.getDate()).padStart(2, '0')}`;
     // Task is defined with a narrow shape in lib/types; ledger fields
     // (bin_name, is_automated, reservation_id) exist on the row payload
-    // but aren't on the interface yet — widen locally. reservation_id is
-    // stamped on by allTasksWithProperty above.
+    // but aren't on the interface yet — widen locally. reservation_id
+    // is the task's own FK (forwarded as-is by allTasksWithProperty),
+    // not a stamp from the parent reservation.
     type TaskRowSource = Task & {
       property_name: string;
       bin_name?: string | null;
@@ -1501,19 +1516,29 @@ export default function TimelineWindow({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                     </button>
-                    <span className="truncate pr-14">{property}</span>
+                    {(() => {
+                      const propertyId = propertyIdByName.get(property);
+                      return propertyId ? (
+                        <a
+                          href={`/properties/${propertyId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 min-w-0 truncate mr-14 px-1.5 py-0.5 rounded-md cursor-pointer hover:bg-[rgba(30,25,20,0.06)] dark:hover:bg-[rgba(255,255,255,0.06)] transition-colors"
+                          title={`Open ${property}`}
+                        >
+                          {property}
+                        </a>
+                      ) : (
+                        <span className="flex-1 min-w-0 truncate pr-14">{property}</span>
+                      );
+                    })()}
                     {activeTurnover && (() => {
                       return (
                         <Popover>
                           <PopoverTrigger asChild>
                             <div className="absolute right-0 top-0 bottom-0 w-16 flex items-center justify-end pr-2 cursor-pointer">
-                              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[rgba(30,25,20,0.06)] dark:bg-[rgba(255,255,255,0.06)] text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.10)] dark:hover:bg-[rgba(255,255,255,0.10)] transition-colors">
-                                <div className="flex items-center gap-0.5">
-                                  <ClipboardCheck className="w-3 h-3" />
-                                  <span className="text-[10px] font-medium w-3 text-right">
-                                    {activeTurnover.tasks?.filter(t => t.status !== 'complete').length || 0}
-                                  </span>
-                                </div>
+                              <div className="flex items-center px-2 py-1 rounded-lg bg-[rgba(30,25,20,0.06)] dark:bg-[rgba(255,255,255,0.06)] text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.10)] dark:hover:bg-[rgba(255,255,255,0.10)] transition-colors">
+                                <ClipboardCheck className="w-3 h-3" />
                               </div>
                             </div>
                           </PopoverTrigger>
@@ -1601,17 +1626,15 @@ export default function TimelineWindow({
                           const rightDiagonal = flushRight ? '0px' : `${diagonalPx}px`;
                           const clipPath = `polygon(${leftDiagonal} 0%, 100% 0%, calc(100% - ${rightDiagonal}) 100%, 0% 100%)`;
 
-                          // Status-aware bar colors (purple family).
-                          // Top-only stroke (border-t-2) gives the bar a "lit
-                          // top edge" / dimensional feel — shared across the
-                          // mobile timeline + property schedule grid so the
-                          // reservation bar reads as one component everywhere.
-                          const barStatus = activeTurnover?.turnover_status || 'not_started';
-                          const barColorClass = barStatus === 'complete'
-                            ? 'bg-[rgba(76,72,105,0.18)] dark:bg-[rgba(76,72,105,0.25)] border-[rgba(76,72,105,0.38)] dark:border-[rgba(76,72,105,0.45)]'
-                            : barStatus === 'in_progress'
-                            ? 'bg-[rgba(99,102,241,0.16)] dark:bg-[rgba(99,102,241,0.22)] border-[rgba(99,102,241,0.38)] dark:border-[rgba(99,102,241,0.45)]'
-                            : 'bg-[rgba(167,139,250,0.16)] dark:bg-[rgba(167,139,250,0.18)] border-[rgba(167,139,250,0.38)] dark:border-[rgba(167,139,250,0.45)]';
+                          // Reservation bar color — single shared lavender.
+                          // Status (not_started / in_progress / complete) is
+                          // communicated by the per-card progress bar, not by
+                          // the bar's color. Tokens live in globals.css
+                          // (--turnover-purple-bg / --turnover-purple-border)
+                          // so TurnoverCards, MobileTimelineView, and the
+                          // property Schedule MonthGrid all stay in lockstep.
+                          const barColorClass =
+                            'bg-[var(--turnover-purple-bg)] border-[var(--turnover-purple-border)]';
 
                           return (
                             <div

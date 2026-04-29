@@ -13,7 +13,7 @@ import type {
   ScheduleReservation,
   ScheduleTask,
 } from '@/components/properties/schedule/MonthGrid';
-import type { Turnover, User } from '@/lib/types';
+import type { Task, Turnover, User } from '@/lib/types';
 import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 
@@ -30,22 +30,17 @@ import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 // comments / attachments / time-tracking plumbing internally. Only one detail
 // layer is visible at a time — while a task overlay is open we hide the
 // reservation panel, mirroring PropertyScheduleView.
+//
+// "Associated tasks" hydration: the RPC's per-card `tasks` array is already
+// minute-precise filtered to [check_in @ defaultCheckInTime,
+// next_check_in @ defaultCheckInTime), so we feed the panel from it directly
+// instead of round-tripping /api/property-tasks-in-window. Net: one less HTTP
+// hop per card click and the card progress bar + the panel's task list are
+// guaranteed to come from the same source.
 
 interface TurnoversWindowProps {
   users: User[];
   currentUser: User | null;
-}
-
-// Open-ended window when next_check_in is null. Bounded so we don't pull the
-// entire forever-tail of recurring tasks. 365d matches a "year ahead" mental
-// model and is plenty for a reservation that may end up extending.
-const FALLBACK_WINDOW_DAYS = 365;
-
-function addDays(yyyyMmDd: string, days: number): string {
-  const slice = yyyyMmDd.length >= 10 ? yyyyMmDd.slice(0, 10) : yyyyMmDd;
-  const d = new Date(`${slice}T00:00:00`);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
 }
 
 function reservationFromTurnover(
@@ -59,6 +54,46 @@ function reservationFromTurnover(
     check_out: card.check_out.slice(0, 10),
     next_check_in: card.next_check_in ? card.next_check_in.slice(0, 10) : null,
     property_name: card.property_name,
+  };
+}
+
+// Adapter: RPC `Task` (jsonb_agg row from get_property_turnovers) → the
+// `ScheduleTask` shape ReservationDetailPanel + PropertyTaskDetailOverlay
+// consume. Most fields map 1:1; the few RPC omissions (property_id,
+// bin_name, is_binned, created_at, updated_at) are non-essential for the
+// panel surfaces — the overlay's mutation paths key on `task_id` and
+// resolve property_name internally, so passing nulls is safe.
+function turnoverTaskToScheduleTask(
+  task: Task,
+  fallbackPropertyName: string | null
+): ScheduleTask {
+  return {
+    task_id: task.task_id,
+    title: task.title ?? null,
+    template_name: task.template_name ?? null,
+    scheduled_date: task.scheduled_date ?? null,
+    scheduled_time: task.scheduled_time ?? null,
+    status: task.status,
+    reservation_id: task.reservation_id ?? null,
+    is_automated: (task.type || '') !== 'project',
+    assigned_users: (task.assigned_users || []).map((u) => ({
+      user_id: u.user_id,
+      name: u.name,
+      avatar: u.avatar ?? null,
+      role: u.role,
+    })),
+    property_id: null,
+    property_name: task.property_name ?? fallbackPropertyName,
+    template_id: task.template_id ?? null,
+    description: task.description ?? null,
+    priority: task.priority ?? undefined,
+    type: task.type,
+    department_id: task.department_id ?? null,
+    department_name: task.department_name ?? null,
+    form_metadata: task.form_metadata ?? null,
+    bin_id: task.bin_id ?? null,
+    bin_name: null,
+    is_binned: !!task.is_binned,
   };
 }
 
@@ -113,16 +148,10 @@ function TurnoversWindowContent(_: TurnoversWindowProps) {
     selectedCard,
     setSelectedCard,
     closeSelectedCard,
+    fetchTurnovers,
     rightPanelRef,
     scrollPositionRef,
   } = useTurnovers();
-
-  // Tasks scheduled inside the selected reservation's turnover window. The
-  // RPC's per-card task list is reservation-bound (FK association); the new
-  // "associated tasks" rule is purely scheduled-date-in-window, so we hydrate
-  // from the dedicated endpoint each time a card is selected.
-  const [windowTasks, setWindowTasks] = useState<ScheduleTask[]>([]);
-  const [windowPropertyId, setWindowPropertyId] = useState<string | null>(null);
 
   // One detail layer at a time. selectedTask, when set, takes precedence and
   // hides the reservation panel beneath.
@@ -135,66 +164,33 @@ function TurnoversWindowContent(_: TurnoversWindowProps) {
     setSelectedTask(null);
   });
 
-  const fetchWindowTasks = useCallback(async () => {
-    if (!selectedCard?.property_name || !selectedCard.check_in) {
-      setWindowTasks([]);
-      setWindowPropertyId(null);
-      return;
-    }
-    const start = selectedCard.check_in.slice(0, 10);
-    const end = selectedCard.next_check_in
-      ? selectedCard.next_check_in.slice(0, 10)
-      : addDays(start, FALLBACK_WINDOW_DAYS);
-    try {
-      const params = new URLSearchParams({
-        property_name: selectedCard.property_name,
-        start,
-        end,
-      });
-      const res = await fetch(
-        `/api/property-tasks-in-window?${params.toString()}`
-      );
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error || 'Failed to load associated tasks');
-      }
-      setWindowTasks((data.tasks || []) as ScheduleTask[]);
-      setWindowPropertyId(data.property?.id ?? null);
-    } catch (err) {
-      console.error('[TurnoversWindow] window tasks fetch failed:', err);
-      setWindowTasks([]);
-    }
-  }, [
-    selectedCard?.id,
-    selectedCard?.property_name,
-    selectedCard?.check_in,
-    selectedCard?.next_check_in,
-  ]);
+  // Tasks for the selected card's reservation window. Sourced directly from
+  // the RPC payload — `selectedCard.tasks` is already minute-precise filtered
+  // and sorted by get_property_turnovers, so no second fetch is required.
+  const windowTasks = useMemo<ScheduleTask[]>(() => {
+    if (!selectedCard) return [];
+    const fallbackPropertyName = selectedCard.property_name ?? null;
+    return (selectedCard.tasks || []).map((t) =>
+      turnoverTaskToScheduleTask(t, fallbackPropertyName)
+    );
+  }, [selectedCard]);
 
+  // Clearing the card also tears down any open task overlay so we never
+  // leave a stale right-pane behind.
   useEffect(() => {
-    if (selectedCard) {
-      fetchWindowTasks();
-    } else {
-      setWindowTasks([]);
-      setWindowPropertyId(null);
+    if (!selectedCard) {
       setSelectedTask(null);
     }
-    // fetchWindowTasks captures the relevant card fields already
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCard?.id]);
 
   const handleOpenTask = useCallback(
     (task: ScheduleTask) => {
       closeGlobals();
       setSelectedTask(
-        scheduleTaskToOverlay(
-          task,
-          windowPropertyId,
-          selectedCard?.property_name ?? null
-        )
+        scheduleTaskToOverlay(task, null, selectedCard?.property_name ?? null)
       );
     },
-    [windowPropertyId, selectedCard?.property_name, closeGlobals]
+    [selectedCard?.property_name, closeGlobals]
   );
 
   const reservationForPanel = useMemo(
@@ -305,12 +301,13 @@ function TurnoversWindowContent(_: TurnoversWindowProps) {
       )}
 
       {/* Task detail overlay — shared with Schedule / Tasks / Bins. Anchors
-          to the relative wrapper above. Mutations inside refetch the window
-          so the panel reflects edits when the user closes the overlay. */}
+          to the relative wrapper above. Mutations inside refetch the
+          turnovers RPC so both the card progress bar and the panel's task
+          list reflect edits the moment the overlay closes. */}
       <PropertyTaskDetailOverlay
         task={selectedTask}
         onClose={() => setSelectedTask(null)}
-        onTaskUpdated={fetchWindowTasks}
+        onTaskUpdated={fetchTurnovers}
       />
     </div>
   );

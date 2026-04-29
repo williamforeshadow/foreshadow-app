@@ -208,7 +208,11 @@ function TasksWindowContent({ currentUser, users }: TasksWindowProps) {
     // matches the previous flex shell. The list always takes the full width
     // — when a task is selected, the detail overlay floats in over the
     // right third (matches Properties / Timeline behaviour).
-    <div className="relative h-full overflow-hidden">
+    //
+    // Explicit white page bg in light mode (matches Turnovers) so the page
+    // stops inheriting the off-white-grey `bg-background` that read as
+    // "grey on grey" against the column-header strip.
+    <div className="relative h-full overflow-hidden bg-white dark:bg-[#0b0b0c]">
       {/* Main Content - container resizes, content stays full width via min-w-max */}
       <div className="w-full h-full flex flex-col min-w-0">
         {/* Header with filters */}

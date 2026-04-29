@@ -46,9 +46,24 @@ function PopoverAnchor({
 }
 
 function PopoverClose({
+  className,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Close>) {
-  return <PopoverPrimitive.Close data-slot="popover-close" {...props} />
+  // Reset the browser's default button focus outline (which renders as a
+  // harsh white ring around the X close icon on dark surfaces) and replace
+  // it with a tasteful focus-visible ring that only appears for keyboard
+  // navigation. Consumers can still pass their own `className` and it will
+  // merge after these defaults.
+  return (
+    <PopoverPrimitive.Close
+      data-slot="popover-close"
+      className={cn(
+        "outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-3)] focus-visible:ring-offset-1 rounded-md",
+        className,
+      )}
+      {...props}
+    />
+  )
 }
 
 export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor, PopoverClose }

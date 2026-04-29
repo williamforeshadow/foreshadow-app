@@ -191,7 +191,7 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
       return `${glassBase} bg-neutral-100 dark:bg-white/[0.08] border border-dashed border-neutral-400 dark:border-white/30`;
     }
 
-    return `${glassBase} bg-[rgba(167,139,250,0.16)] dark:bg-[rgba(167,139,250,0.18)] border border-[rgba(167,139,250,0.38)] dark:border-[rgba(167,139,250,0.45)]`;
+    return `${glassBase} bg-[var(--turnover-purple-bg)] border border-[var(--turnover-purple-border)]`;
   };
 
   // Card width - slightly narrower in compact mode
@@ -233,11 +233,11 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
             {item.guest_name || 'No Guest'}
           </p>
           {isInPlay && (
-            <Badge 
-              className={`px-2 py-0.5 text-[11px] backdrop-blur-sm shrink-0 ${
-                item.occupancy_status === 'occupied' 
-                  ? 'bg-white/35 dark:bg-white/10 text-neutral-700 dark:text-neutral-300 border-neutral-300/30 dark:border-white/10'
-                  : 'bg-white/30 dark:bg-white/10 text-neutral-600 dark:text-neutral-400 border-neutral-300/30 dark:border-white/10'
+            <Badge
+              className={`px-2 py-0.5 text-[11px] backdrop-blur-sm shrink-0 border ${
+                item.occupancy_status === 'occupied'
+                  ? 'bg-amber-100/70 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-300/50 dark:border-amber-500/30'
+                  : 'bg-emerald-100/70 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-300/50 dark:border-emerald-500/30'
               }`}
             >
               {item.occupancy_status === 'occupied' ? 'Occupied' : 'Checked out'}
