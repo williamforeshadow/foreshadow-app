@@ -44,10 +44,19 @@ export default function DesktopApp() {
   // (last-used view) and finally to 'turnovers'. Lives in the URL so refresh
   // and shared links land on the right tab — and so per-tab filter state
   // (read by the individual view components) is unambiguous.
+  //
+  // We read the URL synchronously from `window.location.search` for the
+  // initial state. `useSearchParams()` from next/navigation is not guaranteed
+  // to be populated on the very first client render of this component
+  // (DesktopApp only mounts after `useIsMobile` resolves, and the hook can
+  // briefly return null at that point). Reading window.location directly
+  // avoids that race — otherwise the localStorage fallback wins, then a
+  // mount effect rewrites the URL with the wrong tab on refresh.
   const urlView = searchParams?.get('view');
   const [activeView, setActiveView] = useState<ViewType>(() => {
-    if (isViewType(urlView)) return urlView;
     if (typeof window !== 'undefined') {
+      const fromUrl = new URLSearchParams(window.location.search).get('view');
+      if (isViewType(fromUrl)) return fromUrl;
       try {
         const stored = window.localStorage.getItem(VIEW_STORAGE_KEY);
         if (isViewType(stored)) return stored;
@@ -82,9 +91,15 @@ export default function DesktopApp() {
   // from localStorage (or fell back to turnovers), reflect that into the URL
   // so the rest of the app — including the views' own filter state — has a
   // consistent source of truth.
+  //
+  // Read the live URL from `window.location` (not the captured searchParams
+  // hook value) so we never overwrite a real `?view=…` because the hook
+  // hadn't populated yet at mount.
   useEffect(() => {
-    if (urlView == null) {
-      const params = new URLSearchParams(searchParams?.toString() || '');
+    if (typeof window === 'undefined') return;
+    const live = new URLSearchParams(window.location.search).get('view');
+    if (live == null) {
+      const params = new URLSearchParams(window.location.search);
       params.set('view', activeView);
       router.replace(`/?${params.toString()}` as any, { scroll: false });
     }

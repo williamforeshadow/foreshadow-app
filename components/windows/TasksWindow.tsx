@@ -385,15 +385,13 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
   const handleConfirmCreateTask = useCallback(async () => {
     if (!draftTask) return;
     const fields = editingFieldsRef.current;
-    // Property is required — if the user hasn't picked one, do nothing. The
-    // Create button is disabled in this state (see `creatingTask` block in
-    // ProjectDetailPanel — we mirror that with our own gate).
-    const propertyName = draftTask.property_name;
-    if (!propertyName) return;
+    const propertyName = draftTask.property_name || null;
 
     setCreatingTask(true);
     try {
-      const matchedProperty = allProperties.find((p) => p.name === propertyName);
+      const matchedProperty = propertyName
+        ? allProperties.find((p) => p.name === propertyName)
+        : null;
       const payload: Record<string, unknown> = {
         title: fields?.title || draftTask.title || 'New Task',
         status: fields?.status || 'not_started',
@@ -755,12 +753,8 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
             }}
             onOpenActivity={() => {}}
             isNewTask={isDraft}
-            // Disable Create until property is picked. ProjectDetailPanel's
-            // button only checks `creatingTask`, so we surface the missing
-            // property by short-circuiting the handler. Disabled state is
-            // additionally driven by `creatingTask`.
             onConfirmCreate={isDraft ? handleConfirmCreateTask : undefined}
-            creatingTask={creatingTask || (isDraft && !draftTask?.property_name)}
+            creatingTask={creatingTask}
             onPropertyChange={
               isDraft
                 ? (_pid, name) => {
