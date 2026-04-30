@@ -1,7 +1,18 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 
-// GET - Fetch all tasks with related data
+// GET /api/all-tasks
+//
+// Global task ledger — returns every row in `turnover_tasks` plus the metadata
+// needed by the shared <TaskRow /> component (status / priority / department /
+// assignees / bin / comment count / origin). The Tasks tab on the dashboard
+// reads from here; client-side filtering / sorting / grouping are then layered
+// on top in `lib/useTasks.ts`.
+//
+// Response shape mirrors `/api/properties/[id]/tasks` so the same UI pieces
+// work in both places. The reservation-window fields (`check_in`, `check_out`,
+// `guest_name`) are kept for the detail panel but are no longer used by the
+// list row itself.
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -9,12 +20,12 @@ export async function GET(request: Request) {
     const type = searchParams.get('type');
     const propertyName = searchParams.get('property_name');
 
-    // Fetch tasks with related data
     let query = getSupabaseServer()
       .from('turnover_tasks')
       .select(`
         id,
         reservation_id,
+        property_id,
         property_name,
         template_id,
         title,
@@ -26,101 +37,53 @@ export async function GET(request: Request) {
         scheduled_date,
         scheduled_time,
         bin_id,
+        is_binned,
         form_metadata,
         completed_at,
         created_at,
         updated_at,
         templates(id, name, type, department_id),
         departments(id, name),
+        project_bins(id, name, is_system),
         reservations(id, property_name, guest_name, check_in, check_out),
-        task_assignments(user_id, users(id, name, avatar, role))
+        task_assignments(user_id, users(id, name, avatar, role)),
+        project_comments(count)
       `)
       .order('created_at', { ascending: false });
 
-    // Apply optional filters
-    if (status) {
-      query = query.eq('status', status);
-    }
-    if (type) {
-      query = query.eq('type', type);
-    }
+    if (status) query = query.eq('status', status);
+    if (type) query = query.eq('type', type);
 
     const { data: tasks, error } = await query;
 
     if (error) {
       console.error('Error fetching tasks:', error);
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Fetch all reservations to compute next_check_in for each task
-    // We need property_name and check_in to find the next reservation
-    const { data: allReservations, error: reservationsError } = await getSupabaseServer()
-      .from('reservations')
-      .select('id, property_name, check_in, check_out')
-      .order('check_in', { ascending: true });
-
-    if (reservationsError) {
-      console.error('Error fetching reservations:', reservationsError);
-      return NextResponse.json(
-        { error: reservationsError.message },
-        { status: 500 }
-      );
-    }
-
-    // Group reservations by property for efficient lookup
-    const reservationsByProperty: Record<string, Array<{ id: string; check_in: string; check_out: string }>> = {};
-    allReservations?.forEach((r: { id: string; property_name: string; check_in: string; check_out: string }) => {
-      if (!reservationsByProperty[r.property_name]) {
-        reservationsByProperty[r.property_name] = [];
-      }
-      reservationsByProperty[r.property_name].push({
-        id: r.id,
-        check_in: r.check_in,
-        check_out: r.check_out
-      });
-    });
-
-    // Helper to find next_check_in for a given reservation
-    const findNextCheckIn = (propertyName: string, checkOut: string | null): string | null => {
-      if (!checkOut || !reservationsByProperty[propertyName]) return null;
-      
-      const checkOutDate = new Date(checkOut);
-      const propertyReservations = reservationsByProperty[propertyName];
-      
-      // Find the first reservation where check_in is after this reservation's check_out
-      for (const res of propertyReservations) {
-        const resCheckIn = new Date(res.check_in);
-        if (resCheckIn > checkOutDate) {
-          return res.check_in;
-        }
-      }
-      return null;
-    };
-
-    // Transform the data to flatten nested structures
-    const transformedTasks = tasks?.map((task: any) => {
+    const transformedTasks = (tasks || []).map((task: any) => {
       const template = task.templates as any;
       const reservation = task.reservations as any;
       const department = task.departments as any;
+      const bin = task.project_bins as any;
       const assignments = (task.task_assignments || []) as any[];
+      const commentAgg = task.project_comments as any;
+      const commentCount = Array.isArray(commentAgg)
+        ? Number(commentAgg[0]?.count ?? 0)
+        : 0;
 
-      // Use property_name from the task directly (now always populated),
-      // fall back to reservation for legacy rows
-      const propName = task.property_name || reservation?.property_name || 'Unknown Property';
-      const checkOut = reservation?.check_out || null;
-      const nextCheckIn = findNextCheckIn(propName, checkOut);
+      const propName =
+        task.property_name || reservation?.property_name || 'Unknown Property';
 
       return {
         task_id: task.id,
         reservation_id: task.reservation_id,
+        property_id: task.property_id || null,
         template_id: task.template_id,
         template_name: template?.name || 'Unnamed Task',
         title: task.title || null,
         description: task.description || null,
-        priority: task.priority || null,
+        priority: task.priority || 'medium',
         type: task.type || template?.type || 'cleaning',
         department_id: task.department_id || template?.department_id || null,
         department_name: department?.name || null,
@@ -130,35 +93,38 @@ export async function GET(request: Request) {
         form_metadata: task.form_metadata,
         completed_at: task.completed_at,
         created_at: task.created_at,
-        bin_id: task.bin_id || null,
         updated_at: task.updated_at,
-        // Reservation context (may be null for recurring tasks)
+        bin_id: task.bin_id || null,
+        bin_name: bin?.name || null,
+        bin_is_system: !!bin?.is_system,
+        is_binned: task.is_binned ?? false,
+        // Automation-generated tasks (reservation turnovers, recurring rules,
+        // templated spawns) all insert with a non-"project" type. Manually
+        // created tasks (New Task button → /api/tasks-for-bin POST) are
+        // type="project". Mirrors the rule used by /api/properties/[id]/tasks.
+        is_automated: (task.type || '') !== 'project',
         property_name: propName,
         guest_name: reservation?.guest_name || null,
         check_in: reservation?.check_in || null,
-        check_out: checkOut,
-        next_check_in: nextCheckIn,
-        // Recurring flag
+        check_out: reservation?.check_out || null,
         is_recurring: task.reservation_id === null,
-        // Assigned users
-        assigned_users: assignments.map(a => ({
+        assigned_users: assignments.map((a) => ({
           user_id: a.user_id,
           name: a.users?.name || '',
           avatar: a.users?.avatar || '',
-          role: a.users?.role || ''
-        }))
+          role: a.users?.role || '',
+        })),
+        comment_count: commentCount,
       };
-    }) || [];
+    });
 
-    // Filter by property name if provided (post-query since it's in a join)
     let filteredTasks = transformedTasks;
     if (propertyName) {
-      filteredTasks = transformedTasks.filter((t: any) => 
+      filteredTasks = transformedTasks.filter((t: any) =>
         t.property_name.toLowerCase().includes(propertyName.toLowerCase())
       );
     }
 
-    // Calculate summary stats
     const byType: Record<string, number> = {};
     filteredTasks.forEach((t: any) => {
       const typeName = t.department_name || t.type || 'unknown';
@@ -170,13 +136,13 @@ export async function GET(request: Request) {
       not_started: filteredTasks.filter((t: any) => t.status === 'not_started').length,
       in_progress: filteredTasks.filter((t: any) => t.status === 'in_progress').length,
       complete: filteredTasks.filter((t: any) => t.status === 'complete').length,
-      by_type: byType
+      by_type: byType,
     };
 
     return NextResponse.json({
       success: true,
       data: filteredTasks,
-      summary
+      summary,
     });
   } catch (err: any) {
     console.error('API error:', err);
@@ -186,4 +152,3 @@ export async function GET(request: Request) {
     );
   }
 }
-
