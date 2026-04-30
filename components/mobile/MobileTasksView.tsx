@@ -25,7 +25,7 @@ import type { Template } from '@/components/DynamicCleaningForm';
 import { MobileTaskRow } from '@/components/tasks/MobileTaskRow';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
 import MobileProjectDetail from '@/components/mobile/MobileProjectDetail';
-import { TaskFilterBar } from '@/components/tasks/TaskFilterBar';
+import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 
 // Mobile-tailored Tasks view. Shares the same useTasks hook + filter bar as
@@ -354,12 +354,13 @@ function MobileTasksViewContent() {
   const handleConfirmCreate = useCallback(
     async (fields?: ProjectFormFields) => {
       if (!draftTask) return;
-      const propertyName = draftTask.property_name;
-      if (!propertyName) return;
+      const propertyName = draftTask.property_name || null;
 
       setCreatingTask(true);
       try {
-        const matchedProperty = allProperties.find((p) => p.name === propertyName);
+        const matchedProperty = propertyName
+          ? allProperties.find((p) => p.name === propertyName)
+          : null;
         const payload: Record<string, unknown> = {
           title: fields?.title || draftTask.title || 'New Task',
           status: fields?.status || 'not_started',
@@ -506,47 +507,46 @@ function MobileTasksViewContent() {
         </div>
       </div>
 
-      {/* Filter bar — shared component, scrolls horizontally if needed.
-          We override the desktop padding by wrapping in a flush container
-          and giving the chip row overflow-x-auto. */}
-      <div className="flex-shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] overflow-x-auto hide-scrollbar">
-        <div className="min-w-max">
-          <TaskFilterBar
-            search={filters.search}
-            onSearchChange={setSearch}
-            statusOptions={filterOptions.statuses}
-            statusSelected={filters.statuses}
-            onStatusChange={setStatuses}
-            assigneeOptions={filterOptions.assignees}
-            assigneeSelected={filters.assignees}
-            onAssigneeChange={setAssignees}
-            departmentOptions={filterOptions.departments}
-            departmentSelected={filters.departments}
-            onDepartmentChange={setDepartments}
-            binOptions={filterOptions.bins}
-            binSelected={filters.bins}
-            onBinChange={setBins}
-            originOptions={filterOptions.origins}
-            originSelected={filters.origins}
-            onOriginChange={setOrigins}
-            priorityOptions={filterOptions.priorities}
-            prioritySelected={filters.priorities}
-            onPriorityChange={setPriorities}
-            propertyOptions={filterOptions.properties}
-            propertySelected={filters.properties}
-            onPropertyChange={setProperties}
-            scheduledDateRange={filters.scheduledDateRange}
-            onScheduledDateRangeChange={setScheduledDateRange}
-            sortKey={sort.key}
-            sortDir={sort.dir}
-            onSortChange={setSort}
-            onClearAll={clearFilters}
-            anyFilterActive={anyFilterActive}
-            onNewTask={handleNewTask}
-            totalCount={allTasks.length}
-            filteredCount={tasks.length}
-          />
-        </div>
+      {/* Mobile-native filter bar: compact row + portalled bottom sheets.
+          Avoids cramming 8+ desktop chips into a horizontally-scrolling row,
+          and renders its sheets via portal so they can't be clipped by the
+          list's scroll container. */}
+      <div className="flex-shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
+        <MobileTaskFilterBar
+          search={filters.search}
+          onSearchChange={setSearch}
+          statusOptions={filterOptions.statuses}
+          statusSelected={filters.statuses}
+          onStatusChange={setStatuses}
+          assigneeOptions={filterOptions.assignees}
+          assigneeSelected={filters.assignees}
+          onAssigneeChange={setAssignees}
+          departmentOptions={filterOptions.departments}
+          departmentSelected={filters.departments}
+          onDepartmentChange={setDepartments}
+          binOptions={filterOptions.bins}
+          binSelected={filters.bins}
+          onBinChange={setBins}
+          originOptions={filterOptions.origins}
+          originSelected={filters.origins}
+          onOriginChange={setOrigins}
+          priorityOptions={filterOptions.priorities}
+          prioritySelected={filters.priorities}
+          onPriorityChange={setPriorities}
+          propertyOptions={filterOptions.properties}
+          propertySelected={filters.properties}
+          onPropertyChange={setProperties}
+          scheduledDateRange={filters.scheduledDateRange}
+          onScheduledDateRangeChange={setScheduledDateRange}
+          sortKey={sort.key}
+          sortDir={sort.dir}
+          onSortChange={setSort}
+          onClearAll={clearFilters}
+          anyFilterActive={anyFilterActive}
+          onNewTask={handleNewTask}
+          totalCount={allTasks.length}
+          filteredCount={tasks.length}
+        />
       </div>
 
       {/* List */}
@@ -696,7 +696,7 @@ function MobileTasksViewContent() {
           onTemplateChange={handleTemplateChange}
           isNewTask={isDraft}
           onConfirmCreate={isDraft ? (fields) => handleConfirmCreate(fields) : undefined}
-          creatingTask={creatingTask || (isDraft && !draftTask?.property_name)}
+          creatingTask={creatingTask}
         />
       )}
     </div>
