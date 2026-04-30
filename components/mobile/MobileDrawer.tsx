@@ -23,6 +23,7 @@ const roleColors: Record<string, string> = {
 const NAV_ROUTES = {
   home: '/',
   properties: '/properties',
+  tasks: '/tasks',
   profile: '/profile',
 } as const;
 
@@ -125,6 +126,16 @@ const MobileDrawer = memo(function MobileDrawer({ open, onClose }: MobileDrawerP
               icon={
                 <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+              }
+            />
+            <DrawerNavItem
+              active={isActiveRoute(pathname, NAV_ROUTES.tasks)}
+              label="Tasks"
+              onClick={() => navigate(NAV_ROUTES.tasks)}
+              icon={
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                 </svg>
               }
             />
