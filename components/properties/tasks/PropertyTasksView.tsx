@@ -41,7 +41,7 @@ import {
   type FilterOption,
   ORIGIN_MANUAL,
   ORIGIN_AUTOMATED,
-} from './TaskFilterBar';
+} from '@/components/tasks/TaskFilterBar';
 
 // Property Tasks ledger — shows every task ever linked to the property.
 // Curation is done by the user via filter + sort, not by the component. The
@@ -186,9 +186,14 @@ function PropertyTasksViewContent({
   const [originSelected, setOriginSelected] = useState<Set<string>>(() =>
     parseSet(searchParams?.get(URL_KEYS.origin) || null)
   );
+  const [prioritySelected, setPrioritySelected] = useState<Set<string>>(() =>
+    parseSet(searchParams?.get('priority') || null)
+  );
   const [sortKey, setSortKey] = useState<SortKey>(() => {
     const v = searchParams?.get(URL_KEYS.sortKey);
-    return v === 'completed' || v === 'created' || v === 'updated' ? v : 'scheduled';
+    return v === 'completed' || v === 'created' || v === 'updated' || v === 'priority'
+      ? v
+      : 'scheduled';
   });
   const [sortDir, setSortDir] = useState<SortDir>(() => {
     const v = searchParams?.get(URL_KEYS.sortDir);
@@ -209,6 +214,8 @@ function PropertyTasksViewContent({
     if (bin) params.set(URL_KEYS.bin, bin);
     const origin = serializeSet(originSelected);
     if (origin) params.set(URL_KEYS.origin, origin);
+    const priority = serializeSet(prioritySelected);
+    if (priority) params.set('priority', priority);
     if (sortKey !== 'scheduled') params.set(URL_KEYS.sortKey, sortKey);
     if (sortDir !== 'desc') params.set(URL_KEYS.sortDir, sortDir);
 
@@ -223,6 +230,7 @@ function PropertyTasksViewContent({
     departmentSelected,
     binSelected,
     originSelected,
+    prioritySelected,
     sortKey,
     sortDir,
   ]);
@@ -431,6 +439,19 @@ function PropertyTasksViewContent({
     ];
   }, [allItems]);
 
+  const priorityOptions: FilterOption[] = useMemo(() => {
+    const counts: Record<string, number> = {};
+    allItems.forEach((i) => {
+      counts[i.priority] = (counts[i.priority] || 0) + 1;
+    });
+    return [
+      { value: 'urgent', label: 'Urgent', count: counts.urgent || 0 },
+      { value: 'high', label: 'High', count: counts.high || 0 },
+      { value: 'medium', label: 'Medium', count: counts.medium || 0 },
+      { value: 'low', label: 'Low', count: counts.low || 0 },
+    ];
+  }, [allItems]);
+
   // ---- Filter + sort ------------------------------------------------------
 
   const filteredItems = useMemo(() => {
@@ -466,6 +487,9 @@ function PropertyTasksViewContent({
         if (wantAutomated !== item.is_automated) return false;
       }
 
+      if (prioritySelected.size > 0 && !prioritySelected.has(item.priority))
+        return false;
+
       return true;
     });
   }, [
@@ -476,11 +500,21 @@ function PropertyTasksViewContent({
     departmentSelected,
     binSelected,
     originSelected,
+    prioritySelected,
   ]);
 
   const sortedItems = useMemo(() => {
     const arr = [...filteredItems];
-    const keyOf = (i: UnifiedItem): string => {
+    // 'priority' sort uses a numeric ordering (urgent → low) so missing /
+    // unknown priorities sort last regardless of direction. All other keys
+    // are date strings.
+    const PRIORITY_ORDER: Record<string, number> = {
+      urgent: 0,
+      high: 1,
+      medium: 2,
+      low: 3,
+    };
+    const keyOf = (i: UnifiedItem): string | number => {
       switch (sortKey) {
         case 'completed':
           return i.completed_at || '';
@@ -488,20 +522,24 @@ function PropertyTasksViewContent({
           return i.created_at || '';
         case 'updated':
           return i.updated_at || '';
+        case 'priority':
+          return PRIORITY_ORDER[i.priority] ?? 99;
         case 'scheduled':
         default:
-          // Combine date + time to sort scheduled stably
           return `${i.scheduled_date || ''}T${i.scheduled_time || ''}`;
       }
     };
     arr.sort((a, b) => {
       const av = keyOf(a);
       const bv = keyOf(b);
-      // Empty values always last regardless of direction — they're unscheduled.
-      if (!av && bv) return 1;
-      if (av && !bv) return -1;
-      if (!av && !bv) return 0;
-      const cmp = av.localeCompare(bv);
+      const aEmpty = av === '' || av === 99;
+      const bEmpty = bv === '' || bv === 99;
+      if (aEmpty && !bEmpty) return 1;
+      if (!aEmpty && bEmpty) return -1;
+      if (aEmpty && bEmpty) return 0;
+      let cmp = 0;
+      if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv;
+      else cmp = String(av).localeCompare(String(bv));
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return arr;
@@ -575,8 +613,17 @@ function PropertyTasksViewContent({
       // Only count origin as active when it actually narrows results.
       // Empty set or both values selected = pass-through, so no chip
       // highlight and no "clear" required.
-      originSelected.size === 1,
-    [search, statusSelected, assigneeSelected, departmentSelected, binSelected, originSelected]
+      originSelected.size === 1 ||
+      prioritySelected.size > 0,
+    [
+      search,
+      statusSelected,
+      assigneeSelected,
+      departmentSelected,
+      binSelected,
+      originSelected,
+      prioritySelected,
+    ]
   );
 
   const clearAll = useCallback(() => {
@@ -586,6 +633,7 @@ function PropertyTasksViewContent({
     setDepartmentSelected(new Set());
     setBinSelected(new Set());
     setOriginSelected(new Set());
+    setPrioritySelected(new Set());
   }, []);
 
   // Collapsible section state. "Completed" starts collapsed; user toggles are
@@ -1079,6 +1127,9 @@ function PropertyTasksViewContent({
             originOptions={originOptions}
             originSelected={originSelected}
             onOriginChange={setOriginSelected}
+            priorityOptions={priorityOptions}
+            prioritySelected={prioritySelected}
+            onPriorityChange={setPrioritySelected}
             sortKey={sortKey}
             sortDir={sortDir}
             onSortChange={(k, d) => {
