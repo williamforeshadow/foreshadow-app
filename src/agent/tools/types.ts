@@ -27,6 +27,11 @@ export interface ToolMeta {
   limit: number;
   /** True when more rows existed than `limit` allowed. */
   truncated: boolean;
+  /**
+   * Tools may attach extra disambiguation context (e.g. resolved name → id
+   * matches) so the model can mention them in its answer.
+   */
+  [key: string]: unknown;
 }
 
 export type ToolResult<T> =

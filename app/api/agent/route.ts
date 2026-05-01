@@ -28,10 +28,17 @@ export async function POST(req: NextRequest) {
 
   let prompt: string;
   let userId: string | undefined;
+  let clientTz: string | undefined;
   try {
     const body = await req.json();
     prompt = body?.prompt;
     userId = body?.user_id;
+    // Browser-supplied IANA tz string (e.g. "America/Los_Angeles"). Optional;
+    // runAgent falls back to UTC when missing or invalid. Keep this tolerant —
+    // we don't want a malformed tz to fail the whole request.
+    if (typeof body?.client_tz === 'string' && body.client_tz.length > 0) {
+      clientTz = body.client_tz;
+    }
     if (!prompt || typeof prompt !== 'string') {
       return NextResponse.json(
         { error: 'Missing or invalid prompt' },
@@ -74,21 +81,25 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await runAgent({ history, prompt });
+    const result = await runAgent({ history, prompt, clientTz });
 
     if (userId) {
       await supabase.from('ai_chat_messages').insert({
         user_id: userId,
         role: 'assistant',
         content: result.text,
-        // Store a lightweight trace of which tools fired and what input the
-        // model passed. Useful for debugging without bloating the row.
+        // Store a per-call trace of which tools fired, what input the model
+        // passed, and the outcome envelope (meta on success, error on
+        // failure). We deliberately drop `data` to keep rows small but keep
+        // everything we need to diagnose hallucinations and silent empties
+        // after the fact.
         metadata: {
-          tool_calls: result.toolCalls.map((c) => ({
-            name: c.name,
-            input: c.input,
-            ok: c.output.ok,
-          })),
+          tool_calls: result.toolCalls.map((c) => {
+            const base = { name: c.name, input: c.input, ok: c.output.ok };
+            return c.output.ok
+              ? { ...base, meta: c.output.meta }
+              : { ...base, error: c.output.error };
+          }),
         },
       });
     }

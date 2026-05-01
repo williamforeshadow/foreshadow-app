@@ -59,12 +59,23 @@ export function AiChat() {
     setShowMessages(true);
 
     try {
+      // Browser-detected IANA timezone, e.g. "America/Los_Angeles". Lets the
+      // agent resolve relative time language ("today", "this week", "overdue")
+      // in the user's local time even though stored dates are tz-agnostic.
+      let clientTz: string | undefined;
+      try {
+        clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      } catch {
+        clientTz = undefined;
+      }
+
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           prompt: userMessage,
           user_id: user.id,
+          client_tz: clientTz,
         }),
       });
 

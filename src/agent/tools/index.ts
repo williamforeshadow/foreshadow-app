@@ -1,5 +1,7 @@
 import type { ToolDefinition } from './types';
 import { findProperties } from './findProperties';
+import { getPropertyKnowledge } from './getPropertyKnowledge';
+import { findTasks } from './findTasks';
 
 // Tool registry. To add a new tool: define it in its own file, then add it
 // here. The agent loop pulls from this list — there's no other registration
@@ -10,6 +12,8 @@ import { findProperties } from './findProperties';
 // dispatch by name.
 export const TOOLS: ReadonlyArray<ToolDefinition<unknown, unknown>> = [
   findProperties as unknown as ToolDefinition<unknown, unknown>,
+  getPropertyKnowledge as unknown as ToolDefinition<unknown, unknown>,
+  findTasks as unknown as ToolDefinition<unknown, unknown>,
 ];
 
 export const TOOLS_BY_NAME: Readonly<Record<string, ToolDefinition<unknown, unknown>>> =
