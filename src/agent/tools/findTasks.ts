@@ -62,6 +62,20 @@ const inputSchema = z
       .uuid()
       .optional()
       .describe('Restrict to a single department.'),
+    department_name: z
+      .string()
+      .min(2)
+      .optional()
+      .describe(
+        "Case-insensitive substring match on departments.name. Use this for category questions like 'cleaning tasks' or 'maintenance work' — it's more precise than free-text search. Ignored when department_id is also set. meta.resolved_departments lists the matched departments.",
+      ),
+    template_name: z
+      .string()
+      .min(2)
+      .optional()
+      .describe(
+        "Case-insensitive substring match on templates.name. Use when the user names a template (e.g. 'turnover cleaning', 'deep clean') without giving an id. Ignored when template_id is also set. meta.resolved_templates lists the matched templates.",
+      ),
     assignee_name: z
       .string()
       .min(2)
@@ -112,7 +126,9 @@ const inputSchema = z
       .string()
       .min(2)
       .optional()
-      .describe('Case-insensitive substring match against task title and property_name.'),
+      .describe(
+        'Case-insensitive substring match against task title, property_name, template_name, and department_name. Prefer department_name or template_name when the user is asking about a category they can name precisely.',
+      ),
     limit: z
       .number()
       .int()
@@ -214,6 +230,16 @@ interface ResolvedAssignee {
   name: string;
 }
 
+interface ResolvedDepartment {
+  department_id: string;
+  name: string;
+}
+
+interface ResolvedTemplate {
+  template_id: string;
+  name: string;
+}
+
 type Supabase = ReturnType<typeof getSupabaseServer>;
 
 async function resolveAssigneesByName(
@@ -233,6 +259,27 @@ async function resolveAssigneesByName(
     ok: true,
     users: rows.map((u) => ({ user_id: u.id, name: u.name })),
   };
+}
+
+// Generic case-insensitive name resolver for the small lookup tables that
+// back task category/template filters. Returns the raw {id, name} rows so the
+// caller can both filter the main query and surface the matches in meta.
+async function resolveIdsByName(
+  supabase: Supabase,
+  table: 'departments' | 'templates',
+  rawTerm: string,
+): Promise<
+  { ok: true; rows: Array<{ id: string; name: string }> } | { ok: false; message: string }
+> {
+  const term = sanitizeSearchTerm(rawTerm);
+  if (term.length < 2) return { ok: true, rows: [] };
+  const { data, error } = await supabase
+    .from(table)
+    .select('id, name')
+    .ilike('name', `%${term}%`)
+    .limit(50);
+  if (error) return { ok: false, message: error.message };
+  return { ok: true, rows: (data ?? []) as Array<{ id: string; name: string }> };
 }
 
 async function resolveTaskIdsForUsers(
@@ -321,7 +368,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
         field: 'template_id',
         table: 'templates',
         value: input.template_id,
-        hint: 'There is no template resolver tool yet. Confirm the template_id with the user or omit this filter.',
+        hint: 'Pass template_name (e.g. "turnover cleaning") instead, or omit this filter.',
       });
     }
     if (input.department_id) {
@@ -329,7 +376,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
         field: 'department_id',
         table: 'departments',
         value: input.department_id,
-        hint: 'There is no department resolver tool yet. Confirm the department_id with the user or omit this filter.',
+        hint: 'Pass department_name (e.g. "cleaning", "maintenance") instead, or omit this filter.',
       });
     }
     if (input.reservation_id) {
@@ -403,6 +450,64 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
     }
   }
 
+  // Department-by-name resolution. Skipped when department_id is explicitly
+  // set (id wins) or when this is an `ids` batch lookup (filters ignored).
+  // Mirrors the assignee shape: short-circuit empty when no departments
+  // matched so the model gets a loud "we looked, found nothing" instead of
+  // a generic empty list it might attribute to other filters.
+  let resolvedDepartments: ResolvedDepartment[] | undefined;
+  let departmentIdsFilter: string[] | undefined;
+  if (input.department_name && !input.department_id && !input.ids) {
+    const r = await resolveIdsByName(supabase, 'departments', input.department_name);
+    if (!r.ok) {
+      return { ok: false, error: { code: 'db_error', message: r.message } };
+    }
+    resolvedDepartments = r.rows.map((row) => ({
+      department_id: row.id,
+      name: row.name,
+    }));
+    if (r.rows.length === 0) {
+      return {
+        ok: true,
+        data: [],
+        meta: {
+          returned: 0,
+          limit,
+          truncated: false,
+          resolved_departments: [],
+        },
+      };
+    }
+    departmentIdsFilter = r.rows.map((row) => row.id);
+  }
+
+  // Template-by-name resolution. Same precedence + short-circuit rules.
+  let resolvedTemplates: ResolvedTemplate[] | undefined;
+  let templateIdsFilter: string[] | undefined;
+  if (input.template_name && !input.template_id && !input.ids) {
+    const r = await resolveIdsByName(supabase, 'templates', input.template_name);
+    if (!r.ok) {
+      return { ok: false, error: { code: 'db_error', message: r.message } };
+    }
+    resolvedTemplates = r.rows.map((row) => ({
+      template_id: row.id,
+      name: row.name,
+    }));
+    if (r.rows.length === 0) {
+      return {
+        ok: true,
+        data: [],
+        meta: {
+          returned: 0,
+          limit,
+          truncated: false,
+          resolved_templates: [],
+        },
+      };
+    }
+    templateIdsFilter = r.rows.map((row) => row.id);
+  }
+
   // Pull `limit + 1` to detect truncation cheaply.
   let q = supabase
     .from('turnover_tasks')
@@ -451,10 +556,40 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
       q = q.lt('scheduled_date', cutoff).neq('status', 'complete');
     }
 
+    if (departmentIdsFilter) q = q.in('department_id', departmentIdsFilter);
+    if (templateIdsFilter) q = q.in('template_id', templateIdsFilter);
+
     if (input.search) {
       const term = sanitizeSearchTerm(input.search);
       if (term.length > 0) {
-        q = q.or(`title.ilike.%${term}%,property_name.ilike.%${term}%`);
+        // Free-text search fans out across the task's own columns plus the
+        // joined template/department names. Auto-spawned tasks frequently
+        // had a null title with the searchable text only living on the
+        // template name, which made the prior title-only search miss most
+        // matches. We resolve template/department ids separately and OR
+        // them into the row-level filter so PostgREST can do the whole
+        // match in one query.
+        const orParts = [
+          `title.ilike.%${term}%`,
+          `property_name.ilike.%${term}%`,
+        ];
+        const [tmpl, dept] = await Promise.all([
+          resolveIdsByName(supabase, 'templates', term),
+          resolveIdsByName(supabase, 'departments', term),
+        ]);
+        if (!tmpl.ok) {
+          return { ok: false, error: { code: 'db_error', message: tmpl.message } };
+        }
+        if (!dept.ok) {
+          return { ok: false, error: { code: 'db_error', message: dept.message } };
+        }
+        if (tmpl.rows.length > 0) {
+          orParts.push(`template_id.in.(${tmpl.rows.map((r) => r.id).join(',')})`);
+        }
+        if (dept.rows.length > 0) {
+          orParts.push(`department_id.in.(${dept.rows.map((r) => r.id).join(',')})`);
+        }
+        q = q.or(orParts.join(','));
       }
     }
 
@@ -532,6 +667,8 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
     limit,
     truncated,
     ...(resolvedAssignees ? { resolved_assignees: resolvedAssignees } : {}),
+    ...(resolvedDepartments ? { resolved_departments: resolvedDepartments } : {}),
+    ...(resolvedTemplates ? { resolved_templates: resolvedTemplates } : {}),
   };
 
   return { ok: true, data: transformed, meta };
@@ -540,7 +677,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
 export const findTasks: ToolDefinition<Input, TaskRow[]> = {
   name: 'find_tasks',
   description:
-    'Find operational tasks (cleanings, inspections, recurring jobs, manual to-dos) with structured filters. Filter by property, template, status, priority, department, schedule, assignee name, or free-text. Use find_properties first if the user mentions a property by name. Returns rows sorted by scheduled_date asc (nulls last), scheduled_time asc, then created_at desc. JSON-heavy fields (description, form_metadata) are not returned.',
+    "Find operational tasks (cleanings, inspections, recurring jobs, manual to-dos) with structured filters. Filter by property, template (id or name), department (id or name), status, priority, schedule, assignee name, or free-text. For category questions like 'show me all cleaning tasks' or 'maintenance work today', prefer department_name over search — it's more precise. For template-shaped questions ('turnover cleanings this week'), prefer template_name. Use find_properties first if the user mentions a property by name. Returns rows sorted by scheduled_date asc (nulls last), scheduled_time asc, then created_at desc. JSON-heavy fields (description, form_metadata) are not returned.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -580,6 +717,18 @@ export const findTasks: ToolDefinition<Input, TaskRow[]> = {
       department_id: {
         type: 'string',
         description: 'Department UUID.',
+      },
+      department_name: {
+        type: 'string',
+        minLength: 2,
+        description:
+          "Case-insensitive substring match on departments.name. Best filter for category questions ('cleaning tasks', 'maintenance work'). Ignored when department_id is also set; meta.resolved_departments lists the matches.",
+      },
+      template_name: {
+        type: 'string',
+        minLength: 2,
+        description:
+          "Case-insensitive substring match on templates.name. Use when the user names a template ('turnover cleaning', 'deep clean') without giving an id. Ignored when template_id is also set; meta.resolved_templates lists the matches.",
       },
       assignee_name: {
         type: 'string',
@@ -623,7 +772,8 @@ export const findTasks: ToolDefinition<Input, TaskRow[]> = {
       search: {
         type: 'string',
         minLength: 2,
-        description: 'Case-insensitive substring search on task title and property_name.',
+        description:
+          "Case-insensitive substring search across task title, property_name, template_name, and department_name. Prefer department_name or template_name when the user is asking about a category they can name precisely.",
       },
       limit: {
         type: 'integer',
