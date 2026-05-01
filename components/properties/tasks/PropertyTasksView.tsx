@@ -64,7 +64,6 @@ interface RawTask {
   // MyAssignmentsWindow, which treats raw as `any`).
   description: any;
   priority: string;
-  type: string;
   department_id: string | null;
   department_name: string | null;
   status: string;

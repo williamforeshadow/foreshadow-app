@@ -50,7 +50,6 @@ export async function GET(
       title,
       description,
       priority,
-      type,
       bin_id,
       is_binned,
       department_id,
@@ -61,7 +60,7 @@ export async function GET(
       completed_at,
       created_at,
       updated_at,
-      templates(id, name, type, department_id),
+      templates(id, name, department_id),
       departments(id, name),
       project_bins(id, name, is_system),
       reservations(id, property_name, guest_name, check_in, check_out),
@@ -97,7 +96,6 @@ export async function GET(
       title: task.title || null,
       description: task.description || null,
       priority: task.priority || 'medium',
-      type: task.type || template?.type || 'cleaning',
       department_id: task.department_id || template?.department_id || null,
       department_name: department?.name || null,
       status: task.status || 'not_started',
@@ -112,10 +110,10 @@ export async function GET(
       bin_is_system: !!bin?.is_system,
       is_binned: task.is_binned ?? false,
       // Automation-generated tasks — reservation-based turnovers, recurring
-      // rules, templated spawns — all insert with a non-"project" type.
-      // Manually created tasks (New Task button → tasks-for-bin POST) always
-      // get type="project". See app/api/tasks-for-bin/route.ts.
-      is_automated: (task.type || '') !== 'project',
+      // rules, templated spawns — always carry a template_id. Manually
+      // created tasks (New Task button → tasks-for-bin POST) leave it null.
+      // See app/api/tasks-for-bin/route.ts.
+      is_automated: task.template_id != null,
       guest_name: reservation?.guest_name || null,
       check_in: reservation?.check_in || null,
       check_out: reservation?.check_out || null,

@@ -99,7 +99,7 @@ export async function POST(request: Request) {
     // Get template details
     const { data: template, error: templateError } = await supabase
       .from('templates')
-      .select('id, name, type, department_id')
+      .select('id, name, department_id')
       .eq('id', template_id)
       .single();
 
@@ -191,6 +191,10 @@ export async function POST(request: Request) {
     // Dual-write property_id + property_name from the reservation so DB
     // triggers and downstream joins can rely on either column during the
     // property_name → property_id migration.
+    // `title` is set explicitly from the template name so every templated
+    // task carries a human-readable label without a join — matches what the
+    // generate_tasks_for_reservation / sync_automation_to_future_tasks DB
+    // functions write on automated inserts.
     const { data: newTask, error: insertError } = await supabase
       .from('turnover_tasks')
       .insert({
@@ -198,13 +202,13 @@ export async function POST(request: Request) {
         property_id: reservation.property_id || null,
         property_name: reservation.property_name || null,
         template_id,
-        type: template.type,
+        title: template.name,
         department_id: template.department_id || null,
         status: 'not_started',
         scheduled_date: scheduledDate,
         scheduled_time: scheduledTime
       })
-      .select('*, templates(name, type, department_id)')
+      .select('*, templates(name, department_id)')
       .single();
 
     if (insertError) {
@@ -244,7 +248,7 @@ export async function POST(request: Request) {
       task_id: newTask.id,
       template_id: newTask.template_id,
       template_name: newTask.templates?.name || template.name,
-      type: newTask.type,
+      title: newTask.title,
       status: newTask.status,
       assigned_users: assignedUsers,
       scheduled_date: newTask.scheduled_date,
@@ -270,8 +274,7 @@ export async function GET() {
   try {
     const { data: templates, error } = await getSupabaseServer()
       .from('templates')
-      .select('id, name, type, department_id, departments(id, name)')
-      .order('type', { ascending: true })
+      .select('id, name, department_id, departments(id, name)')
       .order('name', { ascending: true });
 
     if (error) {
@@ -281,7 +284,17 @@ export async function GET() {
       );
     }
 
-    return NextResponse.json({ data: templates });
+    // Flatten departments(id, name) into a top-level department_name so
+    // consumers (template pickers, AddTaskDialog, etc.) don't need to
+    // reach into the nested join shape.
+    const flattened = (templates || []).map((t: any) => ({
+      id: t.id,
+      name: t.name,
+      department_id: t.department_id ?? null,
+      department_name: (t.departments as { id: string; name: string } | null)?.name ?? null,
+    }));
+
+    return NextResponse.json({ data: flattened });
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || 'Failed to fetch templates' },

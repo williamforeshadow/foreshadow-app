@@ -21,7 +21,7 @@ import { useDepartments } from '@/lib/departmentsContext';
 interface TaskTemplateBasic {
   id: string;
   name: string;
-  type: string;
+  department_name?: string | null;
 }
 
 interface TurnoverTaskListProps {
@@ -102,7 +102,9 @@ function AddTaskDialog({
               onClick={() => onSelect(template.id)}
             >
               <div className="font-medium text-sm">{template.name}</div>
-              <div className="text-xs text-neutral-500 dark:text-neutral-400 capitalize">{template.type}</div>
+              {template.department_name && (
+                <div className="text-xs text-neutral-500 dark:text-neutral-400 capitalize">{template.department_name}</div>
+              )}
             </button>
           ))}
         </div>

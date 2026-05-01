@@ -105,7 +105,6 @@ export async function GET(
       title,
       description,
       priority,
-      type,
       bin_id,
       is_binned,
       department_id,
@@ -116,7 +115,7 @@ export async function GET(
       completed_at,
       created_at,
       updated_at,
-      templates(id, name, type, department_id),
+      templates(id, name, department_id),
       departments(id, name),
       project_bins(id, name, is_system),
       task_assignments(user_id, users(id, name, email, role, avatar))
@@ -147,7 +146,6 @@ export async function GET(
       title: task.title || null,
       description: task.description || null,
       priority: task.priority || 'medium',
-      type: task.type || template?.type || 'cleaning',
       department_id: task.department_id || template?.department_id || null,
       department_name: department?.name || null,
       status: task.status || 'not_started',
@@ -160,7 +158,7 @@ export async function GET(
       bin_id: task.bin_id || null,
       bin_name: bin?.name || null,
       is_binned: !!task.is_binned,
-      is_automated: (task.type || '') !== 'project',
+      is_automated: task.template_id != null,
       assigned_users: assignments.map((a) => ({
         user_id: a.user_id,
         name: a.users?.name || '',

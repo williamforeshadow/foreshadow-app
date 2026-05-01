@@ -52,7 +52,6 @@ export function useTimeline() {
             description,
             priority,
             bin_id,
-            type,
             department_id,
             status,
             scheduled_date,
@@ -61,7 +60,7 @@ export function useTimeline() {
             completed_at,
             created_at,
             updated_at,
-            templates(id, name, type, department_id),
+            templates(id, name, department_id),
             departments(id, name),
             task_assignments(user_id, users(id, name, avatar, role))
           `)
@@ -83,7 +82,6 @@ export function useTimeline() {
         description: t.description || null,
         priority: t.priority || null,
         bin_id: t.bin_id || null,
-        type: t.type || t.templates?.type || 'cleaning',
         department_id: t.department_id || t.templates?.department_id || null,
         department_name: t.departments?.name || null,
         status: t.status || 'not_started',

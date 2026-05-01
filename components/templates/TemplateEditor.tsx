@@ -57,7 +57,6 @@ interface TemplateEditorProps {
   /** null = creating new template */
   templateId: string | null;
   initialName?: string;
-  initialType?: string;
   initialDepartmentId?: string | null;
   initialDescription?: string;
   initialFields?: FieldDefinition[];
@@ -66,7 +65,6 @@ interface TemplateEditorProps {
 export default function TemplateEditor({
   templateId,
   initialName = '',
-  initialType = '',
   initialDepartmentId = null,
   initialDescription = '',
   initialFields = [],
@@ -75,7 +73,6 @@ export default function TemplateEditor({
   const isEditing = !!templateId;
 
   const [formName, setFormName] = useState(initialName);
-  const [formType, setFormType] = useState(initialType);
   const [departmentId, setDepartmentId] = useState<string | null>(initialDepartmentId);
   const { departments } = useDepartments();
   const [formDescription, setFormDescription] = useState(initialDescription);
@@ -87,7 +84,6 @@ export default function TemplateEditor({
   useEffect(() => {
     if (!departmentId && !isEditing && departments.length > 0) {
       setDepartmentId(departments[0].id);
-      setFormType(departments[0].name.toLowerCase());
     }
   }, [departments, departmentId, isEditing]);
 
@@ -141,7 +137,6 @@ export default function TemplateEditor({
     try {
       const payload = {
         name: formName,
-        type: formType,
         department_id: departmentId,
         description: formDescription || null,
         fields,
@@ -222,11 +217,7 @@ export default function TemplateEditor({
               <Field>
                 <FieldLabel>Department</FieldLabel>
                 <Select
-                  onValueChange={(value) => {
-                    setDepartmentId(value);
-                    const dept = departments.find(d => d.id === value);
-                    if (dept) setFormType(dept.name.toLowerCase());
-                  }}
+                  onValueChange={(value) => setDepartmentId(value)}
                   value={departmentId || ''}
                   disabled={isSaving}
                 >

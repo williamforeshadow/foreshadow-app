@@ -17,7 +17,6 @@ interface FieldDefinition {
 interface Template {
   id: string;
   name: string;
-  type: string;
   department_id: string | null;
   description: string | null;
   fields: FieldDefinition[];
@@ -66,7 +65,6 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
     <TemplateEditor
       templateId={template.id}
       initialName={template.name}
-      initialType={template.type}
       initialDepartmentId={template.department_id}
       initialDescription={template.description || ''}
       initialFields={template.fields}

@@ -919,7 +919,6 @@ export default function TimelineWindow({
       description: null,
       priority: (payload.priority as string) || 'medium',
       bin_id: (payload.bin_id as string) || null,
-      type: 'project',
       department_id: null,
       department_name: null,
       status: (payload.status as Task['status']) || 'not_started',
@@ -964,7 +963,6 @@ export default function TimelineWindow({
           description: data.description || null,
           priority: data.priority || 'medium',
           bin_id: data.bin_id || null,
-          type: 'project',
           department_id: data.department_id || null,
           department_name: data.department_name || null,
           status: data.status || 'not_started',
@@ -1574,7 +1572,7 @@ export default function TimelineWindow({
                                           });
                                         }}
                                       >
-                                        <span className="truncate text-sm">{task.title || task.template_name || task.type}</span>
+                                        <span className="truncate text-sm">{task.title || task.template_name || 'Task'}</span>
                                       </div>
                                     );
                                   })
@@ -1734,7 +1732,7 @@ export default function TimelineWindow({
                                         : 'text-white'
                                     }`}
                                     style={task.status !== 'contingent' ? { background: marbleBackground[task.status] || marbleBackground.not_started } : undefined}
-                                    title={task.title || task.template_name || task.type}
+                                    title={task.title || task.template_name || 'Task'}
                                     onClick={() => {
                                       closeGlobals();
                                       setFloatingData({
@@ -1744,7 +1742,7 @@ export default function TimelineWindow({
                                       });
                                     }}
                                   >
-                                    <span className="truncate">{task.title || task.template_name || task.type}</span>
+                                    <span className="truncate">{task.title || task.template_name || 'Task'}</span>
                                     <div className="flex items-center gap-1.5 flex-shrink-0">
                                       {task.assigned_users?.slice(0, 1).map((user) => (
                                         <div key={user.user_id} className="relative">

@@ -458,7 +458,7 @@ export default function MobileTimelineView({
 
         const dayTasks: TaskRowItem[] = cellTasks.map((t) => ({
           key: t.task_id,
-          title: t.title || t.template_name || t.type || 'Task',
+          title: t.title || t.template_name || 'Task',
           property_name: t.property_name || expandedCell.property,
           status: t.status || 'not_started',
           priority: t.priority || 'medium',

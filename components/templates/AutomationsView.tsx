@@ -31,7 +31,6 @@ import {
 interface Template {
   id: string;
   name: string;
-  type: string;
   department_id?: string | null;
   department_name?: string | null;
   description: string | null;
@@ -429,7 +428,7 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                               variant="secondary"
                               className="bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300 dark:border-neutral-600"
                             >
-                              {template?.department_name || template?.type || 'Unknown'}
+                              {template?.department_name || 'Uncategorized'}
                             </Badge>
                             {hasOverrides && (
                               <Badge variant="outline" className="text-xs">
@@ -499,9 +498,11 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                   <SelectItem key={template.id} value={template.id}>
                     <span className="flex items-center gap-2">
                       {template.name}
-                      <Badge variant="outline" className="text-xs">
-                        {template.type}
-                      </Badge>
+                      {template.department_name && (
+                        <Badge variant="outline" className="text-xs">
+                          {template.department_name}
+                        </Badge>
+                      )}
                     </span>
                   </SelectItem>
                 ))}
@@ -561,9 +562,11 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                     <SelectItem key={template.id} value={template.id}>
                       <span className="flex items-center gap-2">
                         {template.name}
-                        <Badge variant="outline" className="text-xs">
-                          {template.type}
-                        </Badge>
+                        {template.department_name && (
+                          <Badge variant="outline" className="text-xs">
+                            {template.department_name}
+                          </Badge>
+                        )}
                       </span>
                     </SelectItem>
                   ))}

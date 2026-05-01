@@ -17,7 +17,6 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
-    const type = searchParams.get('type');
     const propertyName = searchParams.get('property_name');
 
     let query = getSupabaseServer()
@@ -31,7 +30,6 @@ export async function GET(request: Request) {
         title,
         description,
         priority,
-        type,
         department_id,
         status,
         scheduled_date,
@@ -42,7 +40,7 @@ export async function GET(request: Request) {
         completed_at,
         created_at,
         updated_at,
-        templates(id, name, type, department_id),
+        templates(id, name, department_id),
         departments(id, name),
         project_bins(id, name, is_system),
         reservations(id, property_name, guest_name, check_in, check_out),
@@ -52,7 +50,6 @@ export async function GET(request: Request) {
       .order('created_at', { ascending: false });
 
     if (status) query = query.eq('status', status);
-    if (type) query = query.eq('type', type);
 
     const { data: tasks, error } = await query;
 
@@ -84,7 +81,6 @@ export async function GET(request: Request) {
         title: task.title || null,
         description: task.description || null,
         priority: task.priority || 'medium',
-        type: task.type || template?.type || 'cleaning',
         department_id: task.department_id || template?.department_id || null,
         department_name: department?.name || null,
         status: task.status || 'not_started',
@@ -99,10 +95,10 @@ export async function GET(request: Request) {
         bin_is_system: !!bin?.is_system,
         is_binned: task.is_binned ?? false,
         // Automation-generated tasks (reservation turnovers, recurring rules,
-        // templated spawns) all insert with a non-"project" type. Manually
-        // created tasks (New Task button → /api/tasks-for-bin POST) are
-        // type="project". Mirrors the rule used by /api/properties/[id]/tasks.
-        is_automated: (task.type || '') !== 'project',
+        // templated spawns) always carry a template_id; manually-created
+        // tasks (New Task button → /api/tasks-for-bin POST) leave it null.
+        // Mirrors the rule used by /api/properties/[id]/tasks.
+        is_automated: task.template_id != null,
         property_name: propName,
         guest_name: reservation?.guest_name || null,
         check_in: reservation?.check_in || null,
@@ -125,10 +121,10 @@ export async function GET(request: Request) {
       );
     }
 
-    const byType: Record<string, number> = {};
+    const byDepartment: Record<string, number> = {};
     filteredTasks.forEach((t: any) => {
-      const typeName = t.department_name || t.type || 'unknown';
-      byType[typeName] = (byType[typeName] || 0) + 1;
+      const deptName = t.department_name || 'unknown';
+      byDepartment[deptName] = (byDepartment[deptName] || 0) + 1;
     });
 
     const summary = {
@@ -136,7 +132,7 @@ export async function GET(request: Request) {
       not_started: filteredTasks.filter((t: any) => t.status === 'not_started').length,
       in_progress: filteredTasks.filter((t: any) => t.status === 'in_progress').length,
       complete: filteredTasks.filter((t: any) => t.status === 'complete').length,
-      by_type: byType,
+      by_department: byDepartment,
     };
 
     return NextResponse.json({

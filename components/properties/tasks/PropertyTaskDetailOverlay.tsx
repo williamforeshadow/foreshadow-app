@@ -56,7 +56,6 @@ export interface OverlayTaskInput {
   title: string | null;
   description: unknown;
   priority: string;
-  type?: string;
   department_id: string | null;
   department_name: string | null;
   status: string;

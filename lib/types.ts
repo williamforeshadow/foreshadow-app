@@ -26,7 +26,6 @@ export interface AssignedUser {
 // ============================================================================
 
 export type TaskStatus = 'contingent' | 'not_started' | 'in_progress' | 'paused' | 'complete';
-export type TaskType = string;
 
 // ============================================================================
 // Department Types
@@ -49,7 +48,6 @@ export interface Task {
   priority?: string | null;
   bin_id?: string | null;
   is_binned?: boolean;
-  type: TaskType;
   department_id?: string | null;
   department_name?: string | null;
   status: TaskStatus;
@@ -72,7 +70,6 @@ export interface Task {
 export interface TaskTemplate {
   id: string;
   name: string;
-  type: string;
   department_id?: string | null;
   department_name?: string | null;
   sections?: TaskTemplateSection[];

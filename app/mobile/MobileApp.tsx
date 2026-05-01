@@ -92,7 +92,7 @@ export default function MobileApp() {
       is_binned: task.is_binned ?? false,
       template_id: task.template_id ?? null,
       template_name: task.template_name ?? null,
-      title: task.title || task.template_name || task.type || 'Task',
+      title: task.title || task.template_name || 'Task',
       description: task.description as any || null,
       status: (task.status as any) || 'not_started',
       priority: (task.priority as any) || 'medium',

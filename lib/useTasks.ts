@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type {
   TaskStatus,
-  TaskType,
   AssignedUser,
   TiptapJSON,
   ProjectFormFields,
@@ -27,7 +26,6 @@ export interface TaskRow {
   title: string | null;
   description: TiptapJSON | null;
   priority: string;
-  type: TaskType;
   department_id: string | null;
   department_name: string | null;
   status: TaskStatus;
@@ -56,7 +54,7 @@ export interface TaskSummary {
   not_started: number;
   in_progress: number;
   complete: number;
-  by_type: Record<string, number>;
+  by_department: Record<string, number>;
 }
 
 export type SortKey =

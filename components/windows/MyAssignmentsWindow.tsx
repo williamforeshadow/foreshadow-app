@@ -32,7 +32,6 @@ interface UnifiedItem {
   department_name: string | null;
   scheduled_date?: string | null;
   scheduled_time?: string | null;
-  type?: string;
   assignees: Assignee[];
   bin_id: string | null;
   bin_name: string | null;
@@ -172,7 +171,6 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
         department_name: task.department_name || null,
         scheduled_date: task.scheduled_date,
         scheduled_time: task.scheduled_time,
-        type: task.type,
         assignees: (task.assigned_users || []).map((u: any) => ({
           user_id: u.user_id,
           name: u.name || 'Unknown',

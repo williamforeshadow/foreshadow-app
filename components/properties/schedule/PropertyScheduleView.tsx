@@ -136,7 +136,6 @@ export default function PropertyScheduleView() {
         title: task.title ?? null,
         description: task.description ?? null,
         priority: task.priority ?? 'medium',
-        type: task.type,
         department_id: task.department_id ?? null,
         department_name: task.department_name ?? null,
         status: task.status,

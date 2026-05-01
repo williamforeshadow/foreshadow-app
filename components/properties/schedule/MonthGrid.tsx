@@ -52,7 +52,6 @@ export interface ScheduleTask {
   template_id?: string | null;
   description?: unknown;
   priority?: string;
-  type?: string;
   department_id?: string | null;
   department_name?: string | null;
   form_metadata?: Record<string, unknown> | null;

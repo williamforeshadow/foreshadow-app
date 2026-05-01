@@ -26,7 +26,6 @@ interface UnifiedItem {
   department_id: string | null;
   scheduled_date?: string | null;
   scheduled_time?: string | null;
-  type?: string;
   assignees: Assignee[];
   // Reservation FK on tasks. Drives the small "key" badge after the title.
   // Always null for projects (they live in tasks-for-bin land which filters
@@ -157,7 +156,6 @@ export default function MobileMyAssignmentsView({
         department_id: task.department_id || null,
         scheduled_date: task.scheduled_date,
         scheduled_time: task.scheduled_time,
-        type: task.type,
         assignees: (task.assigned_users || []).map((u: any) => ({
           user_id: u.user_id,
           name: u.name || 'Unknown',
@@ -217,7 +215,10 @@ export default function MobileMyAssignmentsView({
         unscheduled.push(item);
       } else if (d === todayStr) {
         today.push(item);
-        if (item.type === 'cleaning' || item.type === 'turnover') turnoverCount++;
+        // "Turnover" badge counts reservation-bound tasks scheduled today —
+        // turnovers are the only path that produces reservation_id-linked
+        // tasks, regardless of which template/department spawned them.
+        if (item.raw?.reservation_id) turnoverCount++;
       } else if (d > todayStr && d <= endOfWeekStr) {
         thisWeek.push(item);
       } else if (d > endOfWeekStr) {

@@ -820,7 +820,7 @@ function KanbanCardContent({
         </div>
         <div className={styles.cardContent}>
           <p className={styles.cardTitle}>
-            {isTask ? (task?.title || task?.template_name || task?.type) : project?.title}
+            {isTask ? (task?.title || task?.template_name || 'Task') : project?.title}
           </p>
           <p className={styles.cardProperty}>
             {isTask ? task?.property_name : project?.property_name}

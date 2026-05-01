@@ -12,7 +12,6 @@ import AutomationsView from '@/components/templates/AutomationsView';
 interface Template {
   id: string;
   name: string;
-  type: string;
   department_id: string | null;
   department_name: string | null;
   description: string | null;
@@ -147,7 +146,7 @@ export default function TemplatesPage() {
                               variant="secondary"
                               className="bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300 dark:border-neutral-600"
                             >
-                              {template.department_name || template.type}
+                              {template.department_name || 'Uncategorized'}
                             </Badge>
                             <Badge variant="secondary">
                               {template.fields.length} field{template.fields.length !== 1 ? 's' : ''}
