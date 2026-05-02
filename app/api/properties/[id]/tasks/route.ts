@@ -19,9 +19,9 @@ export async function GET(
 
   const supabase = getSupabaseServer();
 
-  // Resolve property.name so we can fall back for any legacy rows where
-  // property_id wasn't populated (migration is in-flight). We'll OR both
-  // property_id and property_name into the filter below.
+  // Confirm the property exists so we can return a clean 404 (and surface
+  // the canonical name in the response). All scoping below is by property_id;
+  // legacy rows that only carried property_name are no longer in the table.
   const { data: property, error: propertyError } = await supabase
     .from('properties')
     .select('id, name')
@@ -68,7 +68,7 @@ export async function GET(
       project_comments(count)
     `
     )
-    .or(`property_id.eq.${propertyId},property_name.eq.${property.name}`);
+    .eq('property_id', propertyId);
 
   if (tasksError) {
     return NextResponse.json({ error: tasksError.message }, { status: 500 });

@@ -34,9 +34,9 @@ import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 // "Associated tasks" hydration: the RPC's per-card `tasks` array is already
 // minute-precise filtered to [check_in @ defaultCheckInTime,
 // next_check_in @ defaultCheckInTime), so we feed the panel from it directly
-// instead of round-tripping /api/property-tasks-in-window. Net: one less HTTP
-// hop per card click and the card progress bar + the panel's task list are
-// guaranteed to come from the same source.
+// instead of doing a separate window-scoped fetch. Net: one less HTTP hop per
+// card click and the card progress bar + the panel's task list are guaranteed
+// to come from the same source.
 
 interface TurnoversWindowProps {
   users: User[];

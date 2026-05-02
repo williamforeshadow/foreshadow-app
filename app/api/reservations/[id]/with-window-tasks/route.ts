@@ -13,9 +13,9 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 // This is the entry point used by the global Reservation Viewer (key-icon
 // click from any task row in the app). Existing inline panel hosts
 // (PropertyScheduleView, TurnoversWindow) still source their own data via
-// /api/properties/[id]/schedule + /api/property-tasks-in-window — this
-// endpoint exists so callers who only have a reservation_id can render the
-// panel without first locating the property.
+// /api/properties/[id]/schedule — this endpoint exists so callers who only
+// have a reservation_id can render the panel without first locating the
+// property.
 //
 // Response shape mirrors the field names ScheduleReservation and
 // ScheduleTask consume so the panel takes it as-is.
@@ -62,26 +62,29 @@ export async function GET(
     ? reservation.next_check_in.slice(0, 10)
     : addDaysISO(start, FALLBACK_WINDOW_DAYS);
 
-  let resolvedPropertyId: string | null = reservation.property_id || null;
-  let resolvedPropertyName: string | null = reservation.property_name || null;
-  if (!resolvedPropertyId && resolvedPropertyName) {
-    const { data: prop } = await supabase
-      .from('properties')
-      .select('id')
-      .eq('name', resolvedPropertyName)
-      .maybeSingle();
-    resolvedPropertyId = prop?.id || null;
-  }
-  if (!resolvedPropertyName && resolvedPropertyId) {
-    const { data: prop } = await supabase
-      .from('properties')
-      .select('name')
-      .eq('id', resolvedPropertyId)
-      .maybeSingle();
-    resolvedPropertyName = prop?.name || null;
+  // Reservations always carry a property_id. If a row somehow lacks one,
+  // surface a 500 rather than silently returning an empty list — that's a
+  // data integrity violation (the row shouldn't exist).
+  if (!reservation.property_id) {
+    return NextResponse.json(
+      {
+        error: `Reservation ${reservation.id} has no property_id; data integrity violation.`,
+      },
+      { status: 500 }
+    );
   }
 
-  let query = supabase
+  // Pull the canonical property name for the response. property_id alone is
+  // enough to scope the tasks query below; we just need the name for display.
+  const { data: propertyRow } = await supabase
+    .from('properties')
+    .select('name')
+    .eq('id', reservation.property_id)
+    .maybeSingle();
+  const resolvedPropertyName: string | null =
+    propertyRow?.name || reservation.property_name || null;
+
+  const { data: tasks, error: tasksError } = await supabase
     .from('turnover_tasks')
     .select(
       `
@@ -109,38 +112,12 @@ export async function GET(
       task_assignments(user_id, users(id, name, email, role, avatar))
       `
     )
+    .eq('property_id', reservation.property_id)
     .not('scheduled_date', 'is', null)
     .gte('scheduled_date', start)
     .lte('scheduled_date', end)
     .order('scheduled_date', { ascending: true });
 
-  if (resolvedPropertyId && resolvedPropertyName) {
-    query = query.or(
-      `property_id.eq.${resolvedPropertyId},property_name.eq.${resolvedPropertyName}`
-    );
-  } else if (resolvedPropertyId) {
-    query = query.eq('property_id', resolvedPropertyId);
-  } else if (resolvedPropertyName) {
-    query = query.eq('property_name', resolvedPropertyName);
-  } else {
-    return NextResponse.json({
-      reservation: {
-        id: reservation.id,
-        guest_name: reservation.guest_name,
-        check_in: start,
-        check_out: (reservation.check_out || '').slice(0, 10),
-        next_check_in: reservation.next_check_in
-          ? reservation.next_check_in.slice(0, 10)
-          : null,
-        property_id: null,
-        property_name: null,
-      },
-      tasks: [],
-      window: { start, end },
-    });
-  }
-
-  const { data: tasks, error: tasksError } = await query;
   if (tasksError) {
     return NextResponse.json({ error: tasksError.message }, { status: 500 });
   }
@@ -153,7 +130,7 @@ export async function GET(
     return {
       task_id: task.id,
       reservation_id: task.reservation_id,
-      property_id: task.property_id || resolvedPropertyId || null,
+      property_id: task.property_id || reservation.property_id,
       property_name: task.property_name || resolvedPropertyName,
       template_id: task.template_id,
       template_name: template?.name || null,
@@ -192,7 +169,7 @@ export async function GET(
       next_check_in: reservation.next_check_in
         ? reservation.next_check_in.slice(0, 10)
         : null,
-      property_id: resolvedPropertyId,
+      property_id: reservation.property_id,
       property_name: resolvedPropertyName,
     },
     tasks: transformedTasks,

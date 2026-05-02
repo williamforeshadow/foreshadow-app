@@ -6,8 +6,7 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 // Returns everything the per-property Schedule calendar needs for the given
 // calendar month: reservations whose [check_in, check_out] window overlaps
 // the month, plus turnover_tasks scheduled during the month. Both are scoped
-// to this property (with property_name fallback for legacy rows missing
-// property_id, matching /api/properties/[id]/tasks).
+// to this property by property_id.
 //
 // We actually widen the window by ±7 days so events that spill into the
 // adjacent-month rows of a 6-week grid are visible without a second fetch.
@@ -66,8 +65,6 @@ export async function GET(
 
   // Reservations overlapping the window:
   //   check_in <= windowEnd  AND  check_out >= windowStart
-  // We OR on property_id or property_name to match legacy rows (same pattern
-  // as the Tasks route).
   const { data: reservations, error: resError } = await supabase
     .from('reservations')
     .select(
@@ -82,7 +79,7 @@ export async function GET(
       hostaway_reservation_id
     `
     )
-    .or(`property_id.eq.${propertyId},property_name.eq.${property.name}`)
+    .eq('property_id', propertyId)
     .lte('check_in', windowEnd)
     .gte('check_out', windowStart)
     .order('check_in', { ascending: true });
@@ -121,7 +118,7 @@ export async function GET(
       task_assignments(user_id, users(id, name, email, role, avatar))
     `
     )
-    .or(`property_id.eq.${propertyId},property_name.eq.${property.name}`)
+    .eq('property_id', propertyId)
     .not('scheduled_date', 'is', null)
     .gte('scheduled_date', windowStart)
     .lte('scheduled_date', windowEnd)
