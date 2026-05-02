@@ -5,8 +5,22 @@ import type {
   ToolResultBlockParam,
   TextBlock,
 } from '@anthropic-ai/sdk/resources/messages';
-import { TOOLS_BY_NAME, toAnthropicTools } from './tools';
+import { TOOLS, TOOLS_BY_NAME, toAnthropicTools } from './tools';
 import type { ToolResult } from './tools/types';
+
+// Names of tools that mutate state. Single source of truth used by:
+//   - the read-only mode filter (when allowWrites:false, these are pruned
+//     from the model's tool catalog and from dispatch)
+//   - the hallucination backstops (write-claim + masking) in
+//     src/agent/backstops.ts
+// Add new write tools here as they land. preview_task is included because
+// it's the front half of the write protocol — there's no point exposing it
+// without create_task; doing so would invite the model to "preview" without
+// being able to commit, which is a worse UX than no write surface at all.
+export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set([
+  'preview_task',
+  'create_task',
+]);
 
 // runAgent — single entry point that drives Anthropic's tool-use loop.
 //
@@ -23,7 +37,13 @@ function getAnthropic(): Anthropic {
   return client;
 }
 
-const MODEL = 'claude-opus-4-20250514';
+// Sonnet 4.6 is the current production sweet spot for tool-grounded ops chat:
+// faster than Opus 4.x, cheaper, and (per Anthropic's release notes for the
+// 4.6 family) tighter on instruction-following and structured tool use —
+// which directly addresses the UUID/token fabrication we've seen Opus 4 do
+// when it tries to shortcut find_* resolvers. The 2024-05-14 Opus alias was
+// also flagged for retirement on 2026-06-15 so we'd be migrating regardless.
+const MODEL = 'claude-sonnet-4-6';
 // Bumped from 1024 so multi-tool turns (e.g. listing 25 tasks after a
 // find_tasks call) never get truncated mid-enumeration. Truncation pushes the
 // model toward summarizing/inferring instead of citing what it received.
@@ -55,14 +75,48 @@ function todayInTz(tz: string | undefined): { date: string; tz: string } {
   return { date: new Date().toISOString().slice(0, 10), tz: 'UTC' };
 }
 
-function buildSystemPrompt(clientTz: string | undefined): string {
+function buildSystemPrompt(
+  clientTz: string | undefined,
+  allowWrites: boolean,
+  surface: AgentSurface,
+): string {
   const { date, tz } = todayInTz(clientTz);
+  // Surface-specific opener gives the model a clue about formatting
+  // expectations. Slack mrkdwn doesn't render markdown headings or
+  // **bold** the same way the in-app chat (full markdown) does. The
+  // route layer still post-processes for safety, but priming the model
+  // here cuts down on rendering surprises.
+  const surfaceLine =
+    surface === 'slack'
+      ? '- You are answering inside Slack. Keep replies short, plain text. Use bold sparingly with single-asterisk syntax (*bold*). Do not use markdown headings (#, ##) — Slack does not render them.'
+      : '- You are answering inside the Foreshadow web app chat panel. Replies render as full markdown.';
+
+  // Write-protocol section is only relevant when write tools are exposed.
+  // Including it on a read-only surface would invite the model to call
+  // tools it can't see, which produces confusing "I tried to but..."
+  // responses.
+  const writeProtocolSection = allowWrites
+    ? `
+
+Write protocol (critical):
+- Any tool that creates, updates, schedules, or deletes data is a write. Today the only write surface is task creation (preview_task → create_task), but the protocol applies to every future write too.
+- For task creation specifically: ALWAYS call preview_task first. preview_task validates fields and returns a plan + a single-use confirmation_token. Present the plan to the user in plain English, ask for explicit confirmation ("shall I create this task?"), and ONLY after the user agrees, call create_task with the returned confirmation_token. If the user wants to change something, call preview_task again with the updated fields — every preview returns a fresh token.
+- create_task accepts ONLY a confirmation_token. It will refuse to act without one. Don't try to call create_task with task fields directly; that interface does not exist.
+- The confirmation_token is a UUID returned by preview_task — copy it verbatim from the most recent preview_task result this turn. Do NOT invent tokens that look like "preview_<timestamp>" or any other custom format; only the exact UUID from preview_task is accepted.
+- Action-claim rule: if your reply includes a claim that something was created, updated, scheduled, deleted, or assigned, the corresponding write tool MUST appear in this turn's tool calls AND have returned ok:true. If the write tool returned ok:false, surface the error message to the user verbatim and offer to retry — do not pretend it succeeded. If no write tool was called this turn, do not claim the action happened; describe what you would do instead.`
+    : `
+
+Read-only surface:
+- This surface (Slack) does not currently expose any write tools. You can answer questions about properties, reservations, tasks, templates, departments, users, and bins, but you cannot create, update, or delete anything.
+- If the user asks you to take an action ("create a task", "assign that to Gabe", "schedule a cleaning"), explain that this surface is read-only for now and direct them to the in-app chat for write operations.`;
+
   return `You are an AI assistant for Foreshadow, a vacation rental property management platform.
 
 Current context:
 - Today is ${date} (${tz}). The user is typing from this timezone.
 - Stored dates and times in Foreshadow are wall-clock and timezone-agnostic. When the user uses relative language ("today", "this week", "yesterday", "overdue"), interpret it against the date above and pass concrete YYYY-MM-DD dates to tools.
 - For any tool that supports a reference_date input, pass ${date} so date-relative filters (e.g. overdue) align with the user's local sense of "today".
+${surfaceLine}
 
 You answer questions about the user's properties, reservations, and tasks by calling the read-only tools provided. You never write SQL. When a question requires data, call the appropriate tool, then answer using the structured data the tool returns.
 
@@ -78,15 +132,27 @@ Tool results come back in a uniform envelope:
 - On failure: { ok: false, error: { code, message, hint? } }
 
 Identifier rules (critical):
-- Only pass id values (property_id, template_id, department_id, reservation_id, bin_id, etc.) that you obtained from a tool result earlier in this same turn.
+- Only pass id values (property_id, template_id, department_id, reservation_id, bin_id, user_id, etc.) that you obtained from a tool result earlier in this same turn.
 - Never fabricate ids, never guess them, and never reuse ids from prior conversation turns — those ids are not visible to you and cannot be trusted.
-- If you don't have an id, call the appropriate resolver tool first (e.g. find_properties to look up a property by name).
+- All ids in this system are random UUIDs (e.g. "a856ddd4-a9ac-4a9f-8a63-a8be59e90d74"). They are NOT derivable from names, slugs, or any text the user typed. If you catch yourself constructing a UUID-looking string from scratch, that is fabrication — stop and call the appropriate resolver instead.
+- If you don't have an id, call the appropriate resolver tool first: find_properties for a property, find_templates for a template, find_departments for a department, find_bins for a bin, find_users for a person, find_reservations for a stay/guest. Resolvers exist for every id-bearing field — there is no excuse for guessing.
 - If a tool returns error.code = "not_found" for an id you passed, do NOT retry with a different guess. Call the resolver tool instead and use the id it returns.
+
+Option-listing rule (critical):
+- If you ask the user to choose between options ("which template?", "which Billy?"), every option you list MUST come from a tool result returned during this same turn. Never list options from memory, training data, prior conversation, or guesses. If you don't have a tool result with the candidates, call the appropriate find_* resolver first, then list its results.
+- If a resolver returns zero matches, say so directly ("I don't see a template by that name") and ask the user to rephrase or provide more detail. Do NOT improvise plausible-sounding alternatives.${writeProtocolSection}
 
 If a tool returns ok:false, surface the error message to the user and use the hint, if present, to suggest a clarification. Do NOT invent or guess data that wasn't returned.
 
 If the user asks something the available tools cannot answer, say so plainly. Keep answers concise and grounded in tool output.`;
 }
+
+/**
+ * Where this agent run originates. Drives surface-specific tweaks in the
+ * system prompt (e.g. Slack mrkdwn vs. full markdown) without changing the
+ * core tool-calling loop.
+ */
+export type AgentSurface = 'web' | 'slack';
 
 export interface RunAgentInput {
   /** Prior conversation, oldest first. Plain-text message turns only. */
@@ -100,6 +166,22 @@ export interface RunAgentInput {
    * when missing or invalid.
    */
   clientTz?: string;
+  /**
+   * Whether the model is allowed to call write tools this run. When false,
+   * write tools are filtered out of the tool catalog AND the system prompt
+   * drops the write-protocol section so the model isn't told to use tools
+   * it can't see. Default: true.
+   *
+   * Set to false on read-only surfaces (e.g. Slack v1) where we want the
+   * agent to answer questions but not mutate state.
+   */
+  allowWrites?: boolean;
+  /**
+   * Surface this run is happening on. Affects formatting hints in the
+   * system prompt only — tool dispatch is identical across surfaces.
+   * Default: 'web'.
+   */
+  surface?: AgentSurface;
 }
 
 export interface ToolCallTrace {
@@ -117,6 +199,8 @@ export async function runAgent({
   history,
   prompt,
   clientTz,
+  allowWrites = true,
+  surface = 'web',
 }: RunAgentInput): Promise<RunAgentOutput> {
   const anthropic = getAnthropic();
   const conversation: MessageParam[] = [
@@ -126,8 +210,21 @@ export async function runAgent({
 
   // Built once per request so the date stays fresh and the user's tz is
   // baked in. Cheap to recompute.
-  const systemPrompt = buildSystemPrompt(clientTz);
+  const systemPrompt = buildSystemPrompt(clientTz, allowWrites, surface);
   const toolCalls: ToolCallTrace[] = [];
+
+  // Filter the tool catalog up front. When allowWrites is false, we hide
+  // both the tool advertisements (toAnthropicTools) AND the dispatch path
+  // (allowedToolNames). This double-fence means even if the model
+  // hallucinates a write tool name from training data, dispatchToolUse
+  // will reject it as unknown.
+  const allowedToolNames: ReadonlySet<string> = allowWrites
+    ? new Set(TOOLS.map((t) => t.name))
+    : new Set(TOOLS.filter((t) => !WRITE_TOOL_NAMES.has(t.name)).map((t) => t.name));
+  const allTools = toAnthropicTools();
+  const exposedTools = allowWrites
+    ? allTools
+    : allTools.filter((t) => !WRITE_TOOL_NAMES.has(t.name));
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     const response = await anthropic.messages.create({
@@ -135,7 +232,7 @@ export async function runAgent({
       max_tokens: MAX_TOKENS,
       temperature: TEMPERATURE,
       system: systemPrompt,
-      tools: toAnthropicTools(),
+      tools: exposedTools,
       messages: conversation,
     });
 
@@ -158,7 +255,7 @@ export async function runAgent({
     );
 
     const toolResults: ToolResultBlockParam[] = await Promise.all(
-      toolUses.map((use) => dispatchToolUse(use, toolCalls)),
+      toolUses.map((use) => dispatchToolUse(use, toolCalls, allowedToolNames)),
     );
 
     conversation.push({ role: 'user', content: toolResults });
@@ -173,9 +270,14 @@ export async function runAgent({
 async function dispatchToolUse(
   use: ToolUseBlock,
   trace: ToolCallTrace[],
+  allowedToolNames: ReadonlySet<string>,
 ): Promise<ToolResultBlockParam> {
   const tool = TOOLS_BY_NAME[use.name];
-  if (!tool) {
+  // Treat tools the caller has masked off as "unknown" — same shape of
+  // error the model already knows how to handle. We don't leak a
+  // "permission_denied"-style code because there's nothing the model can
+  // do with that nuance; it should just stop trying and answer textually.
+  if (!tool || !allowedToolNames.has(use.name)) {
     const result: ToolResult<unknown> = {
       ok: false,
       error: { code: 'unknown_tool', message: `Tool "${use.name}" is not registered.` },

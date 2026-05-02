@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { createTask, type CreatedTask } from '@/src/server/tasks/createTask';
 
 export async function GET(request: Request) {
   try {
@@ -137,169 +138,120 @@ export async function GET(request: Request) {
   }
 }
 
+// POST: thin wrapper around the createTask service.
+//
+// All validation, FK pre-checks, Tiptap synthesis, insert, and assignment
+// fan-out live in src/server/tasks/createTask.ts so the agent and the UI
+// produce identical rows. This handler's only job is mapping the body to
+// the service input, mapping the service result back to the legacy UI
+// response shape, and translating service error codes into HTTP statuses.
+//
+// Note on `property_name`: the service only accepts `property_id` (clean
+// canonical contract). For backward compat, callers that historically sent
+// only `property_name` (some UI surfaces still do at draft-creation time)
+// have it resolved to a `property_id` here before the service is called.
+// `is_binned` is similarly handled — the service derives it from bin_id, so
+// the field is no longer accepted.
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const {
-      property_name,
-      property_id,
-      title,
-      description,
-      status,
-      priority,
-      assigned_user_ids,
-      scheduled_date,
-      scheduled_time,
-      department_id,
-      bin_id,
-      is_binned,
-      template_id,
-    } = body;
 
-    if (!title) {
-      return NextResponse.json({ error: 'title is required' }, { status: 400 });
-    }
-
-    const supabase = getSupabaseServer();
-
-    // Resolve (property_name, property_id) pair for dual-write.
-    // Both can remain null for free-floating tasks. If only one side is given,
-    // we try to resolve the other via the properties table; if resolution
-    // fails we keep the provided value and leave the counterpart null (lax,
-    // matches pre-migration behavior for orphan task scenarios).
-    let resolvedPropertyName: string | null = property_name || null;
-    let resolvedPropertyId: string | null = property_id || null;
-
-    if (resolvedPropertyId && !resolvedPropertyName) {
-      const { data: prop } = await supabase
-        .from('properties')
-        .select('name')
-        .eq('id', resolvedPropertyId)
-        .maybeSingle();
-      if (prop) {
-        resolvedPropertyName = prop.name;
-      } else {
-        resolvedPropertyId = null;
-      }
-    } else if (resolvedPropertyName && !resolvedPropertyId) {
-      const { data: prop } = await supabase
+    // Backward-compat: resolve property_name → property_id when the caller
+    // didn't provide an id. New callers (the agent tool, future UI rewrites)
+    // should pass property_id directly and skip this round-trip.
+    let propertyId: string | null | undefined = body?.property_id ?? undefined;
+    if (
+      !propertyId &&
+      typeof body?.property_name === 'string' &&
+      body.property_name.length > 0
+    ) {
+      const { data: prop } = await getSupabaseServer()
         .from('properties')
         .select('id')
-        .eq('name', resolvedPropertyName)
+        .eq('name', body.property_name)
         .maybeSingle();
-      if (prop) {
-        resolvedPropertyId = prop.id;
-      }
+      propertyId = prop?.id ?? undefined;
     }
 
-    const { data: task, error } = await supabase
-      .from('turnover_tasks')
-      .insert({
-        property_name: resolvedPropertyName,
-        property_id: resolvedPropertyId,
-        bin_id: bin_id || null,
-        is_binned: is_binned ?? (bin_id ? true : false),
-        title,
-        description: description || null,
-        status: status || 'not_started',
-        priority: priority || 'medium',
-        scheduled_date: scheduled_date || null,
-        scheduled_time: scheduled_time || null,
-        department_id: department_id || null,
-        template_id: template_id || null,
-      })
-      .select()
-      .single();
+    const result = await createTask({
+      title: body?.title,
+      description: body?.description,
+      status: body?.status,
+      priority: body?.priority,
+      scheduled_date: body?.scheduled_date,
+      scheduled_time: body?.scheduled_time,
+      property_id: propertyId,
+      bin_id: body?.bin_id,
+      department_id: body?.department_id,
+      template_id: body?.template_id,
+      assigned_user_ids: body?.assigned_user_ids,
+    });
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!result.ok) {
+      const status =
+        result.error.code === 'invalid_input'
+          ? 400
+          : result.error.code === 'not_found'
+            ? 404
+            : 500;
+      return NextResponse.json({ error: result.error.message }, { status });
     }
 
-    const userIds: string[] = Array.isArray(assigned_user_ids)
-      ? assigned_user_ids
-      : assigned_user_ids
-      ? [assigned_user_ids]
-      : [];
-
-    if (userIds.length > 0) {
-      const assignments = userIds.map((userId) => ({
-        task_id: task.id,
-        user_id: userId,
-      }));
-
-      await getSupabaseServer().from('task_assignments').insert(assignments);
-    }
-
-    const { data: fullTask, error: fetchError } = await supabase
-      .from('turnover_tasks')
-      .select(`
-        id,
-        property_name,
-        property_id,
-        reservation_id,
-        template_id,
-        title,
-        description,
-        priority,
-        bin_id,
-        is_binned,
-        department_id,
-        status,
-        scheduled_date,
-        scheduled_time,
-        form_metadata,
-        created_at,
-        updated_at,
-        completed_at,
-        templates(id, name),
-        departments(id, name),
-        task_assignments(
-          user_id,
-          assigned_at,
-          users(id, name, email, role, avatar)
-        )
-      `)
-      .eq('id', task.id)
-      .single();
-
-    if (fetchError) {
-      return NextResponse.json({ success: true, data: task });
-    }
-
-    const tmpl = fullTask.templates as any;
-    const transformed = {
-      id: fullTask.id,
-      property_name: fullTask.property_name || null,
-      property_id: (fullTask as any).property_id || null,
-      reservation_id: (fullTask as any).reservation_id ?? null,
-      bin_id: fullTask.bin_id || null,
-      is_binned: fullTask.is_binned ?? false,
-      template_id: fullTask.template_id || null,
-      template_name: tmpl?.name || null,
-      title: fullTask.title || 'Untitled Task',
-      description: fullTask.description || null,
-      status: fullTask.status || 'not_started',
-      priority: fullTask.priority || 'medium',
-      department_id: fullTask.department_id || null,
-      department_name: (fullTask.departments as any)?.name || null,
-      scheduled_date: fullTask.scheduled_date || null,
-      scheduled_time: fullTask.scheduled_time || null,
-      form_metadata: fullTask.form_metadata || null,
-      created_at: fullTask.created_at,
-      updated_at: fullTask.updated_at,
-      completed_at: (fullTask as any).completed_at || null,
-      unread_comment_count: 0,
-      project_assignments: (fullTask.task_assignments as any[])?.map((a: any) => ({
-        ...a,
-        user: a.users || null,
-      })) || [],
-    };
-
-    return NextResponse.json({ success: true, data: transformed });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Failed to create task' },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      success: true,
+      data: toLegacyResponseShape(result.task),
+    });
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : 'Failed to create task';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+// Translate the canonical CreatedTask into the response shape the existing
+// UI consumers (TasksWindow, ProjectsWindow, PropertyTasksView) already
+// expect. New consumers should prefer the canonical CreatedTask shape; this
+// wrapper exists purely to avoid a UI-layer refactor in the same change.
+function toLegacyResponseShape(t: CreatedTask) {
+  return {
+    id: t.task_id,
+    property_name: t.property_name,
+    property_id: t.property_id,
+    reservation_id: t.reservation_id,
+    bin_id: t.bin_id,
+    is_binned: t.is_binned,
+    template_id: t.template_id,
+    template_name: t.template_name,
+    title: t.title || 'Untitled Task',
+    description: t.description,
+    status: t.status,
+    priority: t.priority,
+    department_id: t.department_id,
+    department_name: t.department_name,
+    scheduled_date: t.scheduled_date,
+    scheduled_time: t.scheduled_time,
+    form_metadata: t.form_metadata,
+    created_at: t.created_at,
+    updated_at: t.updated_at,
+    completed_at: t.completed_at,
+    unread_comment_count: 0,
+    project_assignments: t.assigned_users.map((a) => ({
+      user_id: a.user_id,
+      assigned_at: a.assigned_at ?? null,
+      users: {
+        id: a.user_id,
+        name: a.name,
+        email: a.email ?? null,
+        role: a.role,
+        avatar: a.avatar ?? null,
+      },
+      user: {
+        id: a.user_id,
+        name: a.name,
+        email: a.email ?? null,
+        role: a.role,
+        avatar: a.avatar ?? null,
+      },
+    })),
+  };
 }

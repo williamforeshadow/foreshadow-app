@@ -8,6 +8,16 @@ import type { ToolDefinition, ToolResult } from './types';
 // references ("Beach House") into canonical property IDs that every other
 // future tool will accept as input. Mirrors the query pattern in
 // app/api/properties/GET.
+//
+// Naming rules the agent should follow (encoded in `description` below so the
+// model sees them):
+//   - `name` is the canonical user-facing display name. ALWAYS use it when
+//     referring to a property in responses to the user.
+//   - `hostaway_name` is a passive identifier for matching against Hostaway's
+//     listing label (which can be verbose, e.g. "Fun Tropical Casita: kid
+//     room, 3 blocks to beach"). It is searched here so the agent can resolve
+//     a property the user mentions by its Hostaway name, but it should not be
+//     surfaced back to the user unless they explicitly ask for it.
 
 const inputSchema = z.object({
   query: z
@@ -105,7 +115,7 @@ async function handler(input: Input): Promise<ToolResult<PropertyRow[]>> {
 export const findProperties: ToolDefinition<Input, PropertyRow[]> = {
   name: 'find_properties',
   description:
-    'Find vacation rental properties by name or active status. Use this to resolve property names mentioned by the user into canonical property IDs that other tools accept.',
+    "Find vacation rental properties by name or active status. Use this to resolve property names mentioned by the user into canonical property IDs that other tools accept. Each property has two name fields: `name` is the canonical user-facing display name (always use this when referring to a property in responses) and `hostaway_name` is a passive identifier for the upstream Hostaway listing label. Both are searched so users can mention a property by either, but only `name` should be surfaced in your replies unless the user explicitly asks for the Hostaway name.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,

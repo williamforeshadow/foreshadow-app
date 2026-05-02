@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { runAgent } from '@/src/agent/runAgent';
+import { applyBackstops } from '@/src/agent/backstops';
 
 // POST /api/agent
 //
 // Tool-calling chat agent. The model never writes SQL — it answers data
 // questions by invoking tools registered in src/agent/tools. This route is a
 // thin shell that handles HTTP, conversation memory, and persistence; all
-// LLM + tool dispatch lives in src/agent/runAgent.
+// LLM + tool dispatch lives in src/agent/runAgent. Hallucination backstops
+// live in src/agent/backstops and are shared with the Slack route.
 
 const MEMORY_WINDOW = 15; // user+assistant message pairs to replay as history
 
@@ -83,11 +85,33 @@ export async function POST(req: NextRequest) {
   try {
     const result = await runAgent({ history, prompt, clientTz });
 
+    // Backstops: if the model claimed a side-effect happened but no write
+    // tool succeeded, OR it produced a structured data answer with no read
+    // tool succeeded, swap in a safe message before the user ever sees it.
+    // Both flags are persisted in metadata so reviewers can spot masked
+    // rows quickly.
+    const masked = applyBackstops(result.text, result.toolCalls);
+    if (masked.writeMasked) {
+      console.warn('[agent] masked hallucinated write claim', {
+        user_id: userId,
+        prompt,
+        original: masked.originalIfMasked,
+      });
+    }
+    if (masked.readMasked) {
+      console.warn('[agent] masked hallucinated read claim', {
+        user_id: userId,
+        prompt,
+        original: masked.originalIfMasked,
+      });
+    }
+    const finalText = masked.text;
+
     if (userId) {
       await supabase.from('ai_chat_messages').insert({
         user_id: userId,
         role: 'assistant',
-        content: result.text,
+        content: finalText,
         // Store a per-call trace of which tools fired, what input the model
         // passed, and the outcome envelope (meta on success, error on
         // failure). We deliberately drop `data` to keep rows small but keep
@@ -100,12 +124,14 @@ export async function POST(req: NextRequest) {
               ? { ...base, meta: c.output.meta }
               : { ...base, error: c.output.error };
           }),
+          ...(masked.writeMasked ? { masked_write_claim: true } : {}),
+          ...(masked.readMasked ? { masked_read_claim: true } : {}),
         },
       });
     }
 
     return NextResponse.json({
-      answer: result.text,
+      answer: finalText,
       tool_calls: result.toolCalls,
     });
   } catch (err) {

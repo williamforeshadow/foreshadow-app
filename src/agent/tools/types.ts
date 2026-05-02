@@ -11,7 +11,14 @@ export type ToolErrorCode =
   | 'invalid_input'
   | 'db_error'
   | 'not_found'
-  | 'unknown_tool';
+  | 'unknown_tool'
+  /**
+   * Write tools refuse to act without an in-turn confirmation token from
+   * their paired preview tool. Surfaces when the model tries to skip the
+   * preview/confirm dance, when a token has expired (5-minute TTL), or
+   * when a token has already been used.
+   */
+  | 'confirmation_required';
 
 export interface ToolError {
   code: ToolErrorCode;

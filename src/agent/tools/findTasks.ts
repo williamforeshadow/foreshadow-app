@@ -117,7 +117,9 @@ const inputSchema = z
       .string()
       .uuid()
       .optional()
-      .describe('Restrict to tasks tied to a single reservation.'),
+      .describe(
+        'Restrict to tasks tied to a single reservation. Use find_reservations first to resolve a guest, stay window, or Hostaway id into a reservation_id.',
+      ),
     ids: z
       .array(z.string().uuid())
       .optional()
@@ -384,7 +386,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
         field: 'reservation_id',
         table: 'reservations',
         value: input.reservation_id,
-        hint: 'There is no reservation resolver tool yet. Confirm the reservation_id with the user or omit this filter.',
+        hint: 'Call find_reservations to resolve a stay (by property, guest_name, hostaway_reservation_id, or date range) into a valid reservation_id.',
       });
     }
     // bin_id may be a sentinel ('__none__' / '__any__') or a real UUID.
@@ -677,7 +679,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
 export const findTasks: ToolDefinition<Input, TaskRow[]> = {
   name: 'find_tasks',
   description:
-    "Find operational tasks (cleanings, inspections, recurring jobs, manual to-dos) with structured filters. Filter by property, template (id or name), department (id or name), status, priority, schedule, assignee name, or free-text. For category questions like 'show me all cleaning tasks' or 'maintenance work today', prefer department_name over search — it's more precise. For template-shaped questions ('turnover cleanings this week'), prefer template_name. Use find_properties first if the user mentions a property by name. Returns rows sorted by scheduled_date asc (nulls last), scheduled_time asc, then created_at desc. JSON-heavy fields (description, form_metadata) are not returned.",
+    "Find operational tasks (cleanings, inspections, recurring jobs, manual to-dos) with structured filters. Filter by property, template (id or name), department (id or name), status, priority, schedule, assignee name, or free-text. For category questions like 'show me all cleaning tasks' or 'maintenance work today', prefer department_name over search — it's more precise. For template-shaped questions ('turnover cleanings this week'), prefer template_name. Resolve references first when the user names something rather than ids: call find_properties for a property name, and call find_reservations for a specific stay or guest (then pass the resulting reservation_id). Returns rows sorted by scheduled_date asc (nulls last), scheduled_time asc, then created_at desc. JSON-heavy fields (description, form_metadata) are not returned.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -762,7 +764,8 @@ export const findTasks: ToolDefinition<Input, TaskRow[]> = {
       },
       reservation_id: {
         type: 'string',
-        description: 'Restrict to tasks tied to a single reservation.',
+        description:
+          'Reservation UUID; restricts to tasks tied to this specific stay. Resolve guest names, date windows, or Hostaway ids into a reservation_id with find_reservations before calling.',
       },
       ids: {
         type: 'array',
