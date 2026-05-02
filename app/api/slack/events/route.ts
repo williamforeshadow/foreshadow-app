@@ -226,15 +226,14 @@ async function handleAppMention(
     },
   });
 
-  // Run the agent in read-only mode. Writes from Slack are intentionally
-  // off in v1 — the audit trail and confirmation UX work better in the
-  // in-app chat for now. Flipping `allowWrites: true` is the only change
-  // needed to enable them later.
+  // Slack runs the same agent loop as the in-app chat — same tools, same
+  // preview/confirm dance for writes, same backstops. The only thing
+  // surface-specific is the formatting hint in the system prompt (Slack
+  // mrkdwn vs. full markdown).
   const result = await runAgent({
     history,
     prompt,
     clientTz: identity.tz ?? undefined,
-    allowWrites: false,
     surface: 'slack',
   });
 
