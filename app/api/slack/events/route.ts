@@ -1,0 +1,321 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { after } from 'next/server';
+import { WebClient } from '@slack/web-api';
+import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
+import { getSupabaseServer } from '@/lib/supabaseServer';
+import { runAgent } from '@/src/agent/runAgent';
+import { applyBackstops } from '@/src/agent/backstops';
+import { verifySlackSignature } from '@/src/slack/verify';
+import { alreadyProcessed } from '@/src/slack/dedupe';
+import { resolveSlackUser, getBotUserId } from '@/src/slack/identity';
+import { markdownToMrkdwn, stripBotMention } from '@/src/slack/format';
+
+// POST /api/slack/events
+//
+// Slack Events API webhook. Mirrors the in-app /api/agent surface: same
+// runAgent, same backstops, same conversation memory in ai_chat_messages —
+// just with Slack-shaped IO at the edges.
+//
+// Required env:
+//   SLACK_BOT_TOKEN       (xoxb-...) — bot token used to read users.info
+//                                     and post replies via chat.postMessage.
+//   SLACK_SIGNING_SECRET            — signs every event Slack sends us;
+//                                     verified before any work happens.
+//
+// Optional env:
+//   SLACK_ALLOWED_CHANNELS         — comma-separated channel ids; if set,
+//                                     events from other channels are ignored.
+//                                     Empty/unset = allow all channels.
+//
+// Slack app config (in api.slack.com/apps):
+//   Bot scopes: app_mentions:read, chat:write, users:read, users:read.email
+//   Subscribed events: app_mention
+//   Request URL: https://<your-domain>/api/slack/events
+//
+// Lifecycle:
+//   1. Verify HMAC signature (rejects forgeries / replays).
+//   2. Handle url_verification handshake (one-time, during app setup).
+//   3. Dedup by event_id (Slack retries aggressively when slow).
+//   4. Ack 200 immediately, defer agent work via `after()`.
+//   5. Background:
+//        - Resolve Slack user → app user (via email match in users table).
+//        - Pull recent ai_chat_messages history for that app user.
+//        - Run the agent in read-only mode (no write tools exposed yet).
+//        - Apply backstops, persist user + assistant messages.
+//        - Post reply to the same thread as the mention.
+
+const MEMORY_WINDOW = 15;
+
+interface SlackEventEnvelope {
+  type: string;
+  // Present on every "real" event but absent on url_verification handshake.
+  event?: SlackInnerEvent;
+  event_id?: string;
+  team_id?: string;
+  // Only on url_verification.
+  challenge?: string;
+}
+
+interface SlackInnerEvent {
+  type: string;
+  user?: string;
+  text?: string;
+  channel?: string;
+  ts?: string;
+  thread_ts?: string;
+  bot_id?: string;
+  // Set when this app's own posts come back as events; we ignore them.
+  app_id?: string;
+  subtype?: string;
+}
+
+interface ChatMessageRow {
+  role: string;
+  content: string;
+}
+
+export async function POST(req: NextRequest) {
+  const signingSecret = process.env.SLACK_SIGNING_SECRET ?? '';
+  const botToken = process.env.SLACK_BOT_TOKEN ?? '';
+  if (!signingSecret || !botToken) {
+    console.error('[slack] missing SLACK_SIGNING_SECRET or SLACK_BOT_TOKEN');
+    // Return 200 anyway so Slack doesn't disable the URL on misconfig —
+    // but log loudly so it's easy to diagnose.
+    return new Response(null, { status: 200 });
+  }
+
+  // We need the raw body string to verify the signature. NextRequest gives
+  // us text() which is the bytes Slack sent. Don't read req.json() first —
+  // that would consume the stream and we'd have nothing to hash.
+  const rawBody = await req.text();
+  const sig = req.headers.get('x-slack-signature');
+  const ts = req.headers.get('x-slack-request-timestamp');
+
+  const verified = verifySlackSignature(rawBody, sig, ts, signingSecret);
+  if (!verified.ok) {
+    console.warn('[slack] signature verification failed', {
+      reason: verified.reason,
+    });
+    return new Response('signature verification failed', { status: 401 });
+  }
+
+  let envelope: SlackEventEnvelope;
+  try {
+    envelope = JSON.parse(rawBody) as SlackEventEnvelope;
+  } catch {
+    return new Response('invalid json', { status: 400 });
+  }
+
+  // 1) URL verification: Slack sends this once when wiring up the
+  //    Request URL on the Event Subscriptions page. We have to echo
+  //    back the challenge string verbatim to prove we own the URL.
+  if (envelope.type === 'url_verification' && envelope.challenge) {
+    return NextResponse.json({ challenge: envelope.challenge });
+  }
+
+  // 2) Dedup: Slack retries when we don't ack within 3s. Returning early
+  //    on a retried event_id avoids double-running the agent.
+  if (alreadyProcessed(envelope.event_id)) {
+    return new Response(null, { status: 200 });
+  }
+
+  // 3) Only act on the events we actually subscribed to. Defensive — if
+  //    Slack ever sends us something unexpected we just ack and ignore.
+  const event = envelope.event;
+  if (!event || event.type !== 'app_mention') {
+    return new Response(null, { status: 200 });
+  }
+
+  // 4) Ignore bot-authored messages so we never reply to ourselves or
+  //    other bots (which would either spam loop or just be noise).
+  if (event.bot_id || event.subtype === 'bot_message' || !event.user) {
+    return new Response(null, { status: 200 });
+  }
+
+  // 5) Optional channel allowlist. Empty/unset env var = allow all.
+  const allowedRaw = process.env.SLACK_ALLOWED_CHANNELS ?? '';
+  const allowedChannels = allowedRaw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (
+    allowedChannels.length > 0 &&
+    event.channel &&
+    !allowedChannels.includes(event.channel)
+  ) {
+    console.log('[slack] event from non-allowlisted channel; ignoring', {
+      channel: event.channel,
+    });
+    return new Response(null, { status: 200 });
+  }
+
+  // Defer the actual agent work: ack now (Slack's 3s SLA), then process.
+  // `after` runs the callback after the response is sent and works on both
+  // Vercel and self-hosted Node. Errors here must NOT propagate or Slack
+  // will see a 500 even though we already 200'd; wrap in try/catch.
+  after(async () => {
+    try {
+      await handleAppMention(event, botToken);
+    } catch (err) {
+      console.error('[slack] handleAppMention threw', err);
+    }
+  });
+
+  return new Response(null, { status: 200 });
+}
+
+async function handleAppMention(
+  event: SlackInnerEvent,
+  botToken: string,
+): Promise<void> {
+  if (!event.user || !event.channel || !event.ts) return;
+
+  const web = new WebClient(botToken);
+
+  // Resolve identities first. Without an app user we can't pull history,
+  // can't persist, and shouldn't run the agent (writes would be unattributed
+  // even on read-only surfaces, since memory is keyed by user).
+  const [identity, botUserId] = await Promise.all([
+    resolveSlackUser(web, event.user),
+    getBotUserId(web),
+  ]);
+
+  // Slack API expects `thread_ts` for in-thread replies. If the mention
+  // is at the top level of a channel (no thread_ts), reply in a new thread
+  // anchored on the mention's own ts so the conversation stays tidy.
+  const threadTs = event.thread_ts ?? event.ts;
+
+  if (!identity) {
+    await postReply(
+      web,
+      event.channel,
+      threadTs,
+      `Hey <@${event.user}> — I don't recognize this Slack account. Ask Billy to add your email to Foreshadow so I can connect you, then try again.`,
+    );
+    return;
+  }
+
+  const prompt = stripBotMention(event.text ?? '', botUserId).trim();
+  if (!prompt) {
+    await postReply(
+      web,
+      event.channel,
+      threadTs,
+      `Hi <@${event.user}> — what would you like me to look up?`,
+    );
+    return;
+  }
+
+  // Pull recent history from ai_chat_messages, same as the in-app route.
+  // This means Slack and in-app share memory (a deliberate choice — see
+  // chat thread). Per-thread Slack scoping isn't built yet; if it becomes
+  // needed we can layer a slack_thread_ts column onto the table without
+  // breaking the in-app side.
+  const history = await loadHistory(identity.appUserId);
+
+  const supabase = getSupabaseServer();
+  await supabase.from('ai_chat_messages').insert({
+    user_id: identity.appUserId,
+    role: 'user',
+    content: prompt,
+    metadata: {
+      surface: 'slack',
+      slack_channel: event.channel,
+      slack_thread_ts: threadTs,
+      slack_user_id: event.user,
+    },
+  });
+
+  // Run the agent in read-only mode. Writes from Slack are intentionally
+  // off in v1 — the audit trail and confirmation UX work better in the
+  // in-app chat for now. Flipping `allowWrites: true` is the only change
+  // needed to enable them later.
+  const result = await runAgent({
+    history,
+    prompt,
+    clientTz: identity.tz ?? undefined,
+    allowWrites: false,
+    surface: 'slack',
+  });
+
+  const masked = applyBackstops(result.text, result.toolCalls);
+  if (masked.writeMasked) {
+    console.warn('[slack] masked hallucinated write claim', {
+      user_id: identity.appUserId,
+      slack_user: event.user,
+      original: masked.originalIfMasked,
+    });
+  }
+  if (masked.readMasked) {
+    console.warn('[slack] masked hallucinated read claim', {
+      user_id: identity.appUserId,
+      slack_user: event.user,
+      original: masked.originalIfMasked,
+    });
+  }
+
+  const finalText = masked.text;
+
+  await supabase.from('ai_chat_messages').insert({
+    user_id: identity.appUserId,
+    role: 'assistant',
+    content: finalText,
+    metadata: {
+      surface: 'slack',
+      slack_channel: event.channel,
+      slack_thread_ts: threadTs,
+      tool_calls: result.toolCalls.map((c) => {
+        const base = { name: c.name, input: c.input, ok: c.output.ok };
+        return c.output.ok
+          ? { ...base, meta: c.output.meta }
+          : { ...base, error: c.output.error };
+      }),
+      ...(masked.writeMasked ? { masked_write_claim: true } : {}),
+      ...(masked.readMasked ? { masked_read_claim: true } : {}),
+    },
+  });
+
+  await postReply(web, event.channel, threadTs, markdownToMrkdwn(finalText));
+}
+
+async function loadHistory(appUserId: string): Promise<MessageParam[]> {
+  const supabase = getSupabaseServer();
+  const { data, error } = await supabase
+    .from('ai_chat_messages')
+    .select('role, content')
+    .eq('user_id', appUserId)
+    .order('created_at', { ascending: false })
+    .limit(MEMORY_WINDOW * 2);
+
+  if (error || !data) return [];
+
+  return (data as ChatMessageRow[])
+    .reverse()
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .map((m) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
+}
+
+async function postReply(
+  web: WebClient,
+  channel: string,
+  threadTs: string,
+  text: string,
+): Promise<void> {
+  try {
+    await web.chat.postMessage({
+      channel,
+      thread_ts: threadTs,
+      text,
+      // Disable Slack's auto-link unfurling on URLs in our reply. Tools
+      // sometimes return URLs (e.g. property knowledge wifi networks) and
+      // unfurl previews in a thread are noisy.
+      unfurl_links: false,
+      unfurl_media: false,
+    });
+  } catch (err) {
+    console.error('[slack] chat.postMessage failed', { channel, threadTs, err });
+  }
+}
