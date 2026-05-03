@@ -13,8 +13,15 @@
 //   - code:    `x`   → `x`    (unchanged)
 //   - code block: ```x``` → ```x``` (unchanged)
 //   - heading: ## x  → *x*    (no native heading; bold the line)
-//   - bullet:  - x   → * x    (Slack mrkdwn renders `*` as a real
-//                              bullet glyph; `-` is rendered literally)
+//   - bullet:  - x   → • x    (Slack's API renderer treats both `*` and
+//                  * x   → • x  `-` markers as literal text — neither
+//                              renders as a real bullet glyph in
+//                              chat.postMessage.text. The Unicode bullet
+//                              `•` (U+2022) is rendered as itself, which
+//                              IS the visible bullet shape we want.
+//                              Native bullets via the composer's bullet
+//                              button use Block Kit's rich_text_list
+//                              block — a much bigger restructure.)
 //   - link:    [t](u) → <u|t> (Slack's link syntax)
 //
 // Italic is intentionally NOT converted — the heuristic to distinguish
@@ -35,15 +42,26 @@ export function markdownToMrkdwn(input: string): string {
   // properly bolded.
   out = out.replace(/^#{1,6}\s+(.+?)\s*$/gm, '*$1*');
 
-  // Bullets: `- ` at the start of a line (with optional leading
-  // whitespace for nested lists) → `* `. Slack mrkdwn renders `* item`
-  // as a real bullet glyph (•), but renders `- item` literally as a
-  // dash. The system prompt asks the model to emit `*` directly, but
-  // earlier conversation turns are full of `-` bullets and the model
-  // echoes them; this regex is the deterministic safety net. Done
-  // BEFORE bold conversion so we don't accidentally mangle a bold
-  // marker that already happens to start a line.
-  out = out.replace(/^(\s*)-(\s)/gm, '$1*$2');
+  // Bullets: `- ` or `* ` at the start of a line (with optional leading
+  // whitespace for nested lists) → `• ` (Unicode bullet, U+2022). Slack's
+  // text renderer treats both markdown markers as literal characters —
+  // neither produces a real bullet glyph. Inserting the actual bullet
+  // character is the simplest path to the visual outcome the user wants.
+  //
+  // The space-after-marker requirement is what discriminates a list
+  // marker from inline `*bold*` syntax: a bullet line is "* item" while
+  // bold is "*item*" with no space inside, so this pattern can't catch
+  // bold by accident.
+  //
+  // We deliberately keep the canonical markdown form (`* `) in the
+  // persisted ai_chat_messages.content — only the Slack last-mile
+  // delivery applies this swap. That way the in-app chat panel still
+  // gets a real semantic <ul><li> from ReactMarkdown, and conversation
+  // history fed back to the model stays in markdown source form.
+  //
+  // Done BEFORE bold conversion so we don't accidentally consume an
+  // asterisk that's part of a `**foo**` run.
+  out = out.replace(/^(\s*)[-*](\s)/gm, '$1\u2022$2');
 
   // Bold: `**foo**` → `*foo*`. Non-greedy match so adjacent bolds on the
   // same line don't merge. We require at least one non-asterisk character
