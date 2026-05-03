@@ -8,7 +8,11 @@ import { runAgent } from '@/src/agent/runAgent';
 import { applyBackstops } from '@/src/agent/backstops';
 import { verifySlackSignature } from '@/src/slack/verify';
 import { alreadyProcessed } from '@/src/slack/dedupe';
-import { resolveSlackUser, getBotUserId } from '@/src/slack/identity';
+import {
+  resolveSlackUser,
+  getBotUserId,
+  resolveMentionsInText,
+} from '@/src/slack/identity';
 import {
   markdownToMrkdwn,
   stripBotMention,
@@ -61,7 +65,7 @@ interface MessageExtras {
 //                                     passive and don't run the agent.
 //
 // Slack app config (in api.slack.com/apps):
-//   Bot scopes:        app_mentions:read, chat:write, users:read,
+//   Bot scopes:        app_mentions:read, chat:write, commands, users:read,
 //                      users:read.email, im:history, im:read, im:write,
 //                      links:read, links:write
 //   Subscribed events: app_mention, message.im, link_shared
@@ -70,6 +74,9 @@ interface MessageExtras {
 //                      domains registered here.
 //   App Home tab:      enable "Allow users to send Slash commands and
 //                      messages from the messages tab"
+//   Slash commands:    configured separately in api.slack.com/apps →
+//                      "Slash Commands"; Request URL points at
+//                      /api/slack/commands. See app/api/slack/commands/route.ts.
 //   Request URL:       https://<your-domain>/api/slack/events
 //
 // Lifecycle:
@@ -321,9 +328,16 @@ async function handleSlackMessage(
   // DMs don't have that prefix — the user typed straight at the bot —
   // so we pass the raw text through.
   const rawText = event.text ?? '';
-  const prompt = (
+  const stripped = (
     kind === 'channel_mention' ? stripBotMention(rawText, botUserId) : rawText
   ).trim();
+
+  // Resolve any remaining `<@Uxxx>` mentions of OTHER users to a
+  // prompt-friendly `[Display Name] (user_id: <uuid>)` form. This lets
+  // the agent answer "what's on Rae's plate?" without doing a fuzzy
+  // find_users call — we already know exactly who Rae is. See
+  // resolveMentionsInText for the resolution rules.
+  const prompt = await resolveMentionsInText(web, stripped);
 
   if (!prompt) {
     await postReply(
@@ -357,14 +371,21 @@ async function handleSlackMessage(
   });
 
   // Slack runs the same agent loop as the in-app chat — same tools, same
-  // preview/confirm dance for writes, same backstops. The only thing
-  // surface-specific is the formatting hint in the system prompt (Slack
-  // mrkdwn vs. full markdown).
+  // preview/confirm dance for writes, same backstops. Surface-specific
+  // bits: the formatting hint (Slack mrkdwn vs. full markdown) and the
+  // resolved actor (we know exactly who's typing because email matched a
+  // users row; in-app chat doesn't have real auth yet so it can't pass
+  // an actor with the same confidence).
   const result = await runAgent({
     history,
     prompt,
     clientTz: identity.tz ?? undefined,
     surface: 'slack',
+    actor: {
+      appUserId: identity.appUserId,
+      name: identity.appUserName,
+      role: identity.role,
+    },
   });
 
   const masked = applyBackstops(result.text, result.toolCalls);

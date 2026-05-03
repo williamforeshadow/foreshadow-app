@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 import { getSupabaseServer } from '@/lib/supabaseServer';
-import { runAgent } from '@/src/agent/runAgent';
+import { runAgent, type AgentActor } from '@/src/agent/runAgent';
 import { applyBackstops } from '@/src/agent/backstops';
 
 // POST /api/agent
@@ -57,6 +57,13 @@ export async function POST(req: NextRequest) {
   // (no tool_use / tool_result blocks) so the history we replay is plain
   // text on both sides — the agent will re-invoke tools as needed.
   let history: MessageParam[] = [];
+  // Resolve the in-app actor when we have a userId. Today this reflects
+  // whoever is selected in the AuthProvider dropdown (no real auth yet),
+  // but it still grounds "me"/"my" correctly in the system prompt — same
+  // shape as the Slack actor so runAgent doesn't care which surface set
+  // it. If the lookup fails we fall back to no actor; the prompt has a
+  // fallback line that asks the model to disambiguate.
+  let actor: AgentActor | undefined;
   if (userId) {
     const { data, error } = await supabase
       .from('ai_chat_messages')
@@ -75,6 +82,27 @@ export async function POST(req: NextRequest) {
         }));
     }
 
+    const { data: userRow } = await supabase
+      .from('users')
+      .select('id, name, role')
+      .eq('id', userId)
+      .maybeSingle();
+    if (userRow?.id) {
+      const role =
+        userRow.role === 'superadmin' ||
+        userRow.role === 'manager' ||
+        userRow.role === 'staff'
+          ? userRow.role
+          : 'staff';
+      actor = {
+        appUserId: userRow.id as string,
+        name:
+          (typeof userRow.name === 'string' && userRow.name.trim()) ||
+          'Unknown user',
+        role,
+      };
+    }
+
     await supabase.from('ai_chat_messages').insert({
       user_id: userId,
       role: 'user',
@@ -83,7 +111,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await runAgent({ history, prompt, clientTz });
+    const result = await runAgent({ history, prompt, clientTz, actor });
 
     // Backstops: if the model claimed a side-effect happened but no write
     // tool succeeded, OR it produced a structured data answer with no read

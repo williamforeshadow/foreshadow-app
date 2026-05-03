@@ -77,6 +77,7 @@ function todayInTz(tz: string | undefined): { date: string; tz: string } {
 function buildSystemPrompt(
   clientTz: string | undefined,
   surface: AgentSurface,
+  actor: AgentActor | undefined,
 ): string {
   const { date, tz } = todayInTz(clientTz);
   // Surface-specific opener gives the model a clue about formatting
@@ -89,12 +90,24 @@ function buildSystemPrompt(
       ? '- You are answering inside Slack. Keep replies short, plain text. Use bold sparingly with single-asterisk syntax (*bold*). Do not use markdown headings (#, ##) — Slack does not render them.'
       : '- You are answering inside the Foreshadow web app chat panel. Replies render as full markdown.';
 
+  // Identity grounding. When the caller knows who's asking — Slack route
+  // resolves Slack user → Foreshadow user via email; in-app chat will
+  // pass the logged-in user once we have real auth — feed that into the
+  // prompt so "me" / "my" / "I" / "mine" resolve to the right user_id
+  // without the model having to call find_users by name (which would be
+  // both slower and ambiguous when names collide). Falls back to a
+  // permissive line when actor is unknown so the prompt stays valid.
+  const actorBlock = actor
+    ? `- The user you are talking to is ${actor.name} (user_id: ${actor.appUserId}). When they say "me", "my", "I", or otherwise refer to themselves, use this user_id directly — do NOT call find_users to look themselves up. Their role is "${actor.role}".`
+    : `- The current user's identity is not resolved. If they refer to themselves ("me", "my"), ask which user they mean before calling tools that filter by user.`;
+
   return `You are an AI assistant for Foreshadow, a vacation rental property management platform.
 
 Current context:
 - Today is ${date} (${tz}). The user is typing from this timezone.
 - Stored dates and times in Foreshadow are wall-clock and timezone-agnostic. When the user uses relative language ("today", "this week", "yesterday", "overdue"), interpret it against the date above and pass concrete YYYY-MM-DD dates to tools.
 - For any tool that supports a reference_date input, pass ${date} so date-relative filters (e.g. overdue) align with the user's local sense of "today".
+${actorBlock}
 ${surfaceLine}
 
 Linking tasks (critical):
@@ -157,6 +170,26 @@ If the user asks something the available tools cannot answer, say so plainly. Ke
  */
 export type AgentSurface = 'web' | 'slack';
 
+/**
+ * The Foreshadow user the agent is talking to right now.
+ *
+ * Resolved before the run by the caller — Slack route does Slack user →
+ * email → users row; in-app chat will pass the logged-in user once we
+ * have real auth (currently just the AuthProvider's `appUser`). When set,
+ * the system prompt grounds "me" / "my" / "I" to this user_id so the
+ * model doesn't have to round-trip through find_users on every self-
+ * referencing message (which is both slower and ambiguous when names
+ * collide — two "Billy"s in the same table is a real possibility).
+ */
+export interface AgentActor {
+  /** Foreshadow users.id UUID. */
+  appUserId: string;
+  /** Display name. Used in the prompt for natural-sounding grounding. */
+  name: string;
+  /** Permission tier; informs the model about what writes are appropriate. */
+  role: 'superadmin' | 'manager' | 'staff';
+}
+
 export interface RunAgentInput {
   /** Prior conversation, oldest first. Plain-text message turns only. */
   history: MessageParam[];
@@ -175,6 +208,14 @@ export interface RunAgentInput {
    * Default: 'web'.
    */
   surface?: AgentSurface;
+  /**
+   * Identity of the user the agent is talking to. Optional today because
+   * the in-app chat surface doesn't have real auth yet (any logged-in
+   * user is just whoever's selected in the AuthProvider dropdown). When
+   * omitted, the prompt falls back to a permissive line that asks the
+   * user to disambiguate before any user-scoped tool call.
+   */
+  actor?: AgentActor;
 }
 
 export interface ToolCallTrace {
@@ -193,6 +234,7 @@ export async function runAgent({
   prompt,
   clientTz,
   surface = 'web',
+  actor,
 }: RunAgentInput): Promise<RunAgentOutput> {
   const anthropic = getAnthropic();
   const conversation: MessageParam[] = [
@@ -202,7 +244,7 @@ export async function runAgent({
 
   // Built once per request so the date stays fresh and the user's tz is
   // baked in. Cheap to recompute.
-  const systemPrompt = buildSystemPrompt(clientTz, surface);
+  const systemPrompt = buildSystemPrompt(clientTz, surface, actor);
   const toolCalls: ToolCallTrace[] = [];
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {

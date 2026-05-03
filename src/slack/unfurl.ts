@@ -164,6 +164,27 @@ export async function buildTaskMessageExtras(
   }
   if (orderedTasks.length === 0) return {};
 
+  return renderTaskRowsAsExtras(orderedTasks);
+}
+
+/**
+ * Render an ordered list of `(task, url)` pairs into the same `blocks`
+ * or `attachments` payload that buildTaskMessageExtras produces.
+ *
+ * Exists so callers that ALREADY have task rows in hand (e.g. the
+ * `/myassignments` slash command, which queries assignments directly
+ * and bypasses the agent) don't have to round-trip through URL → parse
+ * → re-fetch just to reuse the carousel/attachment layout decision.
+ *
+ * Layout follows the same rule as buildTaskMessageExtras:
+ *   - 1–10 entries → horizontal `carousel` block
+ *   - >10 entries → vertical `attachments` (Slack's carousel cap is 10)
+ */
+export function renderTaskRowsAsExtras(
+  orderedTasks: Array<{ url: string; task: TaskByIdRow }>,
+): { blocks?: Block[]; attachments?: MessageAttachment[] } {
+  if (orderedTasks.length === 0) return {};
+
   if (orderedTasks.length <= MAX_CAROUSEL_CARDS) {
     const carousel: SlackCarouselBlock = {
       type: 'carousel',

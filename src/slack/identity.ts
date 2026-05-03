@@ -24,6 +24,15 @@ export interface ResolvedIdentity {
   displayName: string | null;
   /** IANA tz from Slack profile (e.g. "America/Los_Angeles"); null if unknown. */
   tz: string | null;
+  /**
+   * Foreshadow display name from the users row (NOT the Slack profile name).
+   * Used as the agent's "actor" name so prompts read naturally. Falls back
+   * to displayName when the users row is missing the name (shouldn't happen
+   * but the type is permissive).
+   */
+  appUserName: string;
+  /** users.role — drives permission-related agent prompt hints. */
+  role: 'superadmin' | 'manager' | 'staff';
 }
 
 interface CacheEntry {
@@ -70,18 +79,31 @@ export async function resolveSlackUser(
       // Email is the join key. We treat it as case-insensitive — Slack
       // returns it in whatever case the user typed, but our users.email
       // column is lowercased on insert (and we lowercase the query value
-      // here to match).
+      // here to match). We also pull `name` and `role` so callers
+      // (notably the agent's actor block + slash-command handlers) don't
+      // need a second round-trip just to render "you are <name>".
       const { data, error } = await getSupabaseServer()
         .from('users')
-        .select('id')
+        .select('id, name, role')
         .ilike('email', email)
         .maybeSingle();
       if (!error && data?.id) {
+        const role =
+          data.role === 'superadmin' ||
+          data.role === 'manager' ||
+          data.role === 'staff'
+            ? data.role
+            : 'staff';
         identity = {
           appUserId: data.id as string,
           slackUserId,
           displayName,
           tz,
+          appUserName:
+            (typeof data.name === 'string' && data.name.trim()) ||
+            displayName ||
+            'Unknown user',
+          role,
         };
       }
     }
@@ -122,4 +144,89 @@ export async function getBotUserId(web: WebClient): Promise<string | null> {
     console.warn('[slack/identity] auth.test failed', { err });
   }
   return null;
+}
+
+// Match a Slack user mention token in message text. Slack ALWAYS encodes
+// these as "<@Uxxxxx>" or "<@Uxxxxx|display name>" (the |display form
+// shows up in older clients). The capturing group is the Slack user id.
+// We deliberately accept the |display variant but DROP the display name —
+// the display Slack already showed the user is irrelevant to the agent;
+// what matters is which app user the token resolves to.
+const SLACK_MENTION_RE = /<@([UW][A-Z0-9]+)(?:\|[^>]*)?>/g;
+
+/**
+ * Rewrite Slack `<@Uxxxx>` mentions in a message into a form the agent
+ * can actually use: `[Display Name] (user_id: <uuid>)`.
+ *
+ * Why this exists: when a Slack user types `@Rae find me her open
+ * tasks`, Slack delivers the literal string `<@U07ABC>` in `event.text`.
+ * The agent has no way to interpret that token — it doesn't know the
+ * users table is keyed on UUIDs, not Slack ids, and `find_users` doesn't
+ * accept Slack ids. So the agent ends up calling `find_users` with the
+ * wrong query (or worse, fabricating a UUID). Pre-resolving every
+ * mention before the agent sees the prompt eliminates the round trip
+ * AND grounds the agent on the exact user the human meant.
+ *
+ * Behavior:
+ *   - Resolved mention → `[Display Name] (user_id: <uuid>)`. Brackets
+ *     mirror the prompt-friendly form we use elsewhere; the explicit
+ *     `user_id:` label leaves no ambiguity for the model.
+ *   - Mention that resolves to a Slack user but no app user → falls
+ *     back to `[Display Name]` (no user_id), so the agent at least has
+ *     a name to relay back. The agent's grounding rules will steer it
+ *     toward find_users for any tool call that needs the id.
+ *   - Mention that doesn't even resolve to a Slack user (rare;
+ *     usually means the bot can't see that user — different workspace
+ *     or scope issue) → leave the original `<@U…>` token untouched.
+ *     Better to surface the noise than to silently rewrite to garbage.
+ *
+ * The bot's own `<@Ubot>` mention is stripped earlier by `stripBotMention`
+ * (channel-mention path); this helper runs after that, so it never sees
+ * the bot id. If the bot id slips through (DM path with someone copy-
+ * pasting), the resolution will succeed and produce `[Foreshadow] (user_id: …)`
+ * — harmless because the agent won't call find_users on itself.
+ */
+export async function resolveMentionsInText(
+  web: WebClient,
+  text: string,
+): Promise<string> {
+  if (!text) return text;
+  // Collect unique Slack user ids first so we resolve each at most once,
+  // even if the user @-tagged the same person multiple times in one
+  // message.
+  const uniqueIds: string[] = [];
+  const seen = new Set<string>();
+  for (const match of text.matchAll(SLACK_MENTION_RE)) {
+    const id = match[1];
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      uniqueIds.push(id);
+    }
+  }
+  if (uniqueIds.length === 0) return text;
+
+  // Resolve in parallel — resolveSlackUser is cached, so the worst case
+  // is N parallel users.info calls on first contact and zero thereafter.
+  const resolved = await Promise.all(
+    uniqueIds.map(async (slackId) => {
+      try {
+        const id = await resolveSlackUser(web, slackId);
+        return [slackId, id] as const;
+      } catch (err) {
+        console.warn('[slack/identity] mention resolve failed', {
+          slackId,
+          err,
+        });
+        return [slackId, null] as const;
+      }
+    }),
+  );
+  const map = new Map(resolved);
+
+  return text.replace(SLACK_MENTION_RE, (whole, slackId: string) => {
+    const id = map.get(slackId);
+    if (!id) return whole; // unresolved → leave original token
+    const displayName = id.appUserName;
+    return `[${displayName}] (user_id: ${id.appUserId})`;
+  });
 }
