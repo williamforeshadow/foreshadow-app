@@ -77,6 +77,14 @@ interface MessageExtras {
 //   Slash commands:    configured separately in api.slack.com/apps →
 //                      "Slash Commands"; Request URL points at
 //                      /api/slack/commands. See app/api/slack/commands/route.ts.
+//   Interactivity:     enable in api.slack.com/apps →
+//                      "Interactivity & Shortcuts"; Request URL points at
+//                      /api/slack/interactivity. Required for ephemeral
+//                      carousel buttons (e.g. /myassignments) to fire —
+//                      Slack's ephemeral renderer suppresses URL clicks
+//                      unless interactivity is configured AND the
+//                      endpoint acks 200. See
+//                      app/api/slack/interactivity/route.ts.
 //   Request URL:       https://<your-domain>/api/slack/events
 //
 // Lifecycle:
