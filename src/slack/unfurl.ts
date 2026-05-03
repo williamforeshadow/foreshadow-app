@@ -5,9 +5,14 @@ import {
   getTasksByIds,
   type TaskByIdRow,
 } from '@/src/server/tasks/getTaskById';
-import { taskUnfurl, type TaskForUnfurl } from './unfurlBlocks';
+import {
+  taskCard,
+  taskUnfurl,
+  type SlackCarouselBlock,
+  type TaskForUnfurl,
+} from './unfurlBlocks';
 
-// Slack task-card rendering — two surfaces, one layout shape.
+// Slack task-card rendering — two surfaces, two layout shapes.
 //
 // Surface 1: link_shared event (someone pasted a task URL into a channel
 //            we're in, or into a DM). Slack fires `link_shared` with a
@@ -16,28 +21,29 @@ import { taskUnfurl, type TaskForUnfurl } from './unfurlBlocks';
 //            that's the form Slack actually honours across composer-
 //            preview, post-send, and conversations_history surfaces. The
 //            legacy channel+ts form silently no-ops in many contexts.
+//            Layout: one `taskUnfurl` block-list per URL.
 //
 // Surface 2: bot replies (handleSlackMessage in the events route). Slack
 //            does NOT fire `link_shared` for messages posted by our own
 //            bot when `unfurl_links: false` is set on chat.postMessage,
 //            so we can't piggy-back on the link_shared flow. Instead we
-//            attach the task cards directly to the postMessage payload
-//            as classic `attachments` — one per task URL.
+//            attach the task cards directly to the postMessage payload.
+//            Layout depends on count:
+//              - 1–10 tasks: a horizontal `carousel` block of `taskCard`
+//                elements (compact, scrollable).
+//              - >10 tasks: vertical `attachments` of `taskUnfurl` blocks
+//                (Slack caps carousels at 10 elements).
 //
-// Both surfaces use the same `taskUnfurl` block builder (slim card:
-// title, property, status+due, Open-in-Foreshadow button) and share
-// `getTasksByIds` for data, so cards look identical regardless of which
-// path produced them.
-//
-// History note: a previous iteration rendered bot-reply cards inside a
-// horizontal `carousel` block for ≤10 tasks. Slack accepted the message
-// but silently dropped the carousel block (suspected: URL-only buttons
-// inside carousel cards aren't valid; the documented examples all use
-// action_id-based interactive buttons). We rolled back to attachments;
-// reintroducing carousel cleanly is tracked but not blocking.
-//
-// `taskCard` and `SlackCarouselBlock` are kept exported in unfurlBlocks
-// for whoever revisits the carousel route — they're dead code today.
+// Both layouts share `getTasksByIds` for data and the slim card fields
+// (title / property / status+due / Open in Foreshadow), so cards look
+// consistent regardless of which path produced them.
+
+// Slack's documented carousel cap. We could render fewer to keep the
+// horizontal scroll short, but 10 lines up nicely with how often agent
+// answers stay below that threshold (single-property turnover lists,
+// "tasks assigned to <person>", etc.); spillovers fall back to vertical
+// attachments which are unbounded.
+const MAX_CAROUSEL_CARDS = 10;
 
 /** Subset of the link_shared event link shape we actually care about. */
 export interface SlackLink {
@@ -116,21 +122,23 @@ function isKnownUnfurlSource(
 }
 
 /**
- * Build the `attachments` payload for a chat.postMessage that mentions
- * one or more task URLs.
+ * Build the `blocks` and/or `attachments` payload for a chat.postMessage
+ * that mentions one or more task URLs. The shape varies with count:
  *
- * Returns:
- *   - `{ attachments: [...] }` when at least one URL recognises as a
- *     Foreshadow task. Vertical attachments, one card per task,
- *     preserving the source order URLs appeared in the message text.
- *     Duplicate URLs are de-duped so a task referenced twice doesn't
- *     render two cards.
- *   - `{}` when nothing recognises, so callers can spread the result
- *     into chat.postMessage args unconditionally without checking
- *     length.
+ *   - 1–10 task URLs → returns `{ blocks: [carousel] }`. Carousels stay
+ *     compact even with many tasks because Slack lays the cards out
+ *     horizontally with a scroll gesture.
  *
- * Returns `{ blocks }` is reserved in the type signature (rather than
- * removed) for the carousel reintroduction follow-up.
+ *   - >10 task URLs → returns `{ attachments: [...] }`. Slack caps
+ *     `carousel.elements` at 10, so beyond that we fall back to vertical
+ *     attachments, one per task.
+ *
+ *   - Zero recognised task URLs → returns `{}` so callers can spread
+ *     unconditionally without checking length.
+ *
+ * Order is preserved (URLs appear in the cards in the same order they
+ * appear in the source text), and duplicate URLs are de-duped so a task
+ * referenced twice in the reply doesn't render two cards.
  */
 export async function buildTaskMessageExtras(
   links: SlackLink[],
@@ -155,6 +163,19 @@ export async function buildTaskMessageExtras(
     orderedTasks.push({ url, task: t });
   }
   if (orderedTasks.length === 0) return {};
+
+  if (orderedTasks.length <= MAX_CAROUSEL_CARDS) {
+    const carousel: SlackCarouselBlock = {
+      type: 'carousel',
+      block_id: 'task-carousel',
+      elements: orderedTasks.map(({ url, task }) =>
+        taskCard(toUnfurlShape(task, url)),
+      ),
+    };
+    // Cast at the boundary: `carousel` isn't yet in @slack/types' KnownBlock
+    // union but the API accepts it as a generic Block.
+    return { blocks: [carousel as unknown as Block] };
+  }
 
   const attachments: MessageAttachment[] = orderedTasks.map(({ url, task }) => {
     const card = taskUnfurl(toUnfurlShape(task, url));

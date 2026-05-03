@@ -89,12 +89,13 @@ interface MessageExtras {
 //             to repeat them in text — this strips the leftover bits
 //             when the model echoes prior assistant turns that did).
 //           - Persist user + assistant messages.
-//           - Build task-card attachments for any task URLs in the
-//             reply (Slack doesn't fire link_shared for our bot's own
-//             posts, so chat.unfurl can't be used here — we ride the
-//             cards along on the chat.postMessage payload instead).
-//             One card per task URL, vertical stack; carousel is
-//             tracked as a follow-up.
+//           - Build task cards for any task URLs in the reply (Slack
+//             doesn't fire link_shared for our bot's own posts, so
+//             chat.unfurl can't be used here — we ride the cards along
+//             on the chat.postMessage payload instead). Layout is a
+//             horizontal `carousel` block for ≤10 tasks (compact,
+//             scrollable) and falls back to vertical `attachments` for
+//             >10 (Slack's carousel cap is 10 elements).
 //           - Post reply (in-thread for mentions, flat for DMs).
 //        b. link_shared:
 //           - Recognise task URLs via parseTaskUrl.
