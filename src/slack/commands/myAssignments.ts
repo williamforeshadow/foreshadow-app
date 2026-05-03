@@ -16,12 +16,14 @@ import { renderTaskRowsAsExtras } from '@/src/slack/unfurl';
 // existing task-card builders so the visual output matches what the
 // agent would have produced.
 //
-// Filtering rules:
+// Filtering rules (mirror the in-app My Assignments page exactly):
 //   - Only tasks where task_assignments.user_id = the resolved app user.
-//   - Drop tasks in the bin (is_binned = true) — the user marked them
-//     hidden; surfacing them in /myassignments would be noise.
-//   - Drop completed tasks (status = 'complete') — same reasoning, the
-//     user already finished them.
+//   - Drop completed tasks (status = 'complete') — already done.
+//   - Do NOT filter by is_binned. "Binned" in this codebase means
+//     "filed into a project bin" (Backlog, Triage, etc.) — it's a
+//     categorization, not a hide. The in-app My Assignments view
+//     keeps binned tasks visible and we want byte-for-byte parity so
+//     the counts match between surfaces.
 //   - Sort: scheduled_date asc with nulls last, then created_at asc as a
 //     stable tiebreaker. "What's next?" is the natural reading order.
 //
@@ -77,13 +79,11 @@ export async function runMyAssignments(args: {
     };
   }
 
-  // Step 2: fetch the full task rows so we can both filter on status /
-  // is_binned (which the assignment table doesn't carry) and feed the
-  // shared card renderer.
+  // Step 2: fetch the full task rows so we can both filter on status
+  // (which the assignment table doesn't carry) and feed the shared
+  // card renderer.
   const allTasks = await getTasksByIds(assignedIds);
-  const openTasks = allTasks.filter(
-    (t) => t.status !== 'complete' && !t.is_binned,
-  );
+  const openTasks = allTasks.filter((t) => t.status !== 'complete');
   if (openTasks.length === 0) {
     return {
       text: `${displayName}, you have no open assignments. Nice.`,
