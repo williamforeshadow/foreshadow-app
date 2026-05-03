@@ -226,15 +226,14 @@ export interface SlackCarouselBlock {
  * of a list of section/context/actions blocks. The carousel itself wraps
  * up to 10 of these (Slack's per-carousel cap).
  *
- * Why the title is wrapped in `<url|text>` mrkdwn:
- *   The card already has an "Open in Foreshadow" action button below the
- *   body, which works on the surfaces we use (chat.postMessage —
- *   events-route bot replies and the /myassignments DM). Wrapping the
- *   title in an mrkdwn link gives the user a SECOND click target. Text-
- *   based mrkdwn links are universally supported across every Slack
- *   surface (postMessage, postEphemeral, response_url, unfurl), so even
- *   if a future Slack regression breaks button.url on some carousel
- *   delivery path, the title link still navigates. Belt and suspenders.
+ * Why the title is plain text (no `<url|text>` mrkdwn link):
+ *   We tried wrapping the title in an mrkdwn link as a belt-and-
+ *   suspenders second click target. It rendered LITERALLY as
+ *   "<https://...|Task title>" because `card.title` doesn't parse
+ *   mrkdwn link syntax — only inline styling marks (bold/italic) work
+ *   here. The Slack carousel docs confirm this implicitly: their
+ *   own examples never show link syntax in card.title. The "Open in
+ *   Foreshadow" action button is the single click target.
  *
  * Why the button has BOTH `url` and `action_id`:
  *   action_id is required for Slack to fire interactivity events on
@@ -252,7 +251,7 @@ export function taskCard(task: TaskForUnfurl): SlackCardElement {
     block_id: `task-${task.task_id}`,
     title: {
       type: 'mrkdwn',
-      text: `<${task.task_url}|${escapeMrkdwn(title)}>`,
+      text: escapeMrkdwn(title),
       verbatim: false,
     },
     ...(subtitle

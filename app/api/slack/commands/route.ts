@@ -297,20 +297,50 @@ interface PostDmArgs {
 }
 
 // chat.postMessage to a DM channel. Same transport the events route
-// uses for bot replies — proven path for carousel + url buttons. We
-// disable link unfurling on the bot's own message so Slack doesn't
-// double up "card from blocks" + "link unfurl from text" for the same
-// task URL.
+// uses for bot replies — proven path for carousel + url buttons.
+//
+// Why we prepend a `section` block to the carousel:
+//   When `blocks` is set on chat.postMessage, Slack uses it for
+//   display and treats the top-level `text` field purely as
+//   notification fallback (it never renders in the conversation).
+//   Empirically, a message whose blocks array contains ONLY a
+//   carousel block delivers the carousel but the action buttons
+//   inside the cards don't fire URL navigation on click — same
+//   symptom we saw in the chat.postEphemeral path. Mirroring the
+//   shape the events-route postReply uses (`[section, ...extras]`)
+//   makes the buttons fire consistently. The section also doubles
+//   as the visible message text above the carousel, which reads
+//   better than text-only-as-notification anyway.
+//
+// Disable link unfurling on the bot's own message so Slack doesn't
+// double up "card from blocks" + "link unfurl from text" for the
+// same task URL.
 async function postDmMessageSafe(
   web: WebClient,
   args: PostDmArgs,
 ): Promise<void> {
+  // Build the blocks array. When the caller has blocks (the carousel
+  // case), prepend a section carrying the message text so the
+  // visible body matches what users see from the events route. When
+  // the caller passes attachments instead (the >10-tasks fallback),
+  // the top-level `text` field renders normally above them — no
+  // section wrapper needed.
+  const blocks =
+    args.blocks && args.blocks.length > 0
+      ? ([
+          { type: 'section', text: { type: 'mrkdwn', text: args.text } },
+          ...args.blocks,
+        ] as Block[])
+      : undefined;
+
   try {
     await web.chat.postMessage({
       channel: args.channel,
       text: args.text,
-      ...(args.blocks ? { blocks: args.blocks } : {}),
-      ...(args.attachments ? { attachments: args.attachments } : {}),
+      ...(blocks ? { blocks } : {}),
+      ...(args.attachments && args.attachments.length > 0
+        ? { attachments: args.attachments }
+        : {}),
       unfurl_links: false,
       unfurl_media: false,
     });
