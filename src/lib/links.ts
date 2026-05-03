@@ -44,3 +44,46 @@ export function taskUrl(taskId: string): string {
   const path = taskPath(taskId);
   return base ? `${base}${path}` : path;
 }
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Inverse of taskUrl: pulls a task UUID out of a Foreshadow task URL, or
+ * returns null if the input doesn't look like one. Used by the Slack
+ * link-unfurl handler to recognise our URLs in arbitrary messages.
+ *
+ * Validation rules:
+ *   - The input must parse as an absolute URL.
+ *   - When APP_BASE_URL is configured, the URL's host must match it. Slack's
+ *     unfurl flow already filters by registered domain, but we re-check here
+ *     so ad-hoc callers (e.g. scanning the bot's own reply for task links)
+ *     can't accidentally unfurl URLs from other domains.
+ *   - The `task` query param must be present and a well-formed UUID.
+ *
+ * Note: we deliberately don't require `view=tasks`. Older copies of the URL
+ * (or third-party rewrites) sometimes drop or reorder query params; the
+ * `task` UUID is the only piece the deep-link handler actually needs.
+ */
+export function parseTaskUrl(input: string): { taskId: string } | null {
+  if (!input) return null;
+  let url: URL;
+  try {
+    url = new URL(input);
+  } catch {
+    return null;
+  }
+  const base = getAppBaseUrl();
+  if (base) {
+    let baseUrl: URL;
+    try {
+      baseUrl = new URL(base);
+    } catch {
+      return null;
+    }
+    if (url.host !== baseUrl.host) return null;
+  }
+  const taskId = url.searchParams.get('task');
+  if (!taskId || !UUID_RE.test(taskId)) return null;
+  return { taskId };
+}

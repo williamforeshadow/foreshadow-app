@@ -9,6 +9,7 @@ import { verifySlackSignature } from '@/src/slack/verify';
 import { alreadyProcessed } from '@/src/slack/dedupe';
 import { resolveSlackUser, getBotUserId } from '@/src/slack/identity';
 import { markdownToMrkdwn, stripBotMention } from '@/src/slack/format';
+import { unfurlTaskLinks, extractTaskUrlsFromText } from '@/src/slack/unfurl';
 
 // POST /api/slack/events
 //
@@ -16,15 +17,24 @@ import { markdownToMrkdwn, stripBotMention } from '@/src/slack/format';
 // runAgent, same backstops, same conversation memory in ai_chat_messages —
 // just with Slack-shaped IO at the edges.
 //
-// Two entry points are supported:
+// Three entry points are supported:
 //   - app_mention          → @-mention in a channel; we reply in-thread.
 //   - message (im subtype) → 1:1 DM with the bot; we reply flat in the DM.
+//   - link_shared          → any message in a channel the bot is in (or a
+//                             DM) containing a URL on a registered unfurl
+//                             domain. We respond with chat.unfurl so the
+//                             URL renders as a Block Kit task card. No
+//                             agent is invoked on this path.
 //
 // Required env:
-//   SLACK_BOT_TOKEN       (xoxb-...) — bot token used to read users.info
-//                                     and post replies via chat.postMessage.
+//   SLACK_BOT_TOKEN       (xoxb-...) — bot token used to read users.info,
+//                                     post replies via chat.postMessage,
+//                                     and attach unfurls via chat.unfurl.
 //   SLACK_SIGNING_SECRET            — signs every event Slack sends us;
 //                                     verified before any work happens.
+//   APP_BASE_URL                    — required for the unfurl path to
+//                                     match URLs to the right domain (see
+//                                     parseTaskUrl in src/lib/links.ts).
 //
 // Optional env:
 //   SLACK_ALLOWED_CHANNELS         — comma-separated channel ids; if set,
@@ -32,11 +42,18 @@ import { markdownToMrkdwn, stripBotMention } from '@/src/slack/format';
 //                                     are ignored. DMs are NOT filtered
 //                                     by this (they're inherently 1:1).
 //                                     Empty/unset = allow all channels.
+//                                     Note: link_shared is also unaffected
+//                                     by this allowlist — unfurls are
+//                                     passive and don't run the agent.
 //
 // Slack app config (in api.slack.com/apps):
 //   Bot scopes:        app_mentions:read, chat:write, users:read,
-//                      users:read.email, im:history, im:read, im:write
-//   Subscribed events: app_mention, message.im
+//                      users:read.email, im:history, im:read, im:write,
+//                      links:read, links:write
+//   Subscribed events: app_mention, message.im, link_shared
+//   App unfurl domains: the host of APP_BASE_URL (e.g. app.foreshadow.com).
+//                      Slack will only fire link_shared for URLs on
+//                      domains registered here.
 //   App Home tab:      enable "Allow users to send Slash commands and
 //                      messages from the messages tab"
 //   Request URL:       https://<your-domain>/api/slack/events
@@ -45,14 +62,21 @@ import { markdownToMrkdwn, stripBotMention } from '@/src/slack/format';
 //   1. Verify HMAC signature (rejects forgeries / replays).
 //   2. Handle url_verification handshake (one-time, during app setup).
 //   3. Dedup by event_id (Slack retries aggressively when slow).
-//   4. Classify the event as channel_mention or dm (or ignore).
-//   5. Ack 200 immediately, defer agent work via `after()`.
+//   4. Classify the event as channel_mention, dm, or link_shared (else ignore).
+//   5. Ack 200 immediately, defer work via `after()`.
 //   6. Background:
-//        - Resolve Slack user → app user (via email match in users table).
-//        - Pull recent ai_chat_messages history for that app user.
-//        - Run the agent (writes enabled, same as in-app).
-//        - Apply backstops, persist user + assistant messages.
-//        - Post reply (in-thread for mentions, flat for DMs).
+//        a. channel_mention / dm:
+//           - Resolve Slack user → app user (via email match in users table).
+//           - Pull recent ai_chat_messages history for that app user.
+//           - Run the agent (writes enabled, same as in-app).
+//           - Apply backstops, persist user + assistant messages.
+//           - Post reply (in-thread for mentions, flat for DMs).
+//           - Manually unfurl any task URLs we just emitted (Slack does
+//             NOT fire link_shared for our own bot's posts).
+//        b. link_shared:
+//           - Recognise task URLs via parseTaskUrl.
+//           - Fetch matched tasks in one round-trip.
+//           - chat.unfurl with a Block Kit card per URL.
 
 const MEMORY_WINDOW = 15;
 
@@ -82,15 +106,25 @@ interface SlackInnerEvent {
   // We only act on "im" for the message event type; channels go through
   // the app_mention pathway instead.
   channel_type?: string;
+  // link_shared-only fields: list of URLs Slack found in the message and
+  // the message ts they appeared in. `channel` above carries the channel.
+  // `unfurl_id` and `source` are present too but we don't use them — they
+  // matter only for advanced cases like updating an unfurl after posting.
+  links?: Array<{ url: string; domain?: string }>;
+  message_ts?: string;
+  source?: string;
+  unfurl_id?: string;
 }
 
-// Logical surface within Slack — drives mention-stripping, threading, and
-// the channel allowlist. Returns null if the event isn't one we handle.
-type SlackKind = 'channel_mention' | 'dm';
+// Logical surface within Slack — drives mention-stripping, threading, the
+// channel allowlist, and which background handler we dispatch to. Returns
+// null if the event isn't one we handle.
+type SlackKind = 'channel_mention' | 'dm' | 'link_shared';
 
 function classifySlackEvent(event: SlackInnerEvent | undefined): SlackKind | null {
   if (!event) return null;
   if (event.type === 'app_mention') return 'channel_mention';
+  if (event.type === 'link_shared') return 'link_shared';
   if (
     event.type === 'message' &&
     event.channel_type === 'im' &&
@@ -165,7 +199,14 @@ export async function POST(req: NextRequest) {
 
   // 4) Ignore bot-authored messages so we never reply to ourselves or
   //    other bots (which would either spam loop or just be noise).
-  if (event.bot_id || event.subtype === 'bot_message' || !event.user) {
+  //    link_shared is exempt: those events don't always carry `user`
+  //    (they identify the message's author via the underlying post),
+  //    and we DO want to unfurl URLs that humans paste — even when the
+  //    paste happens via another bot like a bookmark integration.
+  if (
+    kind !== 'link_shared' &&
+    (event.bot_id || event.subtype === 'bot_message' || !event.user)
+  ) {
     return new Response(null, { status: 200 });
   }
 
@@ -173,6 +214,9 @@ export async function POST(req: NextRequest) {
   //    DMs are inherently 1:1 and the user already proved access by being
   //    in your workspace, so applying a channel filter to them would be
   //    confusing (the "channel" id of a DM is a synthetic D… id anyway).
+  //    link_shared is also exempt: unfurls are passive (no agent runs,
+  //    nothing is persisted, no external systems are touched), so the
+  //    privacy concerns that motivate the allowlist don't apply.
   if (kind === 'channel_mention') {
     const allowedRaw = process.env.SLACK_ALLOWED_CHANNELS ?? '';
     const allowedChannels = allowedRaw
@@ -191,15 +235,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Defer the actual agent work: ack now (Slack's 3s SLA), then process.
+  // Defer the actual work: ack now (Slack's 3s SLA), then process.
   // `after` runs the callback after the response is sent and works on both
   // Vercel and self-hosted Node. Errors here must NOT propagate or Slack
   // will see a 500 even though we already 200'd; wrap in try/catch.
   after(async () => {
     try {
-      await handleSlackMessage(event, kind, botToken);
+      if (kind === 'link_shared') {
+        await handleLinkShared(event, botToken);
+      } else {
+        await handleSlackMessage(event, kind, botToken);
+      }
     } catch (err) {
-      console.error('[slack] handleSlackMessage threw', err);
+      console.error('[slack] background handler threw', { kind, err });
     }
   });
 
@@ -208,7 +256,7 @@ export async function POST(req: NextRequest) {
 
 async function handleSlackMessage(
   event: SlackInnerEvent,
-  kind: SlackKind,
+  kind: Exclude<SlackKind, 'link_shared'>,
   botToken: string,
 ): Promise<void> {
   if (!event.user || !event.channel || !event.ts) return;
@@ -332,7 +380,33 @@ async function handleSlackMessage(
     },
   });
 
-  await postReply(web, event.channel, threadTs, markdownToMrkdwn(finalText));
+  const mrkdwnText = markdownToMrkdwn(finalText);
+  const postResult = await postReply(web, event.channel, threadTs, mrkdwnText);
+
+  // Step 6b: Slack does NOT fire link_shared for our own bot's messages,
+  // so we manually unfurl any task URLs in the reply we just posted.
+  // Doing it here (vs. inlining attachments in chat.postMessage) keeps the
+  // unfurl rendering path identical to the human-pasted-link path — same
+  // builder, same data fetch — and avoids cluttering postMessage with
+  // attachment data for a feature that's purely presentational.
+  if (postResult.ok && postResult.ts) {
+    const taskUrls = extractTaskUrlsFromText(mrkdwnText).map((url) => ({ url }));
+    if (taskUrls.length > 0) {
+      await unfurlTaskLinks(web, event.channel, postResult.ts, taskUrls);
+    }
+  }
+}
+
+// Pure unfurl entry point. No agent, no persistence, no allowlist — just
+// recognise our task URLs in the message Slack told us about and respond
+// with Block Kit cards. See src/slack/unfurl.ts for the matching logic.
+async function handleLinkShared(
+  event: SlackInnerEvent,
+  botToken: string,
+): Promise<void> {
+  if (!event.channel || !event.message_ts || !event.links?.length) return;
+  const web = new WebClient(botToken);
+  await unfurlTaskLinks(web, event.channel, event.message_ts, event.links);
 }
 
 async function loadHistory(appUserId: string): Promise<MessageParam[]> {
@@ -360,9 +434,9 @@ async function postReply(
   channel: string,
   threadTs: string | undefined,
   text: string,
-): Promise<void> {
+): Promise<{ ok: true; ts: string } | { ok: false }> {
   try {
-    await web.chat.postMessage({
+    const res = await web.chat.postMessage({
       channel,
       // Only set thread_ts when we actually want to thread. For DMs we
       // omit it so the reply sits flat in the conversation.
@@ -370,11 +444,16 @@ async function postReply(
       text,
       // Disable Slack's auto-link unfurling on URLs in our reply. Tools
       // sometimes return URLs (e.g. property knowledge wifi networks) and
-      // unfurl previews in a thread are noisy.
+      // unfurl previews in a thread are noisy. We still attach our own
+      // task-card unfurls afterwards via chat.unfurl (see Step 6b in
+      // handleSlackMessage), which sidesteps this flag.
       unfurl_links: false,
       unfurl_media: false,
     });
+    if (res.ok && res.ts) return { ok: true, ts: res.ts };
+    return { ok: false };
   } catch (err) {
     console.error('[slack] chat.postMessage failed', { channel, threadTs, err });
+    return { ok: false };
   }
 }
