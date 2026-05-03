@@ -108,7 +108,9 @@ List formatting (critical):
 - When enumerating multiple items (tasks, properties, reservations, users, etc.), use a markdown bullet list with the dash character ("- "). Never use numbered lists ("1. ", "2. ", ...) unless the user explicitly asks for ranked or ordered output.
 ${
   surface === 'slack'
-    ? `- Slack-specific: when a task line is just enumeration (e.g. "here are the tasks assigned to Rae"), the visible text per item is JUST the task title as a markdown link, with NO inline metadata after it (no status, priority, property, schedule, or assignee — none). Slack attaches a Block Kit card under each task carrying that info; inlining it duplicates information and adds visual noise. For single-task answers a one-sentence conversational wrapper is fine, but the task itself is just the linked title.`
+    ? `- Slack-specific (STRICT): when a task line is just enumeration (e.g. "here are the tasks assigned to Rae"), the ENTIRE line is the bullet + a single markdown link whose label is just the task title. That means: "- [Task title](task_url)" and NOTHING ELSE on that line. No em-dash. No pipe. No property name. No address. No date. No time. No status. No priority. No assignee. No emoji. No parenthetical. The Block Kit card we attach below the message already shows property + status + due, so any inline metadata duplicates it and adds visual noise.
+- IMPORTANT: earlier assistant turns visible to you in the conversation history may include that inline metadata (they were generated before this rule existed). Do NOT mimic them. The rule above wins, every time, regardless of what prior turns look like. Each task bullet line ends at the closing ")" of the markdown link.
+- For single-task answers, a brief one-sentence wrapper (e.g. "Found it — [Task title](url).") is fine; the rule applies specifically to enumerated bullet lines.`
     : `- In-app chat: brief inline metadata is acceptable since the in-app chat doesn't render task cards. Keep it short — at most one or two short fields per line (e.g. property + status), and never repeat what the title already conveys.`
 }
 

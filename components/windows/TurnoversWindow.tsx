@@ -1,6 +1,7 @@
 'use client';
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import TurnoverCards from '@/components/TurnoverCards';
 import { useTurnovers } from '@/lib/useTurnovers';
 import { TurnoverFilterBar } from './turnovers';
@@ -16,6 +17,7 @@ import type {
 import type { Task, Turnover, User } from '@/lib/types';
 import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
+import { taskPath } from '@/src/lib/links';
 
 // Turnovers window. Two-pane layout:
 //   - Left: filterable + sortable list of turnover cards (one per active /
@@ -132,6 +134,7 @@ function scheduleTaskToOverlay(
 }
 
 function TurnoversWindowContent(_: TurnoversWindowProps) {
+  const router = useRouter();
   const {
     response,
     error,
@@ -306,6 +309,15 @@ function TurnoversWindowContent(_: TurnoversWindowProps) {
         task={selectedTask}
         onClose={() => setSelectedTask(null)}
         onTaskUpdated={fetchTurnovers}
+        onOpenInPage={
+          selectedTask
+            ? () => {
+                const id = selectedTask.task_id;
+                setSelectedTask(null);
+                router.push(taskPath(id));
+              }
+            : undefined
+        }
       />
     </div>
   );

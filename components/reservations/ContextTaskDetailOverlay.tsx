@@ -1,8 +1,10 @@
 'use client';
 
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import { useReservationViewer } from '@/lib/reservationViewerContext';
 import { PropertyTaskDetailOverlay } from '@/components/properties/tasks/PropertyTaskDetailOverlay';
+import { taskPath } from '@/src/lib/links';
 
 // Per-surface task overlay driven by ReservationViewerProvider.
 // ------------------------------------------------------------
@@ -14,7 +16,12 @@ import { PropertyTaskDetailOverlay } from '@/components/properties/tasks/Propert
 //
 // PropertyTaskDetailOverlay self-renders null when `task` is null, so this
 // component is a no-op until something writes to context's selectedTask.
+//
+// onOpenInPage routes the user to the dedicated `/tasks/<uuid>` page (SSR'd,
+// shareable URL, full app chrome). The overlay closes itself on click so we
+// don't briefly render the dialog over the new route during the navigation.
 export function ContextTaskDetailOverlay() {
+  const router = useRouter();
   const { selectedTask, setSelectedTask, refetch } = useReservationViewer();
   return (
     <PropertyTaskDetailOverlay
@@ -25,6 +32,15 @@ export function ContextTaskDetailOverlay() {
       // After the swap modalReservationId is null, so refetch is a no-op
       // and surface-local data stays authoritative.
       onTaskUpdated={refetch}
+      onOpenInPage={
+        selectedTask
+          ? () => {
+              const id = selectedTask.task_id;
+              setSelectedTask(null);
+              router.push(taskPath(id));
+            }
+          : undefined
+      }
     />
   );
 }

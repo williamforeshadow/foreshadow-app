@@ -9,7 +9,11 @@ import { applyBackstops } from '@/src/agent/backstops';
 import { verifySlackSignature } from '@/src/slack/verify';
 import { alreadyProcessed } from '@/src/slack/dedupe';
 import { resolveSlackUser, getBotUserId } from '@/src/slack/identity';
-import { markdownToMrkdwn, stripBotMention } from '@/src/slack/format';
+import {
+  markdownToMrkdwn,
+  stripBotMention,
+  stripTaskListMetadata,
+} from '@/src/slack/format';
 import {
   unfurlTaskLinksFromEvent,
   buildTaskMessageExtras,
@@ -79,14 +83,18 @@ interface MessageExtras {
 //           - Resolve Slack user → app user (via email match in users table).
 //           - Pull recent ai_chat_messages history for that app user.
 //           - Run the agent (writes enabled, same as in-app).
-//           - Apply backstops, persist user + assistant messages.
-//           - Build task cards for any task URLs in the reply (Slack
-//             doesn't fire link_shared for our bot's own posts, so
-//             chat.unfurl can't be used here — we ride the cards along
-//             on the chat.postMessage payload instead). Layout is a
-//             horizontal `carousel` block for ≤10 tasks (compact,
-//             scrollable) and falls back to vertical `attachments` for
-//             >10 (Slack's carousel cap is 10 elements).
+//           - Apply backstops, scrub trailing inline metadata from any
+//             linked-task bullet lines (the cards below the message
+//             carry property/status/due, so the model is instructed not
+//             to repeat them in text — this strips the leftover bits
+//             when the model echoes prior assistant turns that did).
+//           - Persist user + assistant messages.
+//           - Build task-card attachments for any task URLs in the
+//             reply (Slack doesn't fire link_shared for our bot's own
+//             posts, so chat.unfurl can't be used here — we ride the
+//             cards along on the chat.postMessage payload instead).
+//             One card per task URL, vertical stack; carousel is
+//             tracked as a follow-up.
 //           - Post reply (in-thread for mentions, flat for DMs).
 //        b. link_shared:
 //           - Recognise task URLs via parseTaskUrl.
@@ -376,7 +384,12 @@ async function handleSlackMessage(
     });
   }
 
-  const finalText = masked.text;
+  // Scrub trailing inline metadata from any "- [Task](url) — Property | Date"
+  // bullet lines BEFORE persistence. We deliberately persist the cleaned
+  // version so it propagates into future conversation history (which the
+  // model echoes); persisting the raw text would let the bad pattern
+  // re-seed itself every turn. See stripTaskListMetadata for rationale.
+  const finalText = stripTaskListMetadata(masked.text);
 
   await supabase.from('ai_chat_messages').insert({
     user_id: identity.appUserId,

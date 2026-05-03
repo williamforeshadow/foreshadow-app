@@ -28,6 +28,8 @@ import { TaskRow, TaskListHeader, type TaskRowItem } from '@/components/tasks/Ta
 import { TaskFilterBar } from '@/components/tasks/TaskFilterBar';
 import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
+import { useRouter } from 'next/navigation';
+import { taskPath } from '@/src/lib/links';
 
 interface DateGroup {
   id: string;
@@ -93,6 +95,7 @@ function toRowItem(task: TaskRowData): TaskRowItem {
 }
 
 function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindowProps) {
+  const router = useRouter();
   const { departments: allDepts } = useDepartments();
   const {
     tasks,
@@ -751,6 +754,15 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
               setSelectedTask(null);
               setDraftTask(null);
             }}
+            onOpenInPage={
+              !isDraft && selectedTask
+                ? () => {
+                    const id = selectedTask.task_id;
+                    setSelectedTask(null);
+                    router.push(taskPath(id));
+                  }
+                : undefined
+            }
             onOpenActivity={() => {}}
             isNewTask={isDraft}
             onConfirmCreate={isDraft ? handleConfirmCreateTask : undefined}

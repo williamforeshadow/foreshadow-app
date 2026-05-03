@@ -16,6 +16,7 @@ import type { TaskRowItem } from '@/components/tasks/TaskRow';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
+import { taskPath } from '@/src/lib/links';
 
 // Per-property Schedule tab. Month calendar with reservation bars + task
 // pills, styled in the shared purple accent system to stay cohesive with
@@ -411,6 +412,15 @@ export default function PropertyScheduleView() {
         task={selectedTask}
         onClose={() => setSelectedTask(null)}
         onTaskUpdated={fetchSchedule}
+        onOpenInPage={
+          selectedTask
+            ? () => {
+                const id = selectedTask.task_id;
+                setSelectedTask(null);
+                router.push(taskPath(id));
+              }
+            : undefined
+        }
       />
     </div>
   );

@@ -66,3 +66,39 @@ export function stripBotMention(text: string, botUserId: string | null): string 
   const re = new RegExp(`^\\s*<@${botUserId}>\\s*`, 'i');
   return text.replace(re, '').trim();
 }
+
+/**
+ * Strip trailing inline metadata from bullet-list lines that consist of
+ * a single linked task title.
+ *
+ * Why this exists: the Slack-specific system prompt instructs the model
+ * to render task enumerations as bare linked titles ("- [Task](url)")
+ * since the Block Kit cards we attach below the message already carry
+ * status / property / due / priority. The model usually obeys, but the
+ * conversation-memory window (loadHistory in the Slack route) feeds
+ * prior assistant turns back in — and many of those turns predate the
+ * "no inline metadata" rule and DO append " — Property | Date" tails.
+ * In-context examples occasionally outweigh the system prompt, so the
+ * model echoes the old format. This function is the deterministic
+ * safety net that scrubs the tail regardless.
+ *
+ * Only acts on lines that:
+ *   - start at column 0 of a line (the gm flag anchors per-line),
+ *   - begin with a bullet marker `-` or `*` followed by whitespace,
+ *   - have a markdown link `[text](http(s)?://...)` as the FIRST item
+ *     after the bullet.
+ *
+ * Anything past the closing `)` of the link on that line is dropped.
+ *
+ * Anything else — single-task replies, free prose, lists without links,
+ * lines where the link isn't the first element after the bullet — is
+ * left alone so we don't over-trim.
+ *
+ * Idempotent: feeding the output back through is a no-op.
+ */
+export function stripTaskListMetadata(input: string): string {
+  return input.replace(
+    /^(\s*[-*]\s+\[[^\]\n]+\]\(https?:\/\/[^)\s]+\))[^\n]*$/gm,
+    '$1',
+  );
+}
