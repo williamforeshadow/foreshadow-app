@@ -1,4 +1,5 @@
 import type { WebClient } from '@slack/web-api';
+import type { MessageAttachment } from '@slack/types';
 import { parseTaskUrl } from '@/src/lib/links';
 import {
   getTasksByIds,
@@ -6,30 +7,27 @@ import {
 } from '@/src/server/tasks/getTaskById';
 import { taskUnfurl, type TaskForUnfurl } from './unfurlBlocks';
 
-// Slack link-unfurl orchestrator.
+// Slack task-card rendering — two surfaces, one shared builder.
 //
-// Two entry points feed this module:
+// Surface 1: link_shared event (someone — anyone — pasted a task URL in
+//            a channel where the bot is a member, or in a DM with us).
+//            Slack fires `link_shared` with a list of URLs and an
+//            `unfurl_id` + `source` pair. We respond with `chat.unfurl`
+//            using THOSE identifiers (not channel/ts) — that's the form
+//            Slack actually honours for rendering. The legacy
+//            channel+ts form silently no-ops in many contexts.
 //
-//   1. `link_shared` events from app/api/slack/events/route.ts — fired
-//      whenever a message in a channel the bot is in (or a DM) contains a
-//      URL on a domain we registered in our Slack app config. The event
-//      hands us a list of `{ url, domain }` and the (channel, message_ts)
-//      they appeared in.
+// Surface 2: bot replies (handleSlackMessage in the events route). Slack
+//            does NOT fire `link_shared` for messages posted by our own
+//            bot when `unfurl_links: false` is set on chat.postMessage,
+//            so we can't piggy-back on the link_shared flow. Instead we
+//            build the cards ourselves and attach them inline as
+//            `attachments` on chat.postMessage. Slack renders inline
+//            attachments unconditionally — no link_shared dance needed.
 //
-//   2. The bot's own replies — Slack does NOT fire `link_shared` for
-//      messages posted by the same bot, so handleSlackMessage scans its
-//      reply text after chat.postMessage returns and calls back into here
-//      to manually unfurl any task URLs it just emitted.
-//
-// In both cases the algorithm is identical:
-//   - Filter URLs through parseTaskUrl to recognise our task links.
-//   - Fetch all matched tasks in one round-trip via getTasksByIds.
-//   - Build a Block Kit card per URL via taskUnfurl.
-//   - Submit them as the `unfurls` map on chat.unfurl.
-//
-// Anything we don't recognise — non-task URLs, bogus UUIDs, deleted tasks —
-// gets silently dropped from the unfurls map. Slack treats a missing entry
-// as "no preview", which is the right UX for the unrecognised case.
+// Both surfaces share the same builder (`taskUnfurl`) and the same data
+// fetch (`getTasksByIds`), so the cards look identical regardless of who
+// posted the URL.
 
 /** Subset of the link_shared event link shape we actually care about. */
 export interface SlackLink {
@@ -37,66 +35,123 @@ export interface SlackLink {
   domain?: string;
 }
 
+/** Subset of the link_shared event we need to acknowledge an unfurl. */
+export interface LinkSharedEventForUnfurl {
+  channel?: string;
+  message_ts?: string;
+  unfurl_id?: string;
+  source?: string;
+  links?: SlackLink[];
+}
+
 /**
- * Unfurl every task URL in `links` that we can resolve, attaching the
- * resulting cards to the message at (channel, ts).
+ * Respond to a `link_shared` event by attaching task cards to the URLs
+ * Slack told us about. Uses the modern `unfurl_id + source` form of
+ * chat.unfurl, falling back to the legacy `channel + ts` form only when
+ * the event is missing those fields (older Slack delivery, for safety).
  *
  * Best-effort: errors from chat.unfurl are logged but never thrown. The
  * caller can fire-and-forget without try/catch.
  */
-export async function unfurlTaskLinks(
+export async function unfurlTaskLinksFromEvent(
   web: WebClient,
-  channel: string,
-  ts: string,
-  links: SlackLink[],
+  event: LinkSharedEventForUnfurl,
 ): Promise<void> {
-  const recognised = recogniseLinks(links);
-  if (recognised.length === 0) return;
+  const links = event.links ?? [];
+  if (links.length === 0) return;
 
-  const taskIds = Array.from(new Set(recognised.map((r) => r.taskId)));
-  const tasks = await getTasksByIds(taskIds);
-  const byId = new Map(tasks.map((t) => [t.task_id, t]));
-
-  // Build the unfurls map. Slack expects URLs as keys and `{ blocks }` (or
-  // `{ text }`) as values. URLs whose task wasn't found get skipped — Slack
-  // falls back to no preview for those, which is the right behaviour for
-  // deleted/unknown ids.
-  const unfurls: Record<string, { blocks: ReturnType<typeof taskUnfurl>['blocks'] }> = {};
-  for (const { url, taskId } of recognised) {
-    const t = byId.get(taskId);
-    if (!t) continue;
-    unfurls[url] = taskUnfurl(toUnfurlShape(t, url));
-  }
+  const unfurls = await buildUnfurlsMap(links);
   if (Object.keys(unfurls).length === 0) return;
 
+  // Modern path: pass the event's unfurl_id + source straight through.
+  // This is the only form Slack guarantees works across composer-preview,
+  // post-send, and conversations_history surfaces. Slack's source enum is
+  // closed (`composer` | `conversations_history`); anything else means
+  // we received a payload we don't model yet — ignore rather than guess.
+  const source = isKnownUnfurlSource(event.source) ? event.source : null;
+  const args =
+    event.unfurl_id && source
+      ? ({ unfurl_id: event.unfurl_id, source } as const)
+      : event.channel && event.message_ts
+        ? ({ channel: event.channel, ts: event.message_ts } as const)
+        : null;
+
+  if (!args) {
+    console.warn('[slack] link_shared missing both unfurl_id/source and channel/ts', {
+      url_count: Object.keys(unfurls).length,
+    });
+    return;
+  }
+
   try {
-    // chat.unfurl accepts the unfurls map as JSON in the SDK. The type for
-    // `unfurls` here is a Record<url, MessageAttachment | LinkUnfurls>; our
-    // `{ blocks }` shape is the modern equivalent. The SDK accepts it but
-    // its compile-time typing predates blocks-on-unfurl, so cast.
     await web.chat.unfurl({
-      channel,
-      ts,
+      ...args,
+      // The SDK's typing for `unfurls` predates blocks-on-unfurl; cast.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       unfurls: unfurls as any,
     });
   } catch (err) {
     console.error('[slack] chat.unfurl failed', {
-      channel,
-      ts,
+      args,
       url_count: Object.keys(unfurls).length,
       err,
     });
   }
 }
 
+function isKnownUnfurlSource(
+  s: string | undefined,
+): s is 'composer' | 'conversations_history' {
+  return s === 'composer' || s === 'conversations_history';
+}
+
+/**
+ * Build inline `attachments` for a `chat.postMessage` payload. Use this
+ * when the bot itself posts a message that mentions tasks — we attach
+ * one card per task URL found in the reply text.
+ *
+ * Each attachment is a Block Kit card wrapped in an attachment envelope
+ * (with a fallback string for notification text and a vertical color bar
+ * matching Foreshadow's brand blue).
+ */
+export async function buildTaskAttachments(
+  links: SlackLink[],
+): Promise<MessageAttachment[]> {
+  if (links.length === 0) return [];
+  const recognised = recogniseLinks(links);
+  if (recognised.length === 0) return [];
+
+  const taskIds = Array.from(new Set(recognised.map((r) => r.taskId)));
+  const tasks = await getTasksByIds(taskIds);
+  const byId = new Map(tasks.map((t) => [t.task_id, t]));
+
+  // Preserve the order URLs appeared in the reply so the card list reads
+  // top-to-bottom in the same order as the bullet list above it. Dedupe
+  // by URL so a task mentioned twice doesn't render two cards.
+  const seenUrls = new Set<string>();
+  const attachments: MessageAttachment[] = [];
+  for (const { url, taskId } of recognised) {
+    if (seenUrls.has(url)) continue;
+    seenUrls.add(url);
+    const t = byId.get(taskId);
+    if (!t) continue;
+    const card = taskUnfurl(toUnfurlShape(t, url));
+    attachments.push({
+      color: '#4A9EFF',
+      fallback: t.title || t.template_name || 'Task',
+      blocks: card.blocks,
+    });
+  }
+  return attachments;
+}
+
 /**
  * Pull URLs that match parseTaskUrl out of arbitrary message text.
  *
- * Used by handleSlackMessage to drive the manual-unfurl path described
- * above (Slack won't fire link_shared for our own bot's posts). The regex
- * deliberately stops at `|` and `>` so it works on both raw URLs and
- * Slack's mrkdwn `<url|label>` link form.
+ * Drives the bot-reply path: after we render the agent's markdown into
+ * mrkdwn, we scan it for our own task URLs to build attachments for. The
+ * regex deliberately stops at `|` and `>` so it works on both raw URLs
+ * and Slack's mrkdwn `<url|label>` link form.
  */
 export function extractTaskUrlsFromText(text: string): string[] {
   if (!text) return [];
@@ -121,6 +176,29 @@ function recogniseLinks(links: SlackLink[]): RecognisedLink[] {
     if (parsed) out.push({ url: link.url, taskId: parsed.taskId });
   }
   return out;
+}
+
+// Shared between the unfurl-via-event path and the inline-attachments
+// path. Builds a Slack `unfurls` map (URL → { blocks }) for chat.unfurl;
+// callers that want attachments instead just iterate the same task data
+// in buildTaskAttachments above.
+async function buildUnfurlsMap(
+  links: SlackLink[],
+): Promise<Record<string, { blocks: ReturnType<typeof taskUnfurl>['blocks'] }>> {
+  const recognised = recogniseLinks(links);
+  if (recognised.length === 0) return {};
+
+  const taskIds = Array.from(new Set(recognised.map((r) => r.taskId)));
+  const tasks = await getTasksByIds(taskIds);
+  const byId = new Map(tasks.map((t) => [t.task_id, t]));
+
+  const unfurls: Record<string, { blocks: ReturnType<typeof taskUnfurl>['blocks'] }> = {};
+  for (const { url, taskId } of recognised) {
+    const t = byId.get(taskId);
+    if (!t) continue;
+    unfurls[url] = taskUnfurl(toUnfurlShape(t, url));
+  }
+  return unfurls;
 }
 
 // Map the wider TaskByIdRow (which carries reservation/comment/etc fields

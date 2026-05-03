@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { WebClient } from '@slack/web-api';
+import type { MessageAttachment } from '@slack/types';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { runAgent } from '@/src/agent/runAgent';
@@ -9,7 +10,11 @@ import { verifySlackSignature } from '@/src/slack/verify';
 import { alreadyProcessed } from '@/src/slack/dedupe';
 import { resolveSlackUser, getBotUserId } from '@/src/slack/identity';
 import { markdownToMrkdwn, stripBotMention } from '@/src/slack/format';
-import { unfurlTaskLinks, extractTaskUrlsFromText } from '@/src/slack/unfurl';
+import {
+  unfurlTaskLinksFromEvent,
+  buildTaskAttachments,
+  extractTaskUrlsFromText,
+} from '@/src/slack/unfurl';
 
 // POST /api/slack/events
 //
@@ -70,13 +75,18 @@ import { unfurlTaskLinks, extractTaskUrlsFromText } from '@/src/slack/unfurl';
 //           - Pull recent ai_chat_messages history for that app user.
 //           - Run the agent (writes enabled, same as in-app).
 //           - Apply backstops, persist user + assistant messages.
+//           - Build inline task-card attachments for any task URLs in the
+//             reply (Slack doesn't fire link_shared for our bot's own
+//             posts, so chat.unfurl can't be used here — we attach the
+//             cards directly to the chat.postMessage payload instead).
 //           - Post reply (in-thread for mentions, flat for DMs).
-//           - Manually unfurl any task URLs we just emitted (Slack does
-//             NOT fire link_shared for our own bot's posts).
 //        b. link_shared:
 //           - Recognise task URLs via parseTaskUrl.
 //           - Fetch matched tasks in one round-trip.
-//           - chat.unfurl with a Block Kit card per URL.
+//           - chat.unfurl with a Block Kit card per URL, using the
+//             event's unfurl_id + source pair (the modern parameter form
+//             that Slack reliably honours across composer-preview and
+//             post-send contexts; legacy channel + ts silently no-ops).
 
 const MEMORY_WINDOW = 15;
 
@@ -381,32 +391,41 @@ async function handleSlackMessage(
   });
 
   const mrkdwnText = markdownToMrkdwn(finalText);
-  const postResult = await postReply(web, event.channel, threadTs, mrkdwnText);
 
-  // Step 6b: Slack does NOT fire link_shared for our own bot's messages,
-  // so we manually unfurl any task URLs in the reply we just posted.
-  // Doing it here (vs. inlining attachments in chat.postMessage) keeps the
-  // unfurl rendering path identical to the human-pasted-link path — same
-  // builder, same data fetch — and avoids cluttering postMessage with
-  // attachment data for a feature that's purely presentational.
-  if (postResult.ok && postResult.ts) {
-    const taskUrls = extractTaskUrlsFromText(mrkdwnText).map((url) => ({ url }));
-    if (taskUrls.length > 0) {
-      await unfurlTaskLinks(web, event.channel, postResult.ts, taskUrls);
-    }
-  }
+  // Build inline task-card attachments for any task URLs the agent emitted
+  // in its reply. We can't use chat.unfurl for the bot's own messages —
+  // Slack doesn't fire link_shared for posts where unfurl_links is false
+  // (which we keep off to suppress noisy generic OG previews on other
+  // URLs the agent might surface), so chat.unfurl returns 200 but
+  // silently drops the cards. Inline attachments don't depend on the
+  // link_shared flow and render unconditionally.
+  const taskUrls = extractTaskUrlsFromText(mrkdwnText).map((url) => ({ url }));
+  const attachments = taskUrls.length > 0 ? await buildTaskAttachments(taskUrls) : [];
+
+  await postReply(web, event.channel, threadTs, mrkdwnText, attachments);
 }
 
 // Pure unfurl entry point. No agent, no persistence, no allowlist — just
 // recognise our task URLs in the message Slack told us about and respond
 // with Block Kit cards. See src/slack/unfurl.ts for the matching logic.
+//
+// Uses the event's unfurl_id + source pair (the modern chat.unfurl form),
+// which Slack reliably renders across composer-preview, post-send, and
+// conversations_history surfaces. The legacy channel + ts form silently
+// no-ops for many of those contexts even when chat.unfurl returns 200.
 async function handleLinkShared(
   event: SlackInnerEvent,
   botToken: string,
 ): Promise<void> {
-  if (!event.channel || !event.message_ts || !event.links?.length) return;
+  if (!event.links?.length) return;
   const web = new WebClient(botToken);
-  await unfurlTaskLinks(web, event.channel, event.message_ts, event.links);
+  await unfurlTaskLinksFromEvent(web, {
+    channel: event.channel,
+    message_ts: event.message_ts,
+    unfurl_id: event.unfurl_id,
+    source: event.source,
+    links: event.links,
+  });
 }
 
 async function loadHistory(appUserId: string): Promise<MessageParam[]> {
@@ -434,26 +453,28 @@ async function postReply(
   channel: string,
   threadTs: string | undefined,
   text: string,
-): Promise<{ ok: true; ts: string } | { ok: false }> {
+  attachments: MessageAttachment[] = [],
+): Promise<void> {
   try {
-    const res = await web.chat.postMessage({
+    await web.chat.postMessage({
       channel,
       // Only set thread_ts when we actually want to thread. For DMs we
       // omit it so the reply sits flat in the conversation.
       ...(threadTs ? { thread_ts: threadTs } : {}),
       text,
-      // Disable Slack's auto-link unfurling on URLs in our reply. Tools
-      // sometimes return URLs (e.g. property knowledge wifi networks) and
-      // unfurl previews in a thread are noisy. We still attach our own
-      // task-card unfurls afterwards via chat.unfurl (see Step 6b in
-      // handleSlackMessage), which sidesteps this flag.
+      // Inline task cards (one per task URL the agent linked to). When
+      // there are no tasks to attach we omit the field — Slack rejects
+      // empty attachments arrays as a malformed payload in some clients.
+      ...(attachments.length > 0 ? { attachments } : {}),
+      // Disable Slack's auto-link unfurling so unrelated URLs the agent
+      // might surface (wifi networks, doc links from property knowledge,
+      // etc.) don't get generic OG-tag previews stacked under the
+      // message. Our own task cards are attached above as `attachments`,
+      // which doesn't depend on this flag.
       unfurl_links: false,
       unfurl_media: false,
     });
-    if (res.ok && res.ts) return { ok: true, ts: res.ts };
-    return { ok: false };
   } catch (err) {
     console.error('[slack] chat.postMessage failed', { channel, threadTs, err });
-    return { ok: false };
   }
 }
