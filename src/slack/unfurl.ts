@@ -128,12 +128,17 @@ function recogniseLinks(links: SlackLink[]): RecognisedLink[] {
 // pass the URL through as-is rather than rebuilding it from APP_BASE_URL,
 // so deep-links round-trip identically even if the env var changes between
 // when the message was posted and when it gets unfurled.
+//
+// `description` arrives as ProseMirror/TipTap JSON (the rich-text editor
+// format the in-app overlay uses), not a string — flatten it here so the
+// downstream block builder can stick to its plain-text contract.
 function toUnfurlShape(t: TaskByIdRow, url: string): TaskForUnfurl {
+  const descriptionText = proseMirrorToPlainText(t.description).trim();
   return {
     task_id: t.task_id,
     title: t.title,
     template_name: t.template_name,
-    description: t.description,
+    description: descriptionText || null,
     status: t.status,
     priority: t.priority,
     property_name: t.property_name,
@@ -147,4 +152,56 @@ function toUnfurlShape(t: TaskByIdRow, url: string): TaskForUnfurl {
     })),
     task_url: url,
   };
+}
+
+interface ProseMirrorNode {
+  type?: string;
+  text?: string;
+  content?: ProseMirrorNode[];
+}
+
+// Walk a ProseMirror/TipTap doc and concatenate the text leaves. Block-ish
+// node types (paragraphs, list items, headings, etc.) get a newline after
+// their content so the result stays readable when truncated for the unfurl
+// card; inline marks just contribute their text.
+//
+// Pure plain text — no bold/italic/list markers. Slack mrkdwn could carry
+// some of those, but mapping ProseMirror's nested marks onto mrkdwn is
+// fiddly and the truncated 240-char preview rarely benefits from it.
+//
+// Tolerant on input shape: anything that isn't an object or string returns
+// "" so callers can pass `unknown` from getTaskById without pre-checking.
+const PM_BLOCK_TYPES = new Set([
+  'paragraph',
+  'heading',
+  'blockquote',
+  'list_item',
+  'listItem',
+  'bullet_list',
+  'bulletList',
+  'ordered_list',
+  'orderedList',
+  'task_item',
+  'taskItem',
+  'task_list',
+  'taskList',
+  'code_block',
+  'codeBlock',
+  'horizontal_rule',
+  'horizontalRule',
+]);
+
+function proseMirrorToPlainText(node: unknown): string {
+  if (node == null) return '';
+  if (typeof node === 'string') return node;
+  if (typeof node !== 'object') return '';
+  const n = node as ProseMirrorNode;
+  if (typeof n.text === 'string') return n.text;
+  const children = Array.isArray(n.content)
+    ? n.content.map(proseMirrorToPlainText).join('')
+    : '';
+  if (n.type && PM_BLOCK_TYPES.has(n.type)) {
+    return children ? `${children}\n` : '';
+  }
+  return children;
 }

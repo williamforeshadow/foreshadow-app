@@ -57,7 +57,16 @@ export interface TaskByIdRow {
   template_id: string | null;
   template_name: string;
   title: string | null;
-  description: string | null;
+  /**
+   * Stored as ProseMirror/TipTap JSON in turnover_tasks.description, not a
+   * plain string — every consumer here keeps it untyped and either renders
+   * it through the rich-text editor (in-app overlay) or flattens it to
+   * plain text first (Slack unfurl). Typing it `unknown` forces callers to
+   * be explicit instead of accidentally calling string methods on a doc
+   * object (which previously broke the unfurl path with a TypeError that
+   * silently aborted the handler).
+   */
+  description: unknown;
   priority: string;
   department_id: string | null;
   department_name: string | null;
