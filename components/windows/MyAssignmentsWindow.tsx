@@ -14,6 +14,8 @@ import { ProjectDetailPanel, AttachmentLightbox } from './projects';
 import { TaskRow, TaskListHeader } from '@/components/tasks/TaskRow';
 import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
+import { useRouter } from 'next/navigation';
+import { taskPath } from '@/src/lib/links';
 
 interface Assignee {
   user_id: string;
@@ -55,6 +57,7 @@ interface MyAssignmentsWindowProps {
 }
 
 function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowProps) {
+  const router = useRouter();
   const { departments: allDepts } = useDepartments();
   const [rawData, setRawData] = useState<{ tasks: any[]; projects: any[] } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -642,6 +645,15 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
             onSave={handleSaveFields}
             onDelete={() => { setSelectedItem(null); fetchAssignments(); }}
             onClose={() => setSelectedItem(null)}
+            onOpenInPage={
+              itemAsProject
+                ? () => {
+                    const id = itemAsProject.id;
+                    setSelectedItem(null);
+                    router.push(taskPath(id));
+                  }
+                : undefined
+            }
             onOpenActivity={() => {}}
             onPropertyChange={handlePropertyChange}
             staffOpen={staffOpen}

@@ -13,6 +13,8 @@
 //   - code:    `x`   → `x`    (unchanged)
 //   - code block: ```x``` → ```x``` (unchanged)
 //   - heading: ## x  → *x*    (no native heading; bold the line)
+//   - bullet:  - x   → * x    (Slack mrkdwn renders `*` as a real
+//                              bullet glyph; `-` is rendered literally)
 //   - link:    [t](u) → <u|t> (Slack's link syntax)
 //
 // Italic is intentionally NOT converted — the heuristic to distinguish
@@ -32,6 +34,16 @@ export function markdownToMrkdwn(input: string): string {
   // `*Foo*`. We do this before bold conversion so the heading text becomes
   // properly bolded.
   out = out.replace(/^#{1,6}\s+(.+?)\s*$/gm, '*$1*');
+
+  // Bullets: `- ` at the start of a line (with optional leading
+  // whitespace for nested lists) → `* `. Slack mrkdwn renders `* item`
+  // as a real bullet glyph (•), but renders `- item` literally as a
+  // dash. The system prompt asks the model to emit `*` directly, but
+  // earlier conversation turns are full of `-` bullets and the model
+  // echoes them; this regex is the deterministic safety net. Done
+  // BEFORE bold conversion so we don't accidentally mangle a bold
+  // marker that already happens to start a line.
+  out = out.replace(/^(\s*)-(\s)/gm, '$1*$2');
 
   // Bold: `**foo**` → `*foo*`. Non-greedy match so adjacent bolds on the
   // same line don't merge. We require at least one non-asterisk character

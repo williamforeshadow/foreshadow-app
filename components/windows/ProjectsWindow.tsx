@@ -22,6 +22,8 @@ import { ProjectsKanban } from './projects/ProjectsKanban';
 import { useDepartments } from '@/lib/departmentsContext';
 import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
+import { useRouter } from 'next/navigation';
+import { taskPath } from '@/src/lib/links';
 import type { User, Project, Attachment, Comment, ProjectFormFields, PropertyOption, TaskTemplate } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 
@@ -106,6 +108,7 @@ interface ProjectsWindowProps {
 }
 
 function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
+  const router = useRouter();
   const { departments } = useDepartments();
   const binsHook = useProjectBins({ currentUser });
 
@@ -798,6 +801,16 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
           onSave={handleSaveProject}
           onDelete={handleDeleteTask}
           onClose={() => { setExpandedProject(null); setDraftTask(null); }}
+          onOpenInPage={
+            !isDraft && expandedProject
+              ? () => {
+                  const id = expandedProject.id;
+                  setExpandedProject(null);
+                  setDraftTask(null);
+                  router.push(taskPath(id));
+                }
+              : undefined
+          }
           onOpenActivity={handleOpenActivity}
           isNewTask={isDraft}
           onConfirmCreate={isDraft ? handleConfirmCreateTask : undefined}

@@ -55,6 +55,14 @@ interface TurnoverProjectsPanelProps {
   onPropertyChange?: (propertyId: string | null, propertyName: string | null) => void;
   onTemplateChange?: (templateId: string | null) => void;
   availableTemplates?: TaskTemplate[];
+  /**
+   * Optional "open in dedicated page" affordance forwarded into the
+   * inner ProjectDetailPanel header. When provided, the panel renders
+   * the small outward-arrow button next to Close. Suppressed when
+   * undefined (e.g. callers that don't care about deep-linking, or
+   * when the expanded item isn't a task with a /tasks/[id] route).
+   */
+  onOpenInPage?: () => void;
 }
 
 function ProjectCard({
@@ -184,6 +192,7 @@ export function TurnoverProjectsPanel({
   onPropertyChange,
   onTemplateChange,
   availableTemplates = [],
+  onOpenInPage,
 }: TurnoverProjectsPanelProps) {
   const propertyProjects = projects.filter(p => p.property_name === propertyName);
   const { deptIconMap } = useDepartments();
@@ -209,6 +218,7 @@ export function TurnoverProjectsPanel({
               setExpandedProject(null);
               setProjectFields(null);
             }}
+            onOpenInPage={onOpenInPage}
             onOpenActivity={onOpenActivity}
             isNewTask={isNewTask}
             onConfirmCreate={onConfirmCreate}

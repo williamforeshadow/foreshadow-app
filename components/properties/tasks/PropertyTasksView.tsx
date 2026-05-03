@@ -42,6 +42,7 @@ import {
   ORIGIN_MANUAL,
   ORIGIN_AUTOMATED,
 } from '@/components/tasks/TaskFilterBar';
+import { taskPath } from '@/src/lib/links';
 
 // Property Tasks ledger — shows every task ever linked to the property.
 // Curation is done by the user via filter + sort, not by the component. The
@@ -1393,6 +1394,16 @@ function PropertyTasksViewContent({
                 setSelectedItem(null);
                 setDraftTask(null);
               }}
+              onOpenInPage={
+                !isDraft && itemAsProject
+                  ? () => {
+                      const id = itemAsProject.id;
+                      setSelectedItem(null);
+                      setDraftTask(null);
+                      router.push(taskPath(id));
+                    }
+                  : undefined
+              }
               onOpenActivity={() => {}}
               isNewTask={isDraft}
               onConfirmCreate={isDraft ? handleConfirmCreateTask : undefined}

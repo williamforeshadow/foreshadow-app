@@ -27,6 +27,8 @@ import type { Template } from '@/components/DynamicCleaningForm';
 import { cn } from '@/lib/utils';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { useExclusiveDetailPanelHost, useReservationViewer } from '@/lib/reservationViewerContext';
+import { useRouter } from 'next/navigation';
+import { taskPath } from '@/src/lib/links';
 
 const marbleBackground: Record<string, string> = {
   not_started: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.35) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.18) 10%, transparent 40%, rgba(255,255,255,0.12) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #A78BFA`,
@@ -67,6 +69,7 @@ export default function TimelineWindow({
   users,
   currentUser,
 }: TimelineWindowProps) {
+  const router = useRouter();
   // State for the floating window
   const [floatingData, setFloatingData] = useState<FloatingWindowData>(null);
   
@@ -1866,6 +1869,15 @@ export default function TimelineWindow({
                 handleCloseFloatingWindow();
               }}
               onClose={handleCloseFloatingWindow}
+              onOpenInPage={
+                localTask && !localTask.task_id.startsWith('draft-')
+                  ? () => {
+                      const id = localTask.task_id;
+                      handleCloseFloatingWindow();
+                      router.push(taskPath(id));
+                    }
+                  : undefined
+              }
               onOpenActivity={() => {}}
               onPropertyChange={localTask?.task_id?.startsWith('draft-')
                 ? (_propertyId, propertyName) => {
@@ -2196,6 +2208,17 @@ export default function TimelineWindow({
                     onDeleteProject={handleTurnoverDeleteProject}
                     onOpenProjectInWindow={() => {}}
                     onCreateProject={handleTurnoverCreateProject}
+                    onOpenInPage={
+                      expandedProjectInTurnover &&
+                      !expandedProjectInTurnover.id.startsWith('draft-')
+                        ? () => {
+                            const id = expandedProjectInTurnover.id;
+                            setExpandedProjectInTurnover(null);
+                            setTurnoverProjectFields(null);
+                            router.push(taskPath(id));
+                          }
+                        : undefined
+                    }
                     projectComments={turnoverCommentsHook.projectComments}
                     loadingComments={turnoverCommentsHook.loadingComments}
                     newComment={turnoverNewComment}
