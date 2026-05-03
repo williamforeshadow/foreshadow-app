@@ -1,8 +1,8 @@
-import type { AnyChunk } from '@slack/types';
+import type { TaskUpdateChunk } from '@slack/types';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { taskUrl } from '@/src/lib/links';
 import { getTasksByIds, type TaskByIdRow } from '@/src/server/tasks/getTaskById';
-import { buildAssignmentChunks } from '@/src/slack/streamChunks';
+import { buildTaskUpdateChunks } from '@/src/slack/streamChunks';
 
 // Handler for the `/myassignments` Slack slash command.
 //
@@ -29,26 +29,28 @@ import { buildAssignmentChunks } from '@/src/slack/streamChunks';
 // Output (consumed by the route layer):
 //   - 0 results → text-only fallback ("You have no open assignments.")
 //     and an empty chunk array. The route surfaces this as a plain
-//     ephemeral instead of opening a streaming message — no point
-//     streaming an empty list.
-//   - 1+ results → text + the chunk array (markdown_text header
-//     followed by one task_update per assignment). The route streams
-//     them via chat.startStream + chat.stopStream.
+//     ephemeral instead of starting a thread — no point streaming an
+//     empty list.
+//   - 1+ results → header `text` + a task_update chunk per assignment.
+//     The route posts the header as a parent chat.postMessage in the
+//     DM, then streams the task_update chunks as a threaded reply
+//     under it (chat.startStream requires thread_ts; the streaming
+//     API is a thread-reply pattern).
 
 export interface MyAssignmentsResult {
   /**
-   * Human-readable summary line. Used both as the streaming-message
-   * fallback `text` (notification body) and as the first
-   * `markdown_text` chunk (visible header above the task rows).
+   * Header text shown as the parent message in the DM, above the
+   * threaded task-card stream. Doubles as the message-level `text`
+   * fallback (notification body).
    */
   text: string;
   /**
-   * Chunks ready to pass directly to chat.startStream. Empty array
-   * when the user has no open assignments — the route uses the
-   * length to decide between "stream the answer" and "post a plain
-   * ephemeral".
+   * Task chunks ready to pass directly to chat.startStream's `chunks`
+   * parameter. Empty array when the user has no open assignments —
+   * the route uses the length to decide between "stream the answer"
+   * and "post a plain ephemeral".
    */
-  chunks: AnyChunk[];
+  taskChunks: TaskUpdateChunk[];
 }
 
 /**
@@ -79,7 +81,7 @@ export async function runMyAssignments(args: {
     });
     return {
       text: `Sorry — I couldn't load your assignments right now. Try again in a moment.`,
-      chunks: [],
+      taskChunks: [],
     };
   }
   const rows = (assignmentRows ?? []) as Array<{ task_id: string }>;
@@ -87,7 +89,7 @@ export async function runMyAssignments(args: {
   if (assignedIds.length === 0) {
     return {
       text: `${displayName}, you have no open assignments. Nice.`,
-      chunks: [],
+      taskChunks: [],
     };
   }
 
@@ -99,7 +101,7 @@ export async function runMyAssignments(args: {
   if (openTasks.length === 0) {
     return {
       text: `${displayName}, you have no open assignments. Nice.`,
-      chunks: [],
+      taskChunks: [],
     };
   }
 
@@ -121,17 +123,14 @@ export async function runMyAssignments(args: {
     url: taskUrl(task.task_id),
   }));
 
-  // Summary line: keep it short. Doubles as both the message-level
-  // fallback text and the visible header chunk above the tasks.
+  // Header line: keep it short. Becomes the parent DM message and
+  // doubles as the message-level `text` notification fallback.
   const noun = openTasks.length === 1 ? 'assignment' : 'assignments';
   const text = `${displayName}, you have ${openTasks.length} open ${noun}:`;
 
-  const chunks = buildAssignmentChunks({
-    headerText: text,
-    orderedTasks: ordered,
-  });
+  const taskChunks = buildTaskUpdateChunks(ordered);
 
-  return { text, chunks };
+  return { text, taskChunks };
 }
 
 // Comparator for the sort step above. Pulled out so the rule is easy

@@ -1,9 +1,4 @@
-import type {
-  AnyChunk,
-  MarkdownTextChunk,
-  TaskUpdateChunk,
-  URLSourceElement,
-} from '@slack/types';
+import type { TaskUpdateChunk, URLSourceElement } from '@slack/types';
 import type { TaskByIdRow } from '@/src/server/tasks/getTaskById';
 import { formatScheduled } from './unfurlBlocks';
 
@@ -26,26 +21,29 @@ import { formatScheduled } from './unfurlBlocks';
 //   See: https://docs.slack.dev/changelog/2026/02/11/task-cards-plan-blocks
 //        https://docs.slack.dev/reference/methods/chat.startStream
 //
-// What we send for /myassignments:
-//   1. One `markdown_text` chunk carrying the visible header line
-//      ("Billy, you have N open assignments:") so the user has context
-//      above the task rows.
-//   2. One `task_update` chunk per assignment, with:
-//        - id:      task UUID (must be unique within the message)
-//        - title:   task title or template-name fallback (plain text)
-//        - status:  mapped onto Slack's closed enum
-//                   (pending | in_progress | complete | error)
-//        - details: a plain-text string with "Property: …" and
-//                   "Scheduled: …" on separate lines. Streaming
-//                   `details` is a string, NOT a rich_text block —
-//                   simpler than the task_card equivalent.
-//        - sources: a single URL chip pointing at /tasks/<id>, labelled
-//                   "Open in Foreshadow". Slack renders chunk sources
-//                   as native hyperlinks; this is the proven-reliable
-//                   click-through surface across DM / channel.
-//   3. The route layer follows up with `chat.stopStream` (no extra
-//      chunks) so Slack finalises the message and removes any
-//      "streaming" loading indicator.
+// Why no markdown_text header chunk in the stream itself:
+//   chat.startStream requires `thread_ts` — Slack's API rejects
+//   `invalid_arguments / missing required field: thread_ts` without
+//   it. The streaming surface is fundamentally a "reply into a
+//   thread" pattern, not a fresh-message pattern. So the route layer
+//   posts a parent chat.postMessage carrying the header text first,
+//   then streams JUST the task_update chunks as a threaded reply
+//   under that parent. The header lives on the parent message, not
+//   in the stream.
+//
+// What each task_update chunk carries:
+//   - id:      task UUID (must be unique within the message)
+//   - title:   task title or template-name fallback (plain text)
+//   - status:  mapped onto Slack's closed enum
+//              (pending | in_progress | complete | error)
+//   - details: a plain-text string with "Property: …" and
+//              "Scheduled: …" on separate lines. Streaming
+//              `details` is a string, NOT a rich_text block —
+//              simpler than the task_card equivalent.
+//   - sources: a single URL chip pointing at /tasks/<id>, labelled
+//              "Open in Foreshadow". Slack renders chunk sources
+//              as native hyperlinks; this is the proven-reliable
+//              click-through surface across DM / channel / thread.
 
 // Map Foreshadow's task status onto Slack's chunk status. Slack only
 // models four states; our paused / contingent / not_started fold into
@@ -112,21 +110,15 @@ export function buildTaskUpdateChunk(args: {
 }
 
 /**
- * Build the full chunk array for a /myassignments response: one header
- * `markdown_text` chunk followed by one `task_update` per assignment.
+ * Build the chunk array for a /myassignments streaming reply: one
+ * `task_update` per assignment, in the order given.
  *
- * Returned as `AnyChunk[]` so the route layer can pass it directly to
- * `chat.startStream({ chunks })` without further casting.
+ * The header text doesn't live in this array — it's carried by the
+ * parent chat.postMessage that the streaming reply threads under.
+ * See the file header for why streaming requires a parent.
  */
-export function buildAssignmentChunks(args: {
-  headerText: string;
-  orderedTasks: Array<{ url: string; task: TaskByIdRow }>;
-}): AnyChunk[] {
-  const { headerText, orderedTasks } = args;
-  const header: MarkdownTextChunk = {
-    type: 'markdown_text',
-    text: headerText,
-  };
-  const taskChunks = orderedTasks.map((row) => buildTaskUpdateChunk(row));
-  return [header, ...taskChunks];
+export function buildTaskUpdateChunks(
+  orderedTasks: Array<{ url: string; task: TaskByIdRow }>,
+): TaskUpdateChunk[] {
+  return orderedTasks.map((row) => buildTaskUpdateChunk(row));
 }

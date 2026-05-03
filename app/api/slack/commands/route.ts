@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { WebClient } from '@slack/web-api';
-import type { AnyChunk } from '@slack/types';
+import type { TaskUpdateChunk } from '@slack/types';
 import { verifySlackSignature } from '@/src/slack/verify';
 import { resolveSlackUser } from '@/src/slack/identity';
 import { runMyAssignments } from '@/src/slack/commands/myAssignments';
@@ -38,20 +38,24 @@ import { runMyAssignments } from '@/src/slack/commands/myAssignments';
 //      block the webhook.
 //
 // Where the reply lands (and why):
-//   /myassignments STREAMS the assignment list into a DM with the user
-//   via Slack's text-streaming API:
-//     1. conversations.open       → DM channel id
-//     2. chat.startStream         → opens a streaming message carrying
-//                                   one markdown_text header chunk and
-//                                   one task_update chunk per task
-//     3. chat.stopStream          → finalises the message and clears the
-//                                   "streaming" loading indicator
+//   /myassignments delivers the assignment list as a parent + threaded-
+//   stream pair in the user's DM with the bot:
+//     1. conversations.open    → DM channel id
+//     2. chat.postMessage      → posts the header line ("Billy, you
+//                                have N open assignments:") as the
+//                                parent message in the DM
+//     3. chat.startStream      → opens a streaming message threaded
+//                                under the parent (thread_ts =
+//                                parent.ts), carrying one task_update
+//                                chunk per assignment
+//     4. chat.stopStream       → finalises the threaded stream so the
+//                                "streaming" loading indicator clears
 //   …plus a small `chat.postEphemeral` confirmation at the slash-
 //   command site so the user gets immediate feedback. The DM target
 //   fits "personal info" commands — scrollable, private, lives in a
 //   stable place the user can return to.
 //
-// Why streaming chunks (and not chat.postMessage with blocks):
+// Why a threaded stream (and not chat.postMessage with blocks):
 //   Slack's `task_card` block — the collapsible expandable-row visual
 //   we want — is REJECTED by chat.postMessage with `invalid_blocks`.
 //   The Slack platform 2026 changelog confirms task_card is a
@@ -61,6 +65,17 @@ import { runMyAssignments } from '@/src/slack/commands/myAssignments';
 //   exposes a `sources` field whose URL elements Slack renders as
 //   native hyperlinks — guaranteed click-through, no interactivity
 //   ack required.
+//
+// Why the threaded shape specifically:
+//   chat.startStream's `thread_ts` is REQUIRED — Slack returns
+//   `invalid_arguments / missing required field: thread_ts` without
+//   it. Streaming is fundamentally a reply-into-a-thread pattern
+//   (it was built for "AI bot streams a response to a user message"),
+//   not a fresh-message pattern. So we post the header as a fresh
+//   parent message first, then stream the cards as a thread reply
+//   under it. In the DM, the user sees the header inline with a
+//   "N replies" indicator; clicking it reveals the expandable
+//   task-card stream.
 //
 //   Earlier carousel-based attempts failed clickable-URL on every
 //   surface tried: response_url (HTTP 500 on carousel payloads),
@@ -230,10 +245,10 @@ async function handleMyAssignments(
     displayName: identity.appUserName,
   });
 
-  // 0-results case: skip the streaming dance entirely. There's nothing
-  // to render with task_update chunks, and the user gets faster
-  // feedback if we just tell them inline at the slash-command site.
-  if (result.chunks.length === 0) {
+  // 0-results case: skip the parent+thread dance entirely. There's
+  // nothing to thread, and the user gets faster feedback if we just
+  // tell them inline at the slash-command site.
+  if (result.taskChunks.length === 0) {
     await postEphemeralSafe(web, {
       channel: payload.channel_id,
       user: payload.user_id,
@@ -260,21 +275,24 @@ async function handleMyAssignments(
     return;
   }
 
-  // Stream the task_update chunks into the DM, then post the inline
-  // ephemeral confirmation at the slash-command site. Both are
-  // best-effort — failures are logged but don't propagate, since
-  // we're inside an `after()` callback where throws become unhandled
-  // rejections.
+  // Sequenced delivery in the DM:
+  //   1. Post the parent header message with chat.postMessage. We
+  //      need its `ts` value to thread the stream under, so this
+  //      can't run in parallel with the stream call.
+  //   2. Open + populate + close the streaming thread reply.
   //
-  // Order matters here: we open the stream FIRST, so by the time we
-  // post the "Sent to your DMs →" confirmation the message exists in
-  // the DM. The two calls run in parallel via Promise.all because they
-  // touch different channels and don't depend on each other.
+  // The inline "Sent to your DMs →" ephemeral confirmation runs in
+  // parallel with the DM delivery — it touches a different channel
+  // and doesn't depend on either DM step.
+  //
+  // All three are best-effort — failures are logged but don't
+  // propagate, since we're inside an `after()` callback where throws
+  // become unhandled rejections.
   await Promise.all([
-    streamAssignmentsToDmSafe(web, {
+    deliverAssignmentsToDmSafe(web, {
       channel: dmChannel,
-      fallbackText: result.text,
-      chunks: result.chunks,
+      headerText: result.text,
+      taskChunks: result.taskChunks,
       recipientTeamId: payload.team_id,
       recipientUserId: payload.user_id,
     }),
@@ -313,91 +331,121 @@ interface PostEphemeralArgs {
   text: string;
 }
 
-interface StreamAssignmentsArgs {
+interface DeliverAssignmentsArgs {
   /** DM channel id (D...) returned from conversations.open. */
   channel: string;
   /**
-   * Notification-fallback text. Used as the message-level `text` field
-   * via the markdown_text chunk that headers the streaming payload.
+   * Header text shown as the parent message in the DM. Doubles as
+   * the notification fallback text on both the parent and the
+   * threaded stream.
    */
-  fallbackText: string;
+  headerText: string;
   /**
-   * Streaming chunks built upstream by myAssignments → buildAssignmentChunks.
-   * Already includes the markdown_text header as chunks[0], so the
-   * stream call doesn't need to set markdown_text separately.
+   * One task_update chunk per assignment. Streamed as a thread reply
+   * under the parent message; not used for the parent itself.
    */
-  chunks: AnyChunk[];
+  taskChunks: TaskUpdateChunk[];
   /**
-   * Recipient context. Required when starting a stream outside a DM,
-   * optional inside a DM — we pass them anyway because we have them
-   * for free from the slash-command payload and Slack ignores them
-   * when not needed.
+   * Recipient context. Required by chat.startStream when starting a
+   * stream outside a DM, optional inside a DM — we pass them anyway
+   * because we have them for free from the slash-command payload.
    */
   recipientTeamId: string;
   recipientUserId: string;
 }
 
-// Stream the assignment list into a DM via Slack's chat.startStream
-// + chat.stopStream methods. Required for `task_update` chunks
-// (chat.postMessage rejects them with `invalid_blocks` — task_update
-// / task_card are streaming-only primitives).
+// Deliver the assignment list as a parent + threaded-stream pair in
+// the user's DM with the bot.
 //
-// Two-call shape:
-//   - chat.startStream  opens the streaming message AND attaches all
-//     the chunks (header + task_updates). Since we have the full
-//     payload up-front, we don't need chat.appendStream — opening
-//     with the chunks already attached saves a round-trip.
-//   - chat.stopStream   finalises the message so Slack's "streaming"
-//     loading indicator goes away. Without this the message stays
-//     in a perpetual loading state on clients.
+// Three-call sequence:
+//   1. chat.postMessage   parent header line in the DM. We need its
+//                         `ts` to thread the stream under, so this
+//                         must complete before step 2.
+//   2. chat.startStream   threaded reply under the parent, carrying
+//                         all the task_update chunks. Required for
+//                         `task_update` (chat.postMessage rejects
+//                         them with `invalid_blocks`).
+//   3. chat.stopStream    finalises the threaded stream so Slack's
+//                         "streaming" loading indicator clears.
+//                         Without this the message stays in a
+//                         perpetual loading state on clients.
+//
+// Why thread_ts is non-negotiable here:
+//   chat.startStream's type makes thread_ts required, and the live
+//   API enforces it (`invalid_arguments / missing required field:
+//   thread_ts` confirmed). The streaming surface is a reply-into-
+//   thread pattern; there's no Slack-supported way to use it for a
+//   fresh, parentless message.
 //
 // Best-effort: any error is logged but never thrown. We're inside an
-// `after()` callback when this runs; an unhandled rejection would just
-// dangle. The Slack API surfaces logical errors as `{ ok: false, error:
-// '...' }` in the response body — those throw a `slack_webapi_platform_error`
-// from the SDK, which lands in the catch and gets logged with the
-// chunk count for diagnosis.
-async function streamAssignmentsToDmSafe(
+// `after()` callback when this runs; an unhandled rejection would
+// just dangle. If step 1 fails we don't bother attempting steps 2/3
+// — there'd be no thread_ts to use.
+async function deliverAssignmentsToDmSafe(
   web: WebClient,
-  args: StreamAssignmentsArgs,
+  args: DeliverAssignmentsArgs,
 ): Promise<void> {
+  // Step 1: post the header as the parent message. unfurl_links: false
+  // so Slack doesn't try to unfurl URLs that aren't there (defensive —
+  // header text has no URLs today, but pinning the flag avoids future
+  // surprises).
+  let parentTs: string | null = null;
+  try {
+    const parentResp = await web.chat.postMessage({
+      channel: args.channel,
+      text: args.headerText,
+      unfurl_links: false,
+      unfurl_media: false,
+    });
+    parentTs = (parentResp.ts as string | undefined) ?? null;
+  } catch (err) {
+    console.error('[slack/commands] parent chat.postMessage failed', {
+      channel: args.channel,
+      err,
+    });
+    return;
+  }
+  if (!parentTs) {
+    console.warn('[slack/commands] parent chat.postMessage returned no ts', {
+      channel: args.channel,
+    });
+    return;
+  }
+
+  // Step 2: open the streaming thread reply under the parent.
+  // task_display_mode: "timeline" renders each chunk as its own row
+  // (matches /myassignments — independent items). "plan" would group
+  // them under a single unified-plan title which doesn't fit a
+  // personal task list.
   let streamTs: string | null = null;
   try {
-    // Cast: @slack/web-api's TS type makes `thread_ts` required, but
-    // the actual API documents it as optional and we don't have a
-    // parent message — slash commands aren't replies to anything.
-    // Slack accepts the call without thread_ts; the SDK type is just
-    // overly strict (likely modelled off the assistant-message use
-    // case where threads always exist).
     const startResp = await web.chat.startStream({
       channel: args.channel,
+      thread_ts: parentTs,
       recipient_team_id: args.recipientTeamId,
       recipient_user_id: args.recipientUserId,
-      // task_display_mode: "timeline" renders each task as its own row
-      // (matches our /myassignments use case — independent items, no
-      // shared parent goal). "plan" would group them under a single
-      // unified-plan title which doesn't fit a personal task list.
       task_display_mode: 'timeline',
-      chunks: args.chunks,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
+      chunks: args.taskChunks,
+    });
     streamTs = (startResp.ts as string | undefined) ?? null;
   } catch (err) {
     console.error('[slack/commands] chat.startStream failed', {
       channel: args.channel,
-      chunk_count: args.chunks.length,
+      thread_ts: parentTs,
+      chunk_count: args.taskChunks.length,
       err,
     });
     return;
   }
 
-  // Finalise. If startStream succeeded but didn't return a ts (would
-  // be surprising — Slack always returns one on ok=true), we skip
-  // stopStream rather than guess; Slack will eventually time out the
-  // stream on its own.
+  // Step 3: finalise. If startStream succeeded but didn't return a ts
+  // (would be surprising — Slack always returns one on ok=true), we
+  // skip stopStream rather than guess; Slack will eventually time
+  // out the stream on its own.
   if (!streamTs) {
     console.warn('[slack/commands] chat.startStream succeeded but no ts', {
       channel: args.channel,
+      thread_ts: parentTs,
     });
     return;
   }
