@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { WebClient } from '@slack/web-api';
-import type { Block, MessageAttachment } from '@slack/types';
+import type { Block } from '@slack/types';
 import { verifySlackSignature } from '@/src/slack/verify';
 import { resolveSlackUser } from '@/src/slack/identity';
 import { runMyAssignments } from '@/src/slack/commands/myAssignments';
@@ -38,31 +38,36 @@ import { runMyAssignments } from '@/src/slack/commands/myAssignments';
 //      block the webhook.
 //
 // Where the reply lands (and why):
-//   /myassignments DMs the user with a `chat.postMessage` carrying the
-//   carousel of task cards, plus a small ephemeral "Sent to your DMs →"
-//   confirmation at the slash-command site.
+//   /myassignments DMs the user with a `chat.postMessage` carrying a
+//   vertical stack of `task_card` blocks (one per assignment), plus a
+//   small ephemeral "Sent to your DMs →" confirmation at the slash-
+//   command site. The DM target fits "personal info" commands —
+//   scrollable, private, and lives in a stable place the user can
+//   return to.
 //
-//   Earlier iterations tried response_url and chat.postEphemeral with
-//   the carousel inline. Both surfaces have known gaps for `card.actions[]`
-//   buttons inside `carousel` blocks:
-//     - response_url returned HTTP 500 from hooks.slack.com on every
-//       payload with a carousel block — Slack's legacy followup
-//       transport hasn't picked up the newer Block Kit shapes.
-//     - chat.postEphemeral RENDERS the carousel correctly, but the
-//       "Open in Foreshadow" button never opens the URL on click,
-//       even with Interactivity enabled and our /api/slack/interactivity
-//       endpoint receiving + acking 200. The same blocks via
-//       chat.postMessage open the URL fine, so it's a Slack platform
-//       gap on the ephemeral surface specifically. We confirmed in
-//       Vercel logs that Slack DOES POST to interactivity on the
-//       click — it just declines to navigate the URL afterward.
+// Why task_card and not carousel:
+//   Earlier iterations tried response_url, chat.postEphemeral, and
+//   DM-via-chat.postMessage all carrying a `carousel` of `card`
+//   elements. Each one had its own clickable-URL gap:
+//     - response_url: HTTP 500 on every payload with a carousel block.
+//     - chat.postEphemeral: carousel renders, but card.actions[] url
+//       buttons never navigate on click (even with Interactivity
+//       enabled and /api/slack/interactivity acking 200).
+//     - chat.postMessage to DM: carousel-only blocks array also failed
+//       button URL navigation; mirroring the events-route shape
+//       ([section, carousel]) didn't fix it on the slash-command path.
+//   Slack's `task_card` block uses `sources` (an array of URL elements)
+//   instead of `actions[]` for the click-through, and Slack renders
+//   sources as native hyperlinks rather than interactivity buttons.
+//   That's the proven-reliable transport for clickable URLs across
+//   every surface, with no signature-verification or interactivity-
+//   acknowledgment dance required. The expandable-row UX also matches
+//   "scan a personal task list, drill into one" better than horizontal
+//   carousel scroll.
 //
-//   Pivoting to a DM via chat.postMessage uses the same proven
-//   transport the events-route bot replies use (carousel + url
-//   buttons proven working). UX-wise it also fits "personal info"
-//   commands better — the reply is private, scrollable, and lives
-//   in a stable place the user can return to. Linear / Asana / GitHub
-//   all use this exact pattern for their personal-info slash commands.
+//   The events route (bot replies to free-text questions) keeps using
+//   the carousel — it works there, and the horizontal layout fits
+//   alongside the agent's prose summary. Surface-specific choices.
 
 interface SlashCommandPayload {
   /** Token from the X-Slack-Signature dance. Already verified before this struct exists. */
@@ -237,8 +242,10 @@ async function handleMyAssignments(
   }
 
   // Two parallel posts:
-  //   - Real reply with cards goes to the DM (chat.postMessage,
-  //     proven to render carousel + url buttons correctly).
+  //   - Real reply with task_card blocks goes to the DM via
+  //     chat.postMessage. task_card uses `sources` for clickable
+  //     URLs, which Slack renders as native hyperlinks across every
+  //     surface — no interactivity acknowledgment needed.
   //   - "Sent to your DMs →" ephemeral goes inline at the slash-command
   //     site so the user gets immediate feedback that something
   //     happened. Pure plain text — no blocks involved, so the
@@ -250,7 +257,6 @@ async function handleMyAssignments(
       channel: dmChannel,
       text: result.text,
       blocks: result.blocks,
-      attachments: result.attachments,
     }),
     postEphemeralSafe(web, {
       channel: payload.channel_id,
@@ -285,46 +291,38 @@ interface PostEphemeralArgs {
   channel: string;
   user: string;
   text: string;
-  blocks?: Block[];
-  attachments?: MessageAttachment[];
 }
 
 interface PostDmArgs {
   channel: string;
   text: string;
   blocks?: Block[];
-  attachments?: MessageAttachment[];
 }
 
-// chat.postMessage to a DM channel. Same transport the events route
-// uses for bot replies — proven path for carousel + url buttons.
+// chat.postMessage to a DM channel carrying the task_card list.
 //
-// Why we prepend a `section` block to the carousel:
-//   When `blocks` is set on chat.postMessage, Slack uses it for
-//   display and treats the top-level `text` field purely as
+// Why we prepend a `section` block carrying the message text:
+//   When `blocks` is set on chat.postMessage, Slack uses it for the
+//   visible message and treats the top-level `text` field purely as
 //   notification fallback (it never renders in the conversation).
-//   Empirically, a message whose blocks array contains ONLY a
-//   carousel block delivers the carousel but the action buttons
-//   inside the cards don't fire URL navigation on click — same
-//   symptom we saw in the chat.postEphemeral path. Mirroring the
-//   shape the events-route postReply uses (`[section, ...extras]`)
-//   makes the buttons fire consistently. The section also doubles
-//   as the visible message text above the carousel, which reads
-//   better than text-only-as-notification anyway.
+//   The leading section is the visible "Billy, you have N open
+//   assignments:" line above the task_card stack — without it the
+//   user would see only the cards with no header context.
+//
+//   The shape `[section, ...task_cards]` matches the user's reference
+//   Block Kit example and Slack's own task_card documentation.
 //
 // Disable link unfurling on the bot's own message so Slack doesn't
 // double up "card from blocks" + "link unfurl from text" for the
-// same task URL.
+// same task URL — the task_card sources already give the user a
+// click-through link.
 async function postDmMessageSafe(
   web: WebClient,
   args: PostDmArgs,
 ): Promise<void> {
-  // Build the blocks array. When the caller has blocks (the carousel
-  // case), prepend a section carrying the message text so the
-  // visible body matches what users see from the events route. When
-  // the caller passes attachments instead (the >10-tasks fallback),
-  // the top-level `text` field renders normally above them — no
-  // section wrapper needed.
+  // No-blocks branch shouldn't really happen at this call site (the
+  // 0-results case takes the early-return path before we open a DM),
+  // but we handle it for completeness so the helper is safe to reuse.
   const blocks =
     args.blocks && args.blocks.length > 0
       ? ([
@@ -338,9 +336,6 @@ async function postDmMessageSafe(
       channel: args.channel,
       text: args.text,
       ...(blocks ? { blocks } : {}),
-      ...(args.attachments && args.attachments.length > 0
-        ? { attachments: args.attachments }
-        : {}),
       unfurl_links: false,
       unfurl_media: false,
     });
@@ -352,15 +347,14 @@ async function postDmMessageSafe(
   }
 }
 
-// Thin wrapper around chat.postEphemeral that swallows + logs errors
-// instead of throwing. We're already inside `after()` when this runs,
-// so a throw would just become an unhandled rejection — better to log
-// and move on.
+// Thin wrapper around chat.postEphemeral for plain-text inline
+// messages (unrecognised user, DM-open failure, crash fallback,
+// "Sent to your DMs →" confirmation). No blocks parameter — the
+// task_card surface uses chat.postMessage, not ephemeral.
 //
-// Used for the inline "Sent to your DMs →" confirmation and for the
-// plain-text fallback messages (unrecognised user, DM-open failure).
-// Carousel-bearing replies don't go through here anymore; they go via
-// postDmMessageSafe.
+// Swallows + logs errors instead of throwing. We're already inside
+// `after()` when this runs, so a throw would just become an unhandled
+// rejection — better to log and move on.
 async function postEphemeralSafe(
   web: WebClient,
   args: PostEphemeralArgs,
@@ -370,8 +364,6 @@ async function postEphemeralSafe(
       channel: args.channel,
       user: args.user,
       text: args.text,
-      ...(args.blocks ? { blocks: args.blocks } : {}),
-      ...(args.attachments ? { attachments: args.attachments } : {}),
     });
   } catch (err) {
     console.error('[slack/commands] chat.postEphemeral failed', {

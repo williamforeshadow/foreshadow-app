@@ -7,8 +7,10 @@ import {
 } from '@/src/server/tasks/getTaskById';
 import {
   taskCard,
+  taskCardBlock,
   taskUnfurl,
   type SlackCarouselBlock,
+  type SlackTaskCardBlock,
   type TaskForUnfurl,
 } from './unfurlBlocks';
 
@@ -207,6 +209,42 @@ export function renderTaskRowsAsExtras(
     };
   });
   return { attachments };
+}
+
+/**
+ * Render an ordered list of `(task, url)` pairs as a vertical stack of
+ * Slack `task_card` blocks.
+ *
+ * Used by the `/myassignments` slash command. Distinct from
+ * renderTaskRowsAsExtras (carousel/attachments) because:
+ *
+ *   - task_card.sources is the proven-reliable surface for clickable
+ *     URLs across DM, channel, and ephemeral. Carousel-card buttons
+ *     have a known gap on chat.postEphemeral and on DM messages whose
+ *     blocks array is carousel-only — both observed in production.
+ *   - The collapsible-row interaction matches "scan a personal task
+ *     list, drill into one" better than horizontal carousel scroll.
+ *   - It scales past the carousel's 10-element cap. Slack's per-message
+ *     block limit is 50, which is well above any realistic personal
+ *     assignment count.
+ *
+ * Returns blocks cast to `Block[]` because @slack/types 2.20.1 doesn't
+ * model task_card yet — same boundary cast we already do for carousel.
+ *
+ * The events route (bot replies) continues to use renderTaskRowsAsExtras
+ * (carousel) — it's already proven there and the horizontal layout works
+ * well alongside the agent's prose summary.
+ */
+export function renderTaskRowsAsTaskCards(
+  orderedTasks: Array<{ url: string; task: TaskByIdRow }>,
+): { blocks: Block[] } {
+  if (orderedTasks.length === 0) return { blocks: [] };
+  const cards: SlackTaskCardBlock[] = orderedTasks.map(({ url, task }) =>
+    taskCardBlock(toUnfurlShape(task, url)),
+  );
+  // Cast at the boundary: task_card isn't yet in @slack/types' KnownBlock
+  // union but the API accepts it as a generic Block.
+  return { blocks: cards as unknown as Block[] };
 }
 
 /**

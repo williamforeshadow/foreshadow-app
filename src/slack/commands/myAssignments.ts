@@ -1,8 +1,8 @@
-import type { Block, MessageAttachment } from '@slack/types';
+import type { Block } from '@slack/types';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { taskUrl } from '@/src/lib/links';
 import { getTasksByIds, type TaskByIdRow } from '@/src/server/tasks/getTaskById';
-import { renderTaskRowsAsExtras } from '@/src/slack/unfurl';
+import { renderTaskRowsAsTaskCards } from '@/src/slack/unfurl';
 
 // Handler for the `/myassignments` Slack slash command.
 //
@@ -28,17 +28,17 @@ import { renderTaskRowsAsExtras } from '@/src/slack/unfurl';
 //     stable tiebreaker. "What's next?" is the natural reading order.
 //
 // Output:
-//   - 0 results → ephemeral text "You have no open assignments." (no cards)
-//   - 1+ results → a `text` summary line + the same carousel/attachment
-//     layout the unfurl path uses (carousel for ≤10, attachments for >10).
+//   - 0 results → text-only "You have no open assignments." (no cards)
+//   - 1+ results → a `text` summary line + a vertical stack of
+//     `task_card` blocks, one per assignment. See
+//     renderTaskRowsAsTaskCards for why this surface (over carousel /
+//     attachments) for personal task lists.
 
 export interface MyAssignmentsResult {
   /** Human-readable summary line shown above the cards. */
   text: string;
-  /** Optional carousel block when the count is ≤10. */
+  /** Vertical stack of task_card blocks. Empty when there are no results. */
   blocks?: Block[];
-  /** Optional vertical attachments when the count is >10. */
-  attachments?: MessageAttachment[];
 }
 
 /**
@@ -98,25 +98,22 @@ export async function runMyAssignments(args: {
   // by what one user can possibly be assigned to (small).
   openTasks.sort(compareTasksForAssignmentList);
 
-  // Step 4: shape into (task, url) pairs and render via the shared
-  // helper. Using taskUrl() keeps the URL exactly the same as what the
-  // agent's tools return, so links from /myassignments and from the
-  // agent are interchangeable.
+  // Step 4: shape into (task, url) pairs and render as task_card blocks.
+  // Using taskUrl() keeps the URL exactly the same as what the agent's
+  // tools return, so the "Open in Foreshadow" source on each task_card
+  // is interchangeable with links produced anywhere else in the system.
   const ordered = openTasks.map((task) => ({
     task,
     url: taskUrl(task.task_id),
   }));
-  const extras = renderTaskRowsAsExtras(ordered);
+  const { blocks } = renderTaskRowsAsTaskCards(ordered);
 
   // Summary line: keep it short. "You have N open assignments" reads
   // well in Slack mrkdwn.
   const noun = openTasks.length === 1 ? 'assignment' : 'assignments';
   const text = `${displayName}, you have ${openTasks.length} open ${noun}:`;
 
-  return {
-    text,
-    ...extras,
-  };
+  return { text, blocks };
 }
 
 // Comparator for the sort step above. Pulled out so the rule is easy
