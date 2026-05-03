@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { WebClient } from '@slack/web-api';
-import type { MessageAttachment } from '@slack/types';
+import type { Block, MessageAttachment } from '@slack/types';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { runAgent } from '@/src/agent/runAgent';
@@ -12,9 +12,14 @@ import { resolveSlackUser, getBotUserId } from '@/src/slack/identity';
 import { markdownToMrkdwn, stripBotMention } from '@/src/slack/format';
 import {
   unfurlTaskLinksFromEvent,
-  buildTaskAttachments,
+  buildTaskMessageExtras,
   extractTaskUrlsFromText,
 } from '@/src/slack/unfurl';
+
+interface MessageExtras {
+  blocks?: Block[];
+  attachments?: MessageAttachment[];
+}
 
 // POST /api/slack/events
 //
@@ -75,10 +80,13 @@ import {
 //           - Pull recent ai_chat_messages history for that app user.
 //           - Run the agent (writes enabled, same as in-app).
 //           - Apply backstops, persist user + assistant messages.
-//           - Build inline task-card attachments for any task URLs in the
-//             reply (Slack doesn't fire link_shared for our bot's own
-//             posts, so chat.unfurl can't be used here — we attach the
-//             cards directly to the chat.postMessage payload instead).
+//           - Build task cards for any task URLs in the reply (Slack
+//             doesn't fire link_shared for our bot's own posts, so
+//             chat.unfurl can't be used here — we ride the cards along
+//             on the chat.postMessage payload instead). Layout is a
+//             horizontal `carousel` block for ≤10 tasks (compact,
+//             scrollable) and falls back to vertical `attachments` for
+//             >10 (Slack's carousel cap is 10 elements).
 //           - Post reply (in-thread for mentions, flat for DMs).
 //        b. link_shared:
 //           - Recognise task URLs via parseTaskUrl.
@@ -392,17 +400,21 @@ async function handleSlackMessage(
 
   const mrkdwnText = markdownToMrkdwn(finalText);
 
-  // Build inline task-card attachments for any task URLs the agent emitted
-  // in its reply. We can't use chat.unfurl for the bot's own messages —
-  // Slack doesn't fire link_shared for posts where unfurl_links is false
-  // (which we keep off to suppress noisy generic OG previews on other
-  // URLs the agent might surface), so chat.unfurl returns 200 but
-  // silently drops the cards. Inline attachments don't depend on the
-  // link_shared flow and render unconditionally.
+  // Build task cards for any task URLs the agent linked to. We can't use
+  // chat.unfurl for the bot's own messages — Slack doesn't fire
+  // link_shared for posts where unfurl_links is false (which we keep off
+  // to suppress noisy generic OG previews on other URLs the agent might
+  // surface), so chat.unfurl returns 200 but silently drops the cards.
+  // Carousel/attachments rendered inline on chat.postMessage don't
+  // depend on the link_shared flow and render unconditionally.
+  //
+  // buildTaskMessageExtras decides between a horizontal carousel block
+  // (≤10 tasks, the common case) and vertical attachments (>10 tasks,
+  // since Slack caps carousels at 10 elements).
   const taskUrls = extractTaskUrlsFromText(mrkdwnText).map((url) => ({ url }));
-  const attachments = taskUrls.length > 0 ? await buildTaskAttachments(taskUrls) : [];
+  const extras = taskUrls.length > 0 ? await buildTaskMessageExtras(taskUrls) : {};
 
-  await postReply(web, event.channel, threadTs, mrkdwnText, attachments);
+  await postReply(web, event.channel, threadTs, mrkdwnText, extras);
 }
 
 // Pure unfurl entry point. No agent, no persistence, no allowlist — just
@@ -453,8 +465,23 @@ async function postReply(
   channel: string,
   threadTs: string | undefined,
   text: string,
-  attachments: MessageAttachment[] = [],
+  extras: MessageExtras = {},
 ): Promise<void> {
+  // When we render task cards in a `carousel` block, Slack uses the
+  // `blocks` array for display and treats `text` purely as notification
+  // fallback (it doesn't show in the conversation). Prepend a section
+  // block carrying the same mrkdwn so the actual message body renders
+  // above the carousel. For the attachments fallback (>10 tasks), the
+  // top-level `text` field DOES render normally, so we don't need to
+  // wrap it.
+  const blocks =
+    extras.blocks && extras.blocks.length > 0
+      ? ([
+          { type: 'section', text: { type: 'mrkdwn', text } },
+          ...extras.blocks,
+        ] as Block[])
+      : undefined;
+
   try {
     await web.chat.postMessage({
       channel,
@@ -462,15 +489,19 @@ async function postReply(
       // omit it so the reply sits flat in the conversation.
       ...(threadTs ? { thread_ts: threadTs } : {}),
       text,
-      // Inline task cards (one per task URL the agent linked to). When
-      // there are no tasks to attach we omit the field — Slack rejects
-      // empty attachments arrays as a malformed payload in some clients.
-      ...(attachments.length > 0 ? { attachments } : {}),
+      ...(blocks ? { blocks } : {}),
+      // Inline task-card attachments (only used as the >10-tasks
+      // fallback, since carousels cap at 10 elements). When empty we
+      // omit the field — Slack rejects empty attachments arrays as a
+      // malformed payload in some clients.
+      ...(extras.attachments && extras.attachments.length > 0
+        ? { attachments: extras.attachments }
+        : {}),
       // Disable Slack's auto-link unfurling so unrelated URLs the agent
       // might surface (wifi networks, doc links from property knowledge,
       // etc.) don't get generic OG-tag previews stacked under the
-      // message. Our own task cards are attached above as `attachments`,
-      // which doesn't depend on this flag.
+      // message. Our own task cards ride along in `blocks` /
+      // `attachments` above, which doesn't depend on this flag.
       unfurl_links: false,
       unfurl_media: false,
     });

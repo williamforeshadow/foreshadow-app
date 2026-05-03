@@ -1,33 +1,44 @@
 import type { WebClient } from '@slack/web-api';
-import type { MessageAttachment } from '@slack/types';
+import type { Block, MessageAttachment } from '@slack/types';
 import { parseTaskUrl } from '@/src/lib/links';
 import {
   getTasksByIds,
   type TaskByIdRow,
 } from '@/src/server/tasks/getTaskById';
-import { taskUnfurl, type TaskForUnfurl } from './unfurlBlocks';
+import {
+  taskCard,
+  taskUnfurl,
+  type SlackCarouselBlock,
+  type TaskForUnfurl,
+} from './unfurlBlocks';
 
-// Slack task-card rendering — two surfaces, one shared builder.
+// Slack task-card rendering — two surfaces, two layout shapes.
 //
-// Surface 1: link_shared event (someone — anyone — pasted a task URL in
-//            a channel where the bot is a member, or in a DM with us).
-//            Slack fires `link_shared` with a list of URLs and an
-//            `unfurl_id` + `source` pair. We respond with `chat.unfurl`
-//            using THOSE identifiers (not channel/ts) — that's the form
-//            Slack actually honours for rendering. The legacy
-//            channel+ts form silently no-ops in many contexts.
+// Surface 1: link_shared event (someone pasted a task URL into a channel
+//            we're in, or into a DM). Slack fires `link_shared` with a
+//            list of URLs and an `unfurl_id` + `source` pair. We respond
+//            with chat.unfurl using THOSE identifiers (not channel/ts) —
+//            that's the form Slack actually honours across composer-
+//            preview, post-send, and conversations_history surfaces. The
+//            legacy channel+ts form silently no-ops in many contexts.
+//            Layout: one `taskUnfurl` block-list per URL.
 //
 // Surface 2: bot replies (handleSlackMessage in the events route). Slack
 //            does NOT fire `link_shared` for messages posted by our own
 //            bot when `unfurl_links: false` is set on chat.postMessage,
 //            so we can't piggy-back on the link_shared flow. Instead we
-//            build the cards ourselves and attach them inline as
-//            `attachments` on chat.postMessage. Slack renders inline
-//            attachments unconditionally — no link_shared dance needed.
+//            attach the task cards directly to the postMessage payload.
+//            Layout depends on count:
+//              - 1–10 tasks: a horizontal `carousel` block of `taskCard`
+//                elements (compact, scrollable).
+//              - >10 tasks: vertical `attachments` of `taskUnfurl` blocks
+//                (Slack caps carousels at 10 elements).
 //
-// Both surfaces share the same builder (`taskUnfurl`) and the same data
-// fetch (`getTasksByIds`), so the cards look identical regardless of who
-// posted the URL.
+// Both layouts share `getTasksByIds` for data and the slim card fields
+// (title / property / status+due / Open in Foreshadow), so cards look
+// consistent regardless of which path produced them.
+
+const MAX_CAROUSEL_CARDS = 10;
 
 /** Subset of the link_shared event link shape we actually care about. */
 export interface SlackLink {
@@ -106,43 +117,70 @@ function isKnownUnfurlSource(
 }
 
 /**
- * Build inline `attachments` for a `chat.postMessage` payload. Use this
- * when the bot itself posts a message that mentions tasks — we attach
- * one card per task URL found in the reply text.
+ * Build the `blocks` and/or `attachments` payload for a chat.postMessage
+ * that mentions one or more task URLs. The shape varies with count:
  *
- * Each attachment is a Block Kit card wrapped in an attachment envelope
- * (with a fallback string for notification text and a vertical color bar
- * matching Foreshadow's brand blue).
+ *   - 1–10 task URLs → returns `{ blocks: [carousel] }`. Carousels stay
+ *     compact even with many tasks because Slack lays the cards out
+ *     horizontally with a scroll gesture.
+ *
+ *   - >10 task URLs → returns `{ attachments: [...] }`. Slack caps
+ *     `carousel.elements` at 10, so beyond that we fall back to vertical
+ *     attachments, one per task.
+ *
+ *   - Zero recognised task URLs → returns `{}` so callers can spread
+ *     unconditionally without checking length.
+ *
+ * Order is preserved (URLs appear in the cards in the same order they
+ * appear in the source text), and duplicate URLs are de-duped so a task
+ * referenced twice in the reply doesn't render two cards.
  */
-export async function buildTaskAttachments(
+export async function buildTaskMessageExtras(
   links: SlackLink[],
-): Promise<MessageAttachment[]> {
-  if (links.length === 0) return [];
+): Promise<{ blocks?: Block[]; attachments?: MessageAttachment[] }> {
+  if (links.length === 0) return {};
   const recognised = recogniseLinks(links);
-  if (recognised.length === 0) return [];
+  if (recognised.length === 0) return {};
 
   const taskIds = Array.from(new Set(recognised.map((r) => r.taskId)));
   const tasks = await getTasksByIds(taskIds);
   const byId = new Map(tasks.map((t) => [t.task_id, t]));
 
-  // Preserve the order URLs appeared in the reply so the card list reads
-  // top-to-bottom in the same order as the bullet list above it. Dedupe
-  // by URL so a task mentioned twice doesn't render two cards.
+  // Walk the recognised list once, dedupe by URL, and accumulate the
+  // task rows we'll actually render. Preserves source order.
   const seenUrls = new Set<string>();
-  const attachments: MessageAttachment[] = [];
+  const orderedTasks: Array<{ url: string; task: TaskByIdRow }> = [];
   for (const { url, taskId } of recognised) {
     if (seenUrls.has(url)) continue;
     seenUrls.add(url);
     const t = byId.get(taskId);
     if (!t) continue;
-    const card = taskUnfurl(toUnfurlShape(t, url));
-    attachments.push({
-      color: '#4A9EFF',
-      fallback: t.title || t.template_name || 'Task',
-      blocks: card.blocks,
-    });
+    orderedTasks.push({ url, task: t });
   }
-  return attachments;
+  if (orderedTasks.length === 0) return {};
+
+  if (orderedTasks.length <= MAX_CAROUSEL_CARDS) {
+    const carousel: SlackCarouselBlock = {
+      type: 'carousel',
+      block_id: 'task-carousel',
+      elements: orderedTasks.map(({ url, task }) =>
+        taskCard(toUnfurlShape(task, url)),
+      ),
+    };
+    // Cast at the boundary: `carousel` isn't yet in @slack/types' KnownBlock
+    // union but the API accepts it as a generic Block.
+    return { blocks: [carousel as unknown as Block] };
+  }
+
+  const attachments: MessageAttachment[] = orderedTasks.map(({ url, task }) => {
+    const card = taskUnfurl(toUnfurlShape(task, url));
+    return {
+      color: '#4A9EFF',
+      fallback: task.title || task.template_name || 'Task',
+      blocks: card.blocks,
+    };
+  });
+  return { attachments };
 }
 
 /**
