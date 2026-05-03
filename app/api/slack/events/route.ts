@@ -16,6 +16,10 @@ import { markdownToMrkdwn, stripBotMention } from '@/src/slack/format';
 // runAgent, same backstops, same conversation memory in ai_chat_messages —
 // just with Slack-shaped IO at the edges.
 //
+// Two entry points are supported:
+//   - app_mention          → @-mention in a channel; we reply in-thread.
+//   - message (im subtype) → 1:1 DM with the bot; we reply flat in the DM.
+//
 // Required env:
 //   SLACK_BOT_TOKEN       (xoxb-...) — bot token used to read users.info
 //                                     and post replies via chat.postMessage.
@@ -24,25 +28,31 @@ import { markdownToMrkdwn, stripBotMention } from '@/src/slack/format';
 //
 // Optional env:
 //   SLACK_ALLOWED_CHANNELS         — comma-separated channel ids; if set,
-//                                     events from other channels are ignored.
+//                                     channel mentions from other channels
+//                                     are ignored. DMs are NOT filtered
+//                                     by this (they're inherently 1:1).
 //                                     Empty/unset = allow all channels.
 //
 // Slack app config (in api.slack.com/apps):
-//   Bot scopes: app_mentions:read, chat:write, users:read, users:read.email
-//   Subscribed events: app_mention
-//   Request URL: https://<your-domain>/api/slack/events
+//   Bot scopes:        app_mentions:read, chat:write, users:read,
+//                      users:read.email, im:history, im:read, im:write
+//   Subscribed events: app_mention, message.im
+//   App Home tab:      enable "Allow users to send Slash commands and
+//                      messages from the messages tab"
+//   Request URL:       https://<your-domain>/api/slack/events
 //
 // Lifecycle:
 //   1. Verify HMAC signature (rejects forgeries / replays).
 //   2. Handle url_verification handshake (one-time, during app setup).
 //   3. Dedup by event_id (Slack retries aggressively when slow).
-//   4. Ack 200 immediately, defer agent work via `after()`.
-//   5. Background:
+//   4. Classify the event as channel_mention or dm (or ignore).
+//   5. Ack 200 immediately, defer agent work via `after()`.
+//   6. Background:
 //        - Resolve Slack user → app user (via email match in users table).
 //        - Pull recent ai_chat_messages history for that app user.
-//        - Run the agent in read-only mode (no write tools exposed yet).
+//        - Run the agent (writes enabled, same as in-app).
 //        - Apply backstops, persist user + assistant messages.
-//        - Post reply to the same thread as the mention.
+//        - Post reply (in-thread for mentions, flat for DMs).
 
 const MEMORY_WINDOW = 15;
 
@@ -67,6 +77,31 @@ interface SlackInnerEvent {
   // Set when this app's own posts come back as events; we ignore them.
   app_id?: string;
   subtype?: string;
+  // Present on `message` events. "im" = 1:1 DM with the bot, "channel" =
+  // public channel, "group" = private channel, "mpim" = multi-person DM.
+  // We only act on "im" for the message event type; channels go through
+  // the app_mention pathway instead.
+  channel_type?: string;
+}
+
+// Logical surface within Slack — drives mention-stripping, threading, and
+// the channel allowlist. Returns null if the event isn't one we handle.
+type SlackKind = 'channel_mention' | 'dm';
+
+function classifySlackEvent(event: SlackInnerEvent | undefined): SlackKind | null {
+  if (!event) return null;
+  if (event.type === 'app_mention') return 'channel_mention';
+  if (
+    event.type === 'message' &&
+    event.channel_type === 'im' &&
+    // Only fresh user messages — skip edits ("message_changed"), deletes
+    // ("message_deleted"), bot echoes ("bot_message"), file shares, etc.
+    // Slack's DM event stream is noisier than app_mention's.
+    !event.subtype
+  ) {
+    return 'dm';
+  }
+  return null;
 }
 
 interface ChatMessageRow {
@@ -119,10 +154,12 @@ export async function POST(req: NextRequest) {
     return new Response(null, { status: 200 });
   }
 
-  // 3) Only act on the events we actually subscribed to. Defensive — if
-  //    Slack ever sends us something unexpected we just ack and ignore.
+  // 3) Classify the event. We act on @-mentions in channels and on direct
+  //    messages to the bot. Anything else (joins, edits, reactions, etc.)
+  //    we ack and drop on the floor.
   const event = envelope.event;
-  if (!event || event.type !== 'app_mention') {
+  const kind = classifySlackEvent(event);
+  if (!event || !kind) {
     return new Response(null, { status: 200 });
   }
 
@@ -132,21 +169,26 @@ export async function POST(req: NextRequest) {
     return new Response(null, { status: 200 });
   }
 
-  // 5) Optional channel allowlist. Empty/unset env var = allow all.
-  const allowedRaw = process.env.SLACK_ALLOWED_CHANNELS ?? '';
-  const allowedChannels = allowedRaw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (
-    allowedChannels.length > 0 &&
-    event.channel &&
-    !allowedChannels.includes(event.channel)
-  ) {
-    console.log('[slack] event from non-allowlisted channel; ignoring', {
-      channel: event.channel,
-    });
-    return new Response(null, { status: 200 });
+  // 5) Optional channel allowlist — ONLY applies to channel mentions.
+  //    DMs are inherently 1:1 and the user already proved access by being
+  //    in your workspace, so applying a channel filter to them would be
+  //    confusing (the "channel" id of a DM is a synthetic D… id anyway).
+  if (kind === 'channel_mention') {
+    const allowedRaw = process.env.SLACK_ALLOWED_CHANNELS ?? '';
+    const allowedChannels = allowedRaw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (
+      allowedChannels.length > 0 &&
+      event.channel &&
+      !allowedChannels.includes(event.channel)
+    ) {
+      console.log('[slack] event from non-allowlisted channel; ignoring', {
+        channel: event.channel,
+      });
+      return new Response(null, { status: 200 });
+    }
   }
 
   // Defer the actual agent work: ack now (Slack's 3s SLA), then process.
@@ -155,17 +197,18 @@ export async function POST(req: NextRequest) {
   // will see a 500 even though we already 200'd; wrap in try/catch.
   after(async () => {
     try {
-      await handleAppMention(event, botToken);
+      await handleSlackMessage(event, kind, botToken);
     } catch (err) {
-      console.error('[slack] handleAppMention threw', err);
+      console.error('[slack] handleSlackMessage threw', err);
     }
   });
 
   return new Response(null, { status: 200 });
 }
 
-async function handleAppMention(
+async function handleSlackMessage(
   event: SlackInnerEvent,
+  kind: SlackKind,
   botToken: string,
 ): Promise<void> {
   if (!event.user || !event.channel || !event.ts) return;
@@ -173,17 +216,20 @@ async function handleAppMention(
   const web = new WebClient(botToken);
 
   // Resolve identities first. Without an app user we can't pull history,
-  // can't persist, and shouldn't run the agent (writes would be unattributed
-  // even on read-only surfaces, since memory is keyed by user).
+  // can't persist, and shouldn't run the agent (memory is keyed by user).
   const [identity, botUserId] = await Promise.all([
     resolveSlackUser(web, event.user),
     getBotUserId(web),
   ]);
 
-  // Slack API expects `thread_ts` for in-thread replies. If the mention
-  // is at the top level of a channel (no thread_ts), reply in a new thread
-  // anchored on the mention's own ts so the conversation stays tidy.
-  const threadTs = event.thread_ts ?? event.ts;
+  // Threading rules:
+  //   channel_mention → reply in-thread; if the mention itself isn't in a
+  //                     thread we anchor a new one on the mention's ts so
+  //                     conversation doesn't pollute the channel.
+  //   dm              → undefined; Slack DMs don't really do threads, and
+  //                     forcing one creates a weird collapsed UI.
+  const threadTs =
+    kind === 'channel_mention' ? (event.thread_ts ?? event.ts) : undefined;
 
   if (!identity) {
     await postReply(
@@ -195,7 +241,15 @@ async function handleAppMention(
     return;
   }
 
-  const prompt = stripBotMention(event.text ?? '', botUserId).trim();
+  // Channel mentions arrive as "<@U123BOT> do the thing"; we strip the
+  // leading bot mention so the prompt the agent sees is just "do the thing".
+  // DMs don't have that prefix — the user typed straight at the bot —
+  // so we pass the raw text through.
+  const rawText = event.text ?? '';
+  const prompt = (
+    kind === 'channel_mention' ? stripBotMention(rawText, botUserId) : rawText
+  ).trim();
+
   if (!prompt) {
     await postReply(
       web,
@@ -208,9 +262,9 @@ async function handleAppMention(
 
   // Pull recent history from ai_chat_messages, same as the in-app route.
   // This means Slack and in-app share memory (a deliberate choice — see
-  // chat thread). Per-thread Slack scoping isn't built yet; if it becomes
-  // needed we can layer a slack_thread_ts column onto the table without
-  // breaking the in-app side.
+  // chat thread). Per-thread / per-DM Slack scoping isn't built yet; if it
+  // becomes needed we can layer a slack_thread_ts column onto the table
+  // without breaking the in-app side.
   const history = await loadHistory(identity.appUserId);
 
   const supabase = getSupabaseServer();
@@ -220,8 +274,9 @@ async function handleAppMention(
     content: prompt,
     metadata: {
       surface: 'slack',
+      slack_kind: kind,
       slack_channel: event.channel,
-      slack_thread_ts: threadTs,
+      ...(threadTs ? { slack_thread_ts: threadTs } : {}),
       slack_user_id: event.user,
     },
   });
@@ -242,6 +297,7 @@ async function handleAppMention(
     console.warn('[slack] masked hallucinated write claim', {
       user_id: identity.appUserId,
       slack_user: event.user,
+      kind,
       original: masked.originalIfMasked,
     });
   }
@@ -249,6 +305,7 @@ async function handleAppMention(
     console.warn('[slack] masked hallucinated read claim', {
       user_id: identity.appUserId,
       slack_user: event.user,
+      kind,
       original: masked.originalIfMasked,
     });
   }
@@ -261,8 +318,9 @@ async function handleAppMention(
     content: finalText,
     metadata: {
       surface: 'slack',
+      slack_kind: kind,
       slack_channel: event.channel,
-      slack_thread_ts: threadTs,
+      ...(threadTs ? { slack_thread_ts: threadTs } : {}),
       tool_calls: result.toolCalls.map((c) => {
         const base = { name: c.name, input: c.input, ok: c.output.ok };
         return c.output.ok
@@ -300,13 +358,15 @@ async function loadHistory(appUserId: string): Promise<MessageParam[]> {
 async function postReply(
   web: WebClient,
   channel: string,
-  threadTs: string,
+  threadTs: string | undefined,
   text: string,
 ): Promise<void> {
   try {
     await web.chat.postMessage({
       channel,
-      thread_ts: threadTs,
+      // Only set thread_ts when we actually want to thread. For DMs we
+      // omit it so the reply sits flat in the conversation.
+      ...(threadTs ? { thread_ts: threadTs } : {}),
       text,
       // Disable Slack's auto-link unfurling on URLs in our reply. Tools
       // sometimes return URLs (e.g. property knowledge wifi networks) and
