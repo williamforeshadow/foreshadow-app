@@ -92,7 +92,11 @@ function statusEmoji(s: string): string {
 // Format YYYY-MM-DD as "Mon D, YYYY" without going through Date — these are
 // wall-clock dates with no real timezone and we don't want JS's Date parser
 // silently shifting them by the runtime offset.
-function formatScheduled(
+//
+// Exported so the streaming-chunk builder (streamChunks.ts) can reuse the
+// exact same date format the carousel and unfurl cards already use, keeping
+// "Scheduled: …" lines consistent across surfaces.
+export function formatScheduled(
   date: string | null,
   time: string | null,
 ): string | null {
@@ -220,164 +224,11 @@ export interface SlackCarouselBlock {
   elements: SlackCardElement[];
 }
 
-// `task_card` is Slack's newer Block Kit primitive (Slack platform 2025)
-// designed for AI / agent surfaces — see
-// https://docs.slack.dev/reference/block-kit/blocks/task-card-block
-//
-// Compared to `carousel`-of-`card`, the visual is fundamentally different:
-//   - Each task_card renders as its own collapsible row in the message
-//     (vertical list, not horizontal scroll). Click the row to expand.
-//   - The expanded view shows `details` (rich_text), `output` (rich_text),
-//     and `sources` (clickable URL chips). Sources are NATIVE Slack
-//     hyperlinks — no button-with-url ambiguity, they always navigate.
-//   - Status is a first-class enum that Slack renders as a coloured dot
-//     next to the title (pending / in_progress / complete / error).
-//
-// We use this for /myassignments specifically because:
-//   - It scales gracefully past the 10-card carousel cap.
-//   - The "click a link" affordance lives in `sources`, which is the
-//     proven-working transport for clickable URLs across DM, channel,
-//     and ephemeral surfaces — bypassing the carousel-card-button gap
-//     we hit on chat.postEphemeral and DM-only-blocks.
-//   - The compact-row-then-expand interaction matches "scan a list,
-//     drill into one" better than horizontal carousel scroll for
-//     personal task lists.
-//
-// @slack/types 2.20.1 doesn't model task_card or rich_text yet, so the
-// interfaces below are minimal local mirrors of the documented shape.
-// We cast to `Block` at the chat.postMessage boundary; Slack accepts
-// the JSON shape directly. When the SDK adds these types we can drop
-// the locals.
-
-export interface SlackTaskCardSource {
-  type: 'url';
-  url: string;
-  text: string;
-}
-
-// Minimal rich_text element vocabulary — enough for what task_card.details
-// actually wants (line-broken sections of plain + bold text, optional
-// inline links). Skipping the full grammar (lists, quotes, code blocks)
-// because card details are short structured metadata, not prose.
-export interface SlackRichTextElement {
-  type: 'text';
-  text: string;
-  style?: { bold?: boolean; italic?: boolean; code?: boolean };
-}
-export interface SlackRichTextLinkElement {
-  type: 'link';
-  url: string;
-  text?: string;
-  style?: { bold?: boolean; italic?: boolean };
-}
-export interface SlackRichTextSection {
-  type: 'rich_text_section';
-  elements: Array<SlackRichTextElement | SlackRichTextLinkElement>;
-}
-export interface SlackRichTextBlock {
-  type: 'rich_text';
-  elements: SlackRichTextSection[];
-}
-
-export interface SlackTaskCardBlock {
-  type: 'task_card';
-  task_id: string;
-  /** Plain text — task_card.title is NOT mrkdwn (no `<url|label>` parsing). */
-  title: string;
-  /** Slack's enum is closed; map our wider status set onto these four. */
-  status: 'pending' | 'in_progress' | 'complete' | 'error';
-  block_id?: string;
-  details?: SlackRichTextBlock;
-  output?: SlackRichTextBlock;
-  sources?: SlackTaskCardSource[];
-}
-
-// Map Foreshadow's task status enum onto Slack's task_card status enum.
-// Slack only models four states (pending / in_progress / complete / error);
-// our paused + contingent get folded into pending because there's no
-// closer match. /myassignments filters out complete tasks before this
-// runs, so in practice we only emit pending or in_progress.
-function toTaskCardStatus(
-  s: string,
-): 'pending' | 'in_progress' | 'complete' | 'error' {
-  switch (s) {
-    case 'in_progress':
-      return 'in_progress';
-    case 'complete':
-      return 'complete';
-    case 'not_started':
-    case 'paused':
-    case 'contingent':
-    default:
-      return 'pending';
-  }
-}
-
-/**
- * Build a single `task_card` block for a Foreshadow task.
- *
- * Layout (when collapsed): coloured status dot + the task title.
- * Layout (when expanded): the title row plus
- *   - `details`: a rich_text block with one line per piece of metadata
- *     we want surfaced (property, scheduled date). Each rich_text_section
- *     renders on its own line.
- *   - `sources`: a single "Open in Foreshadow" URL chip pointing at the
- *     in-app task page. Slack renders these as native hyperlinks — the
- *     reliable click-through surface for task_card.
- *
- * What we deliberately omit:
- *   - `output`: meant for agent-task results ("Found 5 weather sources").
- *     Doesn't apply to a static list of assignments — there's no "result".
- *   - description / assignees / priority: we keep cards slim. The full
- *     picture is one click away in Foreshadow itself.
- */
-export function taskCardBlock(task: TaskForUnfurl): SlackTaskCardBlock {
-  const { title } = computeCardFields(task);
-
-  // Build the details rich_text. Skip lines whose value is missing so
-  // the expanded card stays tight — better to omit a row than render
-  // "Scheduled: —" or similar filler.
-  const detailSections: SlackRichTextSection[] = [];
-
-  const place = task.property_name?.trim() || task.bin_name?.trim();
-  if (place) {
-    detailSections.push({
-      type: 'rich_text_section',
-      elements: [
-        { type: 'text', text: 'Property: ', style: { bold: true } },
-        { type: 'text', text: place },
-      ],
-    });
-  }
-
-  const scheduled = formatScheduled(task.scheduled_date, task.scheduled_time);
-  if (scheduled) {
-    detailSections.push({
-      type: 'rich_text_section',
-      elements: [
-        { type: 'text', text: 'Scheduled: ', style: { bold: true } },
-        { type: 'text', text: scheduled },
-      ],
-    });
-  }
-
-  const card: SlackTaskCardBlock = {
-    type: 'task_card',
-    task_id: task.task_id,
-    title,
-    status: toTaskCardStatus(task.status),
-    block_id: `task-card-${task.task_id}`,
-    sources: [
-      { type: 'url', url: task.task_url, text: 'Open in Foreshadow' },
-    ],
-  };
-
-  if (detailSections.length > 0) {
-    card.details = { type: 'rich_text', elements: detailSections };
-  }
-
-  return card;
-}
+// Streaming task chunks for /myassignments live in src/slack/streamChunks.ts.
+// They use `task_update` chunks (not `task_card` blocks) because Slack's
+// chat.postMessage rejects task_card with `invalid_blocks` — task_card
+// is a streaming-only primitive emitted via chat.{start,append,stop}Stream.
+// See streamChunks.ts for the chunk builders + the explanation.
 
 /**
  * Build a single `card` element for use inside a Slack `carousel` block.

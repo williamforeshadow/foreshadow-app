@@ -1,8 +1,8 @@
-import type { Block } from '@slack/types';
+import type { AnyChunk } from '@slack/types';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { taskUrl } from '@/src/lib/links';
 import { getTasksByIds, type TaskByIdRow } from '@/src/server/tasks/getTaskById';
-import { renderTaskRowsAsTaskCards } from '@/src/slack/unfurl';
+import { buildAssignmentChunks } from '@/src/slack/streamChunks';
 
 // Handler for the `/myassignments` Slack slash command.
 //
@@ -12,9 +12,8 @@ import { renderTaskRowsAsTaskCards } from '@/src/slack/unfurl';
 // gives us the Slack user_id, which the dispatcher maps to our user_id),
 // and the data shape is fixed (open tasks where task_assignments.user_id
 // matches). Routing this through the LLM would add latency, cost, and
-// hallucination risk for zero gain. We just query directly and reuse the
-// existing task-card builders so the visual output matches what the
-// agent would have produced.
+// hallucination risk for zero gain. We just query directly and build
+// the streaming chunks ourselves.
 //
 // Filtering rules (mirror the in-app My Assignments page exactly):
 //   - Only tasks where task_assignments.user_id = the resolved app user.
@@ -27,18 +26,29 @@ import { renderTaskRowsAsTaskCards } from '@/src/slack/unfurl';
 //   - Sort: scheduled_date asc with nulls last, then created_at asc as a
 //     stable tiebreaker. "What's next?" is the natural reading order.
 //
-// Output:
-//   - 0 results → text-only "You have no open assignments." (no cards)
-//   - 1+ results → a `text` summary line + a vertical stack of
-//     `task_card` blocks, one per assignment. See
-//     renderTaskRowsAsTaskCards for why this surface (over carousel /
-//     attachments) for personal task lists.
+// Output (consumed by the route layer):
+//   - 0 results → text-only fallback ("You have no open assignments.")
+//     and an empty chunk array. The route surfaces this as a plain
+//     ephemeral instead of opening a streaming message — no point
+//     streaming an empty list.
+//   - 1+ results → text + the chunk array (markdown_text header
+//     followed by one task_update per assignment). The route streams
+//     them via chat.startStream + chat.stopStream.
 
 export interface MyAssignmentsResult {
-  /** Human-readable summary line shown above the cards. */
+  /**
+   * Human-readable summary line. Used both as the streaming-message
+   * fallback `text` (notification body) and as the first
+   * `markdown_text` chunk (visible header above the task rows).
+   */
   text: string;
-  /** Vertical stack of task_card blocks. Empty when there are no results. */
-  blocks?: Block[];
+  /**
+   * Chunks ready to pass directly to chat.startStream. Empty array
+   * when the user has no open assignments — the route uses the
+   * length to decide between "stream the answer" and "post a plain
+   * ephemeral".
+   */
+  chunks: AnyChunk[];
 }
 
 /**
@@ -69,6 +79,7 @@ export async function runMyAssignments(args: {
     });
     return {
       text: `Sorry — I couldn't load your assignments right now. Try again in a moment.`,
+      chunks: [],
     };
   }
   const rows = (assignmentRows ?? []) as Array<{ task_id: string }>;
@@ -76,17 +87,19 @@ export async function runMyAssignments(args: {
   if (assignedIds.length === 0) {
     return {
       text: `${displayName}, you have no open assignments. Nice.`,
+      chunks: [],
     };
   }
 
   // Step 2: fetch the full task rows so we can both filter on status
-  // (which the assignment table doesn't carry) and feed the shared
-  // card renderer.
+  // (which the assignment table doesn't carry) and feed the chunk
+  // builder.
   const allTasks = await getTasksByIds(assignedIds);
   const openTasks = allTasks.filter((t) => t.status !== 'complete');
   if (openTasks.length === 0) {
     return {
       text: `${displayName}, you have no open assignments. Nice.`,
+      chunks: [],
     };
   }
 
@@ -98,22 +111,27 @@ export async function runMyAssignments(args: {
   // by what one user can possibly be assigned to (small).
   openTasks.sort(compareTasksForAssignmentList);
 
-  // Step 4: shape into (task, url) pairs and render as task_card blocks.
-  // Using taskUrl() keeps the URL exactly the same as what the agent's
-  // tools return, so the "Open in Foreshadow" source on each task_card
-  // is interchangeable with links produced anywhere else in the system.
+  // Step 4: shape into (task, url) pairs and hand to the chunk
+  // builder. Using taskUrl() keeps the URL exactly the same as what
+  // the agent's tools return, so the "Open in Foreshadow" source on
+  // each task_update chunk is interchangeable with links produced
+  // anywhere else in the system.
   const ordered = openTasks.map((task) => ({
     task,
     url: taskUrl(task.task_id),
   }));
-  const { blocks } = renderTaskRowsAsTaskCards(ordered);
 
-  // Summary line: keep it short. "You have N open assignments" reads
-  // well in Slack mrkdwn.
+  // Summary line: keep it short. Doubles as both the message-level
+  // fallback text and the visible header chunk above the tasks.
   const noun = openTasks.length === 1 ? 'assignment' : 'assignments';
   const text = `${displayName}, you have ${openTasks.length} open ${noun}:`;
 
-  return { text, blocks };
+  const chunks = buildAssignmentChunks({
+    headerText: text,
+    orderedTasks: ordered,
+  });
+
+  return { text, chunks };
 }
 
 // Comparator for the sort step above. Pulled out so the rule is easy

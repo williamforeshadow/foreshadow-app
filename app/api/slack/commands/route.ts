@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { WebClient } from '@slack/web-api';
-import type { Block } from '@slack/types';
+import type { AnyChunk } from '@slack/types';
 import { verifySlackSignature } from '@/src/slack/verify';
 import { resolveSlackUser } from '@/src/slack/identity';
 import { runMyAssignments } from '@/src/slack/commands/myAssignments';
@@ -38,36 +38,43 @@ import { runMyAssignments } from '@/src/slack/commands/myAssignments';
 //      block the webhook.
 //
 // Where the reply lands (and why):
-//   /myassignments DMs the user with a `chat.postMessage` carrying a
-//   vertical stack of `task_card` blocks (one per assignment), plus a
-//   small ephemeral "Sent to your DMs →" confirmation at the slash-
-//   command site. The DM target fits "personal info" commands —
-//   scrollable, private, and lives in a stable place the user can
-//   return to.
+//   /myassignments STREAMS the assignment list into a DM with the user
+//   via Slack's text-streaming API:
+//     1. conversations.open       → DM channel id
+//     2. chat.startStream         → opens a streaming message carrying
+//                                   one markdown_text header chunk and
+//                                   one task_update chunk per task
+//     3. chat.stopStream          → finalises the message and clears the
+//                                   "streaming" loading indicator
+//   …plus a small `chat.postEphemeral` confirmation at the slash-
+//   command site so the user gets immediate feedback. The DM target
+//   fits "personal info" commands — scrollable, private, lives in a
+//   stable place the user can return to.
 //
-// Why task_card and not carousel:
-//   Earlier iterations tried response_url, chat.postEphemeral, and
-//   DM-via-chat.postMessage all carrying a `carousel` of `card`
-//   elements. Each one had its own clickable-URL gap:
-//     - response_url: HTTP 500 on every payload with a carousel block.
-//     - chat.postEphemeral: carousel renders, but card.actions[] url
-//       buttons never navigate on click (even with Interactivity
-//       enabled and /api/slack/interactivity acking 200).
-//     - chat.postMessage to DM: carousel-only blocks array also failed
-//       button URL navigation; mirroring the events-route shape
-//       ([section, carousel]) didn't fix it on the slash-command path.
-//   Slack's `task_card` block uses `sources` (an array of URL elements)
-//   instead of `actions[]` for the click-through, and Slack renders
-//   sources as native hyperlinks rather than interactivity buttons.
-//   That's the proven-reliable transport for clickable URLs across
-//   every surface, with no signature-verification or interactivity-
-//   acknowledgment dance required. The expandable-row UX also matches
-//   "scan a personal task list, drill into one" better than horizontal
-//   carousel scroll.
+// Why streaming chunks (and not chat.postMessage with blocks):
+//   Slack's `task_card` block — the collapsible expandable-row visual
+//   we want — is REJECTED by chat.postMessage with `invalid_blocks`.
+//   The Slack platform 2026 changelog confirms task_card is a
+//   streaming-only primitive, only accepted via the chunks parameter
+//   on the chat.{start,append,stop}Stream methods. The streaming
+//   `task_update` chunk renders as the same expandable-row UI and
+//   exposes a `sources` field whose URL elements Slack renders as
+//   native hyperlinks — guaranteed click-through, no interactivity
+//   ack required.
+//
+//   Earlier carousel-based attempts failed clickable-URL on every
+//   surface tried: response_url (HTTP 500 on carousel payloads),
+//   chat.postEphemeral (carousel renders, buttons don't navigate),
+//   and chat.postMessage-to-DM (same as ephemeral). The
+//   chat.postMessage-with-task_card attempt failed validation
+//   outright. Streaming task_update is the documented, supported
+//   path for this visual.
 //
 //   The events route (bot replies to free-text questions) keeps using
-//   the carousel — it works there, and the horizontal layout fits
-//   alongside the agent's prose summary. Surface-specific choices.
+//   the carousel via chat.postMessage — it works there because the
+//   message has a parent (the user's question), and the horizontal
+//   layout fits alongside the agent's prose summary. Surface-specific
+//   choices.
 
 interface SlashCommandPayload {
   /** Token from the X-Slack-Signature dance. Already verified before this struct exists. */
@@ -223,6 +230,18 @@ async function handleMyAssignments(
     displayName: identity.appUserName,
   });
 
+  // 0-results case: skip the streaming dance entirely. There's nothing
+  // to render with task_update chunks, and the user gets faster
+  // feedback if we just tell them inline at the slash-command site.
+  if (result.chunks.length === 0) {
+    await postEphemeralSafe(web, {
+      channel: payload.channel_id,
+      user: payload.user_id,
+      text: result.text,
+    });
+    return;
+  }
+
   // Open (or look up the existing) DM channel between the bot and
   // the invoker. conversations.open is idempotent — Slack returns the
   // same channel id on subsequent calls. Costs ~50ms cold; nothing
@@ -241,22 +260,23 @@ async function handleMyAssignments(
     return;
   }
 
-  // Two parallel posts:
-  //   - Real reply with task_card blocks goes to the DM via
-  //     chat.postMessage. task_card uses `sources` for clickable
-  //     URLs, which Slack renders as native hyperlinks across every
-  //     surface — no interactivity acknowledgment needed.
-  //   - "Sent to your DMs →" ephemeral goes inline at the slash-command
-  //     site so the user gets immediate feedback that something
-  //     happened. Pure plain text — no blocks involved, so the
-  //     ephemeral surface handles it without issue.
-  // Doing them in parallel saves ~100ms vs sequential and the two
-  // calls don't depend on each other.
+  // Stream the task_update chunks into the DM, then post the inline
+  // ephemeral confirmation at the slash-command site. Both are
+  // best-effort — failures are logged but don't propagate, since
+  // we're inside an `after()` callback where throws become unhandled
+  // rejections.
+  //
+  // Order matters here: we open the stream FIRST, so by the time we
+  // post the "Sent to your DMs →" confirmation the message exists in
+  // the DM. The two calls run in parallel via Promise.all because they
+  // touch different channels and don't depend on each other.
   await Promise.all([
-    postDmMessageSafe(web, {
+    streamAssignmentsToDmSafe(web, {
       channel: dmChannel,
-      text: result.text,
-      blocks: result.blocks,
+      fallbackText: result.text,
+      chunks: result.chunks,
+      recipientTeamId: payload.team_id,
+      recipientUserId: payload.user_id,
     }),
     postEphemeralSafe(web, {
       channel: payload.channel_id,
@@ -293,55 +313,103 @@ interface PostEphemeralArgs {
   text: string;
 }
 
-interface PostDmArgs {
+interface StreamAssignmentsArgs {
+  /** DM channel id (D...) returned from conversations.open. */
   channel: string;
-  text: string;
-  blocks?: Block[];
+  /**
+   * Notification-fallback text. Used as the message-level `text` field
+   * via the markdown_text chunk that headers the streaming payload.
+   */
+  fallbackText: string;
+  /**
+   * Streaming chunks built upstream by myAssignments → buildAssignmentChunks.
+   * Already includes the markdown_text header as chunks[0], so the
+   * stream call doesn't need to set markdown_text separately.
+   */
+  chunks: AnyChunk[];
+  /**
+   * Recipient context. Required when starting a stream outside a DM,
+   * optional inside a DM — we pass them anyway because we have them
+   * for free from the slash-command payload and Slack ignores them
+   * when not needed.
+   */
+  recipientTeamId: string;
+  recipientUserId: string;
 }
 
-// chat.postMessage to a DM channel carrying the task_card list.
+// Stream the assignment list into a DM via Slack's chat.startStream
+// + chat.stopStream methods. Required for `task_update` chunks
+// (chat.postMessage rejects them with `invalid_blocks` — task_update
+// / task_card are streaming-only primitives).
 //
-// Why we prepend a `section` block carrying the message text:
-//   When `blocks` is set on chat.postMessage, Slack uses it for the
-//   visible message and treats the top-level `text` field purely as
-//   notification fallback (it never renders in the conversation).
-//   The leading section is the visible "Billy, you have N open
-//   assignments:" line above the task_card stack — without it the
-//   user would see only the cards with no header context.
+// Two-call shape:
+//   - chat.startStream  opens the streaming message AND attaches all
+//     the chunks (header + task_updates). Since we have the full
+//     payload up-front, we don't need chat.appendStream — opening
+//     with the chunks already attached saves a round-trip.
+//   - chat.stopStream   finalises the message so Slack's "streaming"
+//     loading indicator goes away. Without this the message stays
+//     in a perpetual loading state on clients.
 //
-//   The shape `[section, ...task_cards]` matches the user's reference
-//   Block Kit example and Slack's own task_card documentation.
-//
-// Disable link unfurling on the bot's own message so Slack doesn't
-// double up "card from blocks" + "link unfurl from text" for the
-// same task URL — the task_card sources already give the user a
-// click-through link.
-async function postDmMessageSafe(
+// Best-effort: any error is logged but never thrown. We're inside an
+// `after()` callback when this runs; an unhandled rejection would just
+// dangle. The Slack API surfaces logical errors as `{ ok: false, error:
+// '...' }` in the response body — those throw a `slack_webapi_platform_error`
+// from the SDK, which lands in the catch and gets logged with the
+// chunk count for diagnosis.
+async function streamAssignmentsToDmSafe(
   web: WebClient,
-  args: PostDmArgs,
+  args: StreamAssignmentsArgs,
 ): Promise<void> {
-  // No-blocks branch shouldn't really happen at this call site (the
-  // 0-results case takes the early-return path before we open a DM),
-  // but we handle it for completeness so the helper is safe to reuse.
-  const blocks =
-    args.blocks && args.blocks.length > 0
-      ? ([
-          { type: 'section', text: { type: 'mrkdwn', text: args.text } },
-          ...args.blocks,
-        ] as Block[])
-      : undefined;
-
+  let streamTs: string | null = null;
   try {
-    await web.chat.postMessage({
+    // Cast: @slack/web-api's TS type makes `thread_ts` required, but
+    // the actual API documents it as optional and we don't have a
+    // parent message — slash commands aren't replies to anything.
+    // Slack accepts the call without thread_ts; the SDK type is just
+    // overly strict (likely modelled off the assistant-message use
+    // case where threads always exist).
+    const startResp = await web.chat.startStream({
       channel: args.channel,
-      text: args.text,
-      ...(blocks ? { blocks } : {}),
-      unfurl_links: false,
-      unfurl_media: false,
+      recipient_team_id: args.recipientTeamId,
+      recipient_user_id: args.recipientUserId,
+      // task_display_mode: "timeline" renders each task as its own row
+      // (matches our /myassignments use case — independent items, no
+      // shared parent goal). "plan" would group them under a single
+      // unified-plan title which doesn't fit a personal task list.
+      task_display_mode: 'timeline',
+      chunks: args.chunks,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    streamTs = (startResp.ts as string | undefined) ?? null;
+  } catch (err) {
+    console.error('[slack/commands] chat.startStream failed', {
+      channel: args.channel,
+      chunk_count: args.chunks.length,
+      err,
+    });
+    return;
+  }
+
+  // Finalise. If startStream succeeded but didn't return a ts (would
+  // be surprising — Slack always returns one on ok=true), we skip
+  // stopStream rather than guess; Slack will eventually time out the
+  // stream on its own.
+  if (!streamTs) {
+    console.warn('[slack/commands] chat.startStream succeeded but no ts', {
+      channel: args.channel,
+    });
+    return;
+  }
+  try {
+    await web.chat.stopStream({
+      channel: args.channel,
+      ts: streamTs,
     });
   } catch (err) {
-    console.error('[slack/commands] chat.postMessage to DM failed', {
+    console.error('[slack/commands] chat.stopStream failed', {
       channel: args.channel,
+      ts: streamTs,
       err,
     });
   }
