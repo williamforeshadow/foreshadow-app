@@ -19,16 +19,19 @@ import styles from "./AiChat.module.css";
 
 // Same-origin link interception for the chat panel.
 // ---------------------------------------------------
-// The agent emits markdown links to in-app routes (e.g. a task overlay at
-// `/?view=tasks&task=<uuid>`) so users can jump from chat to the underlying
-// resource. By default react-markdown renders these as plain <a> tags, which
-// triggers a full page reload — collapsing the chat panel and dropping any
-// in-flight UI state.
+// The agent emits markdown links to in-app routes (e.g. a task page at
+// `/tasks/<uuid>`) so users can jump from chat to the underlying resource.
+// By default react-markdown renders these as plain <a> tags, which triggers
+// a full page reload — collapsing the chat panel and dropping any in-flight
+// UI state.
 //
 // `intoChatLink` checks the href and routes same-origin links through Next's
-// client router (preserving panel state and triggering the deep-link handler
-// in ReservationViewerProvider via the URL change). External links keep the
-// normal target="_blank" behaviour.
+// client router (preserving panel state). External links keep the normal
+// target="_blank" behaviour. URL form is irrelevant to this code; it works
+// for both the canonical `/tasks/<uuid>` shape and the legacy
+// `/?view=tasks&task=<uuid>` form (the latter still appears in older agent
+// chat history; ReservationViewerProvider's TaskDeepLinkSync auto-upgrades
+// it on navigation).
 function isSameOriginHref(href: string): boolean {
   if (!href) return false;
   if (href.startsWith("/")) return true;

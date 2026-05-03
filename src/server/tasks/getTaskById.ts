@@ -3,18 +3,22 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 // getTaskById / getTasksByIds — canonical single-task (and small-batch)
 // lookup used by every "show me this task" surface:
 //
-//   - GET /api/all-tasks/[id]      (in-app deep-link → overlay payload)
-//   - Slack link unfurl handler    (build a card per pasted task URL)
+//   - app/tasks/[id]/page.tsx     (dedicated task page — server-side fetch
+//                                   → SSR-rendered task body)
+//   - Slack link unfurl handler   (build a card per pasted task URL)
+//   - GET /api/all-tasks/[id]     (kept for external HTTP consumers; no
+//                                   first-party caller after the route
+//                                   migration)
 //
 // The shape mirrors a row from /api/all-tasks closely enough that the same
-// downstream consumers (e.g. ContextTaskDetailOverlay's OverlayTaskInput)
+// downstream consumers (e.g. PropertyTaskDetailOverlay's OverlayTaskInput)
 // keep working. JSON-heavy fields (form_metadata) are passed through as
 // `unknown`; callers that don't care can ignore them.
 //
 // Why a dedicated module: this query is slightly non-trivial (joins to
 // templates, departments, project_bins, reservations, task_assignments, and
-// project_comments aggregate) and needs to stay in sync between the route
-// and the unfurl path. Centralising avoids drift.
+// project_comments aggregate) and needs to stay in sync between every
+// caller. Centralising avoids drift.
 
 const TASK_SELECT = `
   id,

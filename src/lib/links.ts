@@ -1,16 +1,21 @@
 // Stable URL conventions for deep-linking into the app.
 //
-// Two consumers today:
+// Three consumers today:
 //   - The agent tools (find_tasks, create_task) attach a `task_url` to every
 //     row they return so the model can link into the app from any surface.
 //   - The Slack route uses the same shape; markdownToMrkdwn turns the
 //     resulting `[title](url)` into Slack's `<url|title>` automatically.
+//   - The dedicated `/tasks/[id]` route is the canonical render target —
+//     it does an SSR fetch via getTaskById and ships fully populated HTML,
+//     which sidesteps the SPA-shell hydration races that the legacy
+//     query-param form (`/?view=tasks&task=<uuid>`) was prone to in
+//     mobile webviews (Slack iOS in particular).
 //
 // Why a separate module: the path shape is the contract between the agent's
-// tool output and the in-app deep-link handler in
-// lib/reservationViewerContext.tsx. Centralising it keeps every renamer in
-// one place if we ever change the URL surface (e.g. /tasks/[id] instead of
-// query-param-based).
+// tool output, the in-app deep-link handler in
+// lib/reservationViewerContext.tsx, and the new /tasks/[id] route. Anyone
+// who needs to construct or recognise a Foreshadow task URL goes through
+// here, so a future URL change is a single-file edit.
 
 /**
  * Absolute base URL for the app, no trailing slash. Empty string when
@@ -23,14 +28,17 @@ export function getAppBaseUrl(): string {
 }
 
 /**
- * Path (no host) the in-app dashboard recognises as "open this task".
- * `view=tasks` puts the desktop dashboard on the Tasks tab so the overlay
- * lands over the right list; mobile ignores `view` and just opens the
- * overlay over whatever tab is showing. The `?task=` half is what
- * ReservationViewerProvider watches for.
+ * Path (no host) for the canonical task page. Renders via the
+ * `app/tasks/[id]/page.tsx` server component — auth-gated by the root
+ * layout, full SSR of the task body, no SPA-shell bootstrap required.
+ *
+ * Backward compatibility: parseTaskUrl below also recognises the legacy
+ * `/?view=tasks&task=<uuid>` shape that older Slack messages carry, and
+ * TaskDeepLinkSync auto-upgrades that form to this canonical path on
+ * navigation. New URLs the agent or Slack emits use this shape directly.
  */
 export function taskPath(taskId: string): string {
-  return `/?view=tasks&task=${encodeURIComponent(taskId)}`;
+  return `/tasks/${encodeURIComponent(taskId)}`;
 }
 
 /**
@@ -51,19 +59,29 @@ const UUID_RE =
 /**
  * Inverse of taskUrl: pulls a task UUID out of a Foreshadow task URL, or
  * returns null if the input doesn't look like one. Used by the Slack
- * link-unfurl handler to recognise our URLs in arbitrary messages.
+ * link-unfurl handler to recognise our URLs in arbitrary messages and by
+ * TaskDeepLinkSync to redirect legacy URLs forward.
  *
- * Validation rules:
+ * Recognises BOTH shapes:
+ *   - Canonical:  /tasks/<uuid>            (the form taskPath() emits today)
+ *   - Legacy:     /?view=tasks&task=<uuid> (the form Slack messages from
+ *                                            before the /tasks route had —
+ *                                            kept readable so old unfurls
+ *                                            still find their task and old
+ *                                            chats can keep linking)
+ *
+ * Validation rules (apply to both shapes):
  *   - The input must parse as an absolute URL.
  *   - When APP_BASE_URL is configured, the URL's host must match it. Slack's
  *     unfurl flow already filters by registered domain, but we re-check here
  *     so ad-hoc callers (e.g. scanning the bot's own reply for task links)
  *     can't accidentally unfurl URLs from other domains.
- *   - The `task` query param must be present and a well-formed UUID.
+ *   - The extracted id must be a well-formed UUID.
  *
- * Note: we deliberately don't require `view=tasks`. Older copies of the URL
- * (or third-party rewrites) sometimes drop or reorder query params; the
- * `task` UUID is the only piece the deep-link handler actually needs.
+ * Note: for the legacy form we deliberately don't require `view=tasks`.
+ * Older copies of the URL (or third-party rewrites) sometimes drop or
+ * reorder query params; the `task` UUID is the only piece the deep-link
+ * handler actually needs.
  */
 export function parseTaskUrl(input: string): { taskId: string } | null {
   if (!input) return null;
@@ -83,7 +101,16 @@ export function parseTaskUrl(input: string): { taskId: string } | null {
     }
     if (url.host !== baseUrl.host) return null;
   }
-  const taskId = url.searchParams.get('task');
-  if (!taskId || !UUID_RE.test(taskId)) return null;
-  return { taskId };
+  // Canonical /tasks/<uuid> — try the path first since that's what new URLs
+  // use. Trailing slash tolerated to match real-world copy/paste.
+  const pathMatch = url.pathname.match(/^\/tasks\/([^/]+)\/?$/);
+  if (pathMatch) {
+    const candidate = decodeURIComponent(pathMatch[1]);
+    if (UUID_RE.test(candidate)) return { taskId: candidate };
+    return null;
+  }
+  // Legacy /?view=tasks&task=<uuid>.
+  const legacyId = url.searchParams.get('task');
+  if (legacyId && UUID_RE.test(legacyId)) return { taskId: legacyId };
+  return null;
 }

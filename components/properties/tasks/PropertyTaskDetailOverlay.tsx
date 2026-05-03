@@ -38,11 +38,19 @@ import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
 // ("+ Task" button flow) stays in PropertyTasksView because it's entangled
 // with list-side state; we'll unify later.
 //
-// Layout: renders an absolute overlay anchored to the outer /properties
-// main column (which has `relative` on `app/properties/layout.tsx`), so it
-// spans from the top of the viewport (overriding the property header) down
-// to the bottom. Width is the right 1/3 of the main column, matching the
-// Bins detail panel aesthetic.
+// Layout (desktop, controlled by the `layout` prop):
+//   - 'overlay' (default): absolute right-1/3 panel anchored to the outer
+//     /properties main column (which has `relative` on
+//     `app/properties/layout.tsx`). Spans from the top of the viewport
+//     (overriding the property header) down to the bottom. Width matches
+//     the Bins detail panel.
+//   - 'page': full-bleed centered column (max-w-3xl). Used by the
+//     dedicated `/tasks/[id]` route so a deep-linked task gets its own
+//     page instead of an overlay over an unrelated dashboard.
+//
+// Mobile is identical for both modes — `MobileProjectDetail` is already
+// fixed inset-0 and owns its own chrome, so there's no overlay-vs-page
+// distinction there.
 
 // Minimal task shape the overlay needs. Schedule and Tasks ledger both
 // provide this same set of fields from their respective APIs.
@@ -82,12 +90,31 @@ interface PropertyTaskDetailOverlayProps {
   // list. Kept optional — Schedule doesn't strictly need a re-fetch on
   // every tweak since the calendar view is event-driven.
   onTaskUpdated?: () => void;
+  /**
+   * Visual mode for the desktop branch.
+   *   - 'overlay' (default): absolute right-1/3 panel — used when this
+   *     mounts inside a host page that already has its own content.
+   *   - 'page': full-bleed centered column — used by the dedicated
+   *     `/tasks/[id]` route. The "pop out to page" affordance is
+   *     auto-suppressed in this mode (we're already on the page).
+   * Mobile is unaffected by this prop.
+   */
+  layout?: 'overlay' | 'page';
+  /**
+   * Optional handler for the "open in dedicated page" button in the
+   * panel header. The button only renders when this is provided AND
+   * `layout === 'overlay'`. The wired-up callback typically does
+   * `router.push(taskPath(task.task_id))`.
+   */
+  onOpenInPage?: () => void;
 }
 
 export function PropertyTaskDetailOverlay({
   task,
   onClose,
   onTaskUpdated,
+  layout = 'overlay',
+  onOpenInPage,
 }: PropertyTaskDetailOverlayProps) {
   const { user: authUser, allUsers } = useAuth();
   const users = allUsers as unknown as User[];
@@ -537,6 +564,7 @@ export function PropertyTaskDetailOverlay({
         project={taskAsProject}
         users={users}
         onClose={onClose}
+        onOpenInPage={layout === 'overlay' ? onOpenInPage : undefined}
         onSave={async (_projectId, nextFields) => {
           await handleSaveFields(nextFields);
           return taskAsProject;
@@ -590,9 +618,21 @@ export function PropertyTaskDetailOverlay({
     );
   }
 
+  // Page mode wraps the panel in a centered, scrollable column instead of
+  // the right-1/3 absolute overlay. `flex flex-col h-full` lets the panel's
+  // own header/body internals keep their fixed-header / scrollable-body
+  // contract; the wrapper just constrains width and centers horizontally.
+  // The "open in dedicated page" button is suppressed in this mode since
+  // we're already on the dedicated page.
+  const desktopWrapperClass =
+    layout === 'page'
+      ? 'w-full h-full flex flex-col items-stretch overflow-hidden mx-auto max-w-3xl px-4 py-4'
+      : DESKTOP_DETAIL_PANEL_FLEX;
+  const showOpenInPage = layout === 'overlay' ? onOpenInPage : undefined;
+
   return (
     <>
-      <div className={DESKTOP_DETAIL_PANEL_FLEX}>
+      <div className={desktopWrapperClass}>
         <ProjectDetailPanel
           project={taskAsProject}
           editingFields={editingFields}
@@ -603,6 +643,7 @@ export function PropertyTaskDetailOverlay({
           onSave={handleSaveFields}
           onDelete={handleDeleteTask}
           onClose={onClose}
+          onOpenInPage={showOpenInPage}
           onOpenActivity={() => {}}
           onPropertyChange={handlePropertyChange}
           staffOpen={staffOpen}

@@ -23,6 +23,13 @@ interface MobileProjectDetailProps {
   project: Project;
   users: User[];
   onClose: () => void;
+  /**
+   * Optional "open in dedicated page" affordance for the mobile sheet
+   * header. When set, a small outward-arrow button appears next to
+   * Delete. Suppressed when this sheet IS the dedicated page (the
+   * `/tasks/[id]` route renders the mobile detail directly).
+   */
+  onOpenInPage?: () => void;
   onSave: (projectId: string, fields: ProjectFormFields) => Promise<Project | null>;
   onDelete?: (project: Project) => void;
   allProperties?: PropertyOption[];
@@ -71,6 +78,7 @@ export default function MobileProjectDetail({
   project,
   users,
   onClose,
+  onOpenInPage,
   onSave,
   onDelete,
   allProperties = [],
@@ -330,6 +338,18 @@ export default function MobileProjectDetail({
           <div className="flex items-center gap-2">
             {saving && (
               <span className="text-xs text-neutral-400">Saving...</span>
+            )}
+            {onOpenInPage && (
+              <button
+                onClick={onOpenInPage}
+                className="p-2 text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+                title="Open in dedicated page"
+                aria-label="Open in dedicated page"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 3h7v7m0-7L10 14m-1 7H5a2 2 0 01-2-2v-4" />
+                </svg>
+              </button>
             )}
             {onDelete && (
               <button
