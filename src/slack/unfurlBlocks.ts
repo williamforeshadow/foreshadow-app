@@ -225,6 +225,18 @@ export interface SlackCarouselBlock {
  * Same slim layout as taskUnfurl but expressed as one card object instead
  * of a list of section/context/actions blocks. The carousel itself wraps
  * up to 10 of these (Slack's per-carousel cap).
+ *
+ * Why the button has BOTH `url` and `action_id`:
+ *   `url` alone works in chat.postMessage (the events-route bot replies)
+ *   but is silently dropped from the rendered DOM in chat.postEphemeral
+ *   (the /myassignments slash-command path) — right-clicking the button
+ *   shows no context menu, meaning Slack didn't bind the URL at all.
+ *   Empirically, adding `action_id` alongside `url` is what convinces
+ *   Slack's ephemeral renderer to honour `url` for newer block types
+ *   like `card`-in-`carousel`. The action_id is otherwise inert here:
+ *   we don't have Interactivity enabled on the app, so Slack never POSTs
+ *   the click event anywhere — it's purely the presence of the field
+ *   that flips the URL handling on.
  */
 export function taskCard(task: TaskForUnfurl): SlackCardElement {
   const { title, subtitle, bodyLine } = computeCardFields(task);
@@ -256,6 +268,7 @@ export function taskCard(task: TaskForUnfurl): SlackCardElement {
         type: 'button',
         text: { type: 'plain_text', text: 'Open in Foreshadow', emoji: false },
         url: task.task_url,
+        action_id: `open_task_${task.task_id}`,
       },
     ],
   };
