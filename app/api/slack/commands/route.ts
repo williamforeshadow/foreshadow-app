@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { WebClient } from '@slack/web-api';
+import type { Block, MessageAttachment } from '@slack/types';
 import { verifySlackSignature } from '@/src/slack/verify';
 import { resolveSlackUser } from '@/src/slack/identity';
 import { runMyAssignments } from '@/src/slack/commands/myAssignments';
@@ -9,8 +10,7 @@ import { runMyAssignments } from '@/src/slack/commands/myAssignments';
 //
 // Slack slash-command webhook. Distinct from /api/slack/events because
 // slash commands ship as `application/x-www-form-urlencoded`, not JSON,
-// and use a separate response model (response_url for deferred replies
-// + an immediate 200 ack within 3 seconds).
+// and Slack expects a 200 ack within 3 seconds.
 //
 // Why slash commands skip the agent: the questions they answer ("what's
 // on my plate?", "queue me a turnover", etc.) are deterministic. We
@@ -33,23 +33,25 @@ import { runMyAssignments } from '@/src/slack/commands/myAssignments';
 //   3. Dispatch on `command`. Unknown commands return a 200 with an
 //      ephemeral "unknown command" — Slack treats anything else as a
 //      hard error and shows the user a generic failure message.
-//   4. Ack 200 immediately (within 3s) with an ephemeral "Working on it…"
-//      placeholder. The actual response is POSTed to response_url from
+//   4. Ack 200 immediately (within 3s) with an empty body. The actual
+//      reply lands a moment later via chat.postEphemeral, posted from
 //      `after()` so we never block the webhook.
 //
-// Response shape (both immediate and via response_url):
-//   {
-//     response_type: 'ephemeral' | 'in_channel',
-//     text: string,
-//     blocks?: [...],
-//     attachments?: [...],
-//     replace_original?: boolean   // true on response_url posts so the
-//                                  //  "Working on it…" placeholder gets
-//                                  //  swapped for the real reply
-//   }
+// Why chat.postEphemeral instead of response_url:
+//   The first cut of this route used response_url (the URL Slack hands
+//   us in the slash-command payload, designed exactly for this kind of
+//   followup). It returned HTTP 500 from hooks.slack.com whenever the
+//   payload included a `carousel` block — Slack's response_url
+//   transport hasn't caught up to the newer Block Kit types that
+//   chat.postMessage / chat.postEphemeral already support. Switching
+//   to chat.postEphemeral aligns this surface with the proven path
+//   the events route uses (chat.postMessage with carousel blocks),
+//   the only difference being "ephemeral" so only the invoker sees it.
 //
-// We use `ephemeral` (only the invoker sees it) by default — /myassignments
-// is personal information and doesn't need to spam the channel.
+// Tradeoff: there's no placeholder ("Looking up your open assignments…")
+// anymore — chat.postEphemeral can't replace a previous ephemeral
+// response, so the cleanest UX is a brief silent beat (typically
+// <500ms based on Vercel function timings) followed by the real reply.
 
 interface SlashCommandPayload {
   /** Token from the X-Slack-Signature dance. Already verified before this struct exists. */
@@ -61,16 +63,13 @@ interface SlashCommandPayload {
   command: string;
   /** Argument text after the command name. Empty string when none. */
   text: string;
-  /** One-shot URL for posting deferred replies. Valid for ~30 minutes. */
+  /**
+   * One-shot URL Slack hands us for posting deferred replies. Kept on
+   * the parsed payload type for completeness (and as a fallback if a
+   * future command needs it), but the /myassignments handler doesn't
+   * use it — see the header comment for why.
+   */
   response_url: string;
-}
-
-interface SlackResponseBody {
-  response_type: 'ephemeral' | 'in_channel';
-  text: string;
-  blocks?: unknown;
-  attachments?: unknown;
-  replace_original?: boolean;
 }
 
 export async function POST(req: NextRequest) {
@@ -115,38 +114,42 @@ export async function POST(req: NextRequest) {
 
   // Dispatch. Today there's only one command; new ones land here as
   // additional cases. Anything we don't recognise gets an ephemeral
-  // hint instead of a 404 — Slack renders 4xx as "the slash command
-  // failed", which reads worse than an in-channel "unknown command".
+  // hint via the immediate response (no chat.postEphemeral needed) —
+  // Slack renders this inline at the slash-command site.
   switch (payload.command) {
     case '/myassignments': {
       // Defer the actual work via after() so we ack within 3s. The
-      // immediate response is a placeholder; the real reply lands
-      // a moment later via response_url.
+      // immediate response is empty — Slack accepts that as "command
+      // received, no inline reply" — and the real reply arrives via
+      // chat.postEphemeral from the deferred work.
       after(async () => {
+        const web = new WebClient(botToken);
         try {
-          await handleMyAssignments(payload, botToken);
+          await handleMyAssignments(web, payload);
         } catch (err) {
           console.error('[slack/commands] /myassignments handler crashed', {
             user_id: payload.user_id,
             err,
           });
-          await postToResponseUrl(payload.response_url, {
-            response_type: 'ephemeral',
+          await postEphemeralSafe(web, {
+            channel: payload.channel_id,
+            user: payload.user_id,
             text: `Sorry — something went wrong running /myassignments. Try again in a moment.`,
-            replace_original: true,
           });
         }
       });
-      return NextResponse.json({
-        response_type: 'ephemeral',
-        text: 'Looking up your open assignments…',
-      } satisfies SlackResponseBody);
+      // Empty 200 ack. No placeholder text — see header comment for why.
+      return new NextResponse(null, { status: 200 });
     }
     default: {
+      // Inline ephemeral via the immediate response. This is the one
+      // place response_url-style inline replies still make sense:
+      // there's no Block Kit involved, just plain text, so the
+      // legacy transport handles it cleanly.
       return NextResponse.json({
         response_type: 'ephemeral',
         text: `Unknown command \`${payload.command}\`.`,
-      } satisfies SlackResponseBody);
+      });
     }
   }
 }
@@ -176,21 +179,19 @@ function parseSlashCommandPayload(rawBody: string): SlashCommandPayload | null {
 }
 
 async function handleMyAssignments(
+  web: WebClient,
   payload: SlashCommandPayload,
-  botToken: string,
 ): Promise<void> {
-  const web = new WebClient(botToken);
-
   // Resolve the invoker. Without an email match we can't link the
   // Slack account to a Foreshadow user, and /myassignments has no
   // useful answer in that case. We surface a friendly "ask Billy to
   // hook you up" message instead of running an empty query.
   const identity = await resolveSlackUser(web, payload.user_id);
   if (!identity) {
-    await postToResponseUrl(payload.response_url, {
-      response_type: 'ephemeral',
+    await postEphemeralSafe(web, {
+      channel: payload.channel_id,
+      user: payload.user_id,
       text: `I don't recognize this Slack account. Ask Billy to add your email to Foreshadow so I can connect you, then try again.`,
-      replace_original: true,
     });
     return;
   }
@@ -200,38 +201,52 @@ async function handleMyAssignments(
     displayName: identity.appUserName,
   });
 
-  await postToResponseUrl(payload.response_url, {
-    response_type: 'ephemeral',
+  await postEphemeralSafe(web, {
+    channel: payload.channel_id,
+    user: payload.user_id,
     text: result.text,
-    ...(result.blocks ? { blocks: result.blocks } : {}),
-    ...(result.attachments ? { attachments: result.attachments } : {}),
-    replace_original: true,
+    blocks: result.blocks,
+    attachments: result.attachments,
   });
 }
 
-// POST a JSON body to the slash-command response_url. Slack accepts up
-// to 5 followups within 30 minutes per response_url — plenty of headroom
-// for the simple ack → real-reply flow we use here. We log on failure
-// but don't throw because the caller is already in `after()` and there's
-// no useful place to surface the error.
-async function postToResponseUrl(
-  url: string,
-  body: SlackResponseBody,
+interface PostEphemeralArgs {
+  channel: string;
+  user: string;
+  text: string;
+  blocks?: Block[];
+  attachments?: MessageAttachment[];
+}
+
+// Thin wrapper around chat.postEphemeral that swallows + logs errors
+// instead of throwing. We're already inside `after()` when this runs,
+// so a throw would just become an unhandled rejection — better to log
+// and move on.
+//
+// Note: chat.postEphemeral ALSO requires the bot to be a member of the
+// invoking channel for non-DM cases. For DMs (channel id starts with
+// "D") that's automatic. For channels the bot has been invited to,
+// it works. For channels the bot ISN'T in, Slack returns
+// `channel_not_found` — the user just won't see the reply, which is
+// the same failure mode response_url had. Acceptable for now; if we
+// hit it in practice we can fall back to a DM via web.conversations.open.
+async function postEphemeralSafe(
+  web: WebClient,
+  args: PostEphemeralArgs,
 ): Promise<void> {
   try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
+    await web.chat.postEphemeral({
+      channel: args.channel,
+      user: args.user,
+      text: args.text,
+      ...(args.blocks ? { blocks: args.blocks } : {}),
+      ...(args.attachments ? { attachments: args.attachments } : {}),
     });
-    if (!res.ok) {
-      const responseText = await res.text().catch(() => '<unreadable>');
-      console.error('[slack/commands] response_url POST failed', {
-        status: res.status,
-        responseText,
-      });
-    }
   } catch (err) {
-    console.error('[slack/commands] response_url POST threw', { err });
+    console.error('[slack/commands] chat.postEphemeral failed', {
+      channel: args.channel,
+      user: args.user,
+      err,
+    });
   }
 }
