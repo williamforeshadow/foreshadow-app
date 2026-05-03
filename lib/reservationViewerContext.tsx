@@ -2,6 +2,7 @@
 
 import React, {
   createContext,
+  Suspense,
   useCallback,
   useContext,
   useEffect,
@@ -110,10 +111,6 @@ export function ReservationViewerProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
   const [modalReservationId, setModalReservationId] = useState<string | null>(
     null
   );
@@ -200,98 +197,6 @@ export function ReservationViewerProvider({
       );
   }, [modalReservationId]);
 
-  // ---- ?task=<uuid> deep-link plumbing ---------------------------------
-  //
-  // Lets the agent (Slack + in-app chat) link straight to a task overlay.
-  // The contract is one-way URL → overlay:
-  //   1. When ?task=<uuid> appears in the URL, fetch the row from
-  //      /api/all-tasks/[id] and call setSelectedTaskExclusive. The
-  //      overlay self-mounts via the surface's <ContextTaskDetailOverlay/>.
-  //   2. When the overlay closes (selectedTask flips to null) and the URL
-  //      still carries the param, strip it so refresh / back doesn't
-  //      re-pop the panel and so the URL stays meaningful for sharing.
-  //   3. If the fetch fails (deleted task, bad uuid), clear the URL too —
-  //      a stale ?task=bogus would otherwise stick around forever.
-  //
-  // Surface-local task selection (e.g. clicking a row inside TasksWindow
-  // or MobileTasksView) does NOT go through the global context, so the
-  // URL stays clean for those gestures. Only the deep-link path uses it.
-  const taskParam = searchParams?.get('task') ?? null;
-  // Tracks the param value we last reacted to. Prevents the clear-URL
-  // effect from firing on params we didn't open ourselves, and lets us
-  // no-op when the URL is already in sync with state.
-  const lastHandledTaskParamRef = useRef<string | null>(null);
-
-  const clearTaskParamFromUrl = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    if (!params.has('task')) return;
-    params.delete('task');
-    const qs = params.toString();
-    const path = pathname || window.location.pathname;
-    const href = qs ? `${path}?${qs}` : path;
-    lastHandledTaskParamRef.current = null;
-    router.replace(href as any, { scroll: false });
-  }, [pathname, router]);
-
-  // (1) URL → overlay. Fetch when a new task id appears.
-  useEffect(() => {
-    if (!taskParam) {
-      lastHandledTaskParamRef.current = null;
-      return;
-    }
-    // Already showing this exact task — nothing to do (e.g. effect re-ran
-    // because of a non-task query-param change).
-    if (selectedTask?.task_id === taskParam) {
-      lastHandledTaskParamRef.current = taskParam;
-      return;
-    }
-    let cancelled = false;
-    lastHandledTaskParamRef.current = taskParam;
-    fetch(`/api/all-tasks/${taskParam}`)
-      .then(async (res) => {
-        const body = await res.json();
-        if (!res.ok) {
-          throw new Error(body?.error || 'task lookup failed');
-        }
-        return body as { data: OverlayTaskInput };
-      })
-      .then((body) => {
-        if (cancelled) return;
-        if (body?.data) {
-          // setSelectedTaskExclusive clears any open reservation panel as
-          // part of the swap, so deep-linking can't double-stack overlays.
-          setSelectedTaskExclusive(body.data);
-        }
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.warn('[ReservationViewer] deep-link task fetch failed', {
-          taskId: taskParam,
-          err,
-        });
-        // (3) Strip the dud param so the URL doesn't carry it forever.
-        clearTaskParamFromUrl();
-      });
-    return () => {
-      cancelled = true;
-    };
-    // selectedTask intentionally omitted: re-running this effect when the
-    // user closes the overlay would immediately re-open it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskParam, setSelectedTaskExclusive, clearTaskParamFromUrl]);
-
-  // (2) Overlay close → URL cleanup. When selectedTask drops to null but
-  // the URL still has a task param we opened, strip it. Surface-local
-  // filter params are rewritten by the owning view's own URL-sync
-  // effects, so we only touch the `task` key here.
-  useEffect(() => {
-    if (selectedTask) return;
-    if (!taskParam) return;
-    if (lastHandledTaskParamRef.current !== taskParam) return;
-    clearTaskParamFromUrl();
-  }, [selectedTask, taskParam, clearTaskParamFromUrl]);
-
   const value = useMemo<ReservationViewerContextValue>(
     () => ({
       open,
@@ -322,9 +227,124 @@ export function ReservationViewerProvider({
 
   return (
     <ReservationViewerContext.Provider value={value}>
+      {/* Deep-link bridge lives inside the provider so it can read context.
+          Wrapped in <Suspense> because it calls useSearchParams() — Next 16
+          requires that for the static prerender bailout (e.g. /_not-found
+          inherits the root layout, which mounts this provider). The bridge
+          renders nothing visible; it's effects-only. */}
+      <Suspense fallback={null}>
+        <TaskDeepLinkSync />
+      </Suspense>
       {children}
     </ReservationViewerContext.Provider>
   );
+}
+
+// ---- ?task=<uuid> deep-link plumbing ---------------------------------
+//
+// Lets the agent (Slack + in-app chat) link straight to a task overlay.
+// The contract is one-way URL → overlay:
+//   1. When ?task=<uuid> appears in the URL, fetch the row from
+//      /api/all-tasks/[id] and call setSelectedTask on the context. The
+//      overlay self-mounts via the surface's <ContextTaskDetailOverlay/>.
+//   2. When the overlay closes (selectedTask flips to null) and the URL
+//      still carries the param we opened, strip it so refresh / back
+//      doesn't re-pop the panel and so URLs stay meaningful for sharing.
+//   3. If the fetch fails (deleted task, bad uuid), clear the URL too —
+//      a stale ?task=bogus would otherwise stick around forever.
+//
+// Surface-local task selection (e.g. clicking a row inside TasksWindow
+// or MobileTasksView) does NOT go through the global context, so the
+// URL stays clean for those gestures. Only the deep-link path uses it.
+//
+// Lives in its own component (rather than inline in the provider body)
+// because useSearchParams() requires a <Suspense> boundary in Next 16's
+// static-prerender pipeline. Splitting it out lets the provider stay
+// universally mountable while keeping the URL-sensitive bits behind the
+// boundary.
+function TaskDeepLinkSync() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { selectedTask, setSelectedTask } = useReservationViewer();
+
+  const taskParam = searchParams?.get('task') ?? null;
+  // Tracks the param value we last reacted to. Prevents the clear-URL
+  // effect from firing on params we didn't open ourselves, and lets us
+  // no-op when the URL is already in sync with state.
+  const lastHandledTaskParamRef = useRef<string | null>(null);
+
+  const clearTaskParamFromUrl = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('task')) return;
+    params.delete('task');
+    const qs = params.toString();
+    const path = pathname || window.location.pathname;
+    const href = qs ? `${path}?${qs}` : path;
+    lastHandledTaskParamRef.current = null;
+    router.replace(href as any, { scroll: false });
+  }, [pathname, router]);
+
+  // (1) URL → overlay. Fetch when a new task id appears.
+  useEffect(() => {
+    if (!taskParam) {
+      lastHandledTaskParamRef.current = null;
+      return;
+    }
+    // Already showing this exact task — nothing to do.
+    if (selectedTask?.task_id === taskParam) {
+      lastHandledTaskParamRef.current = taskParam;
+      return;
+    }
+    let cancelled = false;
+    lastHandledTaskParamRef.current = taskParam;
+    fetch(`/api/all-tasks/${taskParam}`)
+      .then(async (res) => {
+        const body = await res.json();
+        if (!res.ok) {
+          throw new Error(body?.error || 'task lookup failed');
+        }
+        return body as { data: OverlayTaskInput };
+      })
+      .then((body) => {
+        if (cancelled) return;
+        if (body?.data) {
+          // setSelectedTask is exclusive (clears any open reservation
+          // panel as part of the swap), so deep-linking can't
+          // double-stack overlays.
+          setSelectedTask(body.data);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn('[ReservationViewer] deep-link task fetch failed', {
+          taskId: taskParam,
+          err,
+        });
+        // (3) Strip the dud param so the URL doesn't carry it forever.
+        clearTaskParamFromUrl();
+      });
+    return () => {
+      cancelled = true;
+    };
+    // selectedTask intentionally omitted: re-running this effect when the
+    // user closes the overlay would immediately re-open it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskParam, setSelectedTask, clearTaskParamFromUrl]);
+
+  // (2) Overlay close → URL cleanup. When selectedTask drops to null but
+  // the URL still has a task param we opened, strip it. Surface-local
+  // filter params are rewritten by the owning view's own URL-sync
+  // effects, so we only touch the `task` key here.
+  useEffect(() => {
+    if (selectedTask) return;
+    if (!taskParam) return;
+    if (lastHandledTaskParamRef.current !== taskParam) return;
+    clearTaskParamFromUrl();
+  }, [selectedTask, taskParam, clearTaskParamFromUrl]);
+
+  return null;
 }
 
 /**
