@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import ReactMarkdown from "react-markdown";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import { useRouter } from "next/navigation";
 import {
   ArrowUp,
   ChevronDown,
@@ -16,6 +17,40 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import styles from "./AiChat.module.css";
 
+// Same-origin link interception for the chat panel.
+// ---------------------------------------------------
+// The agent emits markdown links to in-app routes (e.g. a task overlay at
+// `/?view=tasks&task=<uuid>`) so users can jump from chat to the underlying
+// resource. By default react-markdown renders these as plain <a> tags, which
+// triggers a full page reload — collapsing the chat panel and dropping any
+// in-flight UI state.
+//
+// `intoChatLink` checks the href and routes same-origin links through Next's
+// client router (preserving panel state and triggering the deep-link handler
+// in ReservationViewerProvider via the URL change). External links keep the
+// normal target="_blank" behaviour.
+function isSameOriginHref(href: string): boolean {
+  if (!href) return false;
+  if (href.startsWith("/")) return true;
+  if (typeof window === "undefined") return false;
+  try {
+    return new URL(href, window.location.origin).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+function toRelativeHref(href: string): string {
+  if (href.startsWith("/")) return href;
+  if (typeof window === "undefined") return href;
+  try {
+    const u = new URL(href, window.location.origin);
+    return `${u.pathname}${u.search}${u.hash}`;
+  } catch {
+    return href;
+  }
+}
+
 interface Message {
   id: string;
   role: "user" | "assistant";
@@ -24,6 +59,7 @@ interface Message {
 
 export function AiChat() {
   const { user } = useAuth();
+  const router = useRouter();
   const [inputValue, setInputValue] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -31,6 +67,59 @@ export function AiChat() {
   const [showMessages, setShowMessages] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Markdown component overrides. Custom <a> intercepts internal links so a
+  // task deep-link from the agent does client-side navigation (preserving
+  // chat panel state) instead of a hard reload. External links keep the
+  // standard new-tab behaviour.
+  const handleInternalNav = useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+      // Respect modifier-clicks (open in new tab/window) and middle-clicks.
+      if (
+        e.defaultPrevented ||
+        e.button !== 0 ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.shiftKey ||
+        e.altKey
+      ) {
+        return;
+      }
+      e.preventDefault();
+      router.push(toRelativeHref(href) as any);
+    },
+    [router],
+  );
+
+  const markdownComponents = useMemo<Components>(
+    () => ({
+      a: ({ href, children, ...rest }) => {
+        const safeHref = href ?? "";
+        if (isSameOriginHref(safeHref)) {
+          return (
+            <a
+              {...rest}
+              href={safeHref}
+              onClick={(e) => handleInternalNav(e, safeHref)}
+            >
+              {children}
+            </a>
+          );
+        }
+        return (
+          <a
+            {...rest}
+            href={safeHref}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {children}
+          </a>
+        );
+      },
+    }),
+    [handleInternalNav],
+  );
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -155,7 +244,9 @@ export function AiChat() {
                 <div className={styles.messageContent}>
                   {msg.role === "assistant" ? (
                     <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-3 prose-ul:my-2 prose-li:my-0.5">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      <ReactMarkdown components={markdownComponents}>
+                        {msg.content}
+                      </ReactMarkdown>
                     </div>
                   ) : (
                     <p>{msg.content}</p>

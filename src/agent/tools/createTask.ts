@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { createTask as createTaskService } from '@/src/server/tasks/createTask';
 import { consumeCreateTaskToken } from '@/src/server/tasks/createTaskConfirmation';
+import { taskUrl } from '@/src/lib/links';
 import type { ToolDefinition, ToolMeta, ToolResult } from './types';
 
 // create_task — second half of the two-step write protocol for tasks.
@@ -53,6 +54,12 @@ export interface CreatedTaskRow {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  /**
+   * Deep link to the new task. Mirrors find_tasks.task_url so the model can
+   * confirm a successful creation with a clickable link. Absolute when
+   * APP_BASE_URL is configured (required for Slack); relative otherwise.
+   */
+  task_url: string;
 }
 
 async function handler(input: Input): Promise<ToolResult<CreatedTaskRow>> {
@@ -141,6 +148,7 @@ async function handler(input: Input): Promise<ToolResult<CreatedTaskRow>> {
     created_at: t.created_at,
     updated_at: t.updated_at,
     completed_at: t.completed_at,
+    task_url: taskUrl(t.task_id),
   };
 
   const meta: ToolMeta = { returned: 1, limit: 1, truncated: false };

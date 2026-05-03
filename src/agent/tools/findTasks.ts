@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { taskUrl } from '@/src/lib/links';
 import type { ToolDefinition, ToolError, ToolMeta, ToolResult } from './types';
 
 // find_tasks — discover/list operational tasks.
@@ -186,6 +187,14 @@ export interface TaskRow {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  /**
+   * Deep link to this task in the Foreshadow app. Absolute when APP_BASE_URL
+   * is configured (required for Slack); falls back to a relative path when
+   * not set (still works in the in-app chat). The model is expected to
+   * surface this as a markdown link so users can jump from chat to the task
+   * overlay.
+   */
+  task_url: string;
 }
 
 const SELECT = `
@@ -661,6 +670,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
       created_at: task.created_at,
       updated_at: task.updated_at,
       completed_at: task.completed_at ?? null,
+      task_url: taskUrl(task.id),
     };
   });
 
