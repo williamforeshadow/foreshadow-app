@@ -34,24 +34,35 @@ import { runMyAssignments } from '@/src/slack/commands/myAssignments';
 //      ephemeral "unknown command" — Slack treats anything else as a
 //      hard error and shows the user a generic failure message.
 //   4. Ack 200 immediately (within 3s) with an empty body. The actual
-//      reply lands a moment later via chat.postEphemeral, posted from
-//      `after()` so we never block the webhook.
+//      reply lands a moment later, posted from `after()` so we never
+//      block the webhook.
 //
-// Why chat.postEphemeral instead of response_url:
-//   The first cut of this route used response_url (the URL Slack hands
-//   us in the slash-command payload, designed exactly for this kind of
-//   followup). It returned HTTP 500 from hooks.slack.com whenever the
-//   payload included a `carousel` block — Slack's response_url
-//   transport hasn't caught up to the newer Block Kit types that
-//   chat.postMessage / chat.postEphemeral already support. Switching
-//   to chat.postEphemeral aligns this surface with the proven path
-//   the events route uses (chat.postMessage with carousel blocks),
-//   the only difference being "ephemeral" so only the invoker sees it.
+// Where the reply lands (and why):
+//   /myassignments DMs the user with a `chat.postMessage` carrying the
+//   carousel of task cards, plus a small ephemeral "Sent to your DMs →"
+//   confirmation at the slash-command site.
 //
-// Tradeoff: there's no placeholder ("Looking up your open assignments…")
-// anymore — chat.postEphemeral can't replace a previous ephemeral
-// response, so the cleanest UX is a brief silent beat (typically
-// <500ms based on Vercel function timings) followed by the real reply.
+//   Earlier iterations tried response_url and chat.postEphemeral with
+//   the carousel inline. Both surfaces have known gaps for `card.actions[]`
+//   buttons inside `carousel` blocks:
+//     - response_url returned HTTP 500 from hooks.slack.com on every
+//       payload with a carousel block — Slack's legacy followup
+//       transport hasn't picked up the newer Block Kit shapes.
+//     - chat.postEphemeral RENDERS the carousel correctly, but the
+//       "Open in Foreshadow" button never opens the URL on click,
+//       even with Interactivity enabled and our /api/slack/interactivity
+//       endpoint receiving + acking 200. The same blocks via
+//       chat.postMessage open the URL fine, so it's a Slack platform
+//       gap on the ephemeral surface specifically. We confirmed in
+//       Vercel logs that Slack DOES POST to interactivity on the
+//       click — it just declines to navigate the URL afterward.
+//
+//   Pivoting to a DM via chat.postMessage uses the same proven
+//   transport the events-route bot replies use (carousel + url
+//   buttons proven working). UX-wise it also fits "personal info"
+//   commands better — the reply is private, scrollable, and lives
+//   in a stable place the user can return to. Linear / Asana / GitHub
+//   all use this exact pattern for their personal-info slash commands.
 
 interface SlashCommandPayload {
   /** Token from the X-Slack-Signature dance. Already verified before this struct exists. */
@@ -121,7 +132,8 @@ export async function POST(req: NextRequest) {
       // Defer the actual work via after() so we ack within 3s. The
       // immediate response is empty — Slack accepts that as "command
       // received, no inline reply" — and the real reply arrives via
-      // chat.postEphemeral from the deferred work.
+      // chat.postMessage to a DM (with an inline ephemeral "Sent to
+      // your DMs →" confirmation alongside) from the deferred work.
       after(async () => {
         const web = new WebClient(botToken);
         try {
@@ -131,6 +143,10 @@ export async function POST(req: NextRequest) {
             user_id: payload.user_id,
             err,
           });
+          // Crash fallback uses the inline ephemeral surface — plain
+          // text, no blocks, ephemeral handles that fine. The user
+          // sees the failure where they typed the command, which is
+          // the most discoverable place for an error message.
           await postEphemeralSafe(web, {
             channel: payload.channel_id,
             user: payload.user_id,
@@ -138,7 +154,6 @@ export async function POST(req: NextRequest) {
           });
         }
       });
-      // Empty 200 ack. No placeholder text — see header comment for why.
       return new NextResponse(null, { status: 200 });
     }
     default: {
@@ -184,8 +199,10 @@ async function handleMyAssignments(
 ): Promise<void> {
   // Resolve the invoker. Without an email match we can't link the
   // Slack account to a Foreshadow user, and /myassignments has no
-  // useful answer in that case. We surface a friendly "ask Billy to
-  // hook you up" message instead of running an empty query.
+  // useful answer in that case. The "I don't recognize you" reply
+  // goes back as an inline ephemeral at the slash-command site —
+  // it's plain text only (no carousel), so ephemeral is fine here
+  // and it's more discoverable than DMing a confused user.
   const identity = await resolveSlackUser(web, payload.user_id);
   if (!identity) {
     await postEphemeralSafe(web, {
@@ -201,13 +218,67 @@ async function handleMyAssignments(
     displayName: identity.appUserName,
   });
 
-  await postEphemeralSafe(web, {
-    channel: payload.channel_id,
-    user: payload.user_id,
-    text: result.text,
-    blocks: result.blocks,
-    attachments: result.attachments,
-  });
+  // Open (or look up the existing) DM channel between the bot and
+  // the invoker. conversations.open is idempotent — Slack returns the
+  // same channel id on subsequent calls. Costs ~50ms cold; nothing
+  // when warm.
+  const dmChannel = await openDmChannel(web, payload.user_id);
+  if (!dmChannel) {
+    // DM open failed — surface a fallback ephemeral so the user knows
+    // the command ran but we couldn't deliver. This shouldn't happen
+    // in practice (bot has im:write scope and the invoker is the same
+    // user), but logging the failure mode makes it diagnosable.
+    await postEphemeralSafe(web, {
+      channel: payload.channel_id,
+      user: payload.user_id,
+      text: `Sorry — I couldn't open a DM with you. Try messaging me directly first, then re-run /myassignments.`,
+    });
+    return;
+  }
+
+  // Two parallel posts:
+  //   - Real reply with cards goes to the DM (chat.postMessage,
+  //     proven to render carousel + url buttons correctly).
+  //   - "Sent to your DMs →" ephemeral goes inline at the slash-command
+  //     site so the user gets immediate feedback that something
+  //     happened. Pure plain text — no blocks involved, so the
+  //     ephemeral surface handles it without issue.
+  // Doing them in parallel saves ~100ms vs sequential and the two
+  // calls don't depend on each other.
+  await Promise.all([
+    postDmMessageSafe(web, {
+      channel: dmChannel,
+      text: result.text,
+      blocks: result.blocks,
+      attachments: result.attachments,
+    }),
+    postEphemeralSafe(web, {
+      channel: payload.channel_id,
+      user: payload.user_id,
+      text: `Sent to your DMs →`,
+    }),
+  ]);
+}
+
+// Open a DM channel with the given Slack user. Returns the channel id
+// (a "D..." string) or null if the open call failed. We pull this out
+// to keep handleMyAssignments readable; the fallback messaging when
+// DM-open fails belongs to the caller.
+async function openDmChannel(
+  web: WebClient,
+  slackUserId: string,
+): Promise<string | null> {
+  try {
+    const conv = await web.conversations.open({ users: slackUserId });
+    const id = conv.channel?.id;
+    return typeof id === 'string' && id.length > 0 ? id : null;
+  } catch (err) {
+    console.error('[slack/commands] conversations.open failed', {
+      slackUserId,
+      err,
+    });
+    return null;
+  }
 }
 
 interface PostEphemeralArgs {
@@ -218,18 +289,48 @@ interface PostEphemeralArgs {
   attachments?: MessageAttachment[];
 }
 
+interface PostDmArgs {
+  channel: string;
+  text: string;
+  blocks?: Block[];
+  attachments?: MessageAttachment[];
+}
+
+// chat.postMessage to a DM channel. Same transport the events route
+// uses for bot replies — proven path for carousel + url buttons. We
+// disable link unfurling on the bot's own message so Slack doesn't
+// double up "card from blocks" + "link unfurl from text" for the same
+// task URL.
+async function postDmMessageSafe(
+  web: WebClient,
+  args: PostDmArgs,
+): Promise<void> {
+  try {
+    await web.chat.postMessage({
+      channel: args.channel,
+      text: args.text,
+      ...(args.blocks ? { blocks: args.blocks } : {}),
+      ...(args.attachments ? { attachments: args.attachments } : {}),
+      unfurl_links: false,
+      unfurl_media: false,
+    });
+  } catch (err) {
+    console.error('[slack/commands] chat.postMessage to DM failed', {
+      channel: args.channel,
+      err,
+    });
+  }
+}
+
 // Thin wrapper around chat.postEphemeral that swallows + logs errors
 // instead of throwing. We're already inside `after()` when this runs,
 // so a throw would just become an unhandled rejection — better to log
 // and move on.
 //
-// Note: chat.postEphemeral ALSO requires the bot to be a member of the
-// invoking channel for non-DM cases. For DMs (channel id starts with
-// "D") that's automatic. For channels the bot has been invited to,
-// it works. For channels the bot ISN'T in, Slack returns
-// `channel_not_found` — the user just won't see the reply, which is
-// the same failure mode response_url had. Acceptable for now; if we
-// hit it in practice we can fall back to a DM via web.conversations.open.
+// Used for the inline "Sent to your DMs →" confirmation and for the
+// plain-text fallback messages (unrecognised user, DM-open failure).
+// Carousel-bearing replies don't go through here anymore; they go via
+// postDmMessageSafe.
 async function postEphemeralSafe(
   web: WebClient,
   args: PostEphemeralArgs,
