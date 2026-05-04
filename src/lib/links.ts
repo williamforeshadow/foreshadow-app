@@ -24,7 +24,15 @@
  */
 export function getAppBaseUrl(): string {
   const raw = process.env.APP_BASE_URL ?? '';
-  return raw.replace(/\/+$/, '');
+  // trim() before the trailing-slash strip: Vercel env-var inputs
+  // silently preserve leading/trailing whitespace (newlines, spaces,
+  // tabs) when pasted with one. Once whitespace gets into the base
+  // URL, any consumer that embeds it in Slack mrkdwn link syntax
+  // (`<url|label>`) breaks — Slack's parser rejects URLs with
+  // embedded whitespace and falls back to rendering the literal
+  // `<url|label>` text. Belt-and-suspenders defence: trim here so a
+  // dirty env var can't silently corrupt every downstream link.
+  return raw.trim().replace(/\/+$/, '');
 }
 
 /**
