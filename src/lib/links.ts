@@ -61,6 +61,34 @@ export function taskUrl(taskId: string): string {
   return base ? `${base}${path}` : path;
 }
 
+/**
+ * Path (no host) for the in-app My Assignments page.
+ *
+ * Single source of truth for `/assignments` so a future route rename is
+ * one edit. Mirrors the taskPath / taskUrl pair so callers compose the
+ * absolute form via assignmentsUrl() when they need a Slack-clickable link.
+ */
+export function assignmentsPath(): string {
+  return '/assignments';
+}
+
+/**
+ * Absolute URL for the My Assignments page, or null when APP_BASE_URL
+ * isn't configured.
+ *
+ * Returns null (not the relative path) deliberately: this helper is
+ * used by the Slack /myassignments command to build a "go to the
+ * page" mrkdwn link, and Slack's `<url|label>` syntax silently
+ * breaks when given a relative URL — the link renders as bare text
+ * instead of a hyperlink. Callers can null-check and skip emitting
+ * the link rather than ship something visibly broken.
+ */
+export function assignmentsUrl(): string | null {
+  const base = getAppBaseUrl();
+  if (!base) return null;
+  return `${base}${assignmentsPath()}`;
+}
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

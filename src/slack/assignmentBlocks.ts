@@ -1,24 +1,38 @@
 import type { Block, KnownBlock } from '@slack/types';
 import type { TaskByIdRow } from '@/src/server/tasks/getTaskById';
+import { assignmentsUrl } from '@/src/lib/links';
 import { OPEN_BUTTON_LABEL, type SlackCardElement } from './unfurlBlocks';
 
 // Block Kit builder for the /myassignments slash-command response.
 //
 // Visual — TWO modes, gated on count:
 //
-//   1) ≤ MAX_ASSIGNMENT_CARDS tasks → header + one top-level `card`
-//      block per assignment:
+//   1) ≤ MAX_ASSIGNMENT_CARDS tasks → header + context-link + one
+//      top-level `card` block per assignment:
 //        - title    = task title (mrkdwn, bold)
 //        - subtitle = property name, or "No property" when neither
 //                     property_name nor bin_name is set
 //        - actions  = single "↗" button → task URL
 //
-//   2) > MAX_ASSIGNMENT_CARDS tasks → header + a single `section` block
-//      with a Unicode bullet list, one task per line, each line a
-//      Slack mrkdwn link `• <url|Title>`. No cards, no buttons. This
-//      mirrors how the agent's prose responses already enumerate task
-//      results (markdownToMrkdwn turns "- [Title](url)" into the same
-//      "• <url|Title>" shape — see src/slack/format.ts).
+//   2) > MAX_ASSIGNMENT_CARDS tasks → header + context-link + a single
+//      `section` block with a Unicode bullet list, one task per line,
+//      each line a Slack mrkdwn link `• <url|Title>`. No cards, no
+//      buttons. This mirrors how the agent's prose responses already
+//      enumerate task results (markdownToMrkdwn turns "- [Title](url)"
+//      into the same "• <url|Title>" shape — see src/slack/format.ts).
+//
+// Header + context-link (shared by both modes):
+//   - The header block uses `level: 1` for max visual prominence
+//     (Slack's documented header sizes are 1=largest, 2=default,
+//     3=smallest). `level` isn't in @slack/types' HeaderBlock yet, so
+//     we cast through Block at the boundary; if Slack ignores the
+//     field we just get the default-size header (no harm).
+//   - Below the header sits a single `context` block with a small
+//     mrkdwn link to the in-app My Assignments page (`/assignments`).
+//     This gives the user a one-tap path to the full UI without
+//     stealing the header's typography. Skipped entirely when
+//     APP_BASE_URL is unset (assignmentsUrl() returns null) so we
+//     don't ship a broken-looking relative-URL link.
 //
 // Why two modes:
 //   The card layout looks great at small counts but visually overwhelms
@@ -61,6 +75,7 @@ import { OPEN_BUTTON_LABEL, type SlackCardElement } from './unfurlBlocks';
 
 const HEADER_TEXT = 'My Assignments';
 const NO_PROPERTY_LABEL = 'No property';
+const PAGE_LINK_LABEL = `Open My Assignments page ${OPEN_BUTTON_LABEL}`;
 // Threshold between cards mode and bullet-list mode. Matches the
 // MAX_CAROUSEL_CARDS constant in unfurl.ts so both surfaces (agent
 // path + /myassignments) switch to the lightweight bullet rendering
@@ -76,14 +91,46 @@ function escapeMrkdwn(s: string): string {
 }
 
 /**
- * The "My Assignments" header block. Rendered as a single h-style
- * line at the top of the ephemeral. Plain text only (header blocks
- * don't accept mrkdwn — the field literally requires `plain_text`).
+ * The "My Assignments" header block. Rendered as the page-title-style
+ * line at the top of the ephemeral.
+ *
+ * `level: 1` requests Slack's largest header size (1=largest,
+ * 2=default, 3=smallest). The field isn't in @slack/types'
+ * HeaderBlock interface yet — we widen the return type to Block and
+ * cast at the boundary. Slack tolerates unknown fields gracefully:
+ * if a future API change drops `level`, the header still renders at
+ * the default size.
+ *
+ * Header text stays plain_text — Slack's header block does not parse
+ * mrkdwn link syntax, so we can't make the title itself a hyperlink
+ * (the assignmentPageLinkContextBlock below carries the click target
+ * for the My Assignments page instead).
  */
-export function assignmentHeaderBlock(): KnownBlock {
+export function assignmentHeaderBlock(): Block {
   return {
     type: 'header',
     text: { type: 'plain_text', text: HEADER_TEXT, emoji: true },
+    level: 1,
+  } as unknown as Block;
+}
+
+/**
+ * Small context block sitting directly under the header, carrying a
+ * mrkdwn link to the in-app My Assignments page.
+ *
+ * Returns null when APP_BASE_URL is unset so callers can simply skip
+ * the row rather than emit a broken relative-URL link (Slack's
+ * `<url|label>` syntax requires absolute URLs to render as a
+ * hyperlink — relative paths render as bare text).
+ */
+export function assignmentPageLinkContextBlock(): KnownBlock | null {
+  const url = assignmentsUrl();
+  if (!url) return null;
+  return {
+    type: 'context',
+    elements: [
+      { type: 'mrkdwn', text: `<${url}|${PAGE_LINK_LABEL}>` },
+    ],
   };
 }
 
@@ -163,23 +210,29 @@ export function assignmentBulletSectionBlock(
 /**
  * Compose the full block list for a /myassignments response.
  *
- * Two modes (see file-top doc comment for the rationale):
- *   - ≤ MAX_ASSIGNMENT_CARDS → header + one top-level `card` per task
- *   - > MAX_ASSIGNMENT_CARDS → header + one bullet-list `section` block
+ * Layout (both modes):
+ *   header (level: 1)
+ *   ↳ context-link → /assignments        (skipped when APP_BASE_URL unset)
+ *   ↳ either:
+ *       - one top-level `card` per task   (≤ MAX_ASSIGNMENT_CARDS)
+ *       - one bullet-list `section` block (> MAX_ASSIGNMENT_CARDS)
  *
  * Returns an empty array when `orderedTasks` is empty — the route
  * layer handles the 0-results case as a plain-text ephemeral.
  *
- * Returns Block[] (not KnownBlock[]) because the cards path emits
- * top-level `card` blocks that aren't in @slack/types' KnownBlock
- * union. The bullet-list path uses only KnownBlock primitives but is
- * widened at the boundary for a uniform return type.
+ * Returns Block[] (not KnownBlock[]) because the header carries a
+ * non-KnownBlock `level` field and the cards path emits top-level
+ * `card` blocks that aren't in @slack/types' KnownBlock union. The
+ * bullet-list path uses only KnownBlock primitives but is widened
+ * at the boundary for a uniform return type.
  */
 export function buildAssignmentBlocks(
   orderedTasks: Array<{ url: string; task: TaskByIdRow }>,
 ): Block[] {
   if (orderedTasks.length === 0) return [];
-  const blocks: Block[] = [assignmentHeaderBlock() as unknown as Block];
+  const blocks: Block[] = [assignmentHeaderBlock()];
+  const link = assignmentPageLinkContextBlock();
+  if (link) blocks.push(link as unknown as Block);
   if (orderedTasks.length <= MAX_ASSIGNMENT_CARDS) {
     for (const row of orderedTasks) {
       blocks.push(assignmentCardBlock(row) as unknown as Block);
