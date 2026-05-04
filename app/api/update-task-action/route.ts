@@ -14,11 +14,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid action provided' }, { status: 400 });
     }
 
+    // Keep completed_at in sync with status transitions so downstream
+    // surfaces (bins auto-dismiss countdown, sweeps, reporting) work
+    // regardless of which surface the user completed the task from. Mirrors
+    // the same logic in PUT /api/tasks-for-bin/[id].
     const { data, error } = await getSupabaseServer()
       .from('turnover_tasks')
-      .update({ 
+      .update({
         status: action,
-        updated_at: new Date().toISOString()
+        completed_at: action === 'complete' ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
       })
       .eq('id', taskId)
       .select()

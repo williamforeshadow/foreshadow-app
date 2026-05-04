@@ -30,7 +30,13 @@ export async function PUT(
 
     if (title !== undefined) updateData.title = title;
     if (description !== undefined) updateData.description = description;
-    if (status !== undefined) updateData.status = status;
+    if (status !== undefined) {
+      updateData.status = status;
+      // Keep completed_at in sync with status transitions so downstream
+      // surfaces (auto-dismiss countdown, sweeps, reporting) work without
+      // each caller having to remember to set it.
+      updateData.completed_at = status === 'complete' ? new Date().toISOString() : null;
+    }
     if (priority !== undefined) updateData.priority = priority;
     if (scheduled_date !== undefined) updateData.scheduled_date = scheduled_date;
     if (scheduled_time !== undefined) updateData.scheduled_time = scheduled_time;
@@ -108,7 +114,6 @@ export async function PUT(
         priority,
         bin_id,
         is_binned,
-        type,
         department_id,
         status,
         scheduled_date,

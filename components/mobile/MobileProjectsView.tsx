@@ -339,6 +339,10 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
   }, [screen, fetchTasksForBin, binsHook]);
 
   const handleColumnMove = useCallback(async (taskId: string, field: string, value: string) => {
+    // Force the kanban to re-sync to server truth so a rejected update
+    // doesn't leave the card stranded in the wrong column with a stale
+    // status badge until the next interaction.
+    const revertKanban = () => setTasks(prev => [...prev]);
     try {
       const payload: Record<string, unknown> = {};
       if (field === 'property_name') {
@@ -353,12 +357,19 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const result = await res.json();
-      if (result.data) {
-        setTasks(prev => prev.map(t => t.id === taskId ? result.data : t));
+      const result = await res.json().catch(() => ({} as { error?: string; data?: unknown }));
+      if (!res.ok || !result.data) {
+        const message = result?.error || `Failed to update task (HTTP ${res.status})`;
+        console.error('Error updating task field:', message, result);
+        alert(message);
+        revertKanban();
+        return;
       }
+      setTasks(prev => prev.map(t => t.id === taskId ? result.data : t));
     } catch (err) {
       console.error('Error updating task field:', err);
+      alert(err instanceof Error ? err.message : 'Failed to update task');
+      revertKanban();
     }
   }, []);
 

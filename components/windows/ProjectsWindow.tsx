@@ -553,6 +553,10 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
         }
       }
     }
+    // Force the kanban to re-sync to server truth. Used when an update is
+    // rejected so the card snaps back to its real column instead of sitting
+    // in the wrong column with a stale status badge until the next click.
+    const revertKanban = () => setTasks(prev => [...prev]);
     try {
       const payload: Record<string, unknown> = {};
 
@@ -569,28 +573,35 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const result = await res.json();
-      if (result.data) {
-        const d = result.data;
-        setTasks(prev => prev.map(t => t.id === taskId ? d : t));
-        if (expandedProject?.id === taskId) {
-          setExpandedProject(d);
-          setEditingProjectFields({
-            title: d.title,
-            description: d.description || null,
-            status: d.status,
-            priority: d.priority,
-            assigned_staff: d.project_assignments?.map((a: { user_id: string }) => a.user_id) || [],
-            department_id: d.department_id || '',
-            scheduled_date: d.scheduled_date || '',
-            scheduled_time: d.scheduled_time || '',
-          });
-        }
+      const result = await res.json().catch(() => ({} as { error?: string; data?: unknown }));
+      if (!res.ok || !result.data) {
+        const message = result?.error || `Failed to update task (HTTP ${res.status})`;
+        console.error('Error updating task field:', message, result);
+        alert(message);
+        revertKanban();
+        return;
+      }
+      const d = result.data;
+      setTasks(prev => prev.map(t => t.id === taskId ? d : t));
+      if (expandedProject?.id === taskId) {
+        setExpandedProject(d);
+        setEditingProjectFields({
+          title: d.title,
+          description: d.description || null,
+          status: d.status,
+          priority: d.priority,
+          assigned_staff: d.project_assignments?.map((a: { user_id: string }) => a.user_id) || [],
+          department_id: d.department_id || '',
+          scheduled_date: d.scheduled_date || '',
+          scheduled_time: d.scheduled_time || '',
+        });
       }
     } catch (err) {
       console.error('Error updating task field:', err);
+      alert(err instanceof Error ? err.message : 'Failed to update task');
+      revertKanban();
     }
-  }, [expandedProject?.id]);
+  }, [expandedProject?.id, tasks]);
 
   // Unread comment count from the task data
   const getUnreadCommentCount = useCallback((project: Project): number => {

@@ -280,11 +280,12 @@ export async function createTask(rawInput: unknown): Promise<CreateTaskResult> {
   }
 
   const isBinned = input.bin_id != null;
+  const initialStatus = input.status ?? 'not_started';
 
   const insertPayload: Record<string, unknown> = {
     title: input.title,
     description: descriptionJson,
-    status: input.status ?? 'not_started',
+    status: initialStatus,
     priority: input.priority ?? 'medium',
     scheduled_date: input.scheduled_date ?? null,
     scheduled_time: input.scheduled_time ?? null,
@@ -297,6 +298,11 @@ export async function createTask(rawInput: unknown): Promise<CreateTaskResult> {
     is_binned: isBinned,
     department_id: input.department_id ?? null,
     template_id: input.template_id ?? null,
+    // Tasks created already-complete (e.g. ledger / record entries) need
+    // completed_at set up front so the bins auto-dismiss countdown and any
+    // reporting that keys off completed_at work the same as for tasks
+    // completed via PUT /api/tasks-for-bin/[id] or POST /api/update-task-action.
+    completed_at: initialStatus === 'complete' ? new Date().toISOString() : null,
   };
 
   const { data: inserted, error: insertError } = await supabase
