@@ -1,8 +1,8 @@
-import type { TaskUpdateChunk } from '@slack/types';
+import type { KnownBlock } from '@slack/types';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { taskUrl } from '@/src/lib/links';
 import { getTasksByIds, type TaskByIdRow } from '@/src/server/tasks/getTaskById';
-import { buildTaskUpdateChunks } from '@/src/slack/streamChunks';
+import { buildAssignmentBlocks } from '@/src/slack/assignmentBlocks';
 
 // Handler for the `/myassignments` Slack slash command.
 //
@@ -13,7 +13,7 @@ import { buildTaskUpdateChunks } from '@/src/slack/streamChunks';
 // and the data shape is fixed (open tasks where task_assignments.user_id
 // matches). Routing this through the LLM would add latency, cost, and
 // hallucination risk for zero gain. We just query directly and build
-// the streaming chunks ourselves.
+// the Block Kit response ourselves.
 //
 // Filtering rules (mirror the in-app My Assignments page exactly):
 //   - Only tasks where task_assignments.user_id = the resolved app user.
@@ -27,30 +27,26 @@ import { buildTaskUpdateChunks } from '@/src/slack/streamChunks';
 //     stable tiebreaker. "What's next?" is the natural reading order.
 //
 // Output (consumed by the route layer):
-//   - 0 results → text-only fallback ("You have no open assignments.")
-//     and an empty chunk array. The route surfaces this as a plain
-//     ephemeral instead of starting a thread — no point streaming an
-//     empty list.
-//   - 1+ results → header `text` + a task_update chunk per assignment.
-//     The route posts the header as a parent chat.postMessage in the
-//     DM, then streams the task_update chunks as a threaded reply
-//     under it (chat.startStream requires thread_ts; the streaming
-//     API is a thread-reply pattern).
+//   - 0 results → text-only message ("You have no open assignments.")
+//     and an empty blocks array. The route surfaces this as a
+//     plain-text ephemeral.
+//   - 1+ results → the assignment-list blocks (header + one section
+//     per task). The route posts them as an ephemeral in the channel
+//     where /myassignments was invoked.
 
 export interface MyAssignmentsResult {
   /**
-   * Header text shown as the parent message in the DM, above the
-   * threaded task-card stream. Doubles as the message-level `text`
-   * fallback (notification body).
+   * Plain-text fallback. Slack uses this as the notification body and
+   * also renders it inline when no `blocks` are attached (the 0-results
+   * path).
    */
   text: string;
   /**
-   * Task chunks ready to pass directly to chat.startStream's `chunks`
-   * parameter. Empty array when the user has no open assignments —
-   * the route uses the length to decide between "stream the answer"
-   * and "post a plain ephemeral".
+   * Block Kit payload: `header` + one `section` per task. Empty when
+   * the user has no open assignments — the route falls back to the
+   * `text` field in that case.
    */
-  taskChunks: TaskUpdateChunk[];
+  blocks: KnownBlock[];
 }
 
 /**
@@ -81,7 +77,7 @@ export async function runMyAssignments(args: {
     });
     return {
       text: `Sorry — I couldn't load your assignments right now. Try again in a moment.`,
-      taskChunks: [],
+      blocks: [],
     };
   }
   const rows = (assignmentRows ?? []) as Array<{ task_id: string }>;
@@ -89,19 +85,19 @@ export async function runMyAssignments(args: {
   if (assignedIds.length === 0) {
     return {
       text: `${displayName}, you have no open assignments. Nice.`,
-      taskChunks: [],
+      blocks: [],
     };
   }
 
   // Step 2: fetch the full task rows so we can both filter on status
-  // (which the assignment table doesn't carry) and feed the chunk
+  // (which the assignment table doesn't carry) and feed the block
   // builder.
   const allTasks = await getTasksByIds(assignedIds);
   const openTasks = allTasks.filter((t) => t.status !== 'complete');
   if (openTasks.length === 0) {
     return {
       text: `${displayName}, you have no open assignments. Nice.`,
-      taskChunks: [],
+      blocks: [],
     };
   }
 
@@ -113,24 +109,24 @@ export async function runMyAssignments(args: {
   // by what one user can possibly be assigned to (small).
   openTasks.sort(compareTasksForAssignmentList);
 
-  // Step 4: shape into (task, url) pairs and hand to the chunk
+  // Step 4: shape into (task, url) pairs and hand to the block
   // builder. Using taskUrl() keeps the URL exactly the same as what
-  // the agent's tools return, so the "Open in Foreshadow" source on
-  // each task_update chunk is interchangeable with links produced
-  // anywhere else in the system.
+  // the agent's tools return, so the linked title on each section is
+  // interchangeable with links produced anywhere else in the system.
   const ordered = openTasks.map((task) => ({
     task,
     url: taskUrl(task.task_id),
   }));
 
-  // Header line: keep it short. Becomes the parent DM message and
-  // doubles as the message-level `text` notification fallback.
+  const blocks = buildAssignmentBlocks(ordered);
+
+  // Notification text: short and informative. Slack uses this as the
+  // push-notification body when blocks are present; not rendered inline
+  // in that case (the header block carries the visible heading).
   const noun = openTasks.length === 1 ? 'assignment' : 'assignments';
-  const text = `${displayName}, you have ${openTasks.length} open ${noun}:`;
+  const text = `${displayName}, you have ${openTasks.length} open ${noun}.`;
 
-  const taskChunks = buildTaskUpdateChunks(ordered);
-
-  return { text, taskChunks };
+  return { text, blocks };
 }
 
 // Comparator for the sort step above. Pulled out so the rule is easy
