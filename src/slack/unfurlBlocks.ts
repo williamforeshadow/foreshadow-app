@@ -9,13 +9,22 @@ import type { KnownBlock } from '@slack/types';
 //   - taskCard: a single `card` element for use inside a `carousel` block.
 //     Used when the bot replies with multiple tasks; the carousel scrolls
 //     horizontally so 5–10 task cards stay compact instead of stacking
-//     vertically as separate attachments.
+//     vertically. Above 10 tasks the bot drops the cards entirely and
+//     leans on the agent's prose bullet list (see unfurl.ts).
 //
 // Both surfaces use the same slim layout — title (linked), property as
 // subtitle, a single body line of "<status emoji> <status> · <due date>",
-// and an "Open in Foreshadow" action button. We deliberately do NOT
-// surface assignee / priority / description / department in the card; the
-// user can click through for the full picture.
+// and an "↗" action button (diagonal arrow as the open-in-Foreshadow
+// glyph). We deliberately do NOT surface assignee / priority /
+// description / department in the card; the user can click through for
+// the full picture.
+
+// Single-character button label used as the open-in-Foreshadow click
+// target on every card surface (taskUnfurl, taskCard, and the
+// assignmentCardBlock builder in assignmentBlocks.ts). Plain Unicode
+// (U+2197 NORTH EAST ARROW) so it renders inside `plain_text` with
+// `emoji: false` — no Slack emoji-shortcode conversion needed.
+export const OPEN_BUTTON_LABEL = '\u2197';
 
 export interface TaskForUnfurl {
   task_id: string;
@@ -154,7 +163,7 @@ function computeCardFields(task: TaskForUnfurl): {
 /**
  * Build the Block Kit blocks for a single-URL chat.unfurl. Slim layout:
  * bold linked title, subtitle context line, one body line with status +
- * due date, and an "Open in Foreshadow" button.
+ * due date, and an "↗" button.
  */
 export function taskUnfurl(task: TaskForUnfurl): { blocks: KnownBlock[] } {
   const { title, subtitle, bodyLine } = computeCardFields(task);
@@ -185,7 +194,7 @@ export function taskUnfurl(task: TaskForUnfurl): { blocks: KnownBlock[] } {
     elements: [
       {
         type: 'button',
-        text: { type: 'plain_text', text: 'Open in Foreshadow' },
+        text: { type: 'plain_text', text: OPEN_BUTTON_LABEL, emoji: false },
         url: task.task_url,
       },
     ],
@@ -242,8 +251,8 @@ export interface SlackCarouselBlock {
  *   "<https://...|Task title>" because `card.title` doesn't parse
  *   mrkdwn link syntax — only inline styling marks (bold/italic) work
  *   here. The Slack carousel docs confirm this implicitly: their
- *   own examples never show link syntax in card.title. The "Open in
- *   Foreshadow" action button is the single click target.
+ *   own examples never show link syntax in card.title. The "↗"
+ *   action button is the single click target.
  *
  * Why the button has BOTH `url` and `action_id`:
  *   action_id is required for Slack to fire interactivity events on
@@ -281,7 +290,7 @@ export function taskCard(task: TaskForUnfurl): SlackCardElement {
     actions: [
       {
         type: 'button',
-        text: { type: 'plain_text', text: 'Open in Foreshadow', emoji: false },
+        text: { type: 'plain_text', text: OPEN_BUTTON_LABEL, emoji: false },
         url: task.task_url,
         action_id: `open_task_${task.task_id}`,
       },

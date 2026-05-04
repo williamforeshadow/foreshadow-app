@@ -43,27 +43,30 @@ import { runMyAssignments } from '@/src/slack/commands/myAssignments';
 //   Only the invoker sees it. The reply IS the response — there's no
 //   "go check your DMs" round-trip and no thread to expand.
 //
-// Block layout — currently EXPERIMENTAL:
-//   We're trying header + one top-level `card` block per assignment.
-//   See src/slack/assignmentBlocks.ts for the builder. The `card`
-//   block isn't in @slack/types' KnownBlock union (the SDK only
-//   models it as a `carousel` child), so whether `chat.postEphemeral`
-//   accepts it is undocumented. If Slack rejects with `invalid_blocks`,
-//   fall back to one of:
-//     - `chat.postMessage` (DM or channel) with the same blocks — top-
-//       level `card` may be accepted in non-ephemeral surfaces even
-//       if it's filtered out of ephemerals.
-//     - `carousel` of `card` (10-card cap; horizontal scroll). The
-//       events route already uses this layout for free-text bot
-//       replies and it renders cleanly there.
-//     - Plain `section` blocks with `<url|label>` mrkdwn links (the
-//       previous proven layout — no card UI but reliable everywhere).
+// Block layout (two modes, gated on count):
+//   ≤10 tasks → header + one top-level `card` block per assignment.
+//               Each card has a title (task title), subtitle (property
+//               or "No property"), and a single "↗" URL button.
+//   >10 tasks → header + one bullet-list `section` block. Each line is
+//               `• <url|Title>` — Slack's native link syntax, the
+//               same shape the agent's prose responses use.
+//
+//   See src/slack/assignmentBlocks.ts for the builder + the rationale.
+//   The mode threshold (MAX_ASSIGNMENT_CARDS) matches MAX_CAROUSEL_CARDS
+//   in src/slack/unfurl.ts so both surfaces switch to the lightweight
+//   bullet rendering at the same boundary.
+//
+//   The top-level `card` block isn't in @slack/types' KnownBlock union
+//   (the SDK only models it as a `carousel` child), so we cast at the
+//   boundary. Confirmed working via chat.postEphemeral in this Slack
+//   workspace — if a future Slack API change ever rejects the payload
+//   we'd see `invalid_blocks` from the WebClient call and the bullet
+//   fallback would be the easy escape hatch (apply it unconditionally).
 //
 //   Past experiments on `/myassignments` that were abandoned:
 //     - response_url with a carousel  → HTTP 500
 //     - carousel via chat.postEphemeral → URL buttons never navigated
-//       (this predates the /api/slack/interactivity ack route, may
-//        work now)
+//       (predates the /api/slack/interactivity ack route)
 //     - carousel via chat.postMessage to a DM → same button gap
 //     - chat.postMessage with task_card blocks → invalid_blocks
 //       (task_card is streaming-only)

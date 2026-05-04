@@ -1,55 +1,71 @@
 import type { Block, KnownBlock } from '@slack/types';
 import type { TaskByIdRow } from '@/src/server/tasks/getTaskById';
-import type { SlackCardElement } from './unfurlBlocks';
+import { OPEN_BUTTON_LABEL, type SlackCardElement } from './unfurlBlocks';
 
 // Block Kit builder for the /myassignments slash-command response.
 //
-// Visual:
-//   - One `header` block at the top: "My Assignments"
-//   - One top-level `card` block per assignment:
-//       - title    = task title (mrkdwn, bold)
-//       - subtitle = property name, or "No property" when neither
-//                    property_name nor bin_name is set
-//       - actions  = single "Open in Foreshadow" button → task URL
+// Visual — TWO modes, gated on count:
 //
-// Why top-level `card` (instead of `section` blocks or a `carousel`):
-//   This is an experimental layout. @slack/types' KnownBlock union does
-//   NOT include a top-level `card` (only `TaskCardBlock` and `PlanBlock`,
-//   both streaming-only). Slack's reference documents `card` as a
-//   `carousel` child element. So whether `chat.postMessage` /
-//   `chat.postEphemeral` accept a top-level `card` is undocumented and
-//   was never tested in this codebase before.
+//   1) ≤ MAX_ASSIGNMENT_CARDS tasks → header + one top-level `card`
+//      block per assignment:
+//        - title    = task title (mrkdwn, bold)
+//        - subtitle = property name, or "No property" when neither
+//                     property_name nor bin_name is set
+//        - actions  = single "↗" button → task URL
 //
-//   If Slack rejects the payload it'll come back as `invalid_blocks`
-//   from the WebClient call — fast, loud, easy to fall back from. If
-//   it renders, this gives us a per-task card UI with no carousel cap
-//   and no thread requirement.
+//   2) > MAX_ASSIGNMENT_CARDS tasks → header + a single `section` block
+//      with a Unicode bullet list, one task per line, each line a
+//      Slack mrkdwn link `• <url|Title>`. No cards, no buttons. This
+//      mirrors how the agent's prose responses already enumerate task
+//      results (markdownToMrkdwn turns "- [Title](url)" into the same
+//      "• <url|Title>" shape — see src/slack/format.ts).
 //
-// Click target:
+// Why two modes:
+//   The card layout looks great at small counts but visually overwhelms
+//   the channel at high counts (tall, busy, slow to scan). The bullet
+//   layout is the agent's proven "long list" affordance — compact,
+//   each title still clickable via Slack's native link syntax, no
+//   blocks-per-message budget to worry about.
+//
+// Why top-level `card` (mode 1):
+//   @slack/types' KnownBlock union does NOT include a top-level `card`
+//   (only `TaskCardBlock` and `PlanBlock`, both streaming-only). Slack
+//   documents `card` as a `carousel` child element. We ship it
+//   standalone via chat.postEphemeral; if Slack ever rejects the
+//   payload it'll surface as `invalid_blocks` from the WebClient call.
+//
+// Click target on cards:
 //   `card.title` does NOT parse `<url|label>` mrkdwn link syntax (it
-//   renders the literal text — see unfurlBlocks.ts:239-247). The only
+//   renders the literal text — see unfurlBlocks.ts:240-248). The only
 //   working click target on a card is an `actions[]` button with a
-//   `url`. We add one "Open in Foreshadow" button per card. The
-//   action_id is structured `open_task_<uuid>` so the existing
-//   /api/slack/interactivity ack handler can pattern-match on it
-//   later if we wire server-side button behaviour.
+//   `url`. We add one "↗" button per card. The action_id is structured
+//   `open_task_<uuid>` so the existing /api/slack/interactivity ack
+//   handler can pattern-match on it later if we wire server-side
+//   button behaviour.
 //
-// Block-count cap:
-//   Slack caps a single message at 50 blocks. With 1 header block we
-//   have headroom for 49 cards. Truncate beyond that — extremely rare
-//   in practice (a single user with 50+ open assignments is a sign
-//   their workload, not the renderer, needs attention).
+// Block-count and text caps:
+//   - Mode 1 produces 1 + N blocks (header + N cards). With
+//     MAX_ASSIGNMENT_CARDS = 10 we top out at 11 blocks, well under
+//     Slack's 50-block-per-message cap.
+//   - Mode 2 produces exactly 2 blocks (header + section). Slack
+//     caps `section.text` at 3000 chars; at ~70-90 chars per task
+//     line we comfortably fit 30+ tasks before the cap matters. If
+//     we ever see real users blow past that, split into multiple
+//     section blocks in assignmentBulletSectionBlock.
 //
 // Contract:
 //   - Title falls back to template_name → "Untitled task".
-//   - Subtitle falls back to bin_name → "No property".
+//   - Subtitle falls back to bin_name → "No property" (cards mode).
 //   - All user-supplied strings are HTML-escaped for mrkdwn (`&`,
 //     `<`, `>`).
 
 const HEADER_TEXT = 'My Assignments';
 const NO_PROPERTY_LABEL = 'No property';
-// Slack's per-message block cap is 50. Reserve 1 slot for the header.
-const MAX_ASSIGNMENT_CARDS = 49;
+// Threshold between cards mode and bullet-list mode. Matches the
+// MAX_CAROUSEL_CARDS constant in unfurl.ts so both surfaces (agent
+// path + /myassignments) switch to the lightweight bullet rendering
+// at the same boundary.
+const MAX_ASSIGNMENT_CARDS = 10;
 
 // Slack mrkdwn treats `&`, `<`, `>` as control characters. Anything
 // dropped into a TextObject must be HTML-entity-escaped or it can
@@ -76,9 +92,9 @@ export function assignmentHeaderBlock(): KnownBlock {
  *   - title:    bold task title (mrkdwn `*…*`)
  *   - subtitle: property name, or "No property" if no property and no
  *               bin is attached
- *   - actions:  a single "Open in Foreshadow" URL button — the only
- *               working click target on a card block (card.title does
- *               not parse Slack mrkdwn link syntax)
+ *   - actions:  a single "↗" URL button — the only working click
+ *               target on a card block (card.title does not parse
+ *               Slack mrkdwn link syntax)
  */
 export function assignmentCardBlock(args: {
   task: TaskByIdRow;
@@ -107,7 +123,7 @@ export function assignmentCardBlock(args: {
     actions: [
       {
         type: 'button',
-        text: { type: 'plain_text', text: 'Open in Foreshadow', emoji: false },
+        text: { type: 'plain_text', text: OPEN_BUTTON_LABEL, emoji: false },
         url,
         action_id: `open_task_${task.task_id}`,
       },
@@ -116,27 +132,60 @@ export function assignmentCardBlock(args: {
 }
 
 /**
- * Compose the full block list for a /myassignments response: header
- * followed by one top-level `card` block per task, in the order given.
+ * One section block carrying a Unicode-bullet list of tasks. Each line
+ * is `• <url|Title>` — Slack's native link syntax, the same shape
+ * markdownToMrkdwn produces for the agent's prose responses, so the
+ * bullet rendering looks identical between /myassignments and the
+ * agent's "you have N tasks" answers.
  *
- * Truncates to MAX_ASSIGNMENT_CARDS so the message stays under Slack's
- * 50-block cap. Returns an empty array when `orderedTasks` is empty —
- * the route layer handles the 0-results case as a plain-text ephemeral.
+ * The fallback title chain matches assignmentCardBlock so the same
+ * task renders with the same label across both modes.
  *
- * Returns Block[] (not KnownBlock[]) because @slack/types' KnownBlock
- * union doesn't include a top-level `card` block. We cast at the
- * boundary; if Slack accepts the payload at runtime, this is the
- * intended shape. If it rejects with `invalid_blocks`, that's the
- * signal to fall back to a different layout.
+ * Note: `section.text` has a 3000-char hard cap. We don't enforce it
+ * here — at typical title lengths (~30-50 chars) we comfortably fit
+ * 30+ tasks before the cap matters. If we ever see users blow past
+ * that, split into multiple section blocks here.
+ */
+export function assignmentBulletSectionBlock(
+  orderedTasks: Array<{ url: string; task: TaskByIdRow }>,
+): KnownBlock {
+  const lines = orderedTasks.map(({ url, task }) => {
+    const title =
+      task.title?.trim() || task.template_name?.trim() || 'Untitled task';
+    return `\u2022 <${url}|${escapeMrkdwn(title)}>`;
+  });
+  return {
+    type: 'section',
+    text: { type: 'mrkdwn', text: lines.join('\n') },
+  };
+}
+
+/**
+ * Compose the full block list for a /myassignments response.
+ *
+ * Two modes (see file-top doc comment for the rationale):
+ *   - ≤ MAX_ASSIGNMENT_CARDS → header + one top-level `card` per task
+ *   - > MAX_ASSIGNMENT_CARDS → header + one bullet-list `section` block
+ *
+ * Returns an empty array when `orderedTasks` is empty — the route
+ * layer handles the 0-results case as a plain-text ephemeral.
+ *
+ * Returns Block[] (not KnownBlock[]) because the cards path emits
+ * top-level `card` blocks that aren't in @slack/types' KnownBlock
+ * union. The bullet-list path uses only KnownBlock primitives but is
+ * widened at the boundary for a uniform return type.
  */
 export function buildAssignmentBlocks(
   orderedTasks: Array<{ url: string; task: TaskByIdRow }>,
 ): Block[] {
   if (orderedTasks.length === 0) return [];
   const blocks: Block[] = [assignmentHeaderBlock() as unknown as Block];
-  const capped = orderedTasks.slice(0, MAX_ASSIGNMENT_CARDS);
-  for (const row of capped) {
-    blocks.push(assignmentCardBlock(row) as unknown as Block);
+  if (orderedTasks.length <= MAX_ASSIGNMENT_CARDS) {
+    for (const row of orderedTasks) {
+      blocks.push(assignmentCardBlock(row) as unknown as Block);
+    }
+  } else {
+    blocks.push(assignmentBulletSectionBlock(orderedTasks) as unknown as Block);
   }
   return blocks;
 }

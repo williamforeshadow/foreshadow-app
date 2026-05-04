@@ -1,5 +1,5 @@
 import type { WebClient } from '@slack/web-api';
-import type { Block, MessageAttachment } from '@slack/types';
+import type { Block } from '@slack/types';
 import { parseTaskUrl } from '@/src/lib/links';
 import {
   getTasksByIds,
@@ -31,18 +31,23 @@ import {
 //            Layout depends on count:
 //              - 1–10 tasks: a horizontal `carousel` block of `taskCard`
 //                elements (compact, scrollable).
-//              - >10 tasks: vertical `attachments` of `taskUnfurl` blocks
-//                (Slack caps carousels at 10 elements).
+//              - >10 tasks: NO attached cards. The agent's prose response
+//                already carries a Unicode-bullet list of `• <url|Title>`
+//                lines (markdownToMrkdwn converts `- [Title](url)` to that
+//                shape — see src/slack/format.ts), which is plenty
+//                navigable on its own. Adding 11+ stacked attachments
+//                below it makes the channel feel cluttered and slow to
+//                scan. So we ship the prose and stop there.
 //
-// Both layouts share `getTasksByIds` for data and the slim card fields
-// (title / property / status+due / Open in Foreshadow), so cards look
-// consistent regardless of which path produced them.
+// Both surfaces share `getTasksByIds` for data and the slim card fields
+// (title / property / status+due / "↗" button), so cards look
+// consistent across the surfaces that DO render them.
 
-// Slack's documented carousel cap. We could render fewer to keep the
-// horizontal scroll short, but 10 lines up nicely with how often agent
-// answers stay below that threshold (single-property turnover lists,
-// "tasks assigned to <person>", etc.); spillovers fall back to vertical
-// attachments which are unbounded.
+// Slack's documented carousel cap, AND the threshold above which we
+// fall back to "no extras at all" in surface 2. The /myassignments
+// path uses the same threshold (MAX_ASSIGNMENT_CARDS in
+// assignmentBlocks.ts) so both surfaces switch to the lightweight
+// bullet rendering at the same boundary.
 const MAX_CAROUSEL_CARDS = 10;
 
 /** Subset of the link_shared event link shape we actually care about. */
@@ -122,16 +127,17 @@ function isKnownUnfurlSource(
 }
 
 /**
- * Build the `blocks` and/or `attachments` payload for a chat.postMessage
- * that mentions one or more task URLs. The shape varies with count:
+ * Build the `blocks` payload for a chat.postMessage that mentions one
+ * or more task URLs. The shape varies with count:
  *
  *   - 1–10 task URLs → returns `{ blocks: [carousel] }`. Carousels stay
  *     compact even with many tasks because Slack lays the cards out
  *     horizontally with a scroll gesture.
  *
- *   - >10 task URLs → returns `{ attachments: [...] }`. Slack caps
- *     `carousel.elements` at 10, so beyond that we fall back to vertical
- *     attachments, one per task.
+ *   - >10 task URLs → returns `{}` (no extras). The agent's prose
+ *     response already carries a bulleted hyperlinked list of the
+ *     same tasks; rendering 11+ cards under it adds visual noise
+ *     without new information.
  *
  *   - Zero recognised task URLs → returns `{}` so callers can spread
  *     unconditionally without checking length.
@@ -142,7 +148,7 @@ function isKnownUnfurlSource(
  */
 export async function buildTaskMessageExtras(
   links: SlackLink[],
-): Promise<{ blocks?: Block[]; attachments?: MessageAttachment[] }> {
+): Promise<{ blocks?: Block[] }> {
   if (links.length === 0) return {};
   const recognised = recogniseLinks(links);
   if (recognised.length === 0) return {};
@@ -168,54 +174,46 @@ export async function buildTaskMessageExtras(
 }
 
 /**
- * Render an ordered list of `(task, url)` pairs into the same `blocks`
- * or `attachments` payload that buildTaskMessageExtras produces.
+ * Render an ordered list of `(task, url)` pairs into a `blocks` payload
+ * matching buildTaskMessageExtras' shape.
  *
  * Exists so callers that ALREADY have task rows in hand (e.g. the
  * `/myassignments` slash command, which queries assignments directly
  * and bypasses the agent) don't have to round-trip through URL → parse
- * → re-fetch just to reuse the carousel/attachment layout decision.
+ * → re-fetch just to reuse the carousel layout decision.
  *
- * Layout follows the same rule as buildTaskMessageExtras:
+ * Layout:
  *   - 1–10 entries → horizontal `carousel` block
- *   - >10 entries → vertical `attachments` (Slack's carousel cap is 10)
+ *   - >10 entries  → `{}` (no extras). Callers are expected to render
+ *                    the long list themselves (e.g. as a Unicode-bullet
+ *                    section block, the way assignmentBlocks.ts does).
  */
 export function renderTaskRowsAsExtras(
   orderedTasks: Array<{ url: string; task: TaskByIdRow }>,
-): { blocks?: Block[]; attachments?: MessageAttachment[] } {
+): { blocks?: Block[] } {
   if (orderedTasks.length === 0) return {};
+  if (orderedTasks.length > MAX_CAROUSEL_CARDS) return {};
 
-  if (orderedTasks.length <= MAX_CAROUSEL_CARDS) {
-    const carousel: SlackCarouselBlock = {
-      type: 'carousel',
-      block_id: 'task-carousel',
-      elements: orderedTasks.map(({ url, task }) =>
-        taskCard(toUnfurlShape(task, url)),
-      ),
-    };
-    // Cast at the boundary: `carousel` isn't yet in @slack/types' KnownBlock
-    // union but the API accepts it as a generic Block.
-    return { blocks: [carousel as unknown as Block] };
-  }
-
-  const attachments: MessageAttachment[] = orderedTasks.map(({ url, task }) => {
-    const card = taskUnfurl(toUnfurlShape(task, url));
-    return {
-      color: '#4A9EFF',
-      fallback: task.title || task.template_name || 'Task',
-      blocks: card.blocks,
-    };
-  });
-  return { attachments };
+  const carousel: SlackCarouselBlock = {
+    type: 'carousel',
+    block_id: 'task-carousel',
+    elements: orderedTasks.map(({ url, task }) =>
+      taskCard(toUnfurlShape(task, url)),
+    ),
+  };
+  // Cast at the boundary: `carousel` isn't yet in @slack/types' KnownBlock
+  // union but the API accepts it as a generic Block.
+  return { blocks: [carousel as unknown as Block] };
 }
 
 /**
  * Pull URLs that match parseTaskUrl out of arbitrary message text.
  *
  * Drives the bot-reply path: after we render the agent's markdown into
- * mrkdwn, we scan it for our own task URLs to build attachments for. The
- * regex deliberately stops at `|` and `>` so it works on both raw URLs
- * and Slack's mrkdwn `<url|label>` link form.
+ * mrkdwn, we scan it for our own task URLs to decide whether to attach
+ * a carousel below the message. The regex deliberately stops at `|`
+ * and `>` so it works on both raw URLs and Slack's mrkdwn `<url|label>`
+ * link form.
  */
 export function extractTaskUrlsFromText(text: string): string[] {
   if (!text) return [];
@@ -242,10 +240,10 @@ function recogniseLinks(links: SlackLink[]): RecognisedLink[] {
   return out;
 }
 
-// Shared between the unfurl-via-event path and the inline-attachments
-// path. Builds a Slack `unfurls` map (URL → { blocks }) for chat.unfurl;
-// callers that want attachments instead just iterate the same task data
-// in buildTaskAttachments above.
+// Builds a Slack `unfurls` map (URL → { blocks }) for chat.unfurl,
+// used by the link_shared event path. The bot-reply / slash-command
+// surfaces don't share this — they call renderTaskRowsAsExtras /
+// buildAssignmentBlocks directly with the task rows in hand.
 async function buildUnfurlsMap(
   links: SlackLink[],
 ): Promise<Record<string, { blocks: ReturnType<typeof taskUnfurl>['blocks'] }>> {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { WebClient } from '@slack/web-api';
-import type { Block, MessageAttachment } from '@slack/types';
+import type { Block } from '@slack/types';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { runAgent } from '@/src/agent/runAgent';
@@ -26,7 +26,6 @@ import {
 
 interface MessageExtras {
   blocks?: Block[];
-  attachments?: MessageAttachment[];
 }
 
 // POST /api/slack/events
@@ -109,8 +108,10 @@ interface MessageExtras {
 //             chat.unfurl can't be used here — we ride the cards along
 //             on the chat.postMessage payload instead). Layout is a
 //             horizontal `carousel` block for ≤10 tasks (compact,
-//             scrollable) and falls back to vertical `attachments` for
-//             >10 (Slack's carousel cap is 10 elements).
+//             scrollable). For >10 tasks we attach NO cards — the
+//             agent's prose response already enumerates them as a
+//             bulleted hyperlinked list, which is more scannable than
+//             11+ stacked cards would be.
 //           - Post reply (in-thread for mentions, flat for DMs).
 //        b. link_shared:
 //           - Recognise task URLs via parseTaskUrl.
@@ -448,12 +449,13 @@ async function handleSlackMessage(
   // link_shared for posts where unfurl_links is false (which we keep off
   // to suppress noisy generic OG previews on other URLs the agent might
   // surface), so chat.unfurl returns 200 but silently drops the cards.
-  // Carousel/attachments rendered inline on chat.postMessage don't
-  // depend on the link_shared flow and render unconditionally.
+  // Carousels rendered inline on chat.postMessage don't depend on the
+  // link_shared flow and render unconditionally.
   //
-  // buildTaskMessageExtras decides between a horizontal carousel block
-  // (≤10 tasks, the common case) and vertical attachments (>10 tasks,
-  // since Slack caps carousels at 10 elements).
+  // buildTaskMessageExtras returns a horizontal carousel block for the
+  // ≤10-task case (the common path) and an empty payload for >10
+  // tasks — at that count the agent's prose bullet list is the better
+  // affordance and stacking cards under it adds noise without value.
   const taskUrls = extractTaskUrlsFromText(mrkdwnText).map((url) => ({ url }));
   const extras = taskUrls.length > 0 ? await buildTaskMessageExtras(taskUrls) : {};
 
@@ -514,9 +516,9 @@ async function postReply(
   // `blocks` array for display and treats `text` purely as notification
   // fallback (it doesn't show in the conversation). Prepend a section
   // block carrying the same mrkdwn so the actual message body renders
-  // above the carousel. For the attachments fallback (>10 tasks), the
-  // top-level `text` field DOES render normally, so we don't need to
-  // wrap it.
+  // above the carousel. When there are no extras (>10 tasks, or no
+  // tasks at all) the top-level `text` field DOES render normally and
+  // we don't need to wrap it.
   const blocks =
     extras.blocks && extras.blocks.length > 0
       ? ([
@@ -533,18 +535,11 @@ async function postReply(
       ...(threadTs ? { thread_ts: threadTs } : {}),
       text,
       ...(blocks ? { blocks } : {}),
-      // Inline task-card attachments (only used as the >10-tasks
-      // fallback, since carousels cap at 10 elements). When empty we
-      // omit the field — Slack rejects empty attachments arrays as a
-      // malformed payload in some clients.
-      ...(extras.attachments && extras.attachments.length > 0
-        ? { attachments: extras.attachments }
-        : {}),
       // Disable Slack's auto-link unfurling so unrelated URLs the agent
       // might surface (wifi networks, doc links from property knowledge,
       // etc.) don't get generic OG-tag previews stacked under the
-      // message. Our own task cards ride along in `blocks` /
-      // `attachments` above, which doesn't depend on this flag.
+      // message. Our own task cards ride along in `blocks` above, which
+      // doesn't depend on this flag.
       unfurl_links: false,
       unfurl_media: false,
     });
