@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { WebClient } from '@slack/web-api';
-import type { KnownBlock } from '@slack/types';
+import type { Block } from '@slack/types';
 import { verifySlackSignature } from '@/src/slack/verify';
 import { resolveSlackUser } from '@/src/slack/identity';
 import { runMyAssignments } from '@/src/slack/commands/myAssignments';
@@ -43,33 +43,31 @@ import { runMyAssignments } from '@/src/slack/commands/myAssignments';
 //   Only the invoker sees it. The reply IS the response — there's no
 //   "go check your DMs" round-trip and no thread to expand.
 //
-//   This wasn't always the shape. We previously tried (and abandoned):
-//     - response_url with a carousel  → HTTP 500 (Slack's legacy
-//                                        followup transport rejects
-//                                        carousel payloads)
-//     - chat.postEphemeral with a carousel → renders, but the
-//                                        card.actions[] url buttons
-//                                        never navigate
-//     - chat.postMessage to a DM with a carousel → same button gap
+// Block layout — currently EXPERIMENTAL:
+//   We're trying header + one top-level `card` block per assignment.
+//   See src/slack/assignmentBlocks.ts for the builder. The `card`
+//   block isn't in @slack/types' KnownBlock union (the SDK only
+//   models it as a `carousel` child), so whether `chat.postEphemeral`
+//   accepts it is undocumented. If Slack rejects with `invalid_blocks`,
+//   fall back to one of:
+//     - `chat.postMessage` (DM or channel) with the same blocks — top-
+//       level `card` may be accepted in non-ephemeral surfaces even
+//       if it's filtered out of ephemerals.
+//     - `carousel` of `card` (10-card cap; horizontal scroll). The
+//       events route already uses this layout for free-text bot
+//       replies and it renders cleanly there.
+//     - Plain `section` blocks with `<url|label>` mrkdwn links (the
+//       previous proven layout — no card UI but reliable everywhere).
+//
+//   Past experiments on `/myassignments` that were abandoned:
+//     - response_url with a carousel  → HTTP 500
+//     - carousel via chat.postEphemeral → URL buttons never navigated
+//       (this predates the /api/slack/interactivity ack route, may
+//        work now)
+//     - carousel via chat.postMessage to a DM → same button gap
 //     - chat.postMessage with task_card blocks → invalid_blocks
-//                                        (task_card is streaming-only)
-//     - chat.startStream + stopStream  → works, but requires thread_ts,
-//                                        so the rows live one tap away
-//                                        inside a thread instead of
-//                                        inline
-//
-//   Plain `section` blocks with native mrkdwn `<url|label>` link
-//   syntax are the path that satisfies all three of: inline rendering
-//   (no thread), reliable click-through on every Slack client, and
-//   in-channel delivery (no DM round-trip). We give up the
-//   expandable-row affordance to get those — the cards' content is
-//   short enough (title, property, scheduled date) that the
-//   trade-off is worth it.
-//
-//   The events route (bot replies to free-text questions) keeps using
-//   the carousel via chat.postMessage — it works there because the
-//   message has a parent, and the horizontal layout fits alongside
-//   the agent's prose summary. Surface-specific choices.
+//       (task_card is streaming-only)
+//     - chat.startStream + stopStream → works, but requires thread_ts
 
 interface SlashCommandPayload {
   /** Token from the X-Slack-Signature dance. Already verified before this struct exists. */
@@ -237,7 +235,9 @@ interface PostEphemeralArgs {
   channel: string;
   user: string;
   text: string;
-  blocks?: KnownBlock[];
+  // Block[] (not KnownBlock[]) because /myassignments emits top-level
+  // `card` blocks that aren't in @slack/types' KnownBlock union.
+  blocks?: Block[];
 }
 
 // chat.postEphemeral wrapper that swallows + logs errors instead of

@@ -1,4 +1,4 @@
-import type { KnownBlock } from '@slack/types';
+import type { Block } from '@slack/types';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { taskUrl } from '@/src/lib/links';
 import { getTasksByIds, type TaskByIdRow } from '@/src/server/tasks/getTaskById';
@@ -42,11 +42,16 @@ export interface MyAssignmentsResult {
    */
   text: string;
   /**
-   * Block Kit payload: `header` + one `section` per task. Empty when
-   * the user has no open assignments — the route falls back to the
-   * `text` field in that case.
+   * Block Kit payload: `header` + one top-level `card` per task. Empty
+   * when the user has no open assignments — the route falls back to
+   * the `text` field in that case.
+   *
+   * Typed as Block[] (not KnownBlock[]) because the top-level `card`
+   * block isn't in @slack/types' KnownBlock union — the SDK only
+   * models `card` as a `carousel` child. See assignmentBlocks.ts for
+   * the rationale and the fallback story.
    */
-  blocks: KnownBlock[];
+  blocks: Block[];
 }
 
 /**
