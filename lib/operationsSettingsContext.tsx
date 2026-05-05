@@ -10,18 +10,21 @@ import {
   ReactNode,
 } from 'react';
 
+import { DEFAULT_TIMEZONE } from '@/src/lib/dates';
+
 // OperationsSettings — org-wide defaults loaded once at app boot.
-//
-// Only the default check-in / check-out times today, but the provider is
-// shaped so additional org-level settings can land here without churn.
 //
 // Times are wall-clock 'HH:MM' strings. The app deliberately avoids Date /
 // Intl.DateTimeFormat for these because each property may live in its own
 // timezone and we treat the user-entered value as universal across the app.
+//
+// `default_timezone` is the org-wide IANA timezone fallback (e.g.
+// "America/Los_Angeles"). Properties without an explicit timezone inherit this.
 
 export interface OperationsSettings {
   default_check_in_time: string; // 'HH:MM'
   default_check_out_time: string; // 'HH:MM'
+  default_timezone: string; // IANA tz, e.g. 'America/Los_Angeles'
   updated_at: string | null;
 }
 
@@ -35,15 +38,16 @@ interface OperationsSettingsContextType {
   save: (next: {
     default_check_in_time: string;
     default_check_out_time: string;
+    default_timezone: string;
   }) => Promise<{ ok: true } | { ok: false; error: string; migrationPending?: boolean }>;
 }
 
-// Defaults match the SQL seed (default_check_in_time = '15:00',
-// default_check_out_time = '11:00'). Kept in sync intentionally so the UI
-// has a sane render even on a cold cache or a failed fetch.
+// Defaults match the SQL seed. Kept in sync intentionally so the UI has a
+// sane render even on a cold cache or a failed fetch.
 const DEFAULT_SETTINGS: OperationsSettings = {
   default_check_in_time: '15:00',
   default_check_out_time: '11:00',
+  default_timezone: DEFAULT_TIMEZONE,
   updated_at: null,
 };
 
@@ -71,6 +75,7 @@ export function OperationsSettingsProvider({ children }: { children: ReactNode }
         setSettings({
           default_check_in_time: data.settings.default_check_in_time || DEFAULT_SETTINGS.default_check_in_time,
           default_check_out_time: data.settings.default_check_out_time || DEFAULT_SETTINGS.default_check_out_time,
+          default_timezone: data.settings.default_timezone || DEFAULT_SETTINGS.default_timezone,
           updated_at: data.settings.updated_at ?? null,
         });
       }
@@ -109,6 +114,7 @@ export function OperationsSettingsProvider({ children }: { children: ReactNode }
           setSettings({
             default_check_in_time: data.settings.default_check_in_time || next.default_check_in_time,
             default_check_out_time: data.settings.default_check_out_time || next.default_check_out_time,
+            default_timezone: data.settings.default_timezone || next.default_timezone,
             updated_at: data.settings.updated_at ?? null,
           });
         } else {

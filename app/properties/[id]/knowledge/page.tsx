@@ -13,12 +13,15 @@ import {
   FloatingSaveBar,
   Input,
   ReadonlyRow,
+  Select,
   SectionCaption,
   SectionHeader,
   Subheading,
   Toast,
   useToast,
 } from '@/components/properties/form/FormPrimitives';
+import { useOperationsSettings } from '@/lib/operationsSettingsContext';
+import { TIMEZONE_OPTIONS, TIMEZONE_GROUPS } from '@/src/lib/timezones';
 
 // Information tab: name, address, bed/bath, active-state toggle, and
 // Hostaway linkage. Rendered inside the PropertyShell layout, so no
@@ -35,6 +38,7 @@ interface DraftFields {
   longitude: string;
   bedrooms: string;
   bathrooms: string;
+  timezone: string; // '' = inherit org default
 }
 
 function toDraft(p: PropertyProfile): DraftFields {
@@ -49,6 +53,7 @@ function toDraft(p: PropertyProfile): DraftFields {
     longitude: p.longitude == null ? '' : String(p.longitude),
     bedrooms: p.bedrooms == null ? '' : String(p.bedrooms),
     bathrooms: p.bathrooms == null ? '' : String(p.bathrooms),
+    timezone: p.timezone ?? '',
   };
 }
 
@@ -69,6 +74,7 @@ export default function PropertyInformationTab() {
   const params = useParams<{ id: string }>();
   const propertyId = params?.id as string;
   const { property, applyLocalPatch, refresh } = usePropertyContext();
+  const { settings: opsSettings } = useOperationsSettings();
 
   // Drafts are seeded from the context property but then diverge freely.
   // When refresh() lands with new values we re-seed on demand via Discard
@@ -197,6 +203,10 @@ export default function PropertyInformationTab() {
       diffNumber('longitude', false);
       diffNumber('bedrooms', true);
       diffNumber('bathrooms', false);
+      // Timezone: '' in the draft means "inherit org default" → null in DB.
+      if (draft.timezone !== original.timezone) {
+        patch.timezone = draft.timezone === '' ? null : draft.timezone;
+      }
     } catch (err: any) {
       setSaveError(err.message || 'Invalid input');
       setSaving(false);
@@ -337,6 +347,34 @@ export default function PropertyInformationTab() {
                 </p>
               </FieldGroup>
             )}
+
+            <Subheading label="Timezone" />
+            <FieldGroup>
+              <Field
+                label="Property timezone"
+                hint={
+                  draft.timezone === ''
+                    ? `Inheriting team default: ${opsSettings.default_timezone}`
+                    : undefined
+                }
+              >
+                <Select
+                  value={draft.timezone}
+                  onChange={(e) => updateDraft('timezone', e.target.value)}
+                >
+                  <option value="">Team default ({opsSettings.default_timezone})</option>
+                  {TIMEZONE_GROUPS.map((group) => (
+                    <optgroup key={group} label={group}>
+                      {TIMEZONE_OPTIONS.filter((o) => o.group === group).map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </Select>
+              </Field>
+            </FieldGroup>
 
             <Subheading label="Layout" />
             <FieldGroup>

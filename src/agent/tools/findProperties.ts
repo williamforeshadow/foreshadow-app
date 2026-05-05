@@ -53,10 +53,11 @@ export interface PropertyRow {
   address_state: string | null;
   bedrooms: number | null;
   bathrooms: number | null;
+  timezone: string | null;
 }
 
 const SELECT =
-  'id, name, hostaway_name, is_active, address_city, address_state, bedrooms, bathrooms';
+  'id, name, hostaway_name, is_active, address_city, address_state, bedrooms, bathrooms, timezone';
 
 const DEFAULT_LIMIT = 25;
 

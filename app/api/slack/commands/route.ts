@@ -5,6 +5,7 @@ import type { Block } from '@slack/types';
 import { verifySlackSignature } from '@/src/slack/verify';
 import { resolveSlackUser } from '@/src/slack/identity';
 import { runMyAssignments } from '@/src/slack/commands/myAssignments';
+import { runDailyOutlook } from '@/src/slack/commands/dailyOutlook';
 
 // POST /api/slack/commands
 //
@@ -138,10 +139,6 @@ export async function POST(req: NextRequest) {
   // Slack renders this inline at the slash-command site.
   switch (payload.command) {
     case '/myassignments': {
-      // Defer the actual work via after() so we ack within 3s. The
-      // immediate response is empty — Slack accepts that as "command
-      // received, no inline reply" — and the real reply arrives a
-      // moment later as a chat.postEphemeral in the same channel.
       after(async () => {
         const web = new WebClient(botToken);
         try {
@@ -151,12 +148,29 @@ export async function POST(req: NextRequest) {
             user_id: payload.user_id,
             err,
           });
-          // Crash fallback: plain text ephemeral so the user knows
-          // the command ran but something went wrong server-side.
           await postEphemeralSafe(web, {
             channel: payload.channel_id,
             user: payload.user_id,
             text: `Sorry — something went wrong running /myassignments. Try again in a moment.`,
+          });
+        }
+      });
+      return new NextResponse(null, { status: 200 });
+    }
+    case '/dailyoutlook': {
+      after(async () => {
+        const web = new WebClient(botToken);
+        try {
+          await handleDailyOutlook(web, payload);
+        } catch (err) {
+          console.error('[slack/commands] /dailyoutlook handler crashed', {
+            user_id: payload.user_id,
+            err,
+          });
+          await postEphemeralSafe(web, {
+            channel: payload.channel_id,
+            user: payload.user_id,
+            text: `Sorry — something went wrong running /dailyoutlook. Try again in a moment.`,
           });
         }
       });
@@ -226,6 +240,33 @@ async function handleMyAssignments(
   // Single ephemeral post, in the channel where the command was
   // invoked. Slack renders the blocks inline; the `text` field
   // serves as notification fallback.
+  await postEphemeralSafe(web, {
+    channel: payload.channel_id,
+    user: payload.user_id,
+    text: result.text,
+    blocks: result.blocks.length > 0 ? result.blocks : undefined,
+  });
+}
+
+async function handleDailyOutlook(
+  web: WebClient,
+  payload: SlashCommandPayload,
+): Promise<void> {
+  const identity = await resolveSlackUser(web, payload.user_id);
+  if (!identity) {
+    await postEphemeralSafe(web, {
+      channel: payload.channel_id,
+      user: payload.user_id,
+      text: `I don't recognize this Slack account. Ask Billy to add your email to Foreshadow so I can connect you, then try again.`,
+    });
+    return;
+  }
+
+  const result = await runDailyOutlook({
+    appUserId: identity.appUserId,
+    displayName: identity.appUserName,
+  });
+
   await postEphemeralSafe(web, {
     channel: payload.channel_id,
     user: payload.user_id,

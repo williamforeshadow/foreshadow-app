@@ -36,6 +36,7 @@ interface PropertyRow {
   longitude: number | null;
   bedrooms: number | null;
   bathrooms: number | null;
+  timezone: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -58,7 +59,7 @@ export interface PropertyKnowledge {
 }
 
 const PROPERTY_COLUMNS =
-  'id, name, hostaway_name, hostaway_listing_id, is_active, address_street, address_city, address_state, address_zip, address_country, latitude, longitude, bedrooms, bathrooms, created_at, updated_at';
+  'id, name, hostaway_name, hostaway_listing_id, is_active, address_street, address_city, address_state, address_zip, address_country, latitude, longitude, bedrooms, bathrooms, timezone, created_at, updated_at';
 
 async function handler(input: Input): Promise<ToolResult<PropertyKnowledge>> {
   const supabase = getSupabaseServer();

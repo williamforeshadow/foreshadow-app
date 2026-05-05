@@ -7,6 +7,7 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages';
 import { TOOLS_BY_NAME, toAnthropicTools } from './tools';
 import type { ToolResult } from './tools/types';
+import { todayInTz } from '@/src/lib/dates';
 
 // Names of tools that mutate state. Used by the hallucination backstops
 // (write-claim mask in src/agent/backstops.ts) to validate that any
@@ -60,24 +61,6 @@ const TEMPERATURE = 0;
 // more than 3-4 round-trips for a single user question; this is a safety net.
 const MAX_ITERATIONS = 10;
 
-// Resolve "today" in the user's timezone if we have one, otherwise UTC.
-// Uses 'en-CA' because that locale always formats as YYYY-MM-DD which is the
-// shape every tool input (and Postgres date column) expects. An invalid IANA
-// string makes Intl throw — we swallow and fall back to UTC.
-function todayInTz(tz: string | undefined): { date: string; tz: string } {
-  if (tz) {
-    try {
-      const date = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(
-        new Date(),
-      );
-      return { date, tz };
-    } catch {
-      // fall through
-    }
-  }
-  return { date: new Date().toISOString().slice(0, 10), tz: 'UTC' };
-}
-
 function buildSystemPrompt(
   clientTz: string | undefined,
   surface: AgentSurface,
@@ -109,7 +92,7 @@ function buildSystemPrompt(
 
 Current context:
 - Today is ${date} (${tz}). The user is typing from this timezone.
-- Stored dates and times in Foreshadow are wall-clock and timezone-agnostic. When the user uses relative language ("today", "this week", "yesterday", "overdue"), interpret it against the date above and pass concrete YYYY-MM-DD dates to tools.
+- Stored dates and times in Foreshadow are wall-clock in the property's local timezone. Each property may have an explicit timezone; when unset, it inherits the org default. When the user uses relative language ("today", "this week", "yesterday", "overdue"), interpret it against the date above and pass concrete YYYY-MM-DD dates to tools.
 - For any tool that supports a reference_date input, pass ${date} so date-relative filters (e.g. overdue) align with the user's local sense of "today".
 ${actorBlock}
 ${surfaceLine}

@@ -146,6 +146,67 @@ export async function getBotUserId(web: WebClient): Promise<string | null> {
   return null;
 }
 
+// ── Reverse lookup: app email → Slack user id ──────────────────────────
+//
+// The forward path (resolveSlackUser) runs Slack → email → users table.
+// The daily outlook needs the opposite: given a Foreshadow user's email,
+// find their Slack user id so we can DM them. `users.lookupByEmail` is
+// the Slack Web API call for this; it requires the `users:read.email`
+// scope (which we already need for the forward path).
+//
+// Cached identically to the forward path — 10 min positive, 1 min
+// negative — keyed on lowercased email.
+
+export interface SlackUserByEmail {
+  slackUserId: string;
+  displayName: string | null;
+}
+
+const EMAIL_CACHE: Map<string, { expiresAtMs: number; result: SlackUserByEmail | null }> = new Map();
+
+/**
+ * Look up a Slack user by their email address. Returns null when no
+ * matching Slack account exists (or the email has no Slack profile
+ * visible to the bot).
+ */
+export async function lookupSlackUserByEmail(
+  web: WebClient,
+  email: string,
+): Promise<SlackUserByEmail | null> {
+  const key = email.toLowerCase().trim();
+  const now = Date.now();
+  const cached = EMAIL_CACHE.get(key);
+  if (cached && cached.expiresAtMs > now) return cached.result;
+
+  let result: SlackUserByEmail | null = null;
+  try {
+    const resp = await web.users.lookupByEmail({ email: key });
+    if (resp.user?.id) {
+      const profile = resp.user.profile;
+      result = {
+        slackUserId: resp.user.id,
+        displayName:
+          profile?.display_name?.trim() ||
+          profile?.real_name?.trim() ||
+          resp.user.name ||
+          null,
+      };
+    }
+  } catch (err: unknown) {
+    // users_not_found is expected when the app user isn't in Slack.
+    const code = (err as { data?: { error?: string } })?.data?.error;
+    if (code !== 'users_not_found') {
+      console.warn('[slack/identity] lookupByEmail failed', { email: key, err });
+    }
+  }
+
+  EMAIL_CACHE.set(key, {
+    expiresAtMs: now + (result ? TTL_MS : NEGATIVE_TTL_MS),
+    result,
+  });
+  return result;
+}
+
 // Match a Slack user mention token in message text. Slack ALWAYS encodes
 // these as "<@Uxxxxx>" or "<@Uxxxxx|display name>" (the |display form
 // shows up in older clients). The capturing group is the Slack user id.

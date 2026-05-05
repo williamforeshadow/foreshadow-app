@@ -19,6 +19,7 @@ export interface PropertyProfile {
   longitude: number | null;
   bedrooms: number | null;
   bathrooms: number | null;
+  timezone: string | null;
   created_at: string;
   updated_at: string;
 }

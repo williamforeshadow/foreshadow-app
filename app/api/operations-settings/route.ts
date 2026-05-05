@@ -4,12 +4,18 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 // /api/operations-settings
 //
 // Singleton row in the `operations_settings` table (id = 1) that stores
-// org-wide defaults — currently just the default check-in / check-out times
-// used to compose time-precise turnover-window boundaries client-side.
+// org-wide defaults: check-in / check-out times and the default timezone.
 //
 // Times are stored as plain Postgres TIME values (wall-clock, no TZ),
 // matching the existing convention everywhere else in the app
 // (turnover_tasks.scheduled_time, etc.).
+//
+// `default_timezone` is an IANA timezone string (e.g. "America/Los_Angeles")
+// used as the org-wide fallback when a property doesn't have its own timezone
+// set. It anchors wall-clock dates to a real-world location for features like
+// the daily Slack digest and overdue-task resolution.
+
+import { DEFAULT_TIMEZONE } from '@/src/lib/dates';
 
 const FALLBACK_CHECK_IN = '15:00';
 const FALLBACK_CHECK_OUT = '11:00';
@@ -49,7 +55,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('operations_settings')
-      .select('default_check_in_time, default_check_out_time, updated_at')
+      .select('default_check_in_time, default_check_out_time, default_timezone, updated_at')
       .eq('id', 1)
       .maybeSingle();
 
@@ -62,6 +68,7 @@ export async function GET() {
           settings: {
             default_check_in_time: FALLBACK_CHECK_IN,
             default_check_out_time: FALLBACK_CHECK_OUT,
+            default_timezone: DEFAULT_TIMEZONE,
             updated_at: null,
           },
           migration_pending: true,
@@ -78,6 +85,7 @@ export async function GET() {
         settings: {
           default_check_in_time: FALLBACK_CHECK_IN,
           default_check_out_time: FALLBACK_CHECK_OUT,
+          default_timezone: DEFAULT_TIMEZONE,
           updated_at: null,
         },
       });
@@ -87,6 +95,7 @@ export async function GET() {
       settings: {
         default_check_in_time: trimTime(data.default_check_in_time) || FALLBACK_CHECK_IN,
         default_check_out_time: trimTime(data.default_check_out_time) || FALLBACK_CHECK_OUT,
+        default_timezone: data.default_timezone || DEFAULT_TIMEZONE,
         updated_at: data.updated_at,
       },
     });
@@ -95,6 +104,20 @@ export async function GET() {
       { error: err?.message || 'Failed to load operations settings' },
       { status: 500 }
     );
+  }
+}
+
+// Validate an IANA timezone string. Returns the canonical form on success, null
+// on failure. We lean on Intl.DateTimeFormat for validation rather than
+// maintaining a static list — the runtime knows every tz the ICU dataset has.
+function normalizeTimezone(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) return null;
+  try {
+    const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: value.trim() });
+    const resolved = fmt.resolvedOptions().timeZone;
+    return resolved;
+  } catch {
+    return null;
   }
 }
 
@@ -114,20 +137,37 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    // Timezone is optional on existing requests (backwards compat). When
+    // provided, validate it; when absent, omit from the upsert so the DB
+    // default (or existing value) is preserved.
+    let timezone: string | undefined;
+    if (body?.default_timezone !== undefined) {
+      const tz = normalizeTimezone(body.default_timezone);
+      if (!tz) {
+        return NextResponse.json(
+          { error: 'default_timezone must be a valid IANA timezone string (e.g. "America/Los_Angeles")' },
+          { status: 400 },
+        );
+      }
+      timezone = tz;
+    }
+
     const supabase = getSupabaseServer();
+
+    const upsertPayload: Record<string, unknown> = {
+      id: 1,
+      default_check_in_time: checkIn,
+      default_check_out_time: checkOut,
+      updated_at: new Date().toISOString(),
+    };
+    if (timezone !== undefined) {
+      upsertPayload.default_timezone = timezone;
+    }
 
     const { data, error } = await supabase
       .from('operations_settings')
-      .upsert(
-        {
-          id: 1,
-          default_check_in_time: checkIn,
-          default_check_out_time: checkOut,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'id' }
-      )
-      .select('default_check_in_time, default_check_out_time, updated_at')
+      .upsert(upsertPayload, { onConflict: 'id' })
+      .select('default_check_in_time, default_check_out_time, default_timezone, updated_at')
       .single();
 
     if (error) {
@@ -148,6 +188,7 @@ export async function PUT(request: NextRequest) {
       settings: {
         default_check_in_time: trimTime(data.default_check_in_time) || checkIn,
         default_check_out_time: trimTime(data.default_check_out_time) || checkOut,
+        default_timezone: data.default_timezone || DEFAULT_TIMEZONE,
         updated_at: data.updated_at,
       },
     });

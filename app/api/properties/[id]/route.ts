@@ -24,7 +24,7 @@ export async function GET(
     const { data, error } = await supabase
       .from('properties')
       .select(
-        'id, name, hostaway_name, hostaway_listing_id, is_active, address_street, address_city, address_state, address_zip, address_country, latitude, longitude, bedrooms, bathrooms, created_at, updated_at'
+        'id, name, hostaway_name, hostaway_listing_id, is_active, address_street, address_city, address_state, address_zip, address_country, latitude, longitude, bedrooms, bathrooms, timezone, created_at, updated_at'
       )
       .eq('id', id)
       .maybeSingle();
@@ -61,6 +61,7 @@ const EDITABLE_FIELDS = new Set([
   'longitude',
   'bedrooms',
   'bathrooms',
+  'timezone',
 ]);
 
 // PATCH /api/properties/:id — update any subset of the editable fields.
@@ -96,6 +97,25 @@ export async function PATCH(
           );
         }
         directUpdates[key] = value;
+      } else if (key === 'timezone') {
+        if (value === null || value === '') {
+          directUpdates[key] = null;
+        } else if (typeof value === 'string') {
+          try {
+            const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: value.trim() });
+            directUpdates[key] = fmt.resolvedOptions().timeZone;
+          } catch {
+            return NextResponse.json(
+              { error: 'timezone must be a valid IANA timezone string (e.g. "America/Los_Angeles") or null' },
+              { status: 400 },
+            );
+          }
+        } else {
+          return NextResponse.json(
+            { error: 'timezone must be a string or null' },
+            { status: 400 },
+          );
+        }
       } else {
         directUpdates[key] = value;
       }
@@ -145,7 +165,7 @@ export async function PATCH(
     const { data, error: fetchErr } = await supabase
       .from('properties')
       .select(
-        'id, name, hostaway_name, hostaway_listing_id, is_active, address_street, address_city, address_state, address_zip, address_country, latitude, longitude, bedrooms, bathrooms, created_at, updated_at'
+        'id, name, hostaway_name, hostaway_listing_id, is_active, address_street, address_city, address_state, address_zip, address_country, latitude, longitude, bedrooms, bathrooms, timezone, created_at, updated_at'
       )
       .eq('id', id)
       .maybeSingle();
