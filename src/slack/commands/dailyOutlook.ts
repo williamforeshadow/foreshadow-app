@@ -103,9 +103,8 @@ export async function runDailyOutlook(args: {
     };
   }
 
-  const assignedIds = Array.from(
-    new Set((assignmentRows ?? []).map((r: { task_id: string }) => r.task_id)),
-  );
+  const rows = (assignmentRows ?? []) as Array<{ task_id: string }>;
+  const assignedIds = Array.from(new Set(rows.map((r) => r.task_id)));
 
   let todayTasks: TaskByIdRow[] = [];
   if (assignedIds.length > 0) {
