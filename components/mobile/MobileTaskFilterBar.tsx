@@ -684,13 +684,30 @@ function CheckboxList({
           className="w-full px-3 py-2 mb-1 text-[13px] bg-transparent border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] rounded-md focus:outline-none focus:border-[var(--accent-3)] dark:focus:border-[var(--accent-1)] text-neutral-800 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f]"
         />
       )}
-      {selected.size > 0 && (
-        <button
-          onClick={() => onChange(new Set())}
-          className="self-start text-[11px] uppercase tracking-[0.04em] font-medium text-neutral-500 dark:text-[#a09e9a] mb-1"
-        >
-          Clear
-        </button>
+      {/* Action row — Select All / Clear. Same shortcut as desktop: gives
+          the chip a one-click "every option" action (e.g. for the bin chip
+          this replaces the old "All bins" sentinel) and a one-click clear.
+          "All selected" and "none selected" are functionally the same in
+          our match logic, but Select All is the obvious gesture for "all". */}
+      {(options.length > 0 && (selected.size > 0 || selected.size < options.length)) && (
+        <div className="flex items-center gap-3 mb-1">
+          {selected.size < options.length && (
+            <button
+              onClick={() => onChange(new Set(options.map((o) => o.value)))}
+              className="text-[11px] uppercase tracking-[0.04em] font-medium text-neutral-500 dark:text-[#a09e9a]"
+            >
+              Select all
+            </button>
+          )}
+          {selected.size > 0 && (
+            <button
+              onClick={() => onChange(new Set())}
+              className="text-[11px] uppercase tracking-[0.04em] font-medium text-neutral-500 dark:text-[#a09e9a]"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       )}
       <div className="max-h-[40vh] overflow-y-auto">
         {filtered.length === 0 ? (
@@ -698,44 +715,58 @@ function CheckboxList({
             No options
           </p>
         ) : (
-          filtered.map((opt) => {
+          filtered.map((opt, idx) => {
             const on = selected.has(opt.value);
+            // Mirror the desktop MultiSelect: insert a thin section header
+            // whenever this option's `group` differs from the previous option's
+            // (e.g. "SUB-BINS" header above the sub-bin entries in the bin
+            // filter, with the unsectioned entries staying ungrouped at top).
+            const prevGroup = idx > 0 ? filtered[idx - 1].group : undefined;
+            const showGroupHeader = !!opt.group && opt.group !== prevGroup;
             return (
-              <button
-                key={opt.value}
-                onClick={() => toggle(opt.value)}
-                className="w-full flex items-center gap-3 px-1 py-2.5 text-left text-[13px] text-neutral-700 dark:text-[#f0efed] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] rounded-md"
-              >
-                <span
-                  className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                    on
-                      ? 'bg-[var(--accent-3)] dark:bg-[var(--accent-2)] border-[var(--accent-3)] dark:border-[var(--accent-2)]'
-                      : 'border-neutral-300 dark:border-[rgba(255,255,255,0.15)]'
-                  }`}
-                >
-                  {on && (
-                    <svg
-                      className="w-3 h-3 text-white dark:text-[#1a1a1a]"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={3}
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                  )}
-                </span>
-                <span className="flex-1 truncate">{opt.label}</span>
-                {opt.count != null && (
-                  <span className="text-[11px] tabular-nums text-neutral-400 dark:text-[#66645f]">
-                    {opt.count}
-                  </span>
+              <div key={opt.value}>
+                {showGroupHeader && (
+                  <div className="px-1 pt-3 pb-1 mt-1 border-t border-neutral-100 dark:border-[rgba(255,255,255,0.06)]">
+                    <p className="text-[10px] font-semibold text-neutral-400 dark:text-[#66645f] uppercase tracking-[0.06em]">
+                      {opt.group}
+                    </p>
+                  </div>
                 )}
-              </button>
+                <button
+                  onClick={() => toggle(opt.value)}
+                  className="w-full flex items-center gap-3 px-1 py-2.5 text-left text-[13px] text-neutral-700 dark:text-[#f0efed] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] rounded-md"
+                >
+                  <span
+                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                      on
+                        ? 'bg-[var(--accent-3)] dark:bg-[var(--accent-2)] border-[var(--accent-3)] dark:border-[var(--accent-2)]'
+                        : 'border-neutral-300 dark:border-[rgba(255,255,255,0.15)]'
+                    }`}
+                  >
+                    {on && (
+                      <svg
+                        className="w-3 h-3 text-white dark:text-[#1a1a1a]"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={3}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    )}
+                  </span>
+                  <span className="flex-1 truncate">{opt.label}</span>
+                  {opt.count != null && (
+                    <span className="text-[11px] tabular-nums text-neutral-400 dark:text-[#66645f]">
+                      {opt.count}
+                    </span>
+                  )}
+                </button>
+              </div>
             );
           })
         )}

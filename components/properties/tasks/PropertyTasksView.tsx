@@ -391,37 +391,38 @@ function PropertyTasksViewContent({
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [allItems, allDepts]);
 
-  // Bin filter options:
-  //   1. Not binned
-  //   2. All binned tasks (matches is_binned=true; orphan binned tasks with
-  //      no bin_id are implicitly included here — that's exactly how the
-  //      system "All Binned Tasks" bin behaves in the Bins tab)
-  //   3. Each named bin, counted by bin_id
-  // No separate "any bin" / "orphan" entries — those collapsed into #2.
+  // Bin filter options (mirrors the Bins page taxonomy; no "all bins"
+  // sentinel — the chip's "Select All" action achieves the same effect):
+  //   1. Task Bin     (__task_bin__)      — orphan binned (is_binned=true AND bin_id IS NULL)
+  //   2. Sub-bins, each counted by bin_id — under the "Sub-Bins" group header
+  //   3. Not binned   (__none__)          — under the "Other" group header,
+  //                                          visually separated so the user
+  //                                          can tell it's not a bin
   const binOptions: FilterOption[] = useMemo(() => {
     const namedCounts: Record<string, { name: string; count: number }> = {};
     let notBinnedCount = 0;
-    let allBinnedCount = 0;
+    let taskBinCount = 0;
     allItems.forEach((i) => {
       if (!i.is_binned) {
         notBinnedCount++;
         return;
       }
-      allBinnedCount++;
       if (i.bin_id) {
         const existing = namedCounts[i.bin_id];
         namedCounts[i.bin_id] = {
-          name: i.bin_name || 'Bin',
+          name: i.bin_name || 'Sub-Bin',
           count: (existing?.count || 0) + 1,
         };
+      } else {
+        taskBinCount++;
       }
     });
     return [
-      { value: '__none__', label: 'Not binned', count: notBinnedCount },
-      { value: '__any__', label: 'All binned tasks', count: allBinnedCount },
+      { value: '__task_bin__', label: 'Task Bin', count: taskBinCount },
       ...Object.entries(namedCounts)
-        .map(([id, v]) => ({ value: id, label: v.name, count: v.count }))
+        .map(([id, v]) => ({ value: id, label: v.name, count: v.count, group: 'Sub-Bins' }))
         .sort((a, b) => a.label.localeCompare(b.label)),
+      { value: '__none__', label: 'Not binned', count: notBinnedCount, group: 'Other' },
     ];
   }, [allItems]);
 
@@ -474,7 +475,8 @@ function PropertyTasksViewContent({
       if (binSelected.size > 0) {
         const matches = Array.from(binSelected).some((val) => {
           if (val === '__none__') return !item.is_binned;
-          if (val === '__any__') return item.is_binned;
+          // Task Bin = orphan binned (binned but no specific sub-bin).
+          if (val === '__task_bin__') return item.is_binned && !item.bin_id;
           return item.bin_id === val;
         });
         if (!matches) return false;

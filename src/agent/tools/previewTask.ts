@@ -81,7 +81,13 @@ const inputSchema = z.object({
     .uuid()
     .optional()
     .describe(
-      'Bin UUID. Resolve bin names with find_bins first. When set, the task lands in that bin. Omit for free-floating tasks.',
+      "Sub-bin UUID. Resolve sub-bin names with find_bins first. When set, the task lands in that sub-bin (and is_binned is forced to true). To put a task in the default \"Task Bin\" instead, omit bin_id and pass is_binned=true. Omit both for free-floating tasks that aren't binned at all.",
+    ),
+  is_binned: z
+    .boolean()
+    .optional()
+    .describe(
+      "Whether the task is binned. Defaults to (bin_id != null) when omitted. Pass `true` with no bin_id to land the task in the default \"Task Bin\" (orphan binned). Passing `false` with a bin_id is rejected — a task in a sub-bin is binned by definition.",
     ),
   department_id: z
     .string()
@@ -227,7 +233,12 @@ export const previewTask: ToolDefinition<Input, PreviewTaskResultData> = {
       bin_id: {
         type: 'string',
         description:
-          'Bin UUID. Use find_bins to resolve names. Omit for tasks not in a bin.',
+          "Sub-bin UUID. Use find_bins to resolve sub-bin names. Omit (and pass is_binned=true) when the user said \"bin it\" without naming a sub-bin to land the task in the default Task Bin; omit both for free-floating tasks.",
+      },
+      is_binned: {
+        type: 'boolean',
+        description:
+          "Whether the task is binned. Defaults to (bin_id != null). Pass true with no bin_id for the Task Bin (orphan binned). Cannot be false when bin_id is set.",
       },
       department_id: {
         type: 'string',

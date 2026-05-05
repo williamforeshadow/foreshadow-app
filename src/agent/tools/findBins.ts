@@ -2,16 +2,23 @@ import { z } from 'zod';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import type { ToolDefinition, ToolResult } from './types';
 
-// find_bins — resolve project bin names ("Maintenance", "Front-of-House
-// Issues", "Long-term Projects") into bin_id values.
+// find_bins — resolve sub-bin names ("Maintenance", "Front-of-House
+// Issues", "2026 Goals") into bin_id values.
 //
-// Bins are long-term workspace containers visible in the kanban board /
-// bin tab. A task with a bin_id set lives in that bin's view; tasks
-// without one are free-floating. The agent uses this tool to translate
-// "put it in the maintenance bin" into the bin_id create_task accepts.
-// `is_system` flags built-in bins (e.g. an "All" view) the user can't
-// rename or delete; expose it as filter + output so the agent can avoid
-// suggesting them when the user wants a "real" bin.
+// Mental model:
+//   - The "Task Bin" is the default destination for any binned task. It is
+//     surfaced in the UI as a single tile and persisted as a system bin row
+//     (is_system=true). Tasks land in the Task Bin when is_binned=true AND
+//     bin_id IS NULL — there is no UUID to pass for it.
+//   - "Sub-bins" are user-created containers (is_system=false) for finer
+//     organization within the binned-tasks workspace.
+//   - Tasks with is_binned=false are free-floating (not in any bin).
+//
+// The agent uses this tool to translate "put it in the maintenance sub-bin"
+// into the bin_id that create_task accepts. To put a task in the Task Bin
+// itself, omit bin_id (or pass null) on create_task and set is_binned=true.
+// `is_system` flags the protected Task Bin row; the agent should usually
+// skip it when the user references a "real" sub-bin by name.
 
 const inputSchema = z.object({
   query: z
@@ -23,7 +30,7 @@ const inputSchema = z.object({
     .boolean()
     .optional()
     .describe(
-      'Filter system bins (built-in, non-user-editable) in or out. Omit to include both.',
+      'Filter the system bin (the protected "Task Bin" row, is_system=true) in or out. Omit to include both the Task Bin and all sub-bins. Pass false to list only sub-bins (the usual case when the user names one).',
     ),
   ids: z
     .array(z.string().uuid())
@@ -60,7 +67,7 @@ async function handler(input: Input): Promise<ToolResult<BinRow[]>> {
   const supabase = getSupabaseServer();
 
   // Match the UI's natural order: sort_order asc, then name asc, so the
-  // agent and the kanban board enumerate bins in the same sequence.
+  // agent and the bins picker enumerate bins in the same sequence.
   let query = supabase
     .from('project_bins')
     .select(SELECT)
@@ -101,7 +108,7 @@ async function handler(input: Input): Promise<ToolResult<BinRow[]>> {
 export const findBins: ToolDefinition<Input, BinRow[]> = {
   name: 'find_bins',
   description:
-    "Find project bins (long-term task containers visible in the kanban board) by name. Use this to resolve a bin name into a bin_id that create_task accepts. A task with bin_id set lives in that bin's view; tasks without one are free-floating. `is_system` flags built-in bins the user can't edit — usually skip these unless the user explicitly references one. Bins are sorted in the same order they appear in the UI.",
+    "Resolve a sub-bin name into a bin_id that create_task accepts. The bins workspace has one protected \"Task Bin\" (is_system=true; the default destination — pass null/omit bin_id on create_task to use it) plus zero or more user-created sub-bins (is_system=false). A binned task with bin_id set lives in that sub-bin; binned tasks without one live in the Task Bin; unbinned tasks are free-floating. The agent should usually pass `is_system: false` to list only sub-bins when the user references one by name. Bins are sorted in the same order they appear in the UI.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -115,7 +122,7 @@ export const findBins: ToolDefinition<Input, BinRow[]> = {
       is_system: {
         type: 'boolean',
         description:
-          'Filter system bins in or out. Omit to include both user and system bins.',
+          'Filter the protected Task Bin row in or out. Omit to include both the Task Bin and all sub-bins; pass false to list only sub-bins.',
       },
       ids: {
         type: 'array',

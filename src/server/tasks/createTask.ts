@@ -19,10 +19,16 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 //   - allow direct writes of `property_name` (the rename_property RPC keeps
 //     the denormalized copy in sync; we only write `property_id` here)
 //
-// `is_binned` is derived: a task is binned iff a `bin_id` is set. The
-// previous route accepted is_binned as a separate field, but every UI
-// surface already follows this rule, so the service drops it as a
-// redundant knob.
+// `is_binned` semantics:
+//   - When `is_binned` is omitted, it's derived from bin_id: a task is binned
+//     iff a `bin_id` is set. This keeps backward compatibility with callers
+//     that only know the {bin_id?} contract.
+//   - When `is_binned` is provided explicitly, it's honored. This unlocks the
+//     "Task Bin" case — an orphan binned task (is_binned=true, bin_id=null),
+//     which is the default destination for binned tasks the user didn't put
+//     in any specific sub-bin. The Bins kanban "New Task" button uses this
+//     path when the user is in the Task Bin (whether or not the Global
+//     toggle is on — Global only widens the read view, not the write target).
 
 const STATUS_VALUES = [
   'contingent',
@@ -51,6 +57,10 @@ export const createTaskInputSchema = z.object({
   scheduled_time: timeString.nullable().optional(),
   property_id: z.string().uuid().nullable().optional(),
   bin_id: z.string().uuid().nullable().optional(),
+  // Optional explicit is_binned. Omit to derive from bin_id (backward compat).
+  // Pass `true` with bin_id omitted/null to land the task in the "Task Bin"
+  // (orphan binned). Setting `false` while passing a bin_id is rejected.
+  is_binned: z.boolean().optional(),
   department_id: z.string().uuid().nullable().optional(),
   template_id: z.string().uuid().nullable().optional(),
   assigned_user_ids: z.array(z.string().uuid()).optional(),
@@ -279,7 +289,23 @@ export async function createTask(rawInput: unknown): Promise<CreateTaskResult> {
     // type:'doc'; anything else would corrupt the renderer).
   }
 
-  const isBinned = input.bin_id != null;
+  // Resolve is_binned: honor an explicit value, else derive from bin_id.
+  // The "false-but-bin_id-set" combo is contradictory (a task in a sub-bin
+  // is by definition binned), so we treat that as invalid input rather than
+  // silently coercing — the caller almost certainly has a UI bug.
+  const isBinned =
+    input.is_binned !== undefined ? input.is_binned : input.bin_id != null;
+  if (input.is_binned === false && input.bin_id != null) {
+    return {
+      ok: false,
+      error: {
+        code: 'invalid_input',
+        message:
+          'is_binned=false is incompatible with a non-null bin_id (a task in a sub-bin is binned by definition).',
+        field: 'is_binned',
+      },
+    };
+  }
   const initialStatus = input.status ?? 'not_started';
 
   const insertPayload: Record<string, unknown> = {
@@ -690,7 +716,10 @@ export async function previewCreateTask(
     priority: input.priority ?? 'medium',
     scheduled_date: input.scheduled_date ?? null,
     scheduled_time: input.scheduled_time ?? null,
-    is_binned: input.bin_id != null,
+    // Mirror the createTask service's resolution rule so the previewed
+    // is_binned matches what the commit will actually write.
+    is_binned:
+      input.is_binned !== undefined ? input.is_binned : input.bin_id != null,
     description_preview: descriptionPreview,
   };
 

@@ -36,14 +36,31 @@ export async function GET(request: Request) {
         )
       `;
 
+    // bin_id sentinels:
+    //   '__all__'    — every manually-created task (no reservation), regardless
+    //                  of bin status. Used by the Timeline window's "all tasks"
+    //                  view; not surfaced in the Bins picker.
+    //   '__every__'  — every binned task across the Task Bin and every sub-bin.
+    //                  Internal transport for the Task Bin's "Global" toggle
+    //                  (see useTaskBinGlobalView); never surfaced as
+    //                  user-facing copy.
+    //   <uuid>       — a specific sub-bin.
+    //   missing/null — Task Bin (orphan binned tasks: is_binned=true AND
+    //                  bin_id IS NULL). The default destination for binned
+    //                  tasks not assigned to a specific sub-bin.
     let query;
 
     if (binId === '__all__') {
-      // Return all manually-created tasks (no reservation) regardless of bin
       query = getSupabaseServer()
         .from('turnover_tasks')
         .select(selectFields)
         .is('reservation_id', null)
+        .order('created_at', { ascending: false });
+    } else if (binId === '__every__') {
+      query = getSupabaseServer()
+        .from('turnover_tasks')
+        .select(selectFields)
+        .eq('is_binned', true)
         .order('created_at', { ascending: false });
     } else if (binId) {
       query = getSupabaseServer()
@@ -52,11 +69,12 @@ export async function GET(request: Request) {
         .eq('bin_id', binId)
         .order('created_at', { ascending: false });
     } else {
-      // Default: all binned tasks
+      // Task Bin: orphan binned tasks only (binned but no specific sub-bin).
       query = getSupabaseServer()
         .from('turnover_tasks')
         .select(selectFields)
         .eq('is_binned', true)
+        .is('bin_id', null)
         .order('created_at', { ascending: false });
     }
 
@@ -150,8 +168,10 @@ export async function GET(request: Request) {
 // canonical contract). For backward compat, callers that historically sent
 // only `property_name` (some UI surfaces still do at draft-creation time)
 // have it resolved to a `property_id` here before the service is called.
-// `is_binned` is similarly handled — the service derives it from bin_id, so
-// the field is no longer accepted.
+// Note on `is_binned`: forwarded as an explicit hint when the caller sends
+// it. The service falls back to deriving it from bin_id when omitted, but
+// the explicit form lets the Bins kanban "New Task" button create orphan
+// binned tasks (Task Bin) — a case the bin_id-only contract can't express.
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -182,6 +202,10 @@ export async function POST(request: Request) {
       scheduled_time: body?.scheduled_time,
       property_id: propertyId,
       bin_id: body?.bin_id,
+      // Forward an explicit is_binned so the Bins kanban "New Task" button
+      // can land tasks in the Task Bin (binned, no specific sub-bin) — a
+      // case the {bin_id-only} contract can't express on its own.
+      is_binned: typeof body?.is_binned === 'boolean' ? body.is_binned : undefined,
       department_id: body?.department_id,
       template_id: body?.template_id,
       assigned_user_ids: body?.assigned_user_ids,

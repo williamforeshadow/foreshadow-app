@@ -7,8 +7,13 @@ interface MobileBinPickerProps {
   bins: ProjectBin[];
   totalProjects: number;
   loadingBins: boolean;
+  // Sub-bin selection by UUID.
   onSelectBin: (binId: string) => void;
-  onSelectAll: () => void;
+  // Task Bin tile (orphan binned tasks; bin_id IS NULL). The Task Bin kanban
+  // itself exposes a "Global" toggle that widens the view to every binned
+  // task across the Task Bin and every sub-bin — there is no separate "All
+  // Bins" tile.
+  onSelectTaskBin: () => void;
   onCreateBin: (name: string, description?: string) => Promise<ProjectBin | null>;
   onUpdateBin?: (
     binId: string,
@@ -27,7 +32,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
   totalProjects,
   loadingBins,
   onSelectBin,
-  onSelectAll,
+  onSelectTaskBin,
   onCreateBin,
   onUpdateBin,
   onDeleteBin,
@@ -50,9 +55,17 @@ const MobileBinPicker = memo(function MobileBinPicker({
   // Confirm delete
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  // Split system bin (owner of orphan binned-task auto-dismiss config) from user bins.
+  // The system bin is the "Task Bin" — owner of orphan binned-task auto-dismiss
+  // config. User-created bins are surfaced as sub-bins.
   const systemBin = useMemo(() => bins.find((b) => b.is_system) ?? null, [bins]);
-  const userBins = useMemo(() => bins.filter((b) => !b.is_system), [bins]);
+  const subBins = useMemo(() => bins.filter((b) => !b.is_system), [bins]);
+
+  // Orphan count = total binned − tasks assigned to a sub-bin. The bins API
+  // only fills `project_count` for sub-bins (orphans have no bin_id).
+  const taskBinCount = useMemo(
+    () => Math.max(0, totalProjects - subBins.reduce((s, b) => s + (b.project_count || 0), 0)),
+    [totalProjects, subBins]
+  );
 
   const handleCreate = async () => {
     if (!newBinName.trim()) return;
@@ -105,7 +118,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
   }
 
   // When the user taps "Edit" on the system bin, render the edit form in place
-  // of the "All Binned Tasks" tile (same pattern as user bins).
+  // of the "Task Bin" tile (same pattern as sub-bins).
   const systemIsEditing = !!systemBin && editingBinId === systemBin.id;
   const systemMenuOpen = !!systemBin && menuBinId === systemBin.id;
 
@@ -113,7 +126,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
     <div className="px-[22px] pt-2 pb-4 flex flex-col gap-4">
       {/* Header */}
       <div>
-        <h1 className="text-[28px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed]">Task Bins</h1>
+        <h1 className="text-[28px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed]">Bins</h1>
         <div className="flex items-center justify-between mt-2.5">
           <span className="text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
             {totalProjects} binned task{totalProjects !== 1 ? 's' : ''}
@@ -125,12 +138,12 @@ const MobileBinPicker = memo(function MobileBinPicker({
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
-            New Bin
+            New Sub-Bin
           </button>
         </div>
       </div>
 
-      {/* Create bin input */}
+      {/* Create sub-bin input */}
       {isCreating && (
         <div className="flex flex-col gap-2 p-4 rounded-xl bg-neutral-100/80 dark:bg-[rgba(255,255,255,0.025)] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
           <input
@@ -138,7 +151,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
             value={newBinName}
             onChange={(e) => setNewBinName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-            placeholder="Bin name..."
+            placeholder="Sub-bin name..."
             autoFocus
             className="bg-transparent text-sm text-neutral-900 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f] outline-none"
           />
@@ -168,14 +181,14 @@ const MobileBinPicker = memo(function MobileBinPicker({
         </div>
       )}
 
-      {/* All Binned Tasks — render the inline edit form if system bin is being edited */}
+      {/* Task Bin — render the inline edit form if system bin is being edited */}
       {systemIsEditing && systemBin ? (
         <div
           className="flex flex-col gap-2 p-4 rounded-xl bg-neutral-100/80 dark:bg-[rgba(255,255,255,0.025)] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]"
         >
-          <p className="text-sm font-semibold text-neutral-900 dark:text-[#f0efed]">All Binned Tasks</p>
+          <p className="text-sm font-semibold text-neutral-900 dark:text-[#f0efed]">Task Bin</p>
           <p className="text-[11px] text-neutral-500 dark:text-[#66645f] leading-snug">
-            Auto-dismiss applies to orphan binned tasks (binned without an assigned bin).
+            Auto-dismiss applies to orphan binned tasks (binned without an assigned sub-bin).
           </p>
 
           {/* Auto-dismiss controls */}
@@ -238,15 +251,18 @@ const MobileBinPicker = memo(function MobileBinPicker({
         </div>
       ) : (
         <div className="relative">
-          <button onClick={onSelectAll} className={binCard}>
+          <button onClick={onSelectTaskBin} className={binCard}>
             <div className="w-11 h-11 rounded-xl bg-neutral-200/60 dark:bg-[rgba(255,255,255,0.04)] flex items-center justify-center">
               <svg className="w-5 h-5 text-neutral-500 dark:text-[#a09e9a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-neutral-900 dark:text-[#f0efed]">All Binned Tasks</p>
-              <p className="text-xs text-neutral-500 dark:text-[#66645f] mt-0.5">{totalProjects} task{totalProjects !== 1 ? 's' : ''}</p>
+              <p className="text-sm font-semibold text-neutral-900 dark:text-[#f0efed]">Task Bin</p>
+              <p className="text-[11px] text-neutral-500 dark:text-[#66645f] mt-0.5 leading-snug">
+                Default destination for binned tasks
+              </p>
+              <p className="text-xs text-neutral-500 dark:text-[#66645f] mt-0.5">{taskBinCount} task{taskBinCount !== 1 ? 's' : ''}</p>
             </div>
           </button>
 
@@ -287,13 +303,13 @@ const MobileBinPicker = memo(function MobileBinPicker({
         </div>
       )}
 
-      {/* Bin List */}
-      {userBins.length > 0 && (
+      {/* Sub-Bin List */}
+      {subBins.length > 0 && (
         <div className="flex flex-col gap-3">
           <p className="text-[11px] font-semibold text-neutral-500 dark:text-[#a09e9a] uppercase tracking-[0.08em] px-1 pt-2">
-            Bins
+            Sub-Bins
           </p>
-          {userBins.map((bin) => {
+          {subBins.map((bin) => {
             const isEditing = editingBinId === bin.id;
             const isMenuOpen = menuBinId === bin.id;
             const isConfirmingDelete = confirmDeleteId === bin.id;
@@ -450,8 +466,8 @@ const MobileBinPicker = memo(function MobileBinPicker({
                       )}
                       {isConfirmingDelete && (
                         <div className="px-3 py-2 flex flex-col gap-1.5">
-                          <p className="text-xs text-red-500 font-medium">Delete this bin?</p>
-                          <p className="text-[11px] text-neutral-500">Tasks will remain in All Binned Tasks.</p>
+                          <p className="text-xs text-red-500 font-medium">Delete this sub-bin?</p>
+                          <p className="text-[11px] text-neutral-500">Tasks will remain in the Task Bin.</p>
                           <div className="flex gap-2 pt-1">
                             <button
                               onClick={(e) => { e.stopPropagation(); handleDelete(bin.id); }}

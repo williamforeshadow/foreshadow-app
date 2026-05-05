@@ -7,6 +7,7 @@ import { ProjectsKanban } from '@/components/windows/projects/ProjectsKanban';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
 import { useKanbanTexture } from '@/lib/hooks/useKanbanTexture';
+import { useTaskBinGlobalView } from '@/lib/hooks/useTaskBinGlobalView';
 import { useAuth } from '@/lib/authContext';
 import { useDepartments } from '@/lib/departmentsContext';
 import { STATUS_ORDER, STATUS_LABELS, PRIORITY_ORDER, PRIORITY_LABELS } from '@/lib/types';
@@ -254,6 +255,17 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
   const columnVis = useColumnVisibility(activeBinId, viewMode);
   const { enabled: showBoardTexture } = useKanbanTexture();
 
+  // Task Bin "Global" toggle. Mirrors ProjectsWindow desktop: when ON inside
+  // the Task Bin (activeBinId === null), widens the kanban to every binned
+  // task across the Task Bin and every sub-bin via the '__every__' API
+  // sentinel. Persisted in localStorage so the preference survives reloads.
+  const taskBinGlobal = useTaskBinGlobalView();
+  const apiBinIdFor = useCallback(
+    (binId: string | null) =>
+      binId === null && taskBinGlobal.enabled ? '__every__' : binId,
+    [taskBinGlobal.enabled],
+  );
+
   const allColumnOptions = useMemo(() => {
     if (viewMode === 'property') {
       const names = new Set<string>();
@@ -310,8 +322,19 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
   // Navigation
   const navigateToBin = useCallback(async (binId: string | null, binName: string) => {
     setScreen({ type: 'kanban', binId, binName });
-    await fetchTasksForBin(binId);
-  }, [fetchTasksForBin]);
+    await fetchTasksForBin(apiBinIdFor(binId));
+  }, [fetchTasksForBin, apiBinIdFor]);
+
+  // Toggle the Task Bin's Global view AND immediately refetch when the user
+  // is currently inside the Task Bin so the kanban updates without waiting
+  // for another navigation. Only renders / called from the Task Bin view.
+  const handleToggleTaskBinGlobal = useCallback(async () => {
+    taskBinGlobal.toggle();
+    if (screen.type === 'kanban' && screen.binId === null) {
+      const nextEnabled = !taskBinGlobal.enabled;
+      await fetchTasksForBin(nextEnabled ? '__every__' : null);
+    }
+  }, [taskBinGlobal, screen, fetchTasksForBin]);
 
   const navigateToProject = useCallback((project: Project, binId: string | null, binName: string) => {
     if (currentUser?.id) {
@@ -330,13 +353,13 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
       setDraftTask(null);
       draftFieldsRef.current = null;
       setScreen({ type: 'kanban', binId: screen.binId, binName: screen.binName });
-      fetchTasksForBin(screen.binId);
+      fetchTasksForBin(apiBinIdFor(screen.binId));
     } else if (screen.type === 'kanban') {
       setKanbanSelectionMode(false);
       setScreen({ type: 'bins' });
       binsHook.fetchBins();
     }
-  }, [screen, fetchTasksForBin, binsHook]);
+  }, [screen, fetchTasksForBin, binsHook, apiBinIdFor]);
 
   const handleColumnMove = useCallback(async (taskId: string, field: string, value: string) => {
     // Force the kanban to re-sync to server truth so a rejected update
@@ -384,7 +407,10 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
       property_name: null,
       template_id: null,
       template_name: null,
-      bin_id: screen.binId ?? null,
+      // In Task Bin view (screen.binId === null), a new task has no specific
+      // sub-bin — it lands in the Task Bin by default. In a sub-bin view we
+      // pre-fill bin_id so the new task lands in that sub-bin.
+      bin_id: screen.binId,
       is_binned: true,
       assigned_user_ids: [],
       project_assignments: [],
@@ -508,9 +534,9 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
           loadingBins={binsHook.loadingBins}
           onSelectBin={(binId) => {
             const bin = binsHook.bins.find(b => b.id === binId);
-            navigateToBin(binId, bin?.name || 'Bin');
+            navigateToBin(binId, bin?.name || 'Sub-Bin');
           }}
-          onSelectAll={() => navigateToBin(null, 'All Binned Tasks')}
+          onSelectTaskBin={() => navigateToBin(null, 'Task Bin')}
           onCreateBin={binsHook.createBin}
           onUpdateBin={binsHook.updateBin}
           onDeleteBin={binsHook.deleteBin}
@@ -548,6 +574,25 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
               <span>Operations board</span>
               <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a]" />
               <span>{tasks.length} total</span>
+              {/* Global toggle — only inside the Task Bin (binId === null).
+                  Widens the Task Bin to every binned task across the Task Bin
+                  and every sub-bin. Persists in localStorage. */}
+              {screen.binId === null && (
+                <button
+                  onClick={handleToggleTaskBinGlobal}
+                  aria-pressed={taskBinGlobal.enabled}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${
+                    taskBinGlobal.enabled
+                      ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)] border-[var(--accent-3)]/30 dark:border-[var(--accent-1)]/30'
+                      : 'bg-transparent border-neutral-200 dark:border-[rgba(255,255,255,0.08)] text-neutral-500 dark:text-[#a09e9a] active:opacity-70'
+                  }`}
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 100-18 9 9 0 000 18zM3 12h18M12 3a13.5 13.5 0 010 18M12 3a13.5 13.5 0 000 18" />
+                  </svg>
+                  Global
+                </button>
+              )}
               {tasks.length > 0 && !kanbanSelectionMode && (
                 <button
                   onClick={() => setKanbanSelectionMode(true)}

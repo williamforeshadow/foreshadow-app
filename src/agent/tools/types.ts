@@ -18,7 +18,19 @@ export type ToolErrorCode =
    * preview/confirm dance, when a token has expired (5-minute TTL), or
    * when a token has already been used.
    */
-  | 'confirmation_required';
+  | 'confirmation_required'
+  /**
+   * Bin creation hit a name conflict (case-insensitive). The hint will
+   * usually steer the model toward find_bins so it can reuse the
+   * existing sub-bin instead of inventing a near-duplicate.
+   */
+  | 'duplicate_name'
+  /**
+   * Batch write failed partway through. `error.message` describes which
+   * item failed and why; the model should report the partial outcome
+   * to the user honestly rather than claim full success.
+   */
+  | 'partial_failure';
 
 export interface ToolError {
   code: ToolErrorCode;

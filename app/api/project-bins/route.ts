@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { createBin } from '@/src/server/bins/createBin';
 
 // GET - List all bins with project counts
 export async function GET() {
@@ -48,47 +49,46 @@ export async function GET() {
   }
 }
 
-// POST - Create a new bin
+// POST - Create a new sub-bin.
+//
+// Thin wrapper over the canonical createBin service. The service owns
+// validation, FK pre-checks, sort_order assignment, and case-insensitive
+// duplicate-name detection — everything the agent's create_bin tool
+// also calls into. Both surfaces emit structurally identical rows.
+//
+// Why mirror this through a service rather than keep the inline insert:
+// the bins agent (preview_bin / create_bin) needs the same error codes
+// the route returns, and a service is the single place to evolve them
+// without drift. See src/server/bins/createBin.ts.
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, description, created_by } = body;
 
-    if (!name?.trim()) {
+    const result = await createBin({
+      name: body?.name,
+      description: body?.description ?? null,
+      created_by: body?.created_by ?? null,
+    });
+
+    if (!result.ok) {
+      const status =
+        result.error.code === 'invalid_input'
+          ? 400
+          : result.error.code === 'duplicate_name'
+            ? 409
+            : result.error.code === 'not_found'
+              ? 404
+              : 500;
       return NextResponse.json(
-        { error: 'name is required' },
-        { status: 400 }
+        { error: result.error.message, code: result.error.code, field: result.error.field },
+        { status },
       );
     }
 
-    const supabase = getSupabaseServer();
-
-    // Get max sort_order to append at end
-    const { data: maxRow } = await supabase
-      .from('project_bins')
-      .select('sort_order')
-      .order('sort_order', { ascending: false })
-      .limit(1)
-      .single();
-
-    const nextSort = (maxRow?.sort_order ?? -1) + 1;
-
-    const { data: bin, error } = await supabase
-      .from('project_bins')
-      .insert({
-        name: name.trim(),
-        description: description || null,
-        created_by: created_by || null,
-        sort_order: nextSort,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ data: { ...bin, project_count: 0 } });
+    // Preserve the existing client contract: the bins page reads
+    // `data.project_count` to render the per-tile task count. New bins
+    // always start at 0.
+    return NextResponse.json({ data: { ...result.bin, project_count: 0 } });
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || 'Failed to create bin' },

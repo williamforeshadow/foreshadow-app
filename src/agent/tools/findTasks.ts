@@ -48,7 +48,7 @@ const inputSchema = z
       .string()
       .optional()
       .describe(
-        "Bin filter. Pass a UUID for a specific bin, '__none__' for unbinned tasks only, or '__any__' for any binned task.",
+        "Bin filter. Pass a sub-bin UUID for a specific sub-bin, '__none__' for unbinned tasks only, '__task_bin__' for orphan binned tasks (the default \"Task Bin\": is_binned=true AND bin_id IS NULL), or '__any__' for every binned task (Task Bin + every sub-bin).",
       ),
     statuses: z
       .array(STATUS_ENUM)
@@ -224,6 +224,7 @@ const SELECT = `
 
 const DEFAULT_LIMIT = 25;
 const BIN_NONE = '__none__';
+const BIN_TASK_BIN = '__task_bin__';
 const BIN_ANY = '__any__';
 
 // PostgREST `or()` filters use commas as separators and treat `%`/`_` as
@@ -398,14 +399,20 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
         hint: 'Call find_reservations to resolve a stay (by property, guest_name, hostaway_reservation_id, or date range) into a valid reservation_id.',
       });
     }
-    // bin_id may be a sentinel ('__none__' / '__any__') or a real UUID.
-    // Only validate the UUID case; sentinels are interpreted in-handler.
-    if (input.bin_id && input.bin_id !== BIN_NONE && input.bin_id !== BIN_ANY) {
+    // bin_id may be a sentinel ('__none__' / '__task_bin__' / '__any__') or
+    // a real sub-bin UUID. Only validate the UUID case; sentinels are
+    // interpreted in-handler.
+    if (
+      input.bin_id &&
+      input.bin_id !== BIN_NONE &&
+      input.bin_id !== BIN_TASK_BIN &&
+      input.bin_id !== BIN_ANY
+    ) {
       checks.push({
         field: 'bin_id',
         table: 'project_bins',
         value: input.bin_id,
-        hint: "There is no bin resolver tool yet. Use bin_id='__any__' for any binned task or '__none__' for unbinned, or confirm the bin_id with the user.",
+        hint: "Resolve sub-bin names with find_bins. Or use bin_id='__task_bin__' for orphan binned tasks (the Task Bin), '__any__' for every binned task, '__none__' for unbinned.",
       });
     }
 
@@ -538,6 +545,9 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
 
     if (input.bin_id === BIN_NONE) {
       q = q.eq('is_binned', false);
+    } else if (input.bin_id === BIN_TASK_BIN) {
+      // Task Bin = orphan binned (binned but no specific sub-bin).
+      q = q.eq('is_binned', true).is('bin_id', null);
     } else if (input.bin_id === BIN_ANY) {
       q = q.eq('is_binned', true);
     } else if (input.bin_id) {
@@ -711,7 +721,7 @@ export const findTasks: ToolDefinition<Input, TaskRow[]> = {
       bin_id: {
         type: 'string',
         description:
-          "Bin UUID, or '__none__' for unbinned tasks only, or '__any__' for any binned task.",
+          "Sub-bin UUID, or '__none__' (unbinned only), '__task_bin__' (orphan binned — the default Task Bin: is_binned=true AND bin_id IS NULL), or '__any__' (every binned task).",
       },
       statuses: {
         type: 'array',

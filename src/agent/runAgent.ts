@@ -19,6 +19,10 @@ import type { ToolResult } from './tools/types';
 export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set([
   'preview_task',
   'create_task',
+  'preview_bin',
+  'create_bin',
+  'preview_tasks_batch',
+  'create_tasks_batch',
 ]);
 
 // runAgent — single entry point that drives Anthropic's tool-use loop.
@@ -144,7 +148,7 @@ Identifier rules (critical):
 - Only pass id values (property_id, template_id, department_id, reservation_id, bin_id, user_id, etc.) that you obtained from a tool result earlier in this same turn.
 - Never fabricate ids, never guess them, and never reuse ids from prior conversation turns — those ids are not visible to you and cannot be trusted.
 - All ids in this system are random UUIDs (e.g. "a856ddd4-a9ac-4a9f-8a63-a8be59e90d74"). They are NOT derivable from names, slugs, or any text the user typed. If you catch yourself constructing a UUID-looking string from scratch, that is fabrication — stop and call the appropriate resolver instead.
-- If you don't have an id, call the appropriate resolver tool first: find_properties for a property, find_templates for a template, find_departments for a department, find_bins for a bin, find_users for a person, find_reservations for a stay/guest. Resolvers exist for every id-bearing field — there is no excuse for guessing.
+- If you don't have an id, call the appropriate resolver tool first: find_properties for a property, find_templates for a template, find_departments for a department, find_bins for an EXISTING sub-bin (find_bins resolves names → bin_ids; it does NOT create new bins — use preview_bin / create_bin or preview_tasks_batch's new_sub_bin shorthand for that), find_users for a person, find_reservations for a stay/guest. Resolvers exist for every id-bearing field — there is no excuse for guessing. Note: the default "Task Bin" has no UUID to resolve; to land a task there, omit bin_id and pass is_binned=true on preview_task (or shared_bin: { is_binned: true } on preview_tasks_batch).
 - If a tool returns error.code = "not_found" for an id you passed, do NOT retry with a different guess. Call the resolver tool instead and use the id it returns.
 
 Option-listing rule (critical):
@@ -152,11 +156,17 @@ Option-listing rule (critical):
 - If a resolver returns zero matches, say so directly ("I don't see a template by that name") and ask the user to rephrase or provide more detail. Do NOT improvise plausible-sounding alternatives.
 
 Write protocol (critical):
-- Any tool that creates, updates, schedules, or deletes data is a write. Today the only write surface is task creation (preview_task → create_task), but the protocol applies to every future write too.
-- For task creation specifically: ALWAYS call preview_task first. preview_task validates fields and returns a plan + a single-use confirmation_token. Present the plan to the user in plain English, ask for explicit confirmation ("shall I create this task?"), and ONLY after the user agrees, call create_task with the returned confirmation_token. If the user wants to change something, call preview_task again with the updated fields — every preview returns a fresh token.
-- create_task accepts ONLY a confirmation_token. It will refuse to act without one. Don't try to call create_task with task fields directly; that interface does not exist.
-- The confirmation_token is a UUID returned by preview_task — copy it verbatim from the most recent preview_task result this turn. Do NOT invent tokens that look like "preview_<timestamp>" or any other custom format; only the exact UUID from preview_task is accepted.
-- Action-claim rule: if your reply includes a claim that something was created, updated, scheduled, deleted, or assigned, the corresponding write tool MUST appear in this turn's tool calls AND have returned ok:true. If the write tool returned ok:false, surface the error message to the user verbatim and offer to retry — do not pretend it succeeded. If no write tool was called this turn, do not claim the action happened; describe what you would do instead.
+- Any tool that creates, updates, schedules, or deletes data is a write. Every write follows the same two-step pattern: preview_X first, then create_X with the returned confirmation_token. Available write surfaces today:
+  - Single task: preview_task → create_task
+  - New sub-bin: preview_bin → create_bin
+  - Multiple tasks at once (and optionally a brand-new sub-bin in the same operation): preview_tasks_batch → create_tasks_batch
+- ALWAYS call the preview tool first. preview tools validate fields, resolve display labels (property names, bin names, assignee names), surface conflicts (duplicate sub-bin name, missing FKs), and return a plan + a single-use confirmation_token. Present the plan to the user in plain English, ask for explicit confirmation ("shall I create this?"), and ONLY after the user agrees, call the matching create_X with the returned confirmation_token.
+- create_X tools accept ONLY a confirmation_token. They will refuse to act without one. Don't try to call them with field inputs directly; that interface does not exist.
+- The confirmation_token is a UUID returned by the matching preview tool — copy it verbatim from THIS turn's preview result. Do NOT invent tokens that look like "preview_<timestamp>" or any other custom format; only the exact UUID is accepted. Tokens from a different preview type (e.g. a preview_task token used against create_bin) will be rejected.
+- Tool-pair selection: use preview_task / create_task for ONE task. Use preview_tasks_batch / create_tasks_batch when the user asks to create more than one task in one breath OR asks to create a sub-bin and add tasks to it (the batch tool supports a new_sub_bin destination so the bin and the tasks land in a single confirmed operation). Never loop preview_task N times when the batch tool would do.
+- Sub-bin destination on tasks: pass a real bin_id (resolved via find_bins) for an existing sub-bin; pass is_binned=true with no bin_id for the default Task Bin; omit both for free-floating tasks. The batch tool uses the same vocabulary inside its shared_bin field, plus a new_sub_bin shorthand for "create this bin first, then drop the tasks into it".
+- Partial-failure rule: create_tasks_batch may return ok:true with a non-empty failures array (some tasks landed, some didn't). When that happens, narrate the partial outcome honestly — list the created tasks and explicitly mention which ones failed and why. Do not claim full success.
+- Action-claim rule: if your reply includes a claim that something was created, updated, scheduled, deleted, or assigned, the corresponding write tool MUST appear in this turn's tool calls AND have returned ok:true (a partial-success batch counts). If the write tool returned ok:false, surface the error message verbatim and offer to retry — do not pretend it succeeded. If no write tool was called this turn, do not claim the action happened; describe what you would do instead.
 
 If a tool returns ok:false, surface the error message to the user and use the hint, if present, to suggest a clarification. Do NOT invent or guess data that wasn't returned.
 
@@ -216,6 +226,17 @@ export interface RunAgentInput {
    * user to disambiguate before any user-scoped tool call.
    */
   actor?: AgentActor;
+  /**
+   * Optional ambient context blocks prepended to the user's prompt with
+   * a clear delimiter. The Slack route uses this to inject the
+   * surrounding thread when the bot is @-mentioned mid-conversation —
+   * without it, the model only sees the @-mention message and has no
+   * way to know what the thread was about. Block strings are passed
+   * through verbatim, so the caller is responsible for any formatting
+   * (e.g. labelling the block "Thread context (oldest first)") that
+   * helps the model distinguish background from the actual request.
+   */
+  contextBlocks?: string[];
 }
 
 export interface ToolCallTrace {
@@ -235,11 +256,24 @@ export async function runAgent({
   clientTz,
   surface = 'web',
   actor,
+  contextBlocks,
 }: RunAgentInput): Promise<RunAgentOutput> {
   const anthropic = getAnthropic();
+
+  // Compose the user message: ambient context first (so the model
+  // reads background before the request), then the prompt itself
+  // separated by a clear marker. We put context inside the user turn
+  // (not the system prompt) because it's per-message — different
+  // @-mentions in the same Slack workspace will have different
+  // surrounding threads.
+  const composedPrompt =
+    contextBlocks && contextBlocks.length > 0
+      ? `${contextBlocks.join('\n\n')}\n\n---\nUser request:\n${prompt}`
+      : prompt;
+
   const conversation: MessageParam[] = [
     ...history,
-    { role: 'user', content: prompt },
+    { role: 'user', content: composedPrompt },
   ];
 
   // Built once per request so the date stays fresh and the user's tz is

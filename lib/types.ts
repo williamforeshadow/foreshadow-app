@@ -141,9 +141,10 @@ export interface ProjectBin {
   /** Number of elapsed days after status=complete before auto-dismissal (default 7) */
   auto_dismiss_days?: number;
   /**
-   * When true, this is a protected system bin (e.g. the "All Binned Tasks" container
-   * that owns orphan binned tasks — those with `is_binned = true` but no `bin_id`).
-   * System bins cannot be renamed or deleted; only their auto-dismiss config is editable.
+   * When true, this is a protected system bin — the "Task Bin" that owns
+   * orphan binned tasks (those with `is_binned = true` but no `bin_id`).
+   * System bins cannot be renamed or deleted; only their auto-dismiss config
+   * is editable.
    */
   is_system?: boolean;
   project_count?: number; // computed client-side

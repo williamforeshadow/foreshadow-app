@@ -62,6 +62,33 @@ export function taskUrl(taskId: string): string {
 }
 
 /**
+ * Path (no host) for the bins workspace.
+ *
+ * Today the bins UI doesn't deep-link to an individual sub-bin via URL
+ * — clicking a bin tile is a SPA state transition handled in
+ * components/windows/projects/ProjectsWindow.tsx (and its mobile sibling).
+ * So we point at the bins index (`/?view=projects`) and the user takes
+ * one click to land on the right tile. When per-bin URLs ship, this is
+ * the single place to add the deeper path; agent and Slack consumers
+ * pick up the change automatically.
+ */
+export function binsIndexPath(): string {
+  return '/?view=projects';
+}
+
+/**
+ * Absolute URL for the bins workspace, or the relative path when
+ * APP_BASE_URL isn't configured. Mirrors taskUrl's fallback rules so
+ * the agent can attach a "see your bins" link from Slack and from the
+ * in-app chat with one helper.
+ */
+export function binsIndexUrl(): string {
+  const base = getAppBaseUrl();
+  const path = binsIndexPath();
+  return base ? `${base}${path}` : path;
+}
+
+/**
  * Path (no host) for the in-app My Assignments page.
  *
  * Single source of truth for `/assignments` so a future route rename is

@@ -20,6 +20,17 @@ export interface FilterOption {
   value: string;
   label: string;
   count?: number;
+  /**
+   * Optional section heading. When two consecutive options have different
+   * `group` values (or one is undefined), the MultiSelect popover renders a
+   * small uppercase section header above the second one and a divider line.
+   * Use this to break long lists into semantic sections (e.g. "Sub-Bins" vs
+   * the unsectioned "Task Bin" / "Not binned" entries at the top).
+   *
+   * Options are rendered in the order they appear in the `options` array;
+   * group together options that share a `group` value.
+   */
+  group?: string;
 }
 
 // Origin filter values. Empty set OR both selected = no filter at the
@@ -56,8 +67,14 @@ interface TaskFilterBarProps {
   departmentSelected: Set<string>;
   onDepartmentChange: (next: Set<string>) => void;
 
-  // Bin selection accepts the special sentinels '__none__' / '__any__' plus
-  // bin UUIDs.
+  // Bin selection sentinels (mirrors lib/useTasks.ts):
+  //   '__task_bin__' — orphan binned (is_binned=true AND bin_id IS NULL)
+  //   '__none__'     — not binned (rendered under the "Other" group header,
+  //                    visually separated from the bins themselves)
+  // Plus concrete sub-bin UUIDs grouped under "Sub-Bins". There is no
+  // "all bins" sentinel — the chip's "Select All" action selects every
+  // option (including Not binned, which the user can deselect to
+  // restrict to binned tasks only).
   binOptions: FilterOption[];
   binSelected: Set<string>;
   onBinChange: (next: Set<string>) => void;
@@ -320,42 +337,77 @@ function MultiSelect({
             </div>
           ) : (
             <>
-              {active && (
-                <button
-                  onClick={() => onChange(new Set())}
-                  className="w-full px-3 py-1.5 text-left text-[11px] text-neutral-500 dark:text-[#a09e9a] uppercase tracking-[0.04em] font-medium hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] border-b border-neutral-100 dark:border-[rgba(255,255,255,0.06)]"
-                >
-                  Clear
-                </button>
-              )}
-              {filteredOptions.map((opt) => {
-                const on = selected.has(opt.value);
-                return (
-                  <button
-                    key={opt.value}
-                    onClick={() => toggle(opt.value)}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] text-neutral-700 dark:text-[#f0efed]"
-                  >
-                    <span
-                      className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
-                        on
-                          ? 'bg-[var(--accent-3)] dark:bg-[var(--accent-2)] border-[var(--accent-3)] dark:border-[var(--accent-2)]'
-                          : 'border-neutral-300 dark:border-[rgba(255,255,255,0.15)]'
-                      }`}
+              {/* Action row — Select All / Clear. We render the row whenever
+                  there's at least one option, so the chip exposes a one-click
+                  shortcut to "every option" (the bin chip's user-facing
+                  replacement for the old "All bins" sentinel — see
+                  TaskFilterBar.binOptions doc) and a one-click clear. The
+                  underlying filter logic treats "every option selected" the
+                  same as "no selection" (both = no filter), but Select All
+                  is still the obvious way to ask for "all of these". */}
+              {filteredOptions.length > 0 && (
+                <div className="flex items-stretch border-b border-neutral-100 dark:border-[rgba(255,255,255,0.06)]">
+                  {selected.size < options.length && (
+                    <button
+                      onClick={() => onChange(new Set(options.map((o) => o.value)))}
+                      className="flex-1 px-3 py-1.5 text-left text-[11px] text-neutral-500 dark:text-[#a09e9a] uppercase tracking-[0.04em] font-medium hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)]"
                     >
-                      {on && (
-                        <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                    </span>
-                    <span className="flex-1 truncate">{opt.label}</span>
-                    {opt.count != null && (
-                      <span className="text-[10px] tabular-nums text-neutral-400 dark:text-[#66645f]">
-                        {opt.count}
-                      </span>
+                      Select all
+                    </button>
+                  )}
+                  {active && (
+                    <button
+                      onClick={() => onChange(new Set())}
+                      className="flex-1 px-3 py-1.5 text-left text-[11px] text-neutral-500 dark:text-[#a09e9a] uppercase tracking-[0.04em] font-medium hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)]"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              )}
+              {filteredOptions.map((opt, idx) => {
+                const on = selected.has(opt.value);
+                // Render a section header (with a thin top divider) whenever
+                // this option's `group` differs from the previous option's
+                // `group`. The first option in any group gets the header;
+                // ungrouped options before the first grouped option are
+                // rendered without a header.
+                const prevGroup = idx > 0 ? filteredOptions[idx - 1].group : undefined;
+                const showGroupHeader = !!opt.group && opt.group !== prevGroup;
+                return (
+                  <div key={opt.value}>
+                    {showGroupHeader && (
+                      <div className="px-3 pt-2 pb-1 mt-1 border-t border-neutral-100 dark:border-[rgba(255,255,255,0.06)]">
+                        <p className="text-[10px] font-semibold text-neutral-400 dark:text-[#66645f] uppercase tracking-[0.06em]">
+                          {opt.group}
+                        </p>
+                      </div>
                     )}
-                  </button>
+                    <button
+                      onClick={() => toggle(opt.value)}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] text-neutral-700 dark:text-[#f0efed]"
+                    >
+                      <span
+                        className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
+                          on
+                            ? 'bg-[var(--accent-3)] dark:bg-[var(--accent-2)] border-[var(--accent-3)] dark:border-[var(--accent-2)]'
+                            : 'border-neutral-300 dark:border-[rgba(255,255,255,0.15)]'
+                        }`}
+                      >
+                        {on && (
+                          <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </span>
+                      <span className="flex-1 truncate">{opt.label}</span>
+                      {opt.count != null && (
+                        <span className="text-[10px] tabular-nums text-neutral-400 dark:text-[#66645f]">
+                          {opt.count}
+                        </span>
+                      )}
+                    </button>
+                  </div>
                 );
               })}
             </>

@@ -23,6 +23,7 @@ import {
   buildTaskMessageExtras,
   extractTaskUrlsFromText,
 } from '@/src/slack/unfurl';
+import { fetchThreadMessages, formatThreadAsContext } from '@/src/slack/thread';
 
 interface MessageExtras {
   blocks?: Block[];
@@ -66,7 +67,17 @@ interface MessageExtras {
 // Slack app config (in api.slack.com/apps):
 //   Bot scopes:        app_mentions:read, chat:write, commands, users:read,
 //                      users:read.email, im:history, im:read, im:write,
-//                      links:read, links:write
+//                      links:read, links:write,
+//                      channels:history, groups:history
+//
+//                      The two *:history scopes power the thread-context
+//                      reader (src/slack/thread.ts). Without them the bot
+//                      can still respond to @-mentions, but it sees only
+//                      the @-mention message itself — not the surrounding
+//                      thread. In private channels (groups:history) the
+//                      bot ALSO needs to be invited (`/invite @Foreshadow`)
+//                      to read the history. mpim:history is optional;
+//                      add it if multi-party DMs become a use case.
 //   Subscribed events: app_mention, message.im, link_shared
 //   App unfurl domains: the host of APP_BASE_URL (e.g. app.foreshadow.com).
 //                      Slack will only fire link_shared for URLs on
@@ -96,6 +107,11 @@ interface MessageExtras {
 //        a. channel_mention / dm:
 //           - Resolve Slack user → app user (via email match in users table).
 //           - Pull recent ai_chat_messages history for that app user.
+//           - For channel mentions inside an existing thread: pull the
+//             surrounding thread via conversations.replies (requires
+//             channels:history / groups:history) and inject as ambient
+//             context on the runAgent call. Soft-fails on missing scope
+//             so the @-mention still gets a reply on the original prompt.
 //           - Run the agent (writes enabled, same as in-app).
 //           - Apply backstops, scrub trailing inline metadata from any
 //             linked-task bullet lines (the cards below the message
@@ -365,6 +381,32 @@ async function handleSlackMessage(
   // without breaking the in-app side.
   const history = await loadHistory(identity.appUserId);
 
+  // Pull surrounding thread for channel mentions in an existing thread.
+  // The bot has no idea what the conversation was about from the
+  // @-mention text alone; fetching the thread lets users tag the bot
+  // mid-conversation and have it read the context. Skipped when:
+  //   - the @-mention is not in a thread (event.thread_ts unset) — the
+  //     mention itself IS the conversation root, no extra context to pull
+  //   - we're handling a DM — DM "threading" doesn't behave like channels
+  //     and our typical DM use is one-shot prompts that don't benefit
+  //   - thread fetch returns empty (missing scope, not_in_channel, deleted,
+  //     etc.); fetchThreadMessages logs the cause and returns []
+  // The thread reader requires channels:history (and groups:history for
+  // private channels) — see src/slack/thread.ts and the scopes block in
+  // the file header above. Without those scopes the call no-ops gracefully.
+  let contextBlocks: string[] | undefined;
+  if (kind === 'channel_mention' && event.thread_ts) {
+    const threadMessages = await fetchThreadMessages(web, {
+      channel: event.channel,
+      threadTs: event.thread_ts,
+      excludeTs: event.ts,
+    });
+    const block = formatThreadAsContext(threadMessages);
+    if (block) {
+      contextBlocks = [block];
+    }
+  }
+
   const supabase = getSupabaseServer();
   await supabase.from('ai_chat_messages').insert({
     user_id: identity.appUserId,
@@ -395,6 +437,7 @@ async function handleSlackMessage(
       name: identity.appUserName,
       role: identity.role,
     },
+    contextBlocks,
   });
 
   const masked = applyBackstops(result.text, result.toolCalls);

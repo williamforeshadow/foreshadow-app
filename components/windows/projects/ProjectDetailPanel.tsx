@@ -28,19 +28,37 @@ function InlineDropdown({ children, onClose, align = 'left' }: { children: React
   return (
     <div
       ref={ref}
-      className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} top-full mt-1.5 z-[70] min-w-[200px] max-w-[280px] rounded-xl bg-white dark:bg-neutral-900/[0.98] border border-[rgba(30,25,20,0.08)] dark:border-white/15 shadow-[0_4px_16px_rgba(0,0,0,0.06)]`}
+      className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} top-full mt-1.5 z-[70] min-w-[200px] max-w-[280px] rounded-xl bg-white dark:bg-neutral-900 border border-[rgba(30,25,20,0.08)] dark:border-white/15 shadow-[0_4px_16px_rgba(0,0,0,0.06)] overflow-hidden`}
     >
-      <div className="relative overflow-hidden rounded-xl max-h-[50vh] overflow-y-auto py-1">
+      {/* IMPORTANT: the bg also goes on the inner scroll container. When
+          content exceeds max-h-[50vh] this div becomes a scroll viewport,
+          and a scroll container without its own bg lets scrolled content
+          render against transparency rather than inheriting the outer
+          div's painted bg. That was the cause of the bin dropdown's
+          sub-bins area looking see-through (the upper rows sat against
+          the outer's bg edge, the scrolled rows did not). Belt-and-
+          suspenders: outer paints the corners/border, inner paints the
+          scroll viewport. */}
+      <div className="max-h-[50vh] overflow-y-auto py-1 bg-white dark:bg-neutral-900">
         {children}
       </div>
     </div>
   );
 }
 
-// ── Green checkmark icon ──
-function GreenCheck() {
+// ── "Selected" checkmark icon ──
+// Uses the app's purple accent tokens (--accent-3 light / --accent-1 dark)
+// so dropdown rows visually agree with the rest of the UI (Global toggle,
+// active tabs, etc.) instead of the off-brand emerald we used before.
+function AccentCheck({ title }: { title?: string }) {
   return (
-    <svg className="w-4 h-4 ml-auto text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg
+      className="w-4 h-4 ml-auto text-[var(--accent-3)] dark:text-[var(--accent-1)] flex-shrink-0"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      {title && <title>{title}</title>}
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
     </svg>
   );
@@ -614,7 +632,7 @@ export function ProjectDetailPanel({
                             >
                               <span className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
                               <span className="text-[15px] text-neutral-900 dark:text-white">{cfg.label}</span>
-                              {editingFields.status === key && <GreenCheck />}
+                              {editingFields.status === key && <AccentCheck />}
                             </button>
                           );
                         })}
@@ -649,7 +667,7 @@ export function ProjectDetailPanel({
                         >
                           <span className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
                           <span className="text-[15px] text-neutral-900 dark:text-white">{cfg.label}</span>
-                          {editingFields.priority === key && <GreenCheck />}
+                          {editingFields.priority === key && <AccentCheck />}
                         </button>
                       );
                     })}
@@ -677,7 +695,7 @@ export function ProjectDetailPanel({
                       }`}
                     >
                       <span className="text-[15px] text-neutral-500">No Department</span>
-                      {!editingFields.department_id && <GreenCheck />}
+                      {!editingFields.department_id && <AccentCheck />}
                     </button>
                     {departments.map((d) => {
                       const DIcon2 = getDepartmentIcon(d.icon);
@@ -691,7 +709,7 @@ export function ProjectDetailPanel({
                         >
                           <DIcon2 className="w-4 h-4 text-sky-500" />
                           <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{d.name}</span>
-                          {editingFields.department_id === d.id && <GreenCheck />}
+                          {editingFields.department_id === d.id && <AccentCheck />}
                         </button>
                       );
                     })}
@@ -753,8 +771,18 @@ export function ProjectDetailPanel({
             </div>
           </div>
 
-          {/* ── Relationships row: Property · Bin · Template ── */}
-          <div className="rounded-xl bg-[rgba(30,25,20,0.03)] dark:bg-white/[0.04] border border-[rgba(30,25,20,0.06)] dark:border-white/10 px-2 py-2.5 flex items-start relative z-10">
+          {/* ── Relationships row: Property · Bin · Template ──
+              z-30 (vs z-10 on the later "Assigned + Scheduled grid") because
+              the Property/Bin/Template dropdowns open downward and overlap
+              that grid. CSS stacking: a child's z-index is capped by its
+              nearest stacking-context ancestor — `position: relative`
+               + `z-10` here creates that ancestor, and the dropdown's
+              `z-[70]` only ranks inside it. Two sibling stacking contexts
+              with the SAME z-index fall back to document order, which puts
+              the later grid on top of this row's dropdowns and produces
+              the "transparent dropdown" bug. Bumping this row above the
+              grid restores the expected paint order. */}
+          <div className="rounded-xl bg-[rgba(30,25,20,0.03)] dark:bg-white/[0.04] border border-[rgba(30,25,20,0.06)] dark:border-white/10 px-2 py-2.5 flex items-start relative z-30">
             {/* Property */}
             <div className="relative flex-1 min-w-0 px-2">
               {!isNewTask ? (
@@ -806,7 +834,7 @@ export function ProjectDetailPanel({
                         }`}
                       >
                         <span className="text-[15px] text-neutral-500 dark:text-neutral-400 italic">No Property</span>
-                        {!project.property_name && <GreenCheck />}
+                        {!project.property_name && <AccentCheck />}
                       </button>
                       {filteredProperties.map((prop) => (
                         <button
@@ -820,7 +848,7 @@ export function ProjectDetailPanel({
                             <path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
                           </svg>
                           <span className="text-[15px] text-neutral-900 dark:text-white flex-1 truncate">{prop.name}</span>
-                          {project.property_name === prop.name && <GreenCheck />}
+                          {project.property_name === prop.name && <AccentCheck />}
                         </button>
                       ))}
                     </InlineDropdown>
@@ -831,7 +859,13 @@ export function ProjectDetailPanel({
 
             <div className="w-px self-stretch bg-[rgba(30,25,20,0.08)] dark:bg-white/10 flex-shrink-0" />
 
-            {/* Bin */}
+            {/* Bin
+                Selection model: pick exactly one row {Task Bin | <sub-bin>}
+                or zero. Clicking the currently-selected row toggles it off,
+                which fully unbins the task (is_binned=false, bin_id=null)
+                and the trigger pill collapses to "No bin". The old
+                "Add to Bins" toggle is gone — selecting any row implies
+                is_binned=true so the user gets there in one click. */}
             <div className="relative flex-1 min-w-0 px-2">
               <button
                 onClick={() => { closeAllPickers(); setBinOpen(!binOpen); setBinSearch(''); }}
@@ -841,10 +875,10 @@ export function ProjectDetailPanel({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                 </svg>
                 <span className="truncate flex-1 text-left">
-                  {project.is_binned ? (currentBin ? currentBin.name : 'Binned') : 'No bin'}
+                  {project.is_binned ? (currentBin ? currentBin.name : 'Task Bin') : 'No bin'}
                 </span>
                 {project.is_binned && (
-                  <svg className="w-3 h-3 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3 text-[var(--accent-3)] dark:text-[var(--accent-1)] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                   </svg>
                 )}
@@ -852,73 +886,89 @@ export function ProjectDetailPanel({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
-              {binOpen && (
+              {binOpen && (() => {
+                // Selected-row visual: soft purple wash + purple check
+                // (replaces the previous neutral wash + emerald check). The
+                // helper lives inline so we don't drag accent classes
+                // through every other field's row.
+                const selectedRowBg = 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)]';
+                const hoverRowBg = 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]';
+                const taskBinSelected = !!project.is_binned && !project.bin_id;
+                // Toggle helper: clicking the active row deselects (= unbin
+                // entirely); clicking any other row binds is_binned=true
+                // and the chosen bin_id in one shot.
+                const selectBin = (id: string | null, name: string | null, isCurrentlySelected: boolean) => {
+                  if (isCurrentlySelected) {
+                    onIsBinnedChange?.(false);
+                    onBinChange?.(null, null);
+                  } else {
+                    if (!project.is_binned) onIsBinnedChange?.(true);
+                    onBinChange?.(id, name);
+                  }
+                  setBinOpen(false);
+                };
+                return (
                 <InlineDropdown onClose={() => setBinOpen(false)}>
+                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Bin</p>
+                  {/* Task Bin = bin_id IS NULL. Default destination for
+                      binned tasks not assigned to a specific sub-bin. Sits
+                      at the top — same slot the old "Add to Bins" toggle
+                      occupied — and is just a regular selectable row now. */}
                   <button
-                    onClick={() => {
-                      const newVal = !project.is_binned;
-                      onIsBinnedChange?.(newVal);
-                      if (!newVal) {
-                        onBinChange?.(null, null);
-                        setBinOpen(false);
-                      }
-                    }}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors sticky top-0 z-10 bg-white dark:bg-neutral-900/95 border-b border-[rgba(30,25,20,0.06)] dark:border-white/10 ${
-                      project.is_binned ? 'text-emerald-600 dark:text-emerald-400' : ''
+                    onClick={() => selectBin(null, null, taskBinSelected)}
+                    title={taskBinSelected ? 'Click again to unbin (No bin)' : undefined}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                      taskBinSelected ? selectedRowBg : hoverRowBg
                     }`}
                   >
-                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                      project.is_binned
-                        ? 'bg-emerald-500 border-emerald-500'
-                        : 'border-neutral-300 dark:border-neutral-600'
-                    }`}>
-                      {project.is_binned && (
-                        <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                    </div>
-                    <span className="text-[15px] font-medium">Add to Bins</span>
+                    <svg className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    <span className="text-[15px] text-neutral-900 dark:text-white flex-1">Task Bin <span className="text-neutral-400 dark:text-neutral-500 text-[13px]">(default)</span></span>
+                    {taskBinSelected && <AccentCheck title="Click again to unbin" />}
                   </button>
-                  {project.is_binned && bins.length > 0 && (
+                  {bins.length > 0 && (
                     <>
                       <div className="px-3 py-2">
                         <input
                           type="text"
-                          placeholder="Search bins..."
+                          placeholder="Search sub-bins..."
                           value={binSearch}
                           onChange={(e) => setBinSearch(e.target.value)}
                           className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20"
                         />
                       </div>
-                      <button
-                        onClick={() => { onBinChange?.(null, null); setBinOpen(false); }}
-                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                          !project.bin_id ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
-                        }`}
-                      >
-                        <span className="text-[15px] text-neutral-500 dark:text-neutral-400 italic">No specific bin</span>
-                        {!project.bin_id && <GreenCheck />}
-                      </button>
-                      {filteredBins.map((bin) => (
-                        <button
-                          key={bin.id}
-                          onClick={() => { onBinChange?.(bin.id, bin.name); setBinOpen(false); }}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                            project.bin_id === bin.id ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
-                          }`}
-                        >
-                          <svg className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                          </svg>
-                          <span className="text-[15px] text-neutral-900 dark:text-white flex-1 truncate">{bin.name}</span>
-                          {project.bin_id === bin.id && <GreenCheck />}
-                        </button>
-                      ))}
+                      {filteredBins.length > 0 && (
+                        <div className="px-4 pt-1 pb-1">
+                          <p className="text-[10px] font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-[0.08em]">
+                            Sub-Bins
+                          </p>
+                        </div>
+                      )}
+                      {filteredBins.map((bin) => {
+                        const isSelected = project.bin_id === bin.id;
+                        return (
+                          <button
+                            key={bin.id}
+                            onClick={() => selectBin(bin.id, bin.name, isSelected)}
+                            title={isSelected ? 'Click again to unbin (No bin)' : undefined}
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                              isSelected ? selectedRowBg : hoverRowBg
+                            }`}
+                          >
+                            <svg className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                            </svg>
+                            <span className="text-[15px] text-neutral-900 dark:text-white flex-1 truncate">{bin.name}</span>
+                            {isSelected && <AccentCheck title="Click again to unbin" />}
+                          </button>
+                        );
+                      })}
                     </>
                   )}
                 </InlineDropdown>
-              )}
+                );
+              })()}
             </div>
 
             {/* Template (conditional) */}
@@ -975,7 +1025,7 @@ export function ProjectDetailPanel({
                             }`}
                           >
                             <span className="text-[15px] text-neutral-500 dark:text-neutral-400 italic">No Template</span>
-                            {!project.template_id && <GreenCheck />}
+                            {!project.template_id && <AccentCheck />}
                           </button>
                           {filteredTemplates.map((tmpl) => (
                             <button
@@ -994,7 +1044,7 @@ export function ProjectDetailPanel({
                                   <span className="text-[11px] text-neutral-400 dark:text-neutral-500">{tmpl.department_name}</span>
                                 )}
                               </div>
-                              {project.template_id === tmpl.id && <GreenCheck />}
+                              {project.template_id === tmpl.id && <AccentCheck />}
                             </button>
                           ))}
                         </InlineDropdown>
@@ -1121,7 +1171,7 @@ export function ProjectDetailPanel({
                             </div>
                           )}
                           <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{user.name}</span>
-                          {isAssigned && <GreenCheck />}
+                          {isAssigned && <AccentCheck />}
                         </button>
                       );
                     })}

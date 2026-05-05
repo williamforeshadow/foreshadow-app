@@ -9,7 +9,13 @@ interface BinPickerProps {
   bins: ProjectBin[];
   loadingBins: boolean;
   totalProjects: number;
-  onSelectBin: (binId: string | null) => void; // null = "All Binned Tasks"
+  // Bin selection:
+  //   null    → Task Bin (default destination; orphan binned tasks). The Task
+  //             Bin kanban itself exposes a "Global" toggle that, when on,
+  //             widens the view to every binned task across the Task Bin and
+  //             every sub-bin — there is no separate "All Bins" tile.
+  //   <uuid>  → a specific sub-bin
+  onSelectBin: (binId: string | null) => void;
   onCreateBin: (name: string, description?: string) => Promise<ProjectBin | null>;
   onDeleteBin: (binId: string) => void;
   onUpdateBin: (
@@ -38,10 +44,20 @@ export function BinPicker({
   const [settingsAutoDays, setSettingsAutoDays] = useState<number>(7);
   const [contextMenuBinId, setContextMenuBinId] = useState<string | null>(null);
 
-  // Split system bin (the "All Binned Tasks" container that owns orphan tasks)
-  // from the regular user-managed bins.
+  // The system bin is the "Task Bin" — the default destination for binned
+  // tasks that haven't been assigned to a specific sub-bin. It owns the
+  // auto-dismiss config for orphan binned tasks (bin_id IS NULL). User-
+  // created bins are surfaced as sub-bins.
   const systemBin = useMemo(() => bins.find((b) => b.is_system) ?? null, [bins]);
-  const userBins = useMemo(() => bins.filter((b) => !b.is_system), [bins]);
+  const subBins = useMemo(() => bins.filter((b) => !b.is_system), [bins]);
+
+  // Orphan count = total binned − (tasks assigned to a sub-bin). The bins
+  // API only fills `project_count` for sub-bins (orphans have no bin_id),
+  // so we derive Task Bin's count from totals here.
+  const taskBinCount = useMemo(
+    () => Math.max(0, totalProjects - subBins.reduce((s, b) => s + (b.project_count || 0), 0)),
+    [totalProjects, subBins]
+  );
 
   const handleCreate = useCallback(async () => {
     if (!newBinName.trim()) return;
@@ -105,9 +121,9 @@ export function BinPicker({
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 dark:border-white/10 flex-shrink-0">
         <div>
-          <h2 className="text-xl font-semibold text-neutral-900 dark:text-white">Task Bins</h2>
+          <h2 className="text-xl font-semibold text-neutral-900 dark:text-white">Bins</h2>
           <p className="text-sm text-neutral-500 dark:text-white/40 mt-0.5">
-            {totalProjects} binned task{totalProjects !== 1 ? 's' : ''} across {userBins.length} bin{userBins.length !== 1 ? 's' : ''}
+            {totalProjects} binned task{totalProjects !== 1 ? 's' : ''} across the Task Bin and {subBins.length} sub-bin{subBins.length !== 1 ? 's' : ''}
           </p>
         </div>
         <Button
@@ -118,14 +134,15 @@ export function BinPicker({
           <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
-          New Bin
+          New Sub-Bin
         </Button>
       </div>
 
       {/* Bin Grid */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {/* All Binned Tasks Card — backed by the system bin row for its auto-dismiss config */}
+          {/* Task Bin Card — backed by the system bin row for its auto-dismiss config.
+              Clicking opens the orphan-only view (binned tasks with no sub-bin). */}
           <div
             role="button"
             tabIndex={0}
@@ -166,15 +183,15 @@ export function BinPicker({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                   </svg>
                 </div>
-                <h3 className="text-base font-semibold text-neutral-900 dark:text-white">All Binned Tasks</h3>
+                <h3 className="text-base font-semibold text-neutral-900 dark:text-white">Task Bin</h3>
               </div>
               <p className="text-xs text-neutral-500 dark:text-white/30 line-clamp-2">
-                View every task across all bins
+                Default destination for binned tasks. Use sub-bins to organize further.
               </p>
             </div>
             <div className="flex items-center justify-between mt-3">
               <span className="text-sm font-medium text-neutral-500 dark:text-white/40">
-                {totalProjects} task{totalProjects !== 1 ? 's' : ''}
+                {taskBinCount} task{taskBinCount !== 1 ? 's' : ''}
               </span>
               <svg className="w-4 h-4 text-neutral-300 dark:text-white/20 group-hover:text-neutral-500 dark:group-hover:text-white/40 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -200,8 +217,8 @@ export function BinPicker({
             )}
           </div>
 
-          {/* Individual Bin Cards */}
-          {userBins.map((bin) => (
+          {/* Individual Sub-Bin Cards */}
+          {subBins.map((bin) => (
             <div
               key={bin.id}
               role="button"
@@ -225,7 +242,7 @@ export function BinPicker({
                 <button
                   onClick={() => setContextMenuBinId(contextMenuBinId === bin.id ? null : bin.id)}
                   className="p-1 rounded-md hover:bg-neutral-300/50 dark:hover:bg-white/10 transition-colors"
-                  title="Bin options"
+                  title="Sub-bin options"
                 >
                   <svg className="w-4 h-4 text-neutral-500 dark:text-white/40" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -275,7 +292,7 @@ export function BinPicker({
                   <button
                     className="w-full text-left px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-neutral-100 dark:hover:bg-white/10 transition-colors"
                     onClick={() => {
-                      if (confirm(`Delete "${bin.name}"? Tasks will remain in All Binned Tasks.`)) {
+                      if (confirm(`Delete sub-bin "${bin.name}"? Tasks will remain in the Task Bin.`)) {
                         onDeleteBin(bin.id);
                       }
                       setContextMenuBinId(null);
@@ -288,7 +305,7 @@ export function BinPicker({
             </div>
           ))}
 
-          {/* Create New Bin Card */}
+          {/* Create New Sub-Bin Card */}
           {!showCreateForm && (
             <button
               onClick={() => setShowCreateForm(true)}
@@ -299,7 +316,7 @@ export function BinPicker({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
               </div>
-              <span className="text-sm text-neutral-500 dark:text-white/30 font-medium">Create Bin</span>
+              <span className="text-sm text-neutral-500 dark:text-white/30 font-medium">Create Sub-Bin</span>
             </button>
           )}
         </div>
@@ -307,11 +324,11 @@ export function BinPicker({
         {/* Inline Create Form */}
         {showCreateForm && (
           <div className="mt-6 p-5 rounded-xl border border-neutral-200 bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:backdrop-blur-md max-w-md">
-            <h4 className="text-sm font-semibold text-neutral-900 dark:text-white mb-3">New Bin</h4>
+            <h4 className="text-sm font-semibold text-neutral-900 dark:text-white mb-3">New Sub-Bin</h4>
             <input
               autoFocus
               type="text"
-              placeholder="Bin name..."
+              placeholder="Sub-bin name..."
               value={newBinName}
               onChange={(e) => setNewBinName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
@@ -370,7 +387,7 @@ export function BinPicker({
           >
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-base font-semibold text-neutral-900 dark:text-white">
-                {settingsIsSystem ? 'All Binned Tasks Settings' : 'Bin Settings'}
+                {settingsIsSystem ? 'Task Bin Settings' : 'Sub-Bin Settings'}
               </h3>
               <button
                 onClick={closeSettings}
@@ -399,9 +416,9 @@ export function BinPicker({
                 </div>
               ) : (
                 <p className="text-xs text-neutral-600 dark:text-white/50 leading-relaxed">
-                  Auto-dismiss settings here apply to <strong className="text-neutral-900 dark:text-white/80">orphan binned tasks</strong> —
-                  tasks you've binned without assigning them to a specific bin. Named
-                  bins have their own auto-dismiss settings.
+                  These settings apply to <strong className="text-neutral-900 dark:text-white/80">orphan binned tasks</strong> —
+                  tasks binned without assigning them to a specific sub-bin. Each
+                  sub-bin has its own auto-dismiss settings.
                 </p>
               )}
 

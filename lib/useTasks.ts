@@ -75,9 +75,13 @@ export interface TaskFilters {
   statuses: Set<string>;
   assignees: Set<string>;
   departments: Set<string>;
-  // Bin selection accepts the special sentinels '__none__' (not binned) and
-  // '__any__' (any binned task) plus concrete bin UUIDs. Mirrors the
-  // PropertyTasksView contract.
+  // Bin selection accepts these sentinels plus concrete sub-bin UUIDs:
+  //   '__none__'     — not binned
+  //   '__task_bin__' — orphan binned (is_binned=true AND bin_id IS NULL)
+  // Plus any number of sub-bin UUIDs. There is no "all bins" sentinel —
+  // selecting every binned option (or clearing the selection) achieves
+  // the same effect, with the chip's "Select All" action as a shortcut.
+  // Mirrors the PropertyTasksView contract.
   bins: Set<string>;
   // Origin: 'manual' (created via New Task) vs 'automated' (turnovers /
   // recurring / templated spawns). Empty set OR both selected = no filter.
@@ -450,7 +454,10 @@ export function useTasks(options: UseTasksOptions = {}) {
     let manualCount = 0;
     let automatedCount = 0;
     let notBinnedCount = 0;
-    let allBinnedCount = 0;
+    // taskBinCount = orphan binned (is_binned=true AND bin_id IS NULL —
+    // tasks the user binned without picking a specific sub-bin, owned by
+    // the system "Task Bin" row).
+    let taskBinCount = 0;
 
     tasks.forEach((t) => {
       statusCounts[t.status] = (statusCounts[t.status] || 0) + 1;
@@ -458,13 +465,14 @@ export function useTasks(options: UseTasksOptions = {}) {
       if (t.is_automated) automatedCount++;
       else manualCount++;
       if (t.is_binned) {
-        allBinnedCount++;
         if (t.bin_id) {
           const existing = binMap.get(t.bin_id);
           binMap.set(t.bin_id, {
-            name: t.bin_name || 'Bin',
+            name: t.bin_name || 'Sub-Bin',
             count: (existing?.count || 0) + 1,
           });
+        } else {
+          taskBinCount++;
         }
       } else {
         notBinnedCount++;
@@ -501,12 +509,20 @@ export function useTasks(options: UseTasksOptions = {}) {
       departments: Array.from(deptMap.entries())
         .map(([id, v]) => ({ value: id, label: v.name, count: v.count }))
         .sort((a, b) => a.label.localeCompare(b.label)),
+      // Bin filter shape (mirrors the Bins page taxonomy; no "all bins"
+      // sentinel — the chip's "Select All" action achieves the same effect):
+      //   1. Task Bin     (__task_bin__)      — orphan binned
+      //   2. Sub-Bins     (each <uuid>)       — under the "Sub-Bins" group header
+      //   3. Not binned   (__none__)          — under the "Other" group header,
+      //                                          visually separated so the user
+      //                                          can tell it's not a bin
+      // Group-header rendering is driven by FilterOption.group (see TaskFilterBar).
       bins: [
-        { value: '__none__', label: 'Not binned', count: notBinnedCount },
-        { value: '__any__', label: 'All binned tasks', count: allBinnedCount },
+        { value: '__task_bin__', label: 'Task Bin', count: taskBinCount },
         ...Array.from(binMap.entries())
-          .map(([id, v]) => ({ value: id, label: v.name, count: v.count }))
+          .map(([id, v]) => ({ value: id, label: v.name, count: v.count, group: 'Sub-Bins' }))
           .sort((a, b) => a.label.localeCompare(b.label)),
+        { value: '__none__', label: 'Not binned', count: notBinnedCount, group: 'Other' },
       ],
       origins: [
         { value: ORIGIN_MANUAL, label: 'Manual', count: manualCount },
@@ -570,7 +586,8 @@ export function useTasks(options: UseTasksOptions = {}) {
       if (filters.bins.size > 0) {
         const matches = Array.from(filters.bins).some((val) => {
           if (val === '__none__') return !t.is_binned;
-          if (val === '__any__') return t.is_binned;
+          // Task Bin = orphan binned (binned but no specific sub-bin).
+          if (val === '__task_bin__') return t.is_binned && !t.bin_id;
           return t.bin_id === val;
         });
         if (!matches) return false;

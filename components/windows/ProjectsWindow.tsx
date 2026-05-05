@@ -7,6 +7,7 @@ import { STATUS_LABELS, STATUS_ORDER, PRIORITY_LABELS, PRIORITY_ORDER } from '@/
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
 import { useKanbanTexture } from '@/lib/hooks/useKanbanTexture';
+import { useTaskBinGlobalView } from '@/lib/hooks/useTaskBinGlobalView';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
@@ -113,8 +114,13 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   const binsHook = useProjectBins({ currentUser });
 
   // Bin navigation state
+  // Bin selection (mirrors BinPicker):
+  //   null    → Task Bin (orphan binned tasks, bin_id IS NULL by default;
+  //             widened to every binned task when the Task Bin's "Global"
+  //             toggle is on — see taskBinGlobal below)
+  //   <uuid>  → a specific sub-bin
   const [selectedBinId, setSelectedBinId] = useState<string | null>(null);
-  const [selectedBinName, setSelectedBinName] = useState<string>('All Binned Tasks');
+  const [selectedBinName, setSelectedBinName] = useState<string>('Task Bin');
   const [showKanban, setShowKanban] = useState(false);
 
   // Task data (fetched from tasks-for-bin API)
@@ -289,6 +295,13 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   // Board texture preference
   const { enabled: showBoardTexture } = useKanbanTexture();
 
+  // Task Bin "Global" toggle. When ON inside the Task Bin view, the kanban
+  // widens to every binned task (Task Bin orphans + every sub-bin) by
+  // fetching with the internal '__every__' API sentinel. When OFF, only
+  // orphan binned tasks render. Persisted in localStorage so the user's
+  // preference survives navigation and reloads.
+  const taskBinGlobal = useTaskBinGlobalView();
+
   const allColumnOptions = useMemo(() => {
     if (viewMode === 'property') {
       const names = new Set<string>();
@@ -345,26 +358,50 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   // ============================================================================
   // Bin Navigation
   // ============================================================================
+  // Resolve a logical bin selection (`null` = Task Bin, `<uuid>` = sub-bin)
+  // to the API's `bin_id` query param. The Task Bin's "Global" toggle, when
+  // on, widens the Task Bin fetch to every binned task via the internal
+  // '__every__' sentinel. Sub-bin selections are never widened — Global is
+  // a Task-Bin-only knob.
+  const apiBinIdFor = useCallback(
+    (binId: string | null) =>
+      binId === null && taskBinGlobal.enabled ? '__every__' : binId,
+    [taskBinGlobal.enabled],
+  );
+
   const handleSelectBin = useCallback(async (binId: string | null) => {
     setSelectedBinId(binId);
     setShowKanban(true);
     setExpandedProject(null);
 
     if (binId === null) {
-      setSelectedBinName('All Binned Tasks');
+      setSelectedBinName('Task Bin');
     } else {
       const bin = binsHook.bins.find(b => b.id === binId);
-      setSelectedBinName(bin?.name || 'Bin');
+      setSelectedBinName(bin?.name || 'Sub-Bin');
     }
 
-    await fetchTasksForBin(binId);
-  }, [binsHook.bins, fetchTasksForBin]);
+    await fetchTasksForBin(apiBinIdFor(binId));
+  }, [binsHook.bins, fetchTasksForBin, apiBinIdFor]);
+
+  // Toggle the Task Bin's Global view AND immediately refetch so the kanban
+  // updates without waiting for another navigation. No-op when the user
+  // isn't inside the Task Bin (the toggle button only renders there anyway).
+  const handleToggleTaskBinGlobal = useCallback(async () => {
+    taskBinGlobal.toggle();
+    if (selectedBinId === null) {
+      // taskBinGlobal.toggle is async (state setter), so flip the value
+      // locally to compute the next API param without racing the state.
+      const nextEnabled = !taskBinGlobal.enabled;
+      await fetchTasksForBin(nextEnabled ? '__every__' : null);
+    }
+  }, [taskBinGlobal, selectedBinId, fetchTasksForBin]);
 
   const handleBackToBins = useCallback(() => {
     setShowKanban(false);
     setExpandedProject(null);
     setSelectedBinId(null);
-    setSelectedBinName('All Binned Tasks');
+    setSelectedBinName('Task Bin');
     setKanbanSelectionMode(false);
     binsHook.fetchBins();
   }, [binsHook.fetchBins]);
@@ -466,10 +503,13 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   }, [expandedProject]);
 
   const handleNewTask = useCallback(() => {
+    // In Task Bin view (selectedBinId === null), a new task has no specific
+    // sub-bin — it lands in the Task Bin by default. In a sub-bin view we
+    // pre-fill bin_id so the new task lands in that sub-bin.
     const draft: Project = {
       id: `draft-${Date.now()}`,
       property_name: null,
-      bin_id: selectedBinId || null,
+      bin_id: selectedBinId,
       is_binned: true,
       template_id: null,
       template_name: null,
@@ -700,6 +740,28 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
             <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
               {selectedBinName}
             </h3>
+            {/* Global toggle — only inside the Task Bin (selectedBinId === null).
+                When ON, widens the Task Bin to every binned task across the
+                Task Bin and every sub-bin. Persists across sessions. */}
+            {selectedBinId === null && (
+              <button
+                onClick={handleToggleTaskBinGlobal}
+                title={taskBinGlobal.enabled
+                  ? 'Global view ON — showing every binned task. Click to scope back to the Task Bin only.'
+                  : 'Global view OFF — showing only the Task Bin. Click to widen to every binned task.'}
+                aria-pressed={taskBinGlobal.enabled}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors ${
+                  taskBinGlobal.enabled
+                    ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)] border-[var(--accent-3)]/30 dark:border-[var(--accent-1)]/30'
+                    : 'bg-transparent text-neutral-500 dark:text-[#a09e9a] border-neutral-200 dark:border-white/10 hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-white/[0.04] hover:text-neutral-800 dark:hover:text-white'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 100-18 9 9 0 000 18zM3 12h18M12 3a13.5 13.5 0 010 18M12 3a13.5 13.5 0 000 18" />
+                </svg>
+                Global
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <ViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />

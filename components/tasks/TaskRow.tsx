@@ -104,7 +104,7 @@ export function PriorityTag({ priority }: { priority: string }) {
 }
 
 // Archive-drawer icon — matches the bin iconography in
-// `components/windows/projects/BinPicker.tsx` (the "All Binned Tasks" card).
+// `components/windows/projects/BinPicker.tsx` (the "Task Bin" card).
 export function BinIcon({ className = 'w-3 h-3' }: { className?: string }) {
   return (
     <svg

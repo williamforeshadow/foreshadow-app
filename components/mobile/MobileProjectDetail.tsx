@@ -421,7 +421,7 @@ export default function MobileProjectDetail({
                             <span className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
                             <span className="text-[15px] text-neutral-900 dark:text-white">{cfg.label}</span>
                             {fields.status === s && (
-                              <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-4 h-4 ml-auto text-[var(--accent-3)] dark:text-[var(--accent-1)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                               </svg>
                             )}
@@ -460,7 +460,7 @@ export default function MobileProjectDetail({
                         <span className={`inline-block w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
                         <span className="text-[15px] text-neutral-900 dark:text-white">{cfg.label}</span>
                         {fields.priority === p && (
-                          <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 h-4 ml-auto text-[var(--accent-3)] dark:text-[var(--accent-1)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
                         )}
@@ -492,7 +492,7 @@ export default function MobileProjectDetail({
                   >
                     <span className="text-[15px] text-neutral-500">No Department</span>
                     {!fields.department_id && (
-                      <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4 ml-auto text-[var(--accent-3)] dark:text-[var(--accent-1)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
                     )}
@@ -510,7 +510,7 @@ export default function MobileProjectDetail({
                         <DIcon2 className="w-4 h-4 text-sky-500" />
                         <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{d.name}</span>
                         {fields.department_id === d.id && (
-                          <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 h-4 ml-auto text-[var(--accent-3)] dark:text-[var(--accent-1)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
                         )}
@@ -612,14 +612,14 @@ export default function MobileProjectDetail({
                     <button onClick={() => { onPropertyChange?.(null, null); setShowPropertyPicker(false); setPropertySearch(''); }}
                       className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${!project.property_name ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'}`}>
                       <span className="text-[15px] text-neutral-500 italic">No Property</span>
-                      {!project.property_name && <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                      {!project.property_name && <svg className="w-4 h-4 ml-auto text-[var(--accent-3)] dark:text-[var(--accent-1)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
                     </button>
                     {allProperties.filter(prop => !propertySearch.trim() || prop.name.toLowerCase().includes(propertySearch.toLowerCase())).map((prop) => (
                       <button key={prop.id || prop.name} onClick={() => { onPropertyChange?.(prop.id || null, prop.name); setShowPropertyPicker(false); setPropertySearch(''); }}
                         className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${project.property_name === prop.name ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'}`}>
                         <svg className="w-4 h-4 text-neutral-400" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 3.375 4.5 8.5 4.5 8.5s4.5-5.125 4.5-8.5A4.5 4.5 0 008 1.5zm0 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" /></svg>
                         <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{prop.name}</span>
-                        {project.property_name === prop.name && <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                        {project.property_name === prop.name && <svg className="w-4 h-4 ml-auto text-[var(--accent-3)] dark:text-[var(--accent-1)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
                       </button>
                     ))}
                   </InlineDropdown>
@@ -630,7 +630,13 @@ export default function MobileProjectDetail({
 
           <div className="w-px self-stretch bg-[rgba(30,25,20,0.08)] dark:bg-white/10 flex-shrink-0" />
 
-          {/* Bin */}
+          {/* Bin
+              Selection model mirrors desktop ProjectDetailPanel: pick exactly
+              one row {Task Bin | <sub-bin>} or zero. Tapping the currently-
+              selected row toggles it off, which fully unbins the task
+              (is_binned=false, bin_id=null) and the trigger pill collapses
+              to "No bin". The old "Add to Bins" toggle is gone — selecting
+              any row implies is_binned=true so it's a one-tap action. */}
           <div className="relative flex-1 min-w-0 px-2">
             <button
               onClick={() => { setShowBinPicker(!showBinPicker); setShowPropertyPicker(false); setShowTemplatePicker(false); }}
@@ -639,45 +645,81 @@ export default function MobileProjectDetail({
               <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
               </svg>
-              <span className="truncate flex-1 text-left">{project.is_binned ? (currentBin ? currentBin.name : 'Binned') : 'No bin'}</span>
-              {project.is_binned && <svg className="w-3 h-3 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>}
+              <span className="truncate flex-1 text-left">{project.is_binned ? (currentBin ? currentBin.name : 'Task Bin') : 'No bin'}</span>
+              {project.is_binned && <svg className="w-3 h-3 text-[var(--accent-3)] dark:text-[var(--accent-1)] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>}
               <svg className={`w-3 h-3 opacity-40 transition-transform flex-shrink-0 ${showBinPicker ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
-            {showBinPicker && (
-              <InlineDropdown onClose={() => { setShowBinPicker(false); setBinSearch(''); }}>
-                <button onClick={() => { const newVal = !project.is_binned; onIsBinnedChange?.(newVal); if (!newVal) { onBinChange?.(null, null); setShowBinPicker(false); setBinSearch(''); } }}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors sticky top-0 z-10 bg-white dark:bg-neutral-900/95 border-b border-[rgba(30,25,20,0.06)] dark:border-white/10 ${project.is_binned ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
-                  style={{ touchAction: 'manipulation' }}>
-                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${project.is_binned ? 'bg-emerald-500 border-emerald-500' : 'border-neutral-300 dark:border-neutral-600'}`}>
-                    {project.is_binned && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
-                  </div>
-                  <span className="text-[15px] font-medium">Add to Bins</span>
-                </button>
-                {project.is_binned && bins.length > 0 && (<>
-                  <div className="px-3 py-2">
-                    <input type="text" placeholder="Search bins..." value={binSearch} onChange={(e) => setBinSearch(e.target.value)}
-                      className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20" />
-                  </div>
-                  <button onClick={() => { onBinChange?.(null, null); setShowBinPicker(false); setBinSearch(''); }}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${!project.bin_id ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'}`}
-                    style={{ touchAction: 'manipulation' }}>
-                    <span className="text-[15px] text-neutral-500 italic">No specific bin</span>
-                    {!project.bin_id && <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+            {showBinPicker && (() => {
+              const filteredSubBins = bins.filter(bin => !binSearch.trim() || bin.name.toLowerCase().includes(binSearch.toLowerCase()));
+              const selectedRowBg = 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)]';
+              const tapRowBg = 'active:bg-black/[0.03] dark:active:bg-white/[0.05]';
+              const taskBinSelected = !!project.is_binned && !project.bin_id;
+              const accentCheck = (
+                <svg className="w-4 h-4 ml-auto text-[var(--accent-3)] dark:text-[var(--accent-1)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <title>Tap again to unbin</title>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              );
+              const selectBin = (id: string | null, name: string | null, isCurrentlySelected: boolean) => {
+                if (isCurrentlySelected) {
+                  onIsBinnedChange?.(false);
+                  onBinChange?.(null, null);
+                } else {
+                  if (!project.is_binned) onIsBinnedChange?.(true);
+                  onBinChange?.(id, name);
+                }
+                setShowBinPicker(false);
+                setBinSearch('');
+              };
+              return (
+                <InlineDropdown onClose={() => { setShowBinPicker(false); setBinSearch(''); }}>
+                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400 px-4 pt-2.5 pb-1.5">Bin</p>
+                  {/* Task Bin = bin_id IS NULL. Default destination for binned
+                      tasks not assigned to a specific sub-bin. Top row, same
+                      slot the old "Add to Bins" toggle occupied. */}
+                  <button
+                    onClick={() => selectBin(null, null, taskBinSelected)}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${taskBinSelected ? selectedRowBg : tapRowBg}`}
+                    style={{ touchAction: 'manipulation' }}
+                  >
+                    <svg className="w-4 h-4 text-amber-500 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    <span className="text-[15px] text-neutral-900 dark:text-white flex-1">Task Bin <span className="text-neutral-400 text-[13px]">(default)</span></span>
+                    {taskBinSelected && accentCheck}
                   </button>
-                  {bins.filter(bin => !binSearch.trim() || bin.name.toLowerCase().includes(binSearch.toLowerCase())).map((bin) => (
-                    <button key={bin.id} onClick={() => { onBinChange?.(bin.id, bin.name); setShowBinPicker(false); setBinSearch(''); }}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${project.bin_id === bin.id ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'}`}
-                      style={{ touchAction: 'manipulation' }}>
-                      <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
-                      <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{bin.name}</span>
-                      {project.bin_id === bin.id && <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
-                    </button>
-                  ))}
-                </>)}
-              </InlineDropdown>
-            )}
+                  {bins.length > 0 && (
+                    <>
+                      <div className="px-3 py-2">
+                        <input type="text" placeholder="Search sub-bins..." value={binSearch} onChange={(e) => setBinSearch(e.target.value)}
+                          className="w-full px-3 py-2 text-sm rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-neutral-200/60 dark:border-white/10 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-neutral-300 dark:focus:border-white/20" />
+                      </div>
+                      {filteredSubBins.length > 0 && (
+                        <div className="px-4 pt-1 pb-1">
+                          <p className="text-[10px] font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-[0.08em]">
+                            Sub-Bins
+                          </p>
+                        </div>
+                      )}
+                      {filteredSubBins.map((bin) => {
+                        const isSelected = project.bin_id === bin.id;
+                        return (
+                          <button key={bin.id} onClick={() => selectBin(bin.id, bin.name, isSelected)}
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${isSelected ? selectedRowBg : tapRowBg}`}
+                            style={{ touchAction: 'manipulation' }}>
+                            <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                            <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{bin.name}</span>
+                            {isSelected && accentCheck}
+                          </button>
+                        );
+                      })}
+                    </>
+                  )}
+                </InlineDropdown>
+              );
+            })()}
           </div>
 
           {/* Template (conditional) */}
@@ -718,13 +760,13 @@ export default function MobileProjectDetail({
                       <button onClick={() => { onTemplateChange(null); setShowTemplatePicker(false); }}
                         className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${!project.template_id ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'}`}>
                         <span className="text-[15px] text-neutral-500 italic">No Template</span>
-                        {!project.template_id && <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                        {!project.template_id && <svg className="w-4 h-4 ml-auto text-[var(--accent-3)] dark:text-[var(--accent-1)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
                       </button>
                       {filteredTemplates.map((tmpl) => (
                         <button key={tmpl.id} onClick={() => { onTemplateChange(tmpl.id); setShowTemplatePicker(false); }}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${project.template_id === tmpl.id ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'}`}>
                           <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{tmpl.name}</span>
-                          {project.template_id === tmpl.id && <svg className="w-4 h-4 ml-auto text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                          {project.template_id === tmpl.id && <svg className="w-4 h-4 ml-auto text-[var(--accent-3)] dark:text-[var(--accent-1)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
                         </button>
                       ))}
                     </InlineDropdown>
@@ -837,7 +879,7 @@ export default function MobileProjectDetail({
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${isAssigned ? 'bg-[rgba(30,25,20,0.05)] dark:bg-white/10' : 'active:bg-black/[0.03] dark:active:bg-white/[0.05]'}`}>
                           <UserAvatar src={user.avatar} name={user.name} size="sm" />
                           <span className="text-[15px] text-neutral-900 dark:text-white flex-1">{user.name}</span>
-                          {isAssigned && <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                          {isAssigned && <svg className="w-4 h-4 text-[var(--accent-3)] dark:text-[var(--accent-1)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
                         </button>
                       );
                     })}
@@ -1146,9 +1188,13 @@ function InlineDropdown({
   return (
     <div
       ref={ref}
-      className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} top-full mt-1.5 z-[70] min-w-[200px] max-w-[280px] rounded-xl bg-white dark:bg-neutral-900/[0.98] border border-[rgba(30,25,20,0.08)] dark:border-white/15 shadow-[0_4px_16px_rgba(0,0,0,0.06)]`}
+      className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} top-full mt-1.5 z-[70] min-w-[200px] max-w-[280px] rounded-xl bg-white dark:bg-neutral-900 border border-[rgba(30,25,20,0.08)] dark:border-white/15 shadow-[0_4px_16px_rgba(0,0,0,0.06)] overflow-hidden`}
     >
-      <div className="relative overflow-hidden rounded-xl max-h-[50vh] overflow-y-auto py-1">
+      {/* Mirror the desktop fix: bg on the inner scroll container too,
+          otherwise scrolled content (e.g. the sub-bins past max-h-[50vh])
+          renders against transparency instead of inheriting the outer
+          div's painted bg. */}
+      <div className="max-h-[50vh] overflow-y-auto py-1 bg-white dark:bg-neutral-900">
         {children}
       </div>
     </div>
