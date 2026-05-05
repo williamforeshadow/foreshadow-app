@@ -619,20 +619,56 @@ export interface ChatMessage {
 
 export type SlackAutomationTrigger = 'new_booking' | 'check_in' | 'check_out';
 
-export interface SlackAutomationConfig {
-  message: string;
-  channel_id: string;
-  channel_name: string;
-  include_guest_name: boolean;
-  include_property_name: boolean;
-  include_dates: boolean;
-  attachments: SlackAutomationAttachment[];
-}
+/**
+ * Variables available for `{{var}}` substitution inside a Slack automation's
+ * message template. The execution layer renders these against the firing
+ * reservation; missing values render as the empty string.
+ *
+ * Universal across all triggers — keeps the editor's "Insert variable"
+ * dropdown the same regardless of trigger type. Triggers that don't have a
+ * concept of a given variable (e.g. recurring automations later) simply
+ * leave it blank rather than erroring.
+ */
+export const SLACK_AUTOMATION_VARIABLES: ReadonlyArray<{
+  key: string;
+  label: string;
+  description: string;
+}> = [
+  { key: 'property_name', label: 'Property name', description: 'e.g. "Beach House"' },
+  { key: 'guest_name', label: 'Guest name', description: 'e.g. "Alex Smith"' },
+  { key: 'check_in', label: 'Check-in date', description: 'YYYY-MM-DD' },
+  { key: 'check_out', label: 'Check-out date', description: 'YYYY-MM-DD' },
+  { key: 'nights', label: 'Number of nights', description: 'e.g. "3"' },
+  { key: 'trigger_date', label: 'Today (in property TZ)', description: 'YYYY-MM-DD' },
+];
 
 export interface SlackAutomationAttachment {
+  /** Random hex token; matches the storage path stem. */
   id: string;
+  /** Original filename for display. */
   name: string;
+  /** Path inside the slack-automation-attachments bucket. */
+  storage_path: string;
+  /** Public URL for editor preview only (execution reads bytes from storage). */
   url: string;
+  mime_type: string | null;
+  size_bytes: number;
+}
+
+export interface SlackAutomationConfig {
+  /**
+   * Slack channel id (e.g. C0123456789). Canonical — channel names can
+   * change. The picker stores this from `conversations.list`.
+   */
+  channel_id: string;
+  /** Denormalized channel name for display in the configuration UI. */
+  channel_name: string;
+  /**
+   * Message template. Supports `{{variable}}` placeholders from
+   * SLACK_AUTOMATION_VARIABLES. Multi-line. Slack mrkdwn is allowed.
+   */
+  message_template: string;
+  attachments: SlackAutomationAttachment[];
 }
 
 export interface SlackAutomation {
@@ -648,12 +684,9 @@ export interface SlackAutomation {
 
 export function createDefaultSlackAutomationConfig(): SlackAutomationConfig {
   return {
-    message: '',
     channel_id: '',
     channel_name: '',
-    include_guest_name: true,
-    include_property_name: true,
-    include_dates: true,
+    message_template: '',
     attachments: [],
   };
 }

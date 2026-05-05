@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { fetchListings, fetchReservations } from '@/lib/hostaway';
+import {
+  runSlackAutomationsForReservation,
+  type ReservationContext,
+} from '@/src/server/slackAutomations/run';
 
 // Allow enough time for paginated Hostaway fetches + batched inserts
 export const maxDuration = 120;
@@ -180,17 +185,53 @@ export async function POST() {
       }
     }
 
-    // 4a. INSERT new reservations in batches (triggers fire = tasks created)
+    // 4a. INSERT new reservations in batches (triggers fire = tasks created).
+    //
+    // We `.select()` after each insert so we get back the assigned UUIDs —
+    // those flow into the Slack-automation runner below for `new_booking`
+    // automations. Without `.select()` Supabase returns no rows on insert.
+    const insertedReservations: ReservationContext[] = [];
     for (let i = 0; i < newRows.length; i += BATCH) {
       const batch = newRows.slice(i, i + BATCH);
-      const { error } = await supabase.from('reservations').insert(batch);
+      const { data: returnedRows, error } = await supabase
+        .from('reservations')
+        .insert(batch)
+        .select('id, property_id, property_name, guest_name, check_in, check_out');
 
-      if (error) errors.push(`Insert batch error: ${error.message}`);
-      else inserted += batch.length;
+      if (error) {
+        errors.push(`Insert batch error: ${error.message}`);
+      } else {
+        inserted += batch.length;
+        for (const r of (returnedRows ?? []) as ReservationContext[]) {
+          insertedReservations.push(r);
+        }
+      }
 
       if (i + BATCH < newRows.length) {
         await new Promise((r) => setTimeout(r, 1200));
       }
+    }
+
+    // Fire `new_booking` Slack automations for each newly-inserted
+    // reservation. Done off the response path via after() so a slow Slack
+    // post can't extend the sync's wall time. Errors are logged but don't
+    // bubble — automation failures shouldn't break the sync.
+    if (insertedReservations.length > 0) {
+      after(async () => {
+        for (const reservation of insertedReservations) {
+          try {
+            await runSlackAutomationsForReservation({
+              reservation,
+              trigger: 'new_booking',
+            });
+          } catch (err) {
+            console.error('[Hostaway Sync] slack automation fire failed', {
+              reservation_id: reservation.id,
+              err,
+            });
+          }
+        }
+      });
     }
 
     // 4b. UPDATE existing reservations individually (no INSERT trigger re-fire)

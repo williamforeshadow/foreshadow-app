@@ -3,6 +3,10 @@
     {
       "path": "/api/hostaway/sync",
       "schedule": "0 */3 * * *"
+    },
+    {
+      "path": "/api/cron/slack-automations",
+      "schedule": "0 14 * * *"
     }
   ]
 }

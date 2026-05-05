@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -26,12 +26,21 @@ import {
   type SlackAutomation,
   type SlackAutomationTrigger,
   type SlackAutomationConfig,
+  type SlackAutomationAttachment,
   createDefaultSlackAutomationConfig,
+  SLACK_AUTOMATION_VARIABLES,
 } from '@/lib/types';
 
 interface Property {
   id: string;
   name: string;
+}
+
+interface SlackChannel {
+  id: string;
+  name: string;
+  is_private: boolean;
+  is_member: boolean;
 }
 
 const TRIGGER_LABELS: Record<SlackAutomationTrigger, string> = {
@@ -46,9 +55,17 @@ const TRIGGER_DESCRIPTIONS: Record<SlackAutomationTrigger, string> = {
   check_out: 'Fires on the check-out date for a reservation',
 };
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 export default function SlackAutomationsView() {
   const [automations, setAutomations] = useState<SlackAutomation[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [channels, setChannels] = useState<SlackChannel[]>([]);
+  const [channelsError, setChannelsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -59,6 +76,11 @@ export default function SlackAutomationsView() {
   const [trigger, setTrigger] = useState<SlackAutomationTrigger>('new_booking');
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>([]);
   const [config, setConfig] = useState<SlackAutomationConfig>(createDefaultSlackAutomationConfig());
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+
+  const messageRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchData();
@@ -67,16 +89,24 @@ export default function SlackAutomationsView() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [automationsRes, propertiesRes] = await Promise.all([
+      const [automationsRes, propertiesRes, channelsRes] = await Promise.all([
         fetch('/api/slack-automations'),
         fetch('/api/properties'),
+        fetch('/api/slack/channels'),
       ]);
-      const [automationsData, propertiesData] = await Promise.all([
+      const [automationsData, propertiesData, channelsData] = await Promise.all([
         automationsRes.json(),
         propertiesRes.json(),
+        channelsRes.json(),
       ]);
       if (automationsData.automations) setAutomations(automationsData.automations);
       if (propertiesData.properties) setProperties(propertiesData.properties);
+      if (channelsData.channels) {
+        setChannels(channelsData.channels);
+        setChannelsError(null);
+      } else if (channelsData.error) {
+        setChannelsError(channelsData.error);
+      }
     } catch (err) {
       console.error('Error fetching slack automations:', err);
     } finally {
@@ -90,6 +120,7 @@ export default function SlackAutomationsView() {
     setTrigger('new_booking');
     setSelectedPropertyIds([]);
     setConfig(createDefaultSlackAutomationConfig());
+    setAttachmentError(null);
     setShowDialog(true);
   };
 
@@ -99,6 +130,7 @@ export default function SlackAutomationsView() {
     setTrigger(automation.trigger);
     setSelectedPropertyIds(automation.property_ids ?? []);
     setConfig(automation.config ?? createDefaultSlackAutomationConfig());
+    setAttachmentError(null);
     setShowDialog(true);
   };
 
@@ -165,12 +197,110 @@ export default function SlackAutomationsView() {
     }
   };
 
+  const handleTest = async (id: string) => {
+    try {
+      const res = await fetch(`/api/slack-automations/${id}/test`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(`Test failed: ${data.error ?? 'Unknown error'}`);
+        return;
+      }
+      if (data.fired) {
+        const sample = data.used_reservation;
+        alert(
+          `Test message sent!\n\nUsed reservation:\n  ${sample?.property_name ?? '(none)'} \u2014 ${sample?.guest_name ?? '(none)'}\n  ${sample?.check_in ?? ''} \u2192 ${sample?.check_out ?? ''}`,
+        );
+      } else {
+        const errorMsg = data.result?.error ?? data.result?.skipped_reason ?? 'Unknown reason';
+        alert(`Test did not fire: ${errorMsg}`);
+      }
+    } catch (err) {
+      console.error('Test failed:', err);
+      alert('Test failed. Check console for details.');
+    }
+  };
+
   const toggleProperty = (propertyId: string) => {
     setSelectedPropertyIds((prev) =>
       prev.includes(propertyId)
         ? prev.filter((id) => id !== propertyId)
         : [...prev, propertyId],
     );
+  };
+
+  // Insert a {{variable}} at the current cursor position in the message textarea.
+  const insertVariable = (key: string) => {
+    const placeholder = `{{${key}}}`;
+    const ta = messageRef.current;
+    if (!ta) {
+      setConfig((prev) => ({
+        ...prev,
+        message_template: prev.message_template + placeholder,
+      }));
+      return;
+    }
+    const start = ta.selectionStart ?? ta.value.length;
+    const end = ta.selectionEnd ?? ta.value.length;
+    const next =
+      ta.value.slice(0, start) + placeholder + ta.value.slice(end);
+    setConfig((prev) => ({ ...prev, message_template: next }));
+    requestAnimationFrame(() => {
+      ta.focus();
+      const cursorPos = start + placeholder.length;
+      ta.setSelectionRange(cursorPos, cursorPos);
+    });
+  };
+
+  const handleChannelChange = (channelId: string) => {
+    const channel = channels.find((c) => c.id === channelId);
+    setConfig((prev) => ({
+      ...prev,
+      channel_id: channelId,
+      channel_name: channel?.name ?? '',
+    }));
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingAttachment(true);
+    setAttachmentError(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/slack-automations/attachments', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      const attachment: SlackAutomationAttachment = data.attachment;
+      setConfig((prev) => ({
+        ...prev,
+        attachments: [...prev.attachments, attachment],
+      }));
+    } catch (err) {
+      console.error('Attachment upload failed:', err);
+      setAttachmentError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploadingAttachment(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const removeAttachment = async (attachment: SlackAutomationAttachment) => {
+    setConfig((prev) => ({
+      ...prev,
+      attachments: prev.attachments.filter((a) => a.id !== attachment.id),
+    }));
+    // Best-effort cleanup of the storage object. We don't block on this —
+    // if it fails, the attachment becomes orphaned but the user's UX is
+    // unaffected. A future janitor could sweep these up.
+    fetch(`/api/slack-automations/attachments/${attachment.id}`, {
+      method: 'DELETE',
+    }).catch((err) => console.warn('Attachment cleanup failed:', err));
   };
 
   const getPropertyNames = (ids: string[]): string => {
@@ -181,6 +311,11 @@ export default function SlackAutomationsView() {
     if (names.length <= 2) return names.join(', ');
     return `${names.slice(0, 2).join(', ')} +${names.length - 2} more`;
   };
+
+  const selectedChannel = useMemo(
+    () => channels.find((c) => c.id === config.channel_id),
+    [channels, config.channel_id],
+  );
 
   if (loading) {
     return (
@@ -218,66 +353,97 @@ export default function SlackAutomationsView() {
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {automations.map((automation) => (
-            <Card
-              key={automation.id}
-              className={`cursor-pointer hover:border-neutral-400 dark:hover:border-neutral-500 transition-colors ${
-                !automation.enabled ? 'opacity-60' : ''
-              }`}
-              onClick={() => openEditDialog(automation)}
-            >
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2 truncate">
-                    {automation.name}
-                    <Badge
-                      variant="secondary"
-                      className="bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300 dark:border-neutral-600"
-                    >
-                      {TRIGGER_LABELS[automation.trigger] ?? automation.trigger}
-                    </Badge>
-                    {!automation.enabled && (
-                      <Badge variant="outline" className="text-xs text-neutral-400">
-                        Disabled
+          {automations.map((automation) => {
+            const channel = channels.find((c) => c.id === automation.config?.channel_id);
+            const channelDisplay = channel?.name ?? automation.config?.channel_name ?? '';
+            return (
+              <Card
+                key={automation.id}
+                className={`cursor-pointer hover:border-neutral-400 dark:hover:border-neutral-500 transition-colors ${
+                  !automation.enabled ? 'opacity-60' : ''
+                }`}
+                onClick={() => openEditDialog(automation)}
+              >
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2 truncate">
+                      {automation.name}
+                      <Badge
+                        variant="secondary"
+                        className="bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300 dark:border-neutral-600"
+                      >
+                        {TRIGGER_LABELS[automation.trigger] ?? automation.trigger}
                       </Badge>
-                    )}
-                  </CardTitle>
+                      {channelDisplay && (
+                        <Badge variant="outline" className="text-xs">
+                          #{channelDisplay}
+                        </Badge>
+                      )}
+                      {!automation.enabled && (
+                        <Badge variant="outline" className="text-xs text-neutral-400">
+                          Disabled
+                        </Badge>
+                      )}
+                    </CardTitle>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs text-neutral-500">
-                      {getPropertyNames(automation.property_ids)}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggle(automation);
-                      }}
-                    >
-                      {automation.enabled ? 'Disable' : 'Enable'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(automation.id);
-                      }}
-                    >
-                      Delete
-                    </Button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs text-neutral-500">
+                        {getPropertyNames(automation.property_ids)}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTest(automation.id);
+                        }}
+                        disabled={!automation.config?.channel_id}
+                        title={
+                          !automation.config?.channel_id
+                            ? 'Configure a channel first'
+                            : 'Send a test message to Slack now'
+                        }
+                      >
+                        Test
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggle(automation);
+                        }}
+                      >
+                        {automation.enabled ? 'Disable' : 'Enable'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(automation.id);
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    </div>
                   </div>
-                </div>
-                {automation.config?.message && (
-                  <p className="text-sm text-neutral-500 mt-1 line-clamp-1">
-                    {automation.config.message}
-                  </p>
-                )}
-              </CardHeader>
-            </Card>
-          ))}
+                  {automation.config?.message_template && (
+                    <p className="text-sm text-neutral-500 mt-1 line-clamp-1">
+                      {automation.config.message_template}
+                    </p>
+                  )}
+                  {(automation.config?.attachments?.length ?? 0) > 0 && (
+                    <p className="text-xs text-neutral-400 mt-1">
+                      {automation.config.attachments.length} attachment
+                      {automation.config.attachments.length !== 1 ? 's' : ''}
+                    </p>
+                  )}
+                </CardHeader>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -355,81 +521,174 @@ export default function SlackAutomationsView() {
               )}
             </Field>
 
-            {/* Slack Channel */}
+            {/* Slack Channel — picker from conversations.list */}
             <Field>
-              <FieldLabel>Slack Channel Name</FieldLabel>
-              <Input
-                value={config.channel_name}
-                onChange={(e) =>
-                  setConfig((prev) => ({ ...prev, channel_name: e.target.value }))
-                }
-                placeholder="e.g. #operations"
-              />
-              <FieldDescription>
-                The Slack channel where the notification will be posted.
-              </FieldDescription>
+              <FieldLabel>Slack Channel</FieldLabel>
+              {channelsError ? (
+                <div className="text-sm text-red-600 dark:text-red-400">
+                  Could not load channels: {channelsError}
+                </div>
+              ) : (
+                <>
+                  <Select value={config.channel_id} onValueChange={handleChannelChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a channel..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {channels.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          <span className="flex items-center gap-2">
+                            <span>
+                              {c.is_private ? '\uD83D\uDD12' : '#'} {c.name}
+                            </span>
+                            {!c.is_member && !c.is_private && (
+                              <Badge variant="outline" className="text-[10px] py-0">
+                                bot not in channel
+                              </Badge>
+                            )}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedChannel && !selectedChannel.is_member && (
+                    <FieldDescription className="text-amber-600">
+                      The bot isn't a member of this channel. Either invite the bot
+                      ({selectedChannel.is_private
+                        ? 'required for private channels'
+                        : 'or rely on chat:write.public scope'}
+                      ) or pick a channel it has joined.
+                    </FieldDescription>
+                  )}
+                </>
+              )}
             </Field>
 
-            {/* Message */}
+            {/* Message Template — with variable inserter */}
             <Field>
               <FieldLabel>Message</FieldLabel>
-              <Textarea
-                value={config.message}
-                onChange={(e) =>
-                  setConfig((prev) => ({ ...prev, message: e.target.value }))
-                }
-                placeholder="e.g. HOA registration forms are required for this property. Please ensure the guest completes the attached form."
-                rows={3}
-              />
-              <FieldDescription>
-                The message to send. Property name, guest name, and dates will be included automatically based on the toggles below.
+              <FieldDescription className="mb-2">
+                Use the variables below to insert reservation data. Slack
+                formatting (*bold*, _italic_) is supported.
               </FieldDescription>
+
+              {/* Variable picker bar */}
+              <div className="flex flex-wrap gap-1 mb-2">
+                <span className="text-xs text-neutral-500 self-center mr-1">
+                  Insert:
+                </span>
+                {SLACK_AUTOMATION_VARIABLES.map((v) => (
+                  <button
+                    key={v.key}
+                    type="button"
+                    onClick={() => insertVariable(v.key)}
+                    title={v.description}
+                    className="text-xs px-2 py-1 rounded border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+                  >
+                    {`{{${v.key}}}`}
+                  </button>
+                ))}
+              </div>
+
+              <Textarea
+                ref={messageRef}
+                value={config.message_template}
+                onChange={(e) =>
+                  setConfig((prev) => ({ ...prev, message_template: e.target.value }))
+                }
+                placeholder={`e.g. New booking at {{property_name}}\nGuest: {{guest_name}}\nDates: {{check_in}} → {{check_out}}`}
+                rows={5}
+                className="font-mono text-sm"
+              />
             </Field>
 
-            {/* Include toggles */}
-            <div className="space-y-3">
-              <p className="text-sm font-medium leading-none">Include in Message</p>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={config.include_property_name}
-                  onChange={(e) =>
-                    setConfig((prev) => ({ ...prev, include_property_name: e.target.checked }))
-                  }
-                  className="w-4 h-4 rounded border-neutral-300"
-                />
-                <span className="text-sm">Property name</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={config.include_guest_name}
-                  onChange={(e) =>
-                    setConfig((prev) => ({ ...prev, include_guest_name: e.target.checked }))
-                  }
-                  className="w-4 h-4 rounded border-neutral-300"
-                />
-                <span className="text-sm">Guest name</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={config.include_dates}
-                  onChange={(e) =>
-                    setConfig((prev) => ({ ...prev, include_dates: e.target.checked }))
-                  }
-                  className="w-4 h-4 rounded border-neutral-300"
-                />
-                <span className="text-sm">Check-in / check-out dates</span>
-              </label>
-            </div>
+            {/* Attachments */}
+            <Field>
+              <FieldLabel>Attachments</FieldLabel>
+              <FieldDescription className="mb-2">
+                Files to attach when this automation fires (PDFs, images, docs — up to 25MB each).
+              </FieldDescription>
+
+              {config.attachments.length > 0 && (
+                <div className="space-y-2 mb-3">
+                  {config.attachments.map((attachment) => (
+                    <div
+                      key={attachment.id}
+                      className="flex items-center justify-between p-2 border border-neutral-200 dark:border-neutral-700 rounded-lg"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <svg
+                          className="w-5 h-5 text-neutral-400 shrink-0"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                          />
+                        </svg>
+                        <div className="min-w-0">
+                          <a
+                            href={attachment.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-medium truncate hover:underline block"
+                          >
+                            {attachment.name}
+                          </a>
+                          <p className="text-xs text-neutral-500">
+                            {formatBytes(attachment.size_bytes)}
+                            {attachment.mime_type ? ` \u00b7 ${attachment.mime_type}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        onClick={() => removeAttachment(attachment)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingAttachment}
+              >
+                {uploadingAttachment ? 'Uploading...' : '+ Add Attachment'}
+              </Button>
+              {attachmentError && (
+                <p className="text-sm text-red-600 dark:text-red-400 mt-2">
+                  {attachmentError}
+                </p>
+              )}
+            </Field>
           </div>
 
           <DialogFooter className="mt-6">
             <Button variant="outline" onClick={() => setShowDialog(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={saving || !name.trim()}>
+            <Button
+              onClick={handleSave}
+              disabled={saving || !name.trim() || !config.channel_id}
+            >
               {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Create Automation'}
             </Button>
           </DialogFooter>
