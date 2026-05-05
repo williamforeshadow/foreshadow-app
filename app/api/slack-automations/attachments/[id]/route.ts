@@ -36,7 +36,7 @@ export async function DELETE(
     return NextResponse.json({ error: listErr.message }, { status: 500 });
   }
 
-  const matches = (files ?? [])
+  const matches = ((files ?? []) as Array<{ name: string }>)
     .map((f) => f.name)
     .filter((name) => name.startsWith(`${id}.`));
 
