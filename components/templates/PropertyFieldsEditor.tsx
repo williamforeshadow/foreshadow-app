@@ -93,7 +93,7 @@ export default function PropertyFieldsEditor({
         throw new Error(errData.error || 'Failed to save template customizations');
       }
 
-      router.push('/templates');
+      router.push('/automations');
     } catch (err) {
       console.error('Error saving field overrides:', err);
       alert(err instanceof Error ? err.message : 'Failed to save template customizations');
@@ -152,7 +152,7 @@ export default function PropertyFieldsEditor({
           className="px-8 py-4 flex items-center justify-between"
         >
           <button
-            onClick={() => router.push('/templates')}
+            onClick={() => router.push('/automations')}
             className="flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -614,6 +614,51 @@ export interface ChatMessage {
 }
 
 // ============================================================================
+// Slack Automation Types
+// ============================================================================
+
+export type SlackAutomationTrigger = 'new_booking' | 'check_in' | 'check_out';
+
+export interface SlackAutomationConfig {
+  message: string;
+  channel_id: string;
+  channel_name: string;
+  include_guest_name: boolean;
+  include_property_name: boolean;
+  include_dates: boolean;
+  attachments: SlackAutomationAttachment[];
+}
+
+export interface SlackAutomationAttachment {
+  id: string;
+  name: string;
+  url: string;
+}
+
+export interface SlackAutomation {
+  id: string;
+  name: string;
+  enabled: boolean;
+  trigger: SlackAutomationTrigger;
+  property_ids: string[];
+  config: SlackAutomationConfig;
+  created_at: string;
+  updated_at: string;
+}
+
+export function createDefaultSlackAutomationConfig(): SlackAutomationConfig {
+  return {
+    message: '',
+    channel_id: '',
+    channel_name: '',
+    include_guest_name: true,
+    include_property_name: true,
+    include_dates: true,
+    attachments: [],
+  };
+}
+
+// ============================================================================
 // Filter Types (re-export from cleaningFilters for convenience)
 // ============================================================================
 

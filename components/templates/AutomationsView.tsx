@@ -199,7 +199,7 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
 
     const propertiesParam = encodeURIComponent(Array.from(selectedProperties).join(','));
     setShowBulkAddDialog(false);
-    router.push(`/templates/automation/bulk-configure?properties=${propertiesParam}&template=${encodeURIComponent(selectedTemplateId)}`);
+    router.push(`/automations/tasks/bulk-configure?properties=${propertiesParam}&template=${encodeURIComponent(selectedTemplateId)}`);
   };
 
   // Toggle property selection for bulk edit
@@ -416,7 +416,7 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                       className="cursor-pointer hover:border-neutral-400 dark:hover:border-neutral-500 transition-colors"
                       onClick={() =>
                         router.push(
-                          `/templates/automation/configure?property=${encodeURIComponent(assignment.property_name)}&template=${encodeURIComponent(assignment.template_id)}`
+                          `/automations/tasks/configure?property=${encodeURIComponent(assignment.property_name)}&template=${encodeURIComponent(assignment.template_id)}`
                         )
                       }
                     >
@@ -444,7 +444,7 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                               onClick={(e) => {
                                 e.stopPropagation();
                                 router.push(
-                                  `/templates/automation/fields?property=${encodeURIComponent(assignment.property_name)}&template=${encodeURIComponent(assignment.template_id)}`
+                                  `/automations/tasks/fields?property=${encodeURIComponent(assignment.property_name)}&template=${encodeURIComponent(assignment.template_id)}`
                                 );
                               }}
                             >

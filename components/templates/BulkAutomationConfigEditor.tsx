@@ -102,7 +102,7 @@ export default function BulkAutomationConfigEditor({
         alert(`Applied to ${propertyNames.length - failed} properties. ${failed} failed.`);
       }
 
-      router.push('/templates');
+      router.push('/automations');
     } catch (err) {
       console.error('Error saving bulk automation config:', err);
       alert('Failed to save automation configuration for some properties');
@@ -202,7 +202,7 @@ export default function BulkAutomationConfigEditor({
           className="px-8 py-4 flex items-center justify-between"
         >
           <button
-            onClick={() => router.push('/templates')}
+            onClick={() => router.push('/automations')}
             className="flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

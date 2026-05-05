@@ -66,6 +66,15 @@ export default function Sidebar() {
       )
     },
     {
+      name: 'Automations',
+      path: '/automations',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+      )
+    },
+    {
       name: 'Departments',
       path: '/departments',
       icon: (
@@ -86,9 +95,9 @@ export default function Sidebar() {
     },
   ];
 
-  // Filter out Templates and Departments for staff users
   const navItems = allNavItems.filter(item => {
     if (item.path === '/templates') return canEditTemplates;
+    if (item.path === '/automations') return canEditTemplates;
     if (item.path === '/departments') return canEditTemplates;
     return true;
   });
