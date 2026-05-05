@@ -636,10 +636,16 @@ export const SLACK_AUTOMATION_VARIABLES: ReadonlyArray<{
 }> = [
   { key: 'property_name', label: 'Property name', description: 'e.g. "Beach House"' },
   { key: 'guest_name', label: 'Guest name', description: 'e.g. "Alex Smith"' },
-  { key: 'check_in', label: 'Check-in date', description: 'YYYY-MM-DD' },
-  { key: 'check_out', label: 'Check-out date', description: 'YYYY-MM-DD' },
+  { key: 'check_in', label: 'Check-in date', description: 'e.g. "May 30, 2026"' },
+  { key: 'check_in_time', label: 'Check-in time', description: 'Org default check-in time, e.g. "3:00 PM". Hostaway does not provide actual guest arrival times.' },
+  { key: 'check_in_datetime', label: 'Check-in date & time', description: 'e.g. "May 30, 2026 at 3:00 PM"' },
+  { key: 'check_in_iso', label: 'Check-in (raw)', description: 'YYYY-MM-DD' },
+  { key: 'check_out', label: 'Check-out date', description: 'e.g. "June 2, 2026"' },
+  { key: 'check_out_time', label: 'Check-out time', description: 'Org default check-out time, e.g. "11:00 AM"' },
+  { key: 'check_out_datetime', label: 'Check-out date & time', description: 'e.g. "June 2, 2026 at 11:00 AM"' },
+  { key: 'check_out_iso', label: 'Check-out (raw)', description: 'YYYY-MM-DD' },
   { key: 'nights', label: 'Number of nights', description: 'e.g. "3"' },
-  { key: 'trigger_date', label: 'Today (in property TZ)', description: 'YYYY-MM-DD' },
+  { key: 'trigger_date', label: 'Today (in property TZ)', description: 'YYYY-MM-DD, resolved in the property\'s timezone' },
 ];
 
 export interface SlackAutomationAttachment {

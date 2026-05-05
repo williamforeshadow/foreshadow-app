@@ -107,14 +107,30 @@ export async function runSlackAutomationsForReservation(args: {
   }
 
   const web = new WebClient(token);
-  const orgTimezone = await loadOrgTimezone(supabase);
-  const triggerDate = todayInTz(orgTimezone).date;
+  const opSettings = await loadOpSettings(supabase);
+
+  // Resolve the property's effective timezone — property override falls back
+  // to org default. Used for {{trigger_date}} so "today" matches the
+  // property's clock, not whoever's running the cron.
+  let propertyTimezone = opSettings.default_timezone;
+  if (reservation.property_id) {
+    const { data: prop } = await supabase
+      .from('properties')
+      .select('timezone')
+      .eq('id', reservation.property_id)
+      .maybeSingle();
+    if (prop?.timezone) propertyTimezone = prop.timezone as string;
+  }
+
+  const triggerDate = todayInTz(propertyTimezone).date;
   const variables = buildReservationVariables({
     property_name: reservation.property_name,
     guest_name: reservation.guest_name,
     check_in: reservation.check_in,
     check_out: reservation.check_out,
     trigger_date: triggerDate,
+    default_check_in_time: opSettings.default_check_in_time,
+    default_check_out_time: opSettings.default_check_out_time,
   });
 
   const results: SlackAutomationFireResult[] = [];
@@ -178,18 +194,45 @@ export async function runSlackAutomationsForTrigger(args: {
 
 // ─── Internal helpers ──────────────────────────────────────────────────
 
-async function loadOrgTimezone(supabase: ReturnType<typeof getSupabaseServer>): Promise<string> {
+interface OpSettings {
+  default_timezone: string;
+  default_check_in_time: string;
+  default_check_out_time: string;
+}
+
+const FALLBACK_CHECK_IN = '15:00';
+const FALLBACK_CHECK_OUT = '11:00';
+
+function trimTime(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value.length >= 5 ? value.slice(0, 5) : value;
+}
+
+async function loadOpSettings(
+  supabase: ReturnType<typeof getSupabaseServer>,
+): Promise<OpSettings> {
   try {
     const { data } = await supabase
       .from('operations_settings')
-      .select('default_timezone')
+      .select('default_timezone, default_check_in_time, default_check_out_time')
       .eq('id', 1)
       .maybeSingle();
-    if (data?.default_timezone) return data.default_timezone as string;
+    return {
+      default_timezone:
+        (data?.default_timezone as string | undefined) || DEFAULT_TIMEZONE,
+      default_check_in_time:
+        trimTime(data?.default_check_in_time) || FALLBACK_CHECK_IN,
+      default_check_out_time:
+        trimTime(data?.default_check_out_time) || FALLBACK_CHECK_OUT,
+    };
   } catch {
     // table might not exist yet
+    return {
+      default_timezone: DEFAULT_TIMEZONE,
+      default_check_in_time: FALLBACK_CHECK_IN,
+      default_check_out_time: FALLBACK_CHECK_OUT,
+    };
   }
-  return DEFAULT_TIMEZONE;
 }
 
 async function loadMatchingAutomations(
