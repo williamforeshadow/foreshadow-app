@@ -257,11 +257,13 @@ export interface Comment {
 
 export interface Attachment {
   id: string;
-  project_id: string;
+  project_id: string | null;
+  task_id?: string | null;
   file_name: string;
-  file_url: string;
+  file_url?: string;
   url?: string; // Alternate field name used in some contexts
-  file_type?: string;
+  file_type?: 'image' | 'video' | 'document' | string;
+  mime_type?: string | null;
   file_size?: number;
   uploaded_by?: string;
   created_at: string;

@@ -22,6 +22,14 @@ export function AttachmentLightbox({
 
   const currentAttachment = attachments[viewingIndex];
   const attachmentUrl = currentAttachment.url || currentAttachment.file_url;
+  const isImage =
+    currentAttachment.mime_type?.startsWith('image/') ||
+    (!currentAttachment.mime_type && currentAttachment.file_type === 'image');
+  const isVideo =
+    currentAttachment.mime_type?.startsWith('video/') ||
+    (!currentAttachment.mime_type && currentAttachment.file_type === 'video');
+  const extension =
+    currentAttachment.file_name?.split('.').pop()?.toUpperCase() || 'FILE';
 
   const handlePrev = () => {
     onNavigate((viewingIndex - 1 + attachments.length) % attachments.length);
@@ -71,19 +79,49 @@ export function AttachmentLightbox({
 
           {/* Content */}
           <div className="absolute inset-0 flex items-center justify-center px-20 py-20">
-            {currentAttachment.file_type === 'image' ? (
+            {isImage ? (
               <img
                 src={attachmentUrl}
                 alt=""
                 className="max-h-full max-w-full object-contain"
               />
-            ) : (
+            ) : isVideo ? (
               <video
                 src={attachmentUrl}
                 controls
                 autoPlay
                 className="max-h-full max-w-full"
               />
+            ) : (
+              <div className="flex flex-col items-center gap-4 text-center text-white">
+                <div className="w-20 h-20 rounded-xl border border-white/15 bg-white/10 flex flex-col items-center justify-center">
+                  <svg className="w-8 h-8 text-white/80" viewBox="0 0 20 20" fill="none">
+                    <path d="M4 2h8l4 4v12H4V2z" stroke="currentColor" strokeWidth="1.2" fill="none" />
+                    <path d="M12 2v4h4" stroke="currentColor" strokeWidth="1.2" fill="none" />
+                  </svg>
+                  <span className="mt-1 text-[10px] font-medium text-white/70">
+                    {extension}
+                  </span>
+                </div>
+                <div>
+                  <p className="max-w-[420px] truncate text-sm font-medium">
+                    {currentAttachment.file_name || 'Attachment'}
+                  </p>
+                  <p className="mt-1 text-xs text-white/50">
+                    Documents open in a browser tab.
+                  </p>
+                </div>
+                {attachmentUrl && (
+                  <a
+                    href={attachmentUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-black hover:bg-white/90"
+                  >
+                    Open document
+                  </a>
+                )}
+              </div>
             )}
           </div>
 

@@ -2,6 +2,93 @@ import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { logProjectActivity } from '@/lib/logProjectActivity';
 
+const MAX_ATTACHMENTS = 30;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
+
+const ALLOWED_IMAGE_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
+const ALLOWED_VIDEO_TYPES = new Set([
+  'video/mp4',
+  'video/quicktime',
+  'video/webm',
+  'video/mov',
+]);
+const ALLOWED_DOCUMENT_TYPES = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/csv',
+  'text/plain',
+]);
+const ALLOWED_DOCUMENT_EXTENSIONS = new Set([
+  'pdf',
+  'doc',
+  'docx',
+  'xls',
+  'xlsx',
+  'csv',
+  'txt',
+]);
+
+type AttachmentKind = 'image' | 'video' | 'document';
+
+function getExtension(fileName: string) {
+  return fileName.split('.').pop()?.toLowerCase() || '';
+}
+
+function classifyAttachment(file: File): AttachmentKind | null {
+  if (file.type.startsWith('image/')) return 'image';
+  if (file.type.startsWith('video/')) return 'video';
+  if (ALLOWED_DOCUMENT_TYPES.has(file.type)) return 'document';
+  if (!file.type && ALLOWED_DOCUMENT_EXTENSIONS.has(getExtension(file.name))) {
+    return 'document';
+  }
+  return null;
+}
+
+function validateAttachment(file: File, kind: AttachmentKind): string | null {
+  if (kind === 'image' && !ALLOWED_IMAGE_TYPES.has(file.type)) {
+    return 'Invalid image type. Allowed: JPEG, PNG, WebP, GIF';
+  }
+  if (kind === 'video' && !ALLOWED_VIDEO_TYPES.has(file.type)) {
+    return 'Invalid video type. Allowed: MP4, MOV, WebM';
+  }
+  if (
+    kind === 'document' &&
+    file.type &&
+    !ALLOWED_DOCUMENT_TYPES.has(file.type)
+  ) {
+    return 'Invalid document type. Allowed: PDF, Word, Excel, CSV, TXT';
+  }
+
+  const maxSize =
+    kind === 'video'
+      ? MAX_VIDEO_BYTES
+      : kind === 'document'
+        ? MAX_DOCUMENT_BYTES
+        : MAX_IMAGE_BYTES;
+
+  if (file.size > maxSize) {
+    const maxMB = maxSize / (1024 * 1024);
+    return `File too large. Maximum size is ${maxMB}MB for ${kind}s.`;
+  }
+
+  return null;
+}
+
+function errorMessage(err: unknown, fallback: string) {
+  return err instanceof Error ? err.message : fallback;
+}
+
 // GET - List all attachments for a project or task
 export async function GET(request: Request) {
   try {
@@ -40,9 +127,9 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({ data });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json(
-      { error: err.message || 'Failed to fetch attachments' },
+      { error: errorMessage(err, 'Failed to fetch attachments') },
       { status: 500 }
     );
   }
@@ -66,44 +153,21 @@ export async function POST(request: Request) {
 
     const entityId = taskId || projectId!;
 
-    // Determine file type (image or video)
-    const isVideo = file.type.startsWith('video/');
-    const isImage = file.type.startsWith('image/');
-
-    if (!isVideo && !isImage) {
+    const attachmentKind = classifyAttachment(file);
+    if (!attachmentKind) {
       return NextResponse.json(
-        { error: 'Invalid file type. Only images and videos are allowed.' },
+        {
+          error:
+            'Invalid file type. Allowed: images, videos, PDF, Word, Excel, CSV, TXT.',
+        },
         { status: 400 }
       );
     }
 
-    // Validate file types
-    const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
-    const allowedVideoTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'video/mov'];
-
-    if (isImage && !allowedImageTypes.includes(file.type)) {
+    const validationError = validateAttachment(file, attachmentKind);
+    if (validationError) {
       return NextResponse.json(
-        { error: 'Invalid image type. Allowed: JPEG, PNG, WebP, GIF' },
-        { status: 400 }
-      );
-    }
-
-    if (isVideo && !allowedVideoTypes.includes(file.type)) {
-      return NextResponse.json(
-        { error: 'Invalid video type. Allowed: MP4, MOV, WebM' },
-        { status: 400 }
-      );
-    }
-
-    // Validate file size
-    const maxImageSize = 10 * 1024 * 1024; // 10MB
-    const maxVideoSize = 50 * 1024 * 1024; // 50MB
-    const maxSize = isVideo ? maxVideoSize : maxImageSize;
-
-    if (file.size > maxSize) {
-      const maxMB = maxSize / (1024 * 1024);
-      return NextResponse.json(
-        { error: `File too large. Maximum size is ${maxMB}MB for ${isVideo ? 'videos' : 'images'}.` },
+        { error: validationError },
         { status: 400 }
       );
     }
@@ -121,15 +185,18 @@ export async function POST(request: Request) {
 
     if (countError) {
       console.error('Error checking attachment count:', countError);
-    } else if (count !== null && count >= 30) {
+    } else if (count !== null && count >= MAX_ATTACHMENTS) {
       return NextResponse.json(
-        { error: 'Maximum 30 attachments per project allowed.' },
+        {
+          error: `Maximum ${MAX_ATTACHMENTS} attachments per ${
+            taskId ? 'task' : 'project'
+          } allowed.`,
+        },
         { status: 400 }
       );
     }
 
     // Create filename with timestamp to avoid collisions
-    const fileExt = file.name.split('.').pop();
     const timestamp = Date.now();
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
     const fileName = `${entityId}/${timestamp}_${sanitizedName}`;
@@ -139,10 +206,10 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(arrayBuffer);
 
     // Upload to getSupabaseServer() Storage
-    const { data: uploadData, error: uploadError } = await getSupabaseServer().storage
+    const { error: uploadError } = await getSupabaseServer().storage
       .from('project-attachments')
       .upload(fileName, buffer, {
-        contentType: file.type,
+        contentType: file.type || 'application/octet-stream',
         upsert: false
       });
 
@@ -160,11 +227,16 @@ export async function POST(request: Request) {
       .getPublicUrl(fileName);
 
     // Insert record into database
+    // Legacy schema constrains file_type to image/video. Keep documents
+    // compatible by storing a legacy bucket value and using mime_type as the
+    // source of truth when rendering.
+    const storedFileType =
+      attachmentKind === 'document' ? 'image' : attachmentKind;
     const insertData: Record<string, unknown> = {
       url: publicUrl,
       file_name: file.name,
-      file_type: isVideo ? 'video' : 'image',
-      mime_type: file.type,
+      file_type: storedFileType,
+      mime_type: file.type || null,
       file_size: file.size,
       uploaded_by: uploadedBy || null,
     };
@@ -192,18 +264,24 @@ export async function POST(request: Request) {
 
     // Log activity (only for projects — tasks don't have activity log yet)
     if (uploadedBy && projectId) {
-      const fileType = isVideo ? 'video' : 'image';
-      await logProjectActivity(projectId, uploadedBy, 'attachment_upload', `uploaded ${fileType}: ${file.name}`, null, publicUrl);
+      await logProjectActivity(
+        projectId,
+        uploadedBy,
+        'attachment_upload',
+        `uploaded ${attachmentKind}: ${file.name}`,
+        null,
+        publicUrl
+      );
     }
 
     return NextResponse.json({
       success: true,
       data: attachment
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Upload error:', err);
     return NextResponse.json(
-      { error: err.message || 'Failed to upload attachment' },
+      { error: errorMessage(err, 'Failed to upload attachment') },
       { status: 500 }
     );
   }
@@ -267,10 +345,10 @@ export async function DELETE(request: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Delete error:', err);
     return NextResponse.json(
-      { error: err.message || 'Failed to delete attachment' },
+      { error: errorMessage(err, 'Failed to delete attachment') },
       { status: 500 }
     );
   }

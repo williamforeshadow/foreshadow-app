@@ -44,7 +44,8 @@ const TASK_SELECT = `
   project_bins(id, name, is_system),
   reservations(id, property_name, guest_name, check_in, check_out),
   task_assignments(user_id, users(id, name, avatar, role)),
-  project_comments(count)
+  project_comments(count),
+  project_attachments(count)
 `;
 
 export interface TaskByIdAssignedUser {
@@ -93,6 +94,7 @@ export interface TaskByIdRow {
   is_recurring: boolean;
   assigned_users: TaskByIdAssignedUser[];
   comment_count: number;
+  attachment_count: number;
 }
 
 export type GetTaskByIdResult =
@@ -122,6 +124,10 @@ function shapeTaskRow(row: any): TaskByIdRow {
   const commentAgg = row.project_comments;
   const commentCount = Array.isArray(commentAgg)
     ? Number(commentAgg[0]?.count ?? 0)
+    : 0;
+  const attachmentAgg = row.project_attachments;
+  const attachmentCount = Array.isArray(attachmentAgg)
+    ? Number(attachmentAgg[0]?.count ?? 0)
     : 0;
 
   return {
@@ -160,6 +166,7 @@ function shapeTaskRow(row: any): TaskByIdRow {
       role: a.users?.role || '',
     })),
     comment_count: commentCount,
+    attachment_count: attachmentCount,
   };
 }
 

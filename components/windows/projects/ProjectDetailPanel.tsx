@@ -1245,7 +1245,7 @@ export function ProjectDetailPanel({
                     className="relative w-[72px] h-[72px] rounded-lg overflow-hidden border border-[rgba(30,25,20,0.06)] dark:border-white/10 bg-[rgba(30,25,20,0.03)] dark:bg-white/[0.04] flex-shrink-0 cursor-pointer hover:bg-[rgba(30,25,20,0.06)] dark:hover:bg-white/[0.08] transition-all flex flex-col items-center justify-center"
                     onClick={(e) => { e.stopPropagation(); onViewAttachment(index); }}
                   >
-                    {attachment.file_type === 'image' ? (
+                    {attachment.mime_type?.startsWith('image/') || (!attachment.mime_type && attachment.file_type === 'image') ? (
                       <img src={attachment.url || attachment.file_url} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <>
@@ -1347,7 +1347,7 @@ export function ProjectDetailPanel({
             ref={attachmentInputRef}
             type="file"
             multiple
-            accept="image/*,video/*"
+            accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
             className="hidden"
             onChange={onAttachmentUpload}
           />

@@ -184,6 +184,7 @@ export interface TaskRow {
   check_out: string | null;
   assigned_users: AssignedUser[];
   comment_count: number;
+  attachment_count: number;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
@@ -219,7 +220,8 @@ const SELECT = `
   project_bins(id, name, is_system),
   reservations(id, guest_name, check_in, check_out),
   task_assignments(user_id, users(id, name, role)),
-  project_comments(count)
+  project_comments(count),
+  project_attachments(count)
 `;
 
 const DEFAULT_LIMIT = 25;
@@ -250,6 +252,40 @@ interface ResolvedDepartment {
 interface ResolvedTemplate {
   template_id: string;
   name: string;
+}
+
+interface TaskQueryRow {
+  id: string;
+  reservation_id: string | null;
+  property_id: string | null;
+  property_name: string | null;
+  template_id: string | null;
+  title: string | null;
+  priority: string | null;
+  department_id: string | null;
+  status: string | null;
+  scheduled_date: string | null;
+  scheduled_time: string | null;
+  bin_id: string | null;
+  is_binned: boolean | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  templates: { id: string; name: string } | null;
+  departments: { id: string; name: string } | null;
+  project_bins: { id: string; name: string; is_system: boolean } | null;
+  reservations: {
+    id: string;
+    guest_name: string | null;
+    check_in: string | null;
+    check_out: string | null;
+  } | null;
+  task_assignments: Array<{
+    user_id: string;
+    users: { id: string; name: string; role: string } | null;
+  }> | null;
+  project_comments: Array<{ count: number }> | null;
+  project_attachments: Array<{ count: number }> | null;
 }
 
 type Supabase = ReturnType<typeof getSupabaseServer>;
@@ -622,7 +658,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
     return { ok: false, error: { code: 'db_error', message: error.message } };
   }
 
-  const rows = (data ?? []) as Array<Record<string, any>>;
+  const rows = (data ?? []) as TaskQueryRow[];
   const truncated = rows.length > limit;
   const trimmed = truncated ? rows.slice(0, limit) : rows;
 
@@ -647,6 +683,12 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
     const commentAgg = task.project_comments as Array<{ count: number }> | null;
     const commentCount = Array.isArray(commentAgg)
       ? Number(commentAgg[0]?.count ?? 0)
+      : 0;
+    const attachmentAgg = task.project_attachments as
+      | Array<{ count: number }>
+      | null;
+    const attachmentCount = Array.isArray(attachmentAgg)
+      ? Number(attachmentAgg[0]?.count ?? 0)
       : 0;
 
     return {
@@ -677,6 +719,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
         role: a.users?.role ?? '',
       })),
       comment_count: commentCount,
+      attachment_count: attachmentCount,
       created_at: task.created_at,
       updated_at: task.updated_at,
       completed_at: task.completed_at ?? null,

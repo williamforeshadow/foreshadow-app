@@ -919,7 +919,7 @@ export default function MobileProjectDetail({
             {/* Attachments — inline, desktop style */}
             <div className="flex flex-col gap-3">
               <p className="text-[11px] font-medium text-muted-foreground tracking-wider">Attachments</p>
-              <input ref={attachmentsHook.attachmentInputRef} type="file" multiple accept="image/*,video/*,.pdf,.doc,.docx" className="hidden" onChange={handleAttachmentUpload} />
+              <input ref={attachmentsHook.attachmentInputRef} type="file" multiple accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" className="hidden" onChange={handleAttachmentUpload} />
               <div className="flex gap-2.5 flex-wrap">
                 {attachmentsHook.loadingAttachments ? (
                   <span className="text-xs text-muted-foreground">Loading...</span>
@@ -928,9 +928,12 @@ export default function MobileProjectDetail({
                     <div
                       key={attachment.id}
                       className="relative w-[72px] h-[72px] rounded-lg overflow-hidden border border-[rgba(30,25,20,0.06)] dark:border-white/10 bg-[rgba(30,25,20,0.03)] dark:bg-white/[0.04] flex-shrink-0 cursor-pointer active:opacity-70 transition-all flex flex-col items-center justify-center"
-                      onClick={() => { if (attachment.file_type === 'image') window.open(attachment.url || attachment.file_url, '_blank'); }}
+                      onClick={() => {
+                        const url = attachment.url || attachment.file_url;
+                        if (url) window.open(url, '_blank');
+                      }}
                     >
-                      {attachment.file_type === 'image' ? (
+                      {attachment.mime_type?.startsWith('image/') || (!attachment.mime_type && attachment.file_type === 'image') ? (
                         <img src={attachment.url || attachment.file_url} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <>
