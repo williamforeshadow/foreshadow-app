@@ -40,6 +40,8 @@ export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set([
   'commit_property_contact_delete',
   'preview_property_knowledge_write',
   'commit_property_knowledge_write',
+  'preview_slack_file_attachment',
+  'commit_slack_file_attachment',
 ]);
 
 // runAgent — single entry point that drives Anthropic's tool-use loop.
@@ -167,6 +169,7 @@ Write protocol (critical):
   - Property contact (cleaning / maintenance / stakeholder / emergency), create OR update: preview_property_contact_upsert → commit_property_contact_upsert
   - Delete a property contact: preview_property_contact_delete → commit_property_contact_delete
   - Property Knowledge sections Access, Connectivity, Interior/Exterior rooms, Interior/Exterior cards, and existing Document metadata/deletes: preview_property_knowledge_write → commit_property_knowledge_write
+- Slack-uploaded file writes use preview_slack_file_attachment followed by commit_slack_file_attachment. Use inbound_file_id values only from the current Slack uploaded-files context block. Destinations can be task attachments, Property Knowledge documents, room photos, card photos, or tech account photos.
 - ALWAYS call the preview tool first. preview tools validate fields, resolve display labels (property names, bin names, assignee names), surface conflicts (duplicate sub-bin name, missing FKs, locked fields, empty diffs), and return a plan + a single-use confirmation_token. Present the plan to the user in plain English, ask for explicit confirmation ("shall I do this?"), and ONLY after the user agrees, call the matching commit tool with the returned confirmation_token.
 - Commit tools (create_task, update_task, delete_task, add_comment, commit_property_note_upsert, etc.) accept ONLY a confirmation_token. They will refuse to act without one. Don't try to call them with field inputs directly; that interface does not exist.
 - The confirmation_token is a UUID returned by the matching preview tool — copy it verbatim from THIS turn's preview result. Do NOT invent tokens that look like "preview_<timestamp>" or any other custom format; only the exact UUID is accepted. Tokens from one preview type are not interchangeable with another commit tool's; e.g. a preview_task_update token cannot be used against delete_task, and a preview_property_note_upsert token cannot be used against commit_property_contact_upsert.
@@ -196,7 +199,8 @@ Write protocol (critical):
   * For both notes and contacts: omit the id (note_id / contact_id) to CREATE, pass the existing id to UPDATE. There are no separate add/edit tools.
   * Use get_property_knowledge first when editing — it returns the full notes[] and contacts[] for a property, including ids, so you can pick the right row by name/scope/category before previewing the upsert.
   * Empty-diff rule: if preview_*_upsert comes back with an empty changes array on update, tell the user nothing would change and DO NOT commit. The token still exists but using it on a no-op is wasted motion.
-  * Use preview_property_knowledge_write for Access (codes, parking, lockbox/key details), Connectivity (wifi/router details), Interior and Exterior rooms/cards, and existing document metadata/deletes. It does NOT upload new document files; tell the user document upload has to happen in the app UI for now, then you can edit its title/notes/tag or delete it once it exists.
+  * Use preview_property_knowledge_write for Access (codes, parking, lockbox/key details), Connectivity (wifi/router details), Interior and Exterior rooms/cards, and existing document metadata/deletes.
+  * If the Slack context includes inbound_file_id values, use preview_slack_file_attachment for binary uploads. It can attach Slack files to tasks, Property Knowledge documents, room photos, card photos, or tech account photos. For photo destinations, first call get_property_knowledge to resolve the room/card/tech account id.
   * Use the specialized note/contact tools for Notes and Vendor/contact information. Do not use preview_property_knowledge_write for Notes or Vendor contacts.
 - Partial-failure rule: create_tasks_batch may return ok:true with a non-empty failures array (some tasks landed, some didn't). When that happens, narrate the partial outcome honestly — list the created tasks and explicitly mention which ones failed and why. Do not claim full success.
 - Action-claim rule: if your reply includes a claim that something was created, updated, deleted, scheduled, assigned, or commented on, the corresponding write tool MUST appear in this turn's tool calls AND have returned ok:true (a partial-success batch counts). If the write tool returned ok:false, surface the error message verbatim and offer to retry — do not pretend it succeeded. If no write tool was called this turn, do not claim the action happened; describe what you would do instead.

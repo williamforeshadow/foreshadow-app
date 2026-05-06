@@ -24,6 +24,11 @@ import {
   extractTaskUrlsFromText,
 } from '@/src/slack/unfurl';
 import { fetchThreadMessages, formatThreadAsContext } from '@/src/slack/thread';
+import {
+  captureSlackInboundFiles,
+  formatSlackInboundFilesForAgent,
+  type SlackInboundFileEvent,
+} from '@/src/server/slack/inboundFiles';
 
 interface MessageExtras {
   blocks?: Block[];
@@ -67,7 +72,7 @@ interface MessageExtras {
 // Slack app config (in api.slack.com/apps):
 //   Bot scopes:        app_mentions:read, chat:write, commands, users:read,
 //                      users:read.email, im:history, im:read, im:write,
-//                      links:read, links:write,
+//                      links:read, links:write, files:read,
 //                      channels:history, groups:history
 //
 //                      The two *:history scopes power the thread-context
@@ -79,6 +84,8 @@ interface MessageExtras {
 //                      to read the history. mpim:history is optional;
 //                      add it if multi-party DMs become a use case.
 //   Subscribed events: app_mention, message.im, link_shared
+//                      Files attached to app_mention/message.im events are
+//                      downloaded with files:read and staged as inbound files.
 //   App unfurl domains: the host of APP_BASE_URL (e.g. app.foreshadow.com).
 //                      Slack will only fire link_shared for URLs on
 //                      domains registered here.
@@ -173,6 +180,7 @@ interface SlackInnerEvent {
   message_ts?: string;
   source?: string;
   unfurl_id?: string;
+  files?: SlackInboundFileEvent[];
 }
 
 // Logical surface within Slack — drives mention-stripping, threading, the
@@ -190,7 +198,7 @@ function classifySlackEvent(event: SlackInnerEvent | undefined): SlackKind | nul
     // Only fresh user messages — skip edits ("message_changed"), deletes
     // ("message_deleted"), bot echoes ("bot_message"), file shares, etc.
     // Slack's DM event stream is noisier than app_mention's.
-    !event.subtype
+    (!event.subtype || event.subtype === 'file_share')
   ) {
     return 'dm';
   }
@@ -303,7 +311,7 @@ export async function POST(req: NextRequest) {
       if (kind === 'link_shared') {
         await handleLinkShared(event, botToken);
       } else {
-        await handleSlackMessage(event, kind, botToken);
+        await handleSlackMessage(event, kind, botToken, envelope.team_id);
       }
     } catch (err) {
       console.error('[slack] background handler threw', { kind, err });
@@ -317,6 +325,7 @@ async function handleSlackMessage(
   event: SlackInnerEvent,
   kind: Exclude<SlackKind, 'link_shared'>,
   botToken: string,
+  teamId?: string,
 ): Promise<void> {
   if (!event.user || !event.channel || !event.ts) return;
 
@@ -362,9 +371,10 @@ async function handleSlackMessage(
   // the agent answer "what's on Rae's plate?" without doing a fuzzy
   // find_users call — we already know exactly who Rae is. See
   // resolveMentionsInText for the resolution rules.
-  const prompt = await resolveMentionsInText(web, stripped);
+  let prompt = await resolveMentionsInText(web, stripped);
+  const hasFiles = (event.files?.length ?? 0) > 0;
 
-  if (!prompt) {
+  if (!prompt && !hasFiles) {
     await postReply(
       web,
       event.channel,
@@ -372,6 +382,10 @@ async function handleSlackMessage(
       `Hi <@${event.user}> — what would you like me to look up?`,
     );
     return;
+  }
+  if (!prompt && hasFiles) {
+    prompt =
+      'I uploaded file(s) in Slack. Help me decide where to attach them in Foreshadow.';
   }
 
   // Pull recent history from ai_chat_messages, same as the in-app route.
@@ -404,6 +418,23 @@ async function handleSlackMessage(
     const block = formatThreadAsContext(threadMessages);
     if (block) {
       contextBlocks = [block];
+    }
+  }
+
+  if (event.files?.length) {
+    const inboundFiles = await captureSlackInboundFiles({
+      files: event.files,
+      botToken,
+      teamId,
+      channelId: event.channel,
+      messageTs: event.ts,
+      threadTs,
+      slackUserId: event.user,
+      appUserId: identity.appUserId,
+    });
+    const fileBlock = formatSlackInboundFilesForAgent(inboundFiles);
+    if (fileBlock) {
+      contextBlocks = [...(contextBlocks ?? []), fileBlock];
     }
   }
 

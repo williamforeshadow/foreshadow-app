@@ -29,6 +29,8 @@ import { previewPropertyContactDelete } from './previewPropertyContactDelete';
 import { commitPropertyContactDelete } from './commitPropertyContactDelete';
 import { previewPropertyKnowledgeWriteTool } from './previewPropertyKnowledgeWrite';
 import { commitPropertyKnowledgeWriteTool } from './commitPropertyKnowledgeWrite';
+import { previewSlackFileAttachmentTool } from './previewSlackFileAttachment';
+import { commitSlackFileAttachmentTool } from './commitSlackFileAttachment';
 
 // Tool registry. To add a new tool: define it in its own file, then add it
 // here. The agent loop pulls from this list — there's no other registration
@@ -68,6 +70,8 @@ export const TOOLS: ReadonlyArray<ToolDefinition<unknown, unknown>> = [
   commitPropertyContactDelete as unknown as ToolDefinition<unknown, unknown>,
   previewPropertyKnowledgeWriteTool as unknown as ToolDefinition<unknown, unknown>,
   commitPropertyKnowledgeWriteTool as unknown as ToolDefinition<unknown, unknown>,
+  previewSlackFileAttachmentTool as unknown as ToolDefinition<unknown, unknown>,
+  commitSlackFileAttachmentTool as unknown as ToolDefinition<unknown, unknown>,
 ];
 
 export const TOOLS_BY_NAME: Readonly<Record<string, ToolDefinition<unknown, unknown>>> =
