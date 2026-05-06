@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 
-const NOTE_SCOPES = new Set([
-  'guest_facing',
-  'team_facing',
-  'owner_preferences',
-  'known_issues',
-  'local_tips',
-]);
+// Trimmed from the original 5 in May 2026: guest_facing / team_facing /
+// local_tips were removed because they overlapped heavily with rooms +
+// cards (where actionable per-area notes already live) and weren't being
+// used. The two remaining scopes capture the property-wide policy /
+// status notes that have nowhere else to go. The CHECK constraint /
+// enum on property_notes.scope is the source of truth — keep this
+// matching the DB.
+const NOTE_SCOPES = new Set(['owner_preferences', 'known_issues']);
 
 // GET /api/properties/[id]/notes[?scope=known_issues]
 export async function GET(
@@ -87,6 +90,8 @@ export async function POST(
     return NextResponse.json({ error: 'Property not found' }, { status: 404 });
   }
 
+  const actorUserId = getActorUserIdFromRequest(req);
+
   const { data, error } = await supabase
     .from('property_notes')
     .insert({
@@ -95,12 +100,31 @@ export async function POST(
       title,
       body: noteBody,
       sort_order: sortOrder,
+      created_by_user_id: actorUserId,
+      updated_by_user_id: actorUserId,
     })
     .select('*')
     .maybeSingle();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (data) {
+    await logPropertyKnowledgeActivity({
+      property_id: id,
+      user_id: actorUserId,
+      resource_type: 'note',
+      resource_id: data.id,
+      action: 'create',
+      changes: {
+        kind: 'snapshot',
+        row: { scope: data.scope, title: data.title, body: data.body },
+      },
+      subject_label:
+        data.title && data.title.trim() !== '' ? data.title : `${data.scope} note`,
+      source: 'web',
+    });
   }
 
   return NextResponse.json({ note: data }, { status: 201 });

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 
 // Whitelist of editable fields for property_access. Kept narrow so a
 // client can't accidentally (or maliciously) set `property_id`,
@@ -103,17 +105,71 @@ export async function PUT(
     return NextResponse.json({ error: 'Property not found' }, { status: 404 });
   }
 
+  const actorUserId = getActorUserIdFromRequest(req);
+
+  // Pre-read so we can tell create vs update apart (PUT is upsert) and
+  // produce a precise per-field diff for the activity ledger.
+  const { data: before } = await supabase
+    .from('property_access')
+    .select('*')
+    .eq('property_id', id)
+    .maybeSingle();
+
+  const upsertPayload: Record<string, unknown> = {
+    ...payload,
+    updated_at: new Date().toISOString(),
+    updated_by_user_id: actorUserId,
+  };
+  if (!before) {
+    upsertPayload.created_by_user_id = actorUserId;
+  }
+
   const { data, error } = await supabase
     .from('property_access')
-    .upsert(
-      { ...payload, updated_at: new Date().toISOString() },
-      { onConflict: 'property_id' }
-    )
+    .upsert(upsertPayload, { onConflict: 'property_id' })
     .select('*')
     .maybeSingle();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (data) {
+    if (!before) {
+      // First time access info is set on this property.
+      const snapshot: Record<string, unknown> = {};
+      for (const f of EDITABLE_FIELDS) snapshot[f] = (data as Record<string, unknown>)[f];
+      await logPropertyKnowledgeActivity({
+        property_id: id,
+        user_id: actorUserId,
+        resource_type: 'access',
+        resource_id: data.id ?? null,
+        action: 'create',
+        changes: { kind: 'snapshot', row: snapshot },
+        subject_label: 'Access info',
+        source: 'web',
+      });
+    } else {
+      const entries: Array<{ field: string; before: unknown; after: unknown }> =
+        [];
+      for (const f of EDITABLE_FIELDS) {
+        const b = (before as Record<string, unknown>)[f];
+        const a = (data as Record<string, unknown>)[f];
+        if (b !== a) entries.push({ field: f, before: b, after: a });
+      }
+      if (entries.length > 0) {
+        await logPropertyKnowledgeActivity({
+          property_id: id,
+          user_id: actorUserId,
+          resource_type: 'access',
+          resource_id: data.id ?? null,
+          action: 'update',
+          changes: { kind: 'diff', entries },
+          subject_label: 'Access info',
+          source: 'web',
+        });
+      }
+    }
   }
 
   return NextResponse.json({ access: data });

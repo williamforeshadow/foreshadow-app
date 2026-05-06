@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 
 const CATEGORIES = new Set([
   'cleaning',
@@ -58,6 +60,8 @@ export async function POST(
   const pickString = (v: unknown) =>
     typeof v === 'string' && v.trim() !== '' ? v.trim() : null;
 
+  const actorUserId = getActorUserIdFromRequest(req);
+
   const payload = {
     property_id: id,
     category,
@@ -70,6 +74,8 @@ export async function POST(
       typeof body?.sort_order === 'number' && Number.isFinite(body.sort_order)
         ? Math.trunc(body.sort_order)
         : 0,
+    created_by_user_id: actorUserId,
+    updated_by_user_id: actorUserId,
   };
 
   const supabase = getSupabaseServer();
@@ -94,6 +100,31 @@ export async function POST(
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (data) {
+    await logPropertyKnowledgeActivity({
+      property_id: id,
+      user_id: actorUserId,
+      resource_type: 'contact',
+      resource_id: data.id,
+      action: 'create',
+      changes: {
+        kind: 'snapshot',
+        row: {
+          category: data.category,
+          name: data.name,
+          role: data.role,
+          phone: data.phone,
+          email: data.email,
+        },
+      },
+      subject_label:
+        data.role && data.role.trim() !== ''
+          ? `${data.name} (${data.role})`
+          : data.name,
+      source: 'web',
+    });
   }
 
   return NextResponse.json({ contact: data }, { status: 201 });

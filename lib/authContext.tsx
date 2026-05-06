@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { createSupabaseClient } from '@/lib/supabaseAuth';
+import { setActorUserId } from '@/lib/apiFetch';
 
 export type Role = 'superadmin' | 'manager' | 'staff';
 
@@ -116,6 +117,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const role = appUser?.role ?? null;
+
+  // Publish the active user into the apiFetch singleton so every
+  // property-knowledge fetch (and any other route that reads the
+  // `x-actor-user-id` header) gets attributed without each call site
+  // having to thread the user through manually.
+  useEffect(() => {
+    setActorUserId(appUser?.id ?? null);
+  }, [appUser?.id]);
 
   return (
     <AuthContext.Provider value={{

@@ -19,6 +19,14 @@ import { previewTaskDelete } from './previewTaskDelete';
 import { deleteTask } from './deleteTask';
 import { previewComment } from './previewComment';
 import { addComment } from './addComment';
+import { previewPropertyNoteUpsert } from './previewPropertyNoteUpsert';
+import { commitPropertyNoteUpsert } from './commitPropertyNoteUpsert';
+import { previewPropertyNoteDelete } from './previewPropertyNoteDelete';
+import { commitPropertyNoteDelete } from './commitPropertyNoteDelete';
+import { previewPropertyContactUpsert } from './previewPropertyContactUpsert';
+import { commitPropertyContactUpsert } from './commitPropertyContactUpsert';
+import { previewPropertyContactDelete } from './previewPropertyContactDelete';
+import { commitPropertyContactDelete } from './commitPropertyContactDelete';
 
 // Tool registry. To add a new tool: define it in its own file, then add it
 // here. The agent loop pulls from this list — there's no other registration
@@ -48,6 +56,14 @@ export const TOOLS: ReadonlyArray<ToolDefinition<unknown, unknown>> = [
   deleteTask as unknown as ToolDefinition<unknown, unknown>,
   previewComment as unknown as ToolDefinition<unknown, unknown>,
   addComment as unknown as ToolDefinition<unknown, unknown>,
+  previewPropertyNoteUpsert as unknown as ToolDefinition<unknown, unknown>,
+  commitPropertyNoteUpsert as unknown as ToolDefinition<unknown, unknown>,
+  previewPropertyNoteDelete as unknown as ToolDefinition<unknown, unknown>,
+  commitPropertyNoteDelete as unknown as ToolDefinition<unknown, unknown>,
+  previewPropertyContactUpsert as unknown as ToolDefinition<unknown, unknown>,
+  commitPropertyContactUpsert as unknown as ToolDefinition<unknown, unknown>,
+  previewPropertyContactDelete as unknown as ToolDefinition<unknown, unknown>,
+  commitPropertyContactDelete as unknown as ToolDefinition<unknown, unknown>,
 ];
 
 export const TOOLS_BY_NAME: Readonly<Record<string, ToolDefinition<unknown, unknown>>> =

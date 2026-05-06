@@ -116,7 +116,7 @@ async function handler(input: Input): Promise<ToolResult<PropertyKnowledge>> {
     supabase
       .from('property_rooms')
       .select(
-        `id, scope, type, title, sort_order,
+        `id, scope, type, title, notes, sort_order,
          property_room_photos (id, storage_path, caption, sort_order),
          property_cards (
            id, tag, title, body, tag_data, sort_order,

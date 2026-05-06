@@ -2,6 +2,7 @@
 
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { apiFetch } from '@/lib/apiFetch';
 import {
   Input,
   SectionCaption,
@@ -11,16 +12,16 @@ import {
   useToast,
 } from '@/components/properties/form/FormPrimitives';
 
-// Notes tab — five fixed scopes, each a collection of discrete notes.
+// Notes tab — two fixed scopes, each a collection of discrete notes.
 // The agent queries `WHERE scope = X` to retrieve a scoped list rather
 // than parsing one big blob. Each note autosaves with a debounce.
+//
+// Trimmed from 5 scopes to 2 in May 2026 — guest_facing / team_facing /
+// local_tips were removed because the same content was being captured
+// (and used) on rooms + cards already. What's left is the property-wide
+// policy / status content with nowhere else to live.
 
-type NoteScope =
-  | 'guest_facing'
-  | 'team_facing'
-  | 'owner_preferences'
-  | 'known_issues'
-  | 'local_tips';
+type NoteScope = 'owner_preferences' | 'known_issues';
 
 interface Note {
   id: string;
@@ -42,22 +43,6 @@ interface ScopeDef {
 
 const SCOPES: ScopeDef[] = [
   {
-    id: 'guest_facing',
-    label: 'Guest-Facing',
-    caption:
-      "What to tell guests. Check-in quirks, neighborhood tips, house rules.",
-    placeholder:
-      "e.g. 'The front door sometimes sticks — push firmly while turning the handle.'",
-  },
-  {
-    id: 'team_facing',
-    label: 'Team-Facing',
-    caption:
-      'Internal ops notes. Things your cleaners and maintenance team need to know.',
-    placeholder:
-      "e.g. 'Never use bleach on the kitchen counters — they stain.'",
-  },
-  {
     id: 'owner_preferences',
     label: 'Owner Preferences',
     caption:
@@ -72,14 +57,6 @@ const SCOPES: ScopeDef[] = [
       "Things that are broken, quirky, or under repair. Include current status.",
     placeholder:
       "e.g. 'Master bathroom fan rattles — parts ordered, ETA 2 weeks.'",
-  },
-  {
-    id: 'local_tips',
-    label: 'Local Tips',
-    caption:
-      'Restaurants, beaches, transit, neighborhood context that guests and staff might ask about.',
-    placeholder:
-      "e.g. 'Best coffee is Blue Sparrow, 2 blocks east. Closes at 3pm.'",
   },
 ];
 
@@ -96,7 +73,7 @@ export default function PropertyNotesTab() {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch(`/api/properties/${propertyId}/notes`);
+      const res = await apiFetch(`/api/properties/${propertyId}/notes`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load notes');
       setNotes((data.notes || []) as Note[]);
@@ -124,7 +101,7 @@ export default function PropertyNotesTab() {
   const handleCreate = useCallback(
     async (scope: NoteScope) => {
       try {
-        const res = await fetch(`/api/properties/${propertyId}/notes`, {
+        const res = await apiFetch(`/api/properties/${propertyId}/notes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ scope, body: ' ' }),
@@ -150,7 +127,7 @@ export default function PropertyNotesTab() {
         prev.map((n) => (n.id === noteId ? { ...n, ...patch } : n))
       );
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/properties/${propertyId}/notes/${noteId}`,
           {
             method: 'PATCH',
@@ -173,7 +150,7 @@ export default function PropertyNotesTab() {
       const prev = notes;
       setNotes((p) => p.filter((n) => n.id !== noteId));
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/properties/${propertyId}/notes/${noteId}`,
           { method: 'DELETE' }
         );

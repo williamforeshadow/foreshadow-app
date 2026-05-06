@@ -2,6 +2,7 @@
 
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { apiFetch } from '@/lib/apiFetch';
 import {
   Field,
   Input,
@@ -72,7 +73,7 @@ export default function PropertyDocumentsTab() {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch(`/api/properties/${propertyId}/documents`);
+      const res = await apiFetch(`/api/properties/${propertyId}/documents`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load documents');
       setDocs((data.documents || []) as PropertyDocument[]);
@@ -106,7 +107,7 @@ export default function PropertyDocumentsTab() {
         const form = new FormData();
         form.append('file', file);
         form.append('tag', pendingTag);
-        const res = await fetch(`/api/properties/${propertyId}/documents`, {
+        const res = await apiFetch(`/api/properties/${propertyId}/documents`, {
           method: 'POST',
           body: form,
         });
@@ -128,7 +129,7 @@ export default function PropertyDocumentsTab() {
     async (docId: string, patch: Partial<Pick<PropertyDocument, 'title' | 'notes' | 'tag'>>) => {
       setDocs((prev) => prev.map((d) => (d.id === docId ? { ...d, ...patch } : d)));
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/properties/${propertyId}/documents/${docId}`,
           {
             method: 'PATCH',
@@ -154,7 +155,7 @@ export default function PropertyDocumentsTab() {
       const prev = docs;
       setDocs((p) => p.filter((d) => d.id !== doc.id));
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/properties/${propertyId}/documents/${doc.id}`,
           { method: 'DELETE' }
         );

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 import {
   TECH_ACCOUNT_KINDS,
   type TechAccountKind,
@@ -82,8 +84,20 @@ export async function PATCH(
   }
 
   patch.updated_at = new Date().toISOString();
+  const actorUserId = getActorUserIdFromRequest(req);
+  if (actorUserId) {
+    patch.updated_by_user_id = actorUserId;
+  }
 
   const supabase = getSupabaseServer();
+
+  const { data: before } = await supabase
+    .from('property_tech_accounts')
+    .select('id, kind, service_name, username, password, notes, sort_order')
+    .eq('id', accountId)
+    .eq('property_id', id)
+    .maybeSingle();
+
   const { data, error } = await supabase
     .from('property_tech_accounts')
     .update(patch)
@@ -103,21 +117,52 @@ export async function PATCH(
   if (!data) {
     return NextResponse.json({ error: 'Account not found' }, { status: 404 });
   }
+
+  if (before) {
+    const entries: Array<{ field: string; before: unknown; after: unknown }> = [];
+    for (const f of [
+      'kind',
+      'service_name',
+      'username',
+      'password',
+      'notes',
+      'sort_order',
+    ] as const) {
+      const b = (before as Record<string, unknown>)[f];
+      const a = (data as Record<string, unknown>)[f];
+      if (b !== a) entries.push({ field: f, before: b, after: a });
+    }
+    if (entries.length > 0) {
+      await logPropertyKnowledgeActivity({
+        property_id: id,
+        user_id: actorUserId,
+        resource_type: 'tech_account',
+        resource_id: data.id,
+        action: 'update',
+        changes: { kind: 'diff', entries },
+        subject_label: `${data.service_name} (${data.kind})`,
+        source: 'web',
+      });
+    }
+  }
+
   return NextResponse.json({ account: data });
 }
 
 // DELETE cascades through property_tech_account_photos via FK
 // ON DELETE CASCADE, but we still need to clean up the bucket manually.
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; accountId: string }> }
 ) {
   const { id, accountId } = await params;
   const supabase = getSupabaseServer();
 
+  // Pull the snapshot fields we need for the ledger row alongside the
+  // existence check.
   const { data: account, error: accountErr } = await supabase
     .from('property_tech_accounts')
-    .select('id')
+    .select('id, kind, service_name')
     .eq('id', accountId)
     .eq('property_id', id)
     .maybeSingle();
@@ -150,6 +195,21 @@ export async function DELETE(
   if (paths.length > 0) {
     await supabase.storage.from('property-photos').remove(paths);
   }
+
+  const actorUserId = getActorUserIdFromRequest(req);
+  await logPropertyKnowledgeActivity({
+    property_id: id,
+    user_id: actorUserId,
+    resource_type: 'tech_account',
+    resource_id: null,
+    action: 'delete',
+    changes: {
+      kind: 'snapshot',
+      row: { kind: account.kind, service_name: account.service_name },
+    },
+    subject_label: `${account.service_name} (${account.kind})`,
+    source: 'web',
+  });
 
   return NextResponse.json({ ok: true });
 }

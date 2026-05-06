@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 
 // PATCH /api/properties/[id]/notes/[noteId]
 // Editable: title, body, sort_order. scope is intentionally immutable —
@@ -47,8 +49,24 @@ export async function PATCH(
   }
 
   patch.updated_at = new Date().toISOString();
+  const actorUserId = getActorUserIdFromRequest(req);
+  if (actorUserId) {
+    patch.updated_by_user_id = actorUserId;
+  }
 
   const supabase = getSupabaseServer();
+
+  // Read the existing row first so we can compute a per-field diff for
+  // the activity ledger. One extra round-trip per PATCH is the price of
+  // honest before/after capture; the alternative is logging only the
+  // patched fields' new values which is lossy for the future ledger UI.
+  const { data: before } = await supabase
+    .from('property_notes')
+    .select('id, scope, title, body, sort_order')
+    .eq('id', noteId)
+    .eq('property_id', id)
+    .maybeSingle();
+
   const { data, error } = await supabase
     .from('property_notes')
     .update(patch)
@@ -64,15 +82,49 @@ export async function PATCH(
     return NextResponse.json({ error: 'Note not found' }, { status: 404 });
   }
 
+  if (before) {
+    const entries: Array<{ field: string; before: unknown; after: unknown }> = [];
+    for (const f of ['title', 'body', 'sort_order'] as const) {
+      const b = (before as Record<string, unknown>)[f];
+      const a = (data as Record<string, unknown>)[f];
+      if (b !== a) entries.push({ field: f, before: b, after: a });
+    }
+    if (entries.length > 0) {
+      await logPropertyKnowledgeActivity({
+        property_id: id,
+        user_id: actorUserId,
+        resource_type: 'note',
+        resource_id: data.id,
+        action: 'update',
+        changes: { kind: 'diff', entries },
+        subject_label:
+          data.title && data.title.trim() !== ''
+            ? data.title
+            : `${data.scope} note`,
+        source: 'web',
+      });
+    }
+  }
+
   return NextResponse.json({ note: data });
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; noteId: string }> }
 ) {
   const { id, noteId } = await params;
   const supabase = getSupabaseServer();
+
+  // Snapshot the row before deletion so the ledger can render it after
+  // the FK is gone.
+  const { data: before } = await supabase
+    .from('property_notes')
+    .select('id, scope, title, body')
+    .eq('id', noteId)
+    .eq('property_id', id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from('property_notes')
     .delete()
@@ -82,5 +134,26 @@ export async function DELETE(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  if (before) {
+    const actorUserId = getActorUserIdFromRequest(req);
+    await logPropertyKnowledgeActivity({
+      property_id: id,
+      user_id: actorUserId,
+      resource_type: 'note',
+      resource_id: null,
+      action: 'delete',
+      changes: {
+        kind: 'snapshot',
+        row: { scope: before.scope, title: before.title, body: before.body },
+      },
+      subject_label:
+        before.title && before.title.trim() !== ''
+          ? before.title
+          : `${before.scope} note`,
+      source: 'web',
+    });
+  }
+
   return NextResponse.json({ ok: true });
 }

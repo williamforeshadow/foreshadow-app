@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { apiFetch } from '@/lib/apiFetch';
 import {
   Field,
   FieldGroup,
@@ -50,7 +51,7 @@ export function WifiSection({ propertyId }: { propertyId: string }) {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch(`/api/properties/${propertyId}/connectivity`);
+      const res = await apiFetch(`/api/properties/${propertyId}/connectivity`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load WiFi');
       const d = fromServer(data.connectivity);
@@ -88,7 +89,7 @@ export function WifiSection({ propertyId }: { propertyId: string }) {
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await fetch(`/api/properties/${propertyId}/connectivity`, {
+      const res = await apiFetch(`/api/properties/${propertyId}/connectivity`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(draft),

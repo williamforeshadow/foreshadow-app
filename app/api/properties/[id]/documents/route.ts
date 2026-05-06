@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 
 const DOCUMENT_TAGS = new Set([
   'lease',
@@ -115,6 +117,8 @@ export async function POST(
     return NextResponse.json({ error: uploadErr.message }, { status: 500 });
   }
 
+  const actorUserId = getActorUserIdFromRequest(req);
+
   const { data: row, error: insertErr } = await supabase
     .from('property_documents')
     .insert({
@@ -126,6 +130,8 @@ export async function POST(
       mime_type: file.type || null,
       size_bytes: file.size,
       original_filename: file.name,
+      created_by_user_id: actorUserId,
+      updated_by_user_id: actorUserId,
     })
     .select('*')
     .maybeSingle();
@@ -137,6 +143,25 @@ export async function POST(
       { status: 500 }
     );
   }
+
+  await logPropertyKnowledgeActivity({
+    property_id: id,
+    user_id: actorUserId,
+    resource_type: 'document',
+    resource_id: row.id,
+    action: 'create',
+    changes: {
+      kind: 'snapshot',
+      row: {
+        tag: row.tag,
+        title: row.title,
+        original_filename: row.original_filename,
+        size_bytes: row.size_bytes,
+      },
+    },
+    subject_label: row.title || row.original_filename || `${row.tag} document`,
+    source: 'web',
+  });
 
   return NextResponse.json({ document: row }, { status: 201 });
 }

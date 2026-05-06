@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 import {
   CARD_SCOPES,
   ROOM_TYPES,
@@ -53,7 +55,7 @@ export async function GET(
 
 // POST /api/properties/[id]/rooms
 // Required: scope, type
-// Optional: title (defaults to the label for `type`), sort_order
+// Optional: title (defaults to the label for `type`), notes, sort_order
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -72,6 +74,24 @@ export async function POST(
   const titleRaw = typeof body?.title === 'string' ? body.title.trim() : '';
   const title = titleRaw || defaultRoomTitle(type as RoomType);
 
+  // Optional notes blob attached at the room level. Empty/whitespace
+  // becomes NULL so the column reads cleanly when nothing was set.
+  let notes: string | null = null;
+  if ('notes' in body) {
+    const raw = body.notes;
+    if (raw === null || raw === undefined) {
+      notes = null;
+    } else if (typeof raw !== 'string') {
+      return NextResponse.json(
+        { error: 'notes must be a string' },
+        { status: 400 }
+      );
+    } else {
+      const trimmed = raw.trim();
+      notes = trimmed === '' ? null : trimmed;
+    }
+  }
+
   const supabase = getSupabaseServer();
 
   const { data: prop, error: propErr } = await supabase
@@ -86,15 +106,20 @@ export async function POST(
     return NextResponse.json({ error: 'Property not found' }, { status: 404 });
   }
 
+  const actorUserId = getActorUserIdFromRequest(req);
+
   const payload = {
     property_id: id,
     scope,
     type,
     title,
+    notes,
     sort_order:
       typeof body?.sort_order === 'number' && Number.isFinite(body.sort_order)
         ? Math.trunc(body.sort_order)
         : 0,
+    created_by_user_id: actorUserId,
+    updated_by_user_id: actorUserId,
   };
 
   const { data, error } = await supabase
@@ -115,5 +140,27 @@ export async function POST(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  if (data) {
+    await logPropertyKnowledgeActivity({
+      property_id: id,
+      user_id: actorUserId,
+      resource_type: 'room',
+      resource_id: data.id,
+      action: 'create',
+      changes: {
+        kind: 'snapshot',
+        row: {
+          scope: data.scope,
+          type: data.type,
+          title: data.title,
+          notes: data.notes,
+        },
+      },
+      subject_label: data.title || `${data.scope} room`,
+      source: 'web',
+    });
+  }
+
   return NextResponse.json({ room: data }, { status: 201 });
 }

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 
 const CATEGORIES = new Set([
   'cleaning',
@@ -65,8 +67,21 @@ export async function PATCH(
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
   }
   patch.updated_at = new Date().toISOString();
+  const actorUserId = getActorUserIdFromRequest(req);
+  if (actorUserId) {
+    patch.updated_by_user_id = actorUserId;
+  }
 
   const supabase = getSupabaseServer();
+
+  // Pre-read for the activity diff. Same trade-off as the notes PATCH.
+  const { data: before } = await supabase
+    .from('property_contacts')
+    .select('id, category, name, role, phone, email, notes, sort_order')
+    .eq('id', contactId)
+    .eq('property_id', id)
+    .maybeSingle();
+
   const { data, error } = await supabase
     .from('property_contacts')
     .update(patch)
@@ -81,15 +96,56 @@ export async function PATCH(
   if (!data) {
     return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
   }
+
+  if (before) {
+    const entries: Array<{ field: string; before: unknown; after: unknown }> = [];
+    for (const f of [
+      'category',
+      'name',
+      'role',
+      'phone',
+      'email',
+      'notes',
+      'sort_order',
+    ] as const) {
+      const b = (before as Record<string, unknown>)[f];
+      const a = (data as Record<string, unknown>)[f];
+      if (b !== a) entries.push({ field: f, before: b, after: a });
+    }
+    if (entries.length > 0) {
+      await logPropertyKnowledgeActivity({
+        property_id: id,
+        user_id: actorUserId,
+        resource_type: 'contact',
+        resource_id: data.id,
+        action: 'update',
+        changes: { kind: 'diff', entries },
+        subject_label:
+          data.role && data.role.trim() !== ''
+            ? `${data.name} (${data.role})`
+            : data.name,
+        source: 'web',
+      });
+    }
+  }
+
   return NextResponse.json({ contact: data });
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; contactId: string }> }
 ) {
   const { id, contactId } = await params;
   const supabase = getSupabaseServer();
+
+  const { data: before } = await supabase
+    .from('property_contacts')
+    .select('id, category, name, role, phone, email')
+    .eq('id', contactId)
+    .eq('property_id', id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from('property_contacts')
     .delete()
@@ -98,5 +154,32 @@ export async function DELETE(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  if (before) {
+    const actorUserId = getActorUserIdFromRequest(req);
+    await logPropertyKnowledgeActivity({
+      property_id: id,
+      user_id: actorUserId,
+      resource_type: 'contact',
+      resource_id: null,
+      action: 'delete',
+      changes: {
+        kind: 'snapshot',
+        row: {
+          category: before.category,
+          name: before.name,
+          role: before.role,
+          phone: before.phone,
+          email: before.email,
+        },
+      },
+      subject_label:
+        before.role && before.role.trim() !== ''
+          ? `${before.name} (${before.role})`
+          : before.name,
+      source: 'web',
+    });
+  }
+
   return NextResponse.json({ ok: true });
 }

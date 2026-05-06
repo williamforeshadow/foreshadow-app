@@ -2,6 +2,7 @@
 
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { apiFetch } from '@/lib/apiFetch';
 import {
   Field,
   FieldGroup,
@@ -77,7 +78,7 @@ export default function PropertyAccessTab() {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch(`/api/properties/${propertyId}/access`);
+      const res = await apiFetch(`/api/properties/${propertyId}/access`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load access details');
       const d = fromServer(data.access);
@@ -115,7 +116,7 @@ export default function PropertyAccessTab() {
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await fetch(`/api/properties/${propertyId}/access`, {
+      const res = await apiFetch(`/api/properties/${propertyId}/access`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(draft),

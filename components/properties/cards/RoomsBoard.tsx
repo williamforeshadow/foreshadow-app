@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { apiFetch } from '@/lib/apiFetch';
 import {
   ROOM_TYPE_LABELS,
   TAG_LABELS,
@@ -48,6 +49,7 @@ interface PropertyRoom {
   scope: CardScope;
   type: RoomType;
   title: string;
+  notes: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -95,7 +97,7 @@ export function RoomsBoard({
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/properties/${propertyId}/rooms?scope=${scope}`
       );
       const data = await res.json();
@@ -114,7 +116,7 @@ export function RoomsBoard({
 
   const handleCreateRoom = useCallback(async () => {
     try {
-      const res = await fetch(`/api/properties/${propertyId}/rooms`, {
+      const res = await apiFetch(`/api/properties/${propertyId}/rooms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -133,12 +135,15 @@ export function RoomsBoard({
   }, [propertyId, scope, noun, showToast]);
 
   const handlePatchRoom = useCallback(
-    async (roomId: string, patch: { title?: string; type?: RoomType }) => {
+    async (
+      roomId: string,
+      patch: { title?: string; type?: RoomType; notes?: string | null }
+    ) => {
       setRooms((prev) =>
         prev.map((r) => (r.id === roomId ? { ...r, ...patch } : r))
       );
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/properties/${propertyId}/rooms/${roomId}`,
           {
             method: 'PATCH',
@@ -183,7 +188,7 @@ export function RoomsBoard({
       const prev = rooms;
       setRooms((p) => p.filter((r) => r.id !== room.id));
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/properties/${propertyId}/rooms/${room.id}`,
           { method: 'DELETE' }
         );
@@ -213,7 +218,7 @@ export function RoomsBoard({
   const handleCreateCard = useCallback(
     async (roomId: string) => {
       try {
-        const res = await fetch(`/api/properties/${propertyId}/cards`, {
+        const res = await apiFetch(`/api/properties/${propertyId}/cards`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -265,7 +270,7 @@ export function RoomsBoard({
         )
       );
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/properties/${propertyId}/cards/${cardId}`,
           {
             method: 'PATCH',
@@ -310,7 +315,7 @@ export function RoomsBoard({
         )
       );
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/properties/${propertyId}/cards/${cardId}`,
           { method: 'DELETE' }
         );
@@ -483,7 +488,11 @@ function RoomSection({
   propertyId: string;
   noun: string;
   roomTypes: RoomType[];
-  onPatchRoom: (patch: { title?: string; type?: RoomType }) => void;
+  onPatchRoom: (patch: {
+    title?: string;
+    type?: RoomType;
+    notes?: string | null;
+  }) => void;
   onDeleteRoom: () => void;
   onRoomPhotosChange: (photos: Photo[]) => void;
   onCreateCard: () => void;
@@ -546,6 +555,14 @@ function RoomSection({
         />
       </div>
 
+      <div className="mb-5">
+        <RoomNotes
+          value={room.notes ?? ''}
+          noun={noun}
+          onChange={(next) => onPatchRoom({ notes: next.trim() === '' ? null : next })}
+        />
+      </div>
+
       <div className="flex items-center justify-between mb-2">
         <h4 className="text-[11px] font-semibold text-neutral-700 dark:text-[#a09e9a] uppercase tracking-[0.08em]">
           Cards
@@ -592,6 +609,79 @@ function RoomSection({
         </div>
       )}
     </section>
+  );
+}
+
+// --- RoomNotes (debounced, room-level free-text) --------------------------
+//
+// Mirrors the per-card editor but lives on the room itself. We treat
+// empty/whitespace as "clear it" — the API normalizes that to NULL on
+// save so reads stay clean. Saves are debounced ~650ms to keep typing
+// snappy without hammering the API.
+
+function RoomNotes({
+  value,
+  noun,
+  onChange,
+}: {
+  value: string;
+  noun: string;
+  onChange: (next: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [savedState, setSavedState] = useState<'idle' | 'saving' | 'saved'>(
+    'idle'
+  );
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Re-sync if the parent comes back with new server state and we're
+  // not actively typing. Using a value-equality check is enough — the
+  // parent sets the same string, so React's setState short-circuit
+  // saves us from re-rendering needlessly.
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+    };
+  }, []);
+
+  const handleChange = (next: string) => {
+    setDraft(next);
+    setSavedState('saving');
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      onChange(next);
+      setSavedState('saved');
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+      savedTimer.current = setTimeout(() => setSavedState('idle'), 1500);
+    }, 650);
+  };
+
+  return (
+    <div>
+      <label className="block text-[11px] font-semibold text-neutral-700 dark:text-[#a09e9a] uppercase tracking-[0.08em] mb-1.5">
+        Notes
+      </label>
+      <Textarea
+        value={draft}
+        onChange={(e) => handleChange(e.target.value)}
+        placeholder={`Anything that's true of this whole ${noun} — quirks, layout notes, recurring issues. Card-specific details belong on the card.`}
+        rows={2}
+      />
+      <div className="mt-1 h-4 text-[10px] font-medium text-neutral-400 dark:text-[#66645f] uppercase tracking-[0.04em]">
+        {savedState === 'saving' && 'Saving…'}
+        {savedState === 'saved' && (
+          <span className="text-[var(--accent-2)] dark:text-[var(--accent-1)]">
+            Saved
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 

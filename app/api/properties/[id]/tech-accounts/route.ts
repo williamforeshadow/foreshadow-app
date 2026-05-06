@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 import {
   TECH_ACCOUNT_KINDS,
   DEFAULT_TECH_ACCOUNT_KIND,
@@ -88,6 +90,8 @@ export async function POST(
     .select('*', { count: 'exact', head: true })
     .eq('property_id', id);
 
+  const actorUserId = getActorUserIdFromRequest(req);
+
   const { data, error } = await supabase
     .from('property_tech_accounts')
     .insert({
@@ -95,6 +99,8 @@ export async function POST(
       kind,
       service_name,
       sort_order: count ?? 0,
+      created_by_user_id: actorUserId,
+      updated_by_user_id: actorUserId,
     })
     .select(
       `
@@ -110,6 +116,20 @@ export async function POST(
       { status: 500 }
     );
   }
+
+  await logPropertyKnowledgeActivity({
+    property_id: id,
+    user_id: actorUserId,
+    resource_type: 'tech_account',
+    resource_id: data.id,
+    action: 'create',
+    changes: {
+      kind: 'snapshot',
+      row: { kind: data.kind, service_name: data.service_name },
+    },
+    subject_label: `${data.service_name} (${data.kind})`,
+    source: 'web',
+  });
 
   return NextResponse.json({ account: data }, { status: 201 });
 }

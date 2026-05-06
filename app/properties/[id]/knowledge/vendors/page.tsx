@@ -2,6 +2,7 @@
 
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { apiFetch } from '@/lib/apiFetch';
 import {
   Field,
   FieldGroup,
@@ -76,7 +77,7 @@ export default function PropertyVendorsTab() {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch(`/api/properties/${propertyId}/contacts`);
+      const res = await apiFetch(`/api/properties/${propertyId}/contacts`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load contacts');
       setContacts((data.contacts || []) as Contact[]);
@@ -104,7 +105,7 @@ export default function PropertyVendorsTab() {
   const handleCreate = useCallback(
     async (category: ContactCategory) => {
       try {
-        const res = await fetch(`/api/properties/${propertyId}/contacts`, {
+        const res = await apiFetch(`/api/properties/${propertyId}/contacts`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ category, name: 'New contact' }),
@@ -128,7 +129,7 @@ export default function PropertyVendorsTab() {
         prev.map((c) => (c.id === contactId ? { ...c, ...patch } : c))
       );
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/properties/${propertyId}/contacts/${contactId}`,
           {
             method: 'PATCH',
@@ -153,7 +154,7 @@ export default function PropertyVendorsTab() {
       const prev = contacts;
       setContacts((p) => p.filter((c) => c.id !== contactId));
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/properties/${propertyId}/contacts/${contactId}`,
           { method: 'DELETE' }
         );

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 
 const DOCUMENT_TAGS = new Set([
   'lease',
@@ -42,8 +44,20 @@ export async function PATCH(
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
   }
   patch.updated_at = new Date().toISOString();
+  const actorUserId = getActorUserIdFromRequest(req);
+  if (actorUserId) {
+    patch.updated_by_user_id = actorUserId;
+  }
 
   const supabase = getSupabaseServer();
+
+  const { data: before } = await supabase
+    .from('property_documents')
+    .select('id, tag, title, notes, original_filename')
+    .eq('id', docId)
+    .eq('property_id', id)
+    .maybeSingle();
+
   const { data, error } = await supabase
     .from('property_documents')
     .update(patch)
@@ -57,11 +71,34 @@ export async function PATCH(
   if (!data) {
     return NextResponse.json({ error: 'Document not found' }, { status: 404 });
   }
+
+  if (before) {
+    const entries: Array<{ field: string; before: unknown; after: unknown }> = [];
+    for (const f of ['tag', 'title', 'notes'] as const) {
+      const b = (before as Record<string, unknown>)[f];
+      const a = (data as Record<string, unknown>)[f];
+      if (b !== a) entries.push({ field: f, before: b, after: a });
+    }
+    if (entries.length > 0) {
+      await logPropertyKnowledgeActivity({
+        property_id: id,
+        user_id: actorUserId,
+        resource_type: 'document',
+        resource_id: data.id,
+        action: 'update',
+        changes: { kind: 'diff', entries },
+        subject_label:
+          data.title || data.original_filename || `${data.tag} document`,
+        source: 'web',
+      });
+    }
+  }
+
   return NextResponse.json({ document: data });
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; docId: string }> }
 ) {
   const { id, docId } = await params;
@@ -69,7 +106,7 @@ export async function DELETE(
 
   const { data: doc, error: fetchErr } = await supabase
     .from('property_documents')
-    .select('id, storage_path')
+    .select('id, storage_path, tag, title, notes, original_filename, size_bytes')
     .eq('id', docId)
     .eq('property_id', id)
     .maybeSingle();
@@ -94,6 +131,27 @@ export async function DELETE(
       .from('property-documents')
       .remove([doc.storage_path]);
   }
+
+  const actorUserId = getActorUserIdFromRequest(req);
+  await logPropertyKnowledgeActivity({
+    property_id: id,
+    user_id: actorUserId,
+    resource_type: 'document',
+    resource_id: null,
+    action: 'delete',
+    changes: {
+      kind: 'snapshot',
+      row: {
+        tag: doc.tag,
+        title: doc.title,
+        notes: doc.notes,
+        original_filename: doc.original_filename,
+        size_bytes: doc.size_bytes,
+      },
+    },
+    subject_label: doc.title || doc.original_filename || `${doc.tag} document`,
+    source: 'web',
+  });
 
   return NextResponse.json({ ok: true });
 }

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 import {
   CARD_TAGS,
   normalizeTagData,
@@ -114,6 +116,17 @@ export async function PATCH(
   }
 
   patch.updated_at = new Date().toISOString();
+  const actorUserId = getActorUserIdFromRequest(req);
+  if (actorUserId) {
+    patch.updated_by_user_id = actorUserId;
+  }
+
+  const { data: before } = await supabase
+    .from('property_cards')
+    .select('id, room_id, tag, title, body, tag_data, sort_order')
+    .eq('id', cardId)
+    .eq('property_id', id)
+    .maybeSingle();
 
   const { data, error } = await supabase
     .from('property_cards')
@@ -130,21 +143,62 @@ export async function PATCH(
     return NextResponse.json({ error: 'Card not found' }, { status: 404 });
   }
 
+  if (before) {
+    const entries: Array<{ field: string; before: unknown; after: unknown }> = [];
+    for (const f of [
+      'room_id',
+      'tag',
+      'title',
+      'body',
+      'tag_data',
+      'sort_order',
+    ] as const) {
+      const b = (before as Record<string, unknown>)[f];
+      const a = (data as Record<string, unknown>)[f];
+      // tag_data is a json blob; compare via JSON.stringify to avoid
+      // false-positive diff entries from object identity differences.
+      const changed =
+        f === 'tag_data' ? JSON.stringify(b) !== JSON.stringify(a) : b !== a;
+      if (changed) entries.push({ field: f, before: b, after: a });
+    }
+    if (entries.length > 0) {
+      await logPropertyKnowledgeActivity({
+        property_id: id,
+        user_id: actorUserId,
+        resource_type: 'card',
+        resource_id: data.id,
+        action: 'update',
+        changes: { kind: 'diff', entries },
+        subject_label: data.title || `${data.tag} card`,
+        source: 'web',
+      });
+    }
+  }
+
   return NextResponse.json({ card: data });
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; cardId: string }> }
 ) {
   const { id, cardId } = await params;
   const supabase = getSupabaseServer();
 
-  // Grab storage paths before the cascade deletes the photo rows.
-  const photosRes = await supabase
-    .from('property_card_photos')
-    .select('storage_path')
-    .eq('card_id', cardId);
+  // Snapshot the row + grab storage paths before the cascade fires.
+  const [beforeRes, photosRes] = await Promise.all([
+    supabase
+      .from('property_cards')
+      .select('id, room_id, tag, title, body')
+      .eq('id', cardId)
+      .eq('property_id', id)
+      .maybeSingle(),
+    supabase
+      .from('property_card_photos')
+      .select('storage_path')
+      .eq('card_id', cardId),
+  ]);
+  const before = beforeRes.data;
   const photos: Array<{ storage_path: string | null }> =
     (photosRes.data as Array<{ storage_path: string | null }> | null) ?? [];
 
@@ -165,6 +219,28 @@ export async function DELETE(
     if (paths.length > 0) {
       await supabase.storage.from('property-photos').remove(paths);
     }
+  }
+
+  if (before) {
+    const actorUserId = getActorUserIdFromRequest(req);
+    await logPropertyKnowledgeActivity({
+      property_id: id,
+      user_id: actorUserId,
+      resource_type: 'card',
+      resource_id: null,
+      action: 'delete',
+      changes: {
+        kind: 'snapshot',
+        row: {
+          room_id: before.room_id,
+          tag: before.tag,
+          title: before.title,
+          body: before.body,
+        },
+      },
+      subject_label: before.title || `${before.tag} card`,
+      source: 'web',
+    });
   }
 
   return NextResponse.json({ ok: true });

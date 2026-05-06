@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 import {
   CARD_TAGS,
   normalizeTagData,
@@ -100,6 +102,8 @@ export async function POST(
     return NextResponse.json({ error: 'Room not found' }, { status: 404 });
   }
 
+  const actorUserId = getActorUserIdFromRequest(req);
+
   const payload = {
     property_id: id,
     room_id: roomId,
@@ -112,6 +116,8 @@ export async function POST(
       typeof body?.sort_order === 'number' && Number.isFinite(body.sort_order)
         ? Math.trunc(body.sort_order)
         : 0,
+    created_by_user_id: actorUserId,
+    updated_by_user_id: actorUserId,
   };
 
   const { data, error } = await supabase
@@ -122,6 +128,27 @@ export async function POST(
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (data) {
+    await logPropertyKnowledgeActivity({
+      property_id: id,
+      user_id: actorUserId,
+      resource_type: 'card',
+      resource_id: data.id,
+      action: 'create',
+      changes: {
+        kind: 'snapshot',
+        row: {
+          room_id: data.room_id,
+          tag: data.tag,
+          title: data.title,
+          body: data.body,
+        },
+      },
+      subject_label: data.title || `${data.tag} card`,
+      source: 'web',
+    });
   }
 
   return NextResponse.json({ card: data }, { status: 201 });

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { apiFetch } from '@/lib/apiFetch';
 import {
   KIND_CHIP_CLASSES,
   KIND_LABELS,
@@ -47,7 +48,7 @@ export function TechAccountsList({ propertyId }: { propertyId: string }) {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch(`/api/properties/${propertyId}/tech-accounts`);
+      const res = await apiFetch(`/api/properties/${propertyId}/tech-accounts`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load accounts');
       setAccounts((data.accounts || []) as TechAccount[]);
@@ -65,7 +66,7 @@ export function TechAccountsList({ propertyId }: { propertyId: string }) {
   const handleCreate = useCallback(
     async (seed?: TechAccountPreset) => {
       try {
-        const res = await fetch(`/api/properties/${propertyId}/tech-accounts`, {
+        const res = await apiFetch(`/api/properties/${propertyId}/tech-accounts`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(seed ?? {}),
@@ -91,7 +92,7 @@ export function TechAccountsList({ propertyId }: { propertyId: string }) {
         prev.map((a) => (a.id === accountId ? { ...a, ...patch } : a))
       );
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/properties/${propertyId}/tech-accounts/${accountId}`,
           {
             method: 'PATCH',
@@ -117,7 +118,7 @@ export function TechAccountsList({ propertyId }: { propertyId: string }) {
       const prev = accounts;
       setAccounts((p) => p.filter((a) => a.id !== account.id));
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/properties/${propertyId}/tech-accounts/${account.id}`,
           { method: 'DELETE' }
         );

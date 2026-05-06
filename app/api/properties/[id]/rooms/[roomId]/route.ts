@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 import { ROOM_TYPES, type RoomType } from '@/lib/propertyCards';
 
 // PATCH /api/properties/[id]/rooms/[roomId]
-// Editable: title, type, sort_order. scope is immutable — moving a room
-// from interior to exterior doesn't make sense semantically, and if it
-// ever does the caller can delete + recreate.
+// Editable: title, type, notes, sort_order. scope is immutable — moving
+// a room from interior to exterior doesn't make sense semantically, and
+// if it ever does the caller can delete + recreate.
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; roomId: string }> }
@@ -33,6 +35,23 @@ export async function PATCH(
     patch.type = v;
   }
 
+  // Notes is a free-text blob describing the whole room (separate from
+  // per-card body text). Empty/whitespace clears the field.
+  if ('notes' in body) {
+    const v = body.notes;
+    if (v === null || v === undefined) {
+      patch.notes = null;
+    } else if (typeof v !== 'string') {
+      return NextResponse.json(
+        { error: 'notes must be a string' },
+        { status: 400 }
+      );
+    } else {
+      const trimmed = v.trim();
+      patch.notes = trimmed === '' ? null : trimmed;
+    }
+  }
+
   if ('sort_order' in body) {
     const v = body.sort_order;
     if (typeof v !== 'number' || !Number.isFinite(v)) {
@@ -52,8 +71,20 @@ export async function PATCH(
   }
 
   patch.updated_at = new Date().toISOString();
+  const actorUserId = getActorUserIdFromRequest(req);
+  if (actorUserId) {
+    patch.updated_by_user_id = actorUserId;
+  }
 
   const supabase = getSupabaseServer();
+
+  const { data: before } = await supabase
+    .from('property_rooms')
+    .select('id, title, type, notes, sort_order')
+    .eq('id', roomId)
+    .eq('property_id', id)
+    .maybeSingle();
+
   const { data, error } = await supabase
     .from('property_rooms')
     .update(patch)
@@ -77,6 +108,28 @@ export async function PATCH(
   if (!data) {
     return NextResponse.json({ error: 'Room not found' }, { status: 404 });
   }
+
+  if (before) {
+    const entries: Array<{ field: string; before: unknown; after: unknown }> = [];
+    for (const f of ['title', 'type', 'notes', 'sort_order'] as const) {
+      const b = (before as Record<string, unknown>)[f];
+      const a = (data as Record<string, unknown>)[f];
+      if (b !== a) entries.push({ field: f, before: b, after: a });
+    }
+    if (entries.length > 0) {
+      await logPropertyKnowledgeActivity({
+        property_id: id,
+        user_id: actorUserId,
+        resource_type: 'room',
+        resource_id: data.id,
+        action: 'update',
+        changes: { kind: 'diff', entries },
+        subject_label: data.title || 'Room',
+        source: 'web',
+      });
+    }
+  }
+
   return NextResponse.json({ room: data });
 }
 
@@ -85,17 +138,18 @@ export async function PATCH(
 // up bucket objects manually because Postgres cascades don't reach
 // Supabase Storage.
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; roomId: string }> }
 ) {
   const { id, roomId } = await params;
   const supabase = getSupabaseServer();
 
   // Verify the room belongs to this property before we start listing
-  // storage objects.
+  // storage objects. We pull title/type/notes here for the ledger
+  // snapshot — one extra column read is cheap.
   const { data: room, error: roomErr } = await supabase
     .from('property_rooms')
-    .select('id')
+    .select('id, scope, type, title, notes')
     .eq('id', roomId)
     .eq('property_id', id)
     .maybeSingle();
@@ -146,6 +200,26 @@ export async function DELETE(
   if (paths.length > 0) {
     await supabase.storage.from('property-photos').remove(paths);
   }
+
+  const actorUserId = getActorUserIdFromRequest(req);
+  await logPropertyKnowledgeActivity({
+    property_id: id,
+    user_id: actorUserId,
+    resource_type: 'room',
+    resource_id: null,
+    action: 'delete',
+    changes: {
+      kind: 'snapshot',
+      row: {
+        scope: room.scope,
+        type: room.type,
+        title: room.title,
+        notes: room.notes,
+      },
+    },
+    subject_label: room.title || `${room.scope} room`,
+    source: 'web',
+  });
 
   return NextResponse.json({ ok: true });
 }

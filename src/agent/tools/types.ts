@@ -76,6 +76,13 @@ export interface ToolContext {
     name: string;
     role: 'superadmin' | 'manager' | 'staff';
   };
+  /**
+   * Surface this run originates on. Tools that write to audit/activity
+   * ledgers use this to set the `source` column ('agent_slack' vs
+   * 'agent_web') so a future ledger UI can distinguish where each
+   * change came from. Mirrors AgentSurface in runAgent.ts.
+   */
+  surface?: 'web' | 'slack';
 }
 
 export interface ToolDefinition<TInput, TOutput> {
