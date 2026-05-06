@@ -227,15 +227,10 @@ export async function POST(request: Request) {
       .getPublicUrl(fileName);
 
     // Insert record into database
-    // Legacy schema constrains file_type to image/video. Keep documents
-    // compatible by storing a legacy bucket value and using mime_type as the
-    // source of truth when rendering.
-    const storedFileType =
-      attachmentKind === 'document' ? 'image' : attachmentKind;
     const insertData: Record<string, unknown> = {
       url: publicUrl,
       file_name: file.name,
-      file_type: storedFileType,
+      file_type: attachmentKind,
       mime_type: file.type || null,
       file_size: file.size,
       uploaded_by: uploadedBy || null,
@@ -243,7 +238,7 @@ export async function POST(request: Request) {
     if (taskId) insertData.task_id = taskId;
     if (projectId) insertData.project_id = projectId;
 
-    const { data: attachment, error: dbError } = await getSupabaseServer()
+    const firstInsert = await getSupabaseServer()
       .from('project_attachments')
       .insert(insertData)
       .select(`
@@ -251,6 +246,25 @@ export async function POST(request: Request) {
         users(id, name, avatar)
       `)
       .single();
+    let attachment = firstInsert.data;
+    let dbError = firstInsert.error;
+
+    if (
+      dbError &&
+      attachmentKind === 'document' &&
+      dbError.message.includes('project_attachments_file_type_check')
+    ) {
+      const fallbackInsert = await getSupabaseServer()
+        .from('project_attachments')
+        .insert({ ...insertData, file_type: 'image' })
+        .select(`
+          *,
+          users(id, name, avatar)
+        `)
+        .single();
+      attachment = fallbackInsert.data;
+      dbError = fallbackInsert.error;
+    }
 
     if (dbError) {
       console.error('Database error:', dbError);

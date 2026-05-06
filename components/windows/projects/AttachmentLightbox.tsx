@@ -28,6 +28,9 @@ export function AttachmentLightbox({
   const isVideo =
     currentAttachment.mime_type?.startsWith('video/') ||
     (!currentAttachment.mime_type && currentAttachment.file_type === 'video');
+  const isPdf =
+    currentAttachment.mime_type === 'application/pdf' ||
+    currentAttachment.file_name?.toLowerCase().endsWith('.pdf');
   const extension =
     currentAttachment.file_name?.split('.').pop()?.toUpperCase() || 'FILE';
 
@@ -92,6 +95,12 @@ export function AttachmentLightbox({
                 autoPlay
                 className="max-h-full max-w-full"
               />
+            ) : isPdf && attachmentUrl ? (
+              <iframe
+                src={attachmentUrl}
+                title={currentAttachment.file_name || 'PDF attachment'}
+                className="h-full w-full rounded-lg border border-white/10 bg-white"
+              />
             ) : (
               <div className="flex flex-col items-center gap-4 text-center text-white">
                 <div className="w-20 h-20 rounded-xl border border-white/15 bg-white/10 flex flex-col items-center justify-center">
@@ -108,7 +117,7 @@ export function AttachmentLightbox({
                     {currentAttachment.file_name || 'Attachment'}
                   </p>
                   <p className="mt-1 text-xs text-white/50">
-                    Documents open in a browser tab.
+                    This file type is available to open in a browser tab.
                   </p>
                 </div>
                 {attachmentUrl && (
