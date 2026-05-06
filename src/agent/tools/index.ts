@@ -13,6 +13,12 @@ import { previewBin } from './previewBin';
 import { createBin } from './createBin';
 import { previewTasksBatch } from './previewTasksBatch';
 import { createTasksBatch } from './createTasksBatch';
+import { previewTaskUpdate } from './previewTaskUpdate';
+import { updateTask } from './updateTask';
+import { previewTaskDelete } from './previewTaskDelete';
+import { deleteTask } from './deleteTask';
+import { previewComment } from './previewComment';
+import { addComment } from './addComment';
 
 // Tool registry. To add a new tool: define it in its own file, then add it
 // here. The agent loop pulls from this list — there's no other registration
@@ -36,6 +42,12 @@ export const TOOLS: ReadonlyArray<ToolDefinition<unknown, unknown>> = [
   createBin as unknown as ToolDefinition<unknown, unknown>,
   previewTasksBatch as unknown as ToolDefinition<unknown, unknown>,
   createTasksBatch as unknown as ToolDefinition<unknown, unknown>,
+  previewTaskUpdate as unknown as ToolDefinition<unknown, unknown>,
+  updateTask as unknown as ToolDefinition<unknown, unknown>,
+  previewTaskDelete as unknown as ToolDefinition<unknown, unknown>,
+  deleteTask as unknown as ToolDefinition<unknown, unknown>,
+  previewComment as unknown as ToolDefinition<unknown, unknown>,
+  addComment as unknown as ToolDefinition<unknown, unknown>,
 ];
 
 export const TOOLS_BY_NAME: Readonly<Record<string, ToolDefinition<unknown, unknown>>> =

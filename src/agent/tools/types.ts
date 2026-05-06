@@ -57,6 +57,27 @@ export type ToolResult<T> =
   | { ok: true; data: T; meta?: ToolMeta }
   | { ok: false; error: ToolError };
 
+/**
+ * Per-call execution context the dispatcher hands to every tool handler.
+ * Today this is just the resolved actor (when known), used by tools that
+ * bind a server-side identity to the write — e.g. add_comment authors
+ * the comment as the talking-to user without trusting the model to pass
+ * a user_id. Handlers that don't need this can ignore the parameter.
+ *
+ * The actor is the same `AgentActor` runAgent() received: Slack resolves
+ * it via email match, in-app chat doesn't have real auth yet so it may
+ * be undefined. Tools that REQUIRE an actor (the comment tools) must
+ * fail loudly with a clear error code when ctx.actor is missing rather
+ * than silently picking a stand-in.
+ */
+export interface ToolContext {
+  actor?: {
+    appUserId: string;
+    name: string;
+    role: 'superadmin' | 'manager' | 'staff';
+  };
+}
+
 export interface ToolDefinition<TInput, TOutput> {
   /** Stable identifier the LLM uses when invoking the tool. snake_case. */
   name: string;
@@ -71,5 +92,10 @@ export interface ToolDefinition<TInput, TOutput> {
    * so it stays compatible with the `tools` argument on `messages.create`.
    */
   jsonSchema: Tool.InputSchema;
-  handler: (input: TInput) => Promise<ToolResult<TOutput>>;
+  /**
+   * Receives the validated input plus the optional execution context.
+   * The context arg is positional and optional — read-only tools that
+   * don't care simply omit it from their signature.
+   */
+  handler: (input: TInput, ctx: ToolContext) => Promise<ToolResult<TOutput>>;
 }

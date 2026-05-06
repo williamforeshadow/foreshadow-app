@@ -6,7 +6,7 @@ import type {
   TextBlock,
 } from '@anthropic-ai/sdk/resources/messages';
 import { TOOLS_BY_NAME, toAnthropicTools } from './tools';
-import type { ToolResult } from './tools/types';
+import type { ToolContext, ToolResult } from './tools/types';
 import { todayInTz } from '@/src/lib/dates';
 
 // Names of tools that mutate state. Used by the hallucination backstops
@@ -24,6 +24,12 @@ export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set([
   'create_bin',
   'preview_tasks_batch',
   'create_tasks_batch',
+  'preview_task_update',
+  'update_task',
+  'preview_task_delete',
+  'delete_task',
+  'preview_comment',
+  'add_comment',
 ]);
 
 // runAgent — single entry point that drives Anthropic's tool-use loop.
@@ -139,17 +145,35 @@ Option-listing rule (critical):
 - If a resolver returns zero matches, say so directly ("I don't see a template by that name") and ask the user to rephrase or provide more detail. Do NOT improvise plausible-sounding alternatives.
 
 Write protocol (critical):
-- Any tool that creates, updates, schedules, or deletes data is a write. Every write follows the same two-step pattern: preview_X first, then create_X with the returned confirmation_token. Available write surfaces today:
+- Any tool that creates, updates, deletes, or adds a comment is a write. Every write follows the same two-step pattern: preview_X first, then a matching commit tool with the returned confirmation_token. Available write surfaces today:
   - Single task: preview_task → create_task
   - New sub-bin: preview_bin → create_bin
   - Multiple tasks at once (and optionally a brand-new sub-bin in the same operation): preview_tasks_batch → create_tasks_batch
-- ALWAYS call the preview tool first. preview tools validate fields, resolve display labels (property names, bin names, assignee names), surface conflicts (duplicate sub-bin name, missing FKs), and return a plan + a single-use confirmation_token. Present the plan to the user in plain English, ask for explicit confirmation ("shall I create this?"), and ONLY after the user agrees, call the matching create_X with the returned confirmation_token.
-- create_X tools accept ONLY a confirmation_token. They will refuse to act without one. Don't try to call them with field inputs directly; that interface does not exist.
-- The confirmation_token is a UUID returned by the matching preview tool — copy it verbatim from THIS turn's preview result. Do NOT invent tokens that look like "preview_<timestamp>" or any other custom format; only the exact UUID is accepted. Tokens from a different preview type (e.g. a preview_task token used against create_bin) will be rejected.
-- Tool-pair selection: use preview_task / create_task for ONE task. Use preview_tasks_batch / create_tasks_batch when the user asks to create more than one task in one breath OR asks to create a sub-bin and add tasks to it (the batch tool supports a new_sub_bin destination so the bin and the tasks land in a single confirmed operation). Never loop preview_task N times when the batch tool would do.
-- Sub-bin destination on tasks: pass a real bin_id (resolved via find_bins) for an existing sub-bin; pass is_binned=true with no bin_id for the default Task Bin; omit both for free-floating tasks. The batch tool uses the same vocabulary inside its shared_bin field, plus a new_sub_bin shorthand for "create this bin first, then drop the tasks into it".
+  - Modify an existing task: preview_task_update → update_task
+  - Delete a task: preview_task_delete → delete_task
+  - Add a comment to a task: preview_comment → add_comment
+- ALWAYS call the preview tool first. preview tools validate fields, resolve display labels (property names, bin names, assignee names), surface conflicts (duplicate sub-bin name, missing FKs, locked fields, empty diffs), and return a plan + a single-use confirmation_token. Present the plan to the user in plain English, ask for explicit confirmation ("shall I do this?"), and ONLY after the user agrees, call the matching commit tool with the returned confirmation_token.
+- Commit tools (create_task, update_task, delete_task, add_comment, etc.) accept ONLY a confirmation_token. They will refuse to act without one. Don't try to call them with field inputs directly; that interface does not exist.
+- The confirmation_token is a UUID returned by the matching preview tool — copy it verbatim from THIS turn's preview result. Do NOT invent tokens that look like "preview_<timestamp>" or any other custom format; only the exact UUID is accepted. Tokens from one preview type are not interchangeable with another commit tool's; e.g. a preview_task_update token cannot be used against delete_task.
+- Tool-pair selection: use preview_task / create_task for ONE NEW task. Use preview_tasks_batch / create_tasks_batch when the user asks to create more than one task in one breath OR asks to create a sub-bin and add tasks to it. Use preview_task_update / update_task to change ANY field on an existing task — title, description, status, priority, schedule, department, bin/is_binned, or assignees. Use preview_task_delete / delete_task to remove a task. Use preview_comment / add_comment to leave a note on a task. Never loop preview_task N times when the batch tool would do, and never use the create tool when the user is asking to modify an existing task — the update tool exists for that exact reason.
+- Sub-bin destination on tasks: pass a real bin_id (resolved via find_bins) for an existing sub-bin; pass is_binned=true with no bin_id for the default Task Bin; omit both for free-floating tasks. The batch tool uses the same vocabulary inside its shared_bin field, plus a new_sub_bin shorthand. update_task accepts the same vocabulary for moving tasks between bins.
+- Update specifics:
+  * preview_task_update returns a precise field-by-field diff (before/after for every field that will change). Present those changes to the user, not just a generic "I'll update the task" — be specific.
+  * If the diff comes back EMPTY (no changes), tell the user nothing would change and DO NOT call update_task. The token still exists but using it on an empty diff is wasted motion.
+  * Property and template are LOCKED on existing tasks (see "Locked fields" below). update_task will reject changes to them with a clear error.
+  * Assignment changes are REPLACEMENT, not delta — pass the full final list of user_ids. To clear all assignees, pass an empty array. To add Rae to an existing list of [Billy], you must pass [Billy, Rae] (and the user must confirm the full list).
+  * Setting status='complete' automatically marks completed_at = now; transitioning AWAY from 'complete' clears completed_at. You don't need to (and can't) set completed_at directly.
+- Delete specifics:
+  * Delete is HARD today (the task row is removed; comments and assignments cascade away with it). preview_task_delete surfaces the comment count and assignment count so you can warn the user before they confirm.
+  * After a successful delete_task, confirm using the snapshot returned in the result. Do NOT try to construct a task_url for a deleted task — the row no longer exists.
+- Comment specifics:
+  * Comments are authored as the talking-to user (the actor identified in this prompt). You don't pass a user_id — there is no input field for it; the binding happens server-side. If preview_comment returns a "Cannot author a comment without a resolved actor" error, the current surface doesn't have a verified author (in-app web chat without auth, today). Tell the user that comments can only be posted from a surface where their identity is verified (currently Slack), and suggest they post the comment from there instead.
+- Locked fields (critical, applies to update_task):
+  * property_id and property_name CANNOT be changed after a task is created. If the user asks to "move task X to property Y", explain that property is locked at creation and offer to delete the task and create a new one in the right property.
+  * template_id CANNOT be changed after a task is created. Same workaround: delete + recreate.
+  * If preview_task_update returns invalid_input with the locked-field message, surface it verbatim to the user.
 - Partial-failure rule: create_tasks_batch may return ok:true with a non-empty failures array (some tasks landed, some didn't). When that happens, narrate the partial outcome honestly — list the created tasks and explicitly mention which ones failed and why. Do not claim full success.
-- Action-claim rule: if your reply includes a claim that something was created, updated, scheduled, deleted, or assigned, the corresponding write tool MUST appear in this turn's tool calls AND have returned ok:true (a partial-success batch counts). If the write tool returned ok:false, surface the error message verbatim and offer to retry — do not pretend it succeeded. If no write tool was called this turn, do not claim the action happened; describe what you would do instead.
+- Action-claim rule: if your reply includes a claim that something was created, updated, deleted, scheduled, assigned, or commented on, the corresponding write tool MUST appear in this turn's tool calls AND have returned ok:true (a partial-success batch counts). If the write tool returned ok:false, surface the error message verbatim and offer to retry — do not pretend it succeeded. If no write tool was called this turn, do not claim the action happened; describe what you would do instead.
 
 If a tool returns ok:false, surface the error message to the user and use the hint, if present, to suggest a clarification. Do NOT invent or guess data that wasn't returned.
 
@@ -264,6 +288,12 @@ export async function runAgent({
   const systemPrompt = buildSystemPrompt(clientTz, surface, actor);
   const toolCalls: ToolCallTrace[] = [];
 
+  // Per-run execution context. Tools that bind to identity (e.g.
+  // add_comment, which authors as the talking-to user) read this server-
+  // side instead of trusting the model to pass a user_id. Read-only
+  // tools simply ignore the second argument.
+  const ctx: ToolContext = { actor };
+
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     const response = await anthropic.messages.create({
       model: MODEL,
@@ -293,7 +323,7 @@ export async function runAgent({
     );
 
     const toolResults: ToolResultBlockParam[] = await Promise.all(
-      toolUses.map((use) => dispatchToolUse(use, toolCalls)),
+      toolUses.map((use) => dispatchToolUse(use, toolCalls, ctx)),
     );
 
     conversation.push({ role: 'user', content: toolResults });
@@ -308,6 +338,7 @@ export async function runAgent({
 async function dispatchToolUse(
   use: ToolUseBlock,
   trace: ToolCallTrace[],
+  ctx: ToolContext,
 ): Promise<ToolResultBlockParam> {
   const tool = TOOLS_BY_NAME[use.name];
   if (!tool) {
@@ -346,7 +377,7 @@ async function dispatchToolUse(
   }
 
   try {
-    const result = await tool.handler(parsed.data);
+    const result = await tool.handler(parsed.data, ctx);
     trace.push({ name: use.name, input: parsed.data, output: result });
     return {
       type: 'tool_result',
