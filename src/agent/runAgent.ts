@@ -38,6 +38,8 @@ export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set([
   'commit_property_contact_upsert',
   'preview_property_contact_delete',
   'commit_property_contact_delete',
+  'preview_property_knowledge_write',
+  'commit_property_knowledge_write',
 ]);
 
 // runAgent — single entry point that drives Anthropic's tool-use loop.
@@ -164,6 +166,7 @@ Write protocol (critical):
   - Delete a property note: preview_property_note_delete → commit_property_note_delete
   - Property contact (cleaning / maintenance / stakeholder / emergency), create OR update: preview_property_contact_upsert → commit_property_contact_upsert
   - Delete a property contact: preview_property_contact_delete → commit_property_contact_delete
+  - Property Knowledge sections Access, Connectivity, Interior/Exterior rooms, Interior/Exterior cards, and existing Document metadata/deletes: preview_property_knowledge_write → commit_property_knowledge_write
 - ALWAYS call the preview tool first. preview tools validate fields, resolve display labels (property names, bin names, assignee names), surface conflicts (duplicate sub-bin name, missing FKs, locked fields, empty diffs), and return a plan + a single-use confirmation_token. Present the plan to the user in plain English, ask for explicit confirmation ("shall I do this?"), and ONLY after the user agrees, call the matching commit tool with the returned confirmation_token.
 - Commit tools (create_task, update_task, delete_task, add_comment, commit_property_note_upsert, etc.) accept ONLY a confirmation_token. They will refuse to act without one. Don't try to call them with field inputs directly; that interface does not exist.
 - The confirmation_token is a UUID returned by the matching preview tool — copy it verbatim from THIS turn's preview result. Do NOT invent tokens that look like "preview_<timestamp>" or any other custom format; only the exact UUID is accepted. Tokens from one preview type are not interchangeable with another commit tool's; e.g. a preview_task_update token cannot be used against delete_task, and a preview_property_note_upsert token cannot be used against commit_property_contact_upsert.
@@ -186,12 +189,15 @@ Write protocol (critical):
   * template_id CANNOT be changed after a task is created. Same workaround: delete + recreate.
   * If preview_task_update returns invalid_input with the locked-field message, surface it verbatim to the user.
 - Property knowledge writes:
+  * Property Knowledge has eight sections: Information, Access, Connectivity, Interior, Exterior, Vendor, Notes, Documents, plus an Activity ledger view. Information and Activity are READ-ONLY for the agent.
   * Notes have only TWO scopes today: 'owner_preferences' (how the owner wants things handled) and 'known_issues' (broken/quirky/under-repair items). Earlier surfaces had guest_facing / team_facing / local_tips — they no longer exist; if the user asks to add a "guest-facing" note or similar, suggest known_issues or owner_preferences as the closest fit, OR suggest a room/card if the content is area-specific.
   * Note scope is LOCKED on update — pass note_id WITHOUT scope to update body/title/sort_order. To "move" a note across scopes, the workaround is delete + recreate.
   * Contacts have four categories: 'cleaning', 'maintenance', 'stakeholder', 'emergency'. Unlike notes, category IS editable on update — you can move a contact across categories in one preview_property_contact_upsert call.
   * For both notes and contacts: omit the id (note_id / contact_id) to CREATE, pass the existing id to UPDATE. There are no separate add/edit tools.
   * Use get_property_knowledge first when editing — it returns the full notes[] and contacts[] for a property, including ids, so you can pick the right row by name/scope/category before previewing the upsert.
   * Empty-diff rule: if preview_*_upsert comes back with an empty changes array on update, tell the user nothing would change and DO NOT commit. The token still exists but using it on a no-op is wasted motion.
+  * Use preview_property_knowledge_write for Access (codes, parking, lockbox/key details), Connectivity (wifi/router details), Interior and Exterior rooms/cards, and existing document metadata/deletes. It does NOT upload new document files; tell the user document upload has to happen in the app UI for now, then you can edit its title/notes/tag or delete it once it exists.
+  * Use the specialized note/contact tools for Notes and Vendor/contact information. Do not use preview_property_knowledge_write for Notes or Vendor contacts.
 - Partial-failure rule: create_tasks_batch may return ok:true with a non-empty failures array (some tasks landed, some didn't). When that happens, narrate the partial outcome honestly — list the created tasks and explicitly mention which ones failed and why. Do not claim full success.
 - Action-claim rule: if your reply includes a claim that something was created, updated, deleted, scheduled, assigned, or commented on, the corresponding write tool MUST appear in this turn's tool calls AND have returned ok:true (a partial-success batch counts). If the write tool returned ok:false, surface the error message verbatim and offer to retry — do not pretend it succeeded. If no write tool was called this turn, do not claim the action happened; describe what you would do instead.
 
