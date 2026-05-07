@@ -5,6 +5,7 @@ import {
   type SlackFileAttachmentPlan,
 } from '@/src/server/slack/attachInboundFile';
 import { mintSlackFileAttachmentToken } from '@/src/server/slack/attachInboundFileConfirmation';
+import { createPendingAction } from '@/src/server/agent/pendingActions';
 import type { ToolContext, ToolDefinition, ToolResult } from './types';
 
 const inputSchema = slackFileAttachmentInputSchema;
@@ -14,6 +15,7 @@ export interface PreviewSlackFileAttachmentData {
   plan: SlackFileAttachmentPlan;
   confirmation_token: string;
   expires_at: string;
+  pending_action_id?: string | null;
 }
 
 async function handler(
@@ -41,12 +43,23 @@ async function handler(
   }
 
   const minted = mintSlackFileAttachmentToken(result.canonicalInput);
+  const pendingActionId =
+    ctx.surface === 'slack' && ctx.slack
+      ? await createPendingAction({
+          kind: 'slack_file_attachment',
+          requesterAppUserId: ctx.actor?.appUserId ?? null,
+          slack: ctx.slack,
+          canonicalInput: { input: result.canonicalInput },
+          preview: result.plan,
+        })
+      : null;
   return {
     ok: true,
     data: {
       plan: result.plan,
       confirmation_token: minted.token,
       expires_at: minted.expires_at,
+      pending_action_id: pendingActionId,
     },
     meta: { returned: 1, limit: 1, truncated: false },
   };

@@ -30,6 +30,16 @@ import {
   listRecentSlackInboundFiles,
   type SlackInboundFileEvent,
 } from '@/src/server/slack/inboundFiles';
+import {
+  confirmPendingAction,
+  isBareConfirmation,
+  listActivePendingActions,
+  setPendingActionMessageTs,
+} from '@/src/server/agent/pendingActions';
+import {
+  buildConfirmationBlocks,
+  extractPendingActionIds,
+} from '@/src/server/agent/slackConfirmationBlocks';
 
 interface MessageExtras {
   blocks?: Block[];
@@ -389,6 +399,52 @@ async function handleSlackMessage(
       'I uploaded file(s) in Slack. Help me decide where to attach them in Foreshadow.';
   }
 
+  const supabase = getSupabaseServer();
+
+  if (!hasFiles && isBareConfirmation(prompt)) {
+    const active = await listActivePendingActions({
+      slackUserId: event.user,
+      channelId: event.channel,
+      threadTs,
+      limit: 2,
+    });
+    if (active.length === 1) {
+      await supabase.from('ai_chat_messages').insert({
+        user_id: identity.appUserId,
+        role: 'user',
+        content: prompt,
+        metadata: {
+          surface: 'slack',
+          slack_kind: kind,
+          slack_channel: event.channel,
+          ...(threadTs ? { slack_thread_ts: threadTs } : {}),
+          slack_user_id: event.user,
+          pending_action_id: active[0].id,
+        },
+      });
+      const confirmation = await confirmPendingAction({
+        actionId: active[0].id,
+        slackUserId: event.user,
+      });
+      await supabase.from('ai_chat_messages').insert({
+        user_id: identity.appUserId,
+        role: 'assistant',
+        content: confirmation.text,
+        metadata: {
+          surface: 'slack',
+          slack_kind: kind,
+          slack_channel: event.channel,
+          ...(threadTs ? { slack_thread_ts: threadTs } : {}),
+          slack_user_id: event.user,
+          pending_action_id: active[0].id,
+          pending_action_status: confirmation.status,
+        },
+      });
+      await postReply(web, event.channel, threadTs, confirmation.text);
+      return;
+    }
+  }
+
   // Pull recent history from ai_chat_messages, same as the in-app route.
   // This means Slack and in-app share memory (a deliberate choice — see
   // chat thread). Per-thread / per-DM Slack scoping isn't built yet; if it
@@ -454,7 +510,6 @@ async function handleSlackMessage(
     contextBlocks = [...(contextBlocks ?? []), carryForwardBlock];
   }
 
-  const supabase = getSupabaseServer();
   await supabase.from('ai_chat_messages').insert({
     user_id: identity.appUserId,
     role: 'user',
@@ -483,6 +538,13 @@ async function handleSlackMessage(
       appUserId: identity.appUserId,
       name: identity.appUserName,
       role: identity.role,
+    },
+    slack: {
+      teamId,
+      channelId: event.channel,
+      threadTs,
+      messageTs: event.ts,
+      userId: event.user,
     },
     contextBlocks,
   });
@@ -548,8 +610,18 @@ async function handleSlackMessage(
   // affordance and stacking cards under it adds noise without value.
   const taskUrls = extractTaskUrlsFromText(mrkdwnText).map((url) => ({ url }));
   const extras = taskUrls.length > 0 ? await buildTaskMessageExtras(taskUrls) : {};
+  const pendingActionIds = extractPendingActionIds(result.toolCalls);
+  if (pendingActionIds.length > 0) {
+    const blocks = buildConfirmationBlocks(pendingActionIds[pendingActionIds.length - 1]);
+    extras.blocks = [...(extras.blocks ?? []), ...blocks];
+  }
+  const slackReplyText =
+    pendingActionIds.length > 0
+      ? `${mrkdwnText}\n\nPress *Confirm* or *Cancel* below.`
+      : mrkdwnText;
 
-  await postReply(web, event.channel, threadTs, mrkdwnText, extras);
+  const postedTs = await postReply(web, event.channel, threadTs, slackReplyText, extras);
+  await setPendingActionMessageTs(pendingActionIds, postedTs);
 }
 
 // Pure unfurl entry point. No agent, no persistence, no allowlist — just
@@ -601,7 +673,7 @@ async function postReply(
   threadTs: string | undefined,
   text: string,
   extras: MessageExtras = {},
-): Promise<void> {
+): Promise<string | undefined> {
   // When we render task cards in a `carousel` block, Slack uses the
   // `blocks` array for display and treats `text` purely as notification
   // fallback (it doesn't show in the conversation). Prepend a section
@@ -618,7 +690,7 @@ async function postReply(
       : undefined;
 
   try {
-    await web.chat.postMessage({
+    const posted = await web.chat.postMessage({
       channel,
       // Only set thread_ts when we actually want to thread. For DMs we
       // omit it so the reply sits flat in the conversation.
@@ -633,7 +705,9 @@ async function postReply(
       unfurl_links: false,
       unfurl_media: false,
     });
+    return typeof posted.ts === 'string' ? posted.ts : undefined;
   } catch (err) {
     console.error('[slack] chat.postMessage failed', { channel, threadTs, err });
+    return undefined;
   }
 }

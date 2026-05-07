@@ -4,7 +4,8 @@ import {
   type CreateTaskPlan,
 } from '@/src/server/tasks/createTask';
 import { mintCreateTaskToken } from '@/src/server/tasks/createTaskConfirmation';
-import type { ToolDefinition, ToolResult } from './types';
+import { createPendingAction } from '@/src/server/agent/pendingActions';
+import type { ToolContext, ToolDefinition, ToolResult } from './types';
 
 // preview_task — first half of the two-step write protocol for tasks.
 //
@@ -109,6 +110,12 @@ const inputSchema = z.object({
     .describe(
       "User UUIDs to assign. Resolve names with find_users first. Omit when no one should be assigned yet.",
     ),
+  attachment_inbound_file_ids: z
+    .array(z.string().uuid())
+    .optional()
+    .describe(
+      'Slack-only: inbound_file_id UUIDs to attach after this task is created.',
+    ),
 });
 
 type Input = z.infer<typeof inputSchema>;
@@ -123,12 +130,16 @@ export interface PreviewTaskResultData {
   confirmation_token: string;
   /** ISO8601 expiration timestamp for the token. */
   expires_at: string;
+  /** Durable Slack button-confirmation id. Present only on Slack previews. */
+  pending_action_id?: string | null;
 }
 
 async function handler(
   input: Input,
+  ctx: ToolContext,
 ): Promise<ToolResult<PreviewTaskResultData>> {
-  const result = await previewCreateTask(input);
+  const { attachment_inbound_file_ids, ...taskInput } = input;
+  const result = await previewCreateTask(taskInput);
 
   if (!result.ok) {
     if (result.error.code === 'invalid_input') {
@@ -173,6 +184,19 @@ async function handler(
   // (rather than the raw input) means trivial whitespace / key-order
   // differences don't break round-tripping.
   const minted = mintCreateTaskToken(result.canonicalInput);
+  const pendingActionId =
+    ctx.surface === 'slack' && ctx.slack
+      ? await createPendingAction({
+          kind: 'create_task',
+          requesterAppUserId: ctx.actor?.appUserId ?? null,
+          slack: ctx.slack,
+          canonicalInput: {
+            input: result.canonicalInput,
+            attachment_inbound_file_ids: attachment_inbound_file_ids ?? [],
+          },
+          preview: result.plan,
+        })
+      : null;
 
   return {
     ok: true,
@@ -180,6 +204,7 @@ async function handler(
       plan: result.plan,
       confirmation_token: minted.token,
       expires_at: minted.expires_at,
+      pending_action_id: pendingActionId,
     },
     meta: { returned: 1, limit: 1, truncated: false },
   };
@@ -255,6 +280,12 @@ export const previewTask: ToolDefinition<Input, PreviewTaskResultData> = {
         items: { type: 'string' },
         description:
           'User UUIDs to assign. Use find_users to resolve names.',
+      },
+      attachment_inbound_file_ids: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'Slack-only: inbound_file_id UUIDs to attach after the task is created. Use only ids from the Slack uploaded-files context block.',
       },
     },
     required: ['title'],

@@ -83,6 +83,18 @@ export interface ToolContext {
    * change came from. Mirrors AgentSurface in runAgent.ts.
    */
   surface?: 'web' | 'slack';
+  /**
+   * Slack message identity for durable button confirmations. Present only
+   * when surface='slack'. Preview tools use it to persist a pending action
+   * that /api/slack/interactivity can commit without another LLM turn.
+   */
+  slack?: {
+    teamId?: string;
+    channelId: string;
+    threadTs?: string;
+    messageTs?: string;
+    userId: string;
+  };
 }
 
 export interface ToolDefinition<TInput, TOutput> {

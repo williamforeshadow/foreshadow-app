@@ -1,76 +1,40 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
+import { WebClient } from '@slack/web-api';
 import { verifySlackSignature } from '@/src/slack/verify';
+import {
+  AGENT_CANCEL_ACTION_ID,
+  AGENT_CONFIRM_ACTION_ID,
+  cancelPendingAction,
+  confirmPendingAction,
+} from '@/src/server/agent/pendingActions';
 
 // POST /api/slack/interactivity
 //
-// Slack Interactivity webhook. Slack POSTs every interactive click —
-// button presses, modal submits, select-menu changes, etc. — to this
-// URL when Interactivity & Shortcuts is enabled in the app's config.
-//
-// Why this exists today:
-//   The /myassignments slash-command path (chat.postEphemeral + carousel
-//   + URL button) needs Interactivity ENABLED for Slack's ephemeral
-//   renderer to honour `button.url` clicks. The Slack docs spell this
-//   out: a button with `url` "will still receive an interaction
-//   payload and will need to send an acknowledgement response." On
-//   non-ephemeral chat.postMessage Slack is lenient about the missing
-//   ack, but on ephemeral the click is fully suppressed if the ack
-//   never arrives. So this route's job, for now, is just to ack 200
-//   on every interaction so URL navigation isn't blocked.
-//
-// What it doesn't do (yet):
-//   Parse + dispatch the payload. There's no server-side button
-//   behaviour wired up yet — the `open_task_*` action_id we set on
-//   carousel cards is purely the URL-binding shim. When real
-//   interactive features land (e.g. "Mark complete" from a task
-//   card, or modal submissions for /createtask), the dispatch table
-//   goes here. Today the route just verifies + 200s, which is the
-//   minimum contract Slack requires.
-//
-// Slack app config (in api.slack.com/apps):
-//   Interactivity & Shortcuts:
-//     - Toggle ON.
-//     - Request URL: https://<your-domain>/api/slack/interactivity
-//     - Save. Slack will probe the URL with a synthetic POST as part
-//       of saving; the route MUST be deployed and reachable BEFORE
-//       you save the config or Slack will reject it.
-//
-// Required env (same as the events + commands routes):
-//   SLACK_SIGNING_SECRET (used to verify the HMAC).
-//
-// Wire format:
-//   Slack sends interaction payloads as application/x-www-form-urlencoded
-//   with a single `payload` field whose value is a JSON-encoded string.
-//   Some interaction types (block_actions, view_submission, view_closed,
-//   shortcut, message_action) ship in this same envelope. We don't parse
-//   it today (the verify+ack contract is the only requirement) but the
-//   payload IS available to handlers that grow up here later.
-//
-// Lifecycle:
-//   1. Read the raw body (Slack signs bytes-on-the-wire — same rule
-//      as the events + commands routes).
-//   2. Verify HMAC.
-//   3. Return 200 with an empty body.
+// Slack posts every interactive click here as a form body with a JSON
+// payload field. We verify the signature against the raw body, ack quickly,
+// then process supported buttons in after() so Slack's 3-second deadline
+// never blocks file uploads or database writes.
+
+interface SlackInteractionPayload {
+  type?: string;
+  user?: { id?: string };
+  channel?: { id?: string };
+  message?: { ts?: string; thread_ts?: string };
+  actions?: Array<{ action_id?: string; value?: string }>;
+}
 
 export async function POST(req: NextRequest) {
   const signingSecret = process.env.SLACK_SIGNING_SECRET ?? '';
-  if (!signingSecret) {
-    console.error('[slack/interactivity] SLACK_SIGNING_SECRET not set');
-    // 500 here would tell Slack we're broken, which is honest. We don't
-    // fall back to 200 because that would silently accept unverifiable
-    // requests in a misconfigured deploy.
+  const botToken = process.env.SLACK_BOT_TOKEN ?? '';
+  if (!signingSecret || !botToken) {
+    console.error('[slack/interactivity] Slack env is not configured');
     return NextResponse.json(
       { error: 'Slack integration is not configured' },
       { status: 500 },
     );
   }
 
-  // Slack signs the raw body bytes. We MUST read the body as text once
-  // and reuse it for both verification and (eventually) parsing —
-  // letting Next parse the form would change the byte ordering and
-  // break the HMAC.
   const rawBody = await req.text();
-
   const verify = verifySlackSignature(
     rawBody,
     req.headers.get('x-slack-signature'),
@@ -84,16 +48,85 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // No-op ack. When real handlers land we'll parse the payload here:
-  //
-  //   const params = new URLSearchParams(rawBody);
-  //   const payload = JSON.parse(params.get('payload') ?? '{}');
-  //   switch (payload.type) {
-  //     case 'block_actions': ...
-  //     case 'view_submission': ...
-  //   }
-  //
-  // For now Slack only needs the 200 for URL-button navigation to
-  // proceed in ephemeral context.
+  const payloadRaw = new URLSearchParams(rawBody).get('payload');
+  if (payloadRaw) {
+    after(async () => {
+      try {
+        const payload = JSON.parse(payloadRaw) as SlackInteractionPayload;
+        await handleInteraction(payload, botToken);
+      } catch (err) {
+        console.error('[slack/interactivity] handler failed', { err });
+      }
+    });
+  }
+
   return new NextResponse(null, { status: 200 });
+}
+
+async function handleInteraction(
+  payload: SlackInteractionPayload,
+  botToken: string,
+): Promise<void> {
+  if (payload.type !== 'block_actions') return;
+  const action = payload.actions?.[0];
+  const actionId = action?.action_id;
+  if (
+    actionId !== AGENT_CONFIRM_ACTION_ID &&
+    actionId !== AGENT_CANCEL_ACTION_ID
+  ) {
+    return;
+  }
+
+  const pendingActionId = action?.value;
+  const slackUserId = payload.user?.id;
+  const channelId = payload.channel?.id;
+  if (!pendingActionId || !slackUserId || !channelId) {
+    console.warn('[slack/interactivity] missing action payload fields', {
+      actionId,
+      pendingActionId,
+      slackUserId,
+      channelId,
+    });
+    return;
+  }
+
+  const result =
+    actionId === AGENT_CONFIRM_ACTION_ID
+      ? await confirmPendingAction({
+          actionId: pendingActionId,
+          slackUserId,
+        })
+      : await cancelPendingAction({
+          actionId: pendingActionId,
+          slackUserId,
+        });
+
+  const web = new WebClient(botToken);
+  const messageTs = payload.message?.thread_ts ?? payload.message?.ts;
+  const threadTs = channelId.startsWith('D') ? undefined : messageTs;
+
+  try {
+    if (result.error === 'forbidden') {
+      await web.chat.postEphemeral({
+        channel: channelId,
+        user: slackUserId,
+        text: result.text,
+        ...(threadTs ? { thread_ts: threadTs } : {}),
+      });
+      return;
+    }
+    await web.chat.postMessage({
+      channel: channelId,
+      text: result.text,
+      ...(threadTs ? { thread_ts: threadTs } : {}),
+      unfurl_links: false,
+      unfurl_media: false,
+    });
+  } catch (err) {
+    console.error('[slack/interactivity] failed to post result', {
+      channelId,
+      pendingActionId,
+      err,
+    });
+  }
 }

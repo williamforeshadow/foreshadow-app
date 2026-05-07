@@ -170,6 +170,8 @@ Write protocol (critical):
   - Delete a property contact: preview_property_contact_delete → commit_property_contact_delete
   - Property Knowledge sections Access, Connectivity, Interior/Exterior rooms, Interior/Exterior cards, and existing Document metadata/deletes: preview_property_knowledge_write → commit_property_knowledge_write
 - Slack-uploaded file writes use preview_slack_file_attachment followed by commit_slack_file_attachment. Use inbound_file_id values only from the current Slack uploaded-files context block. Destinations can be task attachments, Property Knowledge documents, room photos, card photos, or tech account photos.
+- Slack confirmation buttons: on Slack, preview tools may return pending_action_id. When a preview returns pending_action_id, present the plan once and tell the user to press Confirm or Cancel. Do NOT ask them to type "yes", "go", or provide internal ids.
+- Slack compound attachments: if the user asks to create a task and attach uploaded files in the same request, pass attachment_inbound_file_ids on preview_task. If the user asks to create/update a Property Knowledge room or card and attach uploaded photos in the same request, pass attachment_inbound_file_ids on preview_property_knowledge_write. That lets one Confirm button commit the write and attachments without a second model turn.
 - Never ask the user to confirm or provide inbound_file_id values. They are internal ids visible only in your tool/context block. If a Slack uploaded-files context block is present, use those ids directly.
 - ALWAYS call the preview tool first. preview tools validate fields, resolve display labels (property names, bin names, assignee names), surface conflicts (duplicate sub-bin name, missing FKs, locked fields, empty diffs), and return a plan + a single-use confirmation_token. Present the plan to the user in plain English, ask for explicit confirmation ("shall I do this?"), and ONLY after the user agrees, call the matching commit tool with the returned confirmation_token.
 - Commit tools (create_task, update_task, delete_task, add_comment, commit_property_note_upsert, etc.) accept ONLY a confirmation_token. They will refuse to act without one. Don't try to call them with field inputs directly; that interface does not exist.
@@ -265,6 +267,17 @@ export interface RunAgentInput {
    */
   actor?: AgentActor;
   /**
+   * Slack metadata for button-confirmable write previews. Only set by the
+   * Slack Events API route; web chat keeps using the in-memory token flow.
+   */
+  slack?: {
+    teamId?: string;
+    channelId: string;
+    threadTs?: string;
+    messageTs?: string;
+    userId: string;
+  };
+  /**
    * Optional ambient context blocks prepended to the user's prompt with
    * a clear delimiter. The Slack route uses this to inject the
    * surrounding thread when the bot is @-mentioned mid-conversation —
@@ -294,6 +307,7 @@ export async function runAgent({
   clientTz,
   surface = 'web',
   actor,
+  slack,
   contextBlocks,
 }: RunAgentInput): Promise<RunAgentOutput> {
   const anthropic = getAnthropic();
@@ -324,7 +338,7 @@ export async function runAgent({
   // side instead of trusting the model to pass a user_id. Tools that
   // write to the property knowledge activity ledger read `surface` to
   // tag the source column. Read-only tools simply ignore the arg.
-  const ctx: ToolContext = { actor, surface };
+  const ctx: ToolContext = { actor, surface, slack };
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     const response = await anthropic.messages.create({
