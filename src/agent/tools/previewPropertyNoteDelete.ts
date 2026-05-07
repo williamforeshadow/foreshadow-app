@@ -4,6 +4,7 @@ import {
   type DeleteNotePlan,
 } from '@/src/server/properties/deletePropertyNote';
 import { mintDeleteNoteToken } from '@/src/server/properties/propertyNoteConfirmation';
+import { createPendingAction } from '@/src/server/agent/pendingActions';
 import type { ToolContext, ToolDefinition, ToolResult } from './types';
 
 const inputSchema = z.object({
@@ -17,6 +18,7 @@ export interface PreviewDeleteNoteData {
   plan: DeleteNotePlan;
   confirmation_token: string;
   expires_at: string;
+  pending_action_id?: string | null;
 }
 
 async function handler(
@@ -43,12 +45,24 @@ async function handler(
     };
   }
   const minted = mintDeleteNoteToken(result.canonicalInput);
+  const pendingActionId =
+    ctx.surface === 'slack' && ctx.slack
+      ? await createPendingAction({
+          kind: 'property_note_delete',
+          requesterAppUserId: ctx.actor?.appUserId ?? null,
+          slack: ctx.slack,
+          canonicalInput: { input: result.canonicalInput },
+          preview: result.plan,
+        })
+      : null;
+
   return {
     ok: true,
     data: {
       plan: result.plan,
       confirmation_token: minted.token,
       expires_at: minted.expires_at,
+      pending_action_id: pendingActionId,
     },
     meta: { returned: 1, limit: 1, truncated: false },
   };

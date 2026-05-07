@@ -1,10 +1,19 @@
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { taskUrl } from '@/src/lib/links';
 import { createTask, type CreateTaskInput } from '@/src/server/tasks/createTask';
+import { updateTask } from '@/src/server/tasks/updateTask';
+import { deleteTask } from '@/src/server/tasks/deleteTask';
+import { createTasksBatch } from '@/src/server/tasks/createTasksBatch';
+import { createBin } from '@/src/server/bins/createBin';
+import { addComment } from '@/src/server/comments/addComment';
 import {
   commitPropertyKnowledgeWrite,
   type PropertyKnowledgeWriteInput,
 } from '@/src/server/properties/propertyKnowledgeWrite';
+import { upsertPropertyNote } from '@/src/server/properties/upsertPropertyNote';
+import { deletePropertyNote } from '@/src/server/properties/deletePropertyNote';
+import { upsertPropertyContact } from '@/src/server/properties/upsertPropertyContact';
+import { deletePropertyContact } from '@/src/server/properties/deletePropertyContact';
 import {
   commitSlackFileAttachment,
   type SlackFileAttachmentInput,
@@ -17,7 +26,16 @@ const PENDING_TTL_MS = 5 * 60 * 1000;
 
 export type PendingActionKind =
   | 'create_task'
+  | 'update_task'
+  | 'delete_task'
+  | 'create_tasks_batch'
+  | 'create_bin'
+  | 'add_comment'
   | 'property_knowledge_write'
+  | 'property_note_upsert'
+  | 'property_note_delete'
+  | 'property_contact_upsert'
+  | 'property_contact_delete'
   | 'slack_file_attachment';
 
 export interface SlackPendingActionContext {
@@ -41,6 +59,10 @@ interface PropertyKnowledgePendingInput {
 
 interface SlackFilePendingInput {
   input: SlackFileAttachmentInput;
+}
+
+interface GenericPendingInput {
+  input: unknown;
 }
 
 export interface PendingActionRow {
@@ -405,8 +427,35 @@ async function executePendingAction(
   if (row.action_kind === 'create_task') {
     return executeCreateTask(row);
   }
+  if (row.action_kind === 'update_task') {
+    return executeUpdateTask(row);
+  }
+  if (row.action_kind === 'delete_task') {
+    return executeDeleteTask(row);
+  }
+  if (row.action_kind === 'create_tasks_batch') {
+    return executeCreateTasksBatch(row);
+  }
+  if (row.action_kind === 'create_bin') {
+    return executeCreateBin(row);
+  }
+  if (row.action_kind === 'add_comment') {
+    return executeAddComment(row);
+  }
   if (row.action_kind === 'property_knowledge_write') {
     return executePropertyKnowledgeWrite(row);
+  }
+  if (row.action_kind === 'property_note_upsert') {
+    return executePropertyNoteUpsert(row);
+  }
+  if (row.action_kind === 'property_note_delete') {
+    return executePropertyNoteDelete(row);
+  }
+  if (row.action_kind === 'property_contact_upsert') {
+    return executePropertyContactUpsert(row);
+  }
+  if (row.action_kind === 'property_contact_delete') {
+    return executePropertyContactDelete(row);
   }
   if (row.action_kind === 'slack_file_attachment') {
     return executeSlackFileAttachment(row);
@@ -463,6 +512,135 @@ async function executeCreateTask(
   };
 }
 
+async function executeUpdateTask(
+  row: PendingActionRow,
+): Promise<PendingExecutionResult> {
+  const stored = row.canonical_input as GenericPendingInput;
+  const result = await updateTask(stored.input);
+  if (!result.ok) {
+    return {
+      ok: false,
+      status: 'failed',
+      text: `I could not update the task: ${result.error.message}`,
+      error: result.error.message,
+      result,
+    };
+  }
+
+  const taskLink = slackTaskLink(result.task.task_id, result.task.title);
+  const count = result.changes.length;
+  return {
+    ok: true,
+    status: 'committed',
+    text:
+      count > 0
+        ? `Done - updated ${taskLink} (${formatCount(count, 'change')}).`
+        : `Done - ${taskLink} was already up to date.`,
+    result,
+  };
+}
+
+async function executeDeleteTask(
+  row: PendingActionRow,
+): Promise<PendingExecutionResult> {
+  const stored = row.canonical_input as GenericPendingInput;
+  const result = await deleteTask(stored.input);
+  if (!result.ok) {
+    return {
+      ok: false,
+      status: 'failed',
+      text: `I could not delete the task: ${result.error.message}`,
+      error: result.error.message,
+      result,
+    };
+  }
+
+  return {
+    ok: true,
+    status: 'committed',
+    text: `Done - deleted "${result.deleted.title}".`,
+    result,
+  };
+}
+
+async function executeCreateTasksBatch(
+  row: PendingActionRow,
+): Promise<PendingExecutionResult> {
+  const stored = row.canonical_input as GenericPendingInput;
+  const result = await createTasksBatch(stored.input);
+  if (!result.ok) {
+    return {
+      ok: false,
+      status: 'failed',
+      text: `I could not create the task batch: ${result.error.message}`,
+      error: result.error.message,
+      result,
+    };
+  }
+
+  const created = result.result.tasks.length;
+  const failed = result.result.failures.length;
+  const binText = result.result.created_bin
+    ? ` Created sub-bin "${result.result.created_bin.name}".`
+    : '';
+  return {
+    ok: failed === 0,
+    status: failed === 0 ? 'committed' : 'failed',
+    text:
+      failed > 0
+        ? `Created ${formatCount(created, 'task')}, but ${formatCount(failed, 'task')} failed. ${result.result.failures[0]?.error.message ?? ''}`.trim()
+        : `Done - created ${formatCount(created, 'task')}.${binText}`,
+    error: result.result.failures[0]?.error.message,
+    result,
+  };
+}
+
+async function executeCreateBin(
+  row: PendingActionRow,
+): Promise<PendingExecutionResult> {
+  const stored = row.canonical_input as GenericPendingInput;
+  const result = await createBin(stored.input);
+  if (!result.ok) {
+    return {
+      ok: false,
+      status: 'failed',
+      text: `I could not create the sub-bin: ${result.error.message}`,
+      error: result.error.message,
+      result,
+    };
+  }
+
+  return {
+    ok: true,
+    status: 'committed',
+    text: `Done - created sub-bin "${result.bin.name}".`,
+    result,
+  };
+}
+
+async function executeAddComment(
+  row: PendingActionRow,
+): Promise<PendingExecutionResult> {
+  const stored = row.canonical_input as GenericPendingInput;
+  const result = await addComment(stored.input);
+  if (!result.ok) {
+    return {
+      ok: false,
+      status: 'failed',
+      text: `I could not add the comment: ${result.error.message}`,
+      error: result.error.message,
+      result,
+    };
+  }
+
+  return {
+    ok: true,
+    status: 'committed',
+    text: 'Done - added the comment.',
+    result,
+  };
+}
+
 async function executePropertyKnowledgeWrite(
   row: PendingActionRow,
 ): Promise<PendingExecutionResult> {
@@ -494,6 +672,112 @@ async function executePropertyKnowledgeWrite(
     text,
     error: failed[0]?.error,
     result: { write: result, attachments },
+  };
+}
+
+async function executePropertyNoteUpsert(
+  row: PendingActionRow,
+): Promise<PendingExecutionResult> {
+  const stored = row.canonical_input as GenericPendingInput;
+  const result = await upsertPropertyNote(stored.input);
+  if (!result.ok) {
+    return {
+      ok: false,
+      status: 'failed',
+      text: `I could not save the property note: ${result.error.message}`,
+      error: result.error.message,
+      result,
+    };
+  }
+
+  const label = result.note.title?.trim() || `${result.note.scope} note`;
+  const changeText =
+    result.mode === 'update' && result.changes?.length === 0
+      ? 'was already up to date'
+      : result.mode === 'create'
+        ? 'created'
+        : 'updated';
+  return {
+    ok: true,
+    status: 'committed',
+    text: `Done - ${changeText} "${label}".`,
+    result,
+  };
+}
+
+async function executePropertyNoteDelete(
+  row: PendingActionRow,
+): Promise<PendingExecutionResult> {
+  const stored = row.canonical_input as GenericPendingInput;
+  const result = await deletePropertyNote(stored.input);
+  if (!result.ok) {
+    return {
+      ok: false,
+      status: 'failed',
+      text: `I could not delete the property note: ${result.error.message}`,
+      error: result.error.message,
+      result,
+    };
+  }
+
+  const label = result.snapshot.title?.trim() || `${result.snapshot.scope} note`;
+  return {
+    ok: true,
+    status: 'committed',
+    text: `Done - deleted "${label}".`,
+    result,
+  };
+}
+
+async function executePropertyContactUpsert(
+  row: PendingActionRow,
+): Promise<PendingExecutionResult> {
+  const stored = row.canonical_input as GenericPendingInput;
+  const result = await upsertPropertyContact(stored.input);
+  if (!result.ok) {
+    return {
+      ok: false,
+      status: 'failed',
+      text: `I could not save the property contact: ${result.error.message}`,
+      error: result.error.message,
+      result,
+    };
+  }
+
+  const changeText =
+    result.mode === 'update' && result.changes?.length === 0
+      ? 'was already up to date'
+      : result.mode === 'create'
+        ? 'created'
+        : 'updated';
+  return {
+    ok: true,
+    status: 'committed',
+    text: `Done - ${changeText} "${result.contact.name}".`,
+    result,
+  };
+}
+
+async function executePropertyContactDelete(
+  row: PendingActionRow,
+): Promise<PendingExecutionResult> {
+  const stored = row.canonical_input as GenericPendingInput;
+  const result = await deletePropertyContact(stored.input);
+  if (!result.ok) {
+    return {
+      ok: false,
+      status: 'failed',
+      text: `I could not delete the property contact: ${result.error.message}`,
+      error: result.error.message,
+      result,
+    };
+  }
+
+  return {
+    ok: true,
+    status: 'committed',
+    text: `Done - deleted "${result.snapshot.name}".`,
+    result,
   };
 }
 

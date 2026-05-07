@@ -4,6 +4,7 @@ import {
   type UpsertNotePlan,
 } from '@/src/server/properties/upsertPropertyNote';
 import { mintUpsertNoteToken } from '@/src/server/properties/propertyNoteConfirmation';
+import { createPendingAction } from '@/src/server/agent/pendingActions';
 import type { ToolContext, ToolDefinition, ToolResult } from './types';
 
 // preview_property_note_upsert — first half of the two-step write
@@ -62,6 +63,7 @@ export interface PreviewUpsertNoteData {
   plan: UpsertNotePlan;
   confirmation_token: string;
   expires_at: string;
+  pending_action_id?: string | null;
 }
 
 async function handler(
@@ -91,12 +93,26 @@ async function handler(
     };
   }
   const minted = mintUpsertNoteToken(result.canonicalInput);
+  const hasChanges =
+    result.plan.mode === 'create' || (result.plan.changes?.length ?? 0) > 0;
+  const pendingActionId =
+    ctx.surface === 'slack' && ctx.slack && hasChanges
+      ? await createPendingAction({
+          kind: 'property_note_upsert',
+          requesterAppUserId: ctx.actor?.appUserId ?? null,
+          slack: ctx.slack,
+          canonicalInput: { input: result.canonicalInput },
+          preview: result.plan,
+        })
+      : null;
+
   return {
     ok: true,
     data: {
       plan: result.plan,
       confirmation_token: minted.token,
       expires_at: minted.expires_at,
+      pending_action_id: pendingActionId,
     },
     meta: { returned: 1, limit: 1, truncated: false },
   };

@@ -4,7 +4,8 @@ import {
   type UpdateTaskPlan,
 } from '@/src/server/tasks/updateTask';
 import { mintUpdateTaskToken } from '@/src/server/tasks/updateTaskConfirmation';
-import type { ToolDefinition, ToolResult } from './types';
+import { createPendingAction } from '@/src/server/agent/pendingActions';
+import type { ToolContext, ToolDefinition, ToolResult } from './types';
 
 // preview_task_update — first half of the two-step write protocol for
 // modifying an existing task. Mirrors preview_task in shape: validates
@@ -116,10 +117,12 @@ export interface PreviewTaskUpdateResultData {
   plan: UpdateTaskPlan;
   confirmation_token: string;
   expires_at: string;
+  pending_action_id?: string | null;
 }
 
 async function handler(
   input: Input,
+  ctx: ToolContext,
 ): Promise<ToolResult<PreviewTaskUpdateResultData>> {
   const result = await previewUpdateTask(input);
 
@@ -179,12 +182,24 @@ async function handler(
   // need to re-preview — but the model is instructed below to NOT
   // call update_task on an empty diff.
   const minted = mintUpdateTaskToken(result.canonicalInput);
+  const pendingActionId =
+    ctx.surface === 'slack' && ctx.slack && result.plan.changes.length > 0
+      ? await createPendingAction({
+          kind: 'update_task',
+          requesterAppUserId: ctx.actor?.appUserId ?? null,
+          slack: ctx.slack,
+          canonicalInput: { input: result.canonicalInput },
+          preview: result.plan,
+        })
+      : null;
+
   return {
     ok: true,
     data: {
       plan: result.plan,
       confirmation_token: minted.token,
       expires_at: minted.expires_at,
+      pending_action_id: pendingActionId,
     },
     meta: { returned: 1, limit: 1, truncated: false },
   };

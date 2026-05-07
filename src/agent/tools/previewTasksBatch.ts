@@ -4,7 +4,8 @@ import {
   type CreateTasksBatchPlan,
 } from '@/src/server/tasks/createTasksBatch';
 import { mintCreateTasksBatchToken } from '@/src/server/tasks/createTasksBatchConfirmation';
-import type { ToolDefinition, ToolResult } from './types';
+import { createPendingAction } from '@/src/server/agent/pendingActions';
+import type { ToolContext, ToolDefinition, ToolResult } from './types';
 
 // preview_tasks_batch — first half of the batch task write protocol.
 //
@@ -134,10 +135,12 @@ export interface PreviewTasksBatchResultData {
   plan: CreateTasksBatchPlan;
   confirmation_token: string;
   expires_at: string;
+  pending_action_id?: string | null;
 }
 
 async function handler(
   input: Input,
+  ctx: ToolContext,
 ): Promise<ToolResult<PreviewTasksBatchResultData>> {
   const result = await previewCreateTasksBatch(input);
 
@@ -184,12 +187,24 @@ async function handler(
   }
 
   const minted = mintCreateTasksBatchToken(result.canonicalInput);
+  const pendingActionId =
+    ctx.surface === 'slack' && ctx.slack
+      ? await createPendingAction({
+          kind: 'create_tasks_batch',
+          requesterAppUserId: ctx.actor?.appUserId ?? null,
+          slack: ctx.slack,
+          canonicalInput: { input: result.canonicalInput },
+          preview: result.plan,
+        })
+      : null;
+
   return {
     ok: true,
     data: {
       plan: result.plan,
       confirmation_token: minted.token,
       expires_at: minted.expires_at,
+      pending_action_id: pendingActionId,
     },
     meta: {
       returned: result.plan.tasks.length,

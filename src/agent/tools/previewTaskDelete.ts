@@ -4,7 +4,8 @@ import {
   type DeleteTaskPlan,
 } from '@/src/server/tasks/deleteTask';
 import { mintDeleteTaskToken } from '@/src/server/tasks/deleteTaskConfirmation';
-import type { ToolDefinition, ToolResult } from './types';
+import { createPendingAction } from '@/src/server/agent/pendingActions';
+import type { ToolContext, ToolDefinition, ToolResult } from './types';
 
 // preview_task_delete — first half of the two-step protocol for
 // deleting a task. Today the underlying delete is HARD (the row goes
@@ -31,10 +32,12 @@ export interface PreviewTaskDeleteResultData {
   plan: DeleteTaskPlan;
   confirmation_token: string;
   expires_at: string;
+  pending_action_id?: string | null;
 }
 
 async function handler(
   input: Input,
+  ctx: ToolContext,
 ): Promise<ToolResult<PreviewTaskDeleteResultData>> {
   const result = await previewDeleteTask(input);
 
@@ -69,12 +72,24 @@ async function handler(
   }
 
   const minted = mintDeleteTaskToken(result.canonicalInput);
+  const pendingActionId =
+    ctx.surface === 'slack' && ctx.slack
+      ? await createPendingAction({
+          kind: 'delete_task',
+          requesterAppUserId: ctx.actor?.appUserId ?? null,
+          slack: ctx.slack,
+          canonicalInput: { input: result.canonicalInput },
+          preview: result.plan,
+        })
+      : null;
+
   return {
     ok: true,
     data: {
       plan: result.plan,
       confirmation_token: minted.token,
       expires_at: minted.expires_at,
+      pending_action_id: pendingActionId,
     },
     meta: { returned: 1, limit: 1, truncated: false },
   };
