@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
     // tool succeeded, swap in a safe message before the user ever sees it.
     // Both flags are persisted in metadata so reviewers can spot masked
     // rows quickly.
-    const masked = applyBackstops(result.text, result.toolCalls);
+    const masked = applyBackstops(result.text, result.toolCalls, { prompt });
     if (masked.writeMasked) {
       console.warn('[agent] masked hallucinated write claim', {
         user_id: userId,

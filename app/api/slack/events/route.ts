@@ -549,7 +549,7 @@ async function handleSlackMessage(
     contextBlocks,
   });
 
-  const masked = applyBackstops(result.text, result.toolCalls);
+  const masked = applyBackstops(result.text, result.toolCalls, { prompt });
   if (masked.writeMasked) {
     console.warn('[slack] masked hallucinated write claim', {
       user_id: identity.appUserId,
