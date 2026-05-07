@@ -27,6 +27,7 @@ import { fetchThreadMessages, formatThreadAsContext } from '@/src/slack/thread';
 import {
   captureSlackInboundFiles,
   formatSlackInboundFilesForAgent,
+  listRecentSlackInboundFiles,
   type SlackInboundFileEvent,
 } from '@/src/server/slack/inboundFiles';
 
@@ -421,6 +422,7 @@ async function handleSlackMessage(
     }
   }
 
+  const capturedFileIds = new Set<string>();
   if (event.files?.length) {
     const inboundFiles = await captureSlackInboundFiles({
       files: event.files,
@@ -432,10 +434,24 @@ async function handleSlackMessage(
       slackUserId: event.user,
       appUserId: identity.appUserId,
     });
+    inboundFiles.forEach((file) => capturedFileIds.add(file.id));
     const fileBlock = formatSlackInboundFilesForAgent(inboundFiles);
     if (fileBlock) {
       contextBlocks = [...(contextBlocks ?? []), fileBlock];
     }
+  }
+
+  const recentInboundFiles = await listRecentSlackInboundFiles({
+    appUserId: identity.appUserId,
+    channelId: event.channel,
+    threadTs,
+  });
+  const carryForwardFiles = recentInboundFiles.filter(
+    (file) => !capturedFileIds.has(file.id),
+  );
+  const carryForwardBlock = formatSlackInboundFilesForAgent(carryForwardFiles);
+  if (carryForwardBlock) {
+    contextBlocks = [...(contextBlocks ?? []), carryForwardBlock];
   }
 
   const supabase = getSupabaseServer();

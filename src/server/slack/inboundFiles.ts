@@ -37,6 +37,14 @@ export interface CaptureSlackFilesArgs {
   appUserId: string;
 }
 
+export interface ListRecentSlackInboundFilesArgs {
+  appUserId: string;
+  channelId: string;
+  threadTs?: string;
+  minutes?: number;
+  limit?: number;
+}
+
 function classifyFile(mimeType: string | null, name: string) {
   if (mimeType?.startsWith('image/')) return 'image' as const;
   if (mimeType?.startsWith('video/')) return 'video' as const;
@@ -153,6 +161,38 @@ export async function captureSlackInboundFiles(
   return captured;
 }
 
+export async function listRecentSlackInboundFiles(
+  args: ListRecentSlackInboundFilesArgs,
+): Promise<CapturedSlackInboundFile[]> {
+  const supabase = getSupabaseServer();
+  const since = new Date(
+    Date.now() - (args.minutes ?? 60) * 60 * 1000,
+  ).toISOString();
+
+  let query = supabase
+    .from('slack_inbound_files')
+    .select(
+      'id, slack_file_id, name, title, mime_type, file_type, size_bytes, storage_bucket, storage_path',
+    )
+    .eq('app_user_id', args.appUserId)
+    .eq('slack_channel_id', args.channelId)
+    .is('consumed_at', null)
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(args.limit ?? 10);
+
+  if (args.threadTs) {
+    query = query.eq('slack_thread_ts', args.threadTs);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('[slack inbound files] recent query failed', error);
+    return [];
+  }
+  return (data ?? []) as CapturedSlackInboundFile[];
+}
+
 export function formatSlackInboundFilesForAgent(
   files: CapturedSlackInboundFile[],
 ): string | null {
@@ -165,8 +205,8 @@ export function formatSlackInboundFilesForAgent(
     return `${index + 1}. inbound_file_id=${file.id}; name="${file.name}"; type=${file.file_type}; mime=${file.mime_type || 'unknown'}; size=${size}`;
   });
   return [
-    'Slack uploaded files available this turn:',
+    'Slack uploaded files available for this conversation:',
     ...lines,
-    'Use preview_slack_file_attachment with inbound_file_id to attach a file to a task or Property Knowledge destination after resolving the target id. Do not claim a file was attached unless the matching commit tool succeeds.',
+    'Use these inbound_file_id values directly with preview_slack_file_attachment. Never ask the user to provide inbound file IDs; they cannot see them. If the user confirms a task creation and file attachment in a later message, these files are still available here until consumed. Do not claim a file was attached unless the matching commit tool succeeds.',
   ].join('\n');
 }
