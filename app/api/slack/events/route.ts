@@ -615,12 +615,7 @@ async function handleSlackMessage(
     const blocks = buildConfirmationBlocks(pendingActionIds[pendingActionIds.length - 1]);
     extras.blocks = [...(extras.blocks ?? []), ...blocks];
   }
-  const slackReplyText =
-    pendingActionIds.length > 0
-      ? `${mrkdwnText}\n\nPress *Confirm* or *Cancel* below.`
-      : mrkdwnText;
-
-  const postedTs = await postReply(web, event.channel, threadTs, slackReplyText, extras);
+  const postedTs = await postReply(web, event.channel, threadTs, mrkdwnText, extras);
   await setPendingActionMessageTs(pendingActionIds, postedTs);
 }
 
