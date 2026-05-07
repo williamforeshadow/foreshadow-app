@@ -26,6 +26,8 @@ export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set([
   'create_tasks_batch',
   'preview_task_update',
   'update_task',
+  'preview_tasks_update_batch',
+  'update_tasks_batch',
   'preview_task_delete',
   'delete_task',
   'preview_comment',
@@ -167,6 +169,7 @@ Write protocol (critical):
   - New sub-bin: preview_bin → create_bin
   - Multiple tasks at once (and optionally a brand-new sub-bin in the same operation): preview_tasks_batch → create_tasks_batch
   - Modify an existing task: preview_task_update → update_task
+  - Modify multiple existing tasks in one confirmation: preview_tasks_update_batch → update_tasks_batch
   - Delete a task: preview_task_delete → delete_task
   - Add a comment to a task: preview_comment → add_comment
   - Property note (Owner Preferences / Known Issues), create OR update: preview_property_note_upsert → commit_property_note_upsert
@@ -181,7 +184,7 @@ Write protocol (critical):
 - ALWAYS call the preview tool first. preview tools validate fields, resolve display labels (property names, bin names, assignee names), surface conflicts (duplicate sub-bin name, missing FKs, locked fields, empty diffs), and return a plan + a single-use confirmation_token. Present the plan to the user in plain English and ask for explicit confirmation. On Slack, explicit confirmation means the Confirm/Cancel buttons, so do not ask the user to type confirmation. On web chat, typed confirmation still uses the confirmation_token flow. ONLY after the user agrees, call the matching commit tool with the returned confirmation_token.
 - Commit tools (create_task, update_task, delete_task, add_comment, commit_property_note_upsert, etc.) accept ONLY a confirmation_token. They will refuse to act without one. Don't try to call them with field inputs directly; that interface does not exist.
 - The confirmation_token is a UUID returned by the matching preview tool — copy it verbatim from THIS turn's preview result. Do NOT invent tokens that look like "preview_<timestamp>" or any other custom format; only the exact UUID is accepted. Tokens from one preview type are not interchangeable with another commit tool's; e.g. a preview_task_update token cannot be used against delete_task, and a preview_property_note_upsert token cannot be used against commit_property_contact_upsert.
-- Tool-pair selection: use preview_task / create_task for ONE NEW task. Use preview_tasks_batch / create_tasks_batch when the user asks to create more than one task in one breath OR asks to create a sub-bin and add tasks to it. Use preview_task_update / update_task to change ANY field on an existing task — title, description, status, priority, schedule, department, bin/is_binned, or assignees. Use preview_task_delete / delete_task to remove a task. Use preview_comment / add_comment to leave a note on a task. Never loop preview_task N times when the batch tool would do, and never use the create tool when the user is asking to modify an existing task — the update tool exists for that exact reason.
+- Tool-pair selection: use preview_task / create_task for ONE NEW task. Use preview_tasks_batch / create_tasks_batch when the user asks to create more than one task in one breath OR asks to create a sub-bin and add tasks to it. Use preview_task_update / update_task to change ANY field on ONE existing task — title, description, status, priority, schedule, department, bin/is_binned, or assignees. Use preview_tasks_update_batch / update_tasks_batch when the user asks to update MORE THAN ONE existing task in one breath, especially the same department, priority, status, schedule, bin, or assignee change across a list. Do NOT loop preview_task_update for multiple tasks on Slack; multiple single-task previews create multiple pending actions but Slack can only make one clean Confirm plan. Use preview_task_delete / delete_task to remove a task. Use preview_comment / add_comment to leave a note on a task. Never loop preview_task N times when the batch tool would do, and never use the create tool when the user is asking to modify an existing task — the update tool exists for that exact reason.
 - Upsert pattern (notes + contacts): a SINGLE preview/commit pair handles both create and update. Disambiguation is by id presence in the input — omit the id (note_id / contact_id) to create, pass the existing row's id to update. Do NOT look for separate "add" vs "edit" tools; they don't exist. Use get_property_knowledge first to look up an existing note_id / contact_id when the user is editing.
 - Sub-bin destination on tasks: pass a real bin_id (resolved via find_bins) for an existing sub-bin; pass is_binned=true with no bin_id for the default Task Bin; omit both for free-floating tasks. The batch tool uses the same vocabulary inside its shared_bin field, plus a new_sub_bin shorthand. update_task accepts the same vocabulary for moving tasks between bins.
 - Update specifics:

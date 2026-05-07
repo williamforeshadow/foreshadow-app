@@ -15,6 +15,8 @@ import { previewTasksBatch } from './previewTasksBatch';
 import { createTasksBatch } from './createTasksBatch';
 import { previewTaskUpdate } from './previewTaskUpdate';
 import { updateTask } from './updateTask';
+import { previewTasksUpdateBatch } from './previewTasksUpdateBatch';
+import { updateTasksBatch } from './updateTasksBatch';
 import { previewTaskDelete } from './previewTaskDelete';
 import { deleteTask } from './deleteTask';
 import { previewComment } from './previewComment';
@@ -56,6 +58,8 @@ export const TOOLS: ReadonlyArray<ToolDefinition<unknown, unknown>> = [
   createTasksBatch as unknown as ToolDefinition<unknown, unknown>,
   previewTaskUpdate as unknown as ToolDefinition<unknown, unknown>,
   updateTask as unknown as ToolDefinition<unknown, unknown>,
+  previewTasksUpdateBatch as unknown as ToolDefinition<unknown, unknown>,
+  updateTasksBatch as unknown as ToolDefinition<unknown, unknown>,
   previewTaskDelete as unknown as ToolDefinition<unknown, unknown>,
   deleteTask as unknown as ToolDefinition<unknown, unknown>,
   previewComment as unknown as ToolDefinition<unknown, unknown>,

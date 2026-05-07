@@ -4,6 +4,7 @@ import { createTask, type CreateTaskInput } from '@/src/server/tasks/createTask'
 import { updateTask } from '@/src/server/tasks/updateTask';
 import { deleteTask } from '@/src/server/tasks/deleteTask';
 import { createTasksBatch } from '@/src/server/tasks/createTasksBatch';
+import { updateTasksBatch } from '@/src/server/tasks/updateTasksBatch';
 import { createBin } from '@/src/server/bins/createBin';
 import { addComment } from '@/src/server/comments/addComment';
 import {
@@ -29,6 +30,7 @@ export type PendingActionKind =
   | 'update_task'
   | 'delete_task'
   | 'create_tasks_batch'
+  | 'update_tasks_batch'
   | 'create_bin'
   | 'add_comment'
   | 'property_knowledge_write'
@@ -436,6 +438,9 @@ async function executePendingAction(
   if (row.action_kind === 'create_tasks_batch') {
     return executeCreateTasksBatch(row);
   }
+  if (row.action_kind === 'update_tasks_batch') {
+    return executeUpdateTasksBatch(row);
+  }
   if (row.action_kind === 'create_bin') {
     return executeCreateBin(row);
   }
@@ -590,6 +595,38 @@ async function executeCreateTasksBatch(
       failed > 0
         ? `Created ${formatCount(created, 'task')}, but ${formatCount(failed, 'task')} failed. ${result.result.failures[0]?.error.message ?? ''}`.trim()
         : `Done - created ${formatCount(created, 'task')}.${binText}`,
+    error: result.result.failures[0]?.error.message,
+    result,
+  };
+}
+
+async function executeUpdateTasksBatch(
+  row: PendingActionRow,
+): Promise<PendingExecutionResult> {
+  const stored = row.canonical_input as GenericPendingInput;
+  const result = await updateTasksBatch(stored.input);
+  if (!result.ok) {
+    return {
+      ok: false,
+      status: 'failed',
+      text: `I could not update the task batch: ${result.error.message}`,
+      error: result.error.message,
+      result,
+    };
+  }
+
+  const updated = result.result.updated.length;
+  const skipped = result.result.skipped.length;
+  const failed = result.result.failures.length;
+  const skippedText =
+    skipped > 0 ? ` ${formatCount(skipped, 'task')} already up to date.` : '';
+  return {
+    ok: failed === 0,
+    status: failed === 0 ? 'committed' : 'failed',
+    text:
+      failed > 0
+        ? `Updated ${formatCount(updated, 'task')}, but ${formatCount(failed, 'task')} failed. ${result.result.failures[0]?.error.message ?? ''}`.trim()
+        : `Done - updated ${formatCount(updated, 'task')}.${skippedText}`,
     error: result.result.failures[0]?.error.message,
     result,
   };
