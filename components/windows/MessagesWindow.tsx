@@ -44,7 +44,7 @@ function ChannelList({
   onCreateChannel: () => void;
 }) {
   return (
-    <div className="w-56 flex-shrink-0 border-r border-neutral-200 dark:border-neutral-800 flex flex-col bg-neutral-50/50 dark:bg-neutral-950/50">
+    <div className="w-56 flex-shrink-0 border-r border-neutral-200 dark:border-neutral-800 flex flex-col bg-neutral-50/50 dark:bg-background/50">
       {/* Header */}
       <div className="px-3 py-3 flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800">
         <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
@@ -326,7 +326,7 @@ function CreateChannelInline({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <form
         onSubmit={handleSubmit}
-        className="bg-white dark:bg-neutral-900 rounded-lg shadow-xl border border-neutral-200 dark:border-neutral-700 p-5 w-80"
+        className="bg-white dark:bg-card rounded-lg shadow-xl border border-neutral-200 dark:border-neutral-700 p-5 w-80"
       >
         <h3 className="text-sm font-semibold text-neutral-900 dark:text-white mb-3">
           Create Channel

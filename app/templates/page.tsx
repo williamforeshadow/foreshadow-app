@@ -44,8 +44,8 @@ export default function TemplatesPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-white dark:bg-neutral-900">
-      <div className="flex-shrink-0 px-3 py-2 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-2">
+    <div className="flex flex-col h-screen bg-white dark:bg-card">
+      <div className="flex-shrink-0 px-3 py-2 bg-white dark:bg-card border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-2">
         <SidebarToggleButton />
         <h1 className="text-base font-semibold text-neutral-900 dark:text-white truncate">
           Templates

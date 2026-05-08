@@ -68,6 +68,18 @@
   --accent-bg-soft: rgba(99, 102, 241, 0.08);
   --accent-bg-soft-dark: rgba(167, 139, 250, 0.1);
 
+  /* Dashboard Timeline dark-mode audit ramp. These are intentionally
+     page-scoped tokens so the Timeline tab can become the reference dark
+     hierarchy before the rest of the dashboard follows it. */
+  --timeline-surface-0: #0F0F12;
+  --timeline-surface-1: #111114;
+  --timeline-surface-2: #17171B;
+  --timeline-surface-3: #1E1E24;
+  --timeline-surface-4: #24242B;
+  --timeline-border-subtle: rgba(255, 255, 255, 0.065);
+  --timeline-border-strong: rgba(255, 255, 255, 0.12);
+  --timeline-hover: rgba(255, 255, 255, 0.07);
+
   /* Turnover / reservation purple — single source of truth for the
      "active turnover" surfaces: TurnoverCards (active card), Timeline
      reservation bars (desktop + mobile + property Schedule grid),
@@ -81,19 +93,19 @@
 }
 
 .dark {
-  --background: #0b0b0c;
+  --background: #0F0F12;
   --foreground: #f0efed;
-  --card: #131315;
+  --card: #1A1A1F;
   --card-foreground: #f0efed;
-  --popover: #131315;
+  --popover: #1A1A1F;
   --popover-foreground: #f0efed;
   --primary: #f0efed;
-  --primary-foreground: #0b0b0c;
-  --secondary: #1a1a1d;
+  --primary-foreground: #0F0F12;
+  --secondary: #1A1A1F;
   --secondary-foreground: #f0efed;
-  --muted: #1a1a1d;
+  --muted: #1A1A1F;
   --muted-foreground: #a09e9a;
-  --accent: #1a1a1d;
+  --accent: #1A1A1F;
   --accent-foreground: #f0efed;
   --destructive: #d97757;
   --destructive-foreground: #f0efed;
@@ -105,11 +117,11 @@
   --chart-3: oklch(0.5500 0.2200 263);
   --chart-4: oklch(0.4900 0.2200 264);
   --chart-5: oklch(0.4200 0.1800 266);
-  --sidebar: #131315;
+  --sidebar: #1A1A1F;
   --sidebar-foreground: #f0efed;
   --sidebar-primary: #f0efed;
-  --sidebar-primary-foreground: #0b0b0c;
-  --sidebar-accent: #1a1a1d;
+  --sidebar-primary-foreground: #0F0F12;
+  --sidebar-accent: #1A1A1F;
   --sidebar-accent-foreground: #f0efed;
   --sidebar-border: rgba(255,255,255,0.07);
   --sidebar-ring: rgba(255,255,255,0.2);

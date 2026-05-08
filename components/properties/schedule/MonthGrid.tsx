@@ -337,7 +337,7 @@ export function MonthGrid({
                       <div
                         className={`flex items-center justify-center w-[22px] h-[22px] rounded-full text-[12px] font-medium tabular-nums ${
                           isToday
-                            ? 'bg-[var(--accent-3)] text-white dark:bg-[var(--accent-1)] dark:text-[#0b0b0c]'
+                            ? 'bg-[var(--accent-3)] text-white dark:bg-[var(--accent-1)] dark:text-background'
                             : inMonth
                               ? 'text-neutral-700 dark:text-[#e5e4e2]'
                               : 'text-neutral-300 dark:text-[#3e3d3a]'

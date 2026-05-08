@@ -174,7 +174,7 @@ export default function MobileTimelineView({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="sticky top-0 z-30 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 pl-14 pr-3 py-2.5">
+      <div className="sticky top-0 z-30 bg-white dark:bg-card border-b border-neutral-200 dark:border-neutral-800 pl-14 pr-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-0.5">
             <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={goToPrevious}>
@@ -227,7 +227,7 @@ export default function MobileTimelineView({
           {/* Date header row */}
           <div className="flex sticky top-0 z-30">
             <div
-              className="sticky left-0 z-30 bg-white dark:bg-[#0d0d10] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] px-1.5 py-2 text-xs font-semibold text-[#6b6963] dark:text-[#9a9893] flex items-center"
+              className="sticky left-0 z-30 bg-white dark:bg-card border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] px-1.5 py-2 text-xs font-semibold text-[#6b6963] dark:text-[#9a9893] flex items-center"
               style={{ width: propertyCellWidth, minWidth: propertyCellWidth }}
             >
               Property
@@ -241,7 +241,7 @@ export default function MobileTimelineView({
                     'border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] text-center py-1.5',
                     todayDate
                       ? 'today-tint'
-                      : 'bg-white dark:bg-[#0d0d10]'
+                      : 'bg-white dark:bg-card'
                   )}
                   style={{ width: cellWidth, minWidth: cellWidth }}
                 >
@@ -270,7 +270,7 @@ export default function MobileTimelineView({
               <div key={property}>
               <div className="flex">
                 <div
-                  className="sticky left-0 z-30 bg-white dark:bg-[#0d0d10] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)]"
+                  className="sticky left-0 z-30 bg-white dark:bg-card border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)]"
                   style={{ width: propertyCellWidth, minWidth: propertyCellWidth, height: rowHeight }}
                 >
                   <div
@@ -308,7 +308,7 @@ export default function MobileTimelineView({
                       key={idx}
                       className={cn(
                         'border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] relative overflow-visible cursor-pointer',
-                        todayDate ? 'today-tint' : 'bg-white dark:bg-[#0d0d10]'
+                        todayDate ? 'today-tint' : 'bg-white dark:bg-card'
                       )}
                       style={{ width: cellWidth, minWidth: cellWidth, height: rowHeight }}
                       onClick={() => {
@@ -491,7 +491,7 @@ export default function MobileTimelineView({
               className="absolute inset-0 bg-black/20 dark:bg-black/40"
               onClick={() => setExpandedCell(null)}
             />
-            <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-[#0b0b0c] border-t border-[rgba(30,25,20,0.08)] dark:border-white/10 rounded-t-2xl shadow-2xl max-h-[75vh] flex flex-col safe-area-bottom">
+            <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-background border-t border-[rgba(30,25,20,0.08)] dark:border-white/10 rounded-t-2xl shadow-2xl max-h-[75vh] flex flex-col safe-area-bottom">
               <DayDetailPanel
                 date={date}
                 title={expandedCell.property}

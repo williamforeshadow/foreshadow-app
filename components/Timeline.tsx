@@ -303,7 +303,7 @@ export default function Timeline({ onCardClick }: TimelineProps) {
                     return (
                       <div
                         key={idx}
-                        className={`border-b border-r border-neutral-200 dark:border-neutral-700 h-[38px] relative overflow-visible ${isTodayDate ? 'bg-emerald-700/20' : 'bg-white dark:bg-neutral-900'}`}
+                        className={`border-b border-r border-neutral-200 dark:border-neutral-700 h-[38px] relative overflow-visible ${isTodayDate ? 'bg-emerald-700/20' : 'bg-white dark:bg-card'}`}
                       >
                         {startingReservation && (() => {
                           const { span, startsBeforeRange, endsAfterRange } = getBlockPosition(startingReservation.check_in, startingReservation.check_out);

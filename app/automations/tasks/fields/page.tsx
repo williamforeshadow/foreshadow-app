@@ -11,7 +11,7 @@ function FieldsContent() {
 
   if (!property || !template) {
     return (
-      <div className="h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center">
+      <div className="h-screen bg-neutral-50 dark:bg-background flex items-center justify-center">
         <p className="text-red-500">Missing property or template parameter.</p>
       </div>
     );
@@ -24,7 +24,7 @@ export default function PropertyFieldsPage() {
   return (
     <Suspense
       fallback={
-        <div className="h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center">
+        <div className="h-screen bg-neutral-50 dark:bg-background flex items-center justify-center">
           <p className="text-neutral-500">Loading...</p>
         </div>
       }

@@ -28,7 +28,7 @@ function InlineDropdown({ children, onClose, align = 'left' }: { children: React
   return (
     <div
       ref={ref}
-      className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} top-full mt-1.5 z-[70] min-w-[200px] max-w-[280px] rounded-xl bg-white dark:bg-neutral-900 border border-[rgba(30,25,20,0.08)] dark:border-white/15 shadow-[0_4px_16px_rgba(0,0,0,0.06)] overflow-hidden`}
+      className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} top-full mt-1.5 z-[70] min-w-[200px] max-w-[280px] rounded-xl bg-white dark:bg-card border border-[rgba(30,25,20,0.08)] dark:border-white/15 shadow-[0_4px_16px_rgba(0,0,0,0.06)] overflow-hidden`}
     >
       {/* IMPORTANT: the bg also goes on the inner scroll container. When
           content exceeds max-h-[50vh] this div becomes a scroll viewport,
@@ -39,7 +39,7 @@ function InlineDropdown({ children, onClose, align = 'left' }: { children: React
           the outer's bg edge, the scrolled rows did not). Belt-and-
           suspenders: outer paints the corners/border, inner paints the
           scroll viewport. */}
-      <div className="max-h-[50vh] overflow-y-auto py-1 bg-white dark:bg-neutral-900">
+      <div className="max-h-[50vh] overflow-y-auto py-1 bg-white dark:bg-card">
         {children}
       </div>
     </div>

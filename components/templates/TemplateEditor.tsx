@@ -184,7 +184,7 @@ export default function TemplateEditor({
   };
 
   return (
-    <div className="h-screen bg-neutral-50 dark:bg-neutral-950 flex flex-col items-center">
+    <div className="h-screen bg-neutral-50 dark:bg-background flex flex-col items-center">
       {/* Scrollable content */}
       <div
         style={{ width: '100%', maxWidth: '48rem' }}
@@ -288,7 +288,7 @@ export default function TemplateEditor({
                     className={`rounded-lg border p-4 ${
                       field.type === 'separator'
                         ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/20'
-                        : 'border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900'
+                        : 'border-neutral-200 dark:border-neutral-700 bg-white dark:bg-card'
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -422,7 +422,7 @@ export default function TemplateEditor({
       </div>
 
       {/* Bottom bar */}
-      <div className="w-full border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex-shrink-0 flex justify-center">
+      <div className="w-full border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-card flex-shrink-0 flex justify-center">
         <div
           style={{ width: '100%', maxWidth: '48rem' }}
           className="px-8 py-4 flex items-center justify-between"

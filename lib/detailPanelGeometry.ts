@@ -27,7 +27,10 @@
 // these constants — see each panel's own mobile branch.
 
 export const DESKTOP_DETAIL_PANEL_CLASS =
-  'absolute inset-y-0 right-0 w-1/3 z-20 border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 bg-white dark:bg-[#0b0b0c]';
+  'absolute inset-y-0 right-0 w-1/3 z-20 border-l border-[rgba(30,25,20,0.08)] dark:border-white/10 bg-white dark:bg-background';
+
+export const DESKTOP_TIMELINE_DETAIL_PANEL_CLASS =
+  'absolute inset-y-0 right-0 w-1/3 z-20 border-l border-[rgba(30,25,20,0.08)] dark:border-[var(--timeline-border-strong)] bg-white dark:bg-[var(--timeline-surface-4)]';
 
 /**
  * Convenience: geometry + the most common interior layout (column with a
@@ -35,3 +38,5 @@ export const DESKTOP_DETAIL_PANEL_CLASS =
  * Equivalent to `${DESKTOP_DETAIL_PANEL_CLASS} flex flex-col overflow-hidden`.
  */
 export const DESKTOP_DETAIL_PANEL_FLEX = `${DESKTOP_DETAIL_PANEL_CLASS} flex flex-col overflow-hidden`;
+
+export const DESKTOP_TIMELINE_DETAIL_PANEL_FLEX = `${DESKTOP_TIMELINE_DETAIL_PANEL_CLASS} flex flex-col overflow-hidden`;

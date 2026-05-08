@@ -319,11 +319,11 @@ export default function MobileProjectDetail({
 
   return (
     <div
-      className="fixed inset-0 z-[60] bg-white dark:bg-neutral-950 flex flex-col"
+      className="fixed inset-0 z-[60] bg-white dark:bg-background flex flex-col"
       style={{ height: '100dvh' }}
     >
       {/* ── Header ── */}
-      <div className="shrink-0 bg-white dark:bg-neutral-900 border-b border-[rgba(30,25,20,0.06)] dark:border-neutral-800 safe-area-top">
+      <div className="shrink-0 bg-white dark:bg-card border-b border-[rgba(30,25,20,0.06)] dark:border-neutral-800 safe-area-top">
         {/* Top bar */}
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
           <button
@@ -1129,7 +1129,7 @@ export default function MobileProjectDetail({
 
         {/* ── Comment Input — sticky bottom (hidden in draft mode) ── */}
         {!isNewTask && activeSection !== 'checklist' && (
-          <div className="shrink-0 border-t border-[rgba(30,25,20,0.06)] dark:border-neutral-800 bg-white dark:bg-neutral-900 px-4 py-3 safe-area-bottom">
+          <div className="shrink-0 border-t border-[rgba(30,25,20,0.06)] dark:border-neutral-800 bg-white dark:bg-card px-4 py-3 safe-area-bottom">
             <div className="flex items-end gap-2">
               <textarea
                 ref={commentInputRef}
@@ -1191,13 +1191,13 @@ function InlineDropdown({
   return (
     <div
       ref={ref}
-      className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} top-full mt-1.5 z-[70] min-w-[200px] max-w-[280px] rounded-xl bg-white dark:bg-neutral-900 border border-[rgba(30,25,20,0.08)] dark:border-white/15 shadow-[0_4px_16px_rgba(0,0,0,0.06)] overflow-hidden`}
+      className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} top-full mt-1.5 z-[70] min-w-[200px] max-w-[280px] rounded-xl bg-white dark:bg-card border border-[rgba(30,25,20,0.08)] dark:border-white/15 shadow-[0_4px_16px_rgba(0,0,0,0.06)] overflow-hidden`}
     >
       {/* Mirror the desktop fix: bg on the inner scroll container too,
           otherwise scrolled content (e.g. the sub-bins past max-h-[50vh])
           renders against transparency instead of inheriting the outer
           div's painted bg. */}
-      <div className="max-h-[50vh] overflow-y-auto py-1 bg-white dark:bg-neutral-900">
+      <div className="max-h-[50vh] overflow-y-auto py-1 bg-white dark:bg-card">
         {children}
       </div>
     </div>

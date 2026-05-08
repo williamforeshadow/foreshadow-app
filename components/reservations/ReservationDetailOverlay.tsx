@@ -139,7 +139,7 @@ export function ReservationDetailOverlay() {
 
   if (isMobile) {
     return (
-      <div className="fixed inset-0 z-[60] bg-white dark:bg-[#0b0b0c] flex flex-col overflow-hidden">
+      <div className="fixed inset-0 z-[60] bg-white dark:bg-background flex flex-col overflow-hidden">
         {body}
       </div>
     );

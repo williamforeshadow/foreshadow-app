@@ -126,7 +126,7 @@ export function LinkHostawayModal({
         aria-modal="true"
         aria-label="Link to Hostaway"
       >
-        <div className="w-full max-w-[520px] bg-white dark:bg-[#0b0b0c] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] rounded-lg shadow-2xl pointer-events-auto flex flex-col max-h-[80vh]">
+        <div className="w-full max-w-[520px] bg-white dark:bg-background border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] rounded-lg shadow-2xl pointer-events-auto flex flex-col max-h-[80vh]">
           <div className="px-5 pt-5 pb-3 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
             <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-[#f0efed] tracking-tight">
               Link to Hostaway

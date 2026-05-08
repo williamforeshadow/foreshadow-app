@@ -353,7 +353,7 @@ export default function PropertyScheduleView() {
               className="absolute inset-0 bg-black/20 dark:bg-black/40"
               onClick={() => setSelectedDay(null)}
             />
-            <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-[#0b0b0c] border-t border-[rgba(30,25,20,0.08)] dark:border-white/10 rounded-t-2xl shadow-2xl max-h-[75vh] flex flex-col safe-area-bottom">
+            <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-background border-t border-[rgba(30,25,20,0.08)] dark:border-white/10 rounded-t-2xl shadow-2xl max-h-[75vh] flex flex-col safe-area-bottom">
               <DayDetailPanel
                 date={selectedDay}
                 title={property.name}
@@ -391,7 +391,7 @@ export default function PropertyScheduleView() {
         <div
           className={
             isMobile
-              ? 'fixed inset-0 z-[60] bg-white dark:bg-[#0b0b0c] safe-area-top safe-area-bottom flex flex-col'
+              ? 'fixed inset-0 z-[60] bg-white dark:bg-background safe-area-top safe-area-bottom flex flex-col'
               : DESKTOP_DETAIL_PANEL_FLEX
           }
         >

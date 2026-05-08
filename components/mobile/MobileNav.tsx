@@ -58,7 +58,7 @@ const MobileNav = memo(function MobileNav({ activeTab, onTabChange, hidden }: Mo
   );
 
   return (
-    <nav className={`fixed left-0 right-0 bottom-0 z-50 border-t border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] bg-white/90 dark:bg-[#0b0b0c]/90 backdrop-blur-xl safe-area-bottom transition-transform duration-300 ${hidden ? 'translate-y-full' : 'translate-y-0'}`}>
+    <nav className={`fixed left-0 right-0 bottom-0 z-50 border-t border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] bg-white/90 dark:bg-background/90 backdrop-blur-xl safe-area-bottom transition-transform duration-300 ${hidden ? 'translate-y-full' : 'translate-y-0'}`}>
       <div className="flex items-start justify-around px-4 pt-2 pb-1">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;

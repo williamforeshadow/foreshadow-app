@@ -562,7 +562,7 @@ export default function MobileMyAssignmentsView({
                               {item.assignees.slice(0, 3).map((u, i) => (
                                 <div
                                   key={u.user_id}
-                                  className="w-[20px] h-[20px] rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-[8px] font-semibold text-neutral-600 dark:text-[#a09e9a] overflow-hidden ring-[1.5px] ring-white dark:ring-[#0b0b0c]"
+                                  className="w-[20px] h-[20px] rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-[8px] font-semibold text-neutral-600 dark:text-[#a09e9a] overflow-hidden ring-[1.5px] ring-white dark:ring-background"
                                   style={{ marginLeft: i > 0 ? '-6px' : 0 }}
                                   title={u.name}
                                 >

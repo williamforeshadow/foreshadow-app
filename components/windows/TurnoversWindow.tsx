@@ -200,7 +200,7 @@ function TurnoversWindowContent(_: TurnoversWindowProps) {
   );
 
   return (
-    <div className="relative h-full overflow-hidden bg-white dark:bg-[#0b0b0c]">
+    <div className="relative h-full overflow-hidden bg-white dark:bg-background">
       {/* Left Panel — Cards. Always full-width; the detail panel below
           floats over the right 1/3 (overlay) instead of compressing the
           list, matching every other detail panel in the app. */}

@@ -356,7 +356,7 @@ export default function PropertiesPage() {
           <div
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-[13px] font-medium whitespace-nowrap overflow-hidden text-ellipsis border ${
               toast.kind === 'success'
-                ? 'bg-neutral-900 dark:bg-[#f0efed] text-white dark:text-[#0b0b0c] border-neutral-800 dark:border-neutral-300'
+                ? 'bg-neutral-900 dark:bg-[#f0efed] text-white dark:text-background border-neutral-800 dark:border-neutral-300'
                 : 'bg-red-600 text-white border-red-700'
             }`}
           >
@@ -532,7 +532,7 @@ function AddPropertyModal({
         aria-modal="true"
         aria-label="Add Property"
       >
-        <div className="w-full max-w-[520px] bg-white dark:bg-[#0b0b0c] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] rounded-lg shadow-2xl pointer-events-auto flex flex-col max-h-[80vh]">
+        <div className="w-full max-w-[520px] bg-white dark:bg-background border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] rounded-lg shadow-2xl pointer-events-auto flex flex-col max-h-[80vh]">
           <div className="px-5 pt-5 pb-0">
             <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-[#f0efed] tracking-tight">
               Add Property

@@ -112,7 +112,7 @@ const AvatarGroup = ({
             size="sm"
           />
           {overflowCount > 0 && (
-            <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-neutral-700 dark:bg-neutral-200 text-[9px] font-medium text-white dark:text-neutral-800 border border-white dark:border-neutral-900">
+          <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-neutral-700 dark:bg-neutral-200 text-[9px] font-medium text-white dark:text-neutral-800 border border-white dark:border-[var(--timeline-surface-3)]">
               +{overflowCount}
             </div>
           )}
@@ -177,8 +177,8 @@ export function ScheduledItemsCell({
               <div
                 className={cn(
                   "flex items-center justify-center w-6 h-6 rounded transition-colors relative overflow-hidden shadow-sm text-white",
-                  !hasApproved && hasContingent && "border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[rgba(255,255,255,0.25)] bg-white dark:bg-[#1a1a1d] text-[#1a1a18] dark:text-white",
-                  hasApproved && taskFolderStatus === 'no_tasks' && "bg-white dark:bg-[#1a1a1d] border border-[rgba(30,25,20,0.12)] dark:border-[rgba(255,255,255,0.12)] text-[#1a1a18] dark:text-white",
+          !hasApproved && hasContingent && "border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[var(--timeline-border-strong)] bg-white dark:bg-[var(--timeline-surface-3)] text-[#1a1a18] dark:text-white",
+          hasApproved && taskFolderStatus === 'no_tasks' && "bg-white dark:bg-[var(--timeline-surface-3)] border border-[rgba(30,25,20,0.12)] dark:border-[var(--timeline-border-strong)] text-[#1a1a18] dark:text-white",
                   hasApproved && hasContingent && "border-[1.5px] border-dashed border-[rgba(30,25,20,0.35)] dark:border-[rgba(255,255,255,0.35)]",
                 )}
                 style={hasApproved && taskFolderStatus !== 'no_tasks' ? { background: marbleBackground[taskFolderStatus] || marbleBackground.not_started } : undefined}
@@ -191,8 +191,8 @@ export function ScheduledItemsCell({
                   <div
                     className={cn(
                       "flex items-center justify-center w-6 h-6 rounded cursor-pointer transition-colors relative overflow-hidden shadow-sm text-white hover:brightness-110",
-                      !hasApproved && hasContingent && "border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[rgba(255,255,255,0.25)] bg-white dark:bg-[#1a1a1d] text-[#1a1a18] dark:text-white hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.08)]",
-                      hasApproved && taskFolderStatus === 'no_tasks' && "bg-white dark:bg-[#1a1a1d] border border-[rgba(30,25,20,0.12)] dark:border-[rgba(255,255,255,0.12)] text-[#1a1a18] dark:text-white hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.08)]",
+          !hasApproved && hasContingent && "border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[var(--timeline-border-strong)] bg-white dark:bg-[var(--timeline-surface-3)] text-[#1a1a18] dark:text-white hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[var(--timeline-hover)]",
+          hasApproved && taskFolderStatus === 'no_tasks' && "bg-white dark:bg-[var(--timeline-surface-3)] border border-[rgba(30,25,20,0.12)] dark:border-[var(--timeline-border-strong)] text-[#1a1a18] dark:text-white hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[var(--timeline-hover)]",
                       hasApproved && hasContingent && "border-[1.5px] border-dashed border-[rgba(30,25,20,0.35)] dark:border-[rgba(255,255,255,0.35)]",
                     )}
                     style={hasApproved && taskFolderStatus !== 'no_tasks' ? { background: marbleBackground[taskFolderStatus] || marbleBackground.not_started } : undefined}
@@ -200,8 +200,8 @@ export function ScheduledItemsCell({
                     <ClipboardCheck className="w-3.5 h-3.5" />
                   </div>
                 </HoverCardTrigger>
-                <HoverCardContent side="bottom" align="start" sideOffset={4} collisionPadding={16} className="w-72 p-0 bg-white dark:bg-[#141418] border border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.08)] shadow-lg">
-                  <HoverCardArrow className="fill-white dark:fill-[#141418]" />
+        <HoverCardContent side="bottom" align="start" sideOffset={4} collisionPadding={16} className="w-72 p-0 bg-white dark:bg-[var(--timeline-surface-4)] border border-[rgba(30,25,20,0.08)] dark:border-[var(--timeline-border-strong)] shadow-lg">
+          <HoverCardArrow className="fill-white dark:fill-[var(--timeline-surface-4)]" />
                   <div className="p-2 flex flex-col gap-2 max-h-48 overflow-y-auto subtle-scrollbar">
                     {scheduledTasks.map((task) => (
                       <div
@@ -231,7 +231,7 @@ export function ScheduledItemsCell({
                                 size="xs"
                               />
                               {(task.assigned_users?.length ?? 0) > 1 && (
-                                <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-neutral-700 dark:bg-neutral-200 text-[9px] font-medium text-white dark:text-neutral-800 border border-white dark:border-neutral-900">
+                    <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-neutral-700 dark:bg-neutral-200 text-[9px] font-medium text-white dark:text-neutral-800 border border-white dark:border-[var(--timeline-surface-3)]">
                                   +{(task.assigned_users?.length ?? 0) - 1}
                                 </div>
                               )}

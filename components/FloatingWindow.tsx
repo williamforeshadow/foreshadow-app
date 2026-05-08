@@ -68,7 +68,7 @@ const FloatingWindow = memo(function FloatingWindow({
       }}
     >
       <div 
-        className="h-full flex flex-col bg-white dark:bg-neutral-900 border-2 border-neutral-300 dark:border-neutral-700 rounded-lg shadow-2xl overflow-hidden"
+        className="h-full flex flex-col bg-white dark:bg-card border-2 border-neutral-300 dark:border-neutral-700 rounded-lg shadow-2xl overflow-hidden"
         onClick={onFocus}
       >
         {/* Window Header */}

@@ -59,10 +59,10 @@ export default function OperationsSettingsPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-white dark:bg-neutral-900">
+    <div className="flex flex-col h-screen bg-white dark:bg-card">
       {/* Top bar — sidebar toggle + page title in a single full-width row
           above the sidebar. */}
-      <div className="flex-shrink-0 px-3 py-2 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-2">
+      <div className="flex-shrink-0 px-3 py-2 bg-white dark:bg-card border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-2">
         <SidebarToggleButton />
         <h1 className="text-base font-semibold text-neutral-900 dark:text-white truncate">
           Operations Settings
@@ -93,7 +93,7 @@ export default function OperationsSettingsPage() {
               </div>
             )}
 
-            <section className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
+            <section className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-card">
               <header className="px-5 pt-5 pb-3 border-b border-neutral-200 dark:border-neutral-800">
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-neutral-500" />
@@ -140,7 +140,7 @@ export default function OperationsSettingsPage() {
               <footer className="px-5 py-4 border-t border-neutral-200 dark:border-neutral-800" />
             </section>
 
-            <section className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
+            <section className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-card">
               <header className="px-5 pt-5 pb-3 border-b border-neutral-200 dark:border-neutral-800">
                 <div className="flex items-center gap-2">
                   <Globe className="w-4 h-4 text-neutral-500" />

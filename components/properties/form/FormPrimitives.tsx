@@ -145,7 +145,7 @@ export function FloatingSaveBar({
 }) {
   if (!dirty) return null;
   return (
-    <div className="flex-shrink-0 border-t border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] bg-white/95 dark:bg-[#0b0b0c]/95 backdrop-blur-sm">
+    <div className="flex-shrink-0 border-t border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] bg-white/95 dark:bg-background/95 backdrop-blur-sm">
       <div className="max-w-[760px] px-5 sm:px-8 py-3 flex items-center justify-between gap-4">
         <div className="min-w-0 flex-1 text-[13px]">
           {error ? (
@@ -193,7 +193,7 @@ export function Toast({
       <div
         className={`flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-[13px] font-medium whitespace-nowrap overflow-hidden text-ellipsis border ${
           kind === 'success'
-            ? 'bg-neutral-900 dark:bg-[#f0efed] text-white dark:text-[#0b0b0c] border-neutral-800 dark:border-neutral-300'
+            ? 'bg-neutral-900 dark:bg-[#f0efed] text-white dark:text-background border-neutral-800 dark:border-neutral-300'
             : 'bg-red-600 text-white border-red-700'
         }`}
       >

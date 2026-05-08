@@ -133,7 +133,7 @@ export function DayDetailPanel({
   }, [tasks]);
 
   return (
-    <div className="h-full w-full flex flex-col bg-white dark:bg-[#0b0b0c]">
+    <div className="h-full w-full flex flex-col bg-white dark:bg-background">
       {/* Header */}
       <div className="flex items-start justify-between gap-3 px-5 sm:px-6 pt-6 pb-4 border-b border-[rgba(30,25,20,0.06)] dark:border-white/5">
         <div className="flex flex-col gap-1 min-w-0">

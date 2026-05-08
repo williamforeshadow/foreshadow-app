@@ -100,6 +100,16 @@ export function assignmentsPath(): string {
 }
 
 /**
+ * Path for opening a specific task inside the My Assignments sheet.
+ *
+ * Uses `openTask` rather than `task` because the global legacy deep-link
+ * bridge reserves `task` for redirecting old dashboard links to /tasks/[id].
+ */
+export function assignmentTaskPath(taskId: string): string {
+  return `${assignmentsPath()}?openTask=${encodeURIComponent(taskId)}`;
+}
+
+/**
  * Absolute URL for the My Assignments page, or null when APP_BASE_URL
  * isn't configured.
  *

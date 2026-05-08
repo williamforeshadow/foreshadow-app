@@ -321,7 +321,7 @@ function BottomSheet({
       />
       {/* Sheet */}
       <div
-        className={`absolute left-0 right-0 bottom-0 bg-white dark:bg-[#0b0b0c] rounded-t-2xl border-t border-neutral-200 dark:border-[rgba(255,255,255,0.08)] shadow-[0_-8px_32px_rgba(0,0,0,0.18)] flex flex-col`}
+        className={`absolute left-0 right-0 bottom-0 bg-white dark:bg-background rounded-t-2xl border-t border-neutral-200 dark:border-[rgba(255,255,255,0.08)] shadow-[0_-8px_32px_rgba(0,0,0,0.18)] flex flex-col`}
         style={{ maxHeight: '88dvh', height: fullHeight ? '88dvh' : 'auto' }}
       >
         {/* Grabber */}

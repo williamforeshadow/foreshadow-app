@@ -79,7 +79,7 @@ const MobileDrawer = memo(function MobileDrawer({ open, onClose }: MobileDrawerP
 
       {/* Drawer */}
       <aside
-        className={`fixed top-0 left-0 bottom-0 z-[61] w-[80%] max-w-[320px] bg-white dark:bg-[#0b0b0c] border-r border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] shadow-xl transition-transform duration-300 safe-area-top safe-area-bottom flex flex-col ${
+        className={`fixed top-0 left-0 bottom-0 z-[61] w-[80%] max-w-[320px] bg-white dark:bg-background border-r border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] shadow-xl transition-transform duration-300 safe-area-top safe-area-bottom flex flex-col ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
         role="dialog"
@@ -168,7 +168,7 @@ const MobileDrawer = memo(function MobileDrawer({ open, onClose }: MobileDrawerP
                 aria-label="Toggle theme"
               >
                 <span
-                  className={`inline-block h-4 w-4 rounded-full bg-white dark:bg-[#0b0b0c] transition-transform ${
+                  className={`inline-block h-4 w-4 rounded-full bg-white dark:bg-background transition-transform ${
                     theme === 'dark' ? 'translate-x-[20px]' : 'translate-x-[3px]'
                   }`}
                 />

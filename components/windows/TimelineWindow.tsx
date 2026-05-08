@@ -16,8 +16,8 @@ import { TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
 import { DayDetailPanel } from '@/components/tasks/DayDetailPanel';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
 import {
-  DESKTOP_DETAIL_PANEL_CLASS,
-  DESKTOP_DETAIL_PANEL_FLEX,
+  DESKTOP_TIMELINE_DETAIL_PANEL_CLASS,
+  DESKTOP_TIMELINE_DETAIL_PANEL_FLEX,
 } from '@/lib/detailPanelGeometry';
 import { ClipboardCheck } from 'lucide-react';
 import Rhombus16FilledIcon from '@/components/icons/Rhombus16FilledIcon';
@@ -1337,7 +1337,7 @@ export default function TimelineWindow({
   return (
     <div className="h-full flex flex-col relative">
       {/* Header with navigation - fixed at top */}
-      <div className="flex-shrink-0 px-4 py-3 bg-white dark:bg-[#0d0d10] border-b border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)]">
+      <div className="flex-shrink-0 px-4 py-3 bg-white dark:bg-[var(--timeline-surface-2)] border-b border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)]">
         <div className="flex items-center gap-4 mb-2">
           {/* View Mode Icons */}
           <div className="flex items-center gap-1">
@@ -1460,13 +1460,13 @@ export default function TimelineWindow({
       {viewMode === 'grid' ? (
       <div className="flex-1 overflow-auto px-4 pb-4">
           <div
-            className="grid border border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] w-full overflow-x-clip"
+            className="grid border border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] w-full overflow-x-clip"
             style={{
               gridTemplateColumns: `200px repeat(${dateRange.length}, minmax(0, 1fr))`
             }}
           >
             {/* Header Row - will stick when scrolling */}
-            <div className="bg-white dark:bg-[#0d0d10] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] px-2 py-1 text-xs font-semibold text-[#6b6963] dark:text-[#9a9893] uppercase tracking-[0.06em] sticky left-0 top-0 z-30 flex items-center gap-1.5">
+            <div className="bg-white dark:bg-[var(--timeline-surface-2)] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] px-2 py-1 text-xs font-semibold text-[#6b6963] dark:text-[#9a9893] uppercase tracking-[0.06em] sticky left-0 top-0 z-30 flex items-center gap-1.5">
               <button
                 onClick={toggleAllExpanded}
                 className="p-0.5 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.05)] transition-colors"
@@ -1483,10 +1483,10 @@ export default function TimelineWindow({
               return (
                 <div 
                   key={idx} 
-                  className={`px-3 py-2.5 border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] sticky top-0 z-20 cursor-pointer transition-colors ${
+                  className={`px-3 py-2.5 border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] sticky top-0 z-20 cursor-pointer transition-colors ${
                     isTodayDate 
                       ? 'today-tint' 
-                      : 'bg-white dark:bg-[#0d0d10] hover:bg-[rgba(30,25,20,0.02)] dark:hover:bg-[rgba(255,255,255,0.03)]'
+                      : 'bg-white dark:bg-[var(--timeline-surface-2)] hover:bg-[rgba(30,25,20,0.02)] dark:hover:bg-[var(--timeline-hover)]'
                   }`}
                   onClick={() => { closeGlobals(); setSelectedDay(date); }}
                 >
@@ -1500,7 +1500,7 @@ export default function TimelineWindow({
               const propertyReservations = getReservationsForProperty(property);
               const activeTurnover = getActiveTurnoverForProperty(propertyReservations);
 
-              const propertyCellBg = 'bg-white dark:bg-[#0d0d10]';
+              const propertyCellBg = 'bg-white dark:bg-[var(--timeline-surface-2)]';
 
               return (
                 <div
@@ -1508,7 +1508,7 @@ export default function TimelineWindow({
                   className="contents"
                 >
                   {/* Property Name with Status Indicator */}
-                  <div className={`relative overflow-hidden px-2 py-3 text-[12px] font-medium text-[#1a1a18] dark:text-[#e8e7e3] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] sticky left-0 z-10 min-h-[56px] ${propertyCellBg} flex items-center gap-1.5`}>
+                  <div className={`relative overflow-hidden px-2 py-3 text-[12px] font-medium text-[#1a1a18] dark:text-[#e8e7e3] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] sticky left-0 z-10 min-h-[56px] ${propertyCellBg} flex items-center gap-1.5`}>
                     <button
                       onClick={() => togglePropertyExpanded(property)}
                       className="p-0.5 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.05)] transition-colors shrink-0"
@@ -1543,9 +1543,9 @@ export default function TimelineWindow({
                               </div>
                             </div>
                           </PopoverTrigger>
-                          <PopoverContent side="right" align="start" sideOffset={4} collisionPadding={16} className="w-72 p-0 bg-white dark:bg-[#141418] border border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.08)] shadow-lg">
+                          <PopoverContent side="right" align="start" sideOffset={4} collisionPadding={16} className="w-72 p-0 bg-white dark:bg-[var(--timeline-surface-4)] border border-[rgba(30,25,20,0.08)] dark:border-[var(--timeline-border-strong)] shadow-lg">
                             {/* Header with close button */}
-                            <div className="flex items-center justify-between px-3 py-2 border-b border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)]">
+                            <div className="flex items-center justify-between px-3 py-2 border-b border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)]">
                               <p className="text-sm font-medium">{property}</p>
                               <PopoverClose className="p-1 hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.05)] rounded-md transition-colors text-[#9a9892] dark:text-[#66645f]">
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1601,7 +1601,7 @@ export default function TimelineWindow({
                     return (
                       <div
                         key={idx}
-                        className={`group border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] h-[56px] relative overflow-visible ${isTodayDate ? 'today-tint' : 'bg-white dark:bg-transparent'}`}
+                        className={`group border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] h-[56px] relative overflow-visible ${isTodayDate ? 'today-tint' : 'bg-white dark:bg-[var(--timeline-surface-2)]'}`}
                         onClick={() => {
                           const res = propertyReservations.find(r => {
                             const pos = getBlockPosition(r.check_in, r.check_out);
@@ -1687,7 +1687,7 @@ export default function TimelineWindow({
                         />
 
                         <button
-                          className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-[rgba(30,25,20,0.10)] dark:border-[rgba(255,255,255,0.10)] bg-white dark:bg-[#141418] text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.08)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3] transition-all z-20 flex items-center justify-center opacity-0 group-hover:opacity-100"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-[rgba(30,25,20,0.10)] dark:border-[var(--timeline-border-strong)] bg-white dark:bg-[var(--timeline-surface-4)] text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[var(--timeline-hover)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3] transition-all z-20 flex items-center justify-center opacity-0 group-hover:opacity-100"
                           title="Create task for this day"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1706,7 +1706,7 @@ export default function TimelineWindow({
                   {expandedProperties.has(property) && (
                     <>
                       {/* Property column for expanded row — empty */}
-                      <div className={`sticky left-0 z-10 border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] ${propertyCellBg}`} />
+                      <div className={`sticky left-0 z-10 border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] ${propertyCellBg}`} />
 
                       {/* Date columns for expanded row */}
                       {dateRange.map((date, idx) => {
@@ -1720,8 +1720,8 @@ export default function TimelineWindow({
                         return (
                           <div
                             key={`expanded-${idx}`}
-                            className={`border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] p-1.5 ${
-                              isTodayDate ? 'today-tint' : 'bg-white dark:bg-transparent'
+                            className={`border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] p-1.5 ${
+                              isTodayDate ? 'today-tint' : 'bg-white dark:bg-[var(--timeline-surface-2)]'
                             }`}
                           >
                             {hasItems && (
@@ -1731,7 +1731,7 @@ export default function TimelineWindow({
                                     key={task.task_id}
                                     className={`flex items-center justify-between gap-2 py-2 px-2.5 shrink-0 cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.01] active:scale-[0.99] relative overflow-hidden rounded-lg text-sm ${
                                       task.status === 'contingent'
-                                        ? 'bg-white dark:bg-[#1a1a1d] border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[rgba(255,255,255,0.25)] text-[#1a1a18] dark:text-[#e8e7e3]'
+                                        ? 'bg-white dark:bg-[var(--timeline-surface-3)] border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[var(--timeline-border-strong)] text-[#1a1a18] dark:text-[#e8e7e3]'
                                         : 'text-white'
                                     }`}
                                     style={task.status !== 'contingent' ? { background: marbleBackground[task.status] || marbleBackground.not_started } : undefined}
@@ -1755,7 +1755,7 @@ export default function TimelineWindow({
                                             size="xs"
                                           />
                                           {(task.assigned_users?.length ?? 0) > 1 && (
-                                            <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-neutral-700 dark:bg-neutral-200 text-[9px] font-medium text-white dark:text-neutral-800 border border-white dark:border-neutral-900">
+                                            <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-neutral-700 dark:bg-neutral-200 text-[9px] font-medium text-white dark:text-neutral-800 border border-white dark:border-[var(--timeline-surface-3)]">
                                               +{(task.assigned_users?.length ?? 0) - 1}
                                             </div>
                                           )}
@@ -1817,7 +1817,7 @@ export default function TimelineWindow({
           canonical editor for each item type. */}
       {selectedDay && dayPanelData && !floatingData && (
         <div
-          className={DESKTOP_DETAIL_PANEL_FLEX}
+          className={DESKTOP_TIMELINE_DETAIL_PANEL_FLEX}
           onWheel={(e) => e.stopPropagation()}
         >
           <DayDetailPanel
@@ -1838,7 +1838,7 @@ export default function TimelineWindow({
           interior layout and expect the outer container to scroll. */}
       {floatingData && (
         <div
-          className={`${DESKTOP_DETAIL_PANEL_CLASS} overflow-y-auto`}
+          className={`${DESKTOP_TIMELINE_DETAIL_PANEL_CLASS} overflow-y-auto`}
           onWheel={(e) => e.stopPropagation()}
         >
           {floatingData.type === 'task' && taskAsProject && taskEditingFields ? (

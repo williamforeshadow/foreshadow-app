@@ -578,7 +578,7 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
   const isDraft = draftTask != null;
 
   return (
-    <div className="relative h-full overflow-hidden bg-white dark:bg-[#0b0b0c]">
+    <div className="relative h-full overflow-hidden bg-white dark:bg-background">
       <div className="w-full h-full flex flex-col min-w-0">
         {/* Header */}
         <div className="flex-shrink-0 px-8 pt-6 pb-1">

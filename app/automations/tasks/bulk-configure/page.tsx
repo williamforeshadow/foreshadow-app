@@ -11,7 +11,7 @@ function BulkConfigureContent() {
 
   if (!propertiesParam || !template) {
     return (
-      <div className="h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center">
+      <div className="h-screen bg-neutral-50 dark:bg-background flex items-center justify-center">
         <p className="text-red-500">Missing properties or template parameter.</p>
       </div>
     );
@@ -21,7 +21,7 @@ function BulkConfigureContent() {
 
   if (propertyNames.length === 0) {
     return (
-      <div className="h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center">
+      <div className="h-screen bg-neutral-50 dark:bg-background flex items-center justify-center">
         <p className="text-red-500">No properties specified.</p>
       </div>
     );
@@ -34,7 +34,7 @@ export default function BulkConfigureAutomationPage() {
   return (
     <Suspense
       fallback={
-        <div className="h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center">
+        <div className="h-screen bg-neutral-50 dark:bg-background flex items-center justify-center">
           <p className="text-neutral-500">Loading...</p>
         </div>
       }

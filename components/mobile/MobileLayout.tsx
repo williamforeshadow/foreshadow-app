@@ -20,7 +20,7 @@ const MobileLayout = memo(function MobileLayout({
   hideNav,
 }: MobileLayoutProps) {
   return (
-    <div className="h-dvh bg-neutral-50 dark:bg-[#0b0b0c] overflow-hidden flex flex-col safe-area-top">
+    <div className="h-dvh bg-neutral-50 dark:bg-background overflow-hidden flex flex-col safe-area-top">
       <MobileTopBar onMenuTap={onMenuTap} hidden={hideNav} />
 
       <main className="flex-1 min-h-0 overflow-auto hide-scrollbar pb-20">

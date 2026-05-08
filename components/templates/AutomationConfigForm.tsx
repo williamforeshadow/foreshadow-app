@@ -56,7 +56,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
         checked ? 'bg-neutral-900 dark:bg-neutral-400' : 'bg-neutral-300 dark:bg-neutral-600'
       }`}
     >
-      <span className={`inline-block h-4 w-4 transform rounded-full bg-white dark:bg-neutral-900 transition-transform ${
+      <span className={`inline-block h-4 w-4 transform rounded-full bg-white dark:bg-card transition-transform ${
         checked ? 'translate-x-6' : 'translate-x-1'
       }`} />
     </button>

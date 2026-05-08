@@ -667,7 +667,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
           {/* FAB */}
           <button
             onClick={handleNewTask}
-            className="absolute right-[22px] bottom-6 w-[52px] h-[52px] rounded-full bg-neutral-800 dark:bg-[#f0efed] text-white dark:text-[#0b0b0c] flex items-center justify-center shadow-[0_10px_30px_-8px_rgba(0,0,0,0.5)] active:scale-95 transition-transform z-30"
+            className="absolute right-[22px] bottom-6 w-[52px] h-[52px] rounded-full bg-neutral-800 dark:bg-[#f0efed] text-white dark:text-background flex items-center justify-center shadow-[0_10px_30px_-8px_rgba(0,0,0,0.5)] active:scale-95 transition-transform z-30"
           >
             <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" viewBox="0 0 24 24">
               <path d="M12 5v14M5 12h14" />

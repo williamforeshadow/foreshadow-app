@@ -106,7 +106,7 @@ export function BinPicker({
 
   if (loadingBins) {
     return (
-      <div className="flex items-center justify-center h-full bg-white dark:bg-[#0b0b0c]">
+      <div className="flex items-center justify-center h-full bg-white dark:bg-background">
         <p className="text-neutral-500 dark:text-white/50">Loading bins...</p>
       </div>
     );
@@ -117,7 +117,7 @@ export function BinPicker({
     // entire palette below is dual-mode — historically this surface was
     // dark-only (white text + white/0.0X surfaces), which rendered as
     // invisible white-on-grey content against `bg-background` in light mode.
-    <div className="h-full flex flex-col bg-white dark:bg-[#0b0b0c]">
+    <div className="h-full flex flex-col bg-white dark:bg-background">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 dark:border-white/10 flex-shrink-0">
         <div>
@@ -201,7 +201,7 @@ export function BinPicker({
             {/* Context menu dropdown — system bin only has Settings */}
             {systemBin && contextMenuBinId === systemBin.id && (
               <div
-                className="absolute top-10 right-3 z-20 bg-white dark:bg-neutral-900/90 dark:backdrop-blur-xl border border-neutral-200 dark:border-white/10 rounded-lg shadow-lg dark:shadow-2xl py-1 min-w-[140px]"
+                className="absolute top-10 right-3 z-20 bg-white dark:bg-card/90 dark:backdrop-blur-xl border border-neutral-200 dark:border-white/10 rounded-lg shadow-lg dark:shadow-2xl py-1 min-w-[140px]"
                 onClick={(e) => e.stopPropagation()}
               >
                 <button
@@ -277,7 +277,7 @@ export function BinPicker({
               {/* Context menu dropdown */}
               {contextMenuBinId === bin.id && (
                 <div
-                  className="absolute top-10 right-3 z-20 bg-white dark:bg-neutral-900/90 dark:backdrop-blur-xl border border-neutral-200 dark:border-white/10 rounded-lg shadow-lg dark:shadow-2xl py-1 min-w-[140px]"
+                  className="absolute top-10 right-3 z-20 bg-white dark:bg-card/90 dark:backdrop-blur-xl border border-neutral-200 dark:border-white/10 rounded-lg shadow-lg dark:shadow-2xl py-1 min-w-[140px]"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
@@ -382,7 +382,7 @@ export function BinPicker({
           onClick={closeSettings}
         >
           <div
-            className="w-full max-w-md mx-4 p-6 rounded-2xl border border-neutral-200 bg-white shadow-xl dark:border-white/10 dark:bg-neutral-900/95 dark:backdrop-blur-xl dark:shadow-2xl"
+            className="w-full max-w-md mx-4 p-6 rounded-2xl border border-neutral-200 bg-white shadow-xl dark:border-white/10 dark:bg-card/95 dark:backdrop-blur-xl dark:shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5">

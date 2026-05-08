@@ -49,10 +49,10 @@ export default function TaskDetailLayout({
   }
 
   return (
-    <div className="flex flex-col h-screen bg-white dark:bg-neutral-900">
+    <div className="flex flex-col h-screen bg-white dark:bg-card">
       {/* Thin top bar — gives the sidebar toggle a fixed home above the
           sidebar + page body, matching every other page in the app. */}
-      <div className="flex-shrink-0 px-3 py-2 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800">
+      <div className="flex-shrink-0 px-3 py-2 bg-white dark:bg-card border-b border-neutral-200 dark:border-neutral-800">
         <SidebarToggleButton />
       </div>
 

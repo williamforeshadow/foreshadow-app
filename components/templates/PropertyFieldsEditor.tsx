@@ -104,14 +104,14 @@ export default function PropertyFieldsEditor({
 
   if (loading) {
     return (
-      <div className="h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center">
+      <div className="h-screen bg-neutral-50 dark:bg-background flex items-center justify-center">
         <p className="text-neutral-500">Loading template fields...</p>
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-neutral-50 dark:bg-neutral-950 flex flex-col items-center">
+    <div className="h-screen bg-neutral-50 dark:bg-background flex flex-col items-center">
       {/* Scrollable content */}
       <div
         style={{ width: '100%', maxWidth: '48rem' }}
@@ -146,7 +146,7 @@ export default function PropertyFieldsEditor({
       </div>
 
       {/* Bottom bar */}
-      <div className="w-full border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex-shrink-0 flex justify-center">
+      <div className="w-full border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-card flex-shrink-0 flex justify-center">
         <div
           style={{ width: '100%', maxWidth: '48rem' }}
           className="px-8 py-4 flex items-center justify-between"

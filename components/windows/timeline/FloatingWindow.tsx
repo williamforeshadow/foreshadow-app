@@ -178,7 +178,7 @@ export function FloatingWindow({
 
   return (
     <div
-      className="fixed z-50 bg-card rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-700 overflow-hidden flex flex-col"
+      className="fixed z-50 bg-card dark:bg-[var(--timeline-surface-4)] rounded-xl shadow-2xl border border-neutral-200 dark:border-[var(--timeline-border-strong)] overflow-hidden flex flex-col"
       style={{
         left: position.x,
         top: position.y,
@@ -192,7 +192,7 @@ export function FloatingWindow({
         onMouseDown={handleMouseDown}
         className={`flex items-center justify-between px-3 py-2 border-b border-neutral-200 dark:border-neutral-700 flex-shrink-0 ${
           isDragging ? 'cursor-grabbing' : 'cursor-grab'
-        } select-none bg-neutral-50 dark:bg-neutral-800`}
+          } select-none bg-neutral-50 dark:bg-[var(--timeline-surface-3)]`}
       >
         <div className="min-w-0 flex-1">
           <h3 className="font-semibold text-sm truncate">{title}</h3>
@@ -201,7 +201,7 @@ export function FloatingWindow({
         <button
           onClick={onClose}
           onMouseDown={(e) => e.stopPropagation()} // Prevent drag when clicking close
-          className="p-1.5 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors ml-2 flex-shrink-0"
+          className="p-1.5 hover:bg-neutral-200 dark:hover:bg-[var(--timeline-hover)] rounded-lg transition-colors ml-2 flex-shrink-0"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

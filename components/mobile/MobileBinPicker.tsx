@@ -167,7 +167,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
             <button
               onClick={handleCreate}
               disabled={!newBinName.trim()}
-              className="text-xs font-medium px-3 py-1.5 rounded-lg bg-neutral-800 dark:bg-[#f0efed] text-white dark:text-[#0b0b0c] disabled:opacity-40 active:opacity-80 transition-opacity"
+              className="text-xs font-medium px-3 py-1.5 rounded-lg bg-neutral-800 dark:bg-[#f0efed] text-white dark:text-background disabled:opacity-40 active:opacity-80 transition-opacity"
             >
               Create
             </button>
@@ -237,7 +237,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
           <div className="flex items-center gap-2 pt-1">
             <button
               onClick={handleSaveEdit}
-              className="text-xs font-medium px-3 py-1.5 rounded-lg bg-neutral-800 dark:bg-[#f0efed] text-white dark:text-[#0b0b0c] active:opacity-80 transition-opacity"
+              className="text-xs font-medium px-3 py-1.5 rounded-lg bg-neutral-800 dark:bg-[#f0efed] text-white dark:text-background active:opacity-80 transition-opacity"
             >
               Save
             </button>
@@ -384,7 +384,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
                     <button
                       onClick={handleSaveEdit}
                       disabled={!editName.trim()}
-                      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-neutral-800 dark:bg-[#f0efed] text-white dark:text-[#0b0b0c] disabled:opacity-40 active:opacity-80 transition-opacity"
+                      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-neutral-800 dark:bg-[#f0efed] text-white dark:text-background disabled:opacity-40 active:opacity-80 transition-opacity"
                     >
                       Save
                     </button>

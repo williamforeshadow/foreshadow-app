@@ -1,7 +1,6 @@
 'use client';
 
 import { memo, useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useAuth } from '@/lib/authContext';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
@@ -14,13 +13,41 @@ import { ProjectDetailPanel, AttachmentLightbox } from './projects';
 import { TaskRow, TaskListHeader } from '@/components/tasks/TaskRow';
 import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { taskPath } from '@/src/lib/links';
+
+const OPEN_TASK_CLEAR_SENTINEL = '__clear_open_task__';
 
 interface Assignee {
   user_id: string;
   name: string;
   avatar: string | null;
+  role?: string | null;
+}
+
+interface RawAssignmentTask extends Record<string, unknown> {
+  task_id: string;
+  id?: string | null;
+  title?: string | null;
+  template_name?: string | null;
+  description?: Project['description'];
+  status?: string | null;
+  priority?: string | null;
+  department_id?: string | null;
+  department_name?: string | null;
+  scheduled_date?: string | null;
+  scheduled_time?: string | null;
+  assigned_users?: Assignee[] | null;
+  bin_id?: string | null;
+  bin_name?: string | null;
+  is_binned?: boolean | null;
+  comment_count?: number | string | null;
+  reservation_id?: string | null;
+  property_name?: string | null;
+  template_id?: string | null;
+  form_metadata?: Record<string, unknown> | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 interface UnifiedItem {
@@ -42,13 +69,30 @@ interface UnifiedItem {
   // FK to the linked reservation when present. Drives the small "key"
   // badge next to the row title in <TaskRow> via KeyAffordance.
   reservation_id: string | null;
-  raw: any;
+  raw: RawAssignmentTask;
 }
 
 interface DateGroup {
   label: string;
   sublabel?: string;
   items: UnifiedItem[];
+}
+
+function getRawTaskId(raw: RawAssignmentTask): string {
+  return raw.task_id || raw.id || '';
+}
+
+function buildEditingFields(raw: RawAssignmentTask): ProjectFormFields {
+  return {
+    title: raw.title || raw.template_name || 'Task',
+    description: raw.description || null,
+    status: raw.status || 'not_started',
+    priority: raw.priority || 'medium',
+    assigned_staff: (raw.assigned_users || []).map((u: Assignee) => u.user_id),
+    department_id: raw.department_id || '',
+    scheduled_date: raw.scheduled_date || '',
+    scheduled_time: raw.scheduled_time || '',
+  };
 }
 
 interface MyAssignmentsWindowProps {
@@ -58,20 +102,43 @@ interface MyAssignmentsWindowProps {
 
 function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { departments: allDepts } = useDepartments();
-  const [rawData, setRawData] = useState<{ tasks: any[]; projects: any[] } | null>(null);
+  const [rawData, setRawData] = useState<{ tasks: RawAssignmentTask[]; projects: unknown[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [selectedItem, setSelectedItem] = useState<UnifiedItem | null>(null);
+  const openTaskParam = searchParams?.get('openTask') ?? null;
+  const pendingOpenTaskParamRef = useRef<string | null>(null);
+
+  const setOpenTaskParam = useCallback((taskId: string | null) => {
+    const params = new URLSearchParams(searchParams?.toString());
+    if (taskId) {
+      params.set('openTask', taskId);
+    } else {
+      params.delete('openTask');
+    }
+    const query = params.toString();
+    router.replace(query ? `/assignments?${query}` : '/assignments', { scroll: false });
+  }, [router, searchParams]);
+
+  const closeSelectedItem = useCallback(() => {
+    pendingOpenTaskParamRef.current = openTaskParam
+      ? OPEN_TASK_CLEAR_SENTINEL
+      : null;
+    setSelectedItem(null);
+    setEditingFields(null);
+    setStaffOpen(false);
+    setNewComment('');
+    setOpenTaskParam(null);
+  }, [openTaskParam, setOpenTaskParam]);
 
   // Strict single-panel rule (both directions):
   //   global → local: close our local panel when context overlays open
   //   local → global: call closeGlobals() before opening our panel so it
   //                   doesn't render behind a still-open context overlay.
-  const closeGlobals = useExclusiveDetailPanelHost(() =>
-    setSelectedItem(null)
-  );
+  const closeGlobals = useExclusiveDetailPanelHost(closeSelectedItem);
 
   // Detail panel state (mirrors TasksWindow pattern)
   const [editingFields, setEditingFields] = useState<ProjectFormFields | null>(null);
@@ -88,6 +155,20 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
   const attachmentsHook = useProjectAttachments({ currentUser });
   const timeTrackingHook = useProjectTimeTracking({ currentUser });
   const binsHook = useProjectBins({ currentUser });
+
+  const openAssignmentItem = useCallback(
+    (item: UnifiedItem, { syncUrl = true }: { syncUrl?: boolean } = {}) => {
+      const id = getRawTaskId(item.raw);
+      closeGlobals();
+      setEditingFields(buildEditingFields(item.raw));
+      setSelectedItem(item);
+      if (syncUrl && id) {
+        pendingOpenTaskParamRef.current = id;
+        setOpenTaskParam(id);
+      }
+    },
+    [closeGlobals, setOpenTaskParam]
+  );
 
   useEffect(() => {
     editingFieldsRef.current = editingFields;
@@ -129,7 +210,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
   }, [taskTemplates]);
 
   // Update selectedItem.raw locally for instant UI feedback
-  const updateSelectedRaw = useCallback((patch: Record<string, any>) => {
+  const updateSelectedRaw = useCallback((patch: Record<string, unknown>) => {
     setSelectedItem(prev => {
       if (!prev) return prev;
       return { ...prev, raw: { ...prev.raw, ...patch } };
@@ -143,12 +224,16 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
     setError(null);
     try {
       const response = await fetch(`/api/my-assignments?user_id=${currentUser.id}`);
-      const result = await response.json();
+      const result = await response.json() as {
+        error?: string;
+        tasks?: RawAssignmentTask[];
+        projects?: unknown[];
+      };
       if (!response.ok) throw new Error(result.error || 'Failed to fetch assignments');
       setRawData({ tasks: result.tasks || [], projects: result.projects || [] });
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error fetching assignments:', err);
-      setError(err.message);
+      setError(err instanceof Error ? err.message : 'Failed to fetch assignments');
     } finally {
       setLoading(false);
     }
@@ -174,7 +259,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
         department_name: task.department_name || null,
         scheduled_date: task.scheduled_date,
         scheduled_time: task.scheduled_time,
-        assignees: (task.assigned_users || []).map((u: any) => ({
+        assignees: (task.assigned_users || []).map((u: Assignee) => ({
           user_id: u.user_id,
           name: u.name || 'Unknown',
           avatar: u.avatar || null,
@@ -189,6 +274,53 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
     }
     return result;
   }, [rawData]);
+
+  const selectedTaskIdForUrl = selectedItem ? getRawTaskId(selectedItem.raw) : null;
+  const selectedItemKey = selectedItem?.key ?? null;
+
+  useEffect(() => {
+    const pendingOpenTaskParam = pendingOpenTaskParamRef.current;
+
+    if (pendingOpenTaskParam === OPEN_TASK_CLEAR_SENTINEL) {
+      if (!openTaskParam) {
+        pendingOpenTaskParamRef.current = null;
+      }
+      return;
+    }
+
+    if (!openTaskParam || loading || !rawData) return;
+
+    if (pendingOpenTaskParam) {
+      if (openTaskParam === pendingOpenTaskParam) {
+        pendingOpenTaskParamRef.current = null;
+      } else if (selectedTaskIdForUrl === pendingOpenTaskParam) {
+        return;
+      }
+    }
+
+    const match = items.find((item) => {
+      const id = getRawTaskId(item.raw);
+      return id === openTaskParam;
+    });
+
+    if (!match) {
+      setOpenTaskParam(null);
+      return;
+    }
+
+    if (selectedItemKey !== match.key) {
+      openAssignmentItem(match, { syncUrl: false });
+    }
+  }, [
+    openTaskParam,
+    loading,
+    rawData,
+    items,
+    selectedItemKey,
+    selectedTaskIdForUrl,
+    openAssignmentItem,
+    setOpenTaskParam,
+  ]);
 
   // Group by date
   const { groups, openCount } = useMemo(() => {
@@ -265,17 +397,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
   useEffect(() => {
     if (selectedItem) {
       const raw = selectedItem.raw;
-      setEditingFields({
-        title: raw.title || raw.template_name || 'Task',
-        description: raw.description || null,
-        status: raw.status || 'not_started',
-        priority: raw.priority || 'medium',
-        assigned_staff: (raw.assigned_users || []).map((u: any) => u.user_id),
-        department_id: raw.department_id || '',
-        scheduled_date: raw.scheduled_date || '',
-        scheduled_time: raw.scheduled_time || '',
-      });
-      const taskId = raw.task_id || raw.id;
+      const taskId = getRawTaskId(raw);
       const entityType = selectedItem.source === 'task' ? 'task' : 'project';
       commentsHook.fetchProjectComments(taskId, entityType);
       attachmentsHook.fetchProjectAttachments(taskId, entityType);
@@ -328,7 +450,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
     const fields = directFields ?? editingFieldsRef.current;
     if (!fields) return;
     const raw = selectedItem.raw;
-    const taskId = raw.task_id || raw.id;
+    const taskId = getRawTaskId(raw);
 
     const oldAssignees = (raw.assigned_users || [])
       .map((u: Assignee) => u.user_id)
@@ -441,7 +563,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
 
   const handleTemplateChange = useCallback(async (templateId: string | null) => {
     if (!selectedItem) return;
-    const taskId = selectedItem.raw.task_id || selectedItem.raw.id;
+    const taskId = getRawTaskId(selectedItem.raw);
     const templateName = templateId
       ? availableTemplates.find(t => t.id === templateId)?.name || null
       : null;
@@ -463,7 +585,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
 
   const handlePropertyChange = useCallback(async (_propertyId: string | null, propertyName: string | null) => {
     if (!selectedItem) return;
-    const taskId = selectedItem.raw.task_id || selectedItem.raw.id;
+    const taskId = getRawTaskId(selectedItem.raw);
     updateSelectedRaw({ property_name: propertyName || null });
     try {
       await fetch('/api/update-task-fields', {
@@ -479,7 +601,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
 
   const handleSaveTaskForm = useCallback(async (formData: Record<string, unknown>) => {
     if (!selectedItem) return;
-    const taskId = selectedItem.raw.task_id || selectedItem.raw.id;
+    const taskId = getRawTaskId(selectedItem.raw);
     try {
       await fetch('/api/save-task-form', {
         method: 'POST',
@@ -492,7 +614,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
   }, [selectedItem]);
 
   const itemAsProject: Project | null = selectedItem ? {
-    id: selectedItem.raw.task_id || selectedItem.raw.id,
+    id: getRawTaskId(selectedItem.raw),
     property_name: selectedItem.raw.property_name || null,
     bin_id: selectedItem.raw.bin_id || null,
     is_binned: selectedItem.raw.is_binned ?? false,
@@ -508,9 +630,14 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
     scheduled_time: selectedItem.raw.scheduled_time || null,
     reservation_id: selectedItem.raw.reservation_id || null,
     form_metadata: selectedItem.raw.form_metadata || undefined,
-    project_assignments: (selectedItem.raw.assigned_users || []).map((u: any) => ({
+    project_assignments: (selectedItem.raw.assigned_users || []).map((u: Assignee) => ({
       user_id: u.user_id,
-      user: { id: u.user_id, name: u.name, avatar: u.avatar, role: u.role }
+      user: {
+        id: u.user_id,
+        name: u.name,
+        avatar: u.avatar || undefined,
+        role: u.role || undefined,
+      }
     })),
     created_at: selectedItem.raw.created_at || '',
     updated_at: selectedItem.raw.updated_at || '',
@@ -602,10 +729,9 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
                               isLast={idx === group.items.length - 1}
                               onClick={() => {
                                 if (isSelected) {
-                                  setSelectedItem(null);
+                                  closeSelectedItem();
                                 } else {
-                                  closeGlobals();
-                                  setSelectedItem(item);
+                                  openAssignmentItem(item);
                                 }
                               }}
                               showBinPill
@@ -643,13 +769,13 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
             allProperties={allProperties}
             savingEdit={false}
             onSave={handleSaveFields}
-            onDelete={() => { setSelectedItem(null); fetchAssignments(); }}
-            onClose={() => setSelectedItem(null)}
+            onDelete={() => { closeSelectedItem(); fetchAssignments(); }}
+            onClose={closeSelectedItem}
             onOpenInPage={
               itemAsProject
                 ? () => {
                     const id = itemAsProject.id;
-                    setSelectedItem(null);
+                    closeSelectedItem();
                     router.push(taskPath(id));
                   }
                 : undefined
@@ -670,7 +796,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
             postingComment={commentsHook.postingComment}
             onPostComment={async () => {
               if (selectedItem && newComment.trim()) {
-                const taskId = raw.task_id || raw.id;
+                const taskId = getRawTaskId(raw);
                 const entityType = selectedItem.source === 'task' ? 'task' : 'project';
                 await commentsHook.postProjectComment(taskId, newComment, entityType);
                 setNewComment('');
@@ -682,7 +808,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
             attachmentInputRef={attachmentsHook.attachmentInputRef}
             onAttachmentUpload={(e) => {
               if (selectedItem) {
-                const taskId = raw.task_id || raw.id;
+                const taskId = getRawTaskId(raw);
                 const entityType = selectedItem.source === 'task' ? 'task' : 'project';
                 attachmentsHook.handleAttachmentUpload(e, taskId, entityType);
               }
@@ -693,7 +819,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
             formatTime={timeTrackingHook.formatTime}
             onStartTimer={() => {
               if (selectedItem) {
-                const taskId = raw.task_id || raw.id;
+                const taskId = getRawTaskId(raw);
                 const entityType = selectedItem.source === 'task' ? 'task' : 'project';
                 timeTrackingHook.startProjectTimer(taskId, entityType);
               }
@@ -704,7 +830,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
             bins={binsHook.bins}
             onBinChange={async (binId) => {
               if (!selectedItem) return;
-              const taskId = selectedItem.raw.task_id || selectedItem.raw.id;
+              const taskId = getRawTaskId(selectedItem.raw);
               updateSelectedRaw({ bin_id: binId || null });
               try {
                 await fetch('/api/update-task-fields', {
@@ -720,7 +846,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
             }}
             onIsBinnedChange={async (isBinned) => {
               if (!selectedItem) return;
-              const taskId = selectedItem.raw.task_id || selectedItem.raw.id;
+              const taskId = getRawTaskId(selectedItem.raw);
               const patch: Record<string, unknown> = { is_binned: isBinned };
               if (!isBinned) patch.bin_id = null;
               updateSelectedRaw(patch);

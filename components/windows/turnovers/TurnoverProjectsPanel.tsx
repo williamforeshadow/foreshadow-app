@@ -80,7 +80,7 @@ function ProjectCard({
 
   return (
     <Card
-      className="cursor-pointer hover:shadow-md transition-all bg-white dark:bg-neutral-900 border"
+      className="cursor-pointer hover:shadow-md transition-all bg-white dark:bg-card border"
       onClick={onClick}
     >
       <CardHeader className="pb-2">

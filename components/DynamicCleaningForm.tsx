@@ -250,7 +250,7 @@ function DynamicCleaningForm({
               <div className="w-full border-t border-neutral-200 dark:border-neutral-700" />
             </div>
             <div className="relative flex justify-center">
-              <span className="bg-white dark:bg-neutral-900 px-3 text-sm text-neutral-500 dark:text-neutral-400">
+              <span className="bg-white dark:bg-card px-3 text-sm text-neutral-500 dark:text-neutral-400">
                 {field.label}
               </span>
             </div>

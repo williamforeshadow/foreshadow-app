@@ -76,7 +76,7 @@ function ViewModeToggle({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 z-50 rounded-xl glass-card bg-white/[0.97] dark:bg-neutral-900/[0.98] border border-white/30 dark:border-white/15 min-w-[140px]">
+        <div className="absolute right-0 top-full mt-1.5 z-50 rounded-xl glass-card bg-white/[0.97] dark:bg-card/[0.98] border border-white/30 dark:border-white/15 min-w-[140px]">
           <div className="relative overflow-hidden rounded-xl glass-sheen flex flex-col gap-0.5 p-1.5">
             {ALL_VIEW_MODES.map((mode) => (
               <button
