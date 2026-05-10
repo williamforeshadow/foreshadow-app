@@ -576,46 +576,6 @@ export function createDefaultAutomationConfig(): AutomationConfig {
 }
 
 // ============================================================================
-// Messaging Types
-// ============================================================================
-
-export interface Channel {
-  id: string;
-  name: string;
-  description?: string;
-  type: string;                           // 'general', 'integration', 'property'
-  integration_source?: string | null;     // 'conduit', null, etc.
-  created_by?: string | null;
-  created_at: string;
-  updated_at: string;
-  unread_count?: number;                  // computed client-side
-  last_message_at?: string | null;        // for sorting
-}
-
-export type MessageSenderType = 'user' | 'bot' | 'integration';
-export type MessageActionStatus = 'pending' | 'approved' | 'rejected';
-
-export interface ChatMessage {
-  id: string;
-  channel_id: string;
-  sender_type: MessageSenderType;
-  sender_id?: string | null;
-  sender_name?: string | null;
-  content: string;
-  metadata?: Record<string, unknown>;
-  requires_action: boolean;
-  action_status?: MessageActionStatus | null;
-  action_by?: string | null;
-  action_at?: string | null;
-  edited_content?: string | null;
-  created_at: string;
-  updated_at: string;
-  // Joined fields
-  sender?: User | null;
-  action_user?: User | null;
-}
-
-// ============================================================================
 // Slack Automation Types
 // ============================================================================
 

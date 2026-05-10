@@ -876,7 +876,7 @@ function ProjectCardContent({
               {assignees.slice(0, 3).map((user, index) => (
                 <div
                   key={user.id}
-                  className="bg-neutral-200 dark:bg-neutral-700 ring-2 ring-white dark:ring-[#131315]"
+                  className="bg-neutral-200 dark:bg-neutral-700 ring-2 ring-white dark:ring-[#222228]"
                   style={{
                     width: 21,
                     height: 21,
@@ -912,7 +912,7 @@ function ProjectCardContent({
               ))}
               {assignees.length > 3 && (
                 <div
-                  className="bg-neutral-300 dark:bg-neutral-600 ring-2 ring-white dark:ring-[#131315] text-neutral-500 dark:text-[#a09e9a]"
+                  className="bg-neutral-300 dark:bg-neutral-600 ring-2 ring-white dark:ring-[#222228] text-neutral-500 dark:text-[#a09e9a]"
                   style={{
                     width: 21,
                     height: 21,

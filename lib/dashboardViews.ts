@@ -1,11 +1,10 @@
-export type DashboardView = 'turnovers' | 'timeline' | 'projects' | 'tasks' | 'messages';
+export type DashboardView = 'turnovers' | 'timeline' | 'projects' | 'tasks';
 
 export const DASHBOARD_VIEW_LABELS: Record<DashboardView, string> = {
   turnovers: 'Turnovers',
   timeline: 'Timeline',
   projects: 'Bins',
   tasks: 'Tasks',
-  messages: 'Messages',
 };
 
 export const DASHBOARD_VIEWS: DashboardView[] = [
@@ -13,7 +12,6 @@ export const DASHBOARD_VIEWS: DashboardView[] = [
   'timeline',
   'projects',
   'tasks',
-  'messages',
 ];
 
 export const DASHBOARD_VIEW_STORAGE_KEY = 'dashboard:lastView';
@@ -23,7 +21,6 @@ export function isDashboardView(v: string | null | undefined): v is DashboardVie
     v === 'turnovers' ||
     v === 'timeline' ||
     v === 'projects' ||
-    v === 'tasks' ||
-    v === 'messages'
+    v === 'tasks'
   );
 }

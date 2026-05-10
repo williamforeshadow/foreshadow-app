@@ -71,14 +71,14 @@
   /* Dashboard Timeline dark-mode audit ramp. These are intentionally
      page-scoped tokens so the Timeline tab can become the reference dark
      hierarchy before the rest of the dashboard follows it. */
-  --timeline-surface-0: #0F0F12;
-  --timeline-surface-1: #111114;
-  --timeline-surface-2: #17171B;
-  --timeline-surface-3: #1E1E24;
-  --timeline-surface-4: #24242B;
-  --timeline-border-subtle: rgba(255, 255, 255, 0.065);
-  --timeline-border-strong: rgba(255, 255, 255, 0.12);
-  --timeline-hover: rgba(255, 255, 255, 0.07);
+  --timeline-surface-0: #1A1A1F;
+  --timeline-surface-1: #1A1A1F;
+  --timeline-surface-2: #1A1A1F;
+  --timeline-surface-3: #222228;
+  --timeline-surface-4: #2A2A32;
+  --timeline-border-subtle: rgba(255, 255, 255, 0.075);
+  --timeline-border-strong: rgba(255, 255, 255, 0.14);
+  --timeline-hover: rgba(255, 255, 255, 0.08);
 
   /* Turnover / reservation purple — single source of truth for the
      "active turnover" surfaces: TurnoverCards (active card), Timeline

@@ -19,7 +19,7 @@
 }
 
 :global(.dark) .board {
-  background: transparent;
+  background: #1A1A1F;
 }
 
 /* Doodle texture overlay (rendered as a div in the component) */
@@ -206,8 +206,8 @@
 }
 
 :global(.dark) .card {
-  background: #121214;
-  border-color: rgba(255, 255, 255, 0.07);
+  background: #222228;
+  border-color: rgba(255, 255, 255, 0.1);
   box-shadow: none;
 }
 
@@ -226,16 +226,16 @@
 }
 
 :global(.dark) .cardStatusNotStarted {
-  background: linear-gradient(rgba(167, 139, 250, 0.05), rgba(167, 139, 250, 0.05)), #121214;
+  background: linear-gradient(rgba(167, 139, 250, 0.05), rgba(167, 139, 250, 0.05)), #222228;
 }
 :global(.dark) .cardStatusInProgress {
-  background: linear-gradient(rgba(99, 102, 241, 0.05), rgba(99, 102, 241, 0.05)), #121214;
+  background: linear-gradient(rgba(99, 102, 241, 0.05), rgba(99, 102, 241, 0.05)), #222228;
 }
 :global(.dark) .cardStatusPaused {
-  background: linear-gradient(rgba(139, 127, 168, 0.05), rgba(139, 127, 168, 0.05)), #121214;
+  background: linear-gradient(rgba(139, 127, 168, 0.05), rgba(139, 127, 168, 0.05)), #222228;
 }
 :global(.dark) .cardStatusComplete {
-  background: linear-gradient(rgba(76, 72, 105, 0.05), rgba(76, 72, 105, 0.05)), #121214;
+  background: linear-gradient(rgba(76, 72, 105, 0.05), rgba(76, 72, 105, 0.05)), #222228;
 }
 
 .card:hover {
@@ -244,7 +244,7 @@
 }
 
 :global(.dark) .card:hover {
-  background: #151517;
+  background: #27272f;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
@@ -259,7 +259,7 @@
 
 :global(.dark) .cardDragging {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-  background: #171719;
+  background: #2A2A32;
 }
 
 /* Dim complete cards — content recedes, gradient stays */
@@ -588,7 +588,7 @@
 }
 
 :global(.dark) .selectionBar {
-  background: transparent;
+  background: #1A1A1F;
   border-bottom-color: rgba(255, 255, 255, 0.06);
 }
 

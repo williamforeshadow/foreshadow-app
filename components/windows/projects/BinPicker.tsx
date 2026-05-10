@@ -106,7 +106,7 @@ export function BinPicker({
 
   if (loadingBins) {
     return (
-      <div className="flex items-center justify-center h-full bg-white dark:bg-background">
+      <div className="flex items-center justify-center h-full bg-white dark:bg-card">
         <p className="text-neutral-500 dark:text-white/50">Loading bins...</p>
       </div>
     );
@@ -117,7 +117,7 @@ export function BinPicker({
     // entire palette below is dual-mode — historically this surface was
     // dark-only (white text + white/0.0X surfaces), which rendered as
     // invisible white-on-grey content against `bg-background` in light mode.
-    <div className="h-full flex flex-col bg-white dark:bg-background">
+    <div className="h-full flex flex-col bg-white dark:bg-card">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 dark:border-white/10 flex-shrink-0">
         <div>
@@ -151,7 +151,7 @@ export function BinPicker({
             className={cn(
               'group relative flex flex-col justify-between p-5 rounded-xl border transition-all duration-200 text-left min-h-[140px] cursor-pointer',
               'border-neutral-200 bg-neutral-100 hover:bg-neutral-200/70 hover:border-neutral-300',
-              'dark:border-white/10 dark:bg-white/[0.04] dark:backdrop-blur-md dark:hover:bg-white/[0.08] dark:hover:border-white/20',
+              'dark:border-white/10 dark:bg-white/[0.06] dark:backdrop-blur-md dark:hover:bg-white/[0.10] dark:hover:border-white/20',
               // Lift the card above the context-menu close overlay (z-10) so clicks
               // reach the dropdown. Without this, `backdrop-blur-md` creates a new
               // stacking context and the overlay ends up on top of the dropdown.
@@ -178,8 +178,8 @@ export function BinPicker({
 
             <div>
               <div className="flex items-center gap-2.5 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center">
-                  <svg className="w-4 h-4 text-amber-500 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-blue-500 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                   </svg>
                 </div>
@@ -228,7 +228,7 @@ export function BinPicker({
               className={cn(
                 'group relative flex flex-col justify-between p-5 rounded-xl border transition-all duration-200 text-left min-h-[140px] cursor-pointer',
                 'border-neutral-200 bg-neutral-100 hover:bg-neutral-200/70 hover:border-neutral-300',
-                'dark:border-white/10 dark:bg-white/[0.04] dark:backdrop-blur-md dark:hover:bg-white/[0.08] dark:hover:border-white/20',
+                'dark:border-white/10 dark:bg-white/[0.06] dark:backdrop-blur-md dark:hover:bg-white/[0.10] dark:hover:border-white/20',
                 // Same fix as above: lift the card above the close overlay
                 // while its context menu is open so the buttons are clickable.
                 contextMenuBinId === bin.id && 'z-20'
@@ -252,8 +252,8 @@ export function BinPicker({
 
               <div>
                 <div className="flex items-center gap-2.5 mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center">
-                    <svg className="w-4 h-4 text-blue-500 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-8 h-8 rounded-lg bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] flex items-center justify-center">
+                    <svg className="w-4 h-4 text-[var(--accent-3)] dark:text-[var(--accent-1)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                     </svg>
                   </div>
@@ -309,7 +309,7 @@ export function BinPicker({
           {!showCreateForm && (
             <button
               onClick={() => setShowCreateForm(true)}
-              className="flex flex-col items-center justify-center p-5 rounded-xl border border-dashed border-neutral-300 dark:border-white/10 bg-transparent hover:bg-neutral-100 hover:border-neutral-400 dark:hover:bg-white/[0.04] dark:hover:border-white/20 transition-all duration-200 min-h-[140px]"
+              className="flex flex-col items-center justify-center p-5 rounded-xl border border-dashed border-neutral-300 dark:border-white/10 bg-transparent dark:bg-white/[0.02] hover:bg-neutral-100 hover:border-neutral-400 dark:hover:bg-white/[0.06] dark:hover:border-white/20 transition-all duration-200 min-h-[140px]"
             >
               <div className="w-10 h-10 rounded-full bg-neutral-100 dark:bg-white/[0.06] flex items-center justify-center mb-2">
                 <svg className="w-5 h-5 text-neutral-400 dark:text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -323,7 +323,7 @@ export function BinPicker({
 
         {/* Inline Create Form */}
         {showCreateForm && (
-          <div className="mt-6 p-5 rounded-xl border border-neutral-200 bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:backdrop-blur-md max-w-md">
+          <div className="mt-6 p-5 rounded-xl border border-neutral-200 bg-neutral-100 dark:border-white/10 dark:bg-white/[0.06] dark:backdrop-blur-md max-w-md">
             <h4 className="text-sm font-semibold text-neutral-900 dark:text-white mb-3">New Sub-Bin</h4>
             <input
               autoFocus
@@ -332,7 +332,7 @@ export function BinPicker({
               value={newBinName}
               onChange={(e) => setNewBinName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
-              className="w-full px-3 py-2 rounded-lg bg-white border border-neutral-200 text-neutral-900 placeholder-neutral-400 dark:bg-white/[0.06] dark:border-white/10 dark:text-white dark:placeholder-white/30 text-sm outline-none focus:border-neutral-400 dark:focus:border-white/20 mb-2"
+              className="w-full px-3 py-2 rounded-lg bg-white border border-neutral-200 text-neutral-900 placeholder-neutral-400 dark:bg-white/[0.08] dark:border-white/10 dark:text-white dark:placeholder-white/30 text-sm outline-none focus:border-neutral-400 dark:focus:border-white/20 mb-2"
             />
             <input
               type="text"
@@ -340,7 +340,7 @@ export function BinPicker({
               value={newBinDescription}
               onChange={(e) => setNewBinDescription(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
-              className="w-full px-3 py-2 rounded-lg bg-white border border-neutral-200 text-neutral-900 placeholder-neutral-400 dark:bg-white/[0.06] dark:border-white/10 dark:text-white dark:placeholder-white/30 text-sm outline-none focus:border-neutral-400 dark:focus:border-white/20 mb-3"
+              className="w-full px-3 py-2 rounded-lg bg-white border border-neutral-200 text-neutral-900 placeholder-neutral-400 dark:bg-white/[0.08] dark:border-white/10 dark:text-white dark:placeholder-white/30 text-sm outline-none focus:border-neutral-400 dark:focus:border-white/20 mb-3"
             />
             <div className="flex items-center gap-2">
               <Button

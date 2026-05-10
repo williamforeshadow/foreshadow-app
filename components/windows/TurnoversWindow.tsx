@@ -133,16 +133,14 @@ function scheduleTaskToOverlay(
   };
 }
 
-function TurnoversWindowContent(_: TurnoversWindowProps) {
+function TurnoversWindowContent(props: TurnoversWindowProps) {
+  void props;
   const router = useRouter();
   const {
     response,
     error,
     loading,
-    viewMode,
-    setViewMode,
     filters,
-    sortBy,
     toggleFilter,
     clearAllFilters,
     getActiveFilterCount,
@@ -180,9 +178,17 @@ function TurnoversWindowContent(_: TurnoversWindowProps) {
   // leave a stale right-pane behind.
   useEffect(() => {
     if (!selectedCard) {
-      setSelectedTask(null);
+      let cancelled = false;
+      queueMicrotask(() => {
+        if (!cancelled) {
+          setSelectedTask(null);
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
     }
-  }, [selectedCard?.id]);
+  }, [selectedCard]);
 
   const handleOpenTask = useCallback(
     (task: ScheduleTask) => {
@@ -200,7 +206,7 @@ function TurnoversWindowContent(_: TurnoversWindowProps) {
   );
 
   return (
-    <div className="relative h-full overflow-hidden bg-white dark:bg-background">
+    <div className="relative h-full overflow-hidden bg-white dark:bg-card">
       {/* Left Panel — Cards. Always full-width; the detail panel below
           floats over the right 1/3 (overlay) instead of compressing the
           list, matching every other detail panel in the app. */}
@@ -215,38 +221,9 @@ function TurnoversWindowContent(_: TurnoversWindowProps) {
               getActiveFilterCount={getActiveFilterCount}
             />
 
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                Turnovers: {Array.isArray(response) ? response.length : 1} total
-              </p>
-              <div className="flex gap-1 p-1 rounded-xl bg-white/30 dark:bg-white/[0.06] backdrop-blur-sm border border-white/20 dark:border-white/10">
-                <button
-                  onClick={() => setViewMode('cards')}
-                  className={`px-3 py-1 text-xs font-medium rounded-lg transition-all duration-200 ${
-                    viewMode === 'cards'
-                      ? 'bg-white/70 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
-                      : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/30 dark:hover:bg-white/10'
-                  }`}
-                >
-                  Cards
-                </button>
-                <button
-                  onClick={() => setViewMode('json')}
-                  className={`px-3 py-1 text-xs font-medium rounded-lg transition-all duration-200 ${
-                    viewMode === 'json'
-                      ? 'bg-white/70 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
-                      : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/30 dark:hover:bg-white/10'
-                  }`}
-                >
-                  JSON
-                </button>
-              </div>
-            </div>
-
             <TurnoverCards
               data={Array.isArray(response) ? response : [response]}
               filters={filters}
-              sortBy={sortBy}
               onCardClick={(card: Turnover) => {
                 closeGlobals();
                 setSelectedTask(null);

@@ -24,7 +24,7 @@ export function TurnoverFilterBar({
   getActiveFilterCount,
 }: TurnoverFilterBarProps) {
   return (
-    <div className="glass-panel bg-white/40 dark:bg-white/[0.05] border border-white/30 dark:border-white/10 rounded-2xl p-4">
+    <div className="glass-panel bg-white/40 dark:bg-black/[0.10] border border-white/30 dark:border-white/10 rounded-2xl p-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           {/* Turnover Status Dropdown */}

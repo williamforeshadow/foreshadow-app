@@ -11,12 +11,11 @@ import type { Turnover } from '@/lib/types';
 interface TurnoverCardsProps {
   data: Turnover[] | null;
   filters: CleaningFilters;
-  sortBy: string;
   onCardClick: (card: Turnover) => void;
   compact?: boolean;
 }
 
-export default function TurnoverCards({ data, filters, sortBy, onCardClick, compact = false }: TurnoverCardsProps) {
+export default function TurnoverCards({ data, filters, onCardClick, compact = false }: TurnoverCardsProps) {
   // Track how many past turnovers to show per property
   const [pastCount, setPastCount] = useState<Record<string, number>>({});
 
@@ -201,6 +200,12 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
   const renderCard = (item: Turnover, isFirstInRow: boolean, isPast: boolean) => {
     const checkIn = item.check_in ? new Date(item.check_in) : null;
     const isInPlay = isFirstInRow && checkIn && now >= checkIn && !isPast;
+    const dateBadgeClass = isInPlay
+      ? 'text-white border-white/25 bg-white/20 dark:bg-white/[0.18]'
+      : 'text-muted-foreground/60 border-white/20 dark:border-white/15 bg-white/25 dark:bg-white/[0.08]';
+    const dateIconClass = isInPlay
+      ? 'text-white'
+      : 'text-neutral-600 dark:text-neutral-400';
 
     return (
       <Card
@@ -236,8 +241,8 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
             <Badge
               className={`px-2 py-0.5 text-[11px] backdrop-blur-sm shrink-0 border ${
                 item.occupancy_status === 'occupied'
-                  ? 'bg-amber-100/70 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-300/50 dark:border-amber-500/30'
-                  : 'bg-emerald-100/70 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-300/50 dark:border-emerald-500/30'
+                  ? 'bg-amber-100/80 dark:bg-amber-500/25 text-amber-800 dark:text-white border-amber-300/60 dark:border-amber-400/40'
+                  : 'bg-blue-100/80 dark:bg-blue-500/25 text-blue-800 dark:text-white border-blue-300/60 dark:border-blue-400/40'
               }`}
             >
               {item.occupancy_status === 'occupied' ? 'Occupied' : 'Checked out'}
@@ -280,13 +285,13 @@ export default function TurnoverCards({ data, filters, sortBy, onCardClick, comp
         })()}
 
         {/* 5) Check-in (this reservation) → Check-out (this reservation) */}
-        <div className="flex w-full justify-between text-xs text-muted-foreground/60">
-          <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-white/20 dark:border-white/15 bg-white/25 dark:bg-white/[0.08] backdrop-blur-sm px-2 py-1 ${!item.check_in ? 'opacity-40' : ''}`}>
-            <LogIn className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400" />
+        <div className="flex w-full justify-between text-xs">
+          <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border backdrop-blur-sm px-2 py-1 ${dateBadgeClass} ${!item.check_in ? 'opacity-40' : ''}`}>
+            <LogIn className={`w-3.5 h-3.5 ${dateIconClass}`} />
             <span>{formatDate(item.check_in) || 'In'}</span>
           </div>
-          <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border border-white/20 dark:border-white/15 bg-white/25 dark:bg-white/[0.08] backdrop-blur-sm px-2 py-1 ${!item.check_out ? 'opacity-40' : ''}`}>
-            <LogOut className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400" />
+          <div className={`flex h-[27px] items-center justify-center gap-1 rounded-xl border backdrop-blur-sm px-2 py-1 ${dateBadgeClass} ${!item.check_out ? 'opacity-40' : ''}`}>
+            <LogOut className={`w-3.5 h-3.5 ${dateIconClass}`} />
             <span>{formatDate(item.check_out) || 'Out'}</span>
           </div>
         </div>

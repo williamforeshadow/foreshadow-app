@@ -1326,7 +1326,7 @@ export default function TimelineWindow({
 
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="h-full flex items-center justify-center bg-white dark:bg-card">
         <div className="text-center py-12 text-neutral-500 dark:text-neutral-400">
           Loading timeline...
         </div>
@@ -1335,7 +1335,7 @@ export default function TimelineWindow({
   }
 
   return (
-    <div className="h-full flex flex-col relative">
+    <div className="h-full flex flex-col relative bg-white dark:bg-card">
       {/* Header with navigation - fixed at top */}
       <div className="flex-shrink-0 px-4 py-3 bg-white dark:bg-[var(--timeline-surface-2)] border-b border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)]">
         <div className="flex items-center gap-4 mb-2">

@@ -16,7 +16,6 @@ import TimelineWindow from '@/components/windows/TimelineWindow';
 import TurnoversWindow from '@/components/windows/TurnoversWindow';
 import ProjectsWindow from '@/components/windows/ProjectsWindow';
 import TasksWindow from '@/components/windows/TasksWindow';
-import MessagesWindow from '@/components/windows/MessagesWindow';
 import { AiChat } from '@/components/AiChat';
 import { ReservationDetailOverlay } from '@/components/reservations/ReservationDetailOverlay';
 import { ContextTaskDetailOverlay } from '@/components/reservations/ContextTaskDetailOverlay';
@@ -36,6 +35,7 @@ export default function DesktopApp() {
     if (typeof window !== 'undefined') {
       const fromUrl = new URLSearchParams(window.location.search).get('view');
       if (isDashboardView(fromUrl)) return fromUrl;
+      if (fromUrl) return 'turnovers';
       try {
         const stored = window.localStorage.getItem(DASHBOARD_VIEW_STORAGE_KEY);
         if (isDashboardView(stored)) return stored;
@@ -49,6 +49,9 @@ export default function DesktopApp() {
   useEffect(() => {
     if (isDashboardView(urlView) && urlView !== activeView) {
       setActiveView(urlView);
+    } else if (urlView && !isDashboardView(urlView)) {
+      setActiveView('turnovers');
+      router.replace('/?view=turnovers', { scroll: false });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlView]);
@@ -65,9 +68,9 @@ export default function DesktopApp() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const live = new URLSearchParams(window.location.search).get('view');
-    if (live == null) {
+    if (live == null || !isDashboardView(live)) {
       const params = new URLSearchParams(window.location.search);
-      params.set('view', activeView);
+      params.set('view', live == null ? activeView : 'turnovers');
       router.replace(`/?${params.toString()}`, { scroll: false });
     }
     // Run once on mount only.
@@ -96,7 +99,7 @@ export default function DesktopApp() {
 
       <div className="flex-1 relative overflow-hidden bg-background">
         {!isSidebarOpen && (
-          <SidebarToggleButton className="absolute left-3 top-3 z-50 bg-white/95 shadow-sm ring-1 ring-neutral-200 dark:bg-[var(--timeline-surface-1)] dark:ring-[var(--timeline-border-subtle)]" />
+          <SidebarToggleButton className="absolute left-3 top-3 z-50 bg-white/95 shadow-sm ring-1 ring-neutral-200 dark:bg-[#111114] dark:ring-[var(--timeline-border-subtle)]" />
         )}
 
         <div className={`absolute inset-0 ${activeView === 'turnovers' ? '' : 'hidden'}`}>
@@ -117,10 +120,6 @@ export default function DesktopApp() {
             users={users}
             isActive={activeView === 'tasks'}
           />
-        </div>
-
-        <div className={`absolute inset-0 ${activeView === 'messages' ? '' : 'hidden'}`}>
-          <MessagesWindow currentUser={currentUser} users={users} />
         </div>
 
         <AiChat />

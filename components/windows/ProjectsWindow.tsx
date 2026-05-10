@@ -722,10 +722,10 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     // `relative` so the detail overlay below anchors here. List always
     // takes full width — when a project is expanded the panel hovers
     // over the right 1/3 (matches Tasks / Properties / Timeline).
-    <div className="relative h-full overflow-hidden glass-bg-neutral">
+    <div className="relative h-full overflow-hidden bg-white dark:bg-card">
       {/* Left Panel - Kanban Board */}
       <div className="w-full h-full flex flex-col">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/20 dark:border-white/10 glass-panel bg-white/40 dark:bg-white/[0.05] flex-shrink-0 relative z-20">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/20 dark:border-white/10 glass-panel bg-white/40 dark:bg-white/[0.06] flex-shrink-0 relative z-20">
           <div className="flex items-center gap-3">
             <button
               onClick={handleBackToBins}

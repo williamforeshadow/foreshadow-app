@@ -15,12 +15,24 @@ import {
   MobileDrawer,
   type MobileTab 
 } from '@/components/mobile';
-import MessagesWindow from '@/components/windows/MessagesWindow';
-import type { Project, Task, TaskTemplate, PropertyOption } from '@/lib/types';
+import type { Project, ProjectFormFields, Task, TaskTemplate, PropertyOption } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 import { ReservationDetailOverlay } from '@/components/reservations/ReservationDetailOverlay';
 import { ContextTaskDetailOverlay } from '@/components/reservations/ContextTaskDetailOverlay';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
+
+function toTaskStatus(status: string | undefined): Task['status'] | undefined {
+  if (
+    status === 'contingent' ||
+    status === 'not_started' ||
+    status === 'in_progress' ||
+    status === 'paused' ||
+    status === 'complete'
+  ) {
+    return status;
+  }
+  return undefined;
+}
 
 export default function MobileApp() {
   const router = useRouter();
@@ -37,7 +49,7 @@ export default function MobileApp() {
     saveTaskForm,
   } = useTurnovers();
 
-  const binsHook = useProjectBins({ currentUser: currentUser as any });
+  const binsHook = useProjectBins({ currentUser });
 
   // Fetch properties list (replaces projectsHook.allProperties)
   const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
@@ -84,6 +96,15 @@ export default function MobileApp() {
   const taskAsProject = useMemo((): Project | null => {
     if (!mobileSelectedTask) return null;
     const task = mobileSelectedTask;
+    const status: Project['status'] =
+      task.status === 'contingent' ? 'not_started' : task.status;
+    const priority: Project['priority'] =
+      task.priority === 'urgent' ||
+      task.priority === 'high' ||
+      task.priority === 'medium' ||
+      task.priority === 'low'
+        ? task.priority
+        : 'medium';
     return {
       id: task.task_id,
       property_id: null,
@@ -93,9 +114,9 @@ export default function MobileApp() {
       template_id: task.template_id ?? null,
       template_name: task.template_name ?? null,
       title: task.title || task.template_name || 'Task',
-      description: task.description as any || null,
-      status: (task.status as any) || 'not_started',
-      priority: (task.priority as any) || 'medium',
+      description: task.description || null,
+      status,
+      priority,
       assigned_user_ids: task.assigned_users?.map(u => u.user_id) || [],
       project_assignments: task.assigned_users?.map(u => ({
         user_id: u.user_id,
@@ -122,8 +143,9 @@ export default function MobileApp() {
     return taskTemplates[cacheKey] || taskTemplates[templateId] || null;
   }, [mobileSelectedTask, taskTemplates]);
 
-  const handleSaveTaskAsProject = useCallback(async (projectId: string, fields: any) => {
+  const handleSaveTaskAsProject = useCallback(async (projectId: string, fields: Partial<ProjectFormFields>) => {
     const updates: Record<string, unknown> = {};
+    const nextStatus = toTaskStatus(fields.status);
     if (fields.title !== undefined) updates.title = fields.title;
     if (fields.description !== undefined) updates.description = fields.description;
     if (fields.priority !== undefined) updates.priority = fields.priority;
@@ -134,8 +156,8 @@ export default function MobileApp() {
     if (fields.assigned_staff !== undefined) {
       await updateTaskAssignment(projectId, fields.assigned_staff);
     }
-    if (fields.status !== undefined) {
-      await updateTaskAction(projectId, fields.status);
+    if (nextStatus !== undefined) {
+      await updateTaskAction(projectId, nextStatus);
     }
     if (Object.keys(updates).length > 0) {
       await fetch('/api/update-task-fields', {
@@ -152,7 +174,7 @@ export default function MobileApp() {
         ...(fields.description !== undefined && { description: fields.description }),
         ...(fields.priority !== undefined && { priority: fields.priority }),
         ...(fields.department_id !== undefined && { department_id: fields.department_id || null }),
-        ...(fields.status !== undefined && { status: fields.status }),
+        ...(nextStatus !== undefined && { status: nextStatus }),
         ...(fields.scheduled_date !== undefined && { scheduled_date: fields.scheduled_date || null }),
         ...(fields.scheduled_time !== undefined && { scheduled_time: fields.scheduled_time || null }),
       };
@@ -206,7 +228,7 @@ export default function MobileApp() {
     }
   }, [mobileSelectedProject?.id]);
 
-  const handleSaveProject = useCallback(async (projectId: string, fields: any) => {
+  const handleSaveProject = useCallback(async (projectId: string, fields: Partial<ProjectFormFields>) => {
     try {
       const payload: Record<string, unknown> = {};
       if (fields.title !== undefined) payload.title = fields.title;
@@ -272,21 +294,23 @@ export default function MobileApp() {
       >
         {mobileView === 'assignments' && (
           <MobileMyAssignmentsView
-            onTaskClick={async (task: any) => {
+            onTaskClick={async (task: Task) => {
               const propName = task.property_name;
-              const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
-              if (task.template_id && !taskTemplates[cacheKey]) {
-                await fetchTaskTemplate(task.template_id, propName);
+              if (task.template_id) {
+                const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
+                if (!taskTemplates[cacheKey]) {
+                  await fetchTaskTemplate(task.template_id, propName);
+                }
               }
               closeGlobals();
               setMobileSelectedTask(task);
             }}
-            onProjectClick={async (project: any) => {
+            onProjectClick={async (project: Project) => {
               if (project.template_id) {
                 const propName = project.property_name;
                 const cacheKey = propName ? `${project.template_id}__${propName}` : project.template_id;
                 if (!taskTemplates[cacheKey]) {
-                  await fetchTaskTemplate(project.template_id, propName);
+                  await fetchTaskTemplate(project.template_id, propName || undefined);
                 }
               }
               closeGlobals();
@@ -307,11 +331,13 @@ export default function MobileApp() {
             onCardClick={() => {}}
             refreshTrigger={mobileRefreshTrigger}
             onSheetOpen={setHideNav}
-            onTaskClick={async (task: any) => {
+            onTaskClick={async (task: Task) => {
               const propName = task.property_name;
-              const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
-              if (task.template_id && !taskTemplates[cacheKey]) {
-                await fetchTaskTemplate(task.template_id, propName);
+              if (task.template_id) {
+                const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
+                if (!taskTemplates[cacheKey]) {
+                  await fetchTaskTemplate(task.template_id, propName);
+                }
               }
               closeGlobals();
               setMobileSelectedTask(task);
@@ -328,9 +354,6 @@ export default function MobileApp() {
           />
         )}
 
-        {mobileView === 'messages' && (
-          <MessagesWindow currentUser={currentUser} users={users} />
-        )}
       </MobileLayout>
 
       <MobileDrawer
