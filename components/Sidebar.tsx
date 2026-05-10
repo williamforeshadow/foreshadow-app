@@ -143,7 +143,7 @@ export default function Sidebar({
     propertyState,
     properties,
   } = useSidebar();
-  const { user, allUsers, role, canEditTemplates, switchUser } = useAuth();
+  const { user, role, loading, canEditTemplates, signOut } = useAuth();
   const kanbanTexture = useKanbanTexture();
 
   const roleColors: Record<string, string> = {
@@ -176,6 +176,10 @@ export default function Sidebar({
   const nestedInactiveClass =
     'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-[var(--sidebar-dark-hover)] dark:hover:text-white';
   const sectionMutedClass = 'text-neutral-500 dark:text-neutral-500';
+  const handleSignOut = async () => {
+    await signOut();
+    router.push('/login');
+  };
 
   return (
     <div
@@ -462,6 +466,13 @@ export default function Sidebar({
                   Edit Profile
                 </DropdownMenuItem>
 
+                <DropdownMenuItem onClick={handleSignOut}>
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6A2.25 2.25 0 005.25 5.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                  </svg>
+                  Sign Out
+                </DropdownMenuItem>
+
                 <div className="px-2 py-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-neutral-700 dark:text-neutral-300 flex items-center gap-2">
@@ -498,44 +509,23 @@ export default function Sidebar({
                   </div>
                 </div>
 
-                {allUsers.length > 1 && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <div className="px-3 py-2">
-                      <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2">Switch User</p>
-                      <div className="space-y-1 max-h-40 overflow-y-auto">
-                        {allUsers.map((u) => (
-                          <button
-                            key={u.id}
-                            type="button"
-                            onClick={() => switchUser(u.id)}
-                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left text-sm transition-colors ${
-                              u.id === user?.id
-                                ? 'bg-primary/10 text-primary'
-                                : 'hover:bg-neutral-100 dark:hover:bg-[rgba(255,255,255,0.06)]'
-                            }`}
-                          >
-                            <UserAvatar src={u.avatar} name={u.name} size="sm" />
-                            <div className="flex-1 min-w-0">
-                              <p className="truncate font-medium">{u.name}</p>
-                              <p className="text-xs text-neutral-500 capitalize">{u.role}</p>
-                            </div>
-                            {u.id === user?.id && (
-                              <svg className="w-4 h-4 text-primary" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              </svg>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
               </DropdownMenuContent>
             </DropdownMenu>
+          ) : loading ? (
+            <div className="flex items-center justify-center px-4 py-4">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-800 dark:border-neutral-700 dark:border-t-white" />
+            </div>
           ) : (
-            <div className="px-4 py-4">
-              <div className="flex items-center justify-center">
+            <div className="flex items-center justify-between gap-3 px-3 py-3">
+              <button
+                type="button"
+                onClick={() => router.push('/login')}
+                className="rounded-md px-2.5 py-1.5 text-[13px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-300 dark:hover:bg-[var(--sidebar-dark-hover)] dark:hover:text-white"
+                tabIndex={isOpen ? 0 : -1}
+              >
+                Sign in
+              </button>
+              <div className="shrink-0">
                 <ModeToggle />
               </div>
             </div>

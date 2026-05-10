@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { createSupabaseClient } from '@/lib/supabaseAuth';
 import { setActorUserId } from '@/lib/apiFetch';
 
@@ -19,7 +19,8 @@ interface AuthContextType {
   allUsers: AppUser[];
   role: Role | null;
   loading: boolean;
-  switchUser: (userId: string) => void;
+  error: string | null;
+  signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
   // Permission helpers
   canManageUsers: boolean;
@@ -44,77 +45,118 @@ const getPermissions = (r: Role | null) => ({
   canManageProjects: r === 'superadmin' || r === 'manager',
 });
 
-const SELECTED_USER_KEY = 'foreshadow_selected_user';
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [allUsers, setAllUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const supabase = createSupabaseClient();
+  const [error, setError] = useState<string | null>(null);
+  const supabase = useMemo(() => createSupabaseClient(), []);
 
-  const fetchAllUsers = async () => {
+  const fetchAllUsers = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .order('name');
+      const res = await fetch('/api/users', { cache: 'no-store' });
+      const result = await res.json();
 
-      if (!error && data) {
-        setAllUsers(data as AppUser[]);
-        return data as AppUser[];
-      } else {
-        console.error('Error fetching users:', error);
+      if (!res.ok || result.error) {
+        console.error('Error fetching users:', result.error);
+        setAllUsers([]);
         return [];
       }
+
+      const users = (result.data ?? []) as AppUser[];
+      setAllUsers(users);
+      return users;
     } catch (err) {
       console.error('Error fetching users:', err);
+      setAllUsers([]);
       return [];
     }
-  };
+  }, []);
 
-  const switchUser = (userId: string) => {
-    const selectedUser = allUsers.find(u => u.id === userId);
-    if (selectedUser) {
-      setAppUser(selectedUser);
-      localStorage.setItem(SELECTED_USER_KEY, userId);
+  const fetchCurrentUser = useCallback(async () => {
+    const res = await fetch('/api/auth/me', { cache: 'no-store' });
+    const result = await res.json();
+
+    if (!res.ok || result.error) {
+      throw new Error(result.error || 'Unable to load signed-in user');
     }
-  };
 
-  const refreshUser = async () => {
-    const users = await fetchAllUsers();
-    if (appUser) {
-      const refreshedUser = users.find(u => u.id === appUser.id);
-      if (refreshedUser) {
-        setAppUser(refreshedUser);
+    return result.user as AppUser;
+  }, []);
+
+  const loadSessionUser = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const {
+        data: { user: authUser },
+        error: authError,
+      } = await supabase.auth.getUser();
+
+      if (authError || !authUser) {
+        setAppUser(null);
+        setAllUsers([]);
+        return;
       }
+
+      const [currentUser] = await Promise.all([
+        fetchCurrentUser(),
+        fetchAllUsers(),
+      ]);
+      setAppUser(currentUser);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to load signed-in user';
+      console.error('Auth bootstrap failed:', err);
+      setAppUser(null);
+      setAllUsers([]);
+      setError(message);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [fetchAllUsers, fetchCurrentUser, supabase]);
+
+  const refreshUser = useCallback(async () => {
+    const [currentUser] = await Promise.all([
+      fetchCurrentUser(),
+      fetchAllUsers(),
+    ]);
+    setAppUser(currentUser);
+    setError(null);
+  }, [fetchAllUsers, fetchCurrentUser]);
+
+  const signOut = useCallback(async () => {
+    setLoading(true);
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      setAppUser(null);
+      setAllUsers([]);
+      setActorUserId(null);
+      setLoading(false);
+    }
+  }, [supabase]);
 
   useEffect(() => {
-    const init = async () => {
-      const users = await fetchAllUsers();
-      
-      // Check for previously selected user
-      const savedUserId = localStorage.getItem(SELECTED_USER_KEY);
-      
-      if (savedUserId) {
-        const savedUser = users.find(u => u.id === savedUserId);
-        if (savedUser) {
-          setAppUser(savedUser);
-        } else if (users.length > 0) {
-          setAppUser(users[0]);
-        }
-      } else if (users.length > 0) {
-        // Default to first user
-        setAppUser(users[0]);
-        localStorage.setItem(SELECTED_USER_KEY, users[0].id);
-      }
-      
-      setLoading(false);
-    };
+    void loadSessionUser();
 
-    init();
-  }, []);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        void loadSessionUser();
+      } else {
+        setAppUser(null);
+        setAllUsers([]);
+        setActorUserId(null);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [loadSessionUser, supabase]);
 
   const role = appUser?.role ?? null;
 
@@ -132,7 +174,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       allUsers,
       role,
       loading,
-      switchUser,
+      error,
+      signOut,
       refreshUser,
       ...getPermissions(role),
     }}>

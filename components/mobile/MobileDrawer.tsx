@@ -36,7 +36,7 @@ function isActiveRoute(pathname: string | null, route: string): boolean {
 const MobileDrawer = memo(function MobileDrawer({ open, onClose }: MobileDrawerProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, allUsers, role, switchUser } = useAuth();
+  const { user, role, signOut } = useAuth();
   const { theme, setTheme } = useTheme();
 
   useEffect(() => {
@@ -61,9 +61,10 @@ const MobileDrawer = memo(function MobileDrawer({ open, onClose }: MobileDrawerP
     if (pathname !== path) router.push(path);
   };
 
-  const handleSwitchUser = (id: string) => {
-    switchUser(id);
+  const handleSignOut = async () => {
+    await signOut();
     onClose();
+    router.push('/login');
   };
 
   return (
@@ -149,6 +150,16 @@ const MobileDrawer = memo(function MobileDrawer({ open, onClose }: MobileDrawerP
                 </svg>
               }
             />
+            <DrawerNavItem
+              active={false}
+              label="Sign Out"
+              onClick={handleSignOut}
+              icon={
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6A2.25 2.25 0 005.25 5.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                </svg>
+              }
+            />
           </div>
 
           {/* Theme toggle */}
@@ -176,45 +187,6 @@ const MobileDrawer = memo(function MobileDrawer({ open, onClose }: MobileDrawerP
             </div>
           </div>
 
-          {/* Switch user */}
-          {allUsers.length > 1 && (
-            <div className="px-5 py-3 border-t border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
-              <p className="text-[10px] font-semibold text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.08em] mb-2.5">
-                Switch User
-              </p>
-              <div className="space-y-1">
-                {allUsers.map((u) => {
-                  const isCurrent = u.id === user?.id;
-                  return (
-                    <button
-                      key={u.id}
-                      onClick={() => handleSwitchUser(u.id)}
-                      className={`w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-left transition-colors ${
-                        isCurrent
-                          ? 'bg-[rgba(30,25,20,0.04)] dark:bg-[rgba(255,255,255,0.04)]'
-                          : 'hover:bg-[rgba(30,25,20,0.02)] dark:hover:bg-[rgba(255,255,255,0.02)]'
-                      }`}
-                    >
-                      <UserAvatar src={u.avatar} name={u.name} size="sm" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-medium text-neutral-900 dark:text-[#f0efed] truncate">
-                          {u.name}
-                        </p>
-                        <p className="text-[11px] text-neutral-500 dark:text-[#66645f] capitalize">
-                          {u.role}
-                        </p>
-                      </div>
-                      {isCurrent && (
-                        <svg className="w-4 h-4 text-neutral-700 dark:text-[#f0efed] flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </nav>
       </aside>
     </>

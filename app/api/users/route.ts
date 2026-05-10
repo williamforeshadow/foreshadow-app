@@ -1,9 +1,20 @@
 import { NextResponse } from 'next/server';
+import { createSupabaseServerClient } from '@/lib/supabaseSession';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 
 // GET - Fetch all users
 export async function GET() {
   try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
+    }
+
     const { data, error } = await getSupabaseServer()
       .from('users')
       .select('id, name, email, role, avatar')
@@ -15,9 +26,10 @@ export async function GET() {
     }
 
     return NextResponse.json({ data });
-  } catch (err: any) {
+  } catch (err) {
     console.error('Users API error:', err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Unknown users API error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

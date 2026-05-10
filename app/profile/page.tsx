@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { createSupabaseClient } from '@/lib/supabaseAuth';
 import { useRouter } from 'next/navigation';
@@ -16,14 +16,20 @@ export default function ProfilePage() {
   const [success, setSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
-  const supabase = createSupabaseClient();
+  const supabase = useMemo(() => createSupabaseClient(), []);
 
   // Initialize name when user loads
-  useState(() => {
+  useEffect(() => {
     if (user?.name) {
       setName(user.name);
     }
-  });
+  }, [user?.name]);
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [loading, router, user]);
 
   if (loading) {
     return (
@@ -34,7 +40,6 @@ export default function ProfilePage() {
   }
 
   if (!user) {
-    router.push('/login');
     return null;
   }
 
@@ -77,20 +82,22 @@ export default function ProfilePage() {
         .from('avatars')
         .getPublicUrl(fileName);
 
-      // Update user record
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({ avatar: publicUrl, updated_at: new Date().toISOString() })
-        .eq('id', user.id);
-
-      if (updateError) throw updateError;
+      const updateRes = await fetch('/api/auth/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatar: publicUrl }),
+      });
+      const updateResult = await updateRes.json();
+      if (!updateRes.ok || updateResult.error) {
+        throw new Error(updateResult.error || 'Failed to update avatar');
+      }
 
       // Refresh user data
       await refreshUser();
       setSuccess('Avatar updated successfully!');
-    } catch (err: any) {
+    } catch (err) {
       console.error('Avatar upload error:', err);
-      setError(err.message || 'Failed to upload avatar');
+      setError(err instanceof Error ? err.message : 'Failed to upload avatar');
     } finally {
       setUploading(false);
     }
@@ -109,18 +116,21 @@ export default function ProfilePage() {
     setSuccess(null);
 
     try {
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({ name: name.trim(), updated_at: new Date().toISOString() })
-        .eq('id', user.id);
-
-      if (updateError) throw updateError;
+      const updateRes = await fetch('/api/auth/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim() }),
+      });
+      const updateResult = await updateRes.json();
+      if (!updateRes.ok || updateResult.error) {
+        throw new Error(updateResult.error || 'Failed to update profile');
+      }
 
       await refreshUser();
       setSuccess('Profile updated successfully!');
-    } catch (err: any) {
+    } catch (err) {
       console.error('Profile update error:', err);
-      setError(err.message || 'Failed to update profile');
+      setError(err instanceof Error ? err.message : 'Failed to update profile');
     } finally {
       setSaving(false);
     }

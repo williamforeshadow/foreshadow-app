@@ -5,16 +5,64 @@ import { KeyAffordance } from '@/components/tasks/KeyAffordance';
 import { useAuth } from '@/lib/authContext';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
-import { UserAvatar } from '@/components/ui/user-avatar';
 import { useRouter } from 'next/navigation';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
+import type { Project, Task } from '@/lib/types';
 
 interface Assignee {
   user_id: string;
   name: string;
   avatar: string | null;
 }
+
+interface RawAssignedUser {
+  user_id: string;
+  name?: string | null;
+  avatar?: string | null;
+}
+
+interface RawProjectAssignment {
+  user_id: string;
+  user?: {
+    name?: string | null;
+    avatar?: string | null;
+  } | null;
+}
+
+interface RawTask {
+  [key: string]: unknown;
+  id?: string;
+  task_id?: string;
+  title?: string | null;
+  template_name?: string | null;
+  property_name?: string | null;
+  status?: string | null;
+  priority?: string | null;
+  department_id?: string | null;
+  scheduled_date?: string | null;
+  scheduled_time?: string | null;
+  assigned_users?: RawAssignedUser[];
+  reservation_id?: string | null;
+}
+
+interface RawProject {
+  [key: string]: unknown;
+  id?: string;
+  task_id?: string;
+  title?: string | null;
+  property_name?: string | null;
+  status?: string | null;
+  priority?: string | null;
+  department_id?: string | null;
+  scheduled_date?: string | null;
+  scheduled_time?: string | null;
+  project_assignments?: RawProjectAssignment[];
+  reservation_id?: string | null;
+}
+
+type AssignmentRaw = RawTask | RawProject;
+type BivariantCallback<T> = { bivarianceHack(value: T): void }['bivarianceHack'];
 
 interface UnifiedItem {
   key: string;
@@ -31,7 +79,7 @@ interface UnifiedItem {
   // Always null for projects (they live in tasks-for-bin land which filters
   // out reservation-bound rows).
   reservation_id?: string | null;
-  raw: any;
+  raw: AssignmentRaw;
 }
 
 interface DateGroup {
@@ -41,8 +89,8 @@ interface DateGroup {
 }
 
 interface MobileMyAssignmentsViewProps {
-  onTaskClick?: (task: any) => void;
-  onProjectClick?: (project: any) => void;
+  onTaskClick?: BivariantCallback<Task & { id?: string }>;
+  onProjectClick?: BivariantCallback<Project & { task_id?: string }>;
   refreshTrigger?: number;
 }
 
@@ -94,10 +142,10 @@ export default function MobileMyAssignmentsView({
   onProjectClick,
   refreshTrigger,
 }: MobileMyAssignmentsViewProps) {
-  const { user, loading: authLoading, allUsers, role, switchUser } = useAuth();
+  const { user, loading: authLoading, role } = useAuth();
   const { theme, setTheme } = useTheme();
   const { departments: allDepts } = useDepartments();
-  const [rawData, setRawData] = useState<{ tasks: any[]; projects: any[] } | null>(null);
+  const [rawData, setRawData] = useState<{ tasks: RawTask[]; projects: RawProject[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
@@ -126,12 +174,16 @@ export default function MobileMyAssignmentsView({
     setError(null);
     try {
       const response = await fetch(`/api/my-assignments?user_id=${user.id}`);
-      const result = await response.json();
+      const result = await response.json() as {
+        error?: string;
+        tasks?: RawTask[];
+        projects?: RawProject[];
+      };
       if (!response.ok) throw new Error(result.error || 'Failed to fetch assignments');
       setRawData({ tasks: result.tasks || [], projects: result.projects || [] });
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error fetching assignments:', err);
-      setError(err.message);
+      setError(err instanceof Error ? err.message : 'Failed to fetch assignments');
     } finally {
       setLoading(false);
     }
@@ -147,7 +199,7 @@ export default function MobileMyAssignmentsView({
 
     for (const task of rawData.tasks) {
       result.push({
-        key: `task-${task.task_id}`,
+        key: `task-${task.task_id ?? task.title ?? result.length}`,
         source: 'task',
         title: task.title || task.template_name || 'Unnamed Task',
         property_name: task.property_name || '',
@@ -156,7 +208,7 @@ export default function MobileMyAssignmentsView({
         department_id: task.department_id || null,
         scheduled_date: task.scheduled_date,
         scheduled_time: task.scheduled_time,
-        assignees: (task.assigned_users || []).map((u: any) => ({
+        assignees: (task.assigned_users || []).map((u) => ({
           user_id: u.user_id,
           name: u.name || 'Unknown',
           avatar: u.avatar || null,
@@ -168,7 +220,7 @@ export default function MobileMyAssignmentsView({
 
     for (const project of rawData.projects) {
       result.push({
-        key: `proj-${project.id}`,
+        key: `proj-${project.id ?? project.title ?? result.length}`,
         source: 'project',
         title: project.title || 'Untitled Task',
         property_name: project.property_name || '',
@@ -177,7 +229,7 @@ export default function MobileMyAssignmentsView({
         department_id: project.department_id || null,
         scheduled_date: project.scheduled_date,
         scheduled_time: project.scheduled_time,
-        assignees: (project.project_assignments || []).map((a: any) => ({
+        assignees: (project.project_assignments || []).map((a) => ({
           user_id: a.user_id,
           name: a.user?.name || 'Unknown',
           avatar: a.user?.avatar || null,
@@ -356,31 +408,6 @@ export default function MobileMyAssignmentsView({
                     <p className="text-[11px] text-neutral-400 dark:text-[#66645f] capitalize">{role}</p>
                   </div>
 
-                  {/* Switch user */}
-                  {allUsers.length > 1 && (
-                    <div className="px-1 pb-1 mb-1 border-b border-neutral-100 dark:border-[rgba(255,255,255,0.07)]">
-                      {allUsers.map((u) => (
-                        <button
-                          key={u.id}
-                          onClick={() => { switchUser(u.id); setShowUserMenu(false); }}
-                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-[12px] transition-colors ${
-                            u.id === user?.id
-                              ? 'text-neutral-800 dark:text-[#f0efed] font-medium'
-                              : 'text-neutral-500 dark:text-[#a09e9a] active:bg-neutral-50 dark:active:bg-[rgba(255,255,255,0.03)]'
-                          }`}
-                        >
-                          <UserAvatar src={u.avatar} name={u.name} size="sm" />
-                          <span className="truncate">{u.name}</span>
-                          {u.id === user?.id && (
-                            <svg className="w-3.5 h-3.5 ml-auto shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
                   {/* Theme toggle */}
                   <button
                     onClick={() => { setTheme(theme === 'dark' ? 'light' : 'dark'); setShowUserMenu(false); }}
@@ -430,7 +457,7 @@ export default function MobileMyAssignmentsView({
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 px-6">
             <p className="text-neutral-600 dark:text-[#a09e9a] font-medium">No tasks assigned</p>
-            <p className="text-sm text-neutral-500 dark:text-[#66645f] mt-1">You're all caught up</p>
+            <p className="text-sm text-neutral-500 dark:text-[#66645f] mt-1">You are all caught up</p>
           </div>
         ) : (
           groups.map((group) => {
@@ -475,8 +502,11 @@ export default function MobileMyAssignmentsView({
                   const DeptIcon = getDepartmentIcon(dept?.icon);
 
                   const handleRowClick = () => {
-                    if (item.source === 'task') onTaskClick?.(item.raw);
-                    else onProjectClick?.(item.raw);
+                    if (item.source === 'task') {
+                      onTaskClick?.(item.raw as unknown as Task & { id?: string });
+                    } else {
+                      onProjectClick?.(item.raw as unknown as Project & { task_id?: string });
+                    }
                   };
                   return (
                     <div
