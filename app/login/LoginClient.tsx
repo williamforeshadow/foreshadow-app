@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowRight, Eye, EyeOff, LockKeyhole } from 'lucide-react';
+import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { createSupabaseClient } from '@/lib/supabaseAuth';
@@ -17,8 +17,18 @@ export default function LoginClient() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [secondaryAction, setSecondaryAction] = useState<'magic' | 'reset' | null>(null);
+  const [error, setError] = useState<string | null>(() =>
+    searchParams.get('error') === 'auth_callback_error'
+      ? 'That sign-in link could not be verified. Please request a fresh link.'
+      : null,
+  );
+  const [notice, setNotice] = useState<string | null>(null);
   const next = searchParams.get('next') || '/';
+  const callbackUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/auth/callback`
+      : undefined;
 
   useEffect(() => {
     if (!loading && user) {
@@ -26,10 +36,20 @@ export default function LoginClient() {
     }
   }, [loading, next, router, user]);
 
+  const getEmailOrSetError = () => {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setError('Enter your email first.');
+      return null;
+    }
+    return trimmed;
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
+    setNotice(null);
 
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email: email.trim(),
@@ -50,6 +70,52 @@ export default function LoginClient() {
       setError(err instanceof Error ? err.message : 'Unable to load your Foreshadow profile');
       setSubmitting(false);
     }
+  };
+
+  const handleMagicLink = async () => {
+    const trimmedEmail = getEmailOrSetError();
+    if (!trimmedEmail || !callbackUrl) return;
+
+    setSecondaryAction('magic');
+    setError(null);
+    setNotice(null);
+
+    const { error: magicLinkError } = await supabase.auth.signInWithOtp({
+      email: trimmedEmail,
+      options: {
+        emailRedirectTo: callbackUrl,
+      },
+    });
+
+    if (magicLinkError) {
+      setError(magicLinkError.message);
+    } else {
+      setNotice('Check your email for a Foreshadow sign-in link.');
+    }
+
+    setSecondaryAction(null);
+  };
+
+  const handlePasswordReset = async () => {
+    const trimmedEmail = getEmailOrSetError();
+    if (!trimmedEmail || !callbackUrl) return;
+
+    setSecondaryAction('reset');
+    setError(null);
+    setNotice(null);
+
+    const resetUrl = `${callbackUrl}?next=/update-password`;
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+      redirectTo: resetUrl,
+    });
+
+    if (resetError) {
+      setError(resetError.message);
+    } else {
+      setNotice('Check your email for a password reset link.');
+    }
+
+    setSecondaryAction(null);
   };
 
   return (
@@ -73,6 +139,11 @@ export default function LoginClient() {
             {error && (
               <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-200">
                 {error}
+              </div>
+            )}
+            {notice && (
+              <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-200">
+                {notice}
               </div>
             )}
 
@@ -120,6 +191,26 @@ export default function LoginClient() {
                 {submitting ? 'Signing in...' : 'Sign in'}
                 {!submitting && <ArrowRight className="h-4 w-4" aria-hidden="true" />}
               </Button>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleMagicLink}
+                  disabled={secondaryAction !== null || submitting}
+                >
+                  <Mail className="h-4 w-4" aria-hidden="true" />
+                  {secondaryAction === 'magic' ? 'Sending...' : 'Email link'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handlePasswordReset}
+                  disabled={secondaryAction !== null || submitting}
+                >
+                  {secondaryAction === 'reset' ? 'Sending...' : 'Forgot password?'}
+                </Button>
+              </div>
             </div>
           </form>
         </div>
