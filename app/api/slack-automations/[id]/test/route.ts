@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import {
   runSlackAutomationsForReservation,
+  testSlackTaskAssignmentAutomation,
   type ReservationContext,
 } from '@/src/server/slackAutomations/run';
 import type { SlackAutomation } from '@/lib/types';
@@ -49,10 +50,23 @@ export async function POST(
 
   const a = automation as SlackAutomation;
   if (a.trigger === 'task_assigned') {
-    return NextResponse.json(
-      { error: 'Task assignment automations fire when a task is assigned. Use a real assignment to test this trigger.' },
-      { status: 400 },
-    );
+    const body = await readJsonBody(_req);
+    const testResult = await testSlackTaskAssignmentAutomation({
+      automation: a,
+      taskId: typeof body?.task_id === 'string' ? body.task_id : undefined,
+      recipientUserId:
+        typeof body?.recipient_user_id === 'string'
+          ? body.recipient_user_id
+          : undefined,
+    });
+
+    return NextResponse.json({
+      fired: !!testResult.result.ok,
+      used_task: testResult.used_task,
+      used_recipient: testResult.used_recipient,
+      result: testResult.result,
+      other_results: [],
+    }, { status: testResult.result.ok ? 200 : 400 });
   }
 
   // Find a representative reservation.
@@ -115,4 +129,13 @@ export async function POST(
     result: thisResult ?? null,
     other_results: results.filter((r) => r.automation_id !== id),
   });
+}
+
+async function readJsonBody(req: NextRequest): Promise<Record<string, unknown> | null> {
+  try {
+    const body = await req.json();
+    return body && typeof body === 'object' ? body as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
 }

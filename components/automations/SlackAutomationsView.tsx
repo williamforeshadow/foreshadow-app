@@ -28,6 +28,7 @@ import {
   type SlackAutomationConfig,
   type SlackAutomationAttachment,
   type SlackAutomationDeliveryType,
+  type SlackAutomationMessageFormat,
   createDefaultSlackAutomationConfig,
   SLACK_RESERVATION_AUTOMATION_VARIABLES,
   SLACK_TASK_ASSIGNMENT_AUTOMATION_VARIABLES,
@@ -78,9 +79,11 @@ function createConfigForTrigger(
   return {
     ...createDefaultSlackAutomationConfig(),
     delivery_type: trigger === 'task_assigned' ? 'task_assignee_dm' : 'channel',
+    message_format: 'text',
+    custom_blocks_json: '',
     message_template:
       trigger === 'task_assigned'
-        ? '{{actor_name}} assigned you {{task_title}}\n{{task_url}}'
+        ? '{{actor_name}} assigned you {{task_link}}'
         : '',
   };
 }
@@ -102,6 +105,13 @@ export default function SlackAutomationsView() {
   const [config, setConfig] = useState<SlackAutomationConfig>(createDefaultSlackAutomationConfig());
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewResult, setPreviewResult] = useState<{
+    text: string;
+    blocks: unknown[];
+    errors: string[];
+  } | null>(null);
 
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -145,6 +155,8 @@ export default function SlackAutomationsView() {
     setSelectedPropertyIds([]);
     setConfig(createConfigForTrigger('new_booking'));
     setAttachmentError(null);
+    setPreviewError(null);
+    setPreviewResult(null);
     setShowDialog(true);
   };
 
@@ -158,6 +170,8 @@ export default function SlackAutomationsView() {
       ...(automation.config ?? {}),
     });
     setAttachmentError(null);
+    setPreviewError(null);
+    setPreviewResult(null);
     setShowDialog(true);
   };
 
@@ -231,14 +245,20 @@ export default function SlackAutomationsView() {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(`Test failed: ${data.error ?? 'Unknown error'}`);
+        alert(`Test failed: ${data.error ?? data.result?.error ?? 'Unknown error'}`);
         return;
       }
       if (data.fired) {
-        const sample = data.used_reservation;
-        alert(
-          `Test message sent!\n\nUsed reservation:\n  ${sample?.property_name ?? '(none)'} \u2014 ${sample?.guest_name ?? '(none)'}\n  ${sample?.check_in ?? ''} \u2192 ${sample?.check_out ?? ''}`,
-        );
+        if (data.used_task) {
+          alert(
+            `Test message sent!\n\nUsed task:\n  ${data.used_task.title ?? '(untitled)'}\nRecipient: ${data.used_recipient?.name ?? data.used_recipient?.email ?? '(sample user)'}`,
+          );
+        } else {
+          const sample = data.used_reservation;
+          alert(
+            `Test message sent!\n\nUsed reservation:\n  ${sample?.property_name ?? '(none)'} \u2014 ${sample?.guest_name ?? '(none)'}\n  ${sample?.check_in ?? ''} \u2192 ${sample?.check_out ?? ''}`,
+          );
+        }
       } else {
         const errorMsg = data.result?.error ?? data.result?.skipped_reason ?? 'Unknown reason';
         alert(`Test did not fire: ${errorMsg}`);
@@ -293,6 +313,8 @@ export default function SlackAutomationsView() {
     const nextTrigger = value as SlackAutomationTrigger;
     const wasTaskTrigger = trigger === 'task_assigned';
     setTrigger(nextTrigger);
+    setPreviewError(null);
+    setPreviewResult(null);
     setConfig((prev) => ({
       ...prev,
       delivery_type:
@@ -301,6 +323,12 @@ export default function SlackAutomationsView() {
             ? prev.delivery_type ?? 'task_assignee_dm'
             : 'task_assignee_dm'
           : 'channel',
+      message_format:
+        nextTrigger === 'task_assigned'
+          ? prev.message_format ?? 'text'
+          : prev.message_format === 'task_card'
+            ? 'text'
+            : prev.message_format ?? 'text',
       message_template:
         prev.message_template ||
         createConfigForTrigger(nextTrigger).message_template,
@@ -312,6 +340,46 @@ export default function SlackAutomationsView() {
       ...prev,
       delivery_type: value as SlackAutomationDeliveryType,
     }));
+  };
+
+  const handleMessageFormatChange = (value: string) => {
+    const messageFormat = value as SlackAutomationMessageFormat;
+    setPreviewError(null);
+    setPreviewResult(null);
+    setConfig((prev) => ({
+      ...prev,
+      message_format: messageFormat,
+      custom_blocks_json:
+        messageFormat === 'custom_blocks' && !prev.custom_blocks_json
+          ? '[\n  {\n    "type": "section",\n    "text": {\n      "type": "mrkdwn",\n      "text": "{{task_link}}"\n    }\n  }\n]'
+          : prev.custom_blocks_json ?? '',
+    }));
+  };
+
+  const handlePreview = async () => {
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const res = await fetch('/api/slack-automations/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trigger, config }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Preview failed');
+      }
+      setPreviewResult({
+        text: data.text ?? '',
+        blocks: Array.isArray(data.blocks) ? data.blocks : [],
+        errors: Array.isArray(data.errors) ? data.errors : [],
+      });
+    } catch (err) {
+      setPreviewError(err instanceof Error ? err.message : 'Preview failed');
+      setPreviewResult(null);
+    } finally {
+      setPreviewLoading(false);
+    }
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -331,7 +399,7 @@ export default function SlackAutomationsView() {
       const attachment: SlackAutomationAttachment = data.attachment;
       setConfig((prev) => ({
         ...prev,
-        attachments: [...prev.attachments, attachment],
+        attachments: [...(prev.attachments ?? []), attachment],
       }));
     } catch (err) {
       console.error('Attachment upload failed:', err);
@@ -345,7 +413,7 @@ export default function SlackAutomationsView() {
   const removeAttachment = async (attachment: SlackAutomationAttachment) => {
     setConfig((prev) => ({
       ...prev,
-      attachments: prev.attachments.filter((a) => a.id !== attachment.id),
+      attachments: (prev.attachments ?? []).filter((a) => a.id !== attachment.id),
     }));
     // Best-effort cleanup of the storage object. We don't block on this —
     // if it fails, the attachment becomes orphaned but the user's UX is
@@ -370,6 +438,8 @@ export default function SlackAutomationsView() {
   );
   const deliveryType = config.delivery_type ?? 'channel';
   const usesChannel = deliveryType === 'channel';
+  const messageFormat = config.message_format ?? 'text';
+  const attachments = config.attachments ?? [];
 
   if (loading) {
     return (
@@ -452,14 +522,11 @@ export default function SlackAutomationsView() {
                           handleTest(automation.id);
                         }}
                         disabled={
-                          automation.trigger === 'task_assigned' ||
                           ((automation.config?.delivery_type ?? 'channel') === 'channel' &&
                             !automation.config?.channel_id)
                         }
                         title={
-                          automation.trigger === 'task_assigned'
-                            ? 'Assign a task to test this automation'
-                            : (automation.config?.delivery_type ?? 'channel') === 'channel' &&
+                          (automation.config?.delivery_type ?? 'channel') === 'channel' &&
                                 !automation.config?.channel_id
                             ? 'Configure a channel first'
                             : 'Send a test message to Slack now'
@@ -664,7 +731,7 @@ export default function SlackAutomationsView() {
                   </Select>
                   {selectedChannel && !selectedChannel.is_member && (
                     <FieldDescription className="text-amber-600">
-                      The bot isn't a member of this channel. Either invite the bot
+                      The bot is not a member of this channel. Either invite the bot
                       ({selectedChannel.is_private
                         ? 'required for private channels'
                         : 'or rely on chat:write.public scope'}
@@ -677,6 +744,26 @@ export default function SlackAutomationsView() {
             )}
 
             {/* Message Template — with variable inserter */}
+            <Field>
+              <FieldLabel>Message Format</FieldLabel>
+              <Select value={messageFormat} onValueChange={handleMessageFormatChange}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">Text</SelectItem>
+                  {trigger === 'task_assigned' && (
+                    <SelectItem value="task_card">Task card</SelectItem>
+                  )}
+                  <SelectItem value="custom_blocks">Custom blocks</SelectItem>
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                Text keeps the current simple Slack message. Task card and
+                custom blocks use Block Kit with the message as fallback text.
+              </FieldDescription>
+            </Field>
+
             <Field>
               <FieldLabel>Message</FieldLabel>
               <FieldDescription className="mb-2">
@@ -728,7 +815,7 @@ export default function SlackAutomationsView() {
                 }
                 placeholder={
                   trigger === 'task_assigned'
-                    ? `e.g. {{actor_name}} assigned you {{task_title}}\n{{task_url}}`
+                    ? `e.g. {{actor_name}} assigned you {{task_link}}`
                     : `e.g. New booking at {{property_name}}\nGuest: {{guest_name}}\nDates: {{check_in}} -> {{check_out}}`
                 }
                 rows={5}
@@ -737,15 +824,80 @@ export default function SlackAutomationsView() {
             </Field>
 
             {/* Attachments */}
+            {messageFormat === 'custom_blocks' && (
+              <Field>
+                <FieldLabel>Custom Blocks JSON</FieldLabel>
+                <FieldDescription className="mb-2">
+                  Paste a Slack blocks array. String values can use the same
+                  variables as the message field.
+                </FieldDescription>
+                <Textarea
+                  value={config.custom_blocks_json ?? ''}
+                  onChange={(e) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      custom_blocks_json: e.target.value,
+                    }))
+                  }
+                  rows={10}
+                  className="font-mono text-xs"
+                />
+              </Field>
+            )}
+
+            <Field>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <FieldLabel>Preview</FieldLabel>
+                  <FieldDescription>
+                    Renders against a sample reservation or task before you save.
+                  </FieldDescription>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePreview}
+                  disabled={previewLoading}
+                >
+                  {previewLoading ? 'Rendering...' : 'Render Preview'}
+                </Button>
+              </div>
+              {previewError && (
+                <p className="text-sm text-red-600 dark:text-red-400 mt-2">
+                  {previewError}
+                </p>
+              )}
+              {previewResult && (
+                <div className="mt-3 space-y-2">
+                  {previewResult.errors.length > 0 && (
+                    <div className="rounded-md border border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-950/20 p-3 text-sm text-red-700 dark:text-red-300">
+                      {previewResult.errors.join(' ')}
+                    </div>
+                  )}
+                  <pre className="max-h-64 overflow-auto rounded-md border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 p-3 text-xs">
+                    {JSON.stringify(
+                      {
+                        text: previewResult.text,
+                        blocks: previewResult.blocks,
+                      },
+                      null,
+                      2,
+                    )}
+                  </pre>
+                </div>
+              )}
+            </Field>
+
             <Field>
               <FieldLabel>Attachments</FieldLabel>
               <FieldDescription className="mb-2">
                 Files to attach when this automation fires (PDFs, images, docs — up to 25MB each).
               </FieldDescription>
 
-              {config.attachments.length > 0 && (
+              {attachments.length > 0 && (
                 <div className="space-y-2 mb-3">
-                  {config.attachments.map((attachment) => (
+                  {attachments.map((attachment) => (
                     <div
                       key={attachment.id}
                       className="flex items-center justify-between p-2 border border-neutral-200 dark:border-neutral-700 rounded-lg"

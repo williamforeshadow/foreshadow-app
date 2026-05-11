@@ -586,6 +586,7 @@ export type SlackAutomationTrigger =
   | 'task_assigned';
 
 export type SlackAutomationDeliveryType = 'channel' | 'task_assignee_dm';
+export type SlackAutomationMessageFormat = 'text' | 'task_card' | 'custom_blocks';
 
 /**
  * Variables available for `{{var}}` substitution inside a Slack automation's
@@ -627,6 +628,7 @@ export const SLACK_TASK_ASSIGNMENT_AUTOMATION_VARIABLES: ReadonlyArray<{
   { key: 'assignee_email', label: 'Assignee email', description: 'Email for the newly assigned user' },
   { key: 'task_title', label: 'Task title', description: 'The assigned task title' },
   { key: 'task_url', label: 'Task link', description: 'Direct link to the task in Foreshadow' },
+  { key: 'task_link', label: 'Linked task title', description: 'Slack hyperlink using the task title as the label' },
   { key: 'task_status', label: 'Task status', description: 'Current task status' },
   { key: 'task_priority', label: 'Task priority', description: 'Current task priority' },
   { key: 'property_name', label: 'Property name', description: 'Property attached to the task, when present' },
@@ -669,6 +671,17 @@ export interface SlackAutomationConfig {
    * SLACK_AUTOMATION_VARIABLES. Multi-line. Slack mrkdwn is allowed.
    */
   message_template: string;
+  /**
+   * Rendering mode. Older automations omit this and are treated as plain
+   * text messages by the execution layer.
+   */
+  message_format?: SlackAutomationMessageFormat;
+  /**
+   * Advanced Block Kit JSON array. Only used when message_format is
+   * `custom_blocks`; string values support the same `{{variable}}`
+   * placeholders as message_template.
+   */
+  custom_blocks_json?: string;
   attachments: SlackAutomationAttachment[];
 }
 
@@ -689,6 +702,8 @@ export function createDefaultSlackAutomationConfig(): SlackAutomationConfig {
     channel_id: '',
     channel_name: '',
     message_template: '',
+    message_format: 'text',
+    custom_blocks_json: '',
     attachments: [],
   };
 }

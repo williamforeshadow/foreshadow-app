@@ -1,8 +1,10 @@
 import { WebClient } from '@slack/web-api';
+import type { Block } from '@slack/types';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { todayInTz, DEFAULT_TIMEZONE } from '@/src/lib/dates';
 import { taskUrl } from '@/src/lib/links';
 import { lookupSlackUserByEmail } from '@/src/slack/identity';
+import { getTasksByIds } from '@/src/server/tasks/getTaskById';
 import type {
   SlackAutomation,
   SlackAutomationTrigger,
@@ -10,7 +12,12 @@ import type {
   SlackAutomationAttachment,
   SlackAutomationDeliveryType,
 } from '@/lib/types';
-import { buildReservationVariables, renderTemplate } from './render';
+import { buildReservationVariables } from './render';
+import {
+  buildSlackTaskLink,
+  renderSlackAutomationPayload,
+  type TaskCardPayloadContext,
+} from './payload';
 
 // Core execution layer for Slack automations.
 //
@@ -70,6 +77,12 @@ export interface SlackTaskAssignmentActor {
 export interface TaskAssignmentAutomationResult extends SlackAutomationFireResult {
   recipient_user_id?: string;
   recipient_email?: string | null;
+}
+
+export interface TaskAssignmentAutomationTestResult {
+  result: TaskAssignmentAutomationResult;
+  used_task: { id: string; title: string | null } | null;
+  used_recipient: { id: string; name: string; email: string | null } | null;
 }
 
 /**
@@ -213,6 +226,8 @@ export async function runSlackAutomationsForTaskAssignment(args: {
   const users = await loadUsersById(supabase, addedAssigneeIds);
   const actor = await resolveActorForVariables(supabase, args.actor);
   const opSettings = await loadOpSettings(supabase);
+  const taskRows = await getTasksByIds([args.taskId]);
+  const taskRow = taskRows[0] ?? null;
   const propertyTimezone = await resolvePropertyTimezone(
     supabase,
     task.property_id,
@@ -249,6 +264,9 @@ export async function runSlackAutomationsForTaskAssignment(args: {
         taskId: args.taskId,
         assignee,
         variables,
+        taskCard: taskRow
+          ? { task: taskRow, url: variables.task_url }
+          : undefined,
       });
       results.push(result);
     }
@@ -290,6 +308,99 @@ export async function safelyRunSlackAutomationsForTaskAssignment(args: {
       },
     ];
   }
+}
+
+export async function testSlackTaskAssignmentAutomation(args: {
+  automation: SlackAutomation;
+  taskId?: string;
+  recipientUserId?: string;
+  actor?: SlackTaskAssignmentActor | null;
+}): Promise<TaskAssignmentAutomationTestResult> {
+  const token = process.env.SLACK_BOT_TOKEN;
+  if (!token) {
+    return {
+      result: {
+        automation_id: args.automation.id,
+        ok: false,
+        error: 'SLACK_BOT_TOKEN not configured',
+      },
+      used_task: null,
+      used_recipient: null,
+    };
+  }
+
+  const supabase = getSupabaseServer();
+  const sample = await resolveTaskAssignmentTestSample({
+    supabase,
+    automation: args.automation,
+    taskId: args.taskId,
+    recipientUserId: args.recipientUserId,
+  });
+  if (!sample.taskId || !sample.recipientUserId) {
+    return {
+      result: {
+        automation_id: args.automation.id,
+        ok: false,
+        error: 'Could not find a sample task and recipient to test with.',
+      },
+      used_task: sample.task,
+      used_recipient: null,
+    };
+  }
+
+  const [task, users, actor, taskRows] = await Promise.all([
+    loadTaskAssignmentContext(supabase, sample.taskId),
+    loadUsersById(supabase, [sample.recipientUserId]),
+    resolveActorForVariables(supabase, args.actor),
+    getTasksByIds([sample.taskId]),
+  ]);
+  const assignee = users.get(sample.recipientUserId);
+  if (!task || !assignee) {
+    return {
+      result: {
+        automation_id: args.automation.id,
+        ok: false,
+        error: !task ? 'Sample task not found.' : 'Sample recipient user not found.',
+      },
+      used_task: sample.task,
+      used_recipient: assignee ?? null,
+    };
+  }
+
+  const opSettings = await loadOpSettings(supabase);
+  const propertyTimezone = await resolvePropertyTimezone(
+    supabase,
+    task.property_id,
+    opSettings.default_timezone,
+  );
+  const triggerDate = todayInTz(propertyTimezone).date;
+  const variables = buildTaskAssignmentVariables({
+    task,
+    actor,
+    assignee,
+    triggerDate,
+  });
+  const web = new WebClient(token);
+  const taskRow = taskRows[0] ?? null;
+  const result = await fireOneTaskAssignmentAutomation({
+    supabase,
+    web,
+    automation: args.automation,
+    taskId: sample.taskId,
+    assignee,
+    variables,
+    taskCard: taskRow ? { task: taskRow, url: variables.task_url } : undefined,
+    bypassDedup: true,
+  });
+
+  return {
+    result,
+    used_task: sample.task ?? {
+      id: sample.taskId,
+      title: task.title || task.template_name || 'Untitled Task',
+    },
+    used_recipient: assignee,
+  };
 }
 
 /**
@@ -516,13 +627,16 @@ function buildTaskAssignmentVariables(args: {
   triggerDate: string;
 }): Record<string, string> {
   const { task, actor, assignee, triggerDate } = args;
+  const title = task.title || task.template_name || 'Untitled Task';
+  const url = taskUrl(task.id);
   return {
     actor_name: actor.name ?? '',
     actor_email: actor.email ?? '',
     assignee_name: assignee.name ?? '',
     assignee_email: assignee.email ?? '',
-    task_title: task.title || task.template_name || 'Untitled Task',
-    task_url: taskUrl(task.id),
+    task_title: title,
+    task_url: url,
+    task_link: buildSlackTaskLink({ url, title }),
     task_status: task.status ?? '',
     task_priority: task.priority ?? '',
     property_name: task.property_name ?? '',
@@ -581,6 +695,117 @@ async function loadMatchingAutomations(
   return automations;
 }
 
+async function resolveTaskAssignmentTestSample(args: {
+  supabase: ReturnType<typeof getSupabaseServer>;
+  automation: SlackAutomation;
+  taskId?: string;
+  recipientUserId?: string;
+}): Promise<{
+  taskId: string | null;
+  recipientUserId: string | null;
+  task: { id: string; title: string | null } | null;
+}> {
+  const { supabase, automation, taskId, recipientUserId } = args;
+
+  let selectedTaskId = taskId ?? null;
+  let selectedTask: { id: string; title: string | null } | null = null;
+
+  if (!selectedTaskId) {
+    let query = supabase
+      .from('turnover_tasks')
+      .select('id, title, property_id, created_at')
+      .order('created_at', { ascending: false })
+      .limit(25);
+
+    if (automation.property_ids?.length) {
+      query = query.in('property_id', automation.property_ids);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('[slackAutomations/run] task assignment test task lookup failed', error);
+    }
+    const rows = (data ?? []) as Array<{ id: string; title: string | null }>;
+    selectedTask = rows[0] ? { id: rows[0].id, title: rows[0].title } : null;
+    selectedTaskId = selectedTask?.id ?? null;
+
+    if (!selectedTaskId) {
+      return { taskId: null, recipientUserId: null, task: null };
+    }
+
+    if (!recipientUserId && rows.length > 0) {
+      const { data: assignmentRows } = await supabase
+        .from('task_assignments')
+        .select('task_id, user_id')
+        .in('task_id', rows.map((row) => row.id))
+        .limit(1);
+      const assignment = (assignmentRows ?? [])[0] as
+        | { task_id: string; user_id: string }
+        | undefined;
+      if (assignment?.task_id) {
+        selectedTaskId = assignment.task_id;
+        selectedTask =
+          rows.find((row) => row.id === assignment.task_id) ?? selectedTask;
+      }
+      if (assignment?.user_id) {
+        return {
+          taskId: selectedTaskId,
+          recipientUserId: assignment.user_id,
+          task: selectedTask,
+        };
+      }
+    }
+  }
+
+  if (selectedTaskId && !selectedTask) {
+    const { data } = await supabase
+      .from('turnover_tasks')
+      .select('id, title')
+      .eq('id', selectedTaskId)
+      .maybeSingle();
+    if (data?.id) {
+      selectedTask = {
+        id: data.id as string,
+        title: (data.title as string | null) ?? null,
+      };
+    }
+  }
+
+  if (recipientUserId) {
+    return { taskId: selectedTaskId, recipientUserId, task: selectedTask };
+  }
+
+  if (selectedTaskId) {
+    const { data: assignmentRows } = await supabase
+      .from('task_assignments')
+      .select('user_id')
+      .eq('task_id', selectedTaskId)
+      .limit(1);
+    const assignment = (assignmentRows ?? [])[0] as
+      | { user_id: string }
+      | undefined;
+    if (assignment?.user_id) {
+      return {
+        taskId: selectedTaskId,
+        recipientUserId: assignment.user_id,
+        task: selectedTask,
+      };
+    }
+  }
+
+  const { data: userRows } = await supabase
+    .from('users')
+    .select('id')
+    .not('email', 'is', null)
+    .limit(1);
+  const fallbackUser = (userRows ?? [])[0] as { id: string } | undefined;
+  return {
+    taskId: selectedTaskId,
+    recipientUserId: fallbackUser?.id ?? null,
+    task: selectedTask,
+  };
+}
+
 async function fireOneAutomation(args: {
   supabase: ReturnType<typeof getSupabaseServer>;
   web: WebClient;
@@ -602,8 +827,25 @@ async function fireOneAutomation(args: {
     };
   }
 
-  // Dedup: try the fires-log insert first. If the unique constraint trips
-  // it means we already fired this combo and we should skip the Slack call.
+  const payload = renderSlackAutomationPayload({ config, variables });
+  const attachments = (config.attachments ?? []) as SlackAutomationAttachment[];
+  if (payload.errors.length > 0) {
+    return {
+      automation_id: automation.id,
+      ok: false,
+      error: payload.errors.join(' '),
+    };
+  }
+  if (!payload.text && !payload.blocks?.length && attachments.length === 0) {
+    return {
+      automation_id: automation.id,
+      ok: false,
+      skipped_reason: 'no_message',
+    };
+  }
+
+  // Dedup after rendering so invalid or empty configs do not burn the
+  // reservation's one allowed fire.
   if (!bypassDedup) {
     const { error: dedupErr } = await supabase
       .from('slack_automation_fires')
@@ -638,57 +880,15 @@ async function fireOneAutomation(args: {
     }
   }
 
-  // Render the message template against the reservation variables.
-  const messageText = renderTemplate(config.message_template ?? '', variables).trim();
-  if (!messageText && (config.attachments?.length ?? 0) === 0) {
-    // Nothing to say AND nothing to attach — skip.
-    return {
-      automation_id: automation.id,
-      ok: false,
-      skipped_reason: 'no_message',
-    };
-  }
-
   try {
-    const attachments = (config.attachments ?? []) as SlackAutomationAttachment[];
-
-    if (attachments.length === 0) {
-      // Plain message path.
-      await web.chat.postMessage({
-        channel: config.channel_id,
-        text: messageText || '(empty message)',
-        unfurl_links: false,
-        unfurl_media: false,
-      });
-    } else {
-      // Files path — fetch each attachment from Storage as Buffer and
-      // hand them to files.uploadV2 along with the message as
-      // initial_comment. Slack groups multiple uploads on a single
-      // message when they share channel + initial_comment.
-      const fileUploads = await Promise.all(
-        attachments.map(async (att) => {
-          const { data, error } = await supabase.storage
-            .from('slack-automation-attachments')
-            .download(att.storage_path);
-          if (error || !data) {
-            throw new Error(
-              `Failed to download attachment ${att.name}: ${error?.message ?? 'unknown error'}`,
-            );
-          }
-          const buffer = Buffer.from(await data.arrayBuffer());
-          return {
-            file: buffer,
-            filename: att.name,
-          };
-        }),
-      );
-
-      await web.files.uploadV2({
-        channel_id: config.channel_id,
-        initial_comment: messageText || undefined,
-        file_uploads: fileUploads,
-      });
-    }
+    await sendAutomationPayload({
+      supabase,
+      web,
+      channelId: config.channel_id,
+      text: payload.text,
+      blocks: payload.blocks,
+      attachments,
+    });
 
     return { automation_id: automation.id, ok: true };
   } catch (err) {
@@ -719,8 +919,10 @@ async function fireOneTaskAssignmentAutomation(args: {
   taskId: string;
   assignee: AutomationUserContext;
   variables: Record<string, string>;
+  taskCard?: TaskCardPayloadContext;
+  bypassDedup?: boolean;
 }): Promise<TaskAssignmentAutomationResult> {
-  const { supabase, web, automation, taskId, assignee, variables } = args;
+  const { supabase, web, automation, taskId, assignee, variables, taskCard, bypassDedup } = args;
   const config = automation.config as SlackAutomationConfig | null;
   const deliveryType: SlackAutomationDeliveryType =
     config?.delivery_type ?? 'channel';
@@ -735,8 +937,18 @@ async function fireOneTaskAssignmentAutomation(args: {
     };
   }
 
-  const messageText = renderTemplate(config.message_template ?? '', variables).trim();
-  if (!messageText && (config.attachments?.length ?? 0) === 0) {
+  const payload = renderSlackAutomationPayload({ config, variables, taskCard });
+  const attachments = (config.attachments ?? []) as SlackAutomationAttachment[];
+  if (payload.errors.length > 0) {
+    return {
+      automation_id: automation.id,
+      ok: false,
+      error: payload.errors.join(' '),
+      recipient_user_id: assignee.id,
+      recipient_email: assignee.email,
+    };
+  }
+  if (!payload.text && !payload.blocks?.length && attachments.length === 0) {
     return {
       automation_id: automation.id,
       ok: false,
@@ -747,53 +959,56 @@ async function fireOneTaskAssignmentAutomation(args: {
   }
 
   const eventSignature = `task_assigned:${taskId}:${assignee.id}`;
-  const { error: dedupErr } = await supabase
-    .from('slack_automation_deliveries')
-    .insert({
-      automation_id: automation.id,
-      trigger: 'task_assigned',
-      entity_type: 'task',
-      entity_id: taskId,
-      recipient_user_id: assignee.id,
-      recipient_email: assignee.email,
-      event_signature: eventSignature,
-    });
+  let deliveryLogged = false;
+  if (!bypassDedup) {
+    const { error: dedupErr } = await supabase
+      .from('slack_automation_deliveries')
+      .insert({
+        automation_id: automation.id,
+        trigger: 'task_assigned',
+        entity_type: 'task',
+        entity_id: taskId,
+        recipient_user_id: assignee.id,
+        recipient_email: assignee.email,
+        event_signature: eventSignature,
+      });
 
-  let deliveryLogged = true;
-  if (dedupErr) {
-    const code = (dedupErr as { code?: string }).code;
-    const errorMessage =
-      (dedupErr as { message?: string }).message ?? String(dedupErr);
-    const isDup =
-      code === '23505' || /duplicate key/i.test(errorMessage);
-    const isMissingDeliveryTable = await isMissingTaskDeliveryLogTable(
-      supabase,
-      code,
-      errorMessage,
-    );
-    if (isDup) {
-      return {
-        automation_id: automation.id,
-        ok: true,
-        skipped_reason: 'duplicate',
-        recipient_user_id: assignee.id,
-        recipient_email: assignee.email,
-      };
-    }
-    if (isMissingDeliveryTable) {
-      deliveryLogged = false;
-      console.warn(
-        '[slackAutomations/run] slack_automation_deliveries missing; sending task assignment without dedupe',
+    deliveryLogged = true;
+    if (dedupErr) {
+      const code = (dedupErr as { code?: string }).code;
+      const errorMessage =
+        (dedupErr as { message?: string }).message ?? String(dedupErr);
+      const isDup =
+        code === '23505' || /duplicate key/i.test(errorMessage);
+      const isMissingDeliveryTable = await isMissingTaskDeliveryLogTable(
+        supabase,
+        code,
+        errorMessage,
       );
-    } else {
-      console.error('[slackAutomations/run] delivery dedup insert failed', dedupErr);
-      return {
-        automation_id: automation.id,
-        ok: false,
-        error: `delivery dedup log failed: ${errorMessage}`,
-        recipient_user_id: assignee.id,
-        recipient_email: assignee.email,
-      };
+      if (isDup) {
+        return {
+          automation_id: automation.id,
+          ok: true,
+          skipped_reason: 'duplicate',
+          recipient_user_id: assignee.id,
+          recipient_email: assignee.email,
+        };
+      }
+      if (isMissingDeliveryTable) {
+        deliveryLogged = false;
+        console.warn(
+          '[slackAutomations/run] slack_automation_deliveries missing; sending task assignment without dedupe',
+        );
+      } else {
+        console.error('[slackAutomations/run] delivery dedup insert failed', dedupErr);
+        return {
+          automation_id: automation.id,
+          ok: false,
+          error: `delivery dedup log failed: ${errorMessage}`,
+          recipient_user_id: assignee.id,
+          recipient_email: assignee.email,
+        };
+      }
     }
   }
 
@@ -823,8 +1038,9 @@ async function fireOneTaskAssignmentAutomation(args: {
       supabase,
       web,
       channelId,
-      text: messageText,
-      attachments: (config.attachments ?? []) as SlackAutomationAttachment[],
+      text: payload.text,
+      blocks: payload.blocks,
+      attachments,
     });
 
     return {
@@ -895,17 +1111,21 @@ async function sendAutomationPayload(args: {
   web: WebClient;
   channelId: string;
   text: string;
+  blocks?: Block[];
   attachments: SlackAutomationAttachment[];
 }): Promise<void> {
-  const { supabase, web, channelId, text, attachments } = args;
-  if (attachments.length === 0) {
+  const { supabase, web, channelId, text, blocks, attachments } = args;
+  const hasBlocks = (blocks?.length ?? 0) > 0;
+
+  if (hasBlocks || attachments.length === 0) {
     await web.chat.postMessage({
       channel: channelId,
       text: text || '(empty message)',
+      ...(hasBlocks ? { blocks } : {}),
       unfurl_links: false,
       unfurl_media: false,
     });
-    return;
+    if (attachments.length === 0) return;
   }
 
   const fileUploads = await Promise.all(
@@ -928,7 +1148,7 @@ async function sendAutomationPayload(args: {
 
   await web.files.uploadV2({
     channel_id: channelId,
-    initial_comment: text || undefined,
+    initial_comment: hasBlocks ? undefined : text || undefined,
     file_uploads: fileUploads,
   });
 }
