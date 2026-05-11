@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Fragment, type CSSProperties } from 'react';
+import type { CSSProperties } from 'react';
 import { ModeToggle } from '@/components/mode-toggle';
 import { SidebarToggleButton } from '@/components/SidebarToggleButton';
 import { UserAvatar } from '@/components/ui/user-avatar';
@@ -13,7 +13,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Separator } from '@/components/ui/separator';
 import {
   DASHBOARD_VIEW_LABELS,
   DASHBOARD_VIEWS,
@@ -22,7 +21,6 @@ import {
 import { useAuth } from '@/lib/authContext';
 import { useKanbanTexture } from '@/lib/hooks/useKanbanTexture';
 import { useSidebar } from '@/lib/sidebarContext';
-import { assignmentTaskPath } from '@/src/lib/links';
 
 type SidebarProps = {
   surface?: 'default' | 'timeline';
@@ -31,15 +29,18 @@ type SidebarProps = {
 };
 
 const SIDEBAR_DARK_SURFACE = '#111114';
-const SIDEBAR_DARK_LIFTED_SURFACE = '#17171B';
 const SIDEBAR_DARK_BORDER = 'rgba(255,255,255,0.065)';
 const SIDEBAR_DARK_HOVER = 'rgba(255,255,255,0.06)';
 const SIDEBAR_DARK_ACTIVE = 'rgba(255,255,255,0.10)';
-const SIDEBAR_DARK_SEPARATOR = 'rgba(255,255,255,0.055)';
 const SIDEBAR_SCROLL_CLASS =
   'overflow-y-auto overflow-x-hidden [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.18)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[rgba(255,255,255,0.14)] hover:[&::-webkit-scrollbar-thumb]:bg-[rgba(255,255,255,0.22)]';
 
 const routeItems = [
+  {
+    name: 'Properties',
+    path: '/properties',
+    icon: <PropertyIcon />,
+  },
   {
     name: 'Templates',
     path: '/templates',
@@ -134,14 +135,6 @@ export default function Sidebar({
     isReady,
     workspaceOpen,
     setWorkspaceOpen,
-    assignmentsOpen,
-    setAssignmentsOpen,
-    propertiesOpen,
-    setPropertiesOpen,
-    assignmentState,
-    assignments,
-    propertyState,
-    properties,
   } = useSidebar();
   const { user, role, loading, canEditTemplates, signOut } = useAuth();
   const kanbanTexture = useKanbanTexture();
@@ -158,11 +151,9 @@ export default function Sidebar({
   });
   const sidebarVars = {
     '--sidebar-dark-surface': SIDEBAR_DARK_SURFACE,
-    '--sidebar-dark-lifted-surface': SIDEBAR_DARK_LIFTED_SURFACE,
     '--sidebar-dark-border': SIDEBAR_DARK_BORDER,
     '--sidebar-dark-hover': SIDEBAR_DARK_HOVER,
     '--sidebar-dark-active': SIDEBAR_DARK_ACTIVE,
-    '--sidebar-dark-separator': SIDEBAR_DARK_SEPARATOR,
   } as CSSProperties;
 
   const panelSurfaceClass =
@@ -223,180 +214,48 @@ export default function Sidebar({
 
               {workspaceOpen && (
                 <div className="mt-1 w-full min-w-0 max-w-full pl-8 pr-1">
-                  <div className={`h-36 w-full min-w-0 max-w-full rounded-md border border-neutral-200/70 bg-neutral-50/80 dark:border-[var(--sidebar-dark-border)] dark:bg-[var(--sidebar-dark-lifted-surface)] ${SIDEBAR_SCROLL_CLASS}`}>
-                    <div className="w-full min-w-0 max-w-full overflow-hidden p-1">
-                      {DASHBOARD_VIEWS.map((view, index) => {
-                        const isActive = pathname === '/' && activeWorkspaceView === view;
-                        return (
-                          <Fragment key={view}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (onWorkspaceViewChange) {
-                                  onWorkspaceViewChange(view);
-                                } else {
-                                  router.push(`/?view=${view}`);
-                                }
-                              }}
-                              tabIndex={isOpen ? 0 : -1}
-                              className={`flex w-full min-w-0 max-w-full overflow-hidden rounded-md px-2.5 py-1.5 text-left text-[12px] leading-4 transition-colors ${
-                                isActive ? nestedActiveClass : nestedInactiveClass
-                              }`}
-                              title={DASHBOARD_VIEW_LABELS[view]}
-                            >
-                              <span className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                                {DASHBOARD_VIEW_LABELS[view]}
-                              </span>
-                            </button>
-                            {index < DASHBOARD_VIEWS.length - 1 && (
-                              <Separator className="mx-2 my-0 bg-neutral-200/70 dark:bg-[var(--sidebar-dark-separator)]" />
-                            )}
-                          </Fragment>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="min-w-0">
-              <div className="flex min-w-0 items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setAssignmentsOpen((open) => !open)}
-                  tabIndex={isOpen ? 0 : -1}
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors ${inactiveRowClass}`}
-                  aria-label={assignmentsOpen ? 'Collapse assignments' : 'Expand assignments'}
-                  aria-expanded={assignmentsOpen}
-                >
-                  <Chevron open={assignmentsOpen} />
-                </button>
-                <Link
-                  href="/assignments"
-                  tabIndex={isOpen ? 0 : -1}
-                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
-                    pathname === '/assignments' ? activeRowClass : inactiveRowClass
-                  }`}
-                >
-                  <span className="shrink-0"><AssignmentIcon /></span>
-                  <span className="min-w-0 flex-1 truncate">My Assignments</span>
-                </Link>
-              </div>
-
-              {assignmentsOpen && (
-                <div className="mt-1 w-full min-w-0 max-w-full pl-8 pr-1">
-                  <div className={`h-44 w-full min-w-0 max-w-full rounded-md border border-neutral-200/70 bg-neutral-50/80 dark:border-[var(--sidebar-dark-border)] dark:bg-[var(--sidebar-dark-lifted-surface)] ${SIDEBAR_SCROLL_CLASS}`}>
-                    <div className="w-full min-w-0 max-w-full overflow-hidden p-1">
-                      {assignmentState === 'loading' && (
-                        <p className={`px-2.5 py-1.5 text-[12px] ${sectionMutedClass}`}>Loading...</p>
-                      )}
-                      {assignmentState === 'error' && (
-                        <p className={`px-2.5 py-1.5 text-[12px] ${sectionMutedClass}`}>Unable to load</p>
-                      )}
-                      {assignmentState === 'ready' && assignments.length === 0 && (
-                        <p className={`px-2.5 py-1.5 text-[12px] ${sectionMutedClass}`}>No assignments</p>
-                      )}
-                      {assignments.map((task, index) => {
-                        const id = task.task_id ?? task.id;
-                        const label = task.title || task.template_name || 'Untitled task';
-                        const row = id ? (
-                          <Link
-                            href={assignmentTaskPath(id)}
-                            tabIndex={isOpen ? 0 : -1}
-                            className={`flex w-full min-w-0 max-w-full overflow-hidden rounded-md px-2.5 py-1.5 text-[12px] leading-4 transition-colors ${nestedInactiveClass}`}
-                            title={label}
-                          >
-                            <span className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                              {label}
-                            </span>
-                          </Link>
-                        ) : (
-                          <span
-                            className={`flex w-full min-w-0 max-w-full overflow-hidden rounded-md px-2.5 py-1.5 text-[12px] leading-4 ${sectionMutedClass}`}
-                            title={label}
-                          >
-                            <span className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                              {label}
-                            </span>
+                  <div className="space-y-0.5">
+                    {DASHBOARD_VIEWS.map((view) => {
+                      const isActive = pathname === '/' && activeWorkspaceView === view;
+                      return (
+                        <button
+                          key={view}
+                          type="button"
+                          onClick={() => {
+                            if (onWorkspaceViewChange) {
+                              onWorkspaceViewChange(view);
+                            } else {
+                              router.push(`/?view=${view}`);
+                            }
+                          }}
+                          tabIndex={isOpen ? 0 : -1}
+                          className={`flex w-full min-w-0 max-w-full overflow-hidden rounded-md px-2.5 py-1.5 text-left text-[12px] leading-4 transition-colors ${
+                            isActive ? nestedActiveClass : nestedInactiveClass
+                          }`}
+                          title={DASHBOARD_VIEW_LABELS[view]}
+                        >
+                          <span className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+                            {DASHBOARD_VIEW_LABELS[view]}
                           </span>
+                        </button>
                         );
-
-                        return (
-                          <Fragment key={id ?? `${label}-${index}`}>
-                            {row}
-                            {index < assignments.length - 1 && (
-                              <Separator className="mx-2 my-0 bg-neutral-200/70 dark:bg-[var(--sidebar-dark-separator)]" />
-                            )}
-                          </Fragment>
-                        );
-                      })}
-                    </div>
+                    })}
                   </div>
                 </div>
               )}
             </div>
 
             <div className="min-w-0">
-              <div className="flex min-w-0 items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setPropertiesOpen((open) => !open)}
-                  tabIndex={isOpen ? 0 : -1}
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors ${inactiveRowClass}`}
-                  aria-label={propertiesOpen ? 'Collapse properties' : 'Expand properties'}
-                  aria-expanded={propertiesOpen}
-                >
-                  <Chevron open={propertiesOpen} />
-                </button>
-                <Link
-                  href="/properties"
-                  tabIndex={isOpen ? 0 : -1}
-                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
-                    pathname?.startsWith('/properties') ? activeRowClass : inactiveRowClass
-                  }`}
-                >
-                  <span className="shrink-0"><PropertyIcon /></span>
-                  <span className="min-w-0 flex-1 truncate">Properties</span>
-                </Link>
-              </div>
-
-              {propertiesOpen && (
-                <div className="mt-1 w-full min-w-0 max-w-full pl-8 pr-1">
-                  <div className={`h-44 w-full min-w-0 max-w-full rounded-md border border-neutral-200/70 bg-neutral-50/80 dark:border-[var(--sidebar-dark-border)] dark:bg-[var(--sidebar-dark-lifted-surface)] ${SIDEBAR_SCROLL_CLASS}`}>
-                    <div className="w-full min-w-0 max-w-full overflow-hidden p-1">
-                      {propertyState === 'loading' && (
-                        <p className={`px-2.5 py-1.5 text-[12px] ${sectionMutedClass}`}>Loading...</p>
-                      )}
-                      {propertyState === 'error' && (
-                        <p className={`px-2.5 py-1.5 text-[12px] ${sectionMutedClass}`}>Unable to load</p>
-                      )}
-                      {propertyState === 'ready' && properties.length === 0 && (
-                        <p className={`px-2.5 py-1.5 text-[12px] ${sectionMutedClass}`}>No properties</p>
-                      )}
-                      {properties.map((property, index) => (
-                        <Fragment key={property.id}>
-                          <Link
-                            href={`/properties/${property.id}`}
-                            tabIndex={isOpen ? 0 : -1}
-                            className={`flex w-full min-w-0 max-w-full overflow-hidden rounded-md px-2.5 py-1.5 text-[12px] leading-4 transition-colors ${
-                              pathname === `/properties/${property.id}` ? nestedActiveClass : nestedInactiveClass
-                            }`}
-                            title={property.name}
-                          >
-                            <span className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                              {property.name}
-                            </span>
-                          </Link>
-                          {index < properties.length - 1 && (
-                            <Separator className="mx-2 my-0 bg-neutral-200/70 dark:bg-[var(--sidebar-dark-separator)]" />
-                          )}
-                        </Fragment>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
+              <Link
+                href="/assignments"
+                tabIndex={isOpen ? 0 : -1}
+                className={`flex min-w-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
+                  pathname === '/assignments' ? activeRowClass : inactiveRowClass
+                }`}
+              >
+                <span className="shrink-0"><AssignmentIcon /></span>
+                <span className="min-w-0 flex-1 truncate">My Assignments</span>
+              </Link>
             </div>
 
             <div className="space-y-0.5 pt-1">

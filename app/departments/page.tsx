@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import Sidebar from '@/components/Sidebar';
-import { SidebarToggleButton } from '@/components/SidebarToggleButton';
+import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -68,7 +67,7 @@ export default function DepartmentsPage() {
       } else {
         setError(data.error || 'Failed to create department');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to create department');
     } finally {
       setCreating(false);
@@ -104,7 +103,7 @@ export default function DepartmentsPage() {
       } else {
         setError(data.error || 'Failed to update department');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to update department');
     } finally {
       setSaving(false);
@@ -123,7 +122,7 @@ export default function DepartmentsPage() {
       } else {
         setDeleteError(data.error || 'Failed to delete department');
       }
-    } catch (err) {
+    } catch {
       setDeleteError('Failed to delete department');
     }
   };
@@ -182,36 +181,24 @@ export default function DepartmentsPage() {
   );
 
   return (
-    <div className="flex flex-col h-screen bg-white dark:bg-card">
-      {/* Top bar with sidebar toggle + page title. The descriptive sub-header
-          (badge + create button) lives below in the content column. */}
-      <div className="flex-shrink-0 px-3 py-2 bg-white dark:bg-card border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-2">
-        <SidebarToggleButton />
-        <h1 className="text-base font-semibold text-neutral-900 dark:text-white truncate">
-          Departments
-        </h1>
-      </div>
+    <DesktopSidebarShell>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Sub-header: description + actions */}
+        <div className="flex-shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-6 pt-6 pb-4">
+          <p className="text-sm text-muted-foreground">
+            Manage departments for templates, tasks, and projects.
+          </p>
 
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
-
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Sub-header: description + actions */}
-          <div className="flex-shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-6 pt-6 pb-4">
-            <p className="text-sm text-muted-foreground">
-              Manage departments for templates, tasks, and projects.
-            </p>
-
-            <div className="flex items-center justify-between mt-4">
-              <Badge variant="secondary" className="text-xs">
-                {departments.length} department{departments.length !== 1 ? 's' : ''}
-              </Badge>
-              <Button onClick={() => setShowCreateDialog(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                New Department
-              </Button>
-            </div>
+          <div className="flex items-center justify-between mt-4">
+            <Badge variant="secondary" className="text-xs">
+              {departments.length} department{departments.length !== 1 ? 's' : ''}
+            </Badge>
+            <Button onClick={() => setShowCreateDialog(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              New Department
+            </Button>
           </div>
+        </div>
 
         {/* Error banner */}
         {error && (
@@ -315,12 +302,13 @@ export default function DepartmentsPage() {
                               <Pencil className="w-3.5 h-3.5 text-neutral-500" />
                             </button>
                             <button
+                              disabled={deletingId === dept.id}
                               onClick={() => {
                                 if (confirm(`Delete "${dept.name}"? This cannot be undone.`)) {
                                   handleDelete(dept.id);
                                 }
                               }}
-                              className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                              className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
                               title="Delete department"
                             >
                               <Trash2 className="w-3.5 h-3.5 text-red-400" />
@@ -345,7 +333,6 @@ export default function DepartmentsPage() {
               </div>
             </div>
           )}
-        </div>
       </div>
 
       {/* Create Department Dialog */}
@@ -403,6 +390,6 @@ export default function DepartmentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </DesktopSidebarShell>
   );
 }
