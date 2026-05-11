@@ -1,8 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { runSlackAutomationsForTaskAssignment } from '@/src/server/slackAutomations/run';
 
 // POST - Update task assignments (replaces all existing assignments)
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const { taskId, userIds } = await request.json();
 
@@ -12,6 +14,13 @@ export async function POST(request: Request) {
 
     // Ensure userIds is an array
     const assigneeIds: string[] = Array.isArray(userIds) ? userIds : (userIds ? [userIds] : []);
+    const previousAssignments = await getSupabaseServer()
+      .from('task_assignments')
+      .select('user_id')
+      .eq('task_id', taskId);
+    const previousAssigneeIds =
+      (previousAssignments.data as Array<{ user_id: string }> | null)
+        ?.map((row) => row.user_id) ?? [];
 
     // Delete existing assignments for this task
     const { error: deleteError } = await getSupabaseServer()
@@ -58,6 +67,15 @@ export async function POST(request: Request) {
       console.error('Error fetching updated task:', fetchError);
       return NextResponse.json({ error: fetchError.message }, { status: 500 });
     }
+
+    runSlackAutomationsForTaskAssignment({
+      taskId,
+      previousAssigneeIds,
+      nextAssigneeIds: assigneeIds,
+      actor: { user_id: getActorUserIdFromRequest(request) },
+    }).catch((err) => {
+      console.error('[update-task-assignment] Slack automation failed:', err);
+    });
 
     return NextResponse.json({ success: true, data: task }, { status: 200 });
   } catch (error: any) {

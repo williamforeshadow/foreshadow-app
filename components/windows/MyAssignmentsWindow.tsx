@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/apiFetch';
 import { memo, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
@@ -544,7 +545,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
       }
       if (assigneesChanged) {
         calls.push(
-          fetch('/api/update-task-assignment', {
+          apiFetch('/api/update-task-assignment', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

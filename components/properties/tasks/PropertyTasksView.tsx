@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/apiFetch';
 import {
   memo,
   useCallback,
@@ -862,7 +863,7 @@ function PropertyTasksViewContent({
         }
         if (assigneesChanged) {
           calls.push(
-            fetch('/api/update-task-assignment', {
+            apiFetch('/api/update-task-assignment', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -947,7 +948,7 @@ function PropertyTasksViewContent({
   const handleDeleteTask = useCallback(
     async (task: Project) => {
       try {
-        const res = await fetch(`/api/tasks-for-bin/${task.id}`, { method: 'DELETE' });
+        const res = await apiFetch(`/api/tasks-for-bin/${task.id}`, { method: 'DELETE' });
         if (res.ok) {
           setSelectedItem(null);
           fetchTasks();

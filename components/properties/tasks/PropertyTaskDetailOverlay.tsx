@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/apiFetch';
 import {
   useCallback,
   useEffect,
@@ -399,7 +400,7 @@ export function PropertyTaskDetailOverlay({
         }
         if (assigneesChanged) {
           calls.push(
-            fetch('/api/update-task-assignment', {
+            apiFetch('/api/update-task-assignment', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -493,7 +494,7 @@ export function PropertyTaskDetailOverlay({
   const handleDeleteTask = useCallback(
     async (project: Project) => {
       try {
-        const res = await fetch(`/api/tasks-for-bin/${project.id}`, {
+        const res = await apiFetch(`/api/tasks-for-bin/${project.id}`, {
           method: 'DELETE',
         });
         if (res.ok) {

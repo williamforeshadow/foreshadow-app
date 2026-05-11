@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/apiFetch';
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import MobileBinPicker from '@/components/mobile/MobileBinPicker';
 import MobileProjectDetail from '@/components/mobile/MobileProjectDetail';
@@ -200,7 +201,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
 
   const handleTemplateChange = useCallback(async (templateId: string | null) => {
     if (!detailProject) return;
-    const res = await fetch(`/api/tasks-for-bin/${detailProject.id}`, {
+    const res = await apiFetch(`/api/tasks-for-bin/${detailProject.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ template_id: templateId }),
@@ -375,7 +376,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
       } else {
         payload[field] = value || null;
       }
-      const res = await fetch(`/api/tasks-for-bin/${taskId}`, {
+      const res = await apiFetch(`/api/tasks-for-bin/${taskId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -479,7 +480,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
 
   const handleDeleteTask = useCallback(async (task: Project) => {
     try {
-      const res = await fetch(`/api/tasks-for-bin/${task.id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/tasks-for-bin/${task.id}`, { method: 'DELETE' });
       if (res.ok) {
         setTasks(prev => prev.filter(t => t.id !== task.id));
         if (screen.type === 'detail') {
@@ -503,7 +504,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
       if (fields.scheduled_date !== undefined) payload.scheduled_date = fields.scheduled_date || null;
       if (fields.scheduled_time !== undefined) payload.scheduled_time = fields.scheduled_time || null;
 
-      const res = await fetch(`/api/tasks-for-bin/${projectId}`, {
+      const res = await apiFetch(`/api/tasks-for-bin/${projectId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -697,7 +698,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
                   setDraftTask(updated);
                 }
               : async (propertyId, propertyName) => {
-                  const res = await fetch(`/api/tasks-for-bin/${screen.project.id}`, {
+                  const res = await apiFetch(`/api/tasks-for-bin/${screen.project.id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ property_name: propertyName || null }),
@@ -712,7 +713,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
             bins={binsHook.bins}
             onBinChange={async (binId) => {
               if (isDraft) return;
-              const res = await fetch(`/api/tasks-for-bin/${screen.project.id}`, {
+              const res = await apiFetch(`/api/tasks-for-bin/${screen.project.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ bin_id: binId || null }),
@@ -728,7 +729,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
               if (isDraft) return;
               const payload: Record<string, unknown> = { is_binned: isBinned };
               if (!isBinned) payload.bin_id = null;
-              const res = await fetch(`/api/tasks-for-bin/${screen.project.id}`, {
+              const res = await apiFetch(`/api/tasks-for-bin/${screen.project.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),

@@ -5,7 +5,7 @@ import {
 } from '@/src/server/tasks/updateTask';
 import { consumeUpdateTaskToken } from '@/src/server/tasks/updateTaskConfirmation';
 import { taskUrl } from '@/src/lib/links';
-import type { ToolDefinition, ToolMeta, ToolResult } from './types';
+import type { ToolContext, ToolDefinition, ToolMeta, ToolResult } from './types';
 
 // update_task — second half of the two-step write protocol for
 // modifying an existing task. Accepts ONLY a confirmation_token from
@@ -52,7 +52,10 @@ export interface UpdateTaskData {
   changes: UpdateTaskFieldChange[];
 }
 
-async function handler(input: Input): Promise<ToolResult<UpdateTaskData>> {
+async function handler(
+  input: Input,
+  ctx: ToolContext,
+): Promise<ToolResult<UpdateTaskData>> {
   const consumed = consumeUpdateTaskToken(input.confirmation_token);
   if (!consumed.ok) {
     return {
@@ -69,7 +72,11 @@ async function handler(input: Input): Promise<ToolResult<UpdateTaskData>> {
     };
   }
 
-  const result = await updateTaskService(consumed.input);
+  const result = await updateTaskService(consumed.input, {
+    actor: ctx.actor
+      ? { user_id: ctx.actor.appUserId, name: ctx.actor.name }
+      : null,
+  });
   if (!result.ok) {
     if (result.error.code === 'invalid_input' || result.error.code === 'locked_field') {
       return {

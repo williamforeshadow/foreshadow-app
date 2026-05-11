@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 
-const VALID_TRIGGERS = ['new_booking', 'check_in', 'check_out'];
+const VALID_TRIGGERS = ['new_booking', 'check_in', 'check_out', 'task_assigned'];
 
 export async function GET(
   _req: NextRequest,

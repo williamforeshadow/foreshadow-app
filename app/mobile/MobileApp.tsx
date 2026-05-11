@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/apiFetch';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
@@ -202,7 +203,7 @@ export default function MobileApp() {
   }, [mobileSelectedTask, saveTaskForm]);
 
   const handleDeleteTask = useCallback(async (project: Project) => {
-    await fetch(`/api/tasks-for-bin/${project.id}`, { method: 'DELETE' });
+    await apiFetch(`/api/tasks-for-bin/${project.id}`, { method: 'DELETE' });
     setMobileSelectedTask(null);
   }, []);
 
@@ -240,7 +241,7 @@ export default function MobileApp() {
       if (fields.scheduled_date !== undefined) payload.scheduled_date = fields.scheduled_date || null;
       if (fields.scheduled_time !== undefined) payload.scheduled_time = fields.scheduled_time || null;
 
-      const res = await fetch(`/api/tasks-for-bin/${projectId}`, {
+      const res = await apiFetch(`/api/tasks-for-bin/${projectId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -257,13 +258,13 @@ export default function MobileApp() {
   }, []);
 
   const handleDeleteProject = useCallback(async (project: Project) => {
-    await fetch(`/api/tasks-for-bin/${project.id}`, { method: 'DELETE' });
+    await apiFetch(`/api/tasks-for-bin/${project.id}`, { method: 'DELETE' });
     setMobileSelectedProject(null);
   }, []);
 
   const handleProjectTemplateChange = useCallback(async (templateId: string | null) => {
     if (!mobileSelectedProject) return;
-    await fetch(`/api/tasks-for-bin/${mobileSelectedProject.id}`, {
+    await apiFetch(`/api/tasks-for-bin/${mobileSelectedProject.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ template_id: templateId }),
@@ -430,7 +431,7 @@ export default function MobileApp() {
           onDelete={handleDeleteProject}
           allProperties={allProperties}
           onPropertyChange={async (propertyId, propertyName) => {
-            const res = await fetch(`/api/tasks-for-bin/${mobileSelectedProject.id}`, {
+            const res = await apiFetch(`/api/tasks-for-bin/${mobileSelectedProject.id}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ property_name: propertyName || null }),
@@ -442,7 +443,7 @@ export default function MobileApp() {
           }}
           bins={binsHook.bins}
           onBinChange={async (binId) => {
-            const res = await fetch(`/api/tasks-for-bin/${mobileSelectedProject.id}`, {
+            const res = await apiFetch(`/api/tasks-for-bin/${mobileSelectedProject.id}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ bin_id: binId || null }),
@@ -456,7 +457,7 @@ export default function MobileApp() {
           onIsBinnedChange={async (isBinned) => {
             const payload: Record<string, unknown> = { is_binned: isBinned };
             if (!isBinned) payload.bin_id = null;
-            const res = await fetch(`/api/tasks-for-bin/${mobileSelectedProject.id}`, {
+            const res = await apiFetch(`/api/tasks-for-bin/${mobileSelectedProject.id}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),

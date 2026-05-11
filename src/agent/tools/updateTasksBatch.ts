@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { updateTasksBatch as updateTasksBatchService } from '@/src/server/tasks/updateTasksBatch';
 import { consumeUpdateTasksBatchToken } from '@/src/server/tasks/updateTasksBatchConfirmation';
 import { taskUrl } from '@/src/lib/links';
-import type { ToolDefinition, ToolMeta, ToolResult } from './types';
+import type { ToolContext, ToolDefinition, ToolMeta, ToolResult } from './types';
 import type { UpdatedTaskRow } from './updateTask';
 
 const inputSchema = z.object({
@@ -34,7 +34,10 @@ export interface UpdateTasksBatchData {
   }>;
 }
 
-async function handler(input: Input): Promise<ToolResult<UpdateTasksBatchData>> {
+async function handler(
+  input: Input,
+  ctx: ToolContext,
+): Promise<ToolResult<UpdateTasksBatchData>> {
   const consumed = consumeUpdateTasksBatchToken(input.confirmation_token);
   if (!consumed.ok) {
     return {
@@ -51,7 +54,11 @@ async function handler(input: Input): Promise<ToolResult<UpdateTasksBatchData>> 
     };
   }
 
-  const result = await updateTasksBatchService(consumed.input);
+  const result = await updateTasksBatchService(consumed.input, {
+    actor: ctx.actor
+      ? { user_id: ctx.actor.appUserId, name: ctx.actor.name }
+      : null,
+  });
   if (!result.ok) {
     return {
       ok: false,

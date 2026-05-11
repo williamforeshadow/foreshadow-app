@@ -1,8 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { runSlackAutomationsForTaskAssignment } from '@/src/server/slackAutomations/run';
 
 export async function PUT(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -27,6 +29,7 @@ export async function PUT(
     const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
+    let previousAssigneeIds: string[] = [];
 
     if (title !== undefined) updateData.title = title;
     if (description !== undefined) updateData.description = description;
@@ -86,6 +89,13 @@ export async function PUT(
         ? [assigned_user_ids]
         : [];
 
+      const { data: previousAssignments } = await getSupabaseServer()
+        .from('task_assignments')
+        .select('user_id')
+        .eq('task_id', id);
+      previousAssigneeIds =
+        previousAssignments?.map((row: { user_id: string }) => row.user_id) ?? [];
+
       await getSupabaseServer()
         .from('task_assignments')
         .delete()
@@ -99,6 +109,15 @@ export async function PUT(
 
         await getSupabaseServer().from('task_assignments').insert(assignments);
       }
+
+      runSlackAutomationsForTaskAssignment({
+        taskId: id,
+        previousAssigneeIds,
+        nextAssigneeIds: userIds,
+        actor: { user_id: getActorUserIdFromRequest(request) },
+      }).catch((err) => {
+        console.error('[tasks-for-bin] Slack assignment automation failed:', err);
+      });
     }
 
     const { data, error: fetchError } = await getSupabaseServer()

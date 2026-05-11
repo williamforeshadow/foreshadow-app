@@ -17,7 +17,7 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 //   created_at    timestamptz
 //   updated_at    timestamptz
 
-const VALID_TRIGGERS = ['new_booking', 'check_in', 'check_out'];
+const VALID_TRIGGERS = ['new_booking', 'check_in', 'check_out', 'task_assigned'];
 
 export async function GET() {
   const supabase = getSupabaseServer();

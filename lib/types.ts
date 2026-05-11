@@ -579,7 +579,13 @@ export function createDefaultAutomationConfig(): AutomationConfig {
 // Slack Automation Types
 // ============================================================================
 
-export type SlackAutomationTrigger = 'new_booking' | 'check_in' | 'check_out';
+export type SlackAutomationTrigger =
+  | 'new_booking'
+  | 'check_in'
+  | 'check_out'
+  | 'task_assigned';
+
+export type SlackAutomationDeliveryType = 'channel' | 'task_assignee_dm';
 
 /**
  * Variables available for `{{var}}` substitution inside a Slack automation's
@@ -591,7 +597,7 @@ export type SlackAutomationTrigger = 'new_booking' | 'check_in' | 'check_out';
  * concept of a given variable (e.g. recurring automations later) simply
  * leave it blank rather than erroring.
  */
-export const SLACK_AUTOMATION_VARIABLES: ReadonlyArray<{
+export const SLACK_RESERVATION_AUTOMATION_VARIABLES: ReadonlyArray<{
   key: string;
   label: string;
   description: string;
@@ -610,6 +616,28 @@ export const SLACK_AUTOMATION_VARIABLES: ReadonlyArray<{
   { key: 'trigger_date', label: 'Today (in property TZ)', description: 'YYYY-MM-DD, resolved in the property\'s timezone' },
 ];
 
+export const SLACK_TASK_ASSIGNMENT_AUTOMATION_VARIABLES: ReadonlyArray<{
+  key: string;
+  label: string;
+  description: string;
+}> = [
+  { key: 'actor_name', label: 'Actor name', description: 'The user who assigned the task' },
+  { key: 'actor_email', label: 'Actor email', description: 'Email for the user who assigned the task' },
+  { key: 'assignee_name', label: 'Assignee name', description: 'The newly assigned user' },
+  { key: 'assignee_email', label: 'Assignee email', description: 'Email for the newly assigned user' },
+  { key: 'task_title', label: 'Task title', description: 'The assigned task title' },
+  { key: 'task_url', label: 'Task link', description: 'Direct link to the task in Foreshadow' },
+  { key: 'task_status', label: 'Task status', description: 'Current task status' },
+  { key: 'task_priority', label: 'Task priority', description: 'Current task priority' },
+  { key: 'property_name', label: 'Property name', description: 'Property attached to the task, when present' },
+  { key: 'department_name', label: 'Department name', description: 'Department attached to the task, when present' },
+  { key: 'scheduled_date', label: 'Scheduled date', description: 'Task scheduled date, YYYY-MM-DD' },
+  { key: 'scheduled_time', label: 'Scheduled time', description: 'Task scheduled time, HH:MM' },
+  { key: 'trigger_date', label: 'Trigger date', description: 'Date the assignment automation fired, YYYY-MM-DD' },
+];
+
+export const SLACK_AUTOMATION_VARIABLES = SLACK_RESERVATION_AUTOMATION_VARIABLES;
+
 export interface SlackAutomationAttachment {
   /** Random hex token; matches the storage path stem. */
   id: string;
@@ -624,6 +652,11 @@ export interface SlackAutomationAttachment {
 }
 
 export interface SlackAutomationConfig {
+  /**
+   * Where to deliver the message. Older automations omit this and are
+   * treated as channel messages by the execution layer.
+   */
+  delivery_type?: SlackAutomationDeliveryType;
   /**
    * Slack channel id (e.g. C0123456789). Canonical — channel names can
    * change. The picker stores this from `conversations.list`.
@@ -652,6 +685,7 @@ export interface SlackAutomation {
 
 export function createDefaultSlackAutomationConfig(): SlackAutomationConfig {
   return {
+    delivery_type: 'channel',
     channel_id: '',
     channel_name: '',
     message_template: '',

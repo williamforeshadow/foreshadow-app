@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/apiFetch';
 import { memo, useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import type { ProjectViewMode, ProjectBin } from '@/lib/types';
@@ -249,7 +250,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   const handleTemplateChange = useCallback(async (templateId: string | null) => {
     if (!expandedProject) return;
     try {
-      const res = await fetch(`/api/tasks-for-bin/${expandedProject.id}`, {
+      const res = await apiFetch(`/api/tasks-for-bin/${expandedProject.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ template_id: templateId }),
@@ -465,7 +466,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
 
     setSavingEdit(true);
     try {
-      const res = await fetch(`/api/tasks-for-bin/${expandedProject.id}`, {
+      const res = await apiFetch(`/api/tasks-for-bin/${expandedProject.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -570,7 +571,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
 
   const handleDeleteTask = useCallback(async (task: Project) => {
     try {
-      const res = await fetch(`/api/tasks-for-bin/${task.id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/tasks-for-bin/${task.id}`, { method: 'DELETE' });
       if (res.ok) {
         setTasks(prev => prev.filter(t => t.id !== task.id));
         if (expandedProject?.id === task.id) {
@@ -608,7 +609,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
         payload[field] = value || null;
       }
 
-      const res = await fetch(`/api/tasks-for-bin/${taskId}`, {
+      const res = await apiFetch(`/api/tasks-for-bin/${taskId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -896,7 +897,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
               }
             : async (_propertyId, propertyName) => {
                 try {
-                  const res = await fetch(`/api/tasks-for-bin/${expandedProject.id}`, {
+                  const res = await apiFetch(`/api/tasks-for-bin/${expandedProject.id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ property_name: propertyName || null }),
@@ -914,7 +915,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
           bins={binsHook.bins}
           onBinChange={async (binId) => {
             try {
-              const res = await fetch(`/api/tasks-for-bin/${expandedProject.id}`, {
+              const res = await apiFetch(`/api/tasks-for-bin/${expandedProject.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ bin_id: binId || null }),
@@ -933,7 +934,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
             try {
               const payload: Record<string, unknown> = { is_binned: isBinned };
               if (!isBinned) payload.bin_id = null;
-              const res = await fetch(`/api/tasks-for-bin/${expandedProject.id}`, {
+              const res = await apiFetch(`/api/tasks-for-bin/${expandedProject.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),

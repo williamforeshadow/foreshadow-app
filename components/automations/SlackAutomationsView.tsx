@@ -27,8 +27,10 @@ import {
   type SlackAutomationTrigger,
   type SlackAutomationConfig,
   type SlackAutomationAttachment,
+  type SlackAutomationDeliveryType,
   createDefaultSlackAutomationConfig,
-  SLACK_AUTOMATION_VARIABLES,
+  SLACK_RESERVATION_AUTOMATION_VARIABLES,
+  SLACK_TASK_ASSIGNMENT_AUTOMATION_VARIABLES,
 } from '@/lib/types';
 
 interface Property {
@@ -47,18 +49,40 @@ const TRIGGER_LABELS: Record<SlackAutomationTrigger, string> = {
   new_booking: 'New Booking',
   check_in: 'Check-in',
   check_out: 'Check-out',
+  task_assigned: 'Task Assigned',
 };
 
 const TRIGGER_DESCRIPTIONS: Record<SlackAutomationTrigger, string> = {
   new_booking: 'Fires when a new reservation is created for the property',
   check_in: 'Fires on the check-in date for a reservation',
   check_out: 'Fires on the check-out date for a reservation',
+  task_assigned: 'Fires when a user is newly assigned to a task',
 };
+
+const RESERVATION_TRIGGERS: SlackAutomationTrigger[] = [
+  'new_booking',
+  'check_in',
+  'check_out',
+];
+const TASK_TRIGGERS: SlackAutomationTrigger[] = ['task_assigned'];
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function createConfigForTrigger(
+  trigger: SlackAutomationTrigger,
+): SlackAutomationConfig {
+  return {
+    ...createDefaultSlackAutomationConfig(),
+    delivery_type: trigger === 'task_assigned' ? 'task_assignee_dm' : 'channel',
+    message_template:
+      trigger === 'task_assigned'
+        ? '{{actor_name}} assigned you {{task_title}}\n{{task_url}}'
+        : '',
+  };
 }
 
 export default function SlackAutomationsView() {
@@ -119,7 +143,7 @@ export default function SlackAutomationsView() {
     setName('');
     setTrigger('new_booking');
     setSelectedPropertyIds([]);
-    setConfig(createDefaultSlackAutomationConfig());
+    setConfig(createConfigForTrigger('new_booking'));
     setAttachmentError(null);
     setShowDialog(true);
   };
@@ -129,7 +153,10 @@ export default function SlackAutomationsView() {
     setName(automation.name);
     setTrigger(automation.trigger);
     setSelectedPropertyIds(automation.property_ids ?? []);
-    setConfig(automation.config ?? createDefaultSlackAutomationConfig());
+    setConfig({
+      ...createConfigForTrigger(automation.trigger),
+      ...(automation.config ?? {}),
+    });
     setAttachmentError(null);
     setShowDialog(true);
   };
@@ -262,6 +289,31 @@ export default function SlackAutomationsView() {
     }));
   };
 
+  const handleTriggerChange = (value: string) => {
+    const nextTrigger = value as SlackAutomationTrigger;
+    const wasTaskTrigger = trigger === 'task_assigned';
+    setTrigger(nextTrigger);
+    setConfig((prev) => ({
+      ...prev,
+      delivery_type:
+        nextTrigger === 'task_assigned'
+          ? wasTaskTrigger
+            ? prev.delivery_type ?? 'task_assignee_dm'
+            : 'task_assignee_dm'
+          : 'channel',
+      message_template:
+        prev.message_template ||
+        createConfigForTrigger(nextTrigger).message_template,
+    }));
+  };
+
+  const handleDeliveryTypeChange = (value: string) => {
+    setConfig((prev) => ({
+      ...prev,
+      delivery_type: value as SlackAutomationDeliveryType,
+    }));
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -316,6 +368,8 @@ export default function SlackAutomationsView() {
     () => channels.find((c) => c.id === config.channel_id),
     [channels, config.channel_id],
   );
+  const deliveryType = config.delivery_type ?? 'channel';
+  const usesChannel = deliveryType === 'channel';
 
   if (loading) {
     return (
@@ -330,7 +384,7 @@ export default function SlackAutomationsView() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <p className="text-sm text-neutral-500 mt-1">
-            Send Slack notifications when reservation events occur at your properties.
+            Send Slack notifications when reservation or task events occur.
           </p>
         </div>
         <Button onClick={openCreateDialog}>+ New Slack Automation</Button>
@@ -397,9 +451,16 @@ export default function SlackAutomationsView() {
                           e.stopPropagation();
                           handleTest(automation.id);
                         }}
-                        disabled={!automation.config?.channel_id}
+                        disabled={
+                          automation.trigger === 'task_assigned' ||
+                          ((automation.config?.delivery_type ?? 'channel') === 'channel' &&
+                            !automation.config?.channel_id)
+                        }
                         title={
-                          !automation.config?.channel_id
+                          automation.trigger === 'task_assigned'
+                            ? 'Assign a task to test this automation'
+                            : (automation.config?.delivery_type ?? 'channel') === 'channel' &&
+                                !automation.config?.channel_id
                             ? 'Configure a channel first'
                             : 'Send a test message to Slack now'
                         }
@@ -478,12 +539,19 @@ export default function SlackAutomationsView() {
             {/* Trigger */}
             <Field>
               <FieldLabel>Trigger Event</FieldLabel>
-              <Select value={trigger} onValueChange={(v) => setTrigger(v as SlackAutomationTrigger)}>
+              <Select value={trigger} onValueChange={handleTriggerChange}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(Object.keys(TRIGGER_LABELS) as SlackAutomationTrigger[]).map((t) => (
+                  <div className="px-2 py-1 text-xs text-neutral-500">Reservation</div>
+                  {RESERVATION_TRIGGERS.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {TRIGGER_LABELS[t]}
+                    </SelectItem>
+                  ))}
+                  <div className="px-2 py-1 text-xs text-neutral-500">Task</div>
+                  {TASK_TRIGGERS.map((t) => (
                     <SelectItem key={t} value={t}>
                       {TRIGGER_LABELS[t]}
                     </SelectItem>
@@ -528,6 +596,44 @@ export default function SlackAutomationsView() {
 
             {/* Slack Channel — picker from conversations.list */}
             <Field>
+              <FieldLabel>Delivery</FieldLabel>
+              {trigger === 'task_assigned' ? (
+                <>
+                  <Select value={deliveryType} onValueChange={handleDeliveryTypeChange}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="task_assignee_dm">
+                        DM newly assigned user
+                      </SelectItem>
+                      <SelectItem value="channel">Post to channel</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>
+                    Task assignment automations can DM the assigned person through
+                    their Slack identity or post to a shared channel.
+                  </FieldDescription>
+                </>
+              ) : (
+                <>
+                  <Select value="channel" disabled>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="channel">Post to channel</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>
+                    DM delivery is available for Task Assigned automations.
+                  </FieldDescription>
+                </>
+              )}
+            </Field>
+
+            {usesChannel && (
+            <Field>
               <FieldLabel>Slack Channel</FieldLabel>
               {channelsError ? (
                 <div className="text-sm text-red-600 dark:text-red-400">
@@ -568,31 +674,50 @@ export default function SlackAutomationsView() {
                 </>
               )}
             </Field>
+            )}
 
             {/* Message Template — with variable inserter */}
             <Field>
               <FieldLabel>Message</FieldLabel>
               <FieldDescription className="mb-2">
-                Use the variables below to insert reservation data. Slack
+                Use the variables below to insert event data. Slack
                 formatting (*bold*, _italic_) is supported.
               </FieldDescription>
 
               {/* Variable picker bar */}
-              <div className="flex flex-wrap gap-1 mb-2">
-                <span className="text-xs text-neutral-500 self-center mr-1">
-                  Insert:
-                </span>
-                {SLACK_AUTOMATION_VARIABLES.map((v) => (
-                  <button
-                    key={v.key}
-                    type="button"
-                    onClick={() => insertVariable(v.key)}
-                    title={v.description}
-                    className="text-xs px-2 py-1 rounded border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
-                  >
-                    {`{{${v.key}}}`}
-                  </button>
-                ))}
+              <div className="space-y-2 mb-2">
+                <div className="flex flex-wrap gap-1">
+                  <span className="text-xs text-neutral-500 self-center mr-1">
+                    Reservation:
+                  </span>
+                  {SLACK_RESERVATION_AUTOMATION_VARIABLES.map((v) => (
+                    <button
+                      key={v.key}
+                      type="button"
+                      onClick={() => insertVariable(v.key)}
+                      title={v.description}
+                      className="text-xs px-2 py-1 rounded border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+                    >
+                      {`{{${v.key}}}`}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  <span className="text-xs text-neutral-500 self-center mr-1">
+                    Task:
+                  </span>
+                  {SLACK_TASK_ASSIGNMENT_AUTOMATION_VARIABLES.map((v) => (
+                    <button
+                      key={v.key}
+                      type="button"
+                      onClick={() => insertVariable(v.key)}
+                      title={v.description}
+                      className="text-xs px-2 py-1 rounded border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+                    >
+                      {`{{${v.key}}}`}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <Textarea
@@ -601,7 +726,11 @@ export default function SlackAutomationsView() {
                 onChange={(e) =>
                   setConfig((prev) => ({ ...prev, message_template: e.target.value }))
                 }
-                placeholder={`e.g. New booking at {{property_name}}\nGuest: {{guest_name}}\nDates: {{check_in}} → {{check_out}}`}
+                placeholder={
+                  trigger === 'task_assigned'
+                    ? `e.g. {{actor_name}} assigned you {{task_title}}\n{{task_url}}`
+                    : `e.g. New booking at {{property_name}}\nGuest: {{guest_name}}\nDates: {{check_in}} -> {{check_out}}`
+                }
                 rows={5}
                 className="font-mono text-sm"
               />
@@ -692,7 +821,7 @@ export default function SlackAutomationsView() {
             </Button>
             <Button
               onClick={handleSave}
-              disabled={saving || !name.trim() || !config.channel_id}
+              disabled={saving || !name.trim() || (usesChannel && !config.channel_id)}
             >
               {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Create Automation'}
             </Button>

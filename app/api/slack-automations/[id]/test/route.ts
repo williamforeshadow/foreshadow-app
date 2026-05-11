@@ -48,6 +48,12 @@ export async function POST(
   }
 
   const a = automation as SlackAutomation;
+  if (a.trigger === 'task_assigned') {
+    return NextResponse.json(
+      { error: 'Task assignment automations fire when a task is assigned. Use a real assignment to test this trigger.' },
+      { status: 400 },
+    );
+  }
 
   // Find a representative reservation.
   let query = supabase

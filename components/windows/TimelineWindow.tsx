@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/apiFetch';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger, PopoverClose } from '@/components/ui/popover';
@@ -407,7 +408,7 @@ export default function TimelineWindow({
   // ============================================================================
   const updateTurnoverTaskAssignment = useCallback(async (taskId: string, userIds: string[]) => {
     try {
-      const res = await fetch('/api/update-task-assignment', {
+      const res = await apiFetch('/api/update-task-assignment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId, userIds })
@@ -639,7 +640,7 @@ export default function TimelineWindow({
     const project = floatingData.item as Project;
     setSavingProjectEdit(true);
     try {
-      const res = await fetch(`/api/tasks-for-bin/${project.id}`, {
+      const res = await apiFetch(`/api/tasks-for-bin/${project.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -700,7 +701,7 @@ export default function TimelineWindow({
   const handleDeleteProject = useCallback(async (project: Project) => {
     if (!confirm(`Delete project "${project.title}"?`)) return;
     try {
-      const res = await fetch(`/api/tasks-for-bin/${project.id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/tasks-for-bin/${project.id}`, { method: 'DELETE' });
       if (res.ok) {
         setProjects(prev => prev.filter(p => p.id !== project.id));
         setFloatingData(null);
@@ -848,7 +849,7 @@ export default function TimelineWindow({
     if (!expandedProjectInTurnover || !currentFields) return;
     setSavingProjectEdit(true);
     try {
-      const res = await fetch(`/api/tasks-for-bin/${expandedProjectInTurnover.id}`, {
+      const res = await apiFetch(`/api/tasks-for-bin/${expandedProjectInTurnover.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -895,7 +896,7 @@ export default function TimelineWindow({
   const handleTurnoverDeleteProject = useCallback(async (project: Project) => {
     if (!confirm(`Delete project "${project.title}"?`)) return;
     try {
-      const res = await fetch(`/api/tasks-for-bin/${project.id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/tasks-for-bin/${project.id}`, { method: 'DELETE' });
       if (res.ok) {
         setProjects(prev => prev.filter(p => p.id !== project.id));
         setExpandedProjectInTurnover(null);
@@ -1036,7 +1037,7 @@ export default function TimelineWindow({
 
         if (changes.assigneeId !== undefined) {
           apiCalls.push(
-            fetch('/api/update-task-assignment', {
+            apiFetch('/api/update-task-assignment', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1153,7 +1154,7 @@ export default function TimelineWindow({
           projectPayload.scheduled_time = changes.scheduledTime;
         }
 
-        const res = await fetch(`/api/tasks-for-bin/${itemId}`, {
+        const res = await apiFetch(`/api/tasks-for-bin/${itemId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(projectPayload)
@@ -1860,7 +1861,7 @@ export default function TimelineWindow({
                   return;
                 }
                 try {
-                  await fetch(`/api/tasks-for-bin/${task.task_id}`, { method: 'DELETE' });
+                  await apiFetch(`/api/tasks-for-bin/${task.task_id}`, { method: 'DELETE' });
                   setRecurringTasks(prev => prev.filter((t: any) => t.task_id !== task.task_id));
                   fetchReservations();
                 } catch (err) {
@@ -2000,7 +2001,7 @@ export default function TimelineWindow({
               onPropertyChange={async (_propertyId, propertyName) => {
                 const project = floatingData.item as Project;
                 try {
-                  const res = await fetch(`/api/tasks-for-bin/${project.id}`, {
+                  const res = await apiFetch(`/api/tasks-for-bin/${project.id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ property_name: propertyName || null }),
@@ -2045,7 +2046,7 @@ export default function TimelineWindow({
               onBinChange={async (binId) => {
                 const project = floatingData.item as Project;
                 try {
-                  const res = await fetch(`/api/tasks-for-bin/${project.id}`, {
+                  const res = await apiFetch(`/api/tasks-for-bin/${project.id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ bin_id: binId || null }),
@@ -2068,7 +2069,7 @@ export default function TimelineWindow({
                 try {
                   const payload: Record<string, unknown> = { is_binned: isBinned };
                   if (!isBinned) payload.bin_id = null;
-                  const res = await fetch(`/api/tasks-for-bin/${project.id}`, {
+                  const res = await apiFetch(`/api/tasks-for-bin/${project.id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),

@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/apiFetch';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import type { CleaningFilters } from '@/lib/cleaningFilters';
@@ -185,7 +186,7 @@ export function useTurnovers() {
 
   const updateTaskAssignment = useCallback(async (taskId: string, userIds: string[]) => {
     try {
-      const res = await fetch('/api/update-task-assignment', {
+      const res = await apiFetch('/api/update-task-assignment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId, userIds })

@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import {
+  runSlackAutomationsForTaskAssignment,
+  type SlackTaskAssignmentActor,
+} from '@/src/server/slackAutomations/run';
 
 // Service: update an existing manually-authored task.
 //
@@ -120,6 +124,10 @@ export interface UpdatedTask {
 export type UpdateTaskResult =
   | { ok: true; task: UpdatedTask; changes: UpdateTaskFieldChange[] }
   | { ok: false; error: UpdateTaskError };
+
+export interface UpdateTaskOptions {
+  actor?: SlackTaskAssignmentActor | null;
+}
 
 // ---------- helpers --------------------------------------------------------
 
@@ -442,7 +450,10 @@ function computeChanges(args: ChangePlanArgs): UpdateTaskFieldChange[] {
  * runs up-front for any id the caller passed; the locked fields are
  * rejected at the schema layer (no payload-level workaround possible).
  */
-export async function updateTask(rawInput: unknown): Promise<UpdateTaskResult> {
+export async function updateTask(
+  rawInput: unknown,
+  options: UpdateTaskOptions = {},
+): Promise<UpdateTaskResult> {
   // Reject locked fields BEFORE Zod parse so the caller gets a
   // specific error rather than an "unknown field" rejection if/when
   // strict() is added. Mirrors the UI route's hard-block at
@@ -502,6 +513,7 @@ export async function updateTask(rawInput: unknown): Promise<UpdateTaskResult> {
       },
     };
   }
+  const previousAssignmentIds = await loadAssignmentSet(supabase, input.task_id);
 
   // is_binned ↔ bin_id invariant. Mirrors createTask's rule: a task in
   // a sub-bin is binned by definition; you can't request unbinned with
@@ -729,7 +741,7 @@ export async function updateTask(rawInput: unknown): Promise<UpdateTaskResult> {
   // For the "before" assignment labels we don't have the prior names
   // joined (we deleted before re-reading). Look them up cheaply from
   // existingAssignmentIds — the agent only renders names, not roles.
-  const existingAssignmentIds = await loadAssignmentSet(supabase, input.task_id);
+  const existingAssignmentIds = previousAssignmentIds;
   // existingAssignmentIds at this point is the POST-update set (we
   // already re-inserted), so we can't use it as "before". Fall back to
   // a separate prior-state query: we read the assignment ids pre-delete.
@@ -745,7 +757,7 @@ export async function updateTask(rawInput: unknown): Promise<UpdateTaskResult> {
 
   const changes = computeChanges({
     existing,
-    existingAssignmentIds: [], // see note above
+    existingAssignmentIds: previousAssignmentIds,
     input,
     binLabel: bin
       ? { id: bin.id, name: bin.name, is_system: bin.is_system }
@@ -761,6 +773,17 @@ export async function updateTask(rawInput: unknown): Promise<UpdateTaskResult> {
     effectiveCompletedAt: updated.completed_at,
     willCompleteNow,
   });
+
+  if (input.assigned_user_ids !== undefined) {
+    runSlackAutomationsForTaskAssignment({
+      taskId: input.task_id,
+      previousAssigneeIds: previousAssignmentIds,
+      nextAssigneeIds: input.assigned_user_ids,
+      actor: options.actor ?? null,
+    }).catch((err) => {
+      console.error('[tasks/updateTask] Slack assignment automation failed:', err);
+    });
+  }
 
   return { ok: true, task: updated, changes };
 }

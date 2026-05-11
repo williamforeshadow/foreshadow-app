@@ -4,6 +4,7 @@ import {
   updateTask,
   updateTaskInputSchema,
   type UpdateTaskInput,
+  type UpdateTaskOptions,
   type UpdateTaskPlan,
   type UpdateTaskResult,
 } from './updateTask';
@@ -136,6 +137,7 @@ export async function previewUpdateTasksBatch(
 
 export async function updateTasksBatch(
   rawInput: unknown,
+  options: UpdateTaskOptions = {},
 ): Promise<UpdateTasksBatchOutcome> {
   const parsed = inputSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -171,7 +173,7 @@ export async function updateTasksBatch(
       continue;
     }
 
-    const result = await updateTask(input);
+    const result = await updateTask(input, options);
     if (result.ok) {
       updated.push(result);
     } else {

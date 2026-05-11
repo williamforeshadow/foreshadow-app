@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/apiFetch';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type {
@@ -817,7 +818,7 @@ export function useTasks(options: UseTasksOptions = {}) {
         }
         if (assigneesChanged) {
           calls.push(
-            fetch('/api/update-task-assignment', {
+            apiFetch('/api/update-task-assignment', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
