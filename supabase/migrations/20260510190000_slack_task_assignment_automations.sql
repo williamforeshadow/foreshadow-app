@@ -35,7 +35,7 @@ create table if not exists public.slack_automation_deliveries (
   trigger text not null,
   entity_type text not null,
   entity_id uuid not null,
-  recipient_user_id uuid null references public.users(id) on delete set null,
+  recipient_user_id text null references public.users(id) on delete set null,
   recipient_email text null,
   event_signature text not null,
   delivered_at timestamptz not null default now(),

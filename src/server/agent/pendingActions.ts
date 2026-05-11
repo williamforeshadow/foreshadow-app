@@ -7,6 +7,7 @@ import { createTasksBatch } from '@/src/server/tasks/createTasksBatch';
 import { updateTasksBatch } from '@/src/server/tasks/updateTasksBatch';
 import { createBin } from '@/src/server/bins/createBin';
 import { addComment } from '@/src/server/comments/addComment';
+import { runSlackAutomationsForTaskAssignment } from '@/src/server/slackAutomations/run';
 import {
   commitPropertyKnowledgeWrite,
   type PropertyKnowledgeWriteInput,
@@ -488,6 +489,8 @@ async function executeCreateTask(
     };
   }
 
+  await runTaskAssignmentAutomationsForCreatedTask(row, result.task);
+
   const attachments = await attachFiles(
     stored.attachment_inbound_file_ids,
     (inboundFileId) => ({
@@ -582,6 +585,12 @@ async function executeCreateTasksBatch(
       result,
     };
   }
+
+  await Promise.all(
+    result.result.tasks.map((task) =>
+      runTaskAssignmentAutomationsForCreatedTask(row, task),
+    ),
+  );
 
   const created = result.result.tasks.length;
   const failed = result.result.failures.length;
@@ -838,6 +847,27 @@ async function executeSlackFileAttachment(
     text: `Done - ${result.plan.summary}`,
     result,
   };
+}
+
+async function runTaskAssignmentAutomationsForCreatedTask(
+  row: PendingActionRow,
+  task: { task_id: string; assigned_users: Array<{ user_id: string }> },
+): Promise<void> {
+  if (task.assigned_users.length === 0) return;
+
+  try {
+    await runSlackAutomationsForTaskAssignment({
+      taskId: task.task_id,
+      previousAssigneeIds: [],
+      nextAssigneeIds: task.assigned_users.map((user) => user.user_id),
+      actor: { user_id: row.requester_app_user_id },
+    });
+  } catch (err) {
+    console.error('[agent pending actions] Slack assignment automation failed:', {
+      taskId: task.task_id,
+      err,
+    });
+  }
 }
 
 async function attachPropertyKnowledgeFiles(

@@ -1,5 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { runSlackAutomationsForTaskAssignment } from '@/src/server/slackAutomations/run';
 
 interface AutomationScheduleConfig {
   enabled: boolean;
@@ -82,7 +84,7 @@ function isSameDayTurnover(checkOut: string | null, nextCheckIn: string | null):
 }
 
 // POST - Add a new task to a turnover card
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { reservation_id, template_id } = body;
@@ -242,6 +244,17 @@ export async function POST(request: Request) {
       avatar: a.users?.avatar || '',
       role: a.users?.role || ''
     }));
+
+    if (assignUserIds.length > 0) {
+      runSlackAutomationsForTaskAssignment({
+        taskId: newTask.id,
+        previousAssigneeIds: [],
+        nextAssigneeIds: assignUserIds,
+        actor: { user_id: getActorUserIdFromRequest(request) },
+      }).catch((err) => {
+        console.error('[tasks] Slack assignment automation failed:', err);
+      });
+    }
 
     // Format response to match expected task structure
     const formattedTask = {

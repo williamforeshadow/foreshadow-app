@@ -724,10 +724,18 @@ async function fireOneTaskAssignmentAutomation(args: {
       event_signature: eventSignature,
     });
 
+  let deliveryLogged = true;
   if (dedupErr) {
     const code = (dedupErr as { code?: string }).code;
+    const errorMessage =
+      (dedupErr as { message?: string }).message ?? String(dedupErr);
     const isDup =
-      code === '23505' || /duplicate key/i.test(dedupErr.message ?? '');
+      code === '23505' || /duplicate key/i.test(errorMessage);
+    const isMissingDeliveryTable = await isMissingTaskDeliveryLogTable(
+      supabase,
+      code,
+      errorMessage,
+    );
     if (isDup) {
       return {
         automation_id: automation.id,
@@ -737,14 +745,21 @@ async function fireOneTaskAssignmentAutomation(args: {
         recipient_email: assignee.email,
       };
     }
-    console.error('[slackAutomations/run] delivery dedup insert failed', dedupErr);
-    return {
-      automation_id: automation.id,
-      ok: false,
-      error: `delivery dedup log failed: ${dedupErr.message}`,
-      recipient_user_id: assignee.id,
-      recipient_email: assignee.email,
-    };
+    if (isMissingDeliveryTable) {
+      deliveryLogged = false;
+      console.warn(
+        '[slackAutomations/run] slack_automation_deliveries missing; sending task assignment without dedupe',
+      );
+    } else {
+      console.error('[slackAutomations/run] delivery dedup insert failed', dedupErr);
+      return {
+        automation_id: automation.id,
+        ok: false,
+        error: `delivery dedup log failed: ${errorMessage}`,
+        recipient_user_id: assignee.id,
+        recipient_email: assignee.email,
+      };
+    }
   }
 
   try {
@@ -792,15 +807,17 @@ async function fireOneTaskAssignmentAutomation(args: {
       err: message,
     });
 
-    await supabase
-      .from('slack_automation_deliveries')
-      .delete()
-      .eq('automation_id', automation.id)
-      .eq('trigger', 'task_assigned')
-      .eq('entity_type', 'task')
-      .eq('entity_id', taskId)
-      .eq('recipient_user_id', assignee.id)
-      .eq('event_signature', eventSignature);
+    if (deliveryLogged) {
+      await supabase
+        .from('slack_automation_deliveries')
+        .delete()
+        .eq('automation_id', automation.id)
+        .eq('trigger', 'task_assigned')
+        .eq('entity_type', 'task')
+        .eq('entity_id', taskId)
+        .eq('recipient_user_id', assignee.id)
+        .eq('event_signature', eventSignature);
+    }
 
     return {
       automation_id: automation.id,
@@ -810,6 +827,32 @@ async function fireOneTaskAssignmentAutomation(args: {
       recipient_email: assignee.email,
     };
   }
+}
+
+async function isMissingTaskDeliveryLogTable(
+  supabase: ReturnType<typeof getSupabaseServer>,
+  code: string | undefined,
+  message: string,
+): Promise<boolean> {
+  if (
+    code === '42P01' ||
+    /relation .*slack_automation_deliveries.* does not exist/i.test(message)
+  ) {
+    return true;
+  }
+
+  const { error } = await supabase
+    .from('slack_automation_deliveries')
+    .select('id')
+    .limit(1);
+
+  if (!error) return false;
+  const probeCode = (error as { code?: string }).code;
+  const probeMessage = (error as { message?: string }).message ?? String(error);
+  return (
+    probeCode === '42P01' ||
+    /relation .*slack_automation_deliveries.* does not exist/i.test(probeMessage)
+  );
 }
 
 async function sendAutomationPayload(args: {

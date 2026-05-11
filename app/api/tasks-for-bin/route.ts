@@ -1,6 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { createTask, type CreatedTask } from '@/src/server/tasks/createTask';
+import { runSlackAutomationsForTaskAssignment } from '@/src/server/slackAutomations/run';
 
 export async function GET(request: Request) {
   try {
@@ -172,7 +174,7 @@ export async function GET(request: Request) {
 // it. The service falls back to deriving it from bin_id when omitted, but
 // the explicit form lets the Bins kanban "New Task" button create orphan
 // binned tasks (Task Bin) — a case the bin_id-only contract can't express.
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
@@ -219,6 +221,17 @@ export async function POST(request: Request) {
             ? 404
             : 500;
       return NextResponse.json({ error: result.error.message }, { status });
+    }
+
+    if (result.task.assigned_users.length > 0) {
+      runSlackAutomationsForTaskAssignment({
+        taskId: result.task.task_id,
+        previousAssigneeIds: [],
+        nextAssigneeIds: result.task.assigned_users.map((user) => user.user_id),
+        actor: { user_id: getActorUserIdFromRequest(request) },
+      }).catch((err) => {
+        console.error('[tasks-for-bin] Slack assignment automation failed:', err);
+      });
     }
 
     return NextResponse.json({
