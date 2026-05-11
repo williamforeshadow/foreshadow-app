@@ -257,6 +257,41 @@ export async function runSlackAutomationsForTaskAssignment(args: {
   return results;
 }
 
+export async function safelyRunSlackAutomationsForTaskAssignment(args: {
+  taskId: string;
+  previousAssigneeIds: string[];
+  nextAssigneeIds: string[];
+  actor?: SlackTaskAssignmentActor | null;
+  logPrefix: string;
+}): Promise<TaskAssignmentAutomationResult[]> {
+  const { logPrefix, ...runnerArgs } = args;
+
+  try {
+    const results = await runSlackAutomationsForTaskAssignment(runnerArgs);
+    const failedResults = results.filter((result) => !result.ok);
+    if (failedResults.length > 0) {
+      console.error(`${logPrefix} Slack assignment automation failed`, {
+        taskId: args.taskId,
+        results: failedResults,
+      });
+    }
+    return results;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`${logPrefix} Slack assignment automation threw`, {
+      taskId: args.taskId,
+      err: message,
+    });
+    return [
+      {
+        automation_id: '',
+        ok: false,
+        error: message,
+      },
+    ];
+  }
+}
+
 /**
  * Sweep every reservation that fires for `trigger` on `dateYYYYMMDD` and
  * run their automations. Used by the daily cron for check_in / check_out.

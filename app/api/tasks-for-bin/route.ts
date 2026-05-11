@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { createTask, type CreatedTask } from '@/src/server/tasks/createTask';
-import { runSlackAutomationsForTaskAssignment } from '@/src/server/slackAutomations/run';
+import { safelyRunSlackAutomationsForTaskAssignment } from '@/src/server/slackAutomations/run';
 
 export async function GET(request: Request) {
   try {
@@ -224,13 +224,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (result.task.assigned_users.length > 0) {
-      runSlackAutomationsForTaskAssignment({
+      await safelyRunSlackAutomationsForTaskAssignment({
         taskId: result.task.task_id,
         previousAssigneeIds: [],
         nextAssigneeIds: result.task.assigned_users.map((user) => user.user_id),
         actor: { user_id: getActorUserIdFromRequest(request) },
-      }).catch((err) => {
-        console.error('[tasks-for-bin] Slack assignment automation failed:', err);
+        logPrefix: '[tasks-for-bin]',
       });
     }
 

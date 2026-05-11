@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
-import { runSlackAutomationsForTaskAssignment } from '@/src/server/slackAutomations/run';
+import { safelyRunSlackAutomationsForTaskAssignment } from '@/src/server/slackAutomations/run';
 
 // POST - Update task assignments (replaces all existing assignments)
 export async function POST(request: NextRequest) {
@@ -68,13 +68,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: fetchError.message }, { status: 500 });
     }
 
-    runSlackAutomationsForTaskAssignment({
+    await safelyRunSlackAutomationsForTaskAssignment({
       taskId,
       previousAssigneeIds,
       nextAssigneeIds: assigneeIds,
       actor: { user_id: getActorUserIdFromRequest(request) },
-    }).catch((err) => {
-      console.error('[update-task-assignment] Slack automation failed:', err);
+      logPrefix: '[update-task-assignment]',
     });
 
     return NextResponse.json({ success: true, data: task }, { status: 200 });

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import {
-  runSlackAutomationsForTaskAssignment,
+  safelyRunSlackAutomationsForTaskAssignment,
   type SlackTaskAssignmentActor,
 } from '@/src/server/slackAutomations/run';
 
@@ -775,13 +775,12 @@ export async function updateTask(
   });
 
   if (input.assigned_user_ids !== undefined) {
-    runSlackAutomationsForTaskAssignment({
+    await safelyRunSlackAutomationsForTaskAssignment({
       taskId: input.task_id,
       previousAssigneeIds: previousAssignmentIds,
       nextAssigneeIds: input.assigned_user_ids,
       actor: options.actor ?? null,
-    }).catch((err) => {
-      console.error('[tasks/updateTask] Slack assignment automation failed:', err);
+      logPrefix: '[tasks/updateTask]',
     });
   }
 

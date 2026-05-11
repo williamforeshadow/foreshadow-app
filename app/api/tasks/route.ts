@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
 import { getSupabaseServer } from '@/lib/supabaseServer';
-import { runSlackAutomationsForTaskAssignment } from '@/src/server/slackAutomations/run';
+import { safelyRunSlackAutomationsForTaskAssignment } from '@/src/server/slackAutomations/run';
 
 interface AutomationScheduleConfig {
   enabled: boolean;
@@ -246,13 +246,12 @@ export async function POST(request: NextRequest) {
     }));
 
     if (assignUserIds.length > 0) {
-      runSlackAutomationsForTaskAssignment({
+      await safelyRunSlackAutomationsForTaskAssignment({
         taskId: newTask.id,
         previousAssigneeIds: [],
         nextAssigneeIds: assignUserIds,
         actor: { user_id: getActorUserIdFromRequest(request) },
-      }).catch((err) => {
-        console.error('[tasks] Slack assignment automation failed:', err);
+        logPrefix: '[tasks]',
       });
     }
 

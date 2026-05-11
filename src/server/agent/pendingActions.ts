@@ -7,7 +7,7 @@ import { createTasksBatch } from '@/src/server/tasks/createTasksBatch';
 import { updateTasksBatch } from '@/src/server/tasks/updateTasksBatch';
 import { createBin } from '@/src/server/bins/createBin';
 import { addComment } from '@/src/server/comments/addComment';
-import { runSlackAutomationsForTaskAssignment } from '@/src/server/slackAutomations/run';
+import { safelyRunSlackAutomationsForTaskAssignment } from '@/src/server/slackAutomations/run';
 import {
   commitPropertyKnowledgeWrite,
   type PropertyKnowledgeWriteInput,
@@ -856,11 +856,12 @@ async function runTaskAssignmentAutomationsForCreatedTask(
   if (task.assigned_users.length === 0) return;
 
   try {
-    await runSlackAutomationsForTaskAssignment({
+    await safelyRunSlackAutomationsForTaskAssignment({
       taskId: task.task_id,
       previousAssigneeIds: [],
       nextAssigneeIds: task.assigned_users.map((user) => user.user_id),
       actor: { user_id: row.requester_app_user_id },
+      logPrefix: '[agent pending actions]',
     });
   } catch (err) {
     console.error('[agent pending actions] Slack assignment automation failed:', {
