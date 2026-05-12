@@ -583,10 +583,107 @@ export type SlackAutomationTrigger =
   | 'new_booking'
   | 'check_in'
   | 'check_out'
-  | 'task_assigned';
+  | 'task_assigned'
+  | 'scheduled';
 
 export type SlackAutomationDeliveryType = 'channel' | 'task_assignee_dm';
 export type SlackAutomationMessageFormat = 'text' | 'task_card' | 'custom_blocks';
+export type SlackAutomationPropertyScope = 'all' | 'selected' | 'none';
+export type SlackAutomationWhenType = 'event' | 'schedule';
+export type SlackAutomationEventTrigger = Exclude<SlackAutomationTrigger, 'scheduled'>;
+export type SlackAutomationContextType =
+  | 'reservation_turnover'
+  | 'task'
+  | 'property'
+  | 'none';
+export type SlackAutomationScheduleFrequency =
+  | 'daily'
+  | 'every_x_days'
+  | 'weekly'
+  | 'monthly';
+export type SlackAutomationTimezoneMode = 'property' | 'company';
+export interface SlackAutomationSchedule {
+  frequency: SlackAutomationScheduleFrequency;
+  interval: number;
+  weekdays: number[];
+  month_days: number[];
+  time: string;
+  timezone_mode: SlackAutomationTimezoneMode;
+}
+export type SlackAutomationDynamicRecipientSource = 'task_assignee' | 'task_actor';
+export type SlackAutomationRecipient =
+  | {
+      id: string;
+      type: 'channel';
+      channel_id: string;
+      channel_name: string;
+    }
+  | {
+      id: string;
+      type: 'user';
+      user_id: string;
+      user_name: string;
+      user_email: string | null;
+    }
+  | {
+      id: string;
+      type: 'dynamic_user';
+      source: SlackAutomationDynamicRecipientSource;
+    };
+export type SlackAutomationConditionOperator =
+  | 'is_empty'
+  | 'is_not_empty'
+  | 'equals'
+  | 'not_equals'
+  | 'contains';
+
+export interface SlackAutomationConditionRule {
+  id: string;
+  variable: string;
+  operator: SlackAutomationConditionOperator;
+  right?: {
+    type: 'literal' | 'variable';
+    value?: string;
+    variable?: string;
+  };
+  /** Legacy literal value. Normalized into right.value for new configs. */
+  value: string;
+}
+
+export interface SlackAutomationV2Config {
+  version: 2;
+  when: {
+    type: SlackAutomationWhenType;
+    event?: SlackAutomationEventTrigger;
+    schedule?: SlackAutomationSchedule;
+    /** Legacy event field. Older v2 configs omit type and store event here. */
+    legacy_event?: SlackAutomationTrigger;
+  };
+  context: {
+    type: SlackAutomationContextType;
+  };
+  conditions: {
+    property_scope: SlackAutomationPropertyScope;
+    property_ids: string[];
+    rules: SlackAutomationConditionRule[];
+  };
+  action: {
+    recipients: SlackAutomationRecipient[];
+    /** Legacy single-recipient delivery config. Preserved for old rows. */
+    delivery?: {
+      type: SlackAutomationDeliveryType;
+      channel_id: string;
+      channel_name: string;
+    };
+    message: {
+      template: string;
+      include_task_cards: boolean;
+      use_custom_blocks: boolean;
+      custom_blocks_json: string;
+    };
+    attachments: SlackAutomationAttachment[];
+  };
+}
 
 /**
  * Variables available for `{{var}}` substitution inside a Slack automation's
@@ -654,6 +751,11 @@ export interface SlackAutomationAttachment {
 }
 
 export interface SlackAutomationConfig {
+  version?: 2;
+  when?: SlackAutomationV2Config['when'];
+  context?: SlackAutomationV2Config['context'];
+  conditions?: SlackAutomationV2Config['conditions'];
+  action?: SlackAutomationV2Config['action'];
   /**
    * Where to deliver the message. Older automations omit this and are
    * treated as channel messages by the execution layer.

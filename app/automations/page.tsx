@@ -24,7 +24,11 @@ interface PropertyListItem {
 type AutomationTab = 'tasks' | 'slack';
 
 export default function AutomationsPage() {
-  const [activeTab, setActiveTab] = useState<AutomationTab>('tasks');
+  const [activeTab, setActiveTab] = useState<AutomationTab>(() => {
+    if (typeof window === 'undefined') return 'tasks';
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') === 'slack' ? 'slack' : 'tasks';
+  });
   const [templates, setTemplates] = useState<Template[]>([]);
   const [properties, setProperties] = useState<string[]>([]);
 

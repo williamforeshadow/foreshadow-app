@@ -1,7 +1,12 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import {
+  getSlackAutomationDispatchTrigger,
+  getSlackAutomationSavePropertyIds,
+  normalizeSlackAutomationConfig,
+} from '@/lib/slackAutomationConfig';
 
-const VALID_TRIGGERS = ['new_booking', 'check_in', 'check_out', 'task_assigned'];
+const VALID_TRIGGERS = ['new_booking', 'check_in', 'check_out', 'task_assigned', 'scheduled'];
 
 export async function GET(
   _req: NextRequest,
@@ -52,7 +57,13 @@ export async function PUT(
     if (typeof body.config !== 'object') {
       return NextResponse.json({ error: 'config must be an object' }, { status: 400 });
     }
-    update.config = body.config;
+    const normalizedConfig = normalizeSlackAutomationConfig(body.config, {
+      trigger: body.trigger,
+      property_ids: Array.isArray(body.property_ids) ? body.property_ids : [],
+    });
+    update.config = normalizedConfig;
+    update.trigger = getSlackAutomationDispatchTrigger(normalizedConfig);
+    update.property_ids = getSlackAutomationSavePropertyIds(normalizedConfig);
   }
 
   if (Object.keys(update).length === 0) {

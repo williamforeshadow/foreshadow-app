@@ -40,6 +40,8 @@ export interface ReservationVariables {
   check_in_iso: string;
   /** Raw YYYY-MM-DD escape hatch. */
   check_out_iso: string;
+  next_check_in: string;
+  next_check_in_iso: string;
   nights: string;
   /** Today, resolved in the property's timezone (or org default fallback). */
   trigger_date: string;
@@ -98,14 +100,17 @@ export function buildReservationVariables(args: {
   guest_name: string | null;
   check_in: string | null;
   check_out: string | null;
+  next_check_in?: string | null;
   trigger_date: string;
   default_check_in_time: string;
   default_check_out_time: string;
 }): ReservationVariables {
   const checkInIso = args.check_in ?? '';
   const checkOutIso = args.check_out ?? '';
+  const nextCheckInIso = args.next_check_in ?? '';
   const checkInPretty = checkInIso ? formatPrettyDate(checkInIso) : '';
   const checkOutPretty = checkOutIso ? formatPrettyDate(checkOutIso) : '';
+  const nextCheckInPretty = nextCheckInIso ? formatPrettyDate(nextCheckInIso) : '';
   const checkInTimePretty = args.default_check_in_time
     ? formatPrettyTime(args.default_check_in_time)
     : '';
@@ -133,6 +138,8 @@ export function buildReservationVariables(args: {
     check_out_datetime: combineDateTime(checkOutPretty, checkOutTimePretty),
     check_in_iso: checkInIso,
     check_out_iso: checkOutIso,
+    next_check_in: nextCheckInPretty,
+    next_check_in_iso: nextCheckInIso,
     nights,
     trigger_date: args.trigger_date,
   };

@@ -1,5 +1,6 @@
 import type { Block } from '@slack/types';
 import type { SlackAutomationConfig } from '@/lib/types';
+import { normalizeSlackAutomationConfig } from '@/lib/slackAutomationConfig';
 import type { TaskByIdRow } from '@/src/server/tasks/getTaskById';
 import { renderTaskRowsAsExtras } from '@/src/slack/unfurl';
 import { renderTemplate } from './render';
@@ -36,16 +37,21 @@ export function renderSlackAutomationPayload(args: {
   variables: Record<string, string>;
   taskCard?: TaskCardPayloadContext;
 }): SlackAutomationPayload {
-  const { config, variables, taskCard } = args;
-  const messageFormat = config.message_format ?? 'text';
-  const fallbackText = renderTemplate(config.message_template ?? '', variables).trim();
+  const { variables, taskCard } = args;
+  const config = normalizeSlackAutomationConfig(args.config);
+  const message = config.action?.message;
+  const messageTemplate = message?.template ?? config.message_template ?? '';
+  const customBlocksJson = message?.custom_blocks_json ?? config.custom_blocks_json ?? '';
+  const useCustomBlocks = message?.use_custom_blocks ?? config.message_format === 'custom_blocks';
+  const includeTaskCards = message?.include_task_cards ?? config.message_format === 'task_card';
+  const fallbackText = renderTemplate(messageTemplate, variables).trim();
   const visibleIntroText = renderSlackMrkdwnTemplate(
-    config.message_template ?? '',
+    messageTemplate,
     variables,
   ).trim();
   const errors = validateVariableRequirements(config, variables);
 
-  if (messageFormat === 'text') {
+  if (!useCustomBlocks && !includeTaskCards) {
     return {
       text: fallbackText,
       errors,
@@ -60,10 +66,8 @@ export function renderSlackAutomationPayload(args: {
     } as Block);
   }
 
-  if (messageFormat === 'task_card') {
-    if (!taskCard) {
-      errors.push('Task card format needs a task context to render.');
-    } else if (!isAbsoluteHttpUrl(taskCard.url)) {
+  if (includeTaskCards && taskCard) {
+    if (!isAbsoluteHttpUrl(taskCard.url)) {
       errors.push('Task card format requires APP_BASE_URL so task buttons use absolute URLs.');
     } else {
       const extras = renderTaskRowsAsExtras([taskCard]);
@@ -73,12 +77,12 @@ export function renderSlackAutomationPayload(args: {
         errors.push('Task card format could not render a Slack task card.');
       }
     }
-  } else if (messageFormat === 'custom_blocks') {
-    const parsed = parseCustomBlocks(config.custom_blocks_json ?? '', variables);
+  }
+
+  if (useCustomBlocks) {
+    const parsed = parseCustomBlocks(customBlocksJson, variables);
     errors.push(...parsed.errors);
     blocks.push(...parsed.blocks);
-  } else {
-    errors.push(`Unknown Slack message format: ${messageFormat}`);
   }
 
   if (blocks.length > BLOCK_LIMIT) {
@@ -220,8 +224,10 @@ function validateVariableRequirements(
 ): string[] {
   const errors: string[] = [];
   const templates = [
-    config.message_template ?? '',
-    config.message_format === 'custom_blocks' ? config.custom_blocks_json ?? '' : '',
+    config.action?.message?.template ?? config.message_template ?? '',
+    config.action?.message?.use_custom_blocks || config.message_format === 'custom_blocks'
+      ? config.action?.message?.custom_blocks_json ?? config.custom_blocks_json ?? ''
+      : '',
   ];
   const usesTaskLink = templates.some((template) => usesVariable(template, 'task_link'));
   if (usesTaskLink && !variables.task_link) {

@@ -1,5 +1,10 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import {
+  getSlackAutomationDispatchTrigger,
+  getSlackAutomationSavePropertyIds,
+  normalizeSlackAutomationConfig,
+} from '@/lib/slackAutomationConfig';
 
 // /api/slack-automations
 //
@@ -17,7 +22,7 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 //   created_at    timestamptz
 //   updated_at    timestamptz
 
-const VALID_TRIGGERS = ['new_booking', 'check_in', 'check_out', 'task_assigned'];
+const VALID_TRIGGERS = ['new_booking', 'check_in', 'check_out', 'task_assigned', 'scheduled'];
 
 export async function GET() {
   const supabase = getSupabaseServer();
@@ -41,7 +46,13 @@ export async function POST(req: NextRequest) {
   if (!name || typeof name !== 'string' || !name.trim()) {
     return NextResponse.json({ error: 'name is required' }, { status: 400 });
   }
-  if (!VALID_TRIGGERS.includes(trigger)) {
+  const normalizedConfig = normalizeSlackAutomationConfig(config, {
+    trigger,
+    property_ids: Array.isArray(property_ids) ? property_ids : [],
+  });
+  const normalizedTrigger = getSlackAutomationDispatchTrigger(normalizedConfig);
+
+  if (!VALID_TRIGGERS.includes(normalizedTrigger)) {
     return NextResponse.json(
       { error: `trigger must be one of: ${VALID_TRIGGERS.join(', ')}` },
       { status: 400 },
@@ -57,9 +68,9 @@ export async function POST(req: NextRequest) {
     .insert({
       name: name.trim(),
       enabled: enabled ?? true,
-      trigger,
-      property_ids: Array.isArray(property_ids) ? property_ids : [],
-      config,
+      trigger: normalizedTrigger,
+      property_ids: getSlackAutomationSavePropertyIds(normalizedConfig),
+      config: normalizedConfig,
     })
     .select()
     .single();

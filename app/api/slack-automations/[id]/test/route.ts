@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import {
+  runScheduledSlackAutomations,
   runSlackAutomationsForReservation,
   testSlackTaskAssignmentAutomation,
   type ReservationContext,
 } from '@/src/server/slackAutomations/run';
 import type { SlackAutomation } from '@/lib/types';
+import { normalizeSlackAutomationConfig } from '@/lib/slackAutomationConfig';
 
 // POST /api/slack-automations/[id]/test
 //
@@ -49,6 +51,10 @@ export async function POST(
   }
 
   const a = automation as SlackAutomation;
+  const config = normalizeSlackAutomationConfig(a.config, {
+    trigger: a.trigger,
+    property_ids: a.property_ids ?? [],
+  });
   if (a.trigger === 'task_assigned') {
     const body = await readJsonBody(_req);
     const testResult = await testSlackTaskAssignmentAutomation({
@@ -69,14 +75,34 @@ export async function POST(
     }, { status: testResult.result.ok ? 200 : 400 });
   }
 
+  if (a.trigger === 'scheduled') {
+    const scheduledResult = await runScheduledSlackAutomations({
+      automationId: id,
+      bypassDedup: true,
+      bypassSchedule: true,
+    });
+    const thisResult = scheduledResult.fires.find((r) => r.automation_id === id);
+    return NextResponse.json({
+      fired: !!thisResult?.ok,
+      result: thisResult ?? null,
+      scheduled: {
+        contexts_scanned: scheduledResult.contextsScanned,
+        fires_attempted: scheduledResult.fires.length,
+      },
+      other_results: scheduledResult.fires.filter((r) => r.automation_id !== id),
+    }, { status: thisResult?.ok ? 200 : 400 });
+  }
+
   // Find a representative reservation.
   let query = supabase
     .from('reservations')
-    .select('id, property_id, property_name, guest_name, check_in, check_out')
+    .select('id, property_id, property_name, guest_name, check_in, check_out, next_check_in')
     .limit(1);
 
-  if (a.property_ids && a.property_ids.length > 0) {
-    query = query.in('property_id', a.property_ids);
+  if (config.conditions?.property_scope === 'selected') {
+    query = query.in('property_id', config.conditions.property_ids);
+  } else if (config.conditions?.property_scope === 'none') {
+    query = query.is('property_id', null);
   }
 
   if (a.trigger === 'check_in') {
@@ -102,6 +128,9 @@ export async function POST(
           check_out: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
             .toISOString()
             .split('T')[0],
+          next_check_in: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .split('T')[0],
         };
 
   // Fire just this one automation. The shared runner queries for ALL
@@ -125,6 +154,7 @@ export async function POST(
       guest_name: reservation.guest_name,
       check_in: reservation.check_in,
       check_out: reservation.check_out,
+      next_check_in: reservation.next_check_in,
     },
     result: thisResult ?? null,
     other_results: results.filter((r) => r.automation_id !== id),
