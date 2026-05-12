@@ -7,7 +7,6 @@ import { createTasksBatch } from '@/src/server/tasks/createTasksBatch';
 import { updateTasksBatch } from '@/src/server/tasks/updateTasksBatch';
 import { createBin } from '@/src/server/bins/createBin';
 import { addComment } from '@/src/server/comments/addComment';
-import { safelyRunSlackAutomationsForTaskAssignment } from '@/src/server/slackAutomations/run';
 import {
   commitPropertyKnowledgeWrite,
   type PropertyKnowledgeWriteInput,
@@ -478,7 +477,9 @@ async function executeCreateTask(
   row: PendingActionRow,
 ): Promise<PendingExecutionResult> {
   const stored = row.canonical_input as CreateTaskPendingInput;
-  const result = await createTask(stored.input);
+  const result = await createTask(stored.input, {
+    actor: { user_id: row.requester_app_user_id },
+  });
   if (!result.ok) {
     return {
       ok: false,
@@ -488,8 +489,6 @@ async function executeCreateTask(
       result,
     };
   }
-
-  await runTaskAssignmentAutomationsForCreatedTask(row, result.task);
 
   const attachments = await attachFiles(
     stored.attachment_inbound_file_ids,
@@ -524,7 +523,9 @@ async function executeUpdateTask(
   row: PendingActionRow,
 ): Promise<PendingExecutionResult> {
   const stored = row.canonical_input as GenericPendingInput;
-  const result = await updateTask(stored.input);
+  const result = await updateTask(stored.input, {
+    actor: { user_id: row.requester_app_user_id },
+  });
   if (!result.ok) {
     return {
       ok: false,
@@ -575,7 +576,9 @@ async function executeCreateTasksBatch(
   row: PendingActionRow,
 ): Promise<PendingExecutionResult> {
   const stored = row.canonical_input as GenericPendingInput;
-  const result = await createTasksBatch(stored.input);
+  const result = await createTasksBatch(stored.input, {
+    actor: { user_id: row.requester_app_user_id },
+  });
   if (!result.ok) {
     return {
       ok: false,
@@ -585,12 +588,6 @@ async function executeCreateTasksBatch(
       result,
     };
   }
-
-  await Promise.all(
-    result.result.tasks.map((task) =>
-      runTaskAssignmentAutomationsForCreatedTask(row, task),
-    ),
-  );
 
   const created = result.result.tasks.length;
   const failed = result.result.failures.length;
@@ -613,7 +610,9 @@ async function executeUpdateTasksBatch(
   row: PendingActionRow,
 ): Promise<PendingExecutionResult> {
   const stored = row.canonical_input as GenericPendingInput;
-  const result = await updateTasksBatch(stored.input);
+  const result = await updateTasksBatch(stored.input, {
+    actor: { user_id: row.requester_app_user_id },
+  });
   if (!result.ok) {
     return {
       ok: false,
@@ -847,28 +846,6 @@ async function executeSlackFileAttachment(
     text: `Done - ${result.plan.summary}`,
     result,
   };
-}
-
-async function runTaskAssignmentAutomationsForCreatedTask(
-  row: PendingActionRow,
-  task: { task_id: string; assigned_users: Array<{ user_id: string }> },
-): Promise<void> {
-  if (task.assigned_users.length === 0) return;
-
-  try {
-    await safelyRunSlackAutomationsForTaskAssignment({
-      taskId: task.task_id,
-      previousAssigneeIds: [],
-      nextAssigneeIds: task.assigned_users.map((user) => user.user_id),
-      actor: { user_id: row.requester_app_user_id },
-      logPrefix: '[agent pending actions]',
-    });
-  } catch (err) {
-    console.error('[agent pending actions] Slack assignment automation failed:', {
-      taskId: task.task_id,
-      err,
-    });
-  }
 }
 
 async function attachPropertyKnowledgeFiles(

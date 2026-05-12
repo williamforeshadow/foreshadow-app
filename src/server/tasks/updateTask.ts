@@ -1,9 +1,11 @@
 import { z } from 'zod';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import {
-  safelyRunSlackAutomationsForTaskAssignment,
-  type SlackTaskAssignmentActor,
-} from '@/src/server/slackAutomations/run';
+  notifyTaskAssigned,
+  notifyTaskScheduleChanged,
+  notifyTaskStatusChanged,
+  type NotificationActor,
+} from '@/src/server/notifications/notify';
 
 // Service: update an existing manually-authored task.
 //
@@ -126,7 +128,7 @@ export type UpdateTaskResult =
   | { ok: false; error: UpdateTaskError };
 
 export interface UpdateTaskOptions {
-  actor?: SlackTaskAssignmentActor | null;
+  actor?: NotificationActor | null;
 }
 
 // ---------- helpers --------------------------------------------------------
@@ -775,12 +777,38 @@ export async function updateTask(
   });
 
   if (input.assigned_user_ids !== undefined) {
-    await safelyRunSlackAutomationsForTaskAssignment({
+    await notifyTaskAssigned({
       taskId: input.task_id,
       previousAssigneeIds: previousAssignmentIds,
       nextAssigneeIds: input.assigned_user_ids,
       actor: options.actor ?? null,
-      logPrefix: '[tasks/updateTask]',
+    });
+  }
+
+  if (
+    input.scheduled_date !== undefined ||
+    input.scheduled_time !== undefined
+  ) {
+    await notifyTaskScheduleChanged({
+      taskId: input.task_id,
+      before: {
+        scheduled_date: existing.scheduled_date ?? null,
+        scheduled_time: existing.scheduled_time ?? null,
+      },
+      after: {
+        scheduled_date: updated.scheduled_date ?? null,
+        scheduled_time: updated.scheduled_time ?? null,
+      },
+      actor: options.actor ?? null,
+    });
+  }
+
+  if (input.status !== undefined) {
+    await notifyTaskStatusChanged({
+      taskId: input.task_id,
+      beforeStatus: existing.status ?? null,
+      afterStatus: updated.status ?? null,
+      actor: options.actor ?? null,
     });
   }
 

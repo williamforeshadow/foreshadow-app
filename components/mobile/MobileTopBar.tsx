@@ -1,6 +1,7 @@
 'use client';
 
 import { memo } from 'react';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 interface MobileTopBarProps {
   onMenuTap: () => void;
@@ -10,7 +11,7 @@ interface MobileTopBarProps {
 const MobileTopBar = memo(function MobileTopBar({ onMenuTap, hidden }: MobileTopBarProps) {
   return (
     <div
-      className={`flex-shrink-0 h-11 px-2 flex items-center transition-transform duration-300 ${
+      className={`flex-shrink-0 h-11 px-2 flex items-center justify-between transition-transform duration-300 ${
         hidden ? '-translate-y-full' : 'translate-y-0'
       }`}
     >
@@ -23,6 +24,7 @@ const MobileTopBar = memo(function MobileTopBar({ onMenuTap, hidden }: MobileTop
           <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
+      <NotificationBell compact />
     </div>
   );
 });

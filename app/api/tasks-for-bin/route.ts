@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { createTask, type CreatedTask } from '@/src/server/tasks/createTask';
-import { safelyRunSlackAutomationsForTaskAssignment } from '@/src/server/slackAutomations/run';
 
 export async function GET(request: Request) {
   try {
@@ -211,7 +210,7 @@ export async function POST(request: NextRequest) {
       department_id: body?.department_id,
       template_id: body?.template_id,
       assigned_user_ids: body?.assigned_user_ids,
-    });
+    }, { actor: { user_id: getActorUserIdFromRequest(request) } });
 
     if (!result.ok) {
       const status =
@@ -221,16 +220,6 @@ export async function POST(request: NextRequest) {
             ? 404
             : 500;
       return NextResponse.json({ error: result.error.message }, { status });
-    }
-
-    if (result.task.assigned_users.length > 0) {
-      await safelyRunSlackAutomationsForTaskAssignment({
-        taskId: result.task.task_id,
-        previousAssigneeIds: [],
-        nextAssigneeIds: result.task.assigned_users.map((user) => user.user_id),
-        actor: { user_id: getActorUserIdFromRequest(request) },
-        logPrefix: '[tasks-for-bin]',
-      });
     }
 
     return NextResponse.json({

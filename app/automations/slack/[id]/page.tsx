@@ -1,15 +1,5 @@
-import DesktopSidebarShell from '@/components/DesktopSidebarShell';
-import SlackAutomationEditor from '@/components/automations/SlackAutomationEditor';
+import { redirect } from 'next/navigation';
 
-export default async function EditSlackAutomationPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  return (
-    <DesktopSidebarShell>
-      <SlackAutomationEditor automationId={id} />
-    </DesktopSidebarShell>
-  );
+export default function EditSlackAutomationPage() {
+  redirect('/automations/new-engine');
 }

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { CSSProperties } from 'react';
 import { ModeToggle } from '@/components/mode-toggle';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { SidebarToggleButton } from '@/components/SidebarToggleButton';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import {
@@ -192,7 +193,10 @@ export default function Sidebar({
               Workspace
             </p>
           </div>
-          <SidebarToggleButton className="dark:hover:bg-[var(--sidebar-dark-hover)]" />
+          <div className="flex shrink-0 items-center gap-1">
+            <NotificationBell />
+            <SidebarToggleButton className="dark:hover:bg-[var(--sidebar-dark-hover)]" />
+          </div>
         </div>
 
         <nav className={`flex-1 min-w-0 px-2.5 py-3 ${SIDEBAR_SCROLL_CLASS}`}>

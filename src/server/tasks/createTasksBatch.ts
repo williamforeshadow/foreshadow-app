@@ -3,6 +3,7 @@ import {
   createTask,
   previewCreateTask,
   type CreateTaskInput,
+  type CreateTaskOptions,
   type CreateTaskPlan,
   type CreatedTask,
 } from './createTask';
@@ -438,6 +439,7 @@ export async function previewCreateTasksBatch(
  */
 export async function createTasksBatch(
   rawInput: unknown,
+  options: CreateTaskOptions = {},
 ): Promise<CreateTasksBatchOutcome> {
   const parsed = createTasksBatchInputSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -496,7 +498,7 @@ export async function createTasksBatch(
       input.shared_bin,
       createdBin?.id ?? null,
     );
-    const result = await createTask(taskInput);
+    const result = await createTask(taskInput, options);
     if (result.ok) {
       tasks.push(result.task);
     } else {

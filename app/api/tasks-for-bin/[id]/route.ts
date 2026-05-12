@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
-import { safelyRunSlackAutomationsForTaskAssignment } from '@/src/server/slackAutomations/run';
+import {
+  notifyTaskAssigned,
+  notifyTaskScheduleChanged,
+  notifyTaskStatusChanged,
+} from '@/src/server/notifications/notify';
+
+type PreviousTaskState = {
+  status: string | null;
+  scheduled_date: string | null;
+  scheduled_time: string | null;
+};
 
 export async function PUT(
   request: NextRequest,
@@ -30,6 +40,8 @@ export async function PUT(
       updated_at: new Date().toISOString(),
     };
     let previousAssigneeIds: string[] = [];
+    const actor = { user_id: getActorUserIdFromRequest(request) };
+    let previousTask: PreviousTaskState | null = null;
 
     if (title !== undefined) updateData.title = title;
     if (description !== undefined) updateData.description = description;
@@ -73,6 +85,19 @@ export async function PUT(
       }
     }
 
+    if (
+      status !== undefined ||
+      scheduled_date !== undefined ||
+      scheduled_time !== undefined
+    ) {
+      const { data: existingTask } = await getSupabaseServer()
+        .from('turnover_tasks')
+        .select('status, scheduled_date, scheduled_time')
+        .eq('id', id)
+        .maybeSingle();
+      previousTask = (existingTask as PreviousTaskState | null) ?? null;
+    }
+
     const { error: updateError } = await getSupabaseServer()
       .from('turnover_tasks')
       .update(updateData)
@@ -110,12 +135,11 @@ export async function PUT(
         await getSupabaseServer().from('task_assignments').insert(assignments);
       }
 
-      await safelyRunSlackAutomationsForTaskAssignment({
+      await notifyTaskAssigned({
         taskId: id,
         previousAssigneeIds,
         nextAssigneeIds: userIds,
-        actor: { user_id: getActorUserIdFromRequest(request) },
-        logPrefix: '[tasks-for-bin]',
+        actor,
       });
     }
 
@@ -153,6 +177,30 @@ export async function PUT(
 
     if (fetchError) {
       return NextResponse.json({ error: fetchError.message }, { status: 500 });
+    }
+
+    if (previousTask && (scheduled_date !== undefined || scheduled_time !== undefined)) {
+      await notifyTaskScheduleChanged({
+        taskId: id,
+        before: {
+          scheduled_date: previousTask.scheduled_date,
+          scheduled_time: previousTask.scheduled_time,
+        },
+        after: {
+          scheduled_date: data.scheduled_date ?? null,
+          scheduled_time: data.scheduled_time ?? null,
+        },
+        actor,
+      });
+    }
+
+    if (previousTask && status !== undefined) {
+      await notifyTaskStatusChanged({
+        taskId: id,
+        beforeStatus: previousTask.status,
+        afterStatus: data.status ?? null,
+        actor,
+      });
     }
 
     const tmpl = data.templates as any;

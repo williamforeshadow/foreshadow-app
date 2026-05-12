@@ -19,7 +19,7 @@ import type { NextRequest } from 'next/server';
 
 const ACTOR_HEADER = 'x-actor-user-id';
 
-export function getActorUserIdFromRequest(req: NextRequest): string | null {
+export function getActorUserIdFromRequest(req: NextRequest | Request): string | null {
   const raw = req.headers.get(ACTOR_HEADER);
   if (!raw) return null;
   const trimmed = raw.trim();

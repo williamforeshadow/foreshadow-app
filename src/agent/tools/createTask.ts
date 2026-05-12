@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createTask as createTaskService } from '@/src/server/tasks/createTask';
 import { consumeCreateTaskToken } from '@/src/server/tasks/createTaskConfirmation';
 import { taskUrl } from '@/src/lib/links';
-import type { ToolDefinition, ToolMeta, ToolResult } from './types';
+import type { ToolContext, ToolDefinition, ToolMeta, ToolResult } from './types';
 
 // create_task — second half of the two-step write protocol for tasks.
 //
@@ -62,7 +62,10 @@ export interface CreatedTaskRow {
   task_url: string;
 }
 
-async function handler(input: Input): Promise<ToolResult<CreatedTaskRow>> {
+async function handler(
+  input: Input,
+  ctx: ToolContext,
+): Promise<ToolResult<CreatedTaskRow>> {
   const consumed = consumeCreateTaskToken(input.confirmation_token);
   if (!consumed.ok) {
     const reason = consumed.reason;
@@ -80,7 +83,11 @@ async function handler(input: Input): Promise<ToolResult<CreatedTaskRow>> {
     };
   }
 
-  const result = await createTaskService(consumed.input);
+  const result = await createTaskService(consumed.input, {
+    actor: ctx.actor
+      ? { user_id: ctx.actor.appUserId, name: ctx.actor.name }
+      : null,
+  });
   if (!result.ok) {
     if (result.error.code === 'invalid_input') {
       return {

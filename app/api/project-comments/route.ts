@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { logProjectActivity } from '@/lib/logProjectActivity';
+import { notifyTaskCommented } from '@/src/server/notifications/notify';
 
 // GET - List comments for a specific project or task with user details
 export async function GET(request: Request) {
@@ -97,6 +98,18 @@ export async function POST(request: Request) {
         ? comment_content.substring(0, 50) + '...' 
         : comment_content;
       await logProjectActivity(project_id, user_id, 'comment', `commented "${truncatedComment}"`, null, comment_content);
+    }
+
+    if (task_id) {
+      await notifyTaskCommented({
+        taskId: task_id,
+        commentId: data.id,
+        actor: {
+          user_id,
+          name: data.users?.name ?? null,
+        },
+        commentPreview: comment_content,
+      });
     }
 
     // Transform to flatten user data

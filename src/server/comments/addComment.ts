@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { notifyTaskCommented } from '@/src/server/notifications/notify';
 
 // Service: add a comment to a task.
 //
@@ -196,6 +197,13 @@ export async function addComment(rawInput: unknown): Promise<AddCommentResult> {
     comment_content: string;
     created_at: string;
   };
+
+  await notifyTaskCommented({
+    taskId: row.task_id,
+    commentId: row.id,
+    actor: { user_id: row.user_id, name: userLookup.value.name },
+    commentPreview: row.comment_content,
+  });
 
   return {
     ok: true,

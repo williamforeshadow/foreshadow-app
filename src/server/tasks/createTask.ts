@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import {
+  notifyTaskCreatedAssigned,
+  type NotificationActor,
+} from '@/src/server/notifications/notify';
 
 // Service: create a manually-authored task.
 //
@@ -128,6 +132,11 @@ export type CreateTaskResult =
   | { ok: true; task: CreatedTask }
   | { ok: false; error: CreateTaskError };
 
+export interface CreateTaskOptions {
+  actor?: NotificationActor | null;
+  notify?: boolean;
+}
+
 // ---------- helpers ---------------------------------------------------------
 
 function plainTextToTiptap(text: string): Record<string, unknown> {
@@ -196,7 +205,10 @@ async function validateForeignKey(
  * FK pre-checks, and rich-text synthesis are all performed here so the
  * route and the agent tool can share identical behavior.
  */
-export async function createTask(rawInput: unknown): Promise<CreateTaskResult> {
+export async function createTask(
+  rawInput: unknown,
+  options: CreateTaskOptions = {},
+): Promise<CreateTaskResult> {
   const parsed = createTaskInputSchema.safeParse(rawInput);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
@@ -463,6 +475,14 @@ export async function createTask(rawInput: unknown): Promise<CreateTaskResult> {
     updated_at: t.updated_at,
     completed_at: t.completed_at ?? null,
   };
+
+  if (options.notify !== false && task.assigned_users.length > 0) {
+    await notifyTaskCreatedAssigned({
+      taskId: task.task_id,
+      assigneeIds: task.assigned_users.map((user) => user.user_id),
+      actor: options.actor ?? null,
+    });
+  }
 
   return { ok: true, task };
 }

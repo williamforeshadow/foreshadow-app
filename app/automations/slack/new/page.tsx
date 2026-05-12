@@ -1,10 +1,5 @@
-import DesktopSidebarShell from '@/components/DesktopSidebarShell';
-import SlackAutomationEditor from '@/components/automations/SlackAutomationEditor';
+import { redirect } from 'next/navigation';
 
 export default function NewSlackAutomationPage() {
-  return (
-    <DesktopSidebarShell>
-      <SlackAutomationEditor />
-    </DesktopSidebarShell>
-  );
+  redirect('/automations/new-engine/new');
 }

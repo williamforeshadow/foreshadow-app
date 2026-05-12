@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import { Button } from '@/components/ui/button';
 import AutomationsView from '@/components/templates/AutomationsView';
-import SlackAutomationsView from '@/components/automations/SlackAutomationsView';
 
 interface Template {
   id: string;
@@ -21,16 +21,17 @@ interface PropertyListItem {
   name: string;
 }
 
-type AutomationTab = 'tasks' | 'slack';
-
 export default function AutomationsPage() {
-  const [activeTab, setActiveTab] = useState<AutomationTab>(() => {
-    if (typeof window === 'undefined') return 'tasks';
-    const params = new URLSearchParams(window.location.search);
-    return params.get('tab') === 'slack' ? 'slack' : 'tasks';
-  });
+  const router = useRouter();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [properties, setProperties] = useState<string[]>([]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('tab') === 'slack') {
+      router.replace('/automations/new-engine');
+    }
+  }, [router]);
 
   useEffect(() => {
     const fetchTemplates = async () => {
@@ -66,15 +67,14 @@ export default function AutomationsPage() {
         <div className="flex-shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-6 py-4 flex items-center justify-between">
           <div className="flex gap-2">
             <Button
-              onClick={() => setActiveTab('tasks')}
-              variant={activeTab === 'tasks' ? 'default' : 'outline'}
+              variant="default"
               size="sm"
             >
               Task Automations
             </Button>
             <Button
-              onClick={() => setActiveTab('slack')}
-              variant={activeTab === 'slack' ? 'default' : 'outline'}
+              onClick={() => router.push('/automations/new-engine')}
+              variant="outline"
               size="sm"
             >
               Slack Automations
@@ -84,11 +84,7 @@ export default function AutomationsPage() {
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-6">
-          {activeTab === 'tasks' ? (
-            <AutomationsView templates={templates} properties={properties} />
-          ) : (
-            <SlackAutomationsView />
-          )}
+          <AutomationsView templates={templates} properties={properties} />
         </div>
       </div>
     </DesktopSidebarShell>

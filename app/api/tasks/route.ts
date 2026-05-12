@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
 import { getSupabaseServer } from '@/lib/supabaseServer';
-import { safelyRunSlackAutomationsForTaskAssignment } from '@/src/server/slackAutomations/run';
+import { notifyTaskCreatedAssigned } from '@/src/server/notifications/notify';
 
 interface AutomationScheduleConfig {
   enabled: boolean;
@@ -245,13 +245,14 @@ export async function POST(request: NextRequest) {
       role: a.users?.role || ''
     }));
 
-    if (assignUserIds.length > 0) {
-      await safelyRunSlackAutomationsForTaskAssignment({
+    const assignedUserIds: string[] = assignedUsers.map(
+      (user: { user_id: string }) => user.user_id,
+    );
+    if (assignedUserIds.length > 0) {
+      await notifyTaskCreatedAssigned({
         taskId: newTask.id,
-        previousAssigneeIds: [],
-        nextAssigneeIds: assignUserIds,
+        assigneeIds: assignedUserIds,
         actor: { user_id: getActorUserIdFromRequest(request) },
-        logPrefix: '[tasks]',
       });
     }
 

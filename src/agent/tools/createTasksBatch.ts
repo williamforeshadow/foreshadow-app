@@ -6,7 +6,7 @@ import {
 import { consumeCreateTasksBatchToken } from '@/src/server/tasks/createTasksBatchConfirmation';
 import { taskUrl } from '@/src/lib/links';
 import { binsIndexUrl } from '@/src/lib/links';
-import type { ToolDefinition, ToolMeta, ToolResult } from './types';
+import type { ToolContext, ToolDefinition, ToolMeta, ToolResult } from './types';
 
 // create_tasks_batch — second half of the batch task write protocol.
 //
@@ -95,7 +95,10 @@ export interface CreateTasksBatchData {
   }>;
 }
 
-async function handler(input: Input): Promise<ToolResult<CreateTasksBatchData>> {
+async function handler(
+  input: Input,
+  ctx: ToolContext,
+): Promise<ToolResult<CreateTasksBatchData>> {
   const consumed = consumeCreateTasksBatchToken(input.confirmation_token);
   if (!consumed.ok) {
     const reason = consumed.reason;
@@ -113,7 +116,11 @@ async function handler(input: Input): Promise<ToolResult<CreateTasksBatchData>> 
     };
   }
 
-  const result = await createTasksBatchService(consumed.input);
+  const result = await createTasksBatchService(consumed.input, {
+    actor: ctx.actor
+      ? { user_id: ctx.actor.appUserId, name: ctx.actor.name }
+      : null,
+  });
   if (!result.ok) {
     if (result.error.code === 'invalid_input') {
       return {

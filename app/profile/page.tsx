@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/authContext';
 import { createSupabaseClient } from '@/lib/supabaseAuth';
 import { useRouter } from 'next/navigation';
 import { UserAvatar } from '@/components/ui/user-avatar';
+import { NotificationPreferencesPanel } from '@/components/notifications/NotificationPreferencesPanel';
 import Link from 'next/link';
 
 export default function ProfilePage() {
@@ -144,7 +145,7 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-background p-4">
-      <div className="max-w-md mx-auto">
+      <div className="max-w-3xl mx-auto">
         {/* Back Button */}
         <Link 
           href="/" 
@@ -163,7 +164,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Profile Card */}
-        <div className="bg-card rounded-xl shadow-lg p-6 border border-border">
+        <div className="mx-auto max-w-md bg-card rounded-xl shadow-lg p-6 border border-border">
           {/* Messages */}
           {error && (
             <div className="mb-4 bg-destructive/10 text-destructive text-sm p-3 rounded-lg border border-destructive/20">
@@ -290,6 +291,10 @@ export default function ProfilePage() {
               )}
             </button>
           </form>
+        </div>
+
+        <div className="mt-6">
+          <NotificationPreferencesPanel />
         </div>
       </div>
     </div>
