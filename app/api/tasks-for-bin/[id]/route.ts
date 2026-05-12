@@ -3,15 +3,58 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
 import {
   notifyTaskAssigned,
+  notifyTaskBinChanged,
+  notifyTaskDescriptionChanged,
+  notifyTaskPriorityChanged,
   notifyTaskScheduleChanged,
   notifyTaskStatusChanged,
+  notifyTaskTitleChanged,
 } from '@/src/server/notifications/notify';
 
 type PreviousTaskState = {
+  title: string | null;
+  description: unknown;
+  priority: string | null;
+  bin_id: string | null;
+  is_binned: boolean | null;
   status: string | null;
   scheduled_date: string | null;
   scheduled_time: string | null;
 };
+
+type JoinedTaskAssignment = {
+  user_id: string;
+  assigned_at: string | null;
+  users: unknown;
+};
+
+type JoinedTaskRow = {
+  id: string;
+  property_name: string | null;
+  property_id: string | null;
+  reservation_id: string | null;
+  bin_id: string | null;
+  is_binned: boolean | null;
+  template_id: string | null;
+  title: string | null;
+  description: unknown;
+  status: string | null;
+  priority: string | null;
+  department_id: string | null;
+  scheduled_date: string | null;
+  scheduled_time: string | null;
+  form_metadata: unknown;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+  templates: { name?: string | null } | null;
+  departments: { name?: string | null } | null;
+  task_assignments?: JoinedTaskAssignment[] | null;
+};
+
+function errorMessage(err: unknown, fallback: string) {
+  return err instanceof Error ? err.message : fallback;
+}
 
 export async function PUT(
   request: NextRequest,
@@ -86,13 +129,18 @@ export async function PUT(
     }
 
     if (
+      title !== undefined ||
+      description !== undefined ||
+      priority !== undefined ||
+      bin_id !== undefined ||
+      is_binned !== undefined ||
       status !== undefined ||
       scheduled_date !== undefined ||
       scheduled_time !== undefined
     ) {
       const { data: existingTask } = await getSupabaseServer()
         .from('turnover_tasks')
-        .select('status, scheduled_date, scheduled_time')
+        .select('title, description, priority, bin_id, is_binned, status, scheduled_date, scheduled_time')
         .eq('id', id)
         .maybeSingle();
       previousTask = (existingTask as PreviousTaskState | null) ?? null;
@@ -179,6 +227,48 @@ export async function PUT(
       return NextResponse.json({ error: fetchError.message }, { status: 500 });
     }
 
+    if (previousTask && title !== undefined) {
+      await notifyTaskTitleChanged({
+        taskId: id,
+        beforeTitle: previousTask.title,
+        afterTitle: data.title ?? null,
+        actor,
+      });
+    }
+
+    if (previousTask && priority !== undefined) {
+      await notifyTaskPriorityChanged({
+        taskId: id,
+        beforePriority: previousTask.priority,
+        afterPriority: data.priority ?? null,
+        actor,
+      });
+    }
+
+    if (previousTask && description !== undefined) {
+      await notifyTaskDescriptionChanged({
+        taskId: id,
+        beforeDescription: previousTask.description,
+        afterDescription: data.description ?? null,
+        actor,
+      });
+    }
+
+    if (previousTask && (bin_id !== undefined || is_binned !== undefined)) {
+      await notifyTaskBinChanged({
+        taskId: id,
+        before: {
+          bin_id: previousTask.bin_id,
+          is_binned: previousTask.is_binned,
+        },
+        after: {
+          bin_id: data.bin_id ?? null,
+          is_binned: data.is_binned ?? false,
+        },
+        actor,
+      });
+    }
+
     if (previousTask && (scheduled_date !== undefined || scheduled_time !== undefined)) {
       await notifyTaskScheduleChanged({
         taskId: id,
@@ -203,38 +293,38 @@ export async function PUT(
       });
     }
 
-    const tmpl = data.templates as any;
+    const taskRow = data as JoinedTaskRow;
     const transformed = {
-      id: data.id,
-      property_name: data.property_name || null,
-      property_id: (data as any).property_id || null,
-      reservation_id: (data as any).reservation_id ?? null,
-      bin_id: data.bin_id || null,
-      is_binned: data.is_binned ?? false,
-      template_id: data.template_id || null,
-      template_name: tmpl?.name || null,
-      title: data.title || 'Untitled Task',
-      description: data.description || null,
-      status: data.status || 'not_started',
-      priority: data.priority || 'medium',
-      department_id: data.department_id || null,
-      department_name: (data.departments as any)?.name || null,
-      scheduled_date: data.scheduled_date || null,
-      scheduled_time: data.scheduled_time || null,
-      form_metadata: data.form_metadata || null,
-      created_at: data.created_at,
-      updated_at: data.updated_at,
-      completed_at: (data as any).completed_at || null,
-      project_assignments: (data.task_assignments as any[])?.map((a: any) => ({
+      id: taskRow.id,
+      property_name: taskRow.property_name || null,
+      property_id: taskRow.property_id || null,
+      reservation_id: taskRow.reservation_id ?? null,
+      bin_id: taskRow.bin_id || null,
+      is_binned: taskRow.is_binned ?? false,
+      template_id: taskRow.template_id || null,
+      template_name: taskRow.templates?.name || null,
+      title: taskRow.title || 'Untitled Task',
+      description: taskRow.description || null,
+      status: taskRow.status || 'not_started',
+      priority: taskRow.priority || 'medium',
+      department_id: taskRow.department_id || null,
+      department_name: taskRow.departments?.name || null,
+      scheduled_date: taskRow.scheduled_date || null,
+      scheduled_time: taskRow.scheduled_time || null,
+      form_metadata: taskRow.form_metadata || null,
+      created_at: taskRow.created_at,
+      updated_at: taskRow.updated_at,
+      completed_at: taskRow.completed_at || null,
+      project_assignments: taskRow.task_assignments?.map((a) => ({
         ...a,
         user: a.users || null,
       })) || [],
     };
 
     return NextResponse.json({ success: true, data: transformed });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json(
-      { error: err.message || 'Failed to update task' },
+      { error: errorMessage(err, 'Failed to update task') },
       { status: 500 }
     );
   }
@@ -257,9 +347,9 @@ export async function DELETE(
     }
 
     return NextResponse.json({ success: true, message: 'Task deleted' });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json(
-      { error: err.message || 'Failed to delete task' },
+      { error: errorMessage(err, 'Failed to delete task') },
       { status: 500 }
     );
   }

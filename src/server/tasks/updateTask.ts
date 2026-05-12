@@ -2,8 +2,12 @@ import { z } from 'zod';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import {
   notifyTaskAssigned,
+  notifyTaskBinChanged,
+  notifyTaskDescriptionChanged,
+  notifyTaskPriorityChanged,
   notifyTaskScheduleChanged,
   notifyTaskStatusChanged,
+  notifyTaskTitleChanged,
   type NotificationActor,
 } from '@/src/server/notifications/notify';
 
@@ -781,6 +785,48 @@ export async function updateTask(
       taskId: input.task_id,
       previousAssigneeIds: previousAssignmentIds,
       nextAssigneeIds: input.assigned_user_ids,
+      actor: options.actor ?? null,
+    });
+  }
+
+  if (input.title !== undefined) {
+    await notifyTaskTitleChanged({
+      taskId: input.task_id,
+      beforeTitle: existing.title ?? null,
+      afterTitle: updated.title ?? null,
+      actor: options.actor ?? null,
+    });
+  }
+
+  if (input.priority !== undefined) {
+    await notifyTaskPriorityChanged({
+      taskId: input.task_id,
+      beforePriority: existing.priority ?? null,
+      afterPriority: updated.priority ?? null,
+      actor: options.actor ?? null,
+    });
+  }
+
+  if (input.description !== undefined) {
+    await notifyTaskDescriptionChanged({
+      taskId: input.task_id,
+      beforeDescription: existing.description,
+      afterDescription: input.description,
+      actor: options.actor ?? null,
+    });
+  }
+
+  if (input.bin_id !== undefined || input.is_binned !== undefined) {
+    await notifyTaskBinChanged({
+      taskId: input.task_id,
+      before: {
+        bin_id: existing.bin_id ?? null,
+        is_binned: existing.is_binned ?? false,
+      },
+      after: {
+        bin_id: updated.bin_id ?? null,
+        is_binned: updated.is_binned ?? false,
+      },
       actor: options.actor ?? null,
     });
   }

@@ -80,16 +80,64 @@ const STATUS_LABELS: Record<string, string> = {
   complete: 'Complete',
 };
 
+const PRIORITY_LABELS: Record<string, string> = {
+  urgent: 'Urgent',
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+};
+
 function statusLabel(status: unknown): string {
   return typeof status === 'string'
     ? STATUS_LABELS[status] ?? status.replace(/_/g, ' ')
     : 'Unknown';
 }
 
+function priorityLabel(priority: unknown): string {
+  return typeof priority === 'string'
+    ? PRIORITY_LABELS[priority] ?? priority.replace(/_/g, ' ')
+    : 'Unknown';
+}
+
+function formatDate(date: unknown): string | null {
+  if (typeof date !== 'string' || !date) return null;
+  const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return date;
+  const [, y, m, d] = match;
+  const utc = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(utc);
+}
+
+function formatTime(time: unknown): string | null {
+  if (typeof time !== 'string' || !time) return null;
+  const match = time.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return time;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (Number.isNaN(hour) || Number.isNaN(minute)) return time;
+  const suffix = hour >= 12 ? 'pm' : 'am';
+  const hour12 = hour % 12 || 12;
+  const minuteText = minute === 0 ? '' : `:${String(minute).padStart(2, '0')}`;
+  return `${hour12}${minuteText}${suffix}`;
+}
+
 function formatSchedule(date: unknown, time: unknown): string {
-  const dateText = typeof date === 'string' && date ? date : 'unscheduled';
-  const timeText = typeof time === 'string' && time ? ` at ${time}` : '';
-  return `${dateText}${timeText}`;
+  const dateText = formatDate(date);
+  const timeText = formatTime(time);
+  if (dateText && timeText) return `${dateText} at ${timeText}`;
+  if (dateText) return dateText;
+  if (timeText) return timeText;
+  return 'unscheduled';
+}
+
+function scheduleSuffix(date: unknown, time: unknown): string {
+  const schedule = formatSchedule(date, time);
+  return schedule === 'unscheduled' ? '' : ` scheduled for ${schedule}`;
 }
 
 function compactPreview(value: unknown): string | null {
@@ -99,41 +147,69 @@ function compactPreview(value: unknown): string | null {
   return compact.length <= 160 ? compact : `${compact.slice(0, 157)}...`;
 }
 
+function descriptionPreview(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === 'string') return compactPreview(value);
+  if (typeof value !== 'object') return null;
+
+  const parts: string[] = [];
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== 'object') return;
+    const typed = node as { text?: unknown; content?: unknown };
+    if (typeof typed.text === 'string') parts.push(typed.text);
+    if (Array.isArray(typed.content)) typed.content.forEach(visit);
+  };
+  visit(value);
+  return compactPreview(parts.join(' '));
+}
+
 function taskLabel(task: TaskContext): string {
   return task.title || 'Untitled task';
+}
+
+function actorLabel(actorName: string | null): string {
+  return actorName || 'Someone';
+}
+
+function quoted(value: unknown): string {
+  const text = typeof value === 'string' && value.trim() ? value.trim() : 'Untitled task';
+  return `"${text}"`;
 }
 
 function renderNotification(payload: RenderPayload): RenderedNotification {
   const { type, task, actorName, metadata = {} } = payload;
   const taskName = taskLabel(task);
-  const where = task.property_name ? ` at ${task.property_name}` : '';
-  const actor = actorName || 'Someone';
+  const actor = actorLabel(actorName);
 
   if (type === 'task_created_assigned') {
-    const title = `New task assigned: ${taskName}`;
-    const body = `You were assigned to ${taskName}${where}.`;
+    const title = actorName
+      ? `${actor} assigned you ${taskName}`
+      : `You've been assigned ${taskName}`;
+    const body = `You've been assigned ${taskName}${scheduleSuffix(task.scheduled_date, task.scheduled_time)}.`;
     return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
   }
 
   if (type === 'task_assigned') {
-    const title = `Assigned to ${taskName}`;
-    const body = `${actor} assigned you to ${taskName}${where}.`;
+    const title = actorName
+      ? `${actor} assigned you ${taskName}`
+      : `You've been assigned ${taskName}`;
+    const body = `You've been assigned ${taskName}${scheduleSuffix(task.scheduled_date, task.scheduled_time)}.`;
     return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
   }
 
   if (type === 'task_commented') {
     const preview = compactPreview(metadata.comment_preview);
-    const title = `New comment on ${taskName}`;
+    const title = `${actor} commented on ${taskName}`;
     const body = preview
       ? `${actor} commented: "${preview}"`
-      : `${actor} commented on ${taskName}${where}.`;
+      : `${actor} commented on ${taskName}.`;
     return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
   }
 
   if (type === 'task_schedule_changed') {
     const before = formatSchedule(metadata.before_date, metadata.before_time);
     const after = formatSchedule(metadata.after_date, metadata.after_time);
-    const title = `Schedule changed: ${taskName}`;
+    const title = `${actor} changed the schedule on your assigned task`;
     const body = `${actor} changed the schedule from ${before} to ${after}.`;
     return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
   }
@@ -141,14 +217,54 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
   if (type === 'task_status_changed') {
     const before = statusLabel(metadata.before_status);
     const after = statusLabel(metadata.after_status);
-    const title = `Status changed: ${taskName}`;
-    const body = `${actor} changed the status from ${before} to ${after}.`;
+    const title = `${actor} changed the status of your task`;
+    const body = `${actor} changed ${taskName} from ${before} to ${after}.`;
+    return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
+  }
+
+  if (type === 'task_bin_changed') {
+    const before = typeof metadata.before_bin === 'string' ? metadata.before_bin : 'No bin';
+    const after = typeof metadata.after_bin === 'string' ? metadata.after_bin : 'No bin';
+    const title = `${actor} moved your task`;
+    const body = `${actor} moved ${taskName} from ${before} to ${after}.`;
+    return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
+  }
+
+  if (type === 'task_attachment_added') {
+    const fileName =
+      typeof metadata.file_name === 'string' && metadata.file_name.trim()
+        ? metadata.file_name.trim()
+        : 'an attachment';
+    const title = `${actor} added an attachment to your task`;
+    const body = `${actor} added ${fileName} to ${taskName}.`;
+    return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
+  }
+
+  if (type === 'task_title_changed') {
+    const before = quoted(metadata.before_title);
+    const after = quoted(metadata.after_title);
+    const title = `${actor} changed the title of your task`;
+    const body = `${actor} changed ${before} to ${after}.`;
+    return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
+  }
+
+  if (type === 'task_priority_changed') {
+    const before = priorityLabel(metadata.before_priority);
+    const after = priorityLabel(metadata.after_priority);
+    const title = `${actor} changed the priority of your task`;
+    const body = `${actor} changed ${taskName} from ${before} to ${after}.`;
+    return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
+  }
+
+  if (type === 'task_description_changed') {
+    const title = `${actor} updated the description of your task`;
+    const body = `${actor} updated the description for ${taskName}.`;
     return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
   }
 
   const schedule = formatSchedule(task.scheduled_date, task.scheduled_time);
-  const title = `Due today: ${taskName}`;
-  const body = `${taskName}${where} is scheduled for ${schedule}.`;
+  const title = `Your task ${taskName} is due today`;
+  const body = `${taskName} is scheduled for ${schedule}.`;
   return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
 }
 
@@ -219,6 +335,22 @@ async function loadTaskContext(
     updated_at: row.updated_at ?? null,
     assignments,
   };
+}
+
+async function binLabel(
+  supabase: Supabase,
+  binId: string | null,
+  isBinned: boolean | null,
+): Promise<string> {
+  if (!binId) return isBinned ? 'Task Bin' : 'No bin';
+  const { data } = await supabase
+    .from('project_bins')
+    .select('name')
+    .eq('id', binId)
+    .maybeSingle();
+  return typeof data?.name === 'string' && data.name.trim()
+    ? data.name
+    : 'Unknown bin';
 }
 
 async function loadPreferences(
@@ -518,6 +650,149 @@ export async function notifyTaskStatusChanged(args: {
     },
     dedupeKeyFor: (recipientId) =>
       `task_status_changed:${args.taskId}:${recipientId}:${args.beforeStatus ?? ''}:${args.afterStatus ?? ''}:${task.updated_at ?? ''}`,
+  });
+}
+
+export async function notifyTaskBinChanged(args: {
+  taskId: string;
+  before: { bin_id: string | null; is_binned: boolean | null };
+  after: { bin_id: string | null; is_binned: boolean | null };
+  actor?: NotificationActor | null;
+}) {
+  if (
+    args.before.bin_id === args.after.bin_id &&
+    args.before.is_binned === args.after.is_binned
+  ) {
+    return;
+  }
+  const supabase = getSupabaseServer();
+  const task = await loadTaskContext(supabase, args.taskId);
+  if (!task) return;
+  const [beforeBin, afterBin] = await Promise.all([
+    binLabel(supabase, args.before.bin_id, !!args.before.is_binned),
+    binLabel(supabase, args.after.bin_id, !!args.after.is_binned),
+  ]);
+  await deliverTaskNotification({
+    type: 'task_bin_changed',
+    taskId: args.taskId,
+    recipientIds: task.assignments.map((a) => a.user_id),
+    actor: args.actor,
+    metadata: {
+      before_bin_id: args.before.bin_id,
+      before_is_binned: args.before.is_binned,
+      before_bin: beforeBin,
+      after_bin_id: args.after.bin_id,
+      after_is_binned: args.after.is_binned,
+      after_bin: afterBin,
+    },
+    dedupeKeyFor: (recipientId, loadedTask) =>
+      [
+        'task_bin_changed',
+        args.taskId,
+        recipientId,
+        args.before.bin_id ?? '',
+        String(args.before.is_binned ?? false),
+        args.after.bin_id ?? '',
+        String(args.after.is_binned ?? false),
+        loadedTask.updated_at ?? '',
+      ].join(':'),
+  });
+}
+
+export async function notifyTaskAttachmentAdded(args: {
+  taskId: string;
+  attachmentId: string;
+  fileName: string;
+  actor?: NotificationActor | null;
+}) {
+  const supabase = getSupabaseServer();
+  const task = await loadTaskContext(supabase, args.taskId);
+  if (!task) return;
+  await deliverTaskNotification({
+    type: 'task_attachment_added',
+    taskId: args.taskId,
+    recipientIds: task.assignments.map((a) => a.user_id),
+    actor: args.actor,
+    metadata: {
+      attachment_id: args.attachmentId,
+      file_name: args.fileName,
+    },
+    dedupeKeyFor: (recipientId) =>
+      `task_attachment_added:${args.attachmentId}:${recipientId}`,
+  });
+}
+
+export async function notifyTaskTitleChanged(args: {
+  taskId: string;
+  beforeTitle: string | null;
+  afterTitle: string | null;
+  actor?: NotificationActor | null;
+}) {
+  if ((args.beforeTitle ?? '') === (args.afterTitle ?? '')) return;
+  const supabase = getSupabaseServer();
+  const task = await loadTaskContext(supabase, args.taskId);
+  if (!task) return;
+  await deliverTaskNotification({
+    type: 'task_title_changed',
+    taskId: args.taskId,
+    recipientIds: task.assignments.map((a) => a.user_id),
+    actor: args.actor,
+    metadata: {
+      before_title: args.beforeTitle,
+      after_title: args.afterTitle,
+    },
+    dedupeKeyFor: (recipientId, loadedTask) =>
+      `task_title_changed:${args.taskId}:${recipientId}:${args.beforeTitle ?? ''}:${args.afterTitle ?? ''}:${loadedTask.updated_at ?? ''}`,
+  });
+}
+
+export async function notifyTaskPriorityChanged(args: {
+  taskId: string;
+  beforePriority: string | null;
+  afterPriority: string | null;
+  actor?: NotificationActor | null;
+}) {
+  if ((args.beforePriority ?? '') === (args.afterPriority ?? '')) return;
+  const supabase = getSupabaseServer();
+  const task = await loadTaskContext(supabase, args.taskId);
+  if (!task) return;
+  await deliverTaskNotification({
+    type: 'task_priority_changed',
+    taskId: args.taskId,
+    recipientIds: task.assignments.map((a) => a.user_id),
+    actor: args.actor,
+    metadata: {
+      before_priority: args.beforePriority,
+      after_priority: args.afterPriority,
+    },
+    dedupeKeyFor: (recipientId, loadedTask) =>
+      `task_priority_changed:${args.taskId}:${recipientId}:${args.beforePriority ?? ''}:${args.afterPriority ?? ''}:${loadedTask.updated_at ?? ''}`,
+  });
+}
+
+export async function notifyTaskDescriptionChanged(args: {
+  taskId: string;
+  beforeDescription: unknown;
+  afterDescription: unknown;
+  actor?: NotificationActor | null;
+}) {
+  const before = descriptionPreview(args.beforeDescription);
+  const after = descriptionPreview(args.afterDescription);
+  if ((before ?? '') === (after ?? '')) return;
+  const supabase = getSupabaseServer();
+  const task = await loadTaskContext(supabase, args.taskId);
+  if (!task) return;
+  await deliverTaskNotification({
+    type: 'task_description_changed',
+    taskId: args.taskId,
+    recipientIds: task.assignments.map((a) => a.user_id),
+    actor: args.actor,
+    metadata: {
+      before_description_preview: before,
+      after_description_preview: after,
+    },
+    dedupeKeyFor: (recipientId, loadedTask) =>
+      `task_description_changed:${args.taskId}:${recipientId}:${before ?? ''}:${after ?? ''}:${loadedTask.updated_at ?? ''}`,
   });
 }
 

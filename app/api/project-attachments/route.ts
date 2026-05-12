@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { logProjectActivity } from '@/lib/logProjectActivity';
+import { notifyTaskAttachmentAdded } from '@/src/server/notifications/notify';
 
 const MAX_ATTACHMENTS = 30;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -286,6 +287,15 @@ export async function POST(request: Request) {
         null,
         publicUrl
       );
+    }
+
+    if (taskId && attachment?.id) {
+      await notifyTaskAttachmentAdded({
+        taskId,
+        attachmentId: attachment.id,
+        fileName: file.name,
+        actor: { user_id: uploadedBy || null },
+      });
     }
 
     return NextResponse.json({

@@ -5,6 +5,11 @@ export const NOTIFICATION_TYPES = [
   'task_schedule_changed',
   'task_status_changed',
   'task_due_today',
+  'task_bin_changed',
+  'task_attachment_added',
+  'task_title_changed',
+  'task_priority_changed',
+  'task_description_changed',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -16,6 +21,11 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   task_schedule_changed: 'Schedule changed',
   task_status_changed: 'Status changed',
   task_due_today: 'Due today',
+  task_bin_changed: 'Bin changed',
+  task_attachment_added: 'Attachment added',
+  task_title_changed: 'Title changed',
+  task_priority_changed: 'Priority changed',
+  task_description_changed: 'Description updated',
 };
 
 export const NOTIFICATION_TYPE_DESCRIPTIONS: Record<NotificationType, string> = {
@@ -25,6 +35,11 @@ export const NOTIFICATION_TYPE_DESCRIPTIONS: Record<NotificationType, string> = 
   task_schedule_changed: 'The scheduled date or time changes on a task assigned to you.',
   task_status_changed: 'The status changes on a task assigned to you.',
   task_due_today: 'A task assigned to you has a scheduled date of today.',
+  task_bin_changed: 'A task assigned to you is moved into, out of, or between bins.',
+  task_attachment_added: 'Someone adds an attachment to a task assigned to you.',
+  task_title_changed: 'The title changes on a task assigned to you.',
+  task_priority_changed: 'The priority changes on a task assigned to you.',
+  task_description_changed: 'The description changes on a task assigned to you.',
 };
 
 export interface NotificationPreference {
