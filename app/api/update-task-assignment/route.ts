@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
-import { notifyTaskAssigned } from '@/src/server/notifications/notify';
+import {
+  notifyTaskAssigned,
+  notifyTaskUnassigned,
+} from '@/src/server/notifications/notify';
 
 // POST - Update task assignments (replaces all existing assignments)
 export async function POST(request: NextRequest) {
@@ -68,17 +71,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: fetchError.message }, { status: 500 });
     }
 
+    const actor = { user_id: getActorUserIdFromRequest(request) };
     await notifyTaskAssigned({
       taskId,
       previousAssigneeIds,
       nextAssigneeIds: assigneeIds,
-      actor: { user_id: getActorUserIdFromRequest(request) },
+      actor,
+    });
+    await notifyTaskUnassigned({
+      taskId,
+      previousAssigneeIds,
+      nextAssigneeIds: assigneeIds,
+      actor,
     });
 
     return NextResponse.json({ success: true, data: task }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('API error:', error);
-    return NextResponse.json({ error: error.message || 'An unexpected error occurred' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'An unexpected error occurred';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -106,7 +117,8 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({ data });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'An unexpected error occurred';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

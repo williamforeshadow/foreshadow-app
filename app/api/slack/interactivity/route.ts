@@ -7,6 +7,12 @@ import {
   cancelPendingAction,
   confirmPendingAction,
 } from '@/src/server/agent/pendingActions';
+import {
+  markNotificationRead,
+  refreshNotificationSlackMessage,
+} from '@/src/server/notifications/notify';
+
+const NOTIFICATION_MARK_READ_PREFIX = 'notification_mark_read_';
 
 // POST /api/slack/interactivity
 //
@@ -70,6 +76,19 @@ async function handleInteraction(
   if (payload.type !== 'block_actions') return;
   const action = payload.actions?.[0];
   const actionId = action?.action_id;
+
+  if (actionId?.startsWith(NOTIFICATION_MARK_READ_PREFIX)) {
+    const notificationId = actionId.slice(NOTIFICATION_MARK_READ_PREFIX.length);
+    if (!notificationId) return;
+    await markNotificationRead(notificationId);
+    // Re-render the original DM without the mark-read button so the user sees
+    // their click took effect. Best-effort — failures are logged in notify.ts.
+    await refreshNotificationSlackMessage(notificationId, {
+      includeMarkReadButton: false,
+    });
+    return;
+  }
+
   if (
     actionId !== AGENT_CONFIRM_ACTION_ID &&
     actionId !== AGENT_CANCEL_ACTION_ID

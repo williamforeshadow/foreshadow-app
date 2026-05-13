@@ -79,8 +79,30 @@ interface RenderedNotification {
   title: string;
   body: string;
   slackText: string;
-  slackBlocks: KnownBlock[];
+  /**
+   * Build the Slack Block Kit payload for this notification. The notification
+   * id is only known after the row is inserted (or looked up via coalesce),
+   * so the renderer returns a builder rather than a finished blocks array —
+   * the id is needed for the "Mark as read" button's action_id.
+   */
+  buildBlocks: (notificationId: string | null) => KnownBlock[];
 }
+
+/**
+ * Change-event types where rapid edits within a window should coalesce into a
+ * single notification (carry forward the original `before_*`, replace the
+ * `after_*` with the latest values) instead of creating multiple rows / DMs.
+ */
+const COALESCABLE_TYPES: ReadonlySet<NotificationType> = new Set<NotificationType>([
+  'task_schedule_changed',
+  'task_status_changed',
+  'task_priority_changed',
+  'task_title_changed',
+  'task_description_changed',
+  'task_bin_changed',
+]);
+
+const COALESCE_WINDOW_MS = 10 * 60 * 1000;
 
 const PRIORITY_LABELS: Record<string, string> = {
   urgent: 'Urgent',
@@ -214,10 +236,12 @@ function buildSlackBlocks(args: {
   actorSentence: string;
   bodyOverride?: string | null;
   titleOverride?: string | null;
+  notificationId?: string | null;
 }): KnownBlock[] {
-  const { task, actorSentence, bodyOverride, titleOverride } = args;
+  const { task, actorSentence, bodyOverride, titleOverride, notificationId } = args;
   const card = taskCard(taskContextToUnfurl(task, titleOverride), {
     bodyOverride: bodyOverride ?? null,
+    markReadNotificationId: notificationId ?? null,
   });
   const carousel: CarouselBlock = {
     type: 'carousel',
@@ -254,12 +278,14 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
     title: args.title,
     body: args.body,
     slackText: `${args.title}\n${args.body}\n${url}`,
-    slackBlocks: buildSlackBlocks({
-      task,
-      actorSentence: args.actorSentence,
-      bodyOverride: args.bodyOverride ?? null,
-      titleOverride: args.titleOverride ?? null,
-    }),
+    buildBlocks: (notificationId: string | null) =>
+      buildSlackBlocks({
+        task,
+        actorSentence: args.actorSentence,
+        bodyOverride: args.bodyOverride ?? null,
+        titleOverride: args.titleOverride ?? null,
+        notificationId,
+      }),
   });
 
   if (type === 'task_created_assigned' || type === 'task_assigned') {
@@ -269,6 +295,15 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
     const body = `You've been assigned ${taskName}${scheduleSuffix(task.scheduled_date, task.scheduled_time)}.`;
     const verb = type === 'task_created_assigned' ? 'created and assigned' : 'assigned';
     const actorSentence = `${escapeMrkdwn(actor)} ${verb} ${linkTitle(url, taskName)} to you`;
+    return finalize({ title, body, actorSentence });
+  }
+
+  if (type === 'task_unassigned') {
+    const title = actorName
+      ? `${actor} unassigned you from ${taskName}`
+      : `You've been unassigned from ${taskName}`;
+    const body = `${actor} unassigned you from ${taskName}.`;
+    const actorSentence = `${escapeMrkdwn(actor)} unassigned you from ${linkTitle(url, taskName)}`;
     return finalize({ title, body, actorSentence });
   }
 
@@ -488,6 +523,26 @@ function preferenceFor(
   return prefs.get(userId)?.get(type) ?? defaultNotificationPreference(type);
 }
 
+async function loadRecipientEmails(
+  supabase: Supabase,
+  userIds: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (userIds.length === 0) return out;
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, email')
+    .in('id', userIds);
+  if (error) {
+    console.warn('[notifications] recipient email lookup failed', { error });
+    return out;
+  }
+  for (const row of (data ?? []) as Array<{ id: string; email: string | null }>) {
+    if (row.email) out.set(row.id, row.email);
+  }
+  return out;
+}
+
 async function sendSlackDm(args: {
   notificationId: string;
   email: string | null;
@@ -522,7 +577,7 @@ async function sendSlackDm(args: {
       return;
     }
 
-    await web.chat.postMessage({
+    const response = await web.chat.postMessage({
       channel: slackUser.slackUserId,
       text: args.text,
       blocks: args.blocks,
@@ -533,6 +588,7 @@ async function sendSlackDm(args: {
       .from('notifications')
       .update({
         slack_sent_at: new Date().toISOString(),
+        slack_message_ts: typeof response.ts === 'string' ? response.ts : null,
         slack_error: null,
         updated_at: new Date().toISOString(),
       })
@@ -544,6 +600,52 @@ async function sendSlackDm(args: {
       .update({ slack_error: message, updated_at: new Date().toISOString() })
       .eq('id', args.notificationId);
   }
+}
+
+/**
+ * Best-effort chat.update for a coalesced notification — if it fails we leave
+ * the original Slack DM in place rather than tearing it down; the user will
+ * still see the up-to-date in-app notification.
+ */
+async function updateSlackDm(args: {
+  email: string;
+  ts: string;
+  text: string;
+  blocks: KnownBlock[];
+}) {
+  const token = process.env.SLACK_BOT_TOKEN;
+  if (!token) return;
+  try {
+    const web = new WebClient(token);
+    const slackUser = await lookupSlackUserByEmail(web, args.email);
+    if (!slackUser) return;
+    await web.chat.update({
+      channel: slackUser.slackUserId,
+      ts: args.ts,
+      text: args.text,
+      blocks: args.blocks,
+    });
+  } catch (err) {
+    console.warn('[notifications] slack update failed', {
+      ts: args.ts,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+function mergeCoalesceMetadata(
+  existing: Record<string, unknown> | null | undefined,
+  incoming: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  // Carry forward `before_*` from the original notification (so the user sees
+  // the full delta from where they started), take everything else from the
+  // incoming change so `after_*` reflects the latest value.
+  const merged: Record<string, unknown> = { ...(existing ?? {}) };
+  for (const [k, v] of Object.entries(incoming ?? {})) {
+    if (k.startsWith('before_')) continue;
+    merged[k] = v;
+  }
+  return merged;
 }
 
 async function deliverTaskNotification(args: {
@@ -566,17 +668,78 @@ async function deliverTaskNotification(args: {
 
   const actorName = await loadActorName(supabase, args.actor);
   const prefs = await loadPreferences(supabase, [...recipientSet]);
-  const rendered = renderNotification({
-    type: args.type,
-    task,
-    actorName,
-    metadata: args.metadata,
-  });
+  // Email lookup goes against the users table directly, not task.assignments,
+  // so unassigned recipients (no longer in assignments) still get DMs.
+  const emails = await loadRecipientEmails(supabase, [...recipientSet]);
 
   for (const recipientId of recipientSet) {
-    const recipient = task.assignments.find((a) => a.user_id === recipientId);
     const preference = preferenceFor(prefs, recipientId, args.type);
     if (!preference.native_enabled && !preference.slack_enabled) continue;
+    const email = emails.get(recipientId) ?? null;
+
+    // Coalesce path: for edit-type notifications, if an unread one already
+    // exists for (type, task, recipient, actor) within the window, update it
+    // in place and chat.update the existing Slack DM rather than spamming a
+    // new row.
+    if (COALESCABLE_TYPES.has(args.type)) {
+      const windowStart = new Date(Date.now() - COALESCE_WINDOW_MS).toISOString();
+      const { data: existing } = await supabase
+        .from('notifications')
+        .select('id, metadata, slack_message_ts')
+        .eq('type', args.type)
+        .eq('entity_id', task.id)
+        .eq('user_id', recipientId)
+        .eq('actor_user_id', actorId)
+        .is('read_at', null)
+        .gte('created_at', windowStart)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existing?.id) {
+        const mergedMeta = mergeCoalesceMetadata(
+          existing.metadata as Record<string, unknown> | null,
+          args.metadata ?? null,
+        );
+        const renderedMerged = renderNotification({
+          type: args.type,
+          task,
+          actorName,
+          metadata: mergedMeta,
+        });
+        await supabase
+          .from('notifications')
+          .update({
+            title: renderedMerged.title,
+            body: renderedMerged.body,
+            metadata: mergedMeta,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id);
+
+        if (
+          preference.slack_enabled &&
+          email &&
+          typeof existing.slack_message_ts === 'string' &&
+          existing.slack_message_ts
+        ) {
+          await updateSlackDm({
+            email,
+            ts: existing.slack_message_ts,
+            text: renderedMerged.slackText,
+            blocks: renderedMerged.buildBlocks(existing.id as string),
+          });
+        }
+        continue;
+      }
+    }
+
+    const rendered = renderNotification({
+      type: args.type,
+      task,
+      actorName,
+      metadata: args.metadata,
+    });
 
     const { data, error } = await supabase
       .from('notifications')
@@ -609,11 +772,12 @@ async function deliverTaskNotification(args: {
     }
 
     if (preference.slack_enabled && data?.id) {
+      const notificationId = data.id as string;
       await sendSlackDm({
-        notificationId: data.id as string,
-        email: recipient?.user?.email ?? null,
+        notificationId,
+        email,
         text: rendered.slackText,
-        blocks: rendered.slackBlocks,
+        blocks: rendered.buildBlocks(notificationId),
       });
     }
   }
@@ -660,6 +824,25 @@ export async function notifyTaskAssigned(args: {
         '';
       return `task_assigned:${task.id}:${recipientId}:${assignedAt}`;
     },
+  });
+}
+
+export async function notifyTaskUnassigned(args: {
+  taskId: string;
+  previousAssigneeIds: string[];
+  nextAssigneeIds: string[];
+  actor?: NotificationActor | null;
+}) {
+  const next = new Set(args.nextAssigneeIds);
+  const removed = args.previousAssigneeIds.filter((id) => !next.has(id));
+  if (removed.length === 0) return;
+  await deliverTaskNotification({
+    type: 'task_unassigned',
+    taskId: args.taskId,
+    recipientIds: removed,
+    actor: args.actor,
+    dedupeKeyFor: (recipientId, task) =>
+      `task_unassigned:${task.id}:${recipientId}:${task.updated_at ?? ''}`,
   });
 }
 
@@ -906,6 +1089,80 @@ async function getOrgTimezone(supabase: Supabase): Promise<string> {
     // Operations settings may not exist in older environments.
   }
   return DEFAULT_TIMEZONE;
+}
+
+/**
+ * Mark a notification as read. Idempotent — re-running on an already-read row
+ * is a no-op. Used by both the in-app `POST /api/notifications/mark-read`
+ * route and the Slack "Mark as read" interactivity handler so behavior stays
+ * identical across surfaces.
+ */
+export async function markNotificationRead(
+  notificationId: string,
+): Promise<{ ok: boolean; alreadyRead: boolean }> {
+  const supabase = getSupabaseServer();
+  const { data, error } = await supabase
+    .from('notifications')
+    .update({ read_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', notificationId)
+    .is('read_at', null)
+    .select('id')
+    .maybeSingle();
+  if (error) {
+    console.warn('[notifications] mark read failed', { notificationId, error });
+    return { ok: false, alreadyRead: false };
+  }
+  return { ok: true, alreadyRead: !data };
+}
+
+/**
+ * Re-render a notification's Slack blocks and `chat.update` the original DM.
+ * Used by the interactivity handler after the user clicks "Mark as read" to
+ * remove the mark-read button (the ↗ open button stays).
+ */
+export async function refreshNotificationSlackMessage(
+  notificationId: string,
+  options?: { includeMarkReadButton?: boolean },
+): Promise<void> {
+  const supabase = getSupabaseServer();
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('id, type, user_id, actor_user_id, entity_id, metadata, slack_message_ts')
+    .eq('id', notificationId)
+    .maybeSingle();
+  if (error || !data || !data.slack_message_ts) return;
+
+  const row = data as {
+    id: string;
+    type: NotificationType;
+    user_id: string;
+    actor_user_id: string | null;
+    entity_id: string;
+    metadata: Record<string, unknown> | null;
+    slack_message_ts: string | null;
+  };
+  if (!row.slack_message_ts) return;
+
+  const task = await loadTaskContext(supabase, row.entity_id);
+  if (!task) return;
+  const actorName = await loadActorName(supabase, { user_id: row.actor_user_id });
+  const rendered = renderNotification({
+    type: row.type,
+    task,
+    actorName,
+    metadata: row.metadata ?? {},
+  });
+  const emails = await loadRecipientEmails(supabase, [row.user_id]);
+  const email = emails.get(row.user_id) ?? null;
+  if (!email) return;
+  await updateSlackDm({
+    email,
+    ts: row.slack_message_ts,
+    text: rendered.slackText,
+    blocks: rendered.buildBlocks(
+      options?.includeMarkReadButton === false ? null : row.id,
+    ),
+  });
 }
 
 export async function runDueTodayNotifications() {

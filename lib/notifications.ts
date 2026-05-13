@@ -1,6 +1,7 @@
 export const NOTIFICATION_TYPES = [
   'task_created_assigned',
   'task_assigned',
+  'task_unassigned',
   'task_commented',
   'task_schedule_changed',
   'task_status_changed',
@@ -17,6 +18,7 @@ export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   task_created_assigned: 'New assigned task',
   task_assigned: 'Task assigned',
+  task_unassigned: 'Task unassigned',
   task_commented: 'Task comment',
   task_schedule_changed: 'Schedule changed',
   task_status_changed: 'Status changed',
@@ -31,6 +33,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
 export const NOTIFICATION_TYPE_DESCRIPTIONS: Record<NotificationType, string> = {
   task_created_assigned: 'A task is created and assigned to you.',
   task_assigned: 'An existing task is assigned to you.',
+  task_unassigned: 'You are removed from a task that was previously assigned to you.',
   task_commented: 'Someone comments on a task assigned to you.',
   task_schedule_changed: 'The scheduled date or time changes on a task assigned to you.',
   task_status_changed: 'The status changes on a task assigned to you.',

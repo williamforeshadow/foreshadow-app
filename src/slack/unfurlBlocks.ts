@@ -264,13 +264,39 @@ export interface SlackCarouselBlock {
  */
 export function taskCard(
   task: TaskForUnfurl,
-  options?: { bodyOverride?: string | null },
+  options?: {
+    bodyOverride?: string | null;
+    /**
+     * When set, a "Mark as read" button is appended next to the ↗ open button
+     * with `action_id` = `notification_mark_read_<id>`. The interactivity
+     * handler at `app/api/slack/interactivity/route.ts` dispatches on that
+     * prefix to mark the notification read and chat.update the message back
+     * without the mark-read button.
+     */
+    markReadNotificationId?: string | null;
+  },
 ): SlackCardElement {
   const { title, subtitle, bodyLine } = computeCardFields(task);
   const finalBody =
     options?.bodyOverride && options.bodyOverride.trim()
       ? options.bodyOverride
       : bodyLine;
+
+  const actions: NonNullable<SlackCardElement['actions']> = [
+    {
+      type: 'button',
+      text: { type: 'plain_text', text: OPEN_BUTTON_LABEL, emoji: false },
+      url: task.task_url,
+      action_id: `open_task_${task.task_id}`,
+    },
+  ];
+  if (options?.markReadNotificationId) {
+    actions.push({
+      type: 'button',
+      text: { type: 'plain_text', text: 'Mark as read', emoji: false },
+      action_id: `notification_mark_read_${options.markReadNotificationId}`,
+    });
+  }
 
   return {
     type: 'card',
@@ -294,13 +320,6 @@ export function taskCard(
       text: finalBody,
       verbatim: false,
     },
-    actions: [
-      {
-        type: 'button',
-        text: { type: 'plain_text', text: OPEN_BUTTON_LABEL, emoji: false },
-        url: task.task_url,
-        action_id: `open_task_${task.task_id}`,
-      },
-    ],
+    actions,
   };
 }
