@@ -226,6 +226,7 @@ function buildSlackBlocks(args: {
         type: 'button',
         text: { type: 'plain_text', text: OPEN_BUTTON_LABEL, emoji: false },
         url,
+        action_id: `open_task_${task.id}`,
       },
     ],
   });
