@@ -3,7 +3,6 @@ import type { KnownBlock } from '@slack/types';
 import {
   defaultNotificationPreference,
   NOTIFICATION_TYPES,
-  NOTIFICATION_TYPE_LABELS,
   type NotificationPreference,
   type NotificationType,
 } from '@/lib/notifications';
@@ -12,10 +11,12 @@ import { taskPath, taskUrl } from '@/src/lib/links';
 import { todayInTz, DEFAULT_TIMEZONE } from '@/src/lib/dates';
 import { lookupSlackUserByEmail } from '@/src/slack/identity';
 import {
-  OPEN_BUTTON_LABEL,
   STATUS_EMOJI,
   STATUS_LABELS as TASK_STATUS_LABELS,
+  type SlackCardElement,
+  type TaskForUnfurl,
   escapeMrkdwn,
+  taskCard,
 } from '@/src/slack/unfurlBlocks';
 
 export interface NotificationActor {
@@ -181,79 +182,83 @@ function quoted(value: unknown): string {
   return `"${text}"`;
 }
 
+function taskContextToUnfurl(
+  task: TaskContext,
+  titleOverride?: string | null,
+): TaskForUnfurl {
+  return {
+    task_id: task.id,
+    title: titleOverride ?? task.title,
+    template_name: null,
+    description: null,
+    status: task.status ?? 'not_started',
+    priority: '',
+    property_name: task.property_name,
+    department_name: null,
+    bin_name: null,
+    scheduled_date: task.scheduled_date,
+    scheduled_time: task.scheduled_time,
+    assigned_users: [],
+    task_url: taskUrl(task.id),
+  };
+}
+
+interface CarouselBlock {
+  type: 'carousel';
+  block_id?: string;
+  elements: SlackCardElement[];
+}
+
 function buildSlackBlocks(args: {
   task: TaskContext;
-  actorName: string | null;
-  eventLabel: string;
-  eventLine: string;
-  subtitle?: string | null;
+  actorSentence: string;
+  bodyOverride?: string | null;
+  titleOverride?: string | null;
 }): KnownBlock[] {
-  const { task, actorName, eventLabel, eventLine, subtitle } = args;
-  const url = taskUrl(task.id);
-  const title = taskLabel(task);
-  const blocks: KnownBlock[] = [];
-
-  blocks.push({
-    type: 'section',
-    text: {
-      type: 'mrkdwn',
-      text: `*<${url}|${escapeMrkdwn(title)}>*`,
-    },
+  const { task, actorSentence, bodyOverride, titleOverride } = args;
+  const card = taskCard(taskContextToUnfurl(task, titleOverride), {
+    bodyOverride: bodyOverride ?? null,
   });
+  const carousel: CarouselBlock = {
+    type: 'carousel',
+    block_id: `task-carousel-${task.id}`,
+    elements: [card],
+  };
 
-  const contextParts: string[] = [];
-  if (actorName) contextParts.push(escapeMrkdwn(actorName));
-  contextParts.push(escapeMrkdwn(eventLabel));
-  const propertyOrBin = task.property_name ?? null;
-  if (subtitle) contextParts.push(escapeMrkdwn(subtitle));
-  else if (propertyOrBin) contextParts.push(escapeMrkdwn(propertyOrBin));
-  blocks.push({
-    type: 'context',
-    elements: [{ type: 'mrkdwn', text: contextParts.join('  ·  ') }],
-  });
-
-  if (eventLine.trim()) {
-    blocks.push({
+  return [
+    {
       type: 'section',
-      text: { type: 'mrkdwn', text: eventLine },
-    });
-  }
+      text: { type: 'mrkdwn', text: actorSentence },
+    },
+    carousel as unknown as KnownBlock,
+  ];
+}
 
-  blocks.push({
-    type: 'actions',
-    elements: [
-      {
-        type: 'button',
-        text: { type: 'plain_text', text: OPEN_BUTTON_LABEL, emoji: false },
-        url,
-        action_id: `open_task_${task.id}`,
-      },
-    ],
-  });
-
-  return blocks;
+function linkTitle(url: string, title: string): string {
+  return `<${url}|${escapeMrkdwn(title)}>`;
 }
 
 function renderNotification(payload: RenderPayload): RenderedNotification {
   const { type, task, actorName, metadata = {} } = payload;
   const taskName = taskLabel(task);
   const actor = actorLabel(actorName);
-  const eventLabel = NOTIFICATION_TYPE_LABELS[type];
   const url = taskUrl(task.id);
 
-  const finalize = (
-    title: string,
-    body: string,
-    eventLine: string,
-  ): RenderedNotification => ({
-    title,
-    body,
-    slackText: `${title}\n${body}\n${url}`,
+  const finalize = (args: {
+    title: string;
+    body: string;
+    actorSentence: string;
+    bodyOverride?: string | null;
+    titleOverride?: string | null;
+  }): RenderedNotification => ({
+    title: args.title,
+    body: args.body,
+    slackText: `${args.title}\n${args.body}\n${url}`,
     slackBlocks: buildSlackBlocks({
       task,
-      actorName,
-      eventLabel,
-      eventLine,
+      actorSentence: args.actorSentence,
+      bodyOverride: args.bodyOverride ?? null,
+      titleOverride: args.titleOverride ?? null,
     }),
   });
 
@@ -262,10 +267,9 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
       ? `${actor} assigned you ${taskName}`
       : `You've been assigned ${taskName}`;
     const body = `You've been assigned ${taskName}${scheduleSuffix(task.scheduled_date, task.scheduled_time)}.`;
-    const status = task.status ?? 'not_started';
-    const scheduleText = formatSchedule(task.scheduled_date, task.scheduled_time);
-    const eventLine = `${statusEmoji(status)} ${statusLabel(status)}  ·  ${scheduleText}`;
-    return finalize(title, body, eventLine);
+    const verb = type === 'task_created_assigned' ? 'created and assigned' : 'assigned';
+    const actorSentence = `${escapeMrkdwn(actor)} ${verb} ${linkTitle(url, taskName)} to you`;
+    return finalize({ title, body, actorSentence });
   }
 
   if (type === 'task_commented') {
@@ -274,8 +278,9 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
     const body = preview
       ? `${actor} commented: "${preview}"`
       : `${actor} commented on ${taskName}.`;
-    const eventLine = preview ? `> ${escapeMrkdwn(preview)}` : '';
-    return finalize(title, body, eventLine);
+    const actorSentence = `${escapeMrkdwn(actor)} commented on ${linkTitle(url, taskName)}`;
+    const bodyOverride = preview ? `> ${escapeMrkdwn(preview)}` : null;
+    return finalize({ title, body, actorSentence, bodyOverride });
   }
 
   if (type === 'task_schedule_changed') {
@@ -283,8 +288,9 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
     const after = formatSchedule(metadata.after_date, metadata.after_time);
     const title = `${actor} changed the schedule on your assigned task`;
     const body = `${actor} changed the schedule from ${before} to ${after}.`;
-    const eventLine = `~${escapeMrkdwn(before)}~  →  *${escapeMrkdwn(after)}*`;
-    return finalize(title, body, eventLine);
+    const actorSentence = `${escapeMrkdwn(actor)} changed the schedule on ${linkTitle(url, taskName)}`;
+    const bodyOverride = `~${escapeMrkdwn(before)}~  →  *${escapeMrkdwn(after)}*`;
+    return finalize({ title, body, actorSentence, bodyOverride });
   }
 
   if (type === 'task_status_changed') {
@@ -292,8 +298,9 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
     const after = statusLabel(metadata.after_status);
     const title = `${actor} changed the status of your task`;
     const body = `${actor} changed ${taskName} from ${before} to ${after}.`;
-    const eventLine = `${statusEmoji(metadata.before_status)} ${escapeMrkdwn(before)}  →  ${statusEmoji(metadata.after_status)} *${escapeMrkdwn(after)}*`;
-    return finalize(title, body, eventLine);
+    const actorSentence = `${escapeMrkdwn(actor)} changed the status of ${linkTitle(url, taskName)}`;
+    const bodyOverride = `${statusEmoji(metadata.before_status)} ~${escapeMrkdwn(before)}~  →  ${statusEmoji(metadata.after_status)} *${escapeMrkdwn(after)}*`;
+    return finalize({ title, body, actorSentence, bodyOverride });
   }
 
   if (type === 'task_bin_changed') {
@@ -301,8 +308,9 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
     const after = typeof metadata.after_bin === 'string' ? metadata.after_bin : 'No bin';
     const title = `${actor} moved your task`;
     const body = `${actor} moved ${taskName} from ${before} to ${after}.`;
-    const eventLine = `~${escapeMrkdwn(before)}~  →  *${escapeMrkdwn(after)}*`;
-    return finalize(title, body, eventLine);
+    const actorSentence = `${escapeMrkdwn(actor)} moved ${linkTitle(url, taskName)}`;
+    const bodyOverride = `~${escapeMrkdwn(before)}~  →  *${escapeMrkdwn(after)}*`;
+    return finalize({ title, body, actorSentence, bodyOverride });
   }
 
   if (type === 'task_attachment_added') {
@@ -312,8 +320,9 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
         : 'an attachment';
     const title = `${actor} added an attachment to your task`;
     const body = `${actor} added ${fileName} to ${taskName}.`;
-    const eventLine = `📎 \`${escapeMrkdwn(fileName)}\``;
-    return finalize(title, body, eventLine);
+    const actorSentence = `${escapeMrkdwn(actor)} added an attachment to ${linkTitle(url, taskName)}`;
+    const bodyOverride = `📎 \`${escapeMrkdwn(fileName)}\``;
+    return finalize({ title, body, actorSentence, bodyOverride });
   }
 
   if (type === 'task_title_changed') {
@@ -321,8 +330,9 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
     const afterRaw = typeof metadata.after_title === 'string' && metadata.after_title.trim() ? metadata.after_title.trim() : 'Untitled task';
     const title = `${actor} changed the title of your task`;
     const body = `${actor} changed ${quoted(metadata.before_title)} to ${quoted(metadata.after_title)}.`;
-    const eventLine = `~"${escapeMrkdwn(beforeRaw)}"~  →  *"${escapeMrkdwn(afterRaw)}"*`;
-    return finalize(title, body, eventLine);
+    const actorSentence = `${escapeMrkdwn(actor)} renamed ${linkTitle(url, afterRaw)}`;
+    const bodyOverride = `~"${escapeMrkdwn(beforeRaw)}"~  →  *"${escapeMrkdwn(afterRaw)}"*`;
+    return finalize({ title, body, actorSentence, bodyOverride, titleOverride: afterRaw });
   }
 
   if (type === 'task_priority_changed') {
@@ -330,24 +340,25 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
     const after = priorityLabel(metadata.after_priority);
     const title = `${actor} changed the priority of your task`;
     const body = `${actor} changed ${taskName} from ${before} to ${after}.`;
-    const eventLine = `~${escapeMrkdwn(before)}~  →  *${escapeMrkdwn(after)}*`;
-    return finalize(title, body, eventLine);
+    const actorSentence = `${escapeMrkdwn(actor)} changed the priority of ${linkTitle(url, taskName)}`;
+    const bodyOverride = `~${escapeMrkdwn(before)}~  →  *${escapeMrkdwn(after)}*`;
+    return finalize({ title, body, actorSentence, bodyOverride });
   }
 
   if (type === 'task_description_changed') {
     const after = compactPreview(metadata.after_description_preview);
     const title = `${actor} updated the description of your task`;
     const body = `${actor} updated the description for ${taskName}.`;
-    const eventLine = after ? `> ${escapeMrkdwn(after)}` : '';
-    return finalize(title, body, eventLine);
+    const actorSentence = `${escapeMrkdwn(actor)} updated the description of ${linkTitle(url, taskName)}`;
+    const bodyOverride = after ? `> ${escapeMrkdwn(after)}` : null;
+    return finalize({ title, body, actorSentence, bodyOverride });
   }
 
   const schedule = formatSchedule(task.scheduled_date, task.scheduled_time);
-  const status = task.status ?? 'not_started';
   const title = `Your task ${taskName} is due today`;
   const body = `${taskName} is scheduled for ${schedule}.`;
-  const eventLine = `${statusEmoji(status)} ${statusLabel(status)}  ·  Due ${escapeMrkdwn(schedule)}`;
-  return finalize(title, body, eventLine);
+  const actorSentence = `${linkTitle(url, taskName)} is due today`;
+  return finalize({ title, body, actorSentence });
 }
 
 async function loadActorName(

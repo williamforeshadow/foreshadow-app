@@ -262,8 +262,15 @@ export interface SlackCarouselBlock {
  *   so future server-side handlers (e.g. "Mark complete from card")
  *   can pattern-match on it without needing a separate dispatch table.
  */
-export function taskCard(task: TaskForUnfurl): SlackCardElement {
+export function taskCard(
+  task: TaskForUnfurl,
+  options?: { bodyOverride?: string | null },
+): SlackCardElement {
   const { title, subtitle, bodyLine } = computeCardFields(task);
+  const finalBody =
+    options?.bodyOverride && options.bodyOverride.trim()
+      ? options.bodyOverride
+      : bodyLine;
 
   return {
     type: 'card',
@@ -284,7 +291,7 @@ export function taskCard(task: TaskForUnfurl): SlackCardElement {
       : {}),
     body: {
       type: 'mrkdwn',
-      text: bodyLine,
+      text: finalBody,
       verbatim: false,
     },
     actions: [
