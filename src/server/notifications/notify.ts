@@ -1,7 +1,9 @@
 import { WebClient } from '@slack/web-api';
+import type { KnownBlock } from '@slack/types';
 import {
   defaultNotificationPreference,
   NOTIFICATION_TYPES,
+  NOTIFICATION_TYPE_LABELS,
   type NotificationPreference,
   type NotificationType,
 } from '@/lib/notifications';
@@ -9,6 +11,12 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 import { taskPath, taskUrl } from '@/src/lib/links';
 import { todayInTz, DEFAULT_TIMEZONE } from '@/src/lib/dates';
 import { lookupSlackUserByEmail } from '@/src/slack/identity';
+import {
+  OPEN_BUTTON_LABEL,
+  STATUS_EMOJI,
+  STATUS_LABELS as TASK_STATUS_LABELS,
+  escapeMrkdwn,
+} from '@/src/slack/unfurlBlocks';
 
 export interface NotificationActor {
   user_id: string | null;
@@ -70,15 +78,8 @@ interface RenderedNotification {
   title: string;
   body: string;
   slackText: string;
+  slackBlocks: KnownBlock[];
 }
-
-const STATUS_LABELS: Record<string, string> = {
-  contingent: 'Contingent',
-  not_started: 'Not started',
-  in_progress: 'In progress',
-  paused: 'Paused',
-  complete: 'Complete',
-};
 
 const PRIORITY_LABELS: Record<string, string> = {
   urgent: 'Urgent',
@@ -89,8 +90,12 @@ const PRIORITY_LABELS: Record<string, string> = {
 
 function statusLabel(status: unknown): string {
   return typeof status === 'string'
-    ? STATUS_LABELS[status] ?? status.replace(/_/g, ' ')
+    ? TASK_STATUS_LABELS[status] ?? status.replace(/_/g, ' ')
     : 'Unknown';
+}
+
+function statusEmoji(status: unknown): string {
+  return typeof status === 'string' ? STATUS_EMOJI[status] ?? '⚫' : '⚫';
 }
 
 function priorityLabel(priority: unknown): string {
@@ -176,25 +181,90 @@ function quoted(value: unknown): string {
   return `"${text}"`;
 }
 
+function buildSlackBlocks(args: {
+  task: TaskContext;
+  actorName: string | null;
+  eventLabel: string;
+  eventLine: string;
+  subtitle?: string | null;
+}): KnownBlock[] {
+  const { task, actorName, eventLabel, eventLine, subtitle } = args;
+  const url = taskUrl(task.id);
+  const title = taskLabel(task);
+  const blocks: KnownBlock[] = [];
+
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `*<${url}|${escapeMrkdwn(title)}>*`,
+    },
+  });
+
+  const contextParts: string[] = [];
+  if (actorName) contextParts.push(escapeMrkdwn(actorName));
+  contextParts.push(escapeMrkdwn(eventLabel));
+  const propertyOrBin = task.property_name ?? null;
+  if (subtitle) contextParts.push(escapeMrkdwn(subtitle));
+  else if (propertyOrBin) contextParts.push(escapeMrkdwn(propertyOrBin));
+  blocks.push({
+    type: 'context',
+    elements: [{ type: 'mrkdwn', text: contextParts.join('  ·  ') }],
+  });
+
+  if (eventLine.trim()) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: eventLine },
+    });
+  }
+
+  blocks.push({
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: OPEN_BUTTON_LABEL, emoji: false },
+        url,
+      },
+    ],
+  });
+
+  return blocks;
+}
+
 function renderNotification(payload: RenderPayload): RenderedNotification {
   const { type, task, actorName, metadata = {} } = payload;
   const taskName = taskLabel(task);
   const actor = actorLabel(actorName);
+  const eventLabel = NOTIFICATION_TYPE_LABELS[type];
+  const url = taskUrl(task.id);
 
-  if (type === 'task_created_assigned') {
+  const finalize = (
+    title: string,
+    body: string,
+    eventLine: string,
+  ): RenderedNotification => ({
+    title,
+    body,
+    slackText: `${title}\n${body}\n${url}`,
+    slackBlocks: buildSlackBlocks({
+      task,
+      actorName,
+      eventLabel,
+      eventLine,
+    }),
+  });
+
+  if (type === 'task_created_assigned' || type === 'task_assigned') {
     const title = actorName
       ? `${actor} assigned you ${taskName}`
       : `You've been assigned ${taskName}`;
     const body = `You've been assigned ${taskName}${scheduleSuffix(task.scheduled_date, task.scheduled_time)}.`;
-    return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
-  }
-
-  if (type === 'task_assigned') {
-    const title = actorName
-      ? `${actor} assigned you ${taskName}`
-      : `You've been assigned ${taskName}`;
-    const body = `You've been assigned ${taskName}${scheduleSuffix(task.scheduled_date, task.scheduled_time)}.`;
-    return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
+    const status = task.status ?? 'not_started';
+    const scheduleText = formatSchedule(task.scheduled_date, task.scheduled_time);
+    const eventLine = `${statusEmoji(status)} ${statusLabel(status)}  ·  ${scheduleText}`;
+    return finalize(title, body, eventLine);
   }
 
   if (type === 'task_commented') {
@@ -203,7 +273,8 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
     const body = preview
       ? `${actor} commented: "${preview}"`
       : `${actor} commented on ${taskName}.`;
-    return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
+    const eventLine = preview ? `> ${escapeMrkdwn(preview)}` : '';
+    return finalize(title, body, eventLine);
   }
 
   if (type === 'task_schedule_changed') {
@@ -211,7 +282,8 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
     const after = formatSchedule(metadata.after_date, metadata.after_time);
     const title = `${actor} changed the schedule on your assigned task`;
     const body = `${actor} changed the schedule from ${before} to ${after}.`;
-    return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
+    const eventLine = `~${escapeMrkdwn(before)}~  →  *${escapeMrkdwn(after)}*`;
+    return finalize(title, body, eventLine);
   }
 
   if (type === 'task_status_changed') {
@@ -219,7 +291,8 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
     const after = statusLabel(metadata.after_status);
     const title = `${actor} changed the status of your task`;
     const body = `${actor} changed ${taskName} from ${before} to ${after}.`;
-    return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
+    const eventLine = `${statusEmoji(metadata.before_status)} ${escapeMrkdwn(before)}  →  ${statusEmoji(metadata.after_status)} *${escapeMrkdwn(after)}*`;
+    return finalize(title, body, eventLine);
   }
 
   if (type === 'task_bin_changed') {
@@ -227,7 +300,8 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
     const after = typeof metadata.after_bin === 'string' ? metadata.after_bin : 'No bin';
     const title = `${actor} moved your task`;
     const body = `${actor} moved ${taskName} from ${before} to ${after}.`;
-    return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
+    const eventLine = `~${escapeMrkdwn(before)}~  →  *${escapeMrkdwn(after)}*`;
+    return finalize(title, body, eventLine);
   }
 
   if (type === 'task_attachment_added') {
@@ -237,15 +311,17 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
         : 'an attachment';
     const title = `${actor} added an attachment to your task`;
     const body = `${actor} added ${fileName} to ${taskName}.`;
-    return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
+    const eventLine = `📎 \`${escapeMrkdwn(fileName)}\``;
+    return finalize(title, body, eventLine);
   }
 
   if (type === 'task_title_changed') {
-    const before = quoted(metadata.before_title);
-    const after = quoted(metadata.after_title);
+    const beforeRaw = typeof metadata.before_title === 'string' && metadata.before_title.trim() ? metadata.before_title.trim() : 'Untitled task';
+    const afterRaw = typeof metadata.after_title === 'string' && metadata.after_title.trim() ? metadata.after_title.trim() : 'Untitled task';
     const title = `${actor} changed the title of your task`;
-    const body = `${actor} changed ${before} to ${after}.`;
-    return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
+    const body = `${actor} changed ${quoted(metadata.before_title)} to ${quoted(metadata.after_title)}.`;
+    const eventLine = `~"${escapeMrkdwn(beforeRaw)}"~  →  *"${escapeMrkdwn(afterRaw)}"*`;
+    return finalize(title, body, eventLine);
   }
 
   if (type === 'task_priority_changed') {
@@ -253,19 +329,24 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
     const after = priorityLabel(metadata.after_priority);
     const title = `${actor} changed the priority of your task`;
     const body = `${actor} changed ${taskName} from ${before} to ${after}.`;
-    return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
+    const eventLine = `~${escapeMrkdwn(before)}~  →  *${escapeMrkdwn(after)}*`;
+    return finalize(title, body, eventLine);
   }
 
   if (type === 'task_description_changed') {
+    const after = compactPreview(metadata.after_description_preview);
     const title = `${actor} updated the description of your task`;
     const body = `${actor} updated the description for ${taskName}.`;
-    return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
+    const eventLine = after ? `> ${escapeMrkdwn(after)}` : '';
+    return finalize(title, body, eventLine);
   }
 
   const schedule = formatSchedule(task.scheduled_date, task.scheduled_time);
+  const status = task.status ?? 'not_started';
   const title = `Your task ${taskName} is due today`;
   const body = `${taskName} is scheduled for ${schedule}.`;
-  return { title, body, slackText: `${title}\n${body}\n${taskUrl(task.id)}` };
+  const eventLine = `${statusEmoji(status)} ${statusLabel(status)}  ·  Due ${escapeMrkdwn(schedule)}`;
+  return finalize(title, body, eventLine);
 }
 
 async function loadActorName(
@@ -399,6 +480,7 @@ async function sendSlackDm(args: {
   notificationId: string;
   email: string | null;
   text: string;
+  blocks: KnownBlock[];
 }) {
   const supabase = getSupabaseServer();
   const token = process.env.SLACK_BOT_TOKEN;
@@ -431,6 +513,7 @@ async function sendSlackDm(args: {
     await web.chat.postMessage({
       channel: slackUser.slackUserId,
       text: args.text,
+      blocks: args.blocks,
       unfurl_links: false,
       unfurl_media: false,
     });
@@ -518,6 +601,7 @@ async function deliverTaskNotification(args: {
         notificationId: data.id as string,
         email: recipient?.user?.email ?? null,
         text: rendered.slackText,
+        blocks: rendered.slackBlocks,
       });
     }
   }

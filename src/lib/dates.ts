@@ -27,3 +27,41 @@ export function todayInTz(tz: string | undefined): { date: string; tz: string } 
 
 /** Default org timezone used when operations_settings hasn't been configured. */
 export const DEFAULT_TIMEZONE = 'America/Los_Angeles';
+
+const MONTH_SHORT = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+/**
+ * Compact, glanceable "time ago" label for UI surfaces like the notifications
+ * bell. Buckets:
+ *   < 1 min   → "just now"
+ *   < 1 hour  → "Xm"
+ *   < 1 day   → "Xh"
+ *   < 7 days  → "Xd"
+ *   ≥ 7 days  → "Mon D"  (drops the year — long enough ago that exact day matters
+ *                         more than the year for in-bell scanning)
+ */
+export function formatRelative(iso: string | Date | null | undefined): string {
+  if (!iso) return '';
+  const date = iso instanceof Date ? iso : new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const diffSec = Math.max(0, (Date.now() - date.getTime()) / 1000);
+  if (diffSec < 60) return 'just now';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h`;
+  if (diffSec < 7 * 86400) return `${Math.floor(diffSec / 86400)}d`;
+  const month = MONTH_SHORT[date.getMonth()] ?? '';
+  return `${month} ${date.getDate()}`;
+}

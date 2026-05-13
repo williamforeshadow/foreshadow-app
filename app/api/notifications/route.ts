@@ -20,7 +20,7 @@ export async function GET(request: Request) {
 
   let query = getSupabaseServer()
     .from('notifications')
-    .select('*')
+    .select('*, actor:users!actor_user_id(id, name)')
     .eq('user_id', user.id)
     .eq('native_visible', true)
     .order('created_at', { ascending: false })
@@ -44,8 +44,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: listError.message }, { status: 500 });
   }
 
+  const notifications = (data ?? []).map((row: { actor?: { name?: string | null } | null } & Record<string, unknown>) => {
+    const { actor, ...rest } = row;
+    return { ...rest, actor_name: actor?.name ?? null };
+  });
+
   return NextResponse.json({
-    notifications: data ?? [],
+    notifications,
     unread_count: unreadCount.count ?? 0,
   });
 }

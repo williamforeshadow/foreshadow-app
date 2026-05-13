@@ -53,6 +53,7 @@ export interface NotificationRecord {
   type: NotificationType;
   user_id: string;
   actor_user_id: string | null;
+  actor_name: string | null;
   entity_type: string;
   entity_id: string;
   title: string;

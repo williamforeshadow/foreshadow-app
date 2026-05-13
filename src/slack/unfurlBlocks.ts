@@ -56,7 +56,7 @@ export interface TaskForUnfurl {
   task_url: string;
 }
 
-const STATUS_LABELS: Record<string, string> = {
+export const STATUS_LABELS: Record<string, string> = {
   not_started: 'Not started',
   in_progress: 'In progress',
   paused: 'Paused',
@@ -67,7 +67,7 @@ const STATUS_LABELS: Record<string, string> = {
 // Visual indicator that survives across Slack themes / dark mode.
 // Slack mrkdwn doesn't support text color so emoji is the only way to
 // give the status field a glanceable color cue.
-const STATUS_EMOJI: Record<string, string> = {
+export const STATUS_EMOJI: Record<string, string> = {
   not_started: '⚪',
   in_progress: '🔵',
   paused: '⏸️',
@@ -133,7 +133,7 @@ function formatTime(t: string): string {
 // goes into a TextObject must be HTML-entity-escaped or it can break the
 // rendering — e.g. a property name containing "&" would otherwise be
 // reinterpreted as the start of an entity.
-function escapeMrkdwn(s: string): string {
+export function escapeMrkdwn(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 

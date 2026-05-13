@@ -11,6 +11,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { UserAvatar } from '@/components/ui/user-avatar';
+import { formatRelative } from '@/src/lib/dates';
 import type { NotificationRecord } from '@/lib/notifications';
 
 type ViewMode = 'unread' | 'all';
@@ -136,33 +138,46 @@ export function NotificationBell({ compact = false }: { compact?: boolean }) {
               No notifications
             </div>
           ) : (
-            notifications.map((notification) => (
-              <DropdownMenuItem
-                key={notification.id}
-                asChild
-                className="cursor-pointer px-0 py-0"
-              >
-                <button
-                  type="button"
-                  onClick={() => openNotification(notification)}
-                  className="flex w-full items-start gap-2 px-3 py-2.5 text-left"
+            notifications.map((notification) => {
+              const actorName = notification.actor_name ?? 'System';
+              const unread = !notification.read_at;
+              return (
+                <DropdownMenuItem
+                  key={notification.id}
+                  asChild
+                  className="cursor-pointer px-0 py-0"
                 >
-                  <span
-                    className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
-                      notification.read_at ? 'bg-transparent' : 'bg-red-500'
-                    }`}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-neutral-900 dark:text-white">
-                      {notification.title}
+                  <button
+                    type="button"
+                    onClick={() => openNotification(notification)}
+                    className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left"
+                  >
+                    <span className="relative mt-0.5 shrink-0">
+                      <UserAvatar name={actorName} size="sm" />
+                      {unread ? (
+                        <span
+                          aria-hidden
+                          className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-neutral-950"
+                        />
+                      ) : null}
                     </span>
-                    <span className="mt-0.5 line-clamp-2 block text-xs leading-5 text-neutral-500 dark:text-neutral-400">
-                      {notification.body}
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline gap-2">
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-900 dark:text-white">
+                          {notification.title}
+                        </span>
+                        <span className="shrink-0 text-[11px] text-neutral-400 dark:text-neutral-500">
+                          {formatRelative(notification.created_at)}
+                        </span>
+                      </span>
+                      <span className="mt-0.5 line-clamp-2 block text-xs leading-5 text-neutral-500 dark:text-neutral-400">
+                        {notification.body}
+                      </span>
                     </span>
-                  </span>
-                </button>
-              </DropdownMenuItem>
-            ))
+                  </button>
+                </DropdownMenuItem>
+              );
+            })
           )}
         </div>
         <DropdownMenuSeparator />
