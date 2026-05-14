@@ -28,6 +28,24 @@ export function todayInTz(tz: string | undefined): { date: string; tz: string } 
 /** Default org timezone used when operations_settings hasn't been configured. */
 export const DEFAULT_TIMEZONE = 'America/Los_Angeles';
 
+/**
+ * Current hour (0–23) in the given IANA timezone. Used by the due-today cron
+ * to match against each user's preferred firing hour.
+ */
+export function currentHourInTz(tz: string): number {
+  try {
+    return Number(
+      new Intl.DateTimeFormat('en-US', {
+        hour: 'numeric',
+        hour12: false,
+        timeZone: tz,
+      }).format(new Date()),
+    );
+  } catch {
+    return new Date().getUTCHours();
+  }
+}
+
 const MONTH_SHORT = [
   'Jan',
   'Feb',

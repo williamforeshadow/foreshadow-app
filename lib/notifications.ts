@@ -49,7 +49,16 @@ export interface NotificationPreference {
   type: NotificationType;
   native_enabled: boolean;
   slack_enabled: boolean;
+  /**
+   * Wall-clock hour (HH:MM) in the org's default timezone at which the
+   * task_due_today reminder fires. Only meaningful when type === 'task_due_today'.
+   * NULL → DEFAULT_DUE_TODAY_TIME.
+   */
+  due_today_time?: string | null;
 }
+
+/** Default firing time for task_due_today, in org timezone. */
+export const DEFAULT_DUE_TODAY_TIME = '08:00';
 
 export interface NotificationRecord {
   id: string;
@@ -77,5 +86,6 @@ export function defaultNotificationPreference(
     type,
     native_enabled: true,
     slack_enabled: false,
+    due_today_time: type === 'task_due_today' ? DEFAULT_DUE_TODAY_TIME : null,
   };
 }

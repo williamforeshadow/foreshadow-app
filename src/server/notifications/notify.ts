@@ -2,13 +2,14 @@ import { WebClient } from '@slack/web-api';
 import type { KnownBlock } from '@slack/types';
 import {
   defaultNotificationPreference,
+  DEFAULT_DUE_TODAY_TIME,
   NOTIFICATION_TYPES,
   type NotificationPreference,
   type NotificationType,
 } from '@/lib/notifications';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { taskPath, taskUrl } from '@/src/lib/links';
-import { todayInTz, DEFAULT_TIMEZONE } from '@/src/lib/dates';
+import { todayInTz, currentHourInTz, DEFAULT_TIMEZONE } from '@/src/lib/dates';
 import { lookupSlackUserByEmail } from '@/src/slack/identity';
 import {
   STATUS_EMOJI,
@@ -491,7 +492,7 @@ async function loadPreferences(
 
   const { data, error } = await supabase
     .from('notification_preferences')
-    .select('user_id, type, native_enabled, slack_enabled')
+    .select('user_id, type, native_enabled, slack_enabled, due_today_time')
     .in('user_id', userIds);
 
   if (error) {
@@ -504,12 +505,14 @@ async function loadPreferences(
     type: NotificationType;
     native_enabled: boolean;
     slack_enabled: boolean;
+    due_today_time: string | null;
   }>) {
     if (!NOTIFICATION_TYPES.includes(row.type)) continue;
     prefs.get(row.user_id)?.set(row.type, {
       type: row.type,
       native_enabled: row.native_enabled,
       slack_enabled: row.slack_enabled,
+      due_today_time: row.due_today_time,
     });
   }
   return prefs;
@@ -1216,10 +1219,35 @@ export async function refreshNotificationSlackMessage(
   });
 }
 
+async function loadDueTodayTimes(
+  supabase: Supabase,
+  userIds: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (userIds.length === 0) return out;
+  const { data, error } = await supabase
+    .from('notification_preferences')
+    .select('user_id, due_today_time')
+    .eq('type', 'task_due_today')
+    .in('user_id', userIds);
+  if (error) {
+    console.warn('[notifications] due_today_time lookup failed', { error });
+    return out;
+  }
+  for (const row of (data ?? []) as Array<{
+    user_id: string;
+    due_today_time: string | null;
+  }>) {
+    if (row.due_today_time) out.set(row.user_id, row.due_today_time);
+  }
+  return out;
+}
+
 export async function runDueTodayNotifications() {
   const supabase = getSupabaseServer();
   const timezone = await getOrgTimezone(supabase);
   const { date } = todayInTz(timezone);
+  const currentHour = currentHourInTz(timezone);
 
   const { data, error } = await supabase
     .from('turnover_tasks')
@@ -1247,25 +1275,42 @@ export async function runDueTodayNotifications() {
   }
 
   const tasks = (data ?? []) as TaskContextRow[];
+
+  // One query for all assignees' preferred firing times.
+  const allAssigneeIds = Array.from(
+    new Set(
+      tasks.flatMap((t) =>
+        (t.task_assignments ?? []).map((a) => a.user_id),
+      ),
+    ),
+  );
+  const dueTimes = await loadDueTodayTimes(supabase, allAssigneeIds);
+
   let emitted = 0;
   for (const row of tasks) {
-    const assignments = (row.task_assignments ?? []).map((a) => a.user_id);
-    if (assignments.length === 0) continue;
+    const recipients = (row.task_assignments ?? [])
+      .map((a) => a.user_id)
+      .filter((uid) => {
+        const desired = dueTimes.get(uid) ?? DEFAULT_DUE_TODAY_TIME;
+        return Number(desired.slice(0, 2)) === currentHour;
+      });
+    if (recipients.length === 0) continue;
     await deliverTaskNotification({
       type: 'task_due_today',
       taskId: row.id,
-      recipientIds: assignments,
+      recipientIds: recipients,
       metadata: { due_date: date, timezone },
       dedupeKeyFor: (recipientId) =>
         `task_due_today:${date}:${row.id}:${recipientId}`,
     });
-    emitted += assignments.length;
+    emitted += recipients.length;
   }
 
   return {
     date,
     timezone,
+    current_hour: currentHour,
     tasks_scanned: tasks.length,
-    recipients_scanned: emitted,
+    recipients_emitted: emitted,
   };
 }
