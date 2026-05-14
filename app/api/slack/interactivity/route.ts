@@ -8,8 +8,8 @@ import {
   confirmPendingAction,
 } from '@/src/server/agent/pendingActions';
 import {
+  deleteNotificationSlackMessage,
   markNotificationRead,
-  refreshNotificationSlackMessage,
 } from '@/src/server/notifications/notify';
 
 const NOTIFICATION_MARK_READ_PREFIX = 'notification_mark_read_';
@@ -81,11 +81,9 @@ async function handleInteraction(
     const notificationId = actionId.slice(NOTIFICATION_MARK_READ_PREFIX.length);
     if (!notificationId) return;
     await markNotificationRead(notificationId);
-    // Re-render the original DM without the mark-read button so the user sees
-    // their click took effect. Best-effort — failures are logged in notify.ts.
-    await refreshNotificationSlackMessage(notificationId, {
-      includeMarkReadButton: false,
-    });
+    // Delete the original DM so the user's Slack inbox stays clean. The bell
+    // still has the row (marked read). Best-effort — failures are logged.
+    await deleteNotificationSlackMessage(notificationId);
     return;
   }
 

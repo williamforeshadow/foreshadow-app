@@ -1121,6 +1121,54 @@ export async function markNotificationRead(
 }
 
 /**
+ * Delete the original Slack DM for a notification. Used by the interactivity
+ * handler after the user clicks "Mark as read" — the message is gone, leaving
+ * the user's Slack DMs clean. The in-app bell still has the row (marked read).
+ *
+ * Best-effort: if chat.delete fails (e.g. message older than retention, bot
+ * lacks scope), we log and leave the message alone — the row is still marked
+ * read on the DB side, so the in-app state is correct either way.
+ */
+export async function deleteNotificationSlackMessage(
+  notificationId: string,
+): Promise<void> {
+  const supabase = getSupabaseServer();
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('id, slack_message_ts, slack_channel_id')
+    .eq('id', notificationId)
+    .maybeSingle();
+  if (error || !data || !data.slack_message_ts || !data.slack_channel_id) {
+    return;
+  }
+
+  const token = process.env.SLACK_BOT_TOKEN;
+  if (!token) return;
+  try {
+    const web = new WebClient(token);
+    await web.chat.delete({
+      channel: data.slack_channel_id,
+      ts: data.slack_message_ts,
+    });
+    // Null the message id so a later coalesce attempt doesn't try to update a
+    // deleted message — though that path also gates on read_at IS NULL.
+    await supabase
+      .from('notifications')
+      .update({
+        slack_message_ts: null,
+        slack_channel_id: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', notificationId);
+  } catch (err) {
+    console.warn('[notifications] slack delete failed', {
+      notificationId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
  * Re-render a notification's Slack blocks and `chat.update` the original DM.
  * Used by the interactivity handler after the user clicks "Mark as read" to
  * remove the mark-read button (the ↗ open button stays).
