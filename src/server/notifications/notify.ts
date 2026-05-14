@@ -589,6 +589,11 @@ async function sendSlackDm(args: {
       .update({
         slack_sent_at: new Date().toISOString(),
         slack_message_ts: typeof response.ts === 'string' ? response.ts : null,
+        // Slack returns the DM channel id (Dxxx) in `response.channel`. We
+        // need this for chat.update later — Slack rejects user ids (Uxxx)
+        // there even though chat.postMessage accepts them.
+        slack_channel_id:
+          typeof response.channel === 'string' ? response.channel : null,
         slack_error: null,
         updated_at: new Date().toISOString(),
       })
@@ -608,7 +613,7 @@ async function sendSlackDm(args: {
  * still see the up-to-date in-app notification.
  */
 async function updateSlackDm(args: {
-  email: string;
+  channel: string;
   ts: string;
   text: string;
   blocks: KnownBlock[];
@@ -617,10 +622,8 @@ async function updateSlackDm(args: {
   if (!token) return;
   try {
     const web = new WebClient(token);
-    const slackUser = await lookupSlackUserByEmail(web, args.email);
-    if (!slackUser) return;
     await web.chat.update({
-      channel: slackUser.slackUserId,
+      channel: args.channel,
       ts: args.ts,
       text: args.text,
       blocks: args.blocks,
@@ -628,6 +631,7 @@ async function updateSlackDm(args: {
   } catch (err) {
     console.warn('[notifications] slack update failed', {
       ts: args.ts,
+      channel: args.channel,
       error: err instanceof Error ? err.message : String(err),
     });
   }
@@ -685,7 +689,7 @@ async function deliverTaskNotification(args: {
       const windowStart = new Date(Date.now() - COALESCE_WINDOW_MS).toISOString();
       const { data: existing } = await supabase
         .from('notifications')
-        .select('id, metadata, slack_message_ts')
+        .select('id, metadata, slack_message_ts, slack_channel_id')
         .eq('type', args.type)
         .eq('entity_id', task.id)
         .eq('user_id', recipientId)
@@ -719,12 +723,13 @@ async function deliverTaskNotification(args: {
 
         if (
           preference.slack_enabled &&
-          email &&
           typeof existing.slack_message_ts === 'string' &&
-          existing.slack_message_ts
+          existing.slack_message_ts &&
+          typeof existing.slack_channel_id === 'string' &&
+          existing.slack_channel_id
         ) {
           await updateSlackDm({
-            email,
+            channel: existing.slack_channel_id,
             ts: existing.slack_message_ts,
             text: renderedMerged.slackText,
             blocks: renderedMerged.buildBlocks(existing.id as string),
@@ -1127,10 +1132,10 @@ export async function refreshNotificationSlackMessage(
   const supabase = getSupabaseServer();
   const { data, error } = await supabase
     .from('notifications')
-    .select('id, type, user_id, actor_user_id, entity_id, metadata, slack_message_ts')
+    .select('id, type, user_id, actor_user_id, entity_id, metadata, slack_message_ts, slack_channel_id')
     .eq('id', notificationId)
     .maybeSingle();
-  if (error || !data || !data.slack_message_ts) return;
+  if (error || !data) return;
 
   const row = data as {
     id: string;
@@ -1140,8 +1145,9 @@ export async function refreshNotificationSlackMessage(
     entity_id: string;
     metadata: Record<string, unknown> | null;
     slack_message_ts: string | null;
+    slack_channel_id: string | null;
   };
-  if (!row.slack_message_ts) return;
+  if (!row.slack_message_ts || !row.slack_channel_id) return;
 
   const task = await loadTaskContext(supabase, row.entity_id);
   if (!task) return;
@@ -1152,11 +1158,8 @@ export async function refreshNotificationSlackMessage(
     actorName,
     metadata: row.metadata ?? {},
   });
-  const emails = await loadRecipientEmails(supabase, [row.user_id]);
-  const email = emails.get(row.user_id) ?? null;
-  if (!email) return;
   await updateSlackDm({
-    email,
+    channel: row.slack_channel_id,
     ts: row.slack_message_ts,
     text: rendered.slackText,
     blocks: rendered.buildBlocks(

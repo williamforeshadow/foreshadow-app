@@ -8,6 +8,7 @@ import {
   notifyTaskScheduleChanged,
   notifyTaskStatusChanged,
   notifyTaskTitleChanged,
+  notifyTaskUnassigned,
   type NotificationActor,
 } from '@/src/server/notifications/notify';
 
@@ -782,6 +783,12 @@ export async function updateTask(
 
   if (input.assigned_user_ids !== undefined) {
     await notifyTaskAssigned({
+      taskId: input.task_id,
+      previousAssigneeIds: previousAssignmentIds,
+      nextAssigneeIds: input.assigned_user_ids,
+      actor: options.actor ?? null,
+    });
+    await notifyTaskUnassigned({
       taskId: input.task_id,
       previousAssigneeIds: previousAssignmentIds,
       nextAssigneeIds: input.assigned_user_ids,

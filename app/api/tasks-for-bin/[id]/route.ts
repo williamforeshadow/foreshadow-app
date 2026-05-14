@@ -9,6 +9,7 @@ import {
   notifyTaskScheduleChanged,
   notifyTaskStatusChanged,
   notifyTaskTitleChanged,
+  notifyTaskUnassigned,
 } from '@/src/server/notifications/notify';
 
 type PreviousTaskState = {
@@ -184,6 +185,12 @@ export async function PUT(
       }
 
       await notifyTaskAssigned({
+        taskId: id,
+        previousAssigneeIds,
+        nextAssigneeIds: userIds,
+        actor,
+      });
+      await notifyTaskUnassigned({
         taskId: id,
         previousAssigneeIds,
         nextAssigneeIds: userIds,
