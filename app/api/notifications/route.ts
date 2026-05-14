@@ -16,7 +16,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const view = searchParams.get('view') === 'all' ? 'all' : 'unread';
-  const limit = Math.min(Number(searchParams.get('limit') ?? 30) || 30, 100);
+  const limit = Math.min(Number(searchParams.get('limit') ?? 50) || 50, 100);
 
   let query = getSupabaseServer()
     .from('notifications')

@@ -28,7 +28,7 @@ export function NotificationBell({ compact = false }: { compact?: boolean }) {
   const load = useCallback(async (mode: ViewMode = view) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/notifications?view=${mode}&limit=30`, {
+      const res = await fetch(`/api/notifications?view=${mode}&limit=50`, {
         cache: 'no-store',
       });
       if (!res.ok) return;
@@ -79,7 +79,7 @@ export function NotificationBell({ compact = false }: { compact?: boolean }) {
         >
           <Bell className="h-4 w-4" />
           {unreadCount > 0 ? (
-            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white">
+            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--accent-3)] px-1 text-[10px] font-semibold leading-none text-white">
               {unreadCount > 9 ? '9+' : unreadCount}
             </span>
           ) : null}
@@ -88,7 +88,7 @@ export function NotificationBell({ compact = false }: { compact?: boolean }) {
       <DropdownMenuContent
         align={compact ? 'end' : 'end'}
         side={compact ? 'bottom' : 'right'}
-        className="w-[min(360px,calc(100vw-24px))] p-0"
+        className="w-[min(640px,calc(100vw-24px))] border border-neutral-200 bg-white p-0 shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
       >
         <div className="flex items-center justify-between gap-2 px-3 py-2.5">
           <div>
@@ -128,7 +128,7 @@ export function NotificationBell({ compact = false }: { compact?: boolean }) {
             </button>
           ))}
         </div>
-        <div className="max-h-[420px] overflow-y-auto py-1">
+        <div className="max-h-[720px] overflow-y-auto py-1">
           {loading && notifications.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-neutral-500">
               Loading
@@ -145,19 +145,19 @@ export function NotificationBell({ compact = false }: { compact?: boolean }) {
                 <DropdownMenuItem
                   key={notification.id}
                   asChild
-                  className="cursor-pointer px-0 py-0"
+                  className="cursor-pointer px-0 py-0 focus:bg-transparent data-[highlighted]:bg-transparent"
                 >
                   <button
                     type="button"
                     onClick={() => openNotification(notification)}
-                    className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left"
+                    className="mx-1 flex w-[calc(100%-0.5rem)] items-start gap-2.5 rounded-md px-3 py-3 text-left transition hover:bg-neutral-50 hover:shadow-md dark:hover:bg-white/[0.06] dark:hover:shadow-none"
                   >
                     <span className="relative mt-0.5 shrink-0">
                       <UserAvatar name={actorName} size="sm" />
                       {unread ? (
                         <span
                           aria-hidden
-                          className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-neutral-950"
+                          className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-[var(--accent-3)] ring-2 ring-white dark:ring-neutral-800"
                         />
                       ) : null}
                     </span>

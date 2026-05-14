@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
-import { runDueTodayNotifications } from '@/src/server/notifications/notify';
+import {
+  cleanupOldNotifications,
+  runDueTodayNotifications,
+} from '@/src/server/notifications/notify';
 
 export const maxDuration = 60;
 
 export async function POST() {
   const result = await runDueTodayNotifications();
-  return NextResponse.json(result);
+  const cleanup = await cleanupOldNotifications();
+  return NextResponse.json({ ...result, cleanup });
 }
 
 export async function GET() {

@@ -104,57 +104,26 @@ export function NotificationPreferencesPanel() {
       <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
         {NOTIFICATION_TYPES.map((type) => {
           const pref = preferences[type];
+          const enabled = pref.native_enabled;
+          const switchDisabled = loading || saving === type;
           return (
-            <div
-              key={type}
-              className="grid gap-3 py-4 sm:grid-cols-[1fr_auto]"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-neutral-900 dark:text-white">
-                  {NOTIFICATION_TYPE_LABELS[type]}
-                </p>
-                <p className="mt-1 text-sm leading-5 text-neutral-500 dark:text-neutral-400">
-                  {NOTIFICATION_TYPE_DESCRIPTIONS[type]}
-                </p>
-              </div>
-              <div className="flex flex-col items-end gap-2">
-                <div className="flex items-center gap-5">
-                  <label className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
-                    <input
-                      type="checkbox"
-                      checked={pref.native_enabled}
-                      disabled={loading || saving === type}
-                      onChange={(event) =>
-                        updatePreference(type, {
-                          native_enabled: event.target.checked,
-                        })
-                      }
-                      className="h-4 w-4 rounded border-neutral-300"
-                    />
-                    Native
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
-                    <input
-                      type="checkbox"
-                      checked={pref.slack_enabled}
-                      disabled={loading || saving === type}
-                      onChange={(event) =>
-                        updatePreference(type, {
-                          slack_enabled: event.target.checked,
-                        })
-                      }
-                      className="h-4 w-4 rounded border-neutral-300"
-                    />
-                    Slack
-                  </label>
+            <div key={type} className="py-4">
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-start">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-neutral-900 dark:text-white">
+                    {NOTIFICATION_TYPE_LABELS[type]}
+                  </p>
+                  <p className="mt-1 text-sm leading-5 text-neutral-500 dark:text-neutral-400">
+                    {NOTIFICATION_TYPE_DESCRIPTIONS[type]}
+                  </p>
                 </div>
-                {type === 'task_due_today' ? (
-                  <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-4">
+                  {type === 'task_due_today' && enabled ? (
                     <label className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
                       <span>Send at</span>
                       <select
                         value={pref.due_today_time ?? DEFAULT_DUE_TODAY_TIME}
-                        disabled={loading || saving === type}
+                        disabled={switchDisabled}
                         onChange={(event) =>
                           updatePreference(type, {
                             due_today_time: event.target.value,
@@ -169,14 +138,59 @@ export function NotificationPreferencesPanel() {
                         ))}
                       </select>
                     </label>
-                    {orgTimezone ? (
-                      <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                        Times are in your org timezone ({orgTimezone}).
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
+                  ) : null}
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={enabled}
+                    aria-label={`Toggle ${NOTIFICATION_TYPE_LABELS[type]}`}
+                    disabled={switchDisabled}
+                    onClick={() =>
+                      updatePreference(type, { native_enabled: !enabled })
+                    }
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                      enabled
+                        ? 'bg-[var(--accent-3)]'
+                        : 'bg-neutral-200 dark:bg-neutral-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                        enabled ? 'translate-x-[22px]' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
               </div>
+              {enabled ? (
+                <div className="mt-3 pl-0 sm:pl-4">
+                  <label
+                    className={`inline-flex items-center gap-2 text-sm ${
+                      switchDisabled
+                        ? 'text-neutral-400 dark:text-neutral-600'
+                        : 'text-neutral-700 dark:text-neutral-300'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={pref.slack_enabled}
+                      disabled={switchDisabled}
+                      onChange={(event) =>
+                        updatePreference(type, {
+                          slack_enabled: event.target.checked,
+                        })
+                      }
+                      className="h-4 w-4 rounded border-neutral-300 accent-[var(--accent-3)]"
+                    />
+                    Also notify in Slack
+                  </label>
+                </div>
+              ) : null}
+              {type === 'task_due_today' && enabled && orgTimezone ? (
+                <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                  Times are in your org timezone ({orgTimezone}).
+                </p>
+              ) : null}
             </div>
           );
         })}

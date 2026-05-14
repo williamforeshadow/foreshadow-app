@@ -1219,6 +1219,32 @@ export async function refreshNotificationSlackMessage(
   });
 }
 
+const NOTIFICATION_RETENTION_DAYS = 90;
+
+/**
+ * Delete notifications older than NOTIFICATION_RETENTION_DAYS. Called from
+ * the hourly cron — cheap and idempotent. Bounds DB growth without losing
+ * recent history (the bell shows the latest 50 in the "all" view).
+ */
+export async function cleanupOldNotifications(): Promise<{
+  deleted: number;
+  cutoff: string;
+}> {
+  const supabase = getSupabaseServer();
+  const cutoff = new Date(
+    Date.now() - NOTIFICATION_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const { error, count } = await supabase
+    .from('notifications')
+    .delete({ count: 'exact' })
+    .lt('created_at', cutoff);
+  if (error) {
+    console.warn('[notifications] cleanup failed', { error });
+    return { deleted: 0, cutoff };
+  }
+  return { deleted: count ?? 0, cutoff };
+}
+
 async function loadDueTodayTimes(
   supabase: Supabase,
   userIds: string[],
