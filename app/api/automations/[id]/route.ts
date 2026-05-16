@@ -33,7 +33,7 @@ export async function PUT(
   if (!parsed.ok) {
     return NextResponse.json({ errors: parsed.errors }, { status: 400 });
   }
-  const { name, enabled, trigger, conditions, actions } = parsed.value;
+  const { name, enabled, trigger, conditions, actions, property_ids } = parsed.value;
 
   const supabase = getSupabaseServer();
   const { data, error } = await supabase
@@ -44,6 +44,7 @@ export async function PUT(
       trigger,
       conditions,
       actions,
+      property_ids,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)

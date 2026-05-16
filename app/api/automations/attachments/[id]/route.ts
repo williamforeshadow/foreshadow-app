@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 
-// DELETE /api/slack-automations/attachments/[id]
+// DELETE /api/automations/attachments/[id]
 //
-// Removes an attachment from Supabase Storage. Used when the user removes
-// a file from an automation's attachment list, or when they cancel the
-// dialog without saving (cleanup of orphaned uploads).
+// Removes an attachment from Supabase Storage. Used when the user removes a
+// file from an automation's attachment list, or cancels without saving
+// (orphan cleanup).
 //
-// The `id` param is the random token portion of the storage path (no
-// extension). We list the bucket prefix to find the exact file (since the
-// extension is variable) and delete it.
+// `id` is the random token portion of the storage path (no extension). We
+// list the bucket prefix to find the exact file (extension is variable)
+// and delete it.
+//
+// (Bucket keeps its historical name `slack-automation-attachments`.)
 
 const BUCKET = 'slack-automation-attachments';
 const ID_RE = /^[a-f0-9]{32}$/;
@@ -26,13 +28,12 @@ export async function DELETE(
 
   const supabase = getSupabaseServer();
 
-  // List the bucket root and find the file matching this id (any extension).
   const { data: files, error: listErr } = await supabase.storage
     .from(BUCKET)
     .list('', { limit: 1000, search: id });
 
   if (listErr) {
-    console.error('[api/slack-automations/attachments] list failed', listErr);
+    console.error('[api/automations/attachments] list failed', listErr);
     return NextResponse.json({ error: listErr.message }, { status: 500 });
   }
 
@@ -49,7 +50,7 @@ export async function DELETE(
     .remove(matches);
 
   if (removeErr) {
-    console.error('[api/slack-automations/attachments] remove failed', removeErr);
+    console.error('[api/automations/attachments] remove failed', removeErr);
     return NextResponse.json({ error: removeErr.message }, { status: 500 });
   }
 

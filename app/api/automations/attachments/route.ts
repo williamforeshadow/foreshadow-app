@@ -1,32 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 
-// POST /api/slack-automations/attachments
+// POST /api/automations/attachments
 //
-// Uploads a file to be attached when a Slack automation fires. Files are
-// stored in the `slack-automation-attachments` Supabase Storage bucket and
-// referenced by storage_path in the automation's config.attachments array.
+// Uploads a file to attach when an automation fires. Files are stored in
+// the `slack-automation-attachments` Supabase Storage bucket and referenced
+// by storage_path in the action's attachments array.
 //
-// At send time, the execution layer will:
-//   1. Read each attachment's storage_path
-//   2. Generate a signed URL (or download the bytes)
-//   3. Upload via Slack's files.uploadV2 with the message
+// (Bucket keeps its historical name `slack-automation-attachments` — it
+// holds live files and the runtime references it by that name. Renaming
+// would orphan the existing HOA-form uploads for no functional gain.)
 //
-// This is a generic upload endpoint — works for PDFs, images, docs,
-// anything teams want to attach to their automated messages. Bucket-level
-// MIME validation is intentionally permissive; the limit is the file
-// size cap.
+// At send time the runtime reads each storage_path, downloads the bytes,
+// and uploads via Slack's files.uploadV2 with the message as initial_comment.
 //
-// Storage layout:
-//   slack-automation-attachments/
-//     {random-token}.{ext}
-//
-// We don't scope by automation_id because attachments can be created
-// before the automation row exists (the user uploads files while
-// composing in the dialog). The DELETE handler under [id] cleans up
-// orphaned uploads.
+// Not scoped by automation_id — attachments are created while composing,
+// before the automation row exists. The DELETE handler cleans orphans.
 
-const MAX_BYTES = 25 * 1024 * 1024; // 25 MB — Slack's per-file upload cap is higher but this matches property documents
+const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
 const BUCKET = 'slack-automation-attachments';
 
 function randomSegment(len = 16) {
@@ -68,14 +59,10 @@ export async function POST(req: NextRequest) {
       upsert: false,
     });
   if (uploadErr) {
-    console.error('[api/slack-automations/attachments] upload failed', uploadErr);
+    console.error('[api/automations/attachments] upload failed', uploadErr);
     return NextResponse.json({ error: uploadErr.message }, { status: 500 });
   }
 
-  // Generate a public URL for display in the editor. The execution layer
-  // doesn't rely on this URL — it reads the bytes directly from storage
-  // by path — but it's useful for letting the user preview / re-download
-  // the file from the configuration UI.
   const { data: publicData } = supabase.storage
     .from(BUCKET)
     .getPublicUrl(storagePath);

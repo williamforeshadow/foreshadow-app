@@ -34,12 +34,12 @@ export async function POST(req: NextRequest) {
   if (!parsed.ok) {
     return NextResponse.json({ errors: parsed.errors }, { status: 400 });
   }
-  const { name, enabled, trigger, conditions, actions } = parsed.value;
+  const { name, enabled, trigger, conditions, actions, property_ids } = parsed.value;
 
   const supabase = getSupabaseServer();
   const { data, error } = await supabase
     .from('automations')
-    .insert({ name, enabled, trigger, conditions, actions })
+    .insert({ name, enabled, trigger, conditions, actions, property_ids })
     .select()
     .single();
 

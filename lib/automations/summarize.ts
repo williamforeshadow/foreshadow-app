@@ -26,11 +26,37 @@ import { describeVariablePath, OPERATOR_LABELS, ROW_CHANGE_LABELS } from './labe
 import { ENTITY_SCHEMAS } from './entities';
 
 export function summarizeAutomation(automation: Automation): string {
-  const scopeEntity = scopeOf(automation.trigger);
-  const triggerSentence = summarizeTrigger(automation.trigger);
-  const conditionClause = summarizeRootConditions(automation.conditions, scopeEntity);
+  const { trigger } = automation;
+  const scopeEntity = scopeOf(trigger);
   const actionClause = summarizeActions(automation.actions, scopeEntity);
 
+  // Reservation daily-check WITH a Timing rule: lead with the timing as an
+  // imperative ("Fire 2 days before check-in, …") and drop the redundant
+  // cadence / "for each reservation" / "when a reservation is" wrapper.
+  const isResDailyCheck =
+    trigger.kind === 'schedule' && trigger.for_each?.entity === 'reservation';
+  if (isResDailyCheck) {
+    const children = automation.conditions?.children ?? [];
+    const timing = children.map(timingPhrase).find(Boolean) ?? null;
+    if (timing) {
+      const filterChildren = children.filter((c) => timingPhrase(c) === null);
+      const filtersInner =
+        filterChildren.length > 0
+          ? summarizeGroup(
+              { ...automation.conditions, children: filterChildren },
+              scopeEntity,
+            )
+          : '';
+      const hasFilters = filtersInner && filtersInner !== '(no conditions yet)';
+      const parts = [`fire ${timing}`];
+      if (hasFilters) parts.push(`if ${filtersInner}`);
+      parts.push(actionClause);
+      return capitalize(parts.join(', ')) + '.';
+    }
+  }
+
+  const triggerSentence = summarizeTrigger(trigger);
+  const conditionClause = summarizeRootConditions(automation.conditions, scopeEntity);
   const parts: string[] = [triggerSentence];
   if (conditionClause) parts.push(conditionClause);
   parts.push(actionClause);
@@ -62,6 +88,7 @@ function summarizeTrigger(trigger: AutomationTrigger): string {
   const verbs = trigger.on
     .map((kind) => ROW_CHANGE_LABELS[kind])
     .filter(Boolean);
+  if (verbs.length === 0) return `When a ${ent} changes`;
   const verbList = listJoin(verbs, 'or');
   return `When a ${ent} is ${verbList}`;
 }
@@ -98,12 +125,75 @@ function describeCadence(schedule: ScheduleConfig): string {
 
 // ─── Conditions ────────────────────────────────────────────────────────
 
+// Timing rules (editor sugar: `this.days_until_<anchor> equals <int>`) are
+// phrased relatively — "2 days before check-in" — not as a raw condition.
+const TIMING_ANCHOR_LABEL: Record<string, string> = {
+  'this.days_until_check_in': 'check-in',
+  'this.days_until_check_out': 'check-out',
+  'this.days_until_next_check_in': 'next check-in',
+};
+
+function timingPhrase(node: ConditionNode): string | null {
+  if (
+    node.kind !== 'rule' ||
+    node.left?.kind !== 'variable' ||
+    !(node.left.path in TIMING_ANCHOR_LABEL) ||
+    node.op !== 'equals' ||
+    node.right?.kind !== 'literal' ||
+    typeof node.right.value !== 'number'
+  ) {
+    return null;
+  }
+  const anchor = TIMING_ANCHOR_LABEL[node.left.path];
+  const v = node.right.value as number;
+  if (v === 0) return `on reservation's ${anchor}`;
+  const n = Math.abs(v);
+  const unit = n === 1 ? 'day' : 'days';
+  return v > 0
+    ? `${n} ${unit} before reservation's ${anchor}`
+    : `${n} ${unit} after reservation's ${anchor}`;
+}
+
 function summarizeRootConditions(
   group: ConditionGroup,
   scopeEntity: EntityKey | null,
 ): string {
+  // No entity in scope (Recurring) → conditions are meaningless; never
+  // emit a clause. This is what kept the summary printing nonsense like
+  // "if today is today and right now is today".
+  if (!scopeEntity) return '';
   if (!group?.children || group.children.length === 0) return '';
-  return `if ${summarizeGroup(group, scopeEntity)}`;
+
+  // Pull the timing rule (if any) out and phrase it relatively; the rest
+  // are attribute filters phrased the normal way.
+  const children = group.children ?? [];
+  const timing = children.map(timingPhrase).find(Boolean) ?? null;
+  const filterChildren = children.filter((c) => timingPhrase(c) === null);
+  const filtersInner =
+    filterChildren.length > 0
+      ? summarizeGroup({ ...group, children: filterChildren }, scopeEntity)
+      : '';
+  const hasFilters = filtersInner && filtersInner !== '(no conditions yet)';
+
+  if (timing && hasFilters) return `fire ${timing}, if ${filtersInner}`;
+  if (timing) return `fire ${timing}`;
+  if (hasFilters) return `if ${filtersInner}`;
+  return '';
+}
+
+// A rule whose two sides resolve to the same text is a tautology
+// ("today is today"). Drop it from the summary so a half-built or
+// degenerate condition never reads as gibberish.
+function isDegenerateRule(
+  rule: ConditionRule,
+  scopeEntity: EntityKey | null,
+  relatedEntity?: EntityKey,
+): boolean {
+  if (!operatorNeedsRight(rule.op)) return false;
+  if (!rule.right) return false;
+  const left = expressionText(rule.left, scopeEntity, relatedEntity);
+  const right = expressionText(rule.right, scopeEntity, relatedEntity);
+  return left === right;
 }
 
 function summarizeGroup(
@@ -112,6 +202,10 @@ function summarizeGroup(
   relatedEntity?: EntityKey,
 ): string {
   const parts = (group.children ?? [])
+    .filter(
+      (child) =>
+        !(child.kind === 'rule' && isDegenerateRule(child, scopeEntity, relatedEntity)),
+    )
     .map((child) => summarizeNode(child, scopeEntity, relatedEntity))
     .filter(Boolean);
   if (parts.length === 0) return '(no conditions yet)';

@@ -69,12 +69,25 @@ export const ENTITY_SCHEMAS: Record<EntityKey, EntitySchema> = {
     table: 'reservations',
     fields: [
       { key: 'id', label: 'ID', type: 'id', internal: true },
-      { key: 'property_id', label: 'Property ID', type: 'id' },
-      { key: 'property_name', label: 'Property name', type: 'string' },
+      // property_id and property_name are hidden from the picker — phasing
+      // out property_name in favor of `{{this.property.name}}` (resolves to
+      // properties.name, the user-editable property code). The columns stay
+      // queryable for advanced/legacy use.
+      { key: 'property_id', label: 'Property ID', type: 'id', internal: true },
+      { key: 'property_name', label: 'Property name', type: 'string', internal: true },
       { key: 'guest_name', label: 'Guest name', type: 'string' },
       { key: 'check_in', label: 'Check-in date', type: 'date' },
       { key: 'check_out', label: 'Check-out date', type: 'date' },
       { key: 'next_check_in', label: 'Next check-in date', type: 'date' },
+      // Derived (computed at evaluation time by
+      // src/server/automations/deriveFields.ts — not stored columns).
+      { key: 'stay_length_days', label: 'Stay length (days)', type: 'number' },
+      { key: 'vacancy_days', label: 'Gap until next booking (days)', type: 'number' },
+      // days_until_* are owned by the Timing control (compiled by path), not
+      // the conditions picker — internal so they don't show as filter fields.
+      { key: 'days_until_check_in', label: 'Days until check-in', type: 'number', internal: true },
+      { key: 'days_until_check_out', label: 'Days until check-out', type: 'number', internal: true },
+      { key: 'days_until_next_check_in', label: 'Days until next check-in', type: 'number', internal: true },
     ],
     relations: [
       {

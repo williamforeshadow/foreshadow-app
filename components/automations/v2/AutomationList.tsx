@@ -10,6 +10,7 @@ import type { Automation } from '@/lib/automations/types';
 export default function AutomationList() {
   const router = useRouter();
   const [automations, setAutomations] = useState<Automation[]>([]);
+  const [propertyNames, setPropertyNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,10 +18,21 @@ export default function AutomationList() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/automations');
-      if (!res.ok) throw new Error(`load failed: ${res.status}`);
-      const data = await res.json();
-      setAutomations((data.automations ?? []) as Automation[]);
+      const [aRes, pRes] = await Promise.all([
+        fetch('/api/automations'),
+        fetch('/api/properties'),
+      ]);
+      if (!aRes.ok) throw new Error(`load failed: ${aRes.status}`);
+      const aData = await aRes.json();
+      setAutomations((aData.automations ?? []) as Automation[]);
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        const map: Record<string, string> = {};
+        for (const p of (pData.properties ?? []) as Array<{ id: string; name: string }>) {
+          map[p.id] = p.name;
+        }
+        setPropertyNames(map);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'load failed');
     } finally {
@@ -110,6 +122,26 @@ export default function AutomationList() {
                       {automation.actions.length} action
                       {automation.actions.length === 1 ? '' : 's'}
                     </Badge>
+                    {(automation.property_ids?.length ?? 0) === 0 ? (
+                      <Badge variant="outline" className="text-xs text-neutral-500">
+                        All properties
+                      </Badge>
+                    ) : (
+                      automation.property_ids.slice(0, 3).map((id) => (
+                        <Badge
+                          key={id}
+                          variant="outline"
+                          className="border-indigo-300 bg-indigo-50 text-xs text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300"
+                        >
+                          {propertyNames[id] ?? id.slice(0, 8)}
+                        </Badge>
+                      ))
+                    )}
+                    {automation.property_ids?.length > 3 && (
+                      <Badge variant="outline" className="text-xs text-neutral-500">
+                        +{automation.property_ids.length - 3} more
+                      </Badge>
+                    )}
                     {!automation.enabled && (
                       <Badge variant="outline" className="text-xs text-neutral-400">
                         Disabled

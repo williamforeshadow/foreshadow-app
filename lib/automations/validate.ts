@@ -8,6 +8,7 @@
 import type {
   Automation,
   AutomationAction,
+  AutomationAttachment,
   AutomationTrigger,
   ConditionGroup,
   ConditionNode,
@@ -31,7 +32,11 @@ export interface ParsedAutomationInput {
   trigger: AutomationTrigger;
   conditions: ConditionGroup;
   actions: AutomationAction[];
+  property_ids: string[];
 }
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function parseAutomationInput(
   body: unknown,
@@ -50,6 +55,7 @@ export function parseAutomationInput(
   const trigger = parseTrigger(raw.trigger, errors);
   const conditions = parseConditionGroup(raw.conditions, 'conditions', errors);
   const actions = parseActions(raw.actions, errors);
+  const property_ids = parsePropertyIds(raw.property_ids, errors);
 
   if (errors.length > 0 || !trigger || !conditions || !actions) {
     return { ok: false, errors };
@@ -57,8 +63,55 @@ export function parseAutomationInput(
 
   return {
     ok: true,
-    value: { name, enabled, trigger, conditions, actions },
+    value: { name, enabled, trigger, conditions, actions, property_ids },
   };
+}
+
+function parseAttachments(
+  raw: unknown,
+  path: string,
+  errors: ValidationError[],
+): AutomationAttachment[] | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (!Array.isArray(raw)) {
+    errors.push({ path, message: 'attachments must be an array' });
+    return undefined;
+  }
+  const out: AutomationAttachment[] = [];
+  for (let i = 0; i < raw.length; i += 1) {
+    const a = raw[i] as Partial<AutomationAttachment> | null;
+    if (!a || typeof a !== 'object') continue;
+    if (typeof a.id !== 'string' || typeof a.name !== 'string' || typeof a.storage_path !== 'string') {
+      errors.push({ path: `${path}[${i}]`, message: 'id, name, storage_path required' });
+      continue;
+    }
+    out.push({
+      id: a.id,
+      name: a.name,
+      storage_path: a.storage_path,
+      mime_type: typeof a.mime_type === 'string' ? a.mime_type : null,
+      size_bytes: typeof a.size_bytes === 'number' ? a.size_bytes : 0,
+    });
+  }
+  return out;
+}
+
+function parsePropertyIds(raw: unknown, errors: ValidationError[]): string[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    errors.push({ path: 'property_ids', message: 'property_ids must be an array' });
+    return [];
+  }
+  const out: string[] = [];
+  for (let i = 0; i < raw.length; i += 1) {
+    const v = raw[i];
+    if (typeof v !== 'string' || !UUID_RE.test(v)) {
+      errors.push({ path: `property_ids[${i}]`, message: 'must be a uuid' });
+      continue;
+    }
+    out.push(v);
+  }
+  return out;
 }
 
 function parseTrigger(
@@ -170,6 +223,7 @@ function parseActions(raw: unknown, errors: ValidationError[]): AutomationAction
       kind: 'slack_message',
       recipients: Array.isArray(action.recipients) ? action.recipients : [],
       message_template: typeof action.message_template === 'string' ? action.message_template : '',
+      attachments: parseAttachments(action.attachments, `actions[${i}].attachments`, errors),
       condition: action.condition,
     });
   }
@@ -183,6 +237,7 @@ export function summarizeAutomationFromRow(row: {
   trigger: unknown;
   conditions: unknown;
   actions: unknown;
+  property_ids?: unknown;
   created_at: string;
   updated_at: string;
 }): Automation {
@@ -193,6 +248,9 @@ export function summarizeAutomationFromRow(row: {
     trigger: row.trigger as AutomationTrigger,
     conditions: row.conditions as ConditionGroup,
     actions: (row.actions as AutomationAction[]) ?? [],
+    property_ids: Array.isArray(row.property_ids)
+      ? (row.property_ids as string[])
+      : [],
     created_at: row.created_at,
     updated_at: row.updated_at,
   };

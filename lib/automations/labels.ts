@@ -95,8 +95,8 @@ export function buildVariableOptions(
 
   const out: VariableOption[] = [];
 
-  out.push({ path: 'today', label: 'Today', group: 'Time' });
-  out.push({ path: 'now', label: 'Right now', group: 'Time' });
+  out.push({ path: 'today', label: 'Date (trigger date)', group: 'Time' });
+  out.push({ path: 'now', label: 'Time (trigger time)', group: 'Time' });
 
   if (ctx.scopeEntity) {
     pushEntityFields(
@@ -105,13 +105,23 @@ export function buildVariableOptions(
       'this',
       `This ${ENTITY_SCHEMAS[ctx.scopeEntity].label.toLowerCase()}`,
     );
+    // Hand-picked relation shortcuts. We stopped auto-flattening one-to-one
+    // relations into a sub-group — most fields under those relations are
+    // noise (timezone, internal id, etc). For the few that matter, surface
+    // a single entry that resolves via the runtime's relation hydration.
+    if (ctx.scopeEntity === 'reservation') {
+      out.push({
+        path: 'this.property.name',
+        label: 'Property',
+        group: 'This reservation',
+        fieldType: 'string',
+      });
+    }
   }
 
-  // Row-change-only namespaces. We don't fail loudly if someone reads
-  // added.X on a 'created' event — the path just won't be in the picker.
-  if (ctx.rowChangeKind) {
-    pushEntityFields(out, 'user', 'actor', 'The user who triggered this change');
-  }
+  // Updated-row relation deltas — only meaningful if the trigger covers
+  // 'updated' events. Doesn't include the actor namespace; that section
+  // was pulled in the v2.0.2 strip-back.
   if (ctx.rowChangeKind === 'updated' && ctx.scopeEntity) {
     pushManyRelations(out, ctx.scopeEntity, 'added', 'Newly added');
     pushManyRelations(out, ctx.scopeEntity, 'removed', 'Just removed');
@@ -167,19 +177,10 @@ function pushEntityFields(
       fieldType: field.type,
     });
   }
-  for (const relation of schema.relations) {
-    if (relation.cardinality !== 'one') continue;
-    const childSchema = ENTITY_SCHEMAS[relation.target];
-    for (const field of childSchema.fields) {
-      if (field.internal) continue;
-      out.push({
-        path: `${pathPrefix}.${relation.key}.${field.key}`,
-        label: field.label,
-        group: `${groupPrefix} → ${relation.label}`,
-        fieldType: field.type,
-      });
-    }
-  }
+  // One-to-one relations are no longer auto-flattened into a sub-group.
+  // Most of the joined fields (timezone, internal ids) are noise. The
+  // shortcuts that matter (e.g. "Property" → property.name) are hardcoded
+  // in `buildVariableOptions` next to the scope branch.
 }
 
 /**

@@ -144,8 +144,25 @@ export interface SlackMessageAction {
   recipients: SlackRecipient[];
   /** Liquid-ish: `{{variable.path}}` and `{{path | filter:arg}}`. */
   message_template: string;
+  /**
+   * Files to attach to the post. When non-empty the runtime uploads via
+   * `files.uploadV2` with the rendered message as `initial_comment`; when
+   * empty it uses `chat.postMessage`.
+   */
+  attachments?: AutomationAttachment[];
   /** Optional per-action gate so one automation can branch on a condition. */
   condition?: ConditionNode;
+}
+
+export interface AutomationAttachment {
+  /** Storage token, also serves as the React key. */
+  id: string;
+  /** Original filename, used as the Slack title. */
+  name: string;
+  /** Path inside the `slack-automation-attachments` Supabase Storage bucket. */
+  storage_path: string;
+  mime_type: string | null;
+  size_bytes: number;
 }
 
 export type SlackRecipient =
@@ -193,6 +210,13 @@ export interface Automation {
   /** Root-level condition. Always a group; empty group means "no filter". */
   conditions: ConditionGroup;
   actions: AutomationAction[];
+  /**
+   * Property scope. Empty = applies to all properties. Non-empty = runtime
+   * filters by row.property_id ∈ property_ids before evaluating conditions.
+   * First-class field rather than a condition because "only for property X"
+   * is the dominant use case.
+   */
+  property_ids: string[];
   created_at: string;
   updated_at: string;
 }
