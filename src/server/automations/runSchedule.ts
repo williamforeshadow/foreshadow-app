@@ -212,8 +212,12 @@ async function fireActions(
         message,
         action.attachments ?? [],
       );
-      if (ok) delivered.push(channel_name || channel_id);
-      else await releaseDelivery(automation.id, signature, recipientKey);
+      if (ok) {
+        await confirmDelivery(automation.id, signature, recipientKey);
+        delivered.push(channel_name || channel_id);
+      } else {
+        await releaseDelivery(automation.id, signature, recipientKey);
+      }
     }
   }
   return delivered;
@@ -302,6 +306,10 @@ async function downloadAttachment(storagePath: string): Promise<Buffer | null> {
   }
 }
 
+// A claimed-but-unconfirmed row older than this is an orphan (the worker that
+// claimed it crashed before posting). New attempts may take it over.
+const CLAIM_STALE_MS = 10 * 60 * 1000;
+
 async function claimDelivery(
   automationId: string,
   signature: string,
@@ -314,9 +322,49 @@ async function claimDelivery(
     recipient_key: recipientKey,
   });
   if (!error) return true;
-  if (error.code === '23505') return false;
+  if (error.code === '23505') {
+    const { data: existing } = await supabase
+      .from('automation_deliveries')
+      .select('confirmed_at, delivered_at')
+      .match({
+        automation_id: automationId,
+        event_signature: signature,
+        recipient_key: recipientKey,
+      })
+      .maybeSingle();
+    if (!existing) return false;
+    if (existing.confirmed_at) return false; // truly delivered — dedup.
+    const age = Date.now() - new Date(existing.delivered_at).getTime();
+    if (age < CLAIM_STALE_MS) return false; // recent, another worker in-flight.
+    const { error: takeover } = await supabase
+      .from('automation_deliveries')
+      .update({ delivered_at: new Date().toISOString() })
+      .match({
+        automation_id: automationId,
+        event_signature: signature,
+        recipient_key: recipientKey,
+      })
+      .is('confirmed_at', null);
+    return !takeover;
+  }
   console.warn('[automations:schedule] claimDelivery error', error);
   return false;
+}
+
+async function confirmDelivery(
+  automationId: string,
+  signature: string,
+  recipientKey: string,
+): Promise<void> {
+  const supabase = getSupabaseServer();
+  await supabase
+    .from('automation_deliveries')
+    .update({ confirmed_at: new Date().toISOString() })
+    .match({
+      automation_id: automationId,
+      event_signature: signature,
+      recipient_key: recipientKey,
+    });
 }
 
 async function releaseDelivery(
@@ -386,15 +434,30 @@ function getZonedParts(now: Date, timeZone: string): ZonedParts {
 
 function isScheduleDue(schedule: ScheduleConfig, parts: ZonedParts): boolean {
   const targetHour = Number(schedule.time?.slice(0, 2) ?? '0');
-  if (schedule.frequency === 'hour') return true;
+  // "Every N periods". interval is normalized to >=1 in parseSchedule, so
+  // interval===1 reproduces the old every-period behaviour exactly. The
+  // bucket is epoch-anchored off the resolved-zone date so it's a stable,
+  // stateless "is this the Nth period" gate (absolute anchor is arbitrary —
+  // only the modulo matters).
+  const interval = Math.max(1, schedule.interval || 1);
+  const [y, m, d] = parts.dateKey.split('-').map(Number);
+  const epochDay = Math.floor(Date.UTC(y, m - 1, d) / 86_400_000);
+
+  if (schedule.frequency === 'hour') {
+    return (epochDay * 24 + parts.hour) % interval === 0;
+  }
   if (parts.hour !== targetHour) return false;
 
-  if (schedule.frequency === 'day') return true;
+  if (schedule.frequency === 'day') {
+    return epochDay % interval === 0;
+  }
   if (schedule.frequency === 'week') {
-    return (schedule.weekdays ?? []).includes(parts.weekday);
+    if (!(schedule.weekdays ?? []).includes(parts.weekday)) return false;
+    return Math.floor(epochDay / 7) % interval === 0;
   }
   if (schedule.frequency === 'month') {
-    return (schedule.month_days ?? []).includes(parts.day);
+    if (!(schedule.month_days ?? []).includes(parts.day)) return false;
+    return (y * 12 + (m - 1)) % interval === 0;
   }
   return false;
 }

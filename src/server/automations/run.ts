@@ -21,12 +21,42 @@ import type {
   Automation,
   AutomationAction,
   AutomationAttachment,
+  ConditionGroup,
+  ConditionNode,
   EntityKey,
   RowChangeKind,
   SlackMessageAction,
 } from '@/lib/automations/types';
 
 const ATTACHMENT_BUCKET = 'slack-automation-attachments';
+
+// Reservation-relative Timing compiles to these paths (see the editor's
+// TIMING_ANCHOR_PATH). They only make sense on the daily-scan path.
+const TIMING_PATHS = new Set([
+  'this.days_until_check_in',
+  'this.days_until_check_out',
+  'this.days_until_next_check_in',
+]);
+
+function isTimingRule(node: ConditionNode): boolean {
+  return (
+    node.kind === 'rule' &&
+    node.left?.kind === 'variable' &&
+    TIMING_PATHS.has(node.left.path) &&
+    node.op === 'equals' &&
+    node.right?.kind === 'literal' &&
+    typeof node.right.value === 'number'
+  );
+}
+
+function stripTimingRules(group: ConditionGroup): ConditionGroup {
+  return {
+    ...group,
+    children: (group.children ?? [])
+      .filter((c) => !isTimingRule(c))
+      .map((c) => (c.kind === 'group' ? stripTimingRules(c) : c)),
+  };
+}
 import { summarizeAutomationFromRow } from '@/lib/automations/validate';
 import { evaluateConditions } from './conditions';
 import { renderTemplate } from './render';
@@ -109,8 +139,11 @@ async function runOneAutomation(
     }
   }
 
-  // 2. Conditions.
-  const passes = evaluateConditions(automation.conditions, {
+  // 2. Conditions. Timing rules (`this.days_until_* equals N`) are
+  // daily-scan-only sugar; on an event trigger they're orphaned config from
+  // a since-changed trigger and would silently gate the automation, so strip
+  // them before evaluating.
+  const passes = evaluateConditions(stripTimingRules(automation.conditions), {
     this: thisRow,
     today: builtins.today,
     now: builtins.now,
@@ -157,8 +190,12 @@ async function runOneAutomation(
         message,
         action.attachments ?? [],
       );
-      if (ok) delivered.push(channel_name || channel_id);
-      else await releaseDelivery(automation.id, signature, recipientKey);
+      if (ok) {
+        await confirmDelivery(automation.id, signature, recipientKey);
+        delivered.push(channel_name || channel_id);
+      } else {
+        await releaseDelivery(automation.id, signature, recipientKey);
+      }
     }
   }
 
@@ -266,9 +303,15 @@ async function downloadAttachment(storagePath: string): Promise<Buffer | null> {
   }
 }
 
+// A claimed-but-unconfirmed row older than this is an orphan (the worker that
+// claimed it crashed before posting). New attempts may take it over.
+const CLAIM_STALE_MS = 10 * 60 * 1000;
+
 /**
  * Try to claim a delivery slot. Returns true if we are responsible for
- * sending, false if someone else already did (unique violation).
+ * sending. A pre-existing row blocks us *unless* it's an orphaned claim
+ * (confirmed_at null and delivered_at older than CLAIM_STALE_MS), which we
+ * take over so a crashed worker can't lose the message forever.
  */
 async function claimDelivery(
   automationId: string,
@@ -282,11 +325,52 @@ async function claimDelivery(
     recipient_key: recipientKey,
   });
   if (!error) return true;
-  // 23505 = unique_violation. Anything else we treat as a soft failure but
-  // still skip the send to avoid double-firing on transient DB errors.
-  if (error.code === '23505') return false;
+  // 23505 = unique_violation: a row already exists for this tuple.
+  if (error.code === '23505') {
+    const { data: existing } = await supabase
+      .from('automation_deliveries')
+      .select('confirmed_at, delivered_at')
+      .match({
+        automation_id: automationId,
+        event_signature: signature,
+        recipient_key: recipientKey,
+      })
+      .maybeSingle();
+    if (!existing) return false;
+    if (existing.confirmed_at) return false; // truly delivered — dedup.
+    const age = Date.now() - new Date(existing.delivered_at).getTime();
+    if (age < CLAIM_STALE_MS) return false; // recent, another worker in-flight.
+    // Orphaned claim — take it over.
+    const { error: takeover } = await supabase
+      .from('automation_deliveries')
+      .update({ delivered_at: new Date().toISOString() })
+      .match({
+        automation_id: automationId,
+        event_signature: signature,
+        recipient_key: recipientKey,
+      })
+      .is('confirmed_at', null);
+    return !takeover;
+  }
+  // Other errors: skip the send to avoid double-firing on transient DB errors.
   console.warn('[automations] claimDelivery error', error);
   return false;
+}
+
+async function confirmDelivery(
+  automationId: string,
+  signature: string,
+  recipientKey: string,
+): Promise<void> {
+  const supabase = getSupabaseServer();
+  await supabase
+    .from('automation_deliveries')
+    .update({ confirmed_at: new Date().toISOString() })
+    .match({
+      automation_id: automationId,
+      event_signature: signature,
+      recipient_key: recipientKey,
+    });
 }
 
 async function releaseDelivery(

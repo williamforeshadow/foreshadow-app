@@ -53,9 +53,25 @@ function resolvePath(path: string, ctx: RenderContext): unknown {
   return cursor;
 }
 
+// A bare YYYY-MM-DD, or an ISO datetime whose date portion is what matters
+// (reservation dates come back as `2027-02-03T00:00:00-08:00`). Match the
+// leading calendar date so default rendering never UTC-shifts the day.
+const DATEISH_RE = /^(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}|$)/;
+
 function applyFilter(value: unknown, filter: string | undefined): string {
+  if (!filter) {
+    // No explicit formatter: a date-shaped value still reads better as
+    // "February 3, 2027" than as a raw ISO string.
+    if (typeof value === 'string') {
+      const m = DATEISH_RE.exec(value);
+      if (m) {
+        const [, y, mo, d] = m;
+        return formatDate(new Date(Number(y), Number(mo) - 1, Number(d)), 'PPP');
+      }
+    }
+    return stringify(value);
+  }
   const text = stringify(value);
-  if (!filter) return text;
 
   // `name:"arg"` or `name:arg` or just `name`.
   const match = /^([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*(.*))?$/.exec(filter);

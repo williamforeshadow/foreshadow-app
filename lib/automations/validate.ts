@@ -13,10 +13,18 @@ import type {
   ConditionGroup,
   ConditionNode,
   EntityKey,
+  Expression,
+  Operator,
   RowChangeKind,
   ScheduleConfig,
   SlackMessageAction,
 } from './types';
+import {
+  SUPPORTED_NODE_KINDS,
+  SUPPORTED_OPERATORS,
+  SUPPORTED_RECIPIENT_KINDS,
+  isSupportedPath,
+} from './engineCapabilities';
 
 const ENTITY_KEYS: EntityKey[] = ['reservation', 'task', 'property', 'user', 'department'];
 const ROW_CHANGE_KINDS: RowChangeKind[] = ['created', 'updated', 'deleted'];
@@ -200,10 +208,75 @@ function parseConditionGroup(
   }
   const match = group.match === 'any' ? 'any' : 'all';
   const children = Array.isArray(group.children) ? (group.children as ConditionNode[]) : [];
-  // Trust child shapes — they'll be evaluated at execution time and
-  // rejected if malformed. Rejecting partial trees here would block the
-  // editor's autosave.
+  // Validate the tree against what the engine can actually evaluate. The
+  // engine fails closed on anything else (silent non-fire), so saving such a
+  // shape produces an automation that looks fine but never runs. The
+  // constrained editor only ever emits supported shapes, so this rejects
+  // nothing a user can build — it only catches API / hand-edited / future
+  // drift. (Replaces the old "trust child shapes" passthrough.)
+  children.forEach((child, i) =>
+    validateConditionNode(child, `${path}.children[${i}]`, errors),
+  );
   return { kind: 'group', match, children };
+}
+
+function validateExpression(
+  expr: unknown,
+  path: string,
+  errors: ValidationError[],
+): void {
+  if (!expr || typeof expr !== 'object') {
+    errors.push({ path, message: 'expression is required' });
+    return;
+  }
+  const e = expr as Expression;
+  if (e.kind === 'variable') {
+    if (typeof e.path !== 'string' || !isSupportedPath(e.path)) {
+      errors.push({
+        path: `${path}.path`,
+        message: `unsupported variable path "${
+          (e as { path?: unknown }).path
+        }" — the engine can only resolve this.* / today / now`,
+      });
+    }
+  }
+}
+
+function validateConditionNode(
+  node: unknown,
+  path: string,
+  errors: ValidationError[],
+): void {
+  if (!node || typeof node !== 'object') {
+    errors.push({ path, message: 'condition node must be an object' });
+    return;
+  }
+  const n = node as ConditionNode;
+  if (!SUPPORTED_NODE_KINDS.includes(n.kind)) {
+    errors.push({
+      path: `${path}.kind`,
+      message: `node kind "${n.kind}" is not evaluable by the engine (only group / rule)`,
+    });
+    return;
+  }
+  if (n.kind === 'group') {
+    const kids = Array.isArray(n.children) ? n.children : [];
+    kids.forEach((c, i) =>
+      validateConditionNode(c, `${path}.children[${i}]`, errors),
+    );
+    return;
+  }
+  if (n.kind !== 'rule') return;
+  if (!SUPPORTED_OPERATORS.includes(n.op as Operator)) {
+    errors.push({
+      path: `${path}.op`,
+      message: `operator "${n.op}" is defined but not implemented by the engine`,
+    });
+  }
+  validateExpression(n.left, `${path}.left`, errors);
+  if (n.right !== undefined) {
+    validateExpression(n.right, `${path}.right`, errors);
+  }
 }
 
 function parseActions(raw: unknown, errors: ValidationError[]): AutomationAction[] | null {
@@ -218,10 +291,24 @@ function parseActions(raw: unknown, errors: ValidationError[]): AutomationAction
       errors.push({ path: `actions[${i}].kind`, message: 'only slack_message actions are supported' });
       continue;
     }
+    const recipients = Array.isArray(action.recipients) ? action.recipients : [];
+    recipients.forEach((r, ri) => {
+      const rp = `actions[${i}].recipients[${ri}]`;
+      const kind = (r as { kind?: unknown })?.kind;
+      // Only reject kinds the engine can NEVER deliver. An empty channel
+      // name is just an unfinished automation — the editor autosaves those
+      // and the engine harmlessly skips it, so don't block the save.
+      if (typeof kind !== 'string' || !SUPPORTED_RECIPIENT_KINDS.includes(kind)) {
+        errors.push({
+          path: `${rp}.kind`,
+          message: `recipient kind "${kind}" is not delivered by the engine (only channel)`,
+        });
+      }
+    });
     out.push({
       id: typeof action.id === 'string' ? action.id : `${Date.now()}-${i}`,
       kind: 'slack_message',
-      recipients: Array.isArray(action.recipients) ? action.recipients : [],
+      recipients,
       message_template: typeof action.message_template === 'string' ? action.message_template : '',
       attachments: parseAttachments(action.attachments, `actions[${i}].attachments`, errors),
       condition: action.condition,

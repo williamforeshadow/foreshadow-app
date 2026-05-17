@@ -202,7 +202,14 @@ export default function AutomationEditor({
         setName(a.name);
         setEnabled(a.enabled);
         setTrigger(a.trigger);
-        setConditions(a.conditions ?? emptyConditionGroup());
+        const loaded = a.conditions ?? emptyConditionGroup();
+        // Heal an existing automation that has an orphaned timing rule from a
+        // since-changed trigger: timing only applies to the daily-scan path.
+        setConditions(
+          a.trigger.kind === 'row_change'
+            ? buildConditions([], parseFilters(loaded))
+            : loaded,
+        );
         setActions(a.actions ?? []);
         setPropertyIds(a.property_ids ?? []);
       } catch (err) {
@@ -274,16 +281,21 @@ export default function AutomationEditor({
     if (nextIsRecurring) {
       setConditions(emptyConditionGroup());
       setPropertyIds([]);
+    } else if (next.kind === 'row_change') {
+      // Event triggers have no Timing concept. Drop any timing rule seeded
+      // by a previous daily-check selection so it doesn't linger orphaned
+      // (mis-summarized as "fire …" and silently gating the automation).
+      setConditions((prev) => buildConditions([], parseFilters(prev)));
     } else if (nextIsDailyCheck) {
       // Nudge correct use (and make the Timing UX/summary visible): a fresh
       // daily-check defaults to a concrete Timing rather than "Any". Only
       // seed when there's no timing rule yet, preserving any existing one
       // and attribute filters.
       setConditions((prev) =>
-        parseTiming(prev)
+        parseTimings(prev).length > 0
           ? prev
           : buildConditions(
-              { anchor: 'check_in', relation: 'before', days: 1 },
+              [{ anchor: 'check_in', relation: 'before', days: 1 }],
               parseFilters(prev),
             ),
       );
@@ -321,6 +333,11 @@ export default function AutomationEditor({
     [name, enabled, trigger, conditions, actions, propertyIds],
   );
 
+  const propertyNameMap = useMemo(
+    () => new Map(properties.map((p) => [p.id, p.name])),
+    [properties],
+  );
+
   // Build the numbered pipeline steps. Order/contents unchanged from before;
   // only the chrome (rail + cards) is new.
   const steps: {
@@ -341,9 +358,9 @@ export default function AutomationEditor({
       hint: "When, relative to the reservation, it should fire.",
       node: (
         <TimingControl
-          value={parseTiming(conditions)}
-          onChange={(timing) =>
-            setConditions(buildConditions(timing, parseFilters(conditions)))
+          value={parseTimings(conditions)}
+          onChange={(timings) =>
+            setConditions(buildConditions(timings, parseFilters(conditions)))
           }
         />
       ),
@@ -361,7 +378,7 @@ export default function AutomationEditor({
           onChange={(filterGroup) =>
             setConditions(
               buildConditions(
-                parseTiming(conditions),
+                parseTimings(conditions),
                 (filterGroup.children ?? []).filter(
                   (c): c is ConditionRule => c.kind === 'rule',
                 ),
@@ -554,7 +571,7 @@ export default function AutomationEditor({
                 Automation in natural language
               </p>
               <p className="mt-3 text-lg leading-relaxed text-foreground">
-                {summarizeAutomation(automation)}
+                {summarizeAutomation(automation, propertyNameMap)}
               </p>
             </div>
           </div>
@@ -1048,11 +1065,8 @@ function isTimingRule(node: ConditionNode): node is ConditionRule {
   );
 }
 
-function parseTiming(group: ConditionGroup): TimingValue | null {
-  const rule = (group.children ?? []).find(isTimingRule) as
-    | ConditionRule
-    | undefined;
-  if (!rule || rule.left.kind !== 'variable' || rule.right?.kind !== 'literal') {
+function ruleToTiming(rule: ConditionRule): TimingValue | null {
+  if (rule.left.kind !== 'variable' || rule.right?.kind !== 'literal') {
     return null;
   }
   const anchor = PATH_TO_ANCHOR[rule.left.path];
@@ -1060,6 +1074,13 @@ function parseTiming(group: ConditionGroup): TimingValue | null {
   if (v > 0) return { anchor, relation: 'before', days: v };
   if (v < 0) return { anchor, relation: 'after', days: -v };
   return { anchor, relation: 'on', days: 0 };
+}
+
+function parseTimings(group: ConditionGroup): TimingValue[] {
+  return (group.children ?? [])
+    .filter(isTimingRule)
+    .map((r) => ruleToTiming(r as ConditionRule))
+    .filter((t): t is TimingValue => t !== null);
 }
 
 function parseFilters(group: ConditionGroup): ConditionRule[] {
@@ -1080,12 +1101,13 @@ function timingToRule(t: TimingValue): ConditionRule {
 }
 
 function buildConditions(
-  timing: TimingValue | null,
+  timings: TimingValue[],
   filters: ConditionRule[],
 ): ConditionGroup {
-  const children: ConditionNode[] = [];
-  if (timing) children.push(timingToRule(timing));
-  children.push(...filters);
+  const children: ConditionNode[] = [
+    ...timings.map(timingToRule),
+    ...filters,
+  ];
   return { kind: 'group', match: 'all', children };
 }
 
@@ -1101,27 +1123,26 @@ const INLINE_INPUT =
 // neutral-100 + border (already legible on white).
 const RAISED_FIELD = 'dark:bg-neutral-700 dark:border-neutral-600';
 
-function TimingControl({
-  value,
+const DEFAULT_TIMING: TimingValue = {
+  anchor: 'check_in',
+  relation: 'before',
+  days: 1,
+};
+
+function TimingRow({
+  v,
   onChange,
+  showLabel,
 }: {
-  value: TimingValue | null;
-  onChange: (next: TimingValue | null) => void;
+  v: TimingValue;
+  onChange: (next: TimingValue) => void;
+  showLabel: boolean;
 }) {
-  const v: TimingValue = value ?? { anchor: 'check_in', relation: 'before', days: 1 };
-
-  // Picking "Run → On a schedule" *is* the choice to time relative to a
-  // reservation, so there's no mode toggle. If we somehow render with no
-  // timing rule yet (older saved automation), seed the default once so the
-  // card and summary are consistent.
-  useEffect(() => {
-    if (value === null) onChange(v);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value === null]);
-
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm">
-      <span className="text-neutral-600 dark:text-neutral-300">Fire</span>
+      {showLabel && (
+        <span className="text-neutral-600 dark:text-neutral-300">Fire</span>
+      )}
       {v.relation !== 'on' && (
         <Input
           type="number"
@@ -1141,10 +1162,9 @@ function TimingControl({
         onValueChange={(value) => {
           const relation = value as TimingRelation;
           // "on" compiles to `equals 0`. If we switch to before/after while
-          // days is still 0 it also compiles to 0 and parseTiming reads it
+          // days is still 0 it also compiles to 0 and parseTimings reads it
           // back as "on" — appearing stuck. Bump to 1 so it sticks.
-          const days =
-            relation === 'on' ? 0 : v.days > 0 ? v.days : 1;
+          const days = relation === 'on' ? 0 : v.days > 0 ? v.days : 1;
           onChange({ ...v, relation, days });
         }}
       >
@@ -1175,6 +1195,73 @@ function TimingControl({
           <SelectItem value="next_check_in">next check-in</SelectItem>
         </SelectContent>
       </Select>
+    </div>
+  );
+}
+
+function TimingControl({
+  value,
+  onChange,
+}: {
+  value: TimingValue[];
+  onChange: (next: TimingValue[]) => void;
+}) {
+  // Picking "Run → On a schedule" *is* the choice to time relative to a
+  // reservation. If we render with no timing rule yet (older saved
+  // automation), seed one default so the card/summary stay consistent.
+  useEffect(() => {
+    if (value.length === 0) onChange([DEFAULT_TIMING]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value.length === 0]);
+
+  const rows = value.length > 0 ? value : [DEFAULT_TIMING];
+
+  const updateAt = (i: number, next: TimingValue) =>
+    onChange(rows.map((r, idx) => (idx === i ? next : r)));
+  const removeAt = (i: number) =>
+    onChange(rows.filter((_, idx) => idx !== i));
+
+  return (
+    <div className="space-y-2">
+      {rows.map((v, i) => (
+        <div key={i}>
+          {i > 0 && (
+            <div className="my-1.5 flex items-center gap-2">
+              <span className="h-px flex-1 bg-border" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                and
+              </span>
+              <span className="h-px flex-1 bg-border" />
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <TimingRow
+                v={v}
+                onChange={(next) => updateAt(i, next)}
+                showLabel={i === 0}
+              />
+            </div>
+            {rows.length > 1 && (
+              <button
+                type="button"
+                onClick={() => removeAt(i)}
+                aria-label="Remove timing"
+                className="text-muted-foreground transition-colors hover:text-foreground"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...rows, DEFAULT_TIMING])}
+        className={`mt-1 rounded-md border border-input bg-transparent px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground ${RAISED_FIELD}`}
+      >
+        + AND
+      </button>
     </div>
   );
 }
@@ -1272,7 +1359,12 @@ function ScheduleConditionsEditor({
           />
         </div>
       ))}
-      <Button size="sm" variant="outline" onClick={addRule}>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={addRule}
+        className={RAISED_FIELD}
+      >
         + Add condition
       </Button>
     </div>

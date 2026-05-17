@@ -23,27 +23,11 @@ import type {
   Expression,
   Operator,
 } from '@/lib/automations/types';
+import { SUPPORTED_OPERATORS } from '@/lib/automations/engineCapabilities';
 
 type AnyValue = unknown;
 
-const SUPPORTED_OPS: Operator[] = [
-  'equals',
-  'not_equals',
-  'contains',
-  'not_contains',
-  'in',
-  'not_in',
-  'gt',
-  'gte',
-  'lt',
-  'lte',
-  'before',
-  'after',
-  'on_or_before',
-  'on_or_after',
-  'is_empty',
-  'is_not_empty',
-];
+const SUPPORTED_OPS: readonly Operator[] = SUPPORTED_OPERATORS;
 
 export interface EvalContext {
   /** The "this" row + one-level joined relations. */

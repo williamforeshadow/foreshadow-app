@@ -25,10 +25,18 @@ import type {
 import { describeVariablePath, OPERATOR_LABELS, ROW_CHANGE_LABELS } from './labels';
 import { ENTITY_SCHEMAS } from './entities';
 
-export function summarizeAutomation(automation: Automation): string {
+export function summarizeAutomation(
+  automation: Automation,
+  propertyNames?: Map<string, string>,
+): string {
   const { trigger } = automation;
   const scopeEntity = scopeOf(trigger);
   const actionClause = summarizeActions(automation.actions, scopeEntity);
+  const scopeClause = summarizePropertyScope(
+    automation,
+    scopeEntity,
+    propertyNames,
+  );
 
   // Reservation daily-check WITH a Timing rule: lead with the timing as an
   // imperative ("Fire 2 days before check-in, …") and drop the redundant
@@ -37,7 +45,8 @@ export function summarizeAutomation(automation: Automation): string {
     trigger.kind === 'schedule' && trigger.for_each?.entity === 'reservation';
   if (isResDailyCheck) {
     const children = automation.conditions?.children ?? [];
-    const timing = children.map(timingPhrase).find(Boolean) ?? null;
+    const timingPhrases = children.map(timingPhrase).filter(Boolean) as string[];
+  const timing = timingPhrases.length ? timingPhrases.join(' and ') : null;
     if (timing) {
       const filterChildren = children.filter((c) => timingPhrase(c) === null);
       const filtersInner =
@@ -49,6 +58,7 @@ export function summarizeAutomation(automation: Automation): string {
           : '';
       const hasFilters = filtersInner && filtersInner !== '(no conditions yet)';
       const parts = [`fire ${timing}`];
+      if (scopeClause) parts.push(scopeClause);
       if (hasFilters) parts.push(`if ${filtersInner}`);
       parts.push(actionClause);
       return capitalize(parts.join(', ')) + '.';
@@ -58,9 +68,36 @@ export function summarizeAutomation(automation: Automation): string {
   const triggerSentence = summarizeTrigger(trigger);
   const conditionClause = summarizeRootConditions(automation.conditions, scopeEntity);
   const parts: string[] = [triggerSentence];
+  if (scopeClause) parts.push(scopeClause);
   if (conditionClause) parts.push(conditionClause);
   parts.push(actionClause);
   return capitalize(parts.join(', ')) + '.';
+}
+
+// Property scope. `property_ids` is a first-class filter (empty = all). Only
+// meaningful when the automation is reservation-scoped — Recurring has no
+// property concept (picker disabled, ids cleared), so emit nothing there.
+function summarizePropertyScope(
+  automation: Automation,
+  scopeEntity: EntityKey | null,
+  propertyNames?: Map<string, string>,
+): string {
+  if (!scopeEntity) return '';
+  const ids = automation.property_ids ?? [];
+  if (ids.length === 0) return 'for all properties';
+
+  const names = ids
+    .map((id) => propertyNames?.get(id))
+    .filter((n): n is string => Boolean(n));
+
+  if (names.length === 0) {
+    return ids.length === 1
+      ? 'for 1 selected property'
+      : `for ${ids.length} selected properties`;
+  }
+  return names.length === 1
+    ? `for property ${names[0]}`
+    : `for properties ${listJoin(names, 'and')}`;
 }
 
 export function scopeOf(trigger: AutomationTrigger): EntityKey | null {
@@ -164,10 +201,11 @@ function summarizeRootConditions(
   if (!scopeEntity) return '';
   if (!group?.children || group.children.length === 0) return '';
 
-  // Pull the timing rule (if any) out and phrase it relatively; the rest
-  // are attribute filters phrased the normal way.
+  // This path is only reached for non-daily-check triggers (the daily-scan
+  // case is handled by the isResDailyCheck block in summarizeAutomation).
+  // Timing rules are daily-scan-only sugar; if one is orphaned here from a
+  // since-changed trigger, drop it rather than phrasing it as "fire …".
   const children = group.children ?? [];
-  const timing = children.map(timingPhrase).find(Boolean) ?? null;
   const filterChildren = children.filter((c) => timingPhrase(c) === null);
   const filtersInner =
     filterChildren.length > 0
@@ -175,8 +213,6 @@ function summarizeRootConditions(
       : '';
   const hasFilters = filtersInner && filtersInner !== '(no conditions yet)';
 
-  if (timing && hasFilters) return `fire ${timing}, if ${filtersInner}`;
-  if (timing) return `fire ${timing}`;
   if (hasFilters) return `if ${filtersInner}`;
   return '';
 }
