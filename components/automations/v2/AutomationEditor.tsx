@@ -24,6 +24,15 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Info } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipPortal,
+  TooltipPositioner,
+  TooltipPopup,
+  TooltipProvider,
+} from '@/components/ui/tooltip/tooltip';
 import type {
   Automation,
   AutomationAction,
@@ -36,7 +45,6 @@ import type {
   Expression,
   Operator,
   RowChangeKind,
-  ScheduleConfig,
   SlackMessageAction,
   SlackRecipient,
 } from '@/lib/automations/types';
@@ -313,32 +321,114 @@ export default function AutomationEditor({
     [name, enabled, trigger, conditions, actions, propertyIds],
   );
 
+  // Build the numbered pipeline steps. Order/contents unchanged from before;
+  // only the chrome (rail + cards) is new.
+  const steps: {
+    title: string;
+    hint?: string;
+    onRemove?: () => void;
+    node: React.ReactNode;
+    aside?: React.ReactNode;
+  }[] = [];
+  steps.push({
+    title: 'Trigger By',
+    hint: 'What kind of event starts this automation.',
+    node: <TriggerBlock trigger={trigger} onChange={handleTriggerChange} />,
+  });
+  if (trigger.kind === 'schedule' && !!trigger.for_each) {
+    steps.push({
+      title: 'Automation timing',
+      hint: "When, relative to the reservation, it should fire.",
+      node: (
+        <TimingControl
+          value={parseTiming(conditions)}
+          onChange={(timing) =>
+            setConditions(buildConditions(timing, parseFilters(conditions)))
+          }
+        />
+      ),
+    });
+    steps.push({
+      title: 'Conditions',
+      hint: 'Optional extra filters on the reservation itself.',
+      node: (
+        <ScheduleConditionsEditor
+          conditions={{
+            kind: 'group',
+            match: 'all',
+            children: parseFilters(conditions),
+          }}
+          onChange={(filterGroup) =>
+            setConditions(
+              buildConditions(
+                parseTiming(conditions),
+                (filterGroup.children ?? []).filter(
+                  (c): c is ConditionRule => c.kind === 'rule',
+                ),
+              ),
+            )
+          }
+          scopeEntity={scopeEntity}
+        />
+      ),
+    });
+  }
+  actions.forEach((action, index) => {
+    steps.push({
+      title: `Message${actions.length > 1 ? ` (${index + 1} of ${actions.length})` : ''}`,
+      hint: 'The action taken when everything above matches.',
+      onRemove:
+        actions.length > 1
+          ? () => setActions((list) => list.filter((a) => a.id !== action.id))
+          : undefined,
+      node: (
+        <ActionBlock
+          action={action}
+          channels={channels}
+          onChange={(next) =>
+            setActions((list) =>
+              list.map((a) => (a.id === action.id ? next : a)),
+            )
+          }
+        />
+      ),
+      aside: (
+        <VariablesCard
+          variableOptions={buildVariableOptions({ scopeEntity, rowChangeKind })}
+          onInsert={(path) =>
+            setActions((list) =>
+              list.map((a) =>
+                a.id === action.id
+                  ? { ...a, message_template: `${a.message_template}{{${path}}}` }
+                  : a,
+              ),
+            )
+          }
+        />
+      ),
+    });
+  });
+
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-neutral-50 dark:bg-background">
-      {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-6 py-4 dark:border-neutral-800 dark:bg-card">
-        <div className="min-w-0">
+    <TooltipProvider>
+    <div className="flex h-full flex-col overflow-hidden bg-white dark:bg-card">
+      {/* Sticky header */}
+      <div className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-4 border-b bg-white/80 px-6 py-3 backdrop-blur dark:bg-card/80">
+        <div className="flex min-w-0 items-center gap-4">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => router.push('/automations/new-engine')}
-            className="mb-1 px-0"
+            className="shrink-0 px-2 text-muted-foreground"
           >
             ← All automations
           </Button>
-          <div className="flex items-center gap-3">
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="h-10 max-w-xl border-0 bg-transparent px-0 text-2xl font-semibold shadow-none focus-visible:ring-0"
-            />
-            <Badge variant={enabled ? 'secondary' : 'outline'}>
-              {enabled ? 'Enabled' : 'Disabled'}
-            </Badge>
-          </div>
+          <Badge variant={enabled ? 'default' : 'outline'}>
+            {enabled ? 'Enabled' : 'Disabled'}
+          </Badge>
         </div>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
             <input
               type="checkbox"
               checked={enabled}
@@ -348,6 +438,7 @@ export default function AutomationEditor({
           </label>
           <Button
             variant="outline"
+            size="sm"
             disabled={!automationId || testing || saving || loading}
             title={
               !automationId
@@ -384,176 +475,169 @@ export default function AutomationEditor({
           >
             {testing ? 'Testing…' : 'Test'}
           </Button>
-          <Button onClick={handleSave} disabled={saving || loading}>
+          <Button size="sm" onClick={handleSave} disabled={saving || loading}>
             {saving ? 'Saving…' : 'Save'}
           </Button>
         </div>
       </div>
       {saveError && (
-        <div className="border-b border-red-200 bg-red-50 px-6 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
+        <div className="border-b border-destructive/30 bg-destructive/10 px-6 py-2 text-sm text-destructive">
           {saveError}
         </div>
       )}
       {testResult && (
-        <div className="border-b border-blue-200 bg-blue-50 px-6 py-2 text-sm text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
+        <div className="border-b border-[var(--turnover-purple-border)] bg-[var(--turnover-purple-bg)] px-6 py-2 text-sm text-foreground">
           {testResult}
         </div>
       )}
       {loading && (
-        <div className="border-b border-neutral-200 bg-neutral-50 px-6 py-2 text-sm text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="border-b bg-muted px-6 py-2 text-sm text-muted-foreground">
           Loading automation…
         </div>
       )}
 
-      {/* Live English summary — primary affordance for confirming intent. */}
-      <div className="border-b border-neutral-200 bg-gradient-to-r from-indigo-50 to-white px-6 py-4 dark:border-neutral-800 dark:from-indigo-950/30 dark:to-card">
-        <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
-          In plain English
-        </p>
-        <p className="mt-1 text-base leading-relaxed text-neutral-800 dark:text-neutral-100">
-          {summarizeAutomation(automation)}
-        </p>
-      </div>
-
-      {/* Property scope — only meaningful for reservation-oriented triggers.
-          Recurring has no reservation, so the chips are hidden there. */}
-      {isReservationScoped && (
-        <div className="border-b border-neutral-200 bg-white px-6 py-3 dark:border-neutral-800 dark:bg-card">
-          <PropertyScopePicker
-            properties={properties}
-            value={propertyIds}
-            onChange={setPropertyIds}
+      <div className="min-h-0 flex-1 overflow-auto">
+        <div className="mx-auto max-w-3xl px-6 py-8">
+          {/* Editable automation title */}
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Untitled automation"
+            className="mb-7 h-auto w-full rounded-none border-0 border-b border-dashed border-transparent bg-transparent px-0 py-1 text-2xl font-semibold shadow-none hover:border-border focus:border-border focus-visible:ring-0"
           />
-        </div>
-      )}
 
-      {/* Body: stacked flow */}
-      <div className="min-h-0 flex-1 overflow-auto p-6">
-        <div className="mx-auto flex max-w-3xl flex-col items-center gap-0">
-          <FlowBox label="Trigger" tone="trigger">
-            <TriggerBlock trigger={trigger} onChange={handleTriggerChange} />
-          </FlowBox>
-
-          {trigger.kind === 'schedule' && !!trigger.for_each && (
-            <>
-              <FlowConnector />
-              <FlowBox label="Timing" tone="condition">
-                <TimingControl
-                  value={parseTiming(conditions)}
-                  onChange={(timing) =>
-                    setConditions(
-                      buildConditions(timing, parseFilters(conditions)),
-                    )
-                  }
-                />
-              </FlowBox>
-              <FlowConnector />
-              <FlowBox label="Conditions" tone="condition">
-                <ScheduleConditionsEditor
-                  conditions={{
-                    kind: 'group',
-                    match: 'all',
-                    children: parseFilters(conditions),
-                  }}
-                  onChange={(filterGroup) =>
-                    setConditions(
-                      buildConditions(
-                        parseTiming(conditions),
-                        (filterGroup.children ?? []).filter(
-                          (c): c is ConditionRule => c.kind === 'rule',
-                        ),
-                      ),
-                    )
-                  }
-                  scopeEntity={scopeEntity}
-                />
-              </FlowBox>
-            </>
-          )}
-
-          {actions.map((action, index) => (
-            <div key={action.id} className="flex w-full flex-col items-center">
-              <FlowConnector />
-              <FlowBox
-                label={`Then${actions.length > 1 ? ` (${index + 1} of ${actions.length})` : ''}`}
-                tone="action"
-                onRemove={
-                  actions.length > 1
-                    ? () => setActions((list) => list.filter((a) => a.id !== action.id))
-                    : undefined
-                }
+          {/* Numbered pipeline */}
+          <div>
+            {steps.map((step, i) => (
+              <RailStep
+                key={`${step.title}-${i}`}
+                index={i}
+                total={steps.length + 1}
+                title={step.title}
+                hint={step.hint}
+                onRemove={step.onRemove}
+                aside={step.aside}
               >
-                <ActionBlock
-                  action={action}
-                  scopeEntity={scopeEntity}
-                  rowChangeKind={rowChangeKind}
-                  channels={channels}
-                  onChange={(next) =>
-                    setActions((list) =>
-                      list.map((a) => (a.id === action.id ? next : a)),
-                    )
-                  }
-                />
-              </FlowBox>
+                {step.node}
+              </RailStep>
+            ))}
+            {/* The rail continues into a "+" node — click to add a message */}
+            <div className="relative pb-6 pl-14">
+              <button
+                type="button"
+                onClick={() => setActions((list) => [...list, defaultAction()])}
+                aria-label="Add a message"
+                className="absolute left-0 top-1 grid h-10 w-10 place-items-center rounded-xl border border-dashed border-[var(--turnover-purple-border)] bg-[var(--turnover-purple-bg)] text-lg leading-none text-foreground shadow-sm transition hover:brightness-110"
+              >
+                +
+              </button>
+              <div className="flex h-10 items-center text-sm text-muted-foreground">
+                Add a message
+              </div>
             </div>
-          ))}
+          </div>
 
-          <FlowConnector />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setActions((list) => [...list, defaultAction()])}
-          >
-            + Do another thing
-          </Button>
+          {/* Applies-to — flush with the cards; muted on recurring */}
+          <div className="pl-14">
+            <PropertyScopePicker
+              properties={properties}
+              value={propertyIds}
+              onChange={setPropertyIds}
+              disabled={!isReservationScoped}
+            />
+          </div>
+
+          {/* Live natural-language summary — flush, trails everything */}
+          <div className="pl-14 pt-5">
+            <div className="rounded-xl border border-l-2 border-l-[#a78bfa] bg-white p-7 shadow-md dark:border-neutral-700 dark:bg-neutral-800">
+              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#a78bfa]">
+                Automation in natural language
+              </p>
+              <p className="mt-3 text-lg leading-relaxed text-foreground">
+                {summarizeAutomation(automation)}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+    </TooltipProvider>
   );
 }
 
 // ─── Flow box chrome ───────────────────────────────────────────────────
 
-function FlowBox({
-  label,
-  tone,
+// One step in the numbered vertical pipeline: a node badge + connecting
+// rail + an app-styled card. Pure chrome.
+function RailStep({
+  index,
+  total,
+  title,
+  hint,
   onRemove,
+  aside,
   children,
 }: {
-  label: string;
-  tone: 'trigger' | 'condition' | 'action';
+  index: number;
+  total: number;
+  title: string;
+  hint?: string;
   onRemove?: () => void;
+  aside?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const toneClass =
-    tone === 'trigger'
-      ? 'border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20'
-      : tone === 'condition'
-      ? 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20'
-      : 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20';
-
+  const isLast = index === total - 1;
+  const num = String(index + 1).padStart(2, '0');
   return (
-    <div
-      className={`w-full max-w-3xl rounded-xl border-2 ${toneClass} px-5 py-4 shadow-sm`}
-    >
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-xs font-bold uppercase tracking-widest text-neutral-700 dark:text-neutral-200">
-          {label}
-        </span>
-        {onRemove && (
-          <Button size="sm" variant="ghost" onClick={onRemove}>
-            Remove
-          </Button>
-        )}
+    <div className="relative pb-6 pl-14 last:pb-0">
+      {!isLast && (
+        <span
+          className="absolute bottom-0 left-[19px] top-11 w-px bg-border"
+          aria-hidden
+        />
+      )}
+      <div className="absolute left-0 top-1 grid h-10 w-10 place-items-center rounded-xl border border-[var(--turnover-purple-border)] bg-[var(--turnover-purple-bg)] font-mono text-[13px] text-foreground shadow-sm">
+        {num}
       </div>
-      <div>{children}</div>
+      <div className="flex gap-4">
+      <div className="min-w-0 flex-1 rounded-xl border bg-white p-5 shadow-md dark:border-neutral-700 dark:bg-neutral-800">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+            {hint && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={`About ${title}`}
+                      className="text-muted-foreground transition-colors hover:text-foreground"
+                    />
+                  }
+                >
+                  <Info className="h-3.5 w-3.5" />
+                </TooltipTrigger>
+                <TooltipPortal>
+                  <TooltipPositioner sideOffset={6}>
+                    <TooltipPopup className="max-w-[260px] text-xs leading-snug">
+                      {hint}
+                    </TooltipPopup>
+                  </TooltipPositioner>
+                </TooltipPortal>
+              </Tooltip>
+            )}
+          </div>
+          {onRemove && (
+            <Button size="sm" variant="ghost" onClick={onRemove}>
+              Remove
+            </Button>
+          )}
+        </div>
+        {children}
+      </div>
+      {aside && <div className="w-60 shrink-0">{aside}</div>}
+      </div>
     </div>
-  );
-}
-
-function FlowConnector() {
-  return (
-    <div className="my-1 h-8 w-px bg-neutral-300 dark:bg-neutral-700" aria-hidden />
   );
 }
 
@@ -577,26 +661,29 @@ function TriggerBlock({
 
   return (
     <div className="space-y-4">
-      <div>
-        <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-neutral-500">
-          Trigger by
-        </p>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant={isReservation ? 'default' : 'outline'}
-            onClick={() => onChange(byReservationEvent())}
-          >
-            Reservation(s)
-          </Button>
-          <Button
-            size="sm"
-            variant={!isReservation ? 'default' : 'outline'}
-            onClick={() => onChange(recurringTrigger())}
-          >
-            Recurring
-          </Button>
-        </div>
+      <div className="inline-flex rounded-lg border bg-secondary p-1">
+        <button
+          type="button"
+          onClick={() => onChange(byReservationEvent())}
+          className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+            isReservation
+              ? 'bg-[var(--turnover-purple-bg)] text-foreground border border-[var(--turnover-purple-border)] shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Reservation
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(recurringTrigger())}
+          className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+            !isReservation
+              ? 'bg-[var(--turnover-purple-bg)] text-foreground border border-[var(--turnover-purple-border)] shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Recurring
+        </button>
       </div>
 
       {isReservation ? (
@@ -612,13 +699,15 @@ function TriggerBlock({
                 )
               }
             >
-              <SelectTrigger className="w-full max-w-md">
+              <SelectTrigger className={`w-full max-w-md ${RAISED_FIELD}`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="created">As soon as it's created</SelectItem>
+                <SelectItem value="created">
+                  On creation, change, or deletion of a reservation
+                </SelectItem>
                 <SelectItem value="schedule">
-                  On a schedule (configure below)
+                  Relative to the timing of a reservation
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -658,14 +747,9 @@ function ScheduleTriggerEditor({
 }) {
   const { schedule } = trigger;
   const isDailyScan = mode === 'daily_scan';
-  const hour = scheduleHourLabel(schedule.time);
-  const helper = isDailyScan
-    ? `Checks every reservation each day at ${hour} and fires for those matching the conditions below.`
-    : describeScheduleCadence(schedule);
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-neutral-500">{helper}</p>
       <div
         className={
           isDailyScan
@@ -695,7 +779,7 @@ function ScheduleTriggerEditor({
                 });
               }}
             >
-              <SelectTrigger>
+              <SelectTrigger className={RAISED_FIELD}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -718,6 +802,7 @@ function ScheduleTriggerEditor({
               })
             }
             disabled={!isDailyScan && schedule.frequency === 'hour'}
+            className={RAISED_FIELD}
           />
         </LabeledField>
         <LabeledField label="Timezone">
@@ -730,7 +815,7 @@ function ScheduleTriggerEditor({
               })
             }
           >
-            <SelectTrigger>
+            <SelectTrigger className={RAISED_FIELD}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -795,8 +880,8 @@ function WeekdayPicker({
             onClick={() => toggle(d)}
             className={`h-8 w-8 rounded-full border text-xs font-medium transition-colors ${
               on
-                ? 'border-indigo-300 bg-indigo-100 text-indigo-800 dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200'
-                : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 dark:border-neutral-700 dark:bg-card dark:text-neutral-300'
+                ? 'border-[var(--turnover-purple-border)] bg-[var(--turnover-purple-bg)] text-foreground'
+                : 'border-input bg-transparent text-muted-foreground hover:border-[var(--turnover-purple-border)] hover:text-foreground'
             }`}
           >
             {label}
@@ -835,8 +920,8 @@ function MonthDayPicker({
             onClick={() => toggle(d)}
             className={`h-8 w-8 rounded-md border text-xs font-medium transition-colors ${
               on
-                ? 'border-indigo-300 bg-indigo-100 text-indigo-800 dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200'
-                : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 dark:border-neutral-700 dark:bg-card dark:text-neutral-300'
+                ? 'border-[var(--turnover-purple-border)] bg-[var(--turnover-purple-bg)] text-foreground'
+                : 'border-input bg-transparent text-muted-foreground hover:border-[var(--turnover-purple-border)] hover:text-foreground'
             }`}
           >
             {d}
@@ -1004,6 +1089,18 @@ function buildConditions(
   return { kind: 'group', match: 'all', children };
 }
 
+// Borderless "editable word" styling for the prose-style pickers so they
+// read as a sentence, not a row of boxes.
+const INLINE_TRIGGER =
+  'h-auto w-auto gap-1 border-0 bg-transparent px-1 py-0.5 shadow-none underline decoration-dotted decoration-[var(--turnover-purple-border)] underline-offset-4 hover:decoration-solid focus-visible:ring-0';
+const INLINE_INPUT =
+  'h-auto w-16 border-0 bg-transparent px-1 py-0.5 text-center shadow-none underline decoration-dotted decoration-[var(--turnover-purple-border)] underline-offset-4 focus-visible:ring-0';
+
+// Boxed grid fields sit *raised* above the card: in dark, one step lighter
+// than the card (#262626) with a clearer border. Light keeps shadcn's
+// neutral-100 + border (already legible on white).
+const RAISED_FIELD = 'dark:bg-neutral-700 dark:border-neutral-600';
+
 function TimingControl({
   value,
   onChange,
@@ -1033,7 +1130,7 @@ function TimingControl({
           onChange={(e) =>
             onChange({ ...v, days: Math.max(0, Number(e.target.value) || 0) })
           }
-          className="w-20"
+          className={INLINE_INPUT}
         />
       )}
       {v.relation !== 'on' && (
@@ -1041,11 +1138,17 @@ function TimingControl({
       )}
       <Select
         value={v.relation}
-        onValueChange={(value) =>
-          onChange({ ...v, relation: value as TimingRelation })
-        }
+        onValueChange={(value) => {
+          const relation = value as TimingRelation;
+          // "on" compiles to `equals 0`. If we switch to before/after while
+          // days is still 0 it also compiles to 0 and parseTiming reads it
+          // back as "on" — appearing stuck. Bump to 1 so it sticks.
+          const days =
+            relation === 'on' ? 0 : v.days > 0 ? v.days : 1;
+          onChange({ ...v, relation, days });
+        }}
       >
-        <SelectTrigger className="h-9 w-28 shrink-0">
+        <SelectTrigger className={INLINE_TRIGGER}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -1063,7 +1166,7 @@ function TimingControl({
           onChange({ ...v, anchor: value as TimingAnchor })
         }
       >
-        <SelectTrigger className="h-9 w-40 shrink-0">
+        <SelectTrigger className={INLINE_TRIGGER}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -1085,8 +1188,6 @@ const SCHEDULE_OPERATORS: { value: Operator; label: string }[] = [
   { value: 'not_contains', label: 'does not contain' },
   { value: 'gte', label: 'is at least' },
   { value: 'lte', label: 'is at most' },
-  { value: 'is_empty', label: 'is empty' },
-  { value: 'is_not_empty', label: 'is filled in' },
 ];
 
 function ScheduleConditionsEditor({
@@ -1153,13 +1254,6 @@ function ScheduleConditionsEditor({
 
   return (
     <div className="space-y-2">
-      {rules.length === 0 && (
-        <p className="text-sm text-neutral-500">
-          Optional extra filters on the reservation itself (e.g. guest name
-          contains “VIP”, stay length ≥ 7). Timing above already controls
-          <em> when</em> it fires.
-        </p>
-      )}
       {rules.map((rule, index) => (
         <div key={index}>
           {index > 0 && (
@@ -1204,10 +1298,10 @@ function ScheduleConditionRow({
     variableOptions.find((o) => o.path === leftPath)?.fieldType ?? '';
   const allowedOps: Operator[] =
     leftType === 'number'
-      ? ['equals', 'not_equals', 'gte', 'lte', 'is_empty', 'is_not_empty']
+      ? ['equals', 'not_equals', 'gte', 'lte']
       : ['string', 'id', 'enum'].includes(leftType)
-      ? ['equals', 'not_equals', 'contains', 'not_contains', 'is_empty', 'is_not_empty']
-      : ['equals', 'not_equals', 'is_empty', 'is_not_empty'];
+      ? ['equals', 'not_equals', 'contains', 'not_contains']
+      : ['equals', 'not_equals'];
   const operators = SCHEDULE_OPERATORS.filter((o) => allowedOps.includes(o.value));
 
   const setLeft = (path: string) => {
@@ -1215,10 +1309,10 @@ function ScheduleConditionRow({
       variableOptions.find((o) => o.path === path)?.fieldType ?? '';
     const nextAllowed: Operator[] =
       nextType === 'number'
-        ? ['equals', 'not_equals', 'gte', 'lte', 'is_empty', 'is_not_empty']
+        ? ['equals', 'not_equals', 'gte', 'lte']
         : ['string', 'id', 'enum'].includes(nextType)
-        ? ['equals', 'not_equals', 'contains', 'not_contains', 'is_empty', 'is_not_empty']
-        : ['equals', 'not_equals', 'is_empty', 'is_not_empty'];
+        ? ['equals', 'not_equals', 'contains', 'not_contains']
+        : ['equals', 'not_equals'];
     onChange({
       ...rule,
       left: { kind: 'variable', path },
@@ -1231,10 +1325,10 @@ function ScheduleConditionRow({
   };
 
   return (
-    <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,2fr)_auto] items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2 text-sm">
       {/* Left: variable picker */}
       <Select value={leftPath} onValueChange={setLeft}>
-        <SelectTrigger>
+        <SelectTrigger className={INLINE_TRIGGER}>
           <SelectValue placeholder="Pick a field…" />
         </SelectTrigger>
         <SelectContent>
@@ -1256,7 +1350,7 @@ function ScheduleConditionRow({
         value={rule.op}
         onValueChange={(value) => onChange({ ...rule, op: value as Operator })}
       >
-        <SelectTrigger>
+        <SelectTrigger className={INLINE_TRIGGER}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -1276,14 +1370,20 @@ function ScheduleConditionRow({
           }
           onChange={(e) => setRight({ kind: 'literal', value: e.target.value })}
           placeholder="value"
+          className={`${INLINE_INPUT} w-32 text-left`}
         />
       ) : (
-        <span className="text-sm text-neutral-400">—</span>
+        <span className="text-muted-foreground">—</span>
       )}
 
-      <Button size="sm" variant="ghost" onClick={() => onChange(null)}>
+      <button
+        type="button"
+        onClick={() => onChange(null)}
+        aria-label="Remove condition"
+        className="ml-auto text-muted-foreground transition-colors hover:text-foreground"
+      >
         ✕
-      </Button>
+      </button>
     </div>
   );
 }
@@ -1309,25 +1409,60 @@ function groupVariableOptions(options: VariableOption[]): GroupedVariableOptions
   return order.map((group) => ({ group, options: map.get(group)! }));
 }
 
+// ─── Variables side card ───────────────────────────────────────────────
+//
+// Sits to the right of a Message card. Clicking a variable appends
+// `{{path}}` to that message's text — identical to the old in-card
+// "Insert data" dropdown, just relocated.
+function VariablesCard({
+  variableOptions,
+  onInsert,
+}: {
+  variableOptions: VariableOption[];
+  onInsert: (path: string) => void;
+}) {
+  const grouped = groupVariableOptions(variableOptions);
+  return (
+    <div className="rounded-xl border bg-white p-4 shadow-md dark:border-neutral-700 dark:bg-neutral-800">
+      <h3 className="mb-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+        Variables
+      </h3>
+      <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+        {grouped.map(({ group, options }) => (
+          <div key={group}>
+            <p className="mb-1 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+              {group}
+            </p>
+            <div className="flex flex-col">
+              {options.map((opt) => (
+                <button
+                  key={opt.path}
+                  type="button"
+                  onClick={() => onInsert(opt.path)}
+                  className="rounded px-2 py-1 text-left text-sm text-foreground transition-colors hover:bg-accent/50"
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Action block ──────────────────────────────────────────────────────
 
 function ActionBlock({
   action,
-  scopeEntity,
-  rowChangeKind,
   channels,
   onChange,
 }: {
   action: AutomationAction;
-  scopeEntity: EntityKey | null;
-  rowChangeKind?: RowChangeKind;
   channels: SlackChannelOption[];
   onChange: (next: AutomationAction) => void;
 }) {
-  const variableOptions = useMemo(
-    () => buildVariableOptions({ scopeEntity, rowChangeKind }),
-    [scopeEntity, rowChangeKind],
-  );
   if (action.kind !== 'slack_message') return null;
 
   // v2.0.1: single channel recipient per action. We ensure the recipient list
@@ -1375,7 +1510,7 @@ function ActionBlock({
           value={channelRecipient.channel_id || undefined}
           onValueChange={updateChannel}
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger className={`w-full ${RAISED_FIELD}`}>
             <SelectValue placeholder="Pick a channel…" />
           </SelectTrigger>
           <SelectContent>
@@ -1404,7 +1539,7 @@ function ActionBlock({
 
       <div>
         <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">
-          Message
+          Text
         </h4>
         <Textarea
           rows={5}
@@ -1413,37 +1548,8 @@ function ActionBlock({
             onChange({ ...action, message_template: e.target.value })
           }
           placeholder="Same-day flip at {{this.property.name}} — {{this.guest_name}} out today."
-          className="font-mono text-sm"
+          className={`font-mono text-sm ${RAISED_FIELD}`}
         />
-        <div className="mt-2 flex items-center gap-2">
-          <span className="text-xs text-neutral-500">Insert data:</span>
-          <Select
-            value=""
-            onValueChange={(value) => {
-              if (!value) return;
-              onChange({
-                ...action,
-                message_template: `${action.message_template}{{${value}}}`,
-              });
-            }}
-          >
-            <SelectTrigger className="h-8 max-w-xs text-xs">
-              <SelectValue placeholder="Pick a field to insert…" />
-            </SelectTrigger>
-            <SelectContent>
-              {groupVariableOptions(variableOptions).map(({ group, options }) => (
-                <SelectGroup key={group}>
-                  <SelectLabel>{group}</SelectLabel>
-                  {options.map((opt) => (
-                    <SelectItem key={opt.path} value={opt.path}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
       </div>
 
       <AttachmentsBlock
@@ -1516,7 +1622,7 @@ function AttachmentsBlock({
           {attachments.map((a) => (
             <li
               key={a.id}
-              className="flex items-center justify-between rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm dark:border-neutral-800 dark:bg-card"
+              className="flex items-center justify-between rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-700"
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{a.name}</p>
@@ -1559,55 +1665,6 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-// Plain-English description of when a schedule fires.
-function describeScheduleCadence(schedule: ScheduleConfig): string {
-  if (schedule.frequency === 'hour') {
-    return 'Runs every hour.';
-  }
-  const hour = scheduleHourLabel(schedule.time);
-  if (schedule.frequency === 'day') {
-    return `Runs every day at ${hour}.`;
-  }
-  if (schedule.frequency === 'week') {
-    if ((schedule.weekdays ?? []).length === 0) {
-      return 'Runs weekly — pick at least one day.';
-    }
-    const days = schedule.weekdays
-      .slice()
-      .sort((a, b) => a - b)
-      .map((d) => WEEKDAY_NAMES[d] ?? '')
-      .filter(Boolean)
-      .join(', ');
-    return `Runs weekly on ${days} at ${hour}.`;
-  }
-  // month
-  if ((schedule.month_days ?? []).length === 0) {
-    return 'Runs monthly — pick at least one day.';
-  }
-  const days = schedule.month_days
-    .slice()
-    .sort((a, b) => a - b)
-    .map(ordinal)
-    .join(', ');
-  return `Runs on the ${days} of each month at ${hour}.`;
-}
-
-const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-function scheduleHourLabel(time: string): string {
-  const h = Number((time || '08:00').slice(0, 2));
-  if (Number.isNaN(h)) return time;
-  const period = h < 12 ? 'AM' : 'PM';
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12} ${period}`;
-}
-
-function ordinal(n: number): string {
-  const s = ['th', 'st', 'nd', 'rd'];
-  const v = n % 100;
-  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
-}
-
 // ─── Misc helpers ──────────────────────────────────────────────────────
 
 function LabeledField({
@@ -1618,10 +1675,10 @@ function LabeledField({
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-neutral-500">
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
         {label}
-      </p>
+      </span>
       {children}
     </div>
   );
@@ -1629,54 +1686,132 @@ function LabeledField({
 
 // ─── Property scope picker ─────────────────────────────────────────────
 
+// Collapsible, searchable scope selector. Same selection model as before:
+// `value=[]` means ALL properties; a non-empty list scopes to those ids.
+// Purely a presentational reorg of the old chip wall.
 function PropertyScopePicker({
   properties,
   value,
   onChange,
+  disabled,
 }: {
   properties: PropertyOption[];
   value: string[];
   onChange: (next: string[]) => void;
+  disabled?: boolean;
 }) {
-  const all = value.length === 0;
+  const [open, setOpenRaw] = useState(false);
+  const [query, setQuery] = useState('');
+  const setOpen = disabled ? () => {} : setOpenRaw;
+
   const toggle = (id: string) => {
     onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
   };
+
+  const summary =
+    value.length === 0
+      ? 'All properties'
+      : value.length === 1
+      ? properties.find((p) => p.id === value[0])?.name ?? '1 property'
+      : `${value.length} properties`;
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? properties.filter((p) => p.name.toLowerCase().includes(q))
+    : properties;
+
   return (
-    <div className="flex items-start gap-3">
-      <span className="mt-1 shrink-0 text-xs font-semibold uppercase tracking-wider text-neutral-500">
-        Properties
-      </span>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => onChange([])}
-          className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
-            all
-              ? 'border-indigo-300 bg-indigo-100 text-indigo-800 dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200'
-              : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 dark:border-neutral-700 dark:bg-card dark:text-neutral-300'
-          }`}
+    <div
+      className={`overflow-hidden rounded-xl border bg-white shadow-md dark:border-neutral-700 dark:bg-neutral-800 ${
+        disabled ? 'pointer-events-none opacity-50' : ''
+      }`}
+      aria-disabled={disabled || undefined}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-5 py-3.5 text-left transition-colors hover:bg-accent/40"
+      >
+        <span className="flex items-center gap-3">
+          <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+            Applies to
+          </span>
+          <span className="text-sm font-medium text-foreground">
+            {disabled ? 'Not applicable for recurring automations' : summary}
+          </span>
+          {!disabled && (
+            <span className="rounded-full border border-[var(--turnover-purple-border)] bg-[var(--turnover-purple-bg)] px-2 py-0.5 text-xs text-foreground">
+              {value.length === 0 ? properties.length : value.length}
+            </span>
+          )}
+        </span>
+        <span
+          className={`text-xs text-muted-foreground transition-transform ${open && !disabled ? 'rotate-180' : ''}`}
+          aria-hidden
         >
-          All properties
-        </button>
-        {properties.map((p) => {
-          const selected = value.includes(p.id);
-          return (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => toggle(p.id)}
-              className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
-                selected
-                  ? 'border-indigo-300 bg-indigo-100 text-indigo-800 dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200'
-                  : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 dark:border-neutral-700 dark:bg-card dark:text-neutral-300'
-              }`}
+          ▾
+        </span>
+      </button>
+      {open && !disabled && (
+        <div className="border-t px-5 pb-5 pt-4">
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search properties…"
+            className={`mb-3 ${RAISED_FIELD}`}
+          />
+          <div className="mb-3 flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onChange(properties.map((p) => p.id))}
             >
-              {p.name}
-            </button>
-          );
-        })}
-      </div>
+              Select all
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={value.length === 0}
+              onClick={() => onChange([])}
+            >
+              Clear
+            </Button>
+          </div>
+          <div className="max-h-60 overflow-y-auto pr-1">
+            {filtered.map((p) => {
+              const selected = value.includes(p.id);
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => toggle(p.id)}
+                  className="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent/50"
+                >
+                  <span
+                    className={`grid h-4 w-4 shrink-0 place-items-center rounded border text-[10px] ${
+                      selected
+                        ? 'border-[var(--turnover-purple-border)] bg-[var(--turnover-purple-bg)] text-foreground'
+                        : 'border-input'
+                    }`}
+                  >
+                    {selected ? '✓' : ''}
+                  </span>
+                  <span
+                    className={selected ? 'text-foreground' : 'text-muted-foreground'}
+                  >
+                    {p.name}
+                  </span>
+                </button>
+              );
+            })}
+            {filtered.length === 0 && (
+              <p className="px-2.5 py-2 text-sm text-muted-foreground">
+                No properties match “{query}”.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
