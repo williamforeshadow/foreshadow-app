@@ -757,11 +757,33 @@ export default function TimelineWindow({
 
     if (Object.keys(fieldUpdates).length > 0) {
       try {
-        await fetch('/api/update-task-fields', {
+        const res = await fetch('/api/update-task-fields', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ taskId, fields: fieldUpdates }),
         });
+        if (res.ok) {
+          // Optimistically reconcile local state — unlike status/schedule/
+          // assignment (which patch via their helpers), plain fields have no
+          // refetch path, so without this the panel rebuilds from stale
+          // reservations/recurringTasks on reopen and the edit looks lost.
+          // `fieldUpdates` keys (title/description/priority/department_id)
+          // already match the Task shape.
+          setLocalTask((prev: Task | null) =>
+            prev && prev.task_id === taskId ? { ...prev, ...fieldUpdates } : prev
+          );
+          setReservations(prev => prev.map(reservation => ({
+            ...reservation,
+            tasks: (reservation.tasks || []).map((task: Task) =>
+              task.task_id === taskId ? { ...task, ...fieldUpdates } : task
+            ),
+          })));
+          setRecurringTasks((prev: any[]) => prev.map((t: any) =>
+            t.task_id === taskId ? { ...t, ...fieldUpdates } : t
+          ));
+        } else {
+          console.error('Error updating task fields:', await res.json().catch(() => ({})));
+        }
       } catch (err) {
         console.error('Error updating task fields:', err);
       }
@@ -770,12 +792,13 @@ export default function TimelineWindow({
     if (directFields) {
       setTaskEditingFields(directFields);
     }
-  }, [localTask, handleUpdateTaskStatus, updateTurnoverTaskSchedule, updateTurnoverTaskAssignment]);
+  }, [localTask, handleUpdateTaskStatus, updateTurnoverTaskSchedule, updateTurnoverTaskAssignment, setReservations, setRecurringTasks]);
 
   const taskAsProject: Project | null = localTask ? {
     id: localTask.task_id,
     property_name: floatingData?.propertyName || localTask.property_name || null,
     bin_id: localTask.bin_id || null,
+    is_binned: localTask.is_binned ?? !!localTask.bin_id,
     template_id: localTask.template_id || null,
     template_name: localTask.template_name || null,
     title: localTask.title || localTask.template_name || 'Task',
@@ -1020,176 +1043,51 @@ export default function TimelineWindow({
     });
   }, [createDraftTask, closeGlobals]);
 
-  // Handle column moves from kanban drag/drop (assignment + schedule changes, atomically)
-  const handleKanbanColumnMove = useCallback(async (
-    itemType: 'task' | 'project',
-    itemId: string,
-    changes: {
-      assigneeId?: string | null;
-      scheduledDate?: string | null;
-      scheduledTime?: string | null;
-    }
-  ) => {
+  // Persist a task's full assignee list from a Timeline-Kanban drag, then
+  // optimistically reflect it across reservation tasks, recurring tasks, and
+  // the open detail panel. Empty list = unassigned.
+  const handleTimelineKanbanAssign = useCallback(async (taskId: string, userIds: string[]) => {
     try {
-      if (itemType === 'task') {
-        // Fire applicable API calls in parallel
-        const apiCalls: Promise<Response>[] = [];
+      const res = await apiFetch('/api/update-task-assignment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, userIds }),
+      });
+      if (!res.ok) {
+        const result = await res.json().catch(() => ({}));
+        throw new Error(result.error || 'Failed to update task assignment');
+      }
 
-        if (changes.assigneeId !== undefined) {
-          apiCalls.push(
-            apiFetch('/api/update-task-assignment', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                taskId: itemId,
-                userIds: changes.assigneeId ? [changes.assigneeId] : []
-              })
-            })
-          );
-        }
-
-        if (changes.scheduledDate !== undefined) {
-          apiCalls.push(
-            fetch('/api/update-task-schedule', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                taskId: itemId,
-                scheduledDate: changes.scheduledDate,
-                scheduledTime: changes.scheduledTime !== undefined ? changes.scheduledTime : undefined
-              })
-            })
-          );
-        }
-
-        const results = await Promise.all(apiCalls);
-        for (const res of results) {
-          if (!res.ok) {
-            const result = await res.json();
-            throw new Error(result.error || 'Failed to update task');
-          }
-        }
-
-        // Single atomic state update for tasks in reservations
-        const assignedUser = changes.assigneeId
-          ? users.find((u: any) => u.id === changes.assigneeId)
-          : null;
-
-        setReservations(prev => prev.map(reservation => ({
-          ...reservation,
-          tasks: (reservation.tasks || []).map((task: Task) => {
-            if (task.task_id !== itemId) return task;
-            const updated = { ...task };
-            if (changes.scheduledDate !== undefined) {
-              updated.scheduled_date = changes.scheduledDate;
-            }
-            if (changes.scheduledTime !== undefined) {
-              updated.scheduled_time = changes.scheduledTime;
-            }
-            if (changes.assigneeId !== undefined) {
-              updated.assigned_users = changes.assigneeId
-                ? [{
-                    user_id: changes.assigneeId,
-                    name: assignedUser?.name || '',
-                    avatar: assignedUser?.avatar || '',
-                    role: assignedUser?.role || ''
-                  }]
-                : [];
-            }
-            return updated;
-          })
-        })));
-
-        // Also update recurring tasks
-        setRecurringTasks((prev: any[]) => prev.map((t: any) => {
-          if (t.task_id !== itemId) return t;
-          const updated = { ...t };
-          if (changes.scheduledDate !== undefined) {
-            updated.scheduled_date = changes.scheduledDate;
-          }
-          if (changes.scheduledTime !== undefined) {
-            updated.scheduled_time = changes.scheduledTime;
-          }
-          if (changes.assigneeId !== undefined) {
-            updated.assigned_users = changes.assigneeId
-              ? [{
-                  user_id: changes.assigneeId,
-                  name: assignedUser?.name || '',
-                  avatar: assignedUser?.avatar || '',
-                  role: assignedUser?.role || ''
-                }]
-              : [];
-          }
-          return updated;
+      const assignedUsers = userIds
+        .map((id) => users.find((u: any) => u.id === id))
+        .filter(Boolean)
+        .map((u: any) => ({
+          user_id: u.id,
+          name: u.name || '',
+          avatar: u.avatar || '',
+          role: u.role || '',
         }));
 
-        // Sync floating detail panel if viewing this task
-        if (floatingData?.type === 'task' && localTask?.task_id === itemId) {
-          setLocalTask((prev: Task | null) => {
-            if (!prev) return prev;
-            const updated = { ...prev };
-            if (changes.scheduledDate !== undefined) updated.scheduled_date = changes.scheduledDate;
-            if (changes.scheduledTime !== undefined) updated.scheduled_time = changes.scheduledTime;
-            if (changes.assigneeId !== undefined) {
-              updated.assigned_users = changes.assigneeId
-                ? [{ user_id: changes.assigneeId, name: assignedUser?.name || '', avatar: assignedUser?.avatar || '', role: assignedUser?.role || '' }]
-                : [];
-            }
-            return updated;
-          });
-        }
+      setReservations(prev => prev.map(reservation => ({
+        ...reservation,
+        tasks: (reservation.tasks || []).map((task: Task) =>
+          task.task_id === taskId ? { ...task, assigned_users: assignedUsers } : task
+        ),
+      })));
 
-      } else {
-        // Project: build update payload with whatever changed
-        const projectPayload: Record<string, any> = {
-          user_id: currentUser?.id
-        };
-        if (changes.assigneeId !== undefined) {
-          projectPayload.assigned_user_ids = changes.assigneeId ? [changes.assigneeId] : [];
-        }
-        if (changes.scheduledDate !== undefined) {
-          projectPayload.scheduled_date = changes.scheduledDate;
-        }
-        if (changes.scheduledTime !== undefined) {
-          projectPayload.scheduled_time = changes.scheduledTime;
-        }
+      setRecurringTasks((prev: any[]) => prev.map((t: any) =>
+        t.task_id === taskId ? { ...t, assigned_users: assignedUsers } : t
+      ));
 
-        const res = await apiFetch(`/api/tasks-for-bin/${itemId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(projectPayload)
-        });
-
-        const result = await res.json();
-
-        if (!res.ok) {
-          throw new Error(result.error || 'Failed to update project');
-        }
-
-        if (result.data) {
-          const d = result.data;
-          setProjects(prev =>
-            prev.map(p => p.id === itemId ? d : p)
-          );
-          if (floatingData?.type === 'project' && (floatingData.item as Project).id === itemId) {
-            setFloatingData(prev => prev ? { ...prev, item: d } : null);
-            setProjectFields({
-              title: d.title,
-              description: d.description || null,
-              status: d.status,
-              priority: d.priority,
-              assigned_staff: d.project_assignments?.map((a: { user_id: string }) => a.user_id) || [],
-              department_id: d.department_id || '',
-              scheduled_date: d.scheduled_date || '',
-              scheduled_time: d.scheduled_time || '',
-            });
-          }
-        }
+      if (floatingData?.type === 'task' && localTask?.task_id === taskId) {
+        setLocalTask((prev: Task | null) =>
+          prev ? { ...prev, assigned_users: assignedUsers } : prev
+        );
       }
     } catch (err) {
-      console.error('Error updating column move:', err);
+      console.error('Error updating kanban assignment:', err);
     }
-  }, [currentUser?.id, setReservations, setRecurringTasks, users, floatingData, localTask]);
+  }, [users, setReservations, setRecurringTasks, floatingData, localTask]);
 
   // Extract ALL tasks from reservations + recurring tasks, tagged with property_name
   const allTasksWithProperty = useMemo(() => {
@@ -1783,8 +1681,10 @@ export default function TimelineWindow({
           <DayKanban
             date={kanbanDate}
             tasks={allScheduledTasks}
-            projects={[]}
-            users={users as any}
+            users={users}
+            openTaskId={
+              floatingData?.type === 'task' ? localTask?.task_id ?? null : null
+            }
             onClose={() => setViewMode('grid')}
             onTaskClick={(task, propertyName) => {
               closeGlobals();
@@ -1794,18 +1694,7 @@ export default function TimelineWindow({
                 propertyName,
               });
             }}
-            onProjectClick={(project, propertyName) => {
-              closeGlobals();
-              setFloatingData({
-                type: 'project',
-                item: project,
-                propertyName,
-              });
-            }}
-            onColumnMove={handleKanbanColumnMove}
-            allTasks={allTasksWithProperty}
-            allProjects={projects}
-            properties={properties}
+            onAssignChange={handleTimelineKanbanAssign}
             isFullScreen
           />
         </div>
@@ -1963,7 +1852,17 @@ export default function TimelineWindow({
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ taskId: task.task_id, fields: { bin_id: binId || null } }),
                   });
-                  setLocalTask(prev => prev ? { ...prev, bin_id: binId || null } : prev);
+                  const patch = { bin_id: binId || null };
+                  setLocalTask(prev => prev && prev.task_id === task.task_id ? { ...prev, ...patch } : prev);
+                  setReservations(prev => prev.map(r => ({
+                    ...r,
+                    tasks: (r.tasks || []).map((t: Task) =>
+                      t.task_id === task.task_id ? { ...t, ...patch } : t
+                    ),
+                  })));
+                  setRecurringTasks((prev: any[]) => prev.map((t: any) =>
+                    t.task_id === task.task_id ? { ...t, ...patch } : t
+                  ));
                   binsHook.fetchBins();
                 } catch (err) {
                   console.error('Error updating bin:', err);
@@ -1979,7 +1878,17 @@ export default function TimelineWindow({
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ taskId: task.task_id, fields }),
                   });
-                  setLocalTask(prev => prev ? { ...prev, is_binned: isBinned, ...(isBinned ? {} : { bin_id: null }) } : prev);
+                  const patch = { is_binned: isBinned, ...(isBinned ? {} : { bin_id: null }) };
+                  setLocalTask(prev => prev && prev.task_id === task.task_id ? { ...prev, ...patch } : prev);
+                  setReservations(prev => prev.map(r => ({
+                    ...r,
+                    tasks: (r.tasks || []).map((t: Task) =>
+                      t.task_id === task.task_id ? { ...t, ...patch } : t
+                    ),
+                  })));
+                  setRecurringTasks((prev: any[]) => prev.map((t: any) =>
+                    t.task_id === task.task_id ? { ...t, ...patch } : t
+                  ));
                   binsHook.fetchBins();
                 } catch (err) {
                   console.error('Error updating is_binned:', err);

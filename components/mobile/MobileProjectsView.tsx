@@ -7,7 +7,6 @@ import MobileProjectDetail from '@/components/mobile/MobileProjectDetail';
 import { ProjectsKanban } from '@/components/windows/projects/ProjectsKanban';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
-import { useKanbanTexture } from '@/lib/hooks/useKanbanTexture';
 import { useTaskBinGlobalView } from '@/lib/hooks/useTaskBinGlobalView';
 import { useAuth } from '@/lib/authContext';
 import { useDepartments } from '@/lib/departmentsContext';
@@ -254,7 +253,6 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
   // Column visibility for the kanban
   const activeBinId = screen.type !== 'bins' ? (screen as any).binId : null;
   const columnVis = useColumnVisibility(activeBinId, viewMode);
-  const { enabled: showBoardTexture } = useKanbanTexture();
 
   // Task Bin "Global" toggle. Mirrors ProjectsWindow desktop: when ON inside
   // the Task Bin (activeBinId === null), widens the kanban to every binned
@@ -636,7 +634,6 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
                 onColumnMove={handleColumnMove}
                 visibleColumnIds={columnVis.visibleIds}
                 onDraggingChange={setKanbanDragging}
-                showTexture={showBoardTexture}
                 bins={binsHook.bins}
                 selectionMode={kanbanSelectionMode}
                 onSelectionModeChange={setKanbanSelectionMode}

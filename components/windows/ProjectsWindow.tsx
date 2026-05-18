@@ -7,7 +7,6 @@ import type { ProjectViewMode, ProjectBin } from '@/lib/types';
 import { STATUS_LABELS, STATUS_ORDER, PRIORITY_LABELS, PRIORITY_ORDER } from '@/lib/types';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
-import { useKanbanTexture } from '@/lib/hooks/useKanbanTexture';
 import { useTaskBinGlobalView } from '@/lib/hooks/useTaskBinGlobalView';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
@@ -292,9 +291,6 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
 
   // Column visibility
   const columnVis = useColumnVisibility(selectedBinId, viewMode);
-
-  // Board texture preference
-  const { enabled: showBoardTexture } = useKanbanTexture();
 
   // Task Bin "Global" toggle. When ON inside the Task Bin view, the kanban
   // widens to every binned task (Task Bin orphans + every sub-bin) by
@@ -822,7 +818,6 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
             getUnreadCommentCount={getUnreadCommentCount}
             onColumnMove={handleColumnMove}
             visibleColumnIds={columnVis.visibleIds}
-            showTexture={showBoardTexture}
             bins={binsHook.bins}
             selectionMode={kanbanSelectionMode}
             onSelectionModeChange={setKanbanSelectionMode}

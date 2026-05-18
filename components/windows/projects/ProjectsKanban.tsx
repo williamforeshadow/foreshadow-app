@@ -53,7 +53,6 @@ interface ProjectsKanbanProps {
   onColumnMove: (projectId: string, field: string, value: string) => void;
   visibleColumnIds?: Set<string>;
   onDraggingChange?: (isDragging: boolean) => void;
-  showTexture?: boolean;
   // Bulk dismiss: called with the ids the user selected via the kanban's
   // built-in selection mode. Optional — when omitted, the selection toolbar
   // is hidden entirely (used outside of bin views where dismiss isn't
@@ -86,7 +85,6 @@ export function ProjectsKanban({
   onColumnMove,
   visibleColumnIds,
   onDraggingChange,
-  showTexture = true,
   onBulkDismiss,
   selectionMode: selectionModeProp,
   onSelectionModeChange,
@@ -507,12 +505,6 @@ export function ProjectsKanban({
         accessibility={{ announcements }}
       >
         <div className={styles.board} data-kanban-board="true">
-          {showTexture && (
-            <div
-              className={styles.boardTexture}
-              style={{ backgroundImage: "url('/images/kanban-bg-doodles.png')" }}
-            />
-          )}
           {columns.map((column) => (
             <div key={column.id} className={cn(styles.column, column.accent)} data-kanban-column="true">
               {/* Column Header */}

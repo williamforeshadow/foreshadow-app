@@ -4,8 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 
 // localStorage key for the Task Bin's "Global" toggle. Persisting it means
 // the user's last preference survives navigation away from / back to the
-// Task Bin and full page reloads — same UX as useKanbanTexture and
-// useColumnVisibility.
+// Task Bin and full page reloads — same UX as useColumnVisibility.
 const STORAGE_KEY = 'foreshadow_task_bin_global_view';
 
 /**
@@ -20,7 +19,7 @@ const STORAGE_KEY = 'foreshadow_task_bin_global_view';
  * toggle is on. This is the user-facing replacement for the old "All Bins"
  * tile / sentinel in the bins picker.
  *
- * `mounted` mirrors useKanbanTexture's pattern: we render the OFF default
+ * `mounted` gates hydration: we render the OFF default
  * during SSR / before localStorage hydration to avoid markup mismatch, and
  * the consumer can defer interactive UI until mounted=true if it wants.
  */

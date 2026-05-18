@@ -20,7 +20,6 @@ import {
   type DashboardView,
 } from '@/lib/dashboardViews';
 import { useAuth } from '@/lib/authContext';
-import { useKanbanTexture } from '@/lib/hooks/useKanbanTexture';
 import { useSidebar } from '@/lib/sidebarContext';
 
 type SidebarProps = {
@@ -138,7 +137,6 @@ export default function Sidebar({
     setWorkspaceOpen,
   } = useSidebar();
   const { user, role, loading, canEditTemplates, signOut } = useAuth();
-  const kanbanTexture = useKanbanTexture();
 
   const roleColors: Record<string, string> = {
     superadmin: 'bg-purple-500',
@@ -345,30 +343,6 @@ export default function Sidebar({
                       Theme
                     </span>
                     <ModeToggle />
-                  </div>
-                </div>
-
-                <div className="px-2 py-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-neutral-700 dark:text-neutral-300 flex items-center gap-2">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-                      </svg>
-                      Texture
-                    </span>
-                    <button
-                      type="button"
-                      onClick={kanbanTexture.toggle}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                        kanbanTexture.enabled ? 'bg-neutral-800 dark:bg-white' : 'bg-neutral-300 dark:bg-neutral-600'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform dark:bg-[#111114] ${
-                          kanbanTexture.enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'
-                        }`}
-                      />
-                    </button>
                   </div>
                 </div>
 
