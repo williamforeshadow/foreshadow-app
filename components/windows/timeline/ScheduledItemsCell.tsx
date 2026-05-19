@@ -6,6 +6,7 @@ import {
   HoverCardTrigger,
   HoverCardArrow,
 } from '@/components/ui/hover-card';
+import { useDraggable } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useDepartments } from '@/lib/departmentsContext';
@@ -39,6 +40,45 @@ const byScheduleThenTitle = (a: Task, b: Task) => {
   const nb = b.title || b.template_name || 'Task';
   return na.localeCompare(nb);
 };
+
+/**
+ * Drag wrapper: makes a task icon/dot draggable to reschedule it onto another
+ * day. The grid-level DndContext (TimelineWindow) handles drop → reschedule.
+ * The child keeps its own onClick — a MouseSensor activation distance
+ * separates a click (open task) from a drag.
+ */
+function DraggableTask({
+  task,
+  propertyName,
+  cellDateStr,
+  children,
+}: {
+  task: Task;
+  propertyName: string;
+  cellDateStr: string;
+  children: React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: task.task_id,
+    data: {
+      taskId: task.task_id,
+      property: propertyName,
+      scheduledTime: task.scheduled_time ?? null,
+      currentDate: cellDateStr,
+      status: task.status,
+    },
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      className={cn('inline-flex', isDragging && 'opacity-50')}
+    >
+      {children}
+    </div>
+  );
+}
 
 /** One task = one icon: department glyph on a status-marble background. */
 function TaskIcon({
@@ -118,26 +158,32 @@ export function ScheduledItemsCell({
         {scheduledTasks.map((task) => {
           const isContingent = task.status === 'contingent';
           return (
-            <span
+            <DraggableTask
               key={task.task_id}
-              role="button"
-              tabIndex={0}
-              title={task.title || task.template_name || 'Task'}
-              onClick={(e) => {
-                e.stopPropagation();
-                onTaskClick?.(task);
-              }}
-              className={cn(
-                'w-2.5 h-2.5 rounded-full shrink-0 cursor-pointer',
-                isContingent &&
-                  'border border-dashed border-[rgba(30,25,20,0.4)] dark:border-[rgba(255,255,255,0.4)]',
-              )}
-              style={
-                isContingent
-                  ? undefined
-                  : { background: marbleBackground[task.status] || marbleBackground.not_started }
-              }
-            />
+              task={task}
+              propertyName={propertyName}
+              cellDateStr={cellDateStr}
+            >
+              <span
+                role="button"
+                tabIndex={0}
+                title={task.title || task.template_name || 'Task'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTaskClick?.(task);
+                }}
+                className={cn(
+                  'w-2.5 h-2.5 rounded-full shrink-0 cursor-pointer',
+                  isContingent &&
+                    'border border-dashed border-[rgba(30,25,20,0.4)] dark:border-[rgba(255,255,255,0.4)]',
+                )}
+                style={
+                  isContingent
+                    ? undefined
+                    : { background: marbleBackground[task.status] || marbleBackground.not_started }
+                }
+              />
+            </DraggableTask>
           );
         })}
       </div>
@@ -151,7 +197,14 @@ export function ScheduledItemsCell({
   const iconRow = (
     <div className="flex items-center gap-0.5">
       {visible.map((task) => (
-        <TaskIcon key={task.task_id} task={task} size={viewMode} onClick={onTaskClick} />
+        <DraggableTask
+          key={task.task_id}
+          task={task}
+          propertyName={propertyName}
+          cellDateStr={cellDateStr}
+        >
+          <TaskIcon task={task} size={viewMode} onClick={onTaskClick} />
+        </DraggableTask>
       ))}
       {overflow > 0 && (
         <div

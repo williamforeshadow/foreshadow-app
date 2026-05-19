@@ -11,7 +11,19 @@ import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
 import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
+import {
+  DndContext,
+  DragOverlay,
+  MouseSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  closestCenter,
+  type DragStartEvent,
+  type DragEndEvent,
+} from '@dnd-kit/core';
 import { ScheduledItemsCell, DayKanban } from './timeline';
+import { marbleBackground } from './timeline/timelineStatus';
 import { TaskRowList } from './timeline/TaskRowList';
 import { AttachmentLightbox, ProjectActivitySheet, ProjectDetailPanel } from './projects';
 import { TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
@@ -59,6 +71,34 @@ type FloatingWindowData = {
   item: Task | Project | Turnover;
   propertyName: string;
 } | null;
+
+// Droppable date cell: a task icon/dot dragged onto it reschedules the task
+// to this day (same-property only — see handleTaskDragEnd). Forwards the
+// original cell className/onClick/children unchanged; adds a ring only when a
+// valid same-property drag is hovering.
+function DroppableDateCell({
+  property,
+  dateStr,
+  className,
+  onClick,
+  children,
+}: {
+  property: string;
+  dateStr: string;
+  className: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef } = useDroppable({
+    id: `${property}__${dateStr}`,
+    data: { property, dateStr },
+  });
+  return (
+    <div ref={setNodeRef} className={className} onClick={onClick}>
+      {children}
+    </div>
+  );
+}
 
 export default function TimelineWindow({
   users,
@@ -454,50 +494,142 @@ export default function TimelineWindow({
   }, [floatingData, setReservations]);
 
   const updateTurnoverTaskSchedule = useCallback(async (taskId: string, scheduledDate: string | null, scheduledTime: string | null) => {
+    // Optimistic-first: move the task in local state immediately so the grid
+    // repaints on drop with no network wait. The fetch runs after; on failure
+    // we resync from the server (self-heals the bad optimistic move).
+    setReservations(prev => prev.map(reservation => ({
+      ...reservation,
+      tasks: (reservation.tasks || []).map((task: Task) =>
+        task.task_id === taskId ? { ...task, scheduled_date: scheduledDate, scheduled_time: scheduledTime } : task
+      )
+    })));
+
+    setRecurringTasks((prev: any[]) => prev.map((t: any) =>
+      t.task_id === taskId ? { ...t, scheduled_date: scheduledDate, scheduled_time: scheduledTime } : t
+    ));
+
+    setLocalTask(prev => {
+      if (!prev || prev.task_id !== taskId) return prev;
+      return { ...prev, scheduled_date: scheduledDate, scheduled_time: scheduledTime };
+    });
+
+    if (floatingData?.type === 'turnover') {
+      setFloatingData(prev => {
+        if (!prev || prev.type !== 'turnover') return prev;
+        const turnover = prev.item as Turnover;
+        return {
+          ...prev,
+          item: {
+            ...turnover,
+            tasks: turnover.tasks.map(task =>
+              task.task_id === taskId ? { ...task, scheduled_date: scheduledDate, scheduled_time: scheduledTime } : task
+            )
+          }
+        };
+      });
+    }
+
     try {
       const res = await fetch('/api/update-task-schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId, scheduledDate, scheduledTime })
       });
-
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Failed to update task schedule');
-
-      // Update task in reservations
-      setReservations(prev => prev.map(reservation => ({
-        ...reservation,
-        tasks: (reservation.tasks || []).map((task: Task) => 
-          task.task_id === taskId ? { ...task, scheduled_date: scheduledDate, scheduled_time: scheduledTime } : task
-        )
-      })));
-
-      // Update localTask if it's the same task
-      setLocalTask(prev => {
-        if (!prev || prev.task_id !== taskId) return prev;
-        return { ...prev, scheduled_date: scheduledDate, scheduled_time: scheduledTime };
-      });
-
-      // Update floatingData if viewing a turnover
-      if (floatingData?.type === 'turnover') {
-        setFloatingData(prev => {
-          if (!prev || prev.type !== 'turnover') return prev;
-          const turnover = prev.item as Turnover;
-          return {
-            ...prev,
-            item: {
-              ...turnover,
-              tasks: turnover.tasks.map(task => 
-                task.task_id === taskId ? { ...task, scheduled_date: scheduledDate, scheduled_time: scheduledTime } : task
-              )
-            }
-          };
-        });
+      if (!res.ok) {
+        const result = await res.json().catch(() => ({}));
+        throw new Error(result.error || 'Failed to update task schedule');
       }
     } catch (err) {
       console.error('Error updating task schedule:', err);
+      // Resync from the server to undo the optimistic move.
+      fetchReservations();
     }
-  }, [floatingData, setReservations]);
+  }, [floatingData, setReservations, setRecurringTasks, fetchReservations]);
+
+  // ── Grid drag-and-drop: reschedule a task by dragging its icon/dot onto
+  // another day in the SAME property row. Activation distance keeps clicks
+  // (open task / open reservation) working.
+  const dndSensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+  );
+  const [draggingTask, setDraggingTask] = useState<{
+    property: string;
+    scheduledTime: string | null;
+    currentDate: string;
+    status: string;
+  } | null>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const cellWidthRef = useRef(0);
+
+  // Lock the drag to the horizontal axis and snap the overlay to whole
+  // column-widths so it jumps cell-to-cell instead of free-floating.
+  // (cellWidthRef is measured once on drag start.)
+  const snapXModifier = useCallback(
+    ({ transform }: { transform: { x: number; y: number; scaleX: number; scaleY: number } }) => {
+      const w = cellWidthRef.current;
+      return {
+        ...transform,
+        y: 0,
+        x: w > 0 ? Math.round(transform.x / w) * w : transform.x,
+      };
+    },
+    [],
+  );
+
+  const handleTaskDragStart = useCallback((e: DragStartEvent) => {
+    // Width is stable for the duration of a drag — measure once here instead
+    // of wiring a ResizeObserver. 200 = the sticky property column.
+    const el = gridRef.current;
+    cellWidthRef.current = el
+      ? (el.clientWidth - 200) / Math.max(1, dateRange.length)
+      : 0;
+    const d = e.active.data.current as
+      | { property: string; scheduledTime: string | null; currentDate: string; status: string }
+      | undefined;
+    if (d) {
+      setDraggingTask({
+        property: d.property,
+        scheduledTime: d.scheduledTime ?? null,
+        currentDate: d.currentDate,
+        status: d.status,
+      });
+    }
+  }, [dateRange.length]);
+
+  const handleTaskDragEnd = useCallback((e: DragEndEvent) => {
+    const a = e.active.data.current as
+      | { taskId: string; property: string; scheduledTime: string | null; currentDate: string }
+      | undefined;
+    const o = e.over?.data.current as { property: string; dateStr: string } | undefined;
+    setDraggingTask(null);
+    if (a && o && o.property === a.property && o.dateStr !== a.currentDate) {
+      updateTurnoverTaskSchedule(a.taskId, o.dateStr, a.scheduledTime ?? null);
+    }
+  }, [updateTurnoverTaskSchedule]);
+
+  // Stable handler + memoized modifiers array: passing inline/unstable values
+  // to DndContext makes its internal effect dependency list churn (the
+  // "useLayoutEffect changed size" error).
+  const handleTaskDragCancel = useCallback(() => setDraggingTask(null), []);
+  const dndModifiers = useMemo(() => [snapXModifier], [snapXModifier]);
+
+  // Freeze scrolling while a task is being dragged WITHOUT removing the
+  // scrollbar (overflow stays `auto`, so no grid reflow). The horizontal-only
+  // overlay can't compensate for a scroll, so an unblocked scroll mid-drag
+  // would pull the task off its property row.
+  const scrollLockRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!draggingTask) return;
+    const el = scrollLockRef.current;
+    if (!el) return;
+    const prevent = (ev: Event) => ev.preventDefault();
+    el.addEventListener('wheel', prevent, { passive: false });
+    el.addEventListener('touchmove', prevent, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', prevent);
+      el.removeEventListener('touchmove', prevent);
+    };
+  }, [draggingTask]);
 
   const fetchAvailableTemplates = useCallback(async () => {
     try {
@@ -1351,8 +1483,18 @@ export default function TimelineWindow({
 
       {/* Content Area - Grid or Kanban based on viewMode */}
       {viewMode === 'grid' ? (
-      <div className="flex-1 overflow-auto px-4 pb-4">
+      <DndContext
+        sensors={dndSensors}
+        collisionDetection={closestCenter}
+        modifiers={dndModifiers}
+        autoScroll={false}
+        onDragStart={handleTaskDragStart}
+        onDragEnd={handleTaskDragEnd}
+        onDragCancel={handleTaskDragCancel}
+      >
+      <div ref={scrollLockRef} className="flex-1 overflow-auto px-4 pb-4">
           <div
+            ref={gridRef}
             className="grid border border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] w-full overflow-x-clip"
             style={{
               gridTemplateColumns: `200px repeat(${dateRange.length}, minmax(0, 1fr))`
@@ -1490,14 +1632,17 @@ export default function TimelineWindow({
                   {/* Date Cells with embedded reservations */}
                   {dateRange.map((date, idx) => {
                     const isTodayDate = isToday(date);
+                    const cellDateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
                     const startingReservation = propertyReservations.find(res => {
                       const { start } = getBlockPosition(res.check_in, res.check_out);
                       return start === idx;
                     });
 
                     return (
-                      <div
+                      <DroppableDateCell
                         key={idx}
+                        property={property}
+                        dateStr={cellDateStr}
                         className={`group border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] h-[56px] relative overflow-visible ${isTodayDate ? 'today-tint' : 'bg-white dark:bg-[var(--timeline-surface-2)]'}`}
                         onClick={() => {
                           const res = propertyReservations.find(r => {
@@ -1595,7 +1740,7 @@ export default function TimelineWindow({
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14m7-7H5" />
                           </svg>
                         </button>
-                      </div>
+                      </DroppableDateCell>
                     );
                   })}
 
@@ -1644,6 +1789,15 @@ export default function TimelineWindow({
             })}
           </div>
       </div>
+      <DragOverlay dropAnimation={null}>
+        {draggingTask ? (
+          <div
+            className="w-6 h-6 rounded shadow-lg"
+            style={{ background: marbleBackground[draggingTask.status] || marbleBackground.not_started }}
+          />
+        ) : null}
+      </DragOverlay>
+      </DndContext>
       ) : (
         /* Full-screen Kanban View */
         <div className="flex-1 overflow-hidden">
