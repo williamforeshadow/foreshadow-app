@@ -12,6 +12,7 @@ import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
 import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { ScheduledItemsCell, DayKanban } from './timeline';
+import { TaskRowList } from './timeline/TaskRowList';
 import { AttachmentLightbox, ProjectActivitySheet, ProjectDetailPanel } from './projects';
 import { TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
 import { DayDetailPanel } from '@/components/tasks/DayDetailPanel';
@@ -30,13 +31,6 @@ import { UserAvatar } from '@/components/ui/user-avatar';
 import { useExclusiveDetailPanelHost, useReservationViewer } from '@/lib/reservationViewerContext';
 import { useRouter } from 'next/navigation';
 import { taskPath } from '@/src/lib/links';
-
-const marbleBackground: Record<string, string> = {
-  not_started: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.35) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.18) 10%, transparent 40%, rgba(255,255,255,0.12) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #A78BFA`,
-  in_progress: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.3) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.18) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.15) 10%, transparent 40%, rgba(255,255,255,0.1) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.1) 0%, transparent 55%), #6366F1`,
-  paused: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.3) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.15) 10%, transparent 40%, rgba(255,255,255,0.1) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #8B7FA8`,
-  complete: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.25) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.15) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.12) 10%, transparent 40%, rgba(255,255,255,0.08) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.1) 0%, transparent 55%), #4C4869`,
-};
 
 const getRowStyles = (status: string) => {
   const base = 'relative overflow-hidden rounded-lg';
@@ -1366,15 +1360,17 @@ export default function TimelineWindow({
           >
             {/* Header Row - will stick when scrolling */}
             <div className="bg-white dark:bg-[var(--timeline-surface-2)] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] px-2 py-1 text-xs font-semibold text-[#6b6963] dark:text-[#9a9893] uppercase tracking-[0.06em] sticky left-0 top-0 z-30 flex items-center gap-1.5">
-              <button
-                onClick={toggleAllExpanded}
-                className="p-0.5 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.05)] transition-colors"
-                title={expandedProperties.size === properties.length ? 'Collapse all' : 'Expand all'}
-              >
-                <svg className={`w-3 h-3 transition-transform duration-200 ${expandedProperties.size === properties.length ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
+              {view !== 'month' && (
+                <button
+                  onClick={toggleAllExpanded}
+                  className="p-0.5 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.05)] transition-colors"
+                  title={expandedProperties.size === properties.length ? 'Collapse all' : 'Expand all'}
+                >
+                  <svg className={`w-3 h-3 transition-transform duration-200 ${expandedProperties.size === properties.length ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              )}
               Property
             </div>
             {dateRange.map((date, idx) => {
@@ -1408,14 +1404,16 @@ export default function TimelineWindow({
                 >
                   {/* Property Name with Status Indicator */}
                   <div className={`relative overflow-hidden px-2 py-3 text-[12px] font-medium text-[#1a1a18] dark:text-[#e8e7e3] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] sticky left-0 z-10 min-h-[56px] ${propertyCellBg} flex items-center gap-1.5`}>
-                    <button
-                      onClick={() => togglePropertyExpanded(property)}
-                      className="p-0.5 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.05)] transition-colors shrink-0"
-                    >
-                      <svg className={`w-3 h-3 transition-transform duration-200 ${expandedProperties.has(property) ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
+                    {view !== 'month' && (
+                      <button
+                        onClick={() => togglePropertyExpanded(property)}
+                        className="p-0.5 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.05)] transition-colors shrink-0"
+                      >
+                        <svg className={`w-3 h-3 transition-transform duration-200 ${expandedProperties.has(property) ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    )}
                     {(() => {
                       const propertyId = propertyIdByName.get(property);
                       return propertyId ? (
@@ -1602,7 +1600,7 @@ export default function TimelineWindow({
                   })}
 
                   {/* Expanded Detail Row */}
-                  {expandedProperties.has(property) && (
+                  {view !== 'month' && expandedProperties.has(property) && (
                     <>
                       {/* Property column for expanded row — empty */}
                       <div className={`sticky left-0 z-10 border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] ${propertyCellBg}`} />
@@ -1624,46 +1622,17 @@ export default function TimelineWindow({
                             }`}
                           >
                             {hasItems && (
-                              <div className="flex flex-col gap-2">
-                                {dateTasks.map((task) => (
-                                  <div
-                                    key={task.task_id}
-                                    className={`flex items-center justify-between gap-2 py-2 px-2.5 shrink-0 cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.01] active:scale-[0.99] relative overflow-hidden rounded-lg text-sm ${
-                                      task.status === 'contingent'
-                                        ? 'bg-white dark:bg-[var(--timeline-surface-3)] border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[var(--timeline-border-strong)] text-[#1a1a18] dark:text-[#e8e7e3]'
-                                        : 'text-white'
-                                    }`}
-                                    style={task.status !== 'contingent' ? { background: marbleBackground[task.status] || marbleBackground.not_started } : undefined}
-                                    title={task.title || task.template_name || 'Task'}
-                                    onClick={() => {
-                                      closeGlobals();
-                                      setFloatingData({
-                                        type: 'task',
-                                        item: task,
-                                        propertyName: property,
-                                      });
-                                    }}
-                                  >
-                                    <span className="truncate">{task.title || task.template_name || 'Task'}</span>
-                                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                                      {task.assigned_users?.slice(0, 1).map((user) => (
-                                        <div key={user.user_id} className="relative">
-                                          <UserAvatar
-                                            src={user.avatar}
-                                            name={user.name || 'Unknown'}
-                                            size="xs"
-                                          />
-                                          {(task.assigned_users?.length ?? 0) > 1 && (
-                                            <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-neutral-700 dark:bg-neutral-200 text-[9px] font-medium text-white dark:text-neutral-800 border border-white dark:border-[var(--timeline-surface-3)]">
-                                              +{(task.assigned_users?.length ?? 0) - 1}
-                                            </div>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
+                              <TaskRowList
+                                tasks={dateTasks}
+                                onTaskClick={(task) => {
+                                  closeGlobals();
+                                  setFloatingData({
+                                    type: 'task',
+                                    item: task,
+                                    propertyName: property,
+                                  });
+                                }}
+                              />
                             )}
                           </div>
                         );

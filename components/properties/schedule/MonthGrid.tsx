@@ -14,7 +14,7 @@ import {
 } from 'date-fns';
 import { ClipboardCheck } from 'lucide-react';
 import { UserAvatar } from '@/components/ui/user-avatar';
-import { marbleBackground } from '@/components/windows/timeline/ScheduledItemsCell';
+import { marbleBackground } from '@/components/windows/timeline/timelineStatus';
 import { useIsMobile } from '@/lib/useIsMobile';
 
 // ---- Types ---------------------------------------------------------------

@@ -8,8 +8,9 @@ import {
   useReservationViewer,
 } from '@/lib/reservationViewerContext';
 import { Button } from '@/components/ui/button';
-import { ClipboardCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getDepartmentIcon } from '@/lib/departmentIcons';
+import { useDepartments } from '@/lib/departmentsContext';
 import type { Task, PropertyOption } from '@/lib/types';
 import { DayDetailPanel, type DayDetailReservation } from '@/components/tasks/DayDetailPanel';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
@@ -21,16 +22,20 @@ const marbleBackground: Record<string, string> = {
   complete: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.25) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.15) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.12) 10%, transparent 40%, rgba(255,255,255,0.08) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.1) 0%, transparent 55%), #4C4869`,
 };
 
-const getFolderStatus = (items: Task[]): string => {
-  const active = items.filter(t => t.status !== 'contingent');
-  if (active.length === 0) return 'no_tasks';
-  const completed = active.filter(t => t.status === 'complete').length;
-  if (completed === active.length) return 'complete';
-  const inProgress = active.filter(t => t.status === 'in_progress').length;
-  if (inProgress > 0) return 'in_progress';
-  const paused = active.filter(t => t.status === 'paused').length;
-  if (paused > 0 || completed > 0) return 'paused';
-  return 'not_started';
+// How many task icons fit before collapsing the rest into a "+N" chip.
+// Week-only cap (month renders all tasks as wrapped status dots, no cap).
+const WEEK_ICON_CAP = 2;
+
+// Stable left-to-right order: timed first (asc), untimed last, then title.
+const byScheduleThenTitle = (a: Task, b: Task) => {
+  const ta = a.scheduled_time || '';
+  const tb = b.scheduled_time || '';
+  if (ta && tb && ta !== tb) return ta.localeCompare(tb);
+  if (ta && !tb) return -1;
+  if (!ta && tb) return 1;
+  const na = a.title || a.template_name || 'Task';
+  const nb = b.title || b.template_name || 'Task';
+  return na.localeCompare(nb);
 };
 
 const toDateString = (d: Date) => {
@@ -75,6 +80,7 @@ export default function MobileTimelineView({
     recurringTasks,
     fetchReservations,
   } = useTimeline();
+  const { departments } = useDepartments();
 
   // Global reservation viewer — used by the day-cell drawer's
   // "Active reservation(s)" rows so tapping a guest opens the same
@@ -129,8 +135,14 @@ export default function MobileTimelineView({
       property_name: string;
       reservation_id?: string | null;
     })[] = [];
+    // Dedupe by task_id (mirrors desktop TimelineWindow): a task can fall in
+    // multiple reservation windows or appear in both reservations[].tasks and
+    // recurringTasks — without this it renders twice (duplicate React keys).
+    const seen = new Set<string>();
     reservations.forEach((res: any) => {
       (res.tasks || []).forEach((task: Task) => {
+        if (seen.has(task.task_id)) return;
+        seen.add(task.task_id);
         tasks.push({
           ...task,
           property_name: res.property_name,
@@ -139,6 +151,8 @@ export default function MobileTimelineView({
       });
     });
     recurringTasks.forEach((task: any) => {
+      if (seen.has(task.task_id)) return;
+      seen.add(task.task_id);
       tasks.push({
         ...task,
         property_name: task.property_name,
@@ -154,9 +168,9 @@ export default function MobileTimelineView({
 
   const getCellTasks = useCallback((propertyName: string, date: Date) => {
     const dateStr = toDateString(date);
-    return allScheduledTasks.filter(
-      t => t.property_name === propertyName && t.scheduled_date === dateStr
-    );
+    return allScheduledTasks
+      .filter(t => t.property_name === propertyName && t.scheduled_date === dateStr)
+      .sort(byScheduleThenTitle);
   }, [allScheduledTasks]);
 
   const cellWidth = view === 'week' ? 72 : 38;
@@ -372,7 +386,7 @@ export default function MobileTimelineView({
                             }}
                             title={startingRes.guest_name || 'No guest'}
                           >
-                            {!startsBeforeRange && view === 'week' && (
+                            {!startsBeforeRange && (
                               <span
                                 className="truncate whitespace-nowrap"
                                 style={{ paddingLeft: `${diagonalPx + 3}px`, paddingRight: `${diagonalPx + 3}px` }}
@@ -384,21 +398,73 @@ export default function MobileTimelineView({
                         );
                       })()}
 
-                      {hasItems && (() => {
-                        const folderStatus = getFolderStatus(cellTasks);
-                        const hasActive = folderStatus !== 'no_tasks';
+                      {hasItems && view === 'month' && (
+                        // Month: status dots (all tasks, wrap). No hover on
+                        // mobile — the cell's onClick opens the bottom sheet
+                        // (full list); dots are pure indicators.
+                        <div className="absolute bottom-0.5 left-0.5 right-0.5 flex flex-wrap items-end gap-0.5 z-[5]">
+                          {cellTasks.map((task) => {
+                            const isContingent = task.status === 'contingent';
+                            return (
+                              <span
+                                key={task.task_id}
+                                className={cn(
+                                  'w-1.5 h-1.5 rounded-full shrink-0',
+                                  isContingent &&
+                                    'border border-dashed border-[rgba(30,25,20,0.4)] dark:border-[rgba(255,255,255,0.4)]',
+                                )}
+                                style={
+                                  isContingent
+                                    ? undefined
+                                    : { background: marbleBackground[task.status] || marbleBackground.not_started }
+                                }
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {hasItems && view === 'week' && (() => {
+                        const visible = cellTasks.slice(0, WEEK_ICON_CAP);
+                        const overflow = cellTasks.length - visible.length;
+                        const box = 'w-[22px] h-[22px]';
+                        const glyph = 'w-3 h-3';
                         return (
                           <div className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 z-[5]">
-                            <div
-                              className={cn(
-                                'flex items-center justify-center rounded shadow-sm hover:brightness-110 transition-all',
-                                hasActive ? 'text-white' : 'text-[#1a1a18] dark:text-white bg-white dark:bg-[#1a1a1d] border border-[rgba(30,25,20,0.12)] dark:border-[rgba(255,255,255,0.12)]',
-                                view === 'week' ? 'w-[22px] h-[22px]' : 'w-4 h-4'
-                              )}
-                              style={hasActive ? { background: marbleBackground[folderStatus] || marbleBackground.not_started } : undefined}
-                            >
-                              <ClipboardCheck className={view === 'week' ? 'w-3 h-3' : 'w-2.5 h-2.5'} />
-                            </div>
+                            {visible.map((task) => {
+                              const dept = departments.find((d) => d.id === task.department_id);
+                              const Icon = getDepartmentIcon(dept?.icon);
+                              const isContingent = task.status === 'contingent';
+                              return (
+                                <div
+                                  key={task.task_id}
+                                  className={cn(
+                                    'flex items-center justify-center rounded shadow-sm transition-all overflow-hidden text-white',
+                                    box,
+                                    isContingent &&
+                                      'border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[rgba(255,255,255,0.35)] bg-white dark:bg-[#1a1a1d] text-[#1a1a18] dark:text-white',
+                                  )}
+                                  style={
+                                    isContingent
+                                      ? undefined
+                                      : { background: marbleBackground[task.status] || marbleBackground.not_started }
+                                  }
+                                >
+                                  <Icon className={glyph} />
+                                </div>
+                              );
+                            })}
+                            {overflow > 0 && (
+                              <div
+                                className={cn(
+                                  'flex items-center justify-center rounded px-0.5 font-medium text-[8px] shadow-sm',
+                                  'bg-white/90 dark:bg-[#1a1a1d] text-[#1a1a18] dark:text-white border border-[rgba(30,25,20,0.12)] dark:border-[rgba(255,255,255,0.12)]',
+                                  box,
+                                )}
+                              >
+                                +{overflow}
+                              </div>
+                            )}
                           </div>
                         );
                       })()}
