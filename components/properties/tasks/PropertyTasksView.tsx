@@ -1061,6 +1061,7 @@ function PropertyTasksViewContent({
     const raw = selectedItem.raw;
     return {
       id: raw.task_id,
+      property_id: raw.property_id || null,
       property_name: raw.property_name || null,
       bin_id: raw.bin_id || null,
       is_binned: raw.is_binned,

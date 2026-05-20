@@ -8,7 +8,6 @@ import {
   format,
   isSameDay,
   isSameMonth,
-  parseISO,
   startOfMonth,
   startOfWeek,
 } from 'date-fns';
@@ -16,6 +15,7 @@ import { ClipboardCheck } from 'lucide-react';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { marbleBackground } from '@/components/windows/timeline/timelineStatus';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { toDateOnly } from '@/components/properties/schedule/scheduleDates';
 
 // ---- Types ---------------------------------------------------------------
 
@@ -74,13 +74,6 @@ interface MonthGridProps {
 }
 
 // ---- Helpers -------------------------------------------------------------
-
-function toDateOnly(raw: string): Date {
-  // Reservation dates come as YYYY-MM-DD strings or ISO timestamps. We always
-  // want the local-day, so slice + parse explicitly to dodge timezone shifts.
-  const justDate = raw.length >= 10 ? raw.slice(0, 10) : raw;
-  return parseISO(`${justDate}T00:00:00`);
-}
 
 function compareYMD(a: Date, b: Date): number {
   const au = a.getFullYear() * 10000 + (a.getMonth() + 1) * 100 + a.getDate();

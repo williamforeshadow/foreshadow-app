@@ -106,9 +106,16 @@ export default function MobileApp() {
       task.priority === 'low'
         ? task.priority
         : 'medium';
+    // Task API only carries property_name; resolve to property_id via the
+    // already-loaded allProperties list so the scheduled-date picker can
+    // load reservations for this task's property.
+    const resolvedPropertyId =
+      (task as { property_id?: string | null }).property_id ||
+      allProperties.find((p) => p.name === task.property_name)?.id ||
+      null;
     return {
       id: task.task_id,
-      property_id: null,
+      property_id: resolvedPropertyId,
       property_name: task.property_name || null,
       bin_id: task.bin_id ?? null,
       is_binned: task.is_binned ?? false,
@@ -132,7 +139,7 @@ export default function MobileApp() {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-  }, [mobileSelectedTask]);
+  }, [mobileSelectedTask, allProperties]);
 
   const taskTemplate = useMemo((): Template | null => {
     if (!mobileSelectedTask?.template_id) return null;

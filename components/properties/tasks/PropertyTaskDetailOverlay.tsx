@@ -515,6 +515,7 @@ export function PropertyTaskDetailOverlay({
     if (!t) return null;
     return {
       id: t.task_id,
+      property_id: t.property_id || null,
       property_name: t.property_name || null,
       bin_id: t.bin_id || null,
       is_binned: t.is_binned,

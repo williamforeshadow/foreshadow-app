@@ -2,6 +2,7 @@
 
 import { RefObject, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { KeyAffordance } from '@/components/tasks/KeyAffordance';
+import { TaskScheduledDatePicker } from '@/components/windows/projects/TaskScheduledDatePicker';
 import { DebouncedNativeInput, DebouncedTextarea } from '@/components/ui/debounced-input';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useDepartments } from '@/lib/departmentsContext';
@@ -1199,15 +1200,14 @@ export function ProjectDetailPanel({
                     <line x1="5.5" y1="2" x2="5.5" y2="4" stroke="currentColor" strokeWidth="1.2" />
                     <line x1="10.5" y1="2" x2="10.5" y2="4" stroke="currentColor" strokeWidth="1.2" />
                   </svg>
-                  <input
-                    type="date"
+                  <TaskScheduledDatePicker
+                    propertyId={project.property_id ?? null}
                     value={editingFields.scheduled_date}
-                    onChange={(e) => {
-                      const f = {...editingFields, scheduled_date: e.target.value};
+                    onChange={(next) => {
+                      const f = {...editingFields, scheduled_date: next};
                       setEditingFields(f);
                       onSave(f);
                     }}
-                    className="bg-transparent border-none outline-none text-[13px] text-muted-foreground focus:text-foreground p-0 w-full min-w-0 dark:[color-scheme:dark]"
                   />
                 </div>
                 <div className="flex items-center gap-1.5">
