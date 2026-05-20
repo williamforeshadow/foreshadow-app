@@ -51,6 +51,7 @@ export interface Task {
   department_id?: string | null;
   department_name?: string | null;
   status: TaskStatus;
+  property_id?: string | null;
   property_name?: string;
   assigned_users?: AssignedUser[];
   assigned_staff?: string;

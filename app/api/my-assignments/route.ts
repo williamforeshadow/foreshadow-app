@@ -44,6 +44,7 @@ export async function GET(request: Request) {
           priority,
           bin_id,
           is_binned,
+          property_id,
           property_name,
           department_id,
           scheduled_date,
@@ -74,7 +75,7 @@ export async function GET(request: Request) {
       if (reservationIds.length > 0) {
         const { data: reservations, error: reservationsError } = await getSupabaseServer()
           .from('reservations')
-          .select('id, property_name, guest_name, check_in, check_out')
+          .select('id, property_id, property_name, guest_name, check_in, check_out')
           .in('id', reservationIds);
 
         if (!reservationsError && reservations) {
@@ -144,6 +145,7 @@ export async function GET(request: Request) {
           form_metadata: task.form_metadata,
           assigned_at: assignment?.assigned_at,
           assigned_users: allAssigneesMap[task.id] || [],
+          property_id: task.property_id || reservation?.property_id || null,
           property_name: reservation?.property_name || task.property_name || null,
           check_out: reservation?.check_out,
           check_in: reservation?.check_in,
