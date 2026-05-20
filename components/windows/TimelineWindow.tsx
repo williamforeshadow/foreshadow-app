@@ -2,6 +2,7 @@
 
 import { apiFetch } from '@/lib/apiFetch';
 import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger, PopoverClose } from '@/components/ui/popover';
 import { useTimeline } from '@/lib/useTimeline';
@@ -102,6 +103,135 @@ function DroppableDateCell({
     <div ref={setNodeRef} className={className} onClick={onClick}>
       {children}
     </div>
+  );
+}
+
+// Reservation bar with a cursor-following hover card. The popover is
+// rendered via a fixed-position portal so it tracks the mouse instead of
+// anchoring to the bar (HoverCard would anchor to the element).
+function ReservationHoverBar({
+  reservation,
+  propertyName,
+  propertyReservations,
+  className,
+  style,
+  showLabel,
+  labelPaddingPx,
+  formatDate,
+  onOpen,
+}: {
+  reservation: any;
+  propertyName: string;
+  propertyReservations: any[];
+  className: string;
+  style: React.CSSProperties;
+  showLabel: boolean;
+  labelPaddingPx: number;
+  formatDate: (d: Date) => string;
+  onOpen: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const openTimer = useRef<number | null>(null);
+  const closeTimer = useRef<number | null>(null);
+  const [portalReady, setPortalReady] = useState(false);
+  useEffect(() => setPortalReady(true), []);
+
+  const cancelTimers = () => {
+    if (openTimer.current) { window.clearTimeout(openTimer.current); openTimer.current = null; }
+    if (closeTimer.current) { window.clearTimeout(closeTimer.current); closeTimer.current = null; }
+  };
+
+  const onEnter = (e: React.MouseEvent) => {
+    cancelTimers();
+    setPos({ x: e.clientX, y: e.clientY });
+    openTimer.current = window.setTimeout(() => setOpen(true), 200);
+  };
+  const onMove = (e: React.MouseEvent) => {
+    setPos({ x: e.clientX, y: e.clientY });
+  };
+  const onLeave = () => {
+    cancelTimers();
+    closeTimer.current = window.setTimeout(() => setOpen(false), 100);
+  };
+
+  useEffect(() => () => cancelTimers(), []);
+
+  const guestLabel = reservation.guest_name || 'No guest';
+  const checkInMs = new Date(reservation.check_in).getTime();
+  const checkOutMs = new Date(reservation.check_out).getTime();
+  const nights = Math.max(1, Math.round((checkOutMs - checkInMs) / (1000 * 60 * 60 * 24)));
+  const nextRes = propertyReservations
+    .filter((r) => new Date(r.check_in).getTime() > checkOutMs)
+    .sort((a, b) => new Date(a.check_in).getTime() - new Date(b.check_in).getTime())[0];
+  const fmt = (d: Date) => formatDate(d);
+
+  // Position popover with a small offset from cursor so the mouse leaving the
+  // bar onto the popover doesn't immediately retrigger close.
+  const popLeft = pos.x + 14;
+  const popTop = pos.y + 18;
+
+  return (
+    <>
+      <div
+        className={className}
+        style={style}
+        onMouseEnter={onEnter}
+        onMouseMove={onMove}
+        onMouseLeave={onLeave}
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen(reservation.id);
+        }}
+      >
+        {showLabel && (
+          <span className="truncate" style={{ paddingLeft: labelPaddingPx, paddingRight: labelPaddingPx }}>
+            {guestLabel}
+          </span>
+        )}
+      </div>
+      {open && portalReady && createPortal(
+        <div
+          // pointer-events-none so the popover can't itself capture hover —
+          // keeps the bar as the single hover authority and avoids flicker.
+          className="fixed pointer-events-none w-64 p-3 bg-white dark:bg-[var(--timeline-surface-4)] border border-[rgba(30,25,20,0.08)] dark:border-[var(--timeline-border-strong)] shadow-lg rounded-md"
+          style={{ left: popLeft, top: popTop, zIndex: 9999 }}
+        >
+          <div className="flex flex-col gap-2">
+            <div>
+              <div className="text-sm font-semibold text-[#1a1a18] dark:text-[#e8e7e3] truncate">
+                {guestLabel}
+              </div>
+              <div className="text-[11px] text-[#6b6963] dark:text-[#9a9893] truncate">
+                {propertyName}
+              </div>
+            </div>
+            <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px]">
+              <span className="text-[#9a9892] dark:text-[#66645f]">Check-in</span>
+              <span className="text-[#1a1a18] dark:text-[#e8e7e3] tabular-nums">
+                {fmt(new Date(reservation.check_in))}
+              </span>
+              <span className="text-[#9a9892] dark:text-[#66645f]">Check-out</span>
+              <span className="text-[#1a1a18] dark:text-[#e8e7e3] tabular-nums">
+                {fmt(new Date(reservation.check_out))}
+                <span className="ml-1.5 text-[#9a9892] dark:text-[#66645f]">
+                  · {nights} night{nights === 1 ? '' : 's'}
+                </span>
+              </span>
+              {nextRes && (
+                <>
+                  <span className="text-[#9a9892] dark:text-[#66645f]">Next in</span>
+                  <span className="text-[#1a1a18] dark:text-[#e8e7e3] tabular-nums">
+                    {fmt(new Date(nextRes.check_in))}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 
@@ -1885,32 +2015,34 @@ export default function TimelineWindow({
                           const barColorClass =
                             'bg-[var(--turnover-purple-bg)] border-[var(--turnover-purple-border)]';
 
+                          const barClassName =`absolute cursor-pointer transition-all duration-150 text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium flex items-center overflow-hidden border-t ${barColorClass} ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-[rgba(99,102,241,0.5)] dark:ring-[rgba(167,139,250,0.6)] shadow-lg z-30' : ''}`;
+                          const barStyle: React.CSSProperties = {
+                            left: leftStyle,
+                            top: '10px',
+                            height: '36px',
+                            width: widthStyle,
+                            zIndex: 15,
+                            clipPath,
+                            borderRadius: startsBeforeRange && flushRight
+                              ? '0'
+                              : startsBeforeRange
+                              ? '0 8px 8px 0'
+                              : flushRight
+                              ? '8px 0 0 8px'
+                              : '8px',
+                          };
                           return (
-                            <div
-                              className={`absolute pointer-events-none transition-all duration-150 text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium flex items-center overflow-hidden border-t ${barColorClass} ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-[rgba(99,102,241,0.5)] dark:ring-[rgba(167,139,250,0.6)] shadow-lg z-30' : ''}`}
-                              style={{
-                                left: leftStyle,
-                                top: '10px',
-                                height: '36px',
-                                width: widthStyle,
-                                zIndex: 15,
-                                clipPath,
-                                borderRadius: startsBeforeRange && flushRight
-                                  ? '0'
-                                  : startsBeforeRange
-                                  ? '0 8px 8px 0'
-                                  : flushRight
-                                  ? '8px 0 0 8px'
-                                  : '8px',
-                              }}
-                              title={`${startingReservation.guest_name || 'No guest'} - ${formatDate(new Date(startingReservation.check_in))} to ${formatDate(new Date(startingReservation.check_out))}`}
-                            >
-                              {!startsBeforeRange && (
-                                <span className="truncate" style={{ paddingLeft: `${diagonalPx + 6}px`, paddingRight: `${diagonalPx + 6}px` }}>
-                                  {startingReservation.guest_name || 'No guest'}
-                                </span>
-                              )}
-                            </div>
+                            <ReservationHoverBar
+                              reservation={startingReservation}
+                              propertyName={property}
+                              propertyReservations={propertyReservations}
+                              className={barClassName}
+                              style={barStyle}
+                              showLabel={!startsBeforeRange}
+                              labelPaddingPx={diagonalPx + 6}
+                              formatDate={formatDate}
+                              onOpen={openReservationViewer}
+                            />
                           );
                         })()}
                         
@@ -1933,10 +2065,11 @@ export default function TimelineWindow({
                         />
 
                         <button
-                          className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-[rgba(30,25,20,0.10)] dark:border-[var(--timeline-border-strong)] bg-white dark:bg-[var(--timeline-surface-4)] text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[var(--timeline-hover)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3] transition-all z-20 flex items-center justify-center opacity-0 group-hover:opacity-100"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-[rgba(30,25,20,0.10)] dark:border-[var(--timeline-border-strong)] bg-white dark:bg-[var(--timeline-surface-4)] text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[var(--timeline-hover)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3] transition-all z-20 flex items-center justify-center opacity-0 group-hover:opacity-100 focus:outline-none"
                           title="Create task for this day"
                           onClick={(e) => {
                             e.stopPropagation();
+                            e.currentTarget.blur();
                             handleCreateProjectFromTimelineCell(property, date);
                           }}
                         >
