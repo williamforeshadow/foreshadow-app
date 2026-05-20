@@ -215,6 +215,10 @@ export function FloatingWindow({
           <ProjectDetailPanel
             project={type === 'task' ? {
               id: (item as Task).task_id,
+              property_id:
+                (item as { property_id?: string | null }).property_id ||
+                allProperties?.find((p) => p.name === propertyName)?.id ||
+                null,
               property_name: propertyName || null,
               bin_id: (item as Task).bin_id || null,
               title: (item as Task).title || (item as Task).template_name || 'Task',

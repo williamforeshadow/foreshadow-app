@@ -616,6 +616,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
 
   const itemAsProject: Project | null = selectedItem ? {
     id: getRawTaskId(selectedItem.raw),
+    property_id: (selectedItem.raw as { property_id?: string | null }).property_id || null,
     property_name: selectedItem.raw.property_name || null,
     bin_id: selectedItem.raw.bin_id || null,
     is_binned: selectedItem.raw.is_binned ?? false,

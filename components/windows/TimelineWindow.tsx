@@ -1186,6 +1186,10 @@ export default function TimelineWindow({
 
   const taskAsProject: Project | null = localTask ? {
     id: localTask.task_id,
+    property_id:
+      (localTask as { property_id?: string | null }).property_id ||
+      propertyIdByName.get(floatingData?.propertyName || localTask.property_name || '') ||
+      null,
     property_name: floatingData?.propertyName || localTask.property_name || null,
     bin_id: localTask.bin_id || null,
     is_binned: localTask.is_binned ?? !!localTask.bin_id,

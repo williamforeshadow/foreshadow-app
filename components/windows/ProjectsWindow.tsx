@@ -505,6 +505,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     // pre-fill bin_id so the new task lands in that sub-bin.
     const draft: Project = {
       id: `draft-${Date.now()}`,
+      property_id: null,
       property_name: null,
       bin_id: selectedBinId,
       is_binned: true,

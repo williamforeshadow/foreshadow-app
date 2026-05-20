@@ -403,6 +403,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
       description: null,
       status: 'not_started',
       priority: 'medium',
+      property_id: null,
       property_name: null,
       template_id: null,
       template_name: null,
