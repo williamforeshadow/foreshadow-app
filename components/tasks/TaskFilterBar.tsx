@@ -52,8 +52,10 @@ export interface DateRange {
 }
 
 interface TaskFilterBarProps {
-  search: string;
-  onSearchChange: (v: string) => void;
+  // Search is optional — surfaces with their own search affordance (e.g. the
+  // Timeline's compact expandable search) omit these and no input is rendered.
+  search?: string;
+  onSearchChange?: (v: string) => void;
 
   statusOptions: FilterOption[];
   statusSelected: Set<string>;
@@ -75,14 +77,16 @@ interface TaskFilterBarProps {
   // "all bins" sentinel — the chip's "Select All" action selects every
   // option (including Not binned, which the user can deselect to
   // restrict to binned tasks only).
-  binOptions: FilterOption[];
-  binSelected: Set<string>;
-  onBinChange: (next: Set<string>) => void;
+  // Optional — when omitted (e.g. on Timeline), the Bin chip isn't rendered.
+  binOptions?: FilterOption[];
+  binSelected?: Set<string>;
+  onBinChange?: (next: Set<string>) => void;
 
-  // Origin: manual / automated.
-  originOptions: FilterOption[];
-  originSelected: Set<string>;
-  onOriginChange: (next: Set<string>) => void;
+  // Origin: manual / automated. Optional — omit on surfaces where the
+  // distinction doesn't matter (e.g. Timeline).
+  originOptions?: FilterOption[];
+  originSelected?: Set<string>;
+  onOriginChange?: (next: Set<string>) => void;
 
   // Optional — Priority chip. When omitted, the chip isn't rendered.
   priorityOptions?: FilterOption[];
@@ -100,9 +104,11 @@ interface TaskFilterBarProps {
   scheduledDateRange?: DateRange;
   onScheduledDateRangeChange?: (next: DateRange) => void;
 
-  sortKey: SortKey;
-  sortDir: SortDir;
-  onSortChange: (k: SortKey, d: SortDir) => void;
+  // Sort is optional — surfaces with an inherent ordering (e.g. the spatial
+  // Timeline grid) omit these and the Sort control is not rendered.
+  sortKey?: SortKey;
+  sortDir?: SortDir;
+  onSortChange?: (k: SortKey, d: SortDir) => void;
 
   onClearAll: () => void;
   anyFilterActive: boolean;
@@ -113,134 +119,167 @@ interface TaskFilterBarProps {
 
   totalCount: number;
   filteredCount: number;
+
+  // When true, the bar lays out as a SINGLE row (chips + count/clear/new-task)
+  // with no internal padding — for surfaces like the Timeline header that want
+  // everything on one row alongside other controls. Search is suppressed in
+  // this mode (host renders its own compact search).
+  inline?: boolean;
 }
 
 export function TaskFilterBar(props: TaskFilterBarProps) {
-  return (
-    <div className="flex flex-col gap-3 px-8 pt-5 pb-3">
-      {/* Row 1: Search + total + clear + new task */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-md">
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 dark:text-[#66645f] pointer-events-none"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
-          <input
-            type="text"
-            value={props.search}
-            onChange={(e) => props.onSearchChange(e.target.value)}
-            placeholder="Search tasks by title, property, description..."
-            className="w-full pl-9 pr-3 py-2 text-[13px] bg-transparent border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] rounded-md focus:outline-none focus:border-[var(--accent-3)] dark:focus:border-[var(--accent-1)] focus:ring-1 focus:ring-[var(--accent-ring)] dark:focus:ring-[var(--accent-ring-dark)] text-neutral-800 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f]"
-          />
-        </div>
+  const inline = !!props.inline;
 
-        <div className="ml-auto flex items-center gap-2">
-          <div className="text-[12px] text-neutral-500 dark:text-[#66645f] tabular-nums">
-            {props.anyFilterActive
-              ? `${props.filteredCount} of ${props.totalCount}`
-              : `${props.totalCount} total`}
-          </div>
-          {props.anyFilterActive && (
-            <button
-              onClick={props.onClearAll}
-              className="text-[11px] font-medium text-neutral-500 dark:text-[#a09e9a] uppercase tracking-[0.04em] px-2 py-1 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-700 dark:hover:text-[#f0efed] transition-colors"
-            >
-              Clear
-            </button>
-          )}
-          {props.onNewTask && (
-            <button
-              onClick={props.onNewTask}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2.5}
-                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                />
-              </svg>
-              New task
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Row 2: Filter chips + sort */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <MultiSelect
-          label="Status"
-          options={props.statusOptions}
-          selected={props.statusSelected}
-          onChange={props.onStatusChange}
-        />
-        <MultiSelect
-          label="Assignee"
-          options={props.assigneeOptions}
-          selected={props.assigneeSelected}
-          onChange={props.onAssigneeChange}
-        />
-        <MultiSelect
-          label="Department"
-          options={props.departmentOptions}
-          selected={props.departmentSelected}
-          onChange={props.onDepartmentChange}
-        />
+  const chips = (
+    <>
+      <MultiSelect
+        label="Status"
+        options={props.statusOptions}
+        selected={props.statusSelected}
+        onChange={props.onStatusChange}
+      />
+      <MultiSelect
+        label="Assignee"
+        options={props.assigneeOptions}
+        selected={props.assigneeSelected}
+        onChange={props.onAssigneeChange}
+      />
+      <MultiSelect
+        label="Department"
+        options={props.departmentOptions}
+        selected={props.departmentSelected}
+        onChange={props.onDepartmentChange}
+      />
+      {props.binOptions && props.binSelected && props.onBinChange && (
         <MultiSelect
           label="Bin"
           options={props.binOptions}
           selected={props.binSelected}
           onChange={props.onBinChange}
         />
+      )}
+      {props.originOptions && props.originSelected && props.onOriginChange && (
         <MultiSelect
           label="Origin"
           options={props.originOptions}
           selected={props.originSelected}
           onChange={props.onOriginChange}
         />
-        {props.priorityOptions && props.prioritySelected && props.onPriorityChange && (
-          <MultiSelect
-            label="Priority"
-            options={props.priorityOptions}
-            selected={props.prioritySelected}
-            onChange={props.onPriorityChange}
-          />
-        )}
-        {props.propertyOptions && props.propertySelected && props.onPropertyChange && (
-          <MultiSelect
-            label="Property"
-            options={props.propertyOptions}
-            selected={props.propertySelected}
-            onChange={props.onPropertyChange}
-            // Properties can be a long list; show a search box.
-            searchable
-          />
-        )}
-        {props.scheduledDateRange && props.onScheduledDateRangeChange && (
-          <DateRangeChip
-            label="Scheduled"
-            range={props.scheduledDateRange}
-            onChange={props.onScheduledDateRangeChange}
-          />
+      )}
+      {props.priorityOptions && props.prioritySelected && props.onPriorityChange && (
+        <MultiSelect
+          label="Priority"
+          options={props.priorityOptions}
+          selected={props.prioritySelected}
+          onChange={props.onPriorityChange}
+        />
+      )}
+      {props.propertyOptions && props.propertySelected && props.onPropertyChange && (
+        <MultiSelect
+          label="Property"
+          options={props.propertyOptions}
+          selected={props.propertySelected}
+          onChange={props.onPropertyChange}
+          searchable
+        />
+      )}
+      {props.scheduledDateRange && props.onScheduledDateRangeChange && (
+        <DateRangeChip
+          label="Scheduled"
+          range={props.scheduledDateRange}
+          onChange={props.onScheduledDateRangeChange}
+        />
+      )}
+    </>
+  );
+
+  const meta = (
+    <div className="ml-auto flex items-center gap-2">
+      <div className="text-[12px] text-neutral-500 dark:text-[#66645f] tabular-nums">
+        {props.anyFilterActive
+          ? `${props.filteredCount} of ${props.totalCount}`
+          : `${props.totalCount} total`}
+      </div>
+      {props.anyFilterActive && (
+        <button
+          onClick={props.onClearAll}
+          className="text-[11px] font-medium text-neutral-500 dark:text-[#a09e9a] uppercase tracking-[0.04em] px-2 py-1 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-700 dark:hover:text-[#f0efed] transition-colors"
+        >
+          Clear
+        </button>
+      )}
+      {props.onNewTask && (
+        <button
+          onClick={props.onNewTask}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2.5}
+              d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+            />
+          </svg>
+          New task
+        </button>
+      )}
+    </div>
+  );
+
+  if (inline) {
+    return (
+      <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+        {chips}
+        {meta}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3 px-8 pt-5 pb-3">
+      {/* Row 1: Search + total + clear + new task */}
+      <div className="flex items-center gap-3">
+        {props.onSearchChange && (
+          <div className="relative flex-1 max-w-md">
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 dark:text-[#66645f] pointer-events-none"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            <input
+              type="text"
+              value={props.search ?? ''}
+              onChange={(e) => props.onSearchChange!(e.target.value)}
+              placeholder="Search tasks by title, property, description..."
+              className="w-full pl-9 pr-3 py-2 text-[13px] bg-transparent border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] rounded-md focus:outline-none focus:border-[var(--accent-3)] dark:focus:border-[var(--accent-1)] focus:ring-1 focus:ring-[var(--accent-ring)] dark:focus:ring-[var(--accent-ring-dark)] text-neutral-800 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f]"
+            />
+          </div>
         )}
 
-        <div className="ml-auto">
-          <SortSelect
-            sortKey={props.sortKey}
-            sortDir={props.sortDir}
-            onChange={props.onSortChange}
-          />
-        </div>
+        {meta}
+      </div>
+
+      {/* Row 2: Filter chips + sort */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {chips}
+        {props.sortKey && props.sortDir && props.onSortChange && (
+          <div className="ml-auto">
+            <SortSelect
+              sortKey={props.sortKey}
+              sortDir={props.sortDir}
+              onChange={props.onSortChange}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

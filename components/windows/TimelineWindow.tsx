@@ -1,7 +1,7 @@
 'use client';
 
 import { apiFetch } from '@/lib/apiFetch';
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger, PopoverClose } from '@/components/ui/popover';
 import { useTimeline } from '@/lib/useTimeline';
@@ -23,6 +23,8 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core';
 import { ScheduledItemsCell, DayKanban } from './timeline';
+import { TimelineNavBar } from './timeline/TimelineNavBar';
+import { WeatherWidgetTrigger } from './timeline/WeatherWidgetTrigger';
 import { marbleBackground } from './timeline/timelineStatus';
 import { TaskRowList } from './timeline/TaskRowList';
 import { AttachmentLightbox, ProjectActivitySheet, ProjectDetailPanel } from './projects';
@@ -30,12 +32,15 @@ import { TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
 import { DayDetailPanel } from '@/components/tasks/DayDetailPanel';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
 import {
+  TaskFilterBar,
+  type FilterOption,
+} from '@/components/tasks/TaskFilterBar';
+import {
   DESKTOP_TIMELINE_DETAIL_PANEL_CLASS,
   DESKTOP_TIMELINE_DETAIL_PANEL_FLEX,
 } from '@/lib/detailPanelGeometry';
 import { ClipboardCheck } from 'lucide-react';
-import Rhombus16FilledIcon from '@/components/icons/Rhombus16FilledIcon';
-import RectangleStackIcon from '@/components/icons/RectangleStackIcon';
+import { RowsIcon, KanbanColumnsIcon } from './timeline/TimelineViewIcons';
 import type { Project, Task, User, ProjectFormFields, Turnover, TaskTemplate, PropertyOption } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 import { cn } from '@/lib/utils';
@@ -100,6 +105,62 @@ function DroppableDateCell({
   );
 }
 
+// Compact expandable search: an icon button that expands to a small text
+// input on click and collapses back when blurred while empty. Keeps the
+// Timeline header on one row when search is unused.
+function CompactSearch({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const open = expanded || !!value;
+  useEffect(() => {
+    if (expanded) inputRef.current?.focus();
+  }, [expanded]);
+  return (
+    <div className="inline-flex items-center">
+      {open ? (
+        <div className="relative">
+          <svg
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 dark:text-[#66645f] pointer-events-none"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            ref={inputRef}
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onBlur={() => { if (!value) setExpanded(false); }}
+            placeholder="Search…"
+            className="w-44 pl-8 pr-2 py-1.5 text-[13px] bg-transparent border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] rounded-md focus:outline-none focus:border-[var(--accent-3)] dark:focus:border-[var(--accent-1)] text-neutral-800 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f]"
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          title="Search"
+          className="p-1.5 rounded text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3] transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function TimelineWindow({
   users,
   currentUser,
@@ -113,6 +174,32 @@ export default function TimelineWindow({
   
   // State for kanban - use current date as default when in kanban view mode
   const [kanbanDate, setKanbanDate] = useState<Date>(new Date());
+
+  // Filter bar state (mirrors Tasks page minus Scheduled date range, Origin,
+  // and Bin — Timeline already implies scheduled tasks; Origin/Bin aren't
+  // useful in this view).
+  const [search, setSearch] = useState('');
+  const [statusSel, setStatusSel] = useState<Set<string>>(new Set());
+  const [assigneeSel, setAssigneeSel] = useState<Set<string>>(new Set());
+  const [deptSel, setDeptSel] = useState<Set<string>>(new Set());
+  const [prioritySel, setPrioritySel] = useState<Set<string>>(new Set());
+  const [propSel, setPropSel] = useState<Set<string>>(new Set());
+  const clearAllFilters = useCallback(() => {
+    setSearch('');
+    setStatusSel(new Set());
+    setAssigneeSel(new Set());
+    setDeptSel(new Set());
+    setPrioritySel(new Set());
+    setPropSel(new Set());
+  }, []);
+  const anyFilterActive =
+    !!search.trim() ||
+    statusSel.size +
+      assigneeSel.size +
+      deptSel.size +
+      prioritySel.size +
+      propSel.size >
+      0;
 
   // State for the day detail panel (clicking a day header in the grid view).
   // Kanban access is preserved via the top-left view-mode toggle; clicking a
@@ -561,6 +648,29 @@ export default function TimelineWindow({
   const gridRef = useRef<HTMLDivElement>(null);
   const cellWidthRef = useRef(0);
 
+  // Measured px width of one date column. Reservation bars are sized in
+  // pixels off this (not cell-relative %) so check-in/check-out penetration
+  // is identical for every bar regardless of span. Re-measured on resize and
+  // when the visible range (week/month) changes.
+  const [colWidth, setColWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = (el.clientWidth - 200) / Math.max(1, dateRange.length);
+      setColWidth(w > 0 ? w : 0);
+      cellWidthRef.current = w > 0 ? w : 0;
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // viewMode is included so the observer re-attaches when the grid <div>
+    // remounts after switching back from Kanban view — without this, colWidth
+    // would stay stale and reservation bars would fall back to the old
+    // span-dependent percentage geometry.
+  }, [dateRange.length, viewMode]);
+
   // Lock the drag to the horizontal axis and snap the overlay to whole
   // column-widths so it jumps cell-to-cell instead of free-floating.
   // (cellWidthRef is measured once on drag start.)
@@ -612,6 +722,30 @@ export default function TimelineWindow({
   // "useLayoutEffect changed size" error).
   const handleTaskDragCancel = useCallback(() => setDraggingTask(null), []);
   const dndModifiers = useMemo(() => [snapXModifier], [snapXModifier]);
+
+  // Header nav — branches grid (date range) vs day-view Kanban (kanbanDate ±1).
+  const handleTimelinePrev = useCallback(() => {
+    if (viewMode === 'grid') {
+      goToPrevious();
+    } else {
+      const d = new Date(kanbanDate);
+      d.setDate(d.getDate() - 1);
+      setKanbanDate(d);
+    }
+  }, [viewMode, goToPrevious, kanbanDate]);
+  const handleTimelineToday = useCallback(() => {
+    if (viewMode === 'grid') goToToday();
+    else setKanbanDate(new Date());
+  }, [viewMode, goToToday]);
+  const handleTimelineNext = useCallback(() => {
+    if (viewMode === 'grid') {
+      goToNext();
+    } else {
+      const d = new Date(kanbanDate);
+      d.setDate(d.getDate() + 1);
+      setKanbanDate(d);
+    }
+  }, [viewMode, goToNext, kanbanDate]);
 
   // Freeze scrolling while a task is being dragged WITHOUT removing the
   // scrollbar (overflow stays `auto`, so no grid reflow). The horizontal-only
@@ -1262,6 +1396,91 @@ export default function TimelineWindow({
     return allTasksWithProperty.filter(task => task.scheduled_date);
   }, [allTasksWithProperty]);
 
+  // ---- Filter bar: options + predicate (mirrors useTasks logic) ----------
+  const NO_DEPT = '__no_department__';
+  const timelineFilterOptions = useMemo(() => {
+    const statusCounts: Record<string, number> = {};
+    const priorityCounts: Record<string, number> = {};
+    const assigneeMap = new Map<string, { name: string; count: number }>();
+    const deptMap = new Map<string, { name: string; count: number }>();
+    const propertyMap = new Map<string, number>();
+    let noDeptCount = 0;
+    allScheduledTasks.forEach((t: any) => {
+      statusCounts[t.status] = (statusCounts[t.status] || 0) + 1;
+      if (t.priority) priorityCounts[t.priority] = (priorityCounts[t.priority] || 0) + 1;
+      if (t.department_id) {
+        const ex = deptMap.get(t.department_id);
+        deptMap.set(t.department_id, { name: t.department_name || 'Department', count: (ex?.count || 0) + 1 });
+      } else {
+        noDeptCount++;
+      }
+      if (t.property_name) propertyMap.set(t.property_name, (propertyMap.get(t.property_name) || 0) + 1);
+      (t.assigned_users || []).forEach((a: any) => {
+        const ex = assigneeMap.get(a.user_id);
+        assigneeMap.set(a.user_id, { name: a.name || 'Unknown', count: (ex?.count || 0) + 1 });
+      });
+    });
+    const statuses: FilterOption[] = [
+      { value: 'not_started', label: 'Not started', count: statusCounts.not_started || 0 },
+      { value: 'in_progress', label: 'In progress', count: statusCounts.in_progress || 0 },
+      { value: 'paused', label: 'Paused', count: statusCounts.paused || 0 },
+      { value: 'complete', label: 'Complete', count: statusCounts.complete || 0 },
+    ];
+    const priorities: FilterOption[] = [
+      { value: 'urgent', label: 'Urgent', count: priorityCounts.urgent || 0 },
+      { value: 'high', label: 'High', count: priorityCounts.high || 0 },
+      { value: 'medium', label: 'Medium', count: priorityCounts.medium || 0 },
+      { value: 'low', label: 'Low', count: priorityCounts.low || 0 },
+    ];
+    const assignees: FilterOption[] = Array.from(assigneeMap.entries())
+      .map(([id, v]) => ({ value: id, label: v.name, count: v.count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    const departments: FilterOption[] = [
+      ...Array.from(deptMap.entries())
+        .map(([id, v]) => ({ value: id, label: v.name, count: v.count }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+      { value: NO_DEPT, label: 'No department', count: noDeptCount },
+    ];
+    const propertiesOpt: FilterOption[] = Array.from(propertyMap.entries())
+      .map(([name, count]) => ({ value: name, label: name, count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    return { statuses, priorities, assignees, departments, propertiesOpt };
+  }, [allScheduledTasks]);
+
+  const displayedScheduledTasks = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return allScheduledTasks.filter((t: any) => {
+      if (q) {
+        const hay = [
+          t.title || '',
+          t.template_name || '',
+          t.property_name || '',
+          t.guest_name || '',
+          t.department_name || '',
+        ].join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (statusSel.size > 0 && !statusSel.has(t.status)) return false;
+      if (prioritySel.size > 0 && !prioritySel.has(t.priority || '')) return false;
+      if (deptSel.size > 0) {
+        const key = t.department_id || NO_DEPT;
+        if (!deptSel.has(key)) return false;
+      }
+      if (assigneeSel.size > 0) {
+        if (!(t.assigned_users || []).some((a: any) => assigneeSel.has(a.user_id))) return false;
+      }
+      if (propSel.size > 0) {
+        if (!t.property_name || !propSel.has(t.property_name)) return false;
+      }
+      return true;
+    });
+  }, [allScheduledTasks, search, statusSel, assigneeSel, deptSel, prioritySel, propSel]);
+
+  const displayedProperties = useMemo(
+    () => (propSel.size > 0 ? properties.filter(p => propSel.has(p)) : properties),
+    [properties, propSel],
+  );
+
   // ---- Day detail panel (clicking a day header in grid view) -----------
   // Flat list of tasks + reservations intersecting the selected day,
   // across all properties. Handlers route task/reservation clicks back
@@ -1281,7 +1500,7 @@ export default function TimelineWindow({
       is_automated?: boolean;
       reservation_id?: string | null;
     };
-    const dayTasks: TaskRowItem[] = (allScheduledTasks as TaskRowSource[])
+    const dayTasks: TaskRowItem[] = (displayedScheduledTasks as TaskRowSource[])
       .filter((t) => (t.scheduled_date || '').slice(0, 10) === dayKey)
       .map((t) => ({
         key: t.task_id,
@@ -1305,7 +1524,7 @@ export default function TimelineWindow({
         reservation_id: t.reservation_id ?? null,
       }));
     return { dayKey, dayTasks };
-  }, [selectedDay, allScheduledTasks]);
+  }, [selectedDay, displayedScheduledTasks]);
 
   const handleOpenTaskFromDay = useCallback((taskKey: string) => {
     const task = allScheduledTasks.find((t) => t.task_id === taskKey);
@@ -1363,7 +1582,7 @@ export default function TimelineWindow({
     <div className="h-full flex flex-col relative bg-white dark:bg-card">
       {/* Header with navigation - fixed at top */}
       <div className="flex-shrink-0 px-4 py-3 bg-white dark:bg-[var(--timeline-surface-2)] border-b border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)]">
-        <div className="flex items-center gap-4 mb-2">
+        <div className="flex items-center gap-3 flex-wrap">
           {/* View Mode Icons */}
           <div className="flex items-center gap-1">
             <button
@@ -1378,7 +1597,7 @@ export default function TimelineWindow({
               }`}
               title="Grid View"
             >
-              <Rhombus16FilledIcon size={18} />
+              <RowsIcon className="w-[18px] h-[18px]" />
             </button>
             <button
               onClick={() => {
@@ -1392,92 +1611,57 @@ export default function TimelineWindow({
               }`}
               title="Kanban View"
             >
-              <RectangleStackIcon size={18} />
+              <KanbanColumnsIcon className="w-[18px] h-[18px]" />
             </button>
           </div>
 
-          <div className="flex items-center gap-4">
-            {/* Navigation Controls */}
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={() => {
-                  if (viewMode === 'grid') {
-                    goToPrevious();
-                  } else {
-                    // In kanban mode, go to previous day
-                    const newDate = new Date(kanbanDate);
-                    newDate.setDate(newDate.getDate() - 1);
-                    setKanbanDate(newDate);
-                  }
-                }}
-                variant="outline"
-                size="sm"
-              >
-                ← Prev
-              </Button>
-              <Button
-                onClick={() => {
-                  if (viewMode === 'grid') {
-                    goToToday();
-                  } else {
-                    setKanbanDate(new Date());
-                  }
-                }}
-                variant="outline"
-                size="sm"
-              >
-                Today
-              </Button>
-              <Button
-                onClick={() => {
-                  if (viewMode === 'grid') {
-                    goToNext();
-                  } else {
-                    // In kanban mode, go to next day
-                    const newDate = new Date(kanbanDate);
-                    newDate.setDate(newDate.getDate() + 1);
-                    setKanbanDate(newDate);
-                  }
-                }}
-                variant="outline"
-                size="sm"
-              >
-                Next →
-              </Button>
-            </div>
+          <TimelineNavBar
+            showViewToggle={viewMode === 'grid'}
+            view={view}
+            onView={setView}
+            onPrev={handleTimelinePrev}
+            onToday={handleTimelineToday}
+            onNext={handleTimelineNext}
+          />
 
-            {/* View Toggle - only show in grid mode */}
-            {viewMode === 'grid' && (
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => setView('week')}
-                  variant={view === 'week' ? 'default' : 'outline'}
-                  size="sm"
-                >
-                  Week
-                </Button>
-                <Button
-                  onClick={() => setView('month')}
-                  variant={view === 'month' ? 'default' : 'outline'}
-                  size="sm"
-                >
-                  Month
-                </Button>
-              </div>
-            )}
-          </div>
+          <CompactSearch value={search} onChange={setSearch} />
 
-          <div className="ml-auto">
-            <Button
-              onClick={handleCreateProjectFromHeader}
-              variant="outline"
-              size="sm"
-              title="Create Task"
-              className="px-3"
-            >
-              + Task
-            </Button>
-          </div>
+          <TaskFilterBar
+            inline
+            statusOptions={timelineFilterOptions.statuses}
+            statusSelected={statusSel}
+            onStatusChange={setStatusSel}
+            assigneeOptions={timelineFilterOptions.assignees}
+            assigneeSelected={assigneeSel}
+            onAssigneeChange={setAssigneeSel}
+            departmentOptions={timelineFilterOptions.departments}
+            departmentSelected={deptSel}
+            onDepartmentChange={setDeptSel}
+            priorityOptions={timelineFilterOptions.priorities}
+            prioritySelected={prioritySel}
+            onPriorityChange={setPrioritySel}
+            propertyOptions={timelineFilterOptions.propertiesOpt}
+            propertySelected={propSel}
+            onPropertyChange={setPropSel}
+            onClearAll={clearAllFilters}
+            anyFilterActive={anyFilterActive}
+            totalCount={allScheduledTasks.length}
+            filteredCount={displayedScheduledTasks.length}
+          />
+
+          <WeatherWidgetTrigger />
+
+          <button
+            type="button"
+            onClick={handleCreateProjectFromHeader}
+            title="Create Task"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            New task
+          </button>
         </div>
       </div>
 
@@ -1492,7 +1676,7 @@ export default function TimelineWindow({
         onDragEnd={handleTaskDragEnd}
         onDragCancel={handleTaskDragCancel}
       >
-      <div ref={scrollLockRef} className="flex-1 overflow-auto px-4 pb-4">
+      <div ref={scrollLockRef} className="flex-1 overflow-auto pb-4">
           <div
             ref={gridRef}
             className="grid border border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] w-full overflow-x-clip"
@@ -1506,9 +1690,9 @@ export default function TimelineWindow({
                 <button
                   onClick={toggleAllExpanded}
                   className="p-0.5 rounded hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.05)] transition-colors"
-                  title={expandedProperties.size === properties.length ? 'Collapse all' : 'Expand all'}
+                  title={expandedProperties.size === displayedProperties.length ? 'Collapse all' : 'Expand all'}
                 >
-                  <svg className={`w-3 h-3 transition-transform duration-200 ${expandedProperties.size === properties.length ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className={`w-3 h-3 transition-transform duration-200 ${expandedProperties.size === displayedProperties.length ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </button>
@@ -1522,8 +1706,8 @@ export default function TimelineWindow({
                   key={idx} 
                   className={`px-3 py-2.5 border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] sticky top-0 z-20 cursor-pointer transition-colors ${
                     isTodayDate 
-                      ? 'today-tint' 
-                      : 'bg-white dark:bg-[var(--timeline-surface-2)] hover:bg-[rgba(30,25,20,0.02)] dark:hover:bg-[var(--timeline-hover)]'
+                      ? 'today-tint'
+                      : 'bg-white dark:bg-[var(--timeline-surface-2)] hover:bg-[#f4f3f1] dark:hover:bg-[#222228]'
                   }`}
                   onClick={() => { closeGlobals(); setSelectedDay(date); }}
                 >
@@ -1533,7 +1717,7 @@ export default function TimelineWindow({
             })}
 
             {/* Property Rows */}
-            {properties.map((property) => {
+            {displayedProperties.map((property) => {
               const propertyReservations = getReservationsForProperty(property);
               const activeTurnover = getActiveTurnoverForProperty(propertyReservations);
 
@@ -1660,9 +1844,31 @@ export default function TimelineWindow({
                           const reachesLastColumn = idx + span >= dateRange.length;
                           const flushRight = endsAfterRange || reachesLastColumn;
 
-                          const leftOffset = startsBeforeRange ? 0 : 50;
-                          const rightOffset = flushRight ? 0 : 50;
-                          const totalWidth = (span * 100) - leftOffset - rightOffset;
+                          // Pixel geometry off the measured column width so the
+                          // check-in start and check-out end land at the same
+                          // in-cell fraction for every bar, independent of span.
+                          // (Cell-relative % drifts because span*100% of one cell
+                          // ≠ the summed width of N rounded 1fr tracks.)
+                          const START_FRAC = 0.60; // into the check-in cell
+                          const END_FRAC = 0.40;   // into the check-out cell
+                          const cw = colWidth;
+                          let leftStyle: string;
+                          let widthStyle: string;
+                          if (cw > 0) {
+                            const left = startsBeforeRange ? 0 : START_FRAC * cw;
+                            const rightEdge = flushRight
+                              ? span * cw
+                              : (span - 1) * cw + END_FRAC * cw;
+                            leftStyle = `${left}px`;
+                            widthStyle = `${Math.max(8, rightEdge - left)}px`;
+                          } else {
+                            // First paint / SSR before the observer fires.
+                            const lo = startsBeforeRange ? 0 : 50;
+                            const ro = flushRight ? 0 : 50;
+                            const tw = (span * 100) - lo - ro;
+                            leftStyle = `${lo}%`;
+                            widthStyle = flushRight ? `${tw + 20}%` : `${tw}%`;
+                          }
 
                           const diagonalPx = 12;
                           const leftDiagonal = startsBeforeRange ? '0px' : `${diagonalPx}px`;
@@ -1683,12 +1889,10 @@ export default function TimelineWindow({
                             <div
                               className={`absolute pointer-events-none transition-all duration-150 text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium flex items-center overflow-hidden border-t ${barColorClass} ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-[rgba(99,102,241,0.5)] dark:ring-[rgba(167,139,250,0.6)] shadow-lg z-30' : ''}`}
                               style={{
-                                left: `${leftOffset}%`,
+                                left: leftStyle,
                                 top: '10px',
                                 height: '36px',
-                                width: flushRight
-                                  ? `${totalWidth + 20}%`
-                                  : `${totalWidth}%`,
+                                width: widthStyle,
                                 zIndex: 15,
                                 clipPath,
                                 borderRadius: startsBeforeRange && flushRight
@@ -1714,7 +1918,7 @@ export default function TimelineWindow({
                         <ScheduledItemsCell
                           propertyName={property}
                           date={date}
-                          tasks={allScheduledTasks}
+                          tasks={displayedScheduledTasks}
                           projects={[]}
                           viewMode={view}
                           expanded={expandedProperties.has(property)}
@@ -1754,7 +1958,7 @@ export default function TimelineWindow({
                       {dateRange.map((date, idx) => {
                         const isTodayDate = isToday(date);
                         const cellDateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-                        const dateTasks = allScheduledTasks.filter(
+                        const dateTasks = displayedScheduledTasks.filter(
                           (t) => t.property_name === property && t.scheduled_date === cellDateStr
                         );
                         const hasItems = dateTasks.length > 0;
@@ -1803,7 +2007,7 @@ export default function TimelineWindow({
         <div className="flex-1 overflow-hidden">
           <DayKanban
             date={kanbanDate}
-            tasks={allScheduledTasks}
+            tasks={displayedScheduledTasks}
             users={users}
             openTaskId={
               floatingData?.type === 'task' ? localTask?.task_id ?? null : null
