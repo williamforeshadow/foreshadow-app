@@ -61,10 +61,10 @@ function reservationFromTurnover(
 
 // Adapter: RPC `Task` (jsonb_agg row from get_property_turnovers) → the
 // `ScheduleTask` shape ReservationDetailPanel + PropertyTaskDetailOverlay
-// consume. Most fields map 1:1; the few RPC omissions (property_id,
-// bin_name, is_binned, created_at, updated_at) are non-essential for the
-// panel surfaces — the overlay's mutation paths key on `task_id` and
-// resolve property_name internally, so passing nulls is safe.
+// consume. Most fields map 1:1; bin_name / created_at / updated_at are
+// non-essential RPC omissions (the overlay keys mutations on task_id).
+// property_id IS carried through — the scheduled-date picker needs it
+// to load the property's reservations.
 function turnoverTaskToScheduleTask(
   task: Task,
   fallbackPropertyName: string | null
@@ -84,7 +84,7 @@ function turnoverTaskToScheduleTask(
       avatar: u.avatar ?? null,
       role: u.role,
     })),
-    property_id: null,
+    property_id: task.property_id ?? null,
     property_name: task.property_name ?? fallbackPropertyName,
     template_id: task.template_id ?? null,
     description: task.description ?? null,
@@ -194,10 +194,16 @@ function TurnoversWindowContent(props: TurnoversWindowProps) {
     (task: ScheduleTask) => {
       closeGlobals();
       setSelectedTask(
-        scheduleTaskToOverlay(task, null, selectedCard?.property_name ?? null)
+        scheduleTaskToOverlay(
+          task,
+          // Fallback to the card's property_id for any legacy task
+          // row whose own property_id is null.
+          selectedCard?.property_id ?? null,
+          selectedCard?.property_name ?? null
+        )
       );
     },
-    [selectedCard?.property_name, closeGlobals]
+    [selectedCard?.property_id, selectedCard?.property_name, closeGlobals]
   );
 
   const reservationForPanel = useMemo(

@@ -100,6 +100,7 @@ export type OccupancyStatus = 'occupied' | 'vacant';
 
 export interface Turnover {
   id: string;
+  property_id?: string | null;
   property_name: string;
   guest_name?: string;
   check_in?: string;
