@@ -4,7 +4,7 @@ import {
   type UpdateTasksBatchPlan,
 } from '@/src/server/tasks/updateTasksBatch';
 import { mintUpdateTasksBatchToken } from '@/src/server/tasks/updateTasksBatchConfirmation';
-import { createPendingAction } from '@/src/server/agent/pendingActions';
+import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
 import type { ToolContext, ToolDefinition, ToolResult } from './types';
 
 const STATUS_ENUM = z.enum([
@@ -77,11 +77,9 @@ async function handler(
 
   const minted = mintUpdateTasksBatchToken(result.canonicalInput);
   const pendingActionId =
-    ctx.surface === 'slack' && ctx.slack && result.plan.change_count > 0
-      ? await createPendingAction({
+    result.plan.change_count > 0
+      ? await maybeCreatePendingAction(ctx, {
           kind: 'update_tasks_batch',
-          requesterAppUserId: ctx.actor?.appUserId ?? null,
-          slack: ctx.slack,
           canonicalInput: { input: result.canonicalInput },
           preview: result.plan,
         })

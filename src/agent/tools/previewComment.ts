@@ -4,7 +4,7 @@ import {
   type AddCommentPlan,
 } from '@/src/server/comments/addComment';
 import { mintAddCommentToken } from '@/src/server/comments/addCommentConfirmation';
-import { createPendingAction } from '@/src/server/agent/pendingActions';
+import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
 import type { ToolDefinition, ToolContext, ToolResult } from './types';
 
 // preview_comment — first half of the two-step write protocol for task
@@ -109,16 +109,11 @@ async function handler(
   }
 
   const minted = mintAddCommentToken(result.canonicalInput);
-  const pendingActionId =
-    ctx.surface === 'slack' && ctx.slack
-      ? await createPendingAction({
-          kind: 'add_comment',
-          requesterAppUserId: ctx.actor.appUserId,
-          slack: ctx.slack,
-          canonicalInput: { input: result.canonicalInput },
-          preview: result.plan,
-        })
-      : null;
+  const pendingActionId = await maybeCreatePendingAction(ctx, {
+    kind: 'add_comment',
+    canonicalInput: { input: result.canonicalInput },
+    preview: result.plan,
+  });
 
   return {
     ok: true,

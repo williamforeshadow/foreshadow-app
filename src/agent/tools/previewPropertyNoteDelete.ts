@@ -4,7 +4,7 @@ import {
   type DeleteNotePlan,
 } from '@/src/server/properties/deletePropertyNote';
 import { mintDeleteNoteToken } from '@/src/server/properties/propertyNoteConfirmation';
-import { createPendingAction } from '@/src/server/agent/pendingActions';
+import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
 import type { ToolContext, ToolDefinition, ToolResult } from './types';
 
 const inputSchema = z.object({
@@ -45,16 +45,11 @@ async function handler(
     };
   }
   const minted = mintDeleteNoteToken(result.canonicalInput);
-  const pendingActionId =
-    ctx.surface === 'slack' && ctx.slack
-      ? await createPendingAction({
-          kind: 'property_note_delete',
-          requesterAppUserId: ctx.actor?.appUserId ?? null,
-          slack: ctx.slack,
-          canonicalInput: { input: result.canonicalInput },
-          preview: result.plan,
-        })
-      : null;
+  const pendingActionId = await maybeCreatePendingAction(ctx, {
+    kind: 'property_note_delete',
+    canonicalInput: { input: result.canonicalInput },
+    preview: result.plan,
+  });
 
   return {
     ok: true,

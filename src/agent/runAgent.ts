@@ -95,7 +95,7 @@ function buildSystemPrompt(
   const surfaceLine =
     surface === 'slack'
       ? '- You are answering inside Slack. Keep replies short, plain text. Use bold sparingly with single-asterisk syntax (*bold*). Do not use markdown headings (#, ##) — Slack does not render them.'
-      : '- You are answering inside the Foreshadow web app chat panel. Replies render as full markdown.';
+      : '- You are answering inside the Foreshadow web app chat panel. Replies render as full markdown. When a write preview returns a pending_action_id, the chat panel shows Confirm and Cancel buttons directly below your message — present the plan once and tell the user to use those buttons. Do NOT ask them to type "yes" or paste a confirmation token.';
 
   // Identity grounding. When the caller knows who's asking — Slack route
   // resolves Slack user → Foreshadow user via email; in-app chat will

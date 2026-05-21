@@ -4,7 +4,7 @@ import {
   type CreateTaskPlan,
 } from '@/src/server/tasks/createTask';
 import { mintCreateTaskToken } from '@/src/server/tasks/createTaskConfirmation';
-import { createPendingAction } from '@/src/server/agent/pendingActions';
+import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
 import type { ToolContext, ToolDefinition, ToolResult } from './types';
 
 // preview_task — first half of the two-step write protocol for tasks.
@@ -184,19 +184,14 @@ async function handler(
   // (rather than the raw input) means trivial whitespace / key-order
   // differences don't break round-tripping.
   const minted = mintCreateTaskToken(result.canonicalInput);
-  const pendingActionId =
-    ctx.surface === 'slack' && ctx.slack
-      ? await createPendingAction({
-          kind: 'create_task',
-          requesterAppUserId: ctx.actor?.appUserId ?? null,
-          slack: ctx.slack,
-          canonicalInput: {
-            input: result.canonicalInput,
-            attachment_inbound_file_ids: attachment_inbound_file_ids ?? [],
-          },
-          preview: result.plan,
-        })
-      : null;
+  const pendingActionId = await maybeCreatePendingAction(ctx, {
+    kind: 'create_task',
+    canonicalInput: {
+      input: result.canonicalInput,
+      attachment_inbound_file_ids: attachment_inbound_file_ids ?? [],
+    },
+    preview: result.plan,
+  });
 
   return {
     ok: true,

@@ -4,7 +4,7 @@ import {
   type CreateBinPlan,
 } from '@/src/server/bins/createBin';
 import { mintCreateBinToken } from '@/src/server/bins/createBinConfirmation';
-import { createPendingAction } from '@/src/server/agent/pendingActions';
+import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
 import type { ToolContext, ToolDefinition, ToolResult } from './types';
 
 // preview_bin — first half of the two-step write protocol for sub-bins.
@@ -98,16 +98,11 @@ async function handler(
   }
 
   const minted = mintCreateBinToken(result.canonicalInput);
-  const pendingActionId =
-    ctx.surface === 'slack' && ctx.slack
-      ? await createPendingAction({
-          kind: 'create_bin',
-          requesterAppUserId: ctx.actor?.appUserId ?? null,
-          slack: ctx.slack,
-          canonicalInput: { input: result.canonicalInput },
-          preview: result.plan,
-        })
-      : null;
+  const pendingActionId = await maybeCreatePendingAction(ctx, {
+    kind: 'create_bin',
+    canonicalInput: { input: result.canonicalInput },
+    preview: result.plan,
+  });
 
   return {
     ok: true,

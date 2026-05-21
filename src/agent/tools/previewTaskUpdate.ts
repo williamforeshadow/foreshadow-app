@@ -4,7 +4,7 @@ import {
   type UpdateTaskPlan,
 } from '@/src/server/tasks/updateTask';
 import { mintUpdateTaskToken } from '@/src/server/tasks/updateTaskConfirmation';
-import { createPendingAction } from '@/src/server/agent/pendingActions';
+import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
 import type { ToolContext, ToolDefinition, ToolResult } from './types';
 
 // preview_task_update — first half of the two-step write protocol for
@@ -183,11 +183,9 @@ async function handler(
   // call update_task on an empty diff.
   const minted = mintUpdateTaskToken(result.canonicalInput);
   const pendingActionId =
-    ctx.surface === 'slack' && ctx.slack && result.plan.changes.length > 0
-      ? await createPendingAction({
+    result.plan.changes.length > 0
+      ? await maybeCreatePendingAction(ctx, {
           kind: 'update_task',
-          requesterAppUserId: ctx.actor?.appUserId ?? null,
-          slack: ctx.slack,
           canonicalInput: { input: result.canonicalInput },
           preview: result.plan,
         })

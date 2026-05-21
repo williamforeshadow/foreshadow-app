@@ -19,6 +19,7 @@ import {
   commitSlackFileAttachment,
   type SlackFileAttachmentInput,
 } from '@/src/server/slack/attachInboundFile';
+import type { ToolContext } from '@/src/agent/tools/types';
 
 export const AGENT_CONFIRM_ACTION_ID = 'agent_confirm_action';
 export const AGENT_CANCEL_ACTION_ID = 'agent_cancel_action';
@@ -69,15 +70,15 @@ interface GenericPendingInput {
 
 export interface PendingActionRow {
   id: string;
-  surface: 'slack';
+  surface: 'slack' | 'web';
   action_kind: PendingActionKind;
   status: 'pending' | 'processing' | 'committed' | 'cancelled' | 'failed' | 'expired';
   requester_app_user_id: string | null;
   slack_team_id: string | null;
-  slack_channel_id: string;
+  slack_channel_id: string | null;
   slack_thread_ts: string | null;
   slack_message_ts: string | null;
-  slack_user_id: string;
+  slack_user_id: string | null;
   canonical_input: unknown;
   preview: unknown;
   result: unknown;
@@ -89,8 +90,10 @@ export interface PendingActionRow {
 
 export interface CreatePendingActionArgs {
   kind: PendingActionKind;
+  surface: 'slack' | 'web';
   requesterAppUserId?: string | null;
-  slack: SlackPendingActionContext;
+  /** Required when surface === 'slack'; omitted for web rows. */
+  slack?: SlackPendingActionContext;
   canonicalInput: unknown;
   preview: unknown;
 }
@@ -126,15 +129,15 @@ export async function createPendingAction(
   const { data, error } = await supabase
     .from('agent_pending_actions')
     .insert({
-      surface: 'slack',
+      surface: args.surface,
       action_kind: args.kind,
       status: 'pending',
       requester_app_user_id: args.requesterAppUserId ?? null,
-      slack_team_id: args.slack.teamId ?? null,
-      slack_channel_id: args.slack.channelId,
-      slack_thread_ts: args.slack.threadTs ?? null,
-      slack_message_ts: args.slack.messageTs ?? null,
-      slack_user_id: args.slack.userId,
+      slack_team_id: args.slack?.teamId ?? null,
+      slack_channel_id: args.slack?.channelId ?? null,
+      slack_thread_ts: args.slack?.threadTs ?? null,
+      slack_message_ts: args.slack?.messageTs ?? null,
+      slack_user_id: args.slack?.userId ?? null,
       canonical_input: args.canonicalInput,
       preview: args.preview,
       expires_at: expiresAt(),
@@ -147,6 +150,66 @@ export async function createPendingAction(
     return null;
   }
   return data.id as string;
+}
+
+/**
+ * Register a pending action from a preview tool, picking up surface and
+ * identity from the tool context. Returns the new action id, or null when
+ * there is no durable surface to attach it to (e.g. an anonymous web call
+ * with no resolved actor). Preview tools call this instead of branching on
+ * surface themselves.
+ */
+export async function maybeCreatePendingAction(
+  ctx: ToolContext,
+  args: {
+    kind: PendingActionKind;
+    canonicalInput: unknown;
+    preview: unknown;
+  },
+): Promise<string | null> {
+  if (ctx.surface === 'slack' && ctx.slack) {
+    return createPendingAction({
+      kind: args.kind,
+      surface: 'slack',
+      requesterAppUserId: ctx.actor?.appUserId ?? null,
+      slack: ctx.slack,
+      canonicalInput: args.canonicalInput,
+      preview: args.preview,
+    });
+  }
+  if (ctx.surface === 'web' && ctx.actor) {
+    return createPendingAction({
+      kind: args.kind,
+      surface: 'web',
+      requesterAppUserId: ctx.actor.appUserId,
+      canonicalInput: args.canonicalInput,
+      preview: args.preview,
+    });
+  }
+  return null;
+}
+
+/**
+ * Surface-aware access check: only the person who requested an action may
+ * confirm or cancel it. Slack rows are keyed by slack_user_id; web rows by
+ * requester_app_user_id.
+ */
+function isAuthorizedActor(
+  row: PendingActionRow,
+  ids: { slackUserId?: string; appUserId?: string },
+): boolean {
+  if (row.surface === 'web') {
+    return (
+      !!ids.appUserId &&
+      !!row.requester_app_user_id &&
+      row.requester_app_user_id === ids.appUserId
+    );
+  }
+  return (
+    !!ids.slackUserId &&
+    !!row.slack_user_id &&
+    row.slack_user_id === ids.slackUserId
+  );
 }
 
 export async function setPendingActionMessageTs(
@@ -219,7 +282,8 @@ export function isBareConfirmation(text: string): boolean {
 
 export async function cancelPendingAction(args: {
   actionId: string;
-  slackUserId: string;
+  slackUserId?: string;
+  appUserId?: string;
 }): Promise<PendingExecutionResult> {
   const row = await loadPendingAction(args.actionId);
   if (!row) {
@@ -230,7 +294,7 @@ export async function cancelPendingAction(args: {
       error: 'not_found',
     };
   }
-  if (row.slack_user_id !== args.slackUserId) {
+  if (!isAuthorizedActor(row, args)) {
     return {
       ok: false,
       status: 'failed',
@@ -266,9 +330,13 @@ export async function cancelPendingAction(args: {
 
 export async function confirmPendingAction(args: {
   actionId: string;
-  slackUserId: string;
+  slackUserId?: string;
+  appUserId?: string;
 }): Promise<PendingExecutionResult> {
-  const claimed = await claimPendingAction(args.actionId, args.slackUserId);
+  const claimed = await claimPendingAction(args.actionId, {
+    slackUserId: args.slackUserId,
+    appUserId: args.appUserId,
+  });
   if (!claimed.ok) return claimed.result;
 
   const execution = await executePendingAction(claimed.row);
@@ -308,7 +376,7 @@ async function loadPendingAction(id: string): Promise<PendingActionRow | null> {
 
 async function claimPendingAction(
   actionId: string,
-  slackUserId: string,
+  ids: { slackUserId?: string; appUserId?: string },
 ): Promise<
   | { ok: true; row: PendingActionRow }
   | { ok: false; result: PendingExecutionResult }
@@ -325,7 +393,7 @@ async function claimPendingAction(
       },
     };
   }
-  if (row.slack_user_id !== slackUserId) {
+  if (!isAuthorizedActor(row, ids)) {
     return {
       ok: false,
       result: {

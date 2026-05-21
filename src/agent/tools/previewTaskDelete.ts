@@ -4,7 +4,7 @@ import {
   type DeleteTaskPlan,
 } from '@/src/server/tasks/deleteTask';
 import { mintDeleteTaskToken } from '@/src/server/tasks/deleteTaskConfirmation';
-import { createPendingAction } from '@/src/server/agent/pendingActions';
+import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
 import type { ToolContext, ToolDefinition, ToolResult } from './types';
 
 // preview_task_delete — first half of the two-step protocol for
@@ -72,16 +72,11 @@ async function handler(
   }
 
   const minted = mintDeleteTaskToken(result.canonicalInput);
-  const pendingActionId =
-    ctx.surface === 'slack' && ctx.slack
-      ? await createPendingAction({
-          kind: 'delete_task',
-          requesterAppUserId: ctx.actor?.appUserId ?? null,
-          slack: ctx.slack,
-          canonicalInput: { input: result.canonicalInput },
-          preview: result.plan,
-        })
-      : null;
+  const pendingActionId = await maybeCreatePendingAction(ctx, {
+    kind: 'delete_task',
+    canonicalInput: { input: result.canonicalInput },
+    preview: result.plan,
+  });
 
   return {
     ok: true,

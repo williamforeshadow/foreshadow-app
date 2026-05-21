@@ -4,7 +4,7 @@ import {
   type CreateTasksBatchPlan,
 } from '@/src/server/tasks/createTasksBatch';
 import { mintCreateTasksBatchToken } from '@/src/server/tasks/createTasksBatchConfirmation';
-import { createPendingAction } from '@/src/server/agent/pendingActions';
+import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
 import type { ToolContext, ToolDefinition, ToolResult } from './types';
 
 // preview_tasks_batch — first half of the batch task write protocol.
@@ -187,16 +187,11 @@ async function handler(
   }
 
   const minted = mintCreateTasksBatchToken(result.canonicalInput);
-  const pendingActionId =
-    ctx.surface === 'slack' && ctx.slack
-      ? await createPendingAction({
-          kind: 'create_tasks_batch',
-          requesterAppUserId: ctx.actor?.appUserId ?? null,
-          slack: ctx.slack,
-          canonicalInput: { input: result.canonicalInput },
-          preview: result.plan,
-        })
-      : null;
+  const pendingActionId = await maybeCreatePendingAction(ctx, {
+    kind: 'create_tasks_batch',
+    canonicalInput: { input: result.canonicalInput },
+    preview: result.plan,
+  });
 
   return {
     ok: true,

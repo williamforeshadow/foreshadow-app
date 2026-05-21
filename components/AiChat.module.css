@@ -119,6 +119,13 @@
   border-radius: 0.25rem 1rem 1rem 1rem;
 }
 
+/* Confirm/Cancel buttons under an assistant write-preview message. */
+.confirmationButtons {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.625rem;
+}
+
 /* Legacy support */
 .responseMessage {
   display: flex;

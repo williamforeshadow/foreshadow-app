@@ -4,7 +4,7 @@ import {
   type DeleteContactPlan,
 } from '@/src/server/properties/deletePropertyContact';
 import { mintDeleteContactToken } from '@/src/server/properties/propertyContactConfirmation';
-import { createPendingAction } from '@/src/server/agent/pendingActions';
+import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
 import type { ToolContext, ToolDefinition, ToolResult } from './types';
 
 const inputSchema = z.object({
@@ -45,16 +45,11 @@ async function handler(
     };
   }
   const minted = mintDeleteContactToken(result.canonicalInput);
-  const pendingActionId =
-    ctx.surface === 'slack' && ctx.slack
-      ? await createPendingAction({
-          kind: 'property_contact_delete',
-          requesterAppUserId: ctx.actor?.appUserId ?? null,
-          slack: ctx.slack,
-          canonicalInput: { input: result.canonicalInput },
-          preview: result.plan,
-        })
-      : null;
+  const pendingActionId = await maybeCreatePendingAction(ctx, {
+    kind: 'property_contact_delete',
+    canonicalInput: { input: result.canonicalInput },
+    preview: result.plan,
+  });
 
   return {
     ok: true,

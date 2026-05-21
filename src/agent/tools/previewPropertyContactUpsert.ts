@@ -4,7 +4,7 @@ import {
   type UpsertContactPlan,
 } from '@/src/server/properties/upsertPropertyContact';
 import { mintUpsertContactToken } from '@/src/server/properties/propertyContactConfirmation';
-import { createPendingAction } from '@/src/server/agent/pendingActions';
+import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
 import type { ToolContext, ToolDefinition, ToolResult } from './types';
 
 const inputSchema = z
@@ -92,16 +92,13 @@ async function handler(
   const minted = mintUpsertContactToken(result.canonicalInput);
   const hasChanges =
     result.plan.mode === 'create' || (result.plan.changes?.length ?? 0) > 0;
-  const pendingActionId =
-    ctx.surface === 'slack' && ctx.slack && hasChanges
-      ? await createPendingAction({
-          kind: 'property_contact_upsert',
-          requesterAppUserId: ctx.actor?.appUserId ?? null,
-          slack: ctx.slack,
-          canonicalInput: { input: result.canonicalInput },
-          preview: result.plan,
-        })
-      : null;
+  const pendingActionId = hasChanges
+    ? await maybeCreatePendingAction(ctx, {
+        kind: 'property_contact_upsert',
+        canonicalInput: { input: result.canonicalInput },
+        preview: result.plan,
+      })
+    : null;
 
   return {
     ok: true,

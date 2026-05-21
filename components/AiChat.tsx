@@ -58,6 +58,11 @@ interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  // When the agent returns a write preview, the server hands back a durable
+  // pending-action id. The chat shows Confirm/Cancel buttons until the user
+  // resolves it; `confirmation` tracks that lifecycle for this message.
+  pendingActionId?: string;
+  confirmation?: "pending" | "confirming" | "done" | "cancelled" | "error";
 }
 
 export function AiChat() {
@@ -181,7 +186,13 @@ export function AiChat() {
       } else {
         setMessages((prev) => [
           ...prev,
-          { id: `assistant-${Date.now()}`, role: "assistant", content: data.answer },
+          {
+            id: `assistant-${Date.now()}`,
+            role: "assistant",
+            content: data.answer,
+            pendingActionId: data.pending_action_id ?? undefined,
+            confirmation: data.pending_action_id ? "pending" : undefined,
+          },
         ]);
       }
     } catch (err: any) {
@@ -191,6 +202,62 @@ export function AiChat() {
       ]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Confirm or cancel a previewed write. Commits the frozen plan server-side
+  // via /api/agent/confirm — no second agent turn — then appends the result.
+  const handleConfirmAction = async (
+    messageId: string,
+    pendingActionId: string,
+    action: "confirm" | "cancel",
+  ) => {
+    if (!user) return;
+
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId ? { ...m, confirmation: "confirming" } : m,
+      ),
+    );
+
+    const settle = (
+      state: NonNullable<Message["confirmation"]>,
+      resultText: string,
+    ) => {
+      setMessages((prev) => [
+        ...prev.map((m) =>
+          m.id === messageId ? { ...m, confirmation: state } : m,
+        ),
+        { id: `assistant-${Date.now()}`, role: "assistant", content: resultText },
+      ]);
+    };
+
+    try {
+      const res = await fetch("/api/agent/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pending_action_id: pendingActionId,
+          action,
+          user_id: user.id,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        settle("error", `Error: ${data.error || "Something went wrong"}`);
+        return;
+      }
+
+      const resolved: NonNullable<Message["confirmation"]> =
+        data.status === "committed"
+          ? "done"
+          : data.status === "cancelled"
+            ? "cancelled"
+            : "error";
+      settle(resolved, data.text);
+    } catch (err: any) {
+      settle("error", `Error: ${err.message || "Failed to confirm"}`);
     }
   };
 
@@ -246,11 +313,48 @@ export function AiChat() {
                 </div>
                 <div className={styles.messageContent}>
                   {msg.role === "assistant" ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-3 prose-ul:my-2 prose-li:my-0.5">
-                      <ReactMarkdown components={markdownComponents}>
-                        {msg.content}
-                      </ReactMarkdown>
-                    </div>
+                    <>
+                      <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-3 prose-ul:my-2 prose-li:my-0.5">
+                        <ReactMarkdown components={markdownComponents}>
+                          {msg.content}
+                        </ReactMarkdown>
+                      </div>
+                      {msg.pendingActionId &&
+                        (msg.confirmation === "pending" ||
+                          msg.confirmation === "confirming") && (
+                          <div className={styles.confirmationButtons}>
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                handleConfirmAction(
+                                  msg.id,
+                                  msg.pendingActionId!,
+                                  "confirm",
+                                )
+                              }
+                              disabled={msg.confirmation === "confirming"}
+                            >
+                              {msg.confirmation === "confirming"
+                                ? "Working…"
+                                : "Confirm"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                handleConfirmAction(
+                                  msg.id,
+                                  msg.pendingActionId!,
+                                  "cancel",
+                                )
+                              }
+                              disabled={msg.confirmation === "confirming"}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        )}
+                    </>
                   ) : (
                     <p>{msg.content}</p>
                   )}
