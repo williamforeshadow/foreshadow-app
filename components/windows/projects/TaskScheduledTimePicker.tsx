@@ -52,11 +52,14 @@ export function TaskScheduledTimePicker({
         align="start"
         sideOffset={6}
         collisionPadding={12}
-        // Match the date picker's z-index so it sits above the mobile
-        // sheet and any inline dropdowns.
-        className="w-auto p-0 z-[80]"
+        // Fixed narrow width — shadcn's PopoverContent base is w-72
+        // (288px), which on mobile reads as "spans the whole screen".
+        // 140px is tight to the time labels and leaves room for the
+        // panel's other affordances. Match the date picker's z-index
+        // so it sits above the mobile sheet and any inline dropdowns.
+        className="w-[140px] p-0 z-[80]"
       >
-        <div className="max-h-[260px] overflow-y-auto py-1 min-w-[120px]">
+        <div className="max-h-[260px] overflow-y-auto py-1">
           {slots.map((slot) => {
             const selected = slot === value;
             return (
