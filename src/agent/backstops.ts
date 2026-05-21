@@ -40,29 +40,51 @@ function isReadTool(name: string): boolean {
 }
 
 /**
- * Capability/help questions are grounded in the tool catalog and system
- * prompt, not in live property/task rows. They should not be forced through
- * read tools unless the user asks for a specific record's data.
+ * Returns true when the user's message is not a request for live record
+ * data: a capability/help question ("what can you do?", "can you make a
+ * task"), a greeting, or smalltalk. The model answers these from the system
+ * prompt and tool catalog without calling a read tool, so the read backstop
+ * must not mask them — only genuine data lookups are held to the
+ * tool-grounding contract.
  */
-export function isCapabilityOrHelpPrompt(prompt: string | undefined): boolean {
+export function isNonDataLookupPrompt(prompt: string | undefined): boolean {
   if (!prompt) return false;
   const text = prompt.trim().toLowerCase();
   if (!text) return false;
 
-  if (/\bwhat\s+can\s+you\s+do\b/.test(text)) return true;
-  if (/\bwhat\s+are\s+you\s+able\s+to\s+do\b/.test(text)) return true;
-  if (/\bwhich\s+(?:sections|things|records|files|data)\s+can\s+you\b/.test(text)) {
+  // Greeting / thanks / short acknowledgement with no data ask — the whole
+  // message is just that, so there is nothing for a tool to look up.
+  if (
+    /^(?:hi+|hey+|hello+|yo|sup|howdy|hiya|greetings|good\s+(?:morning|afternoon|evening|day))(?:\s+(?:there|foreshadow|bot|claude))?[\s!.,'-]*$/.test(
+      text,
+    )
+  ) {
     return true;
   }
+  if (/^(?:thank(?:s|\s+you)?|ty|cheers|nice|cool|great|ok(?:ay)?|got\s+it)\b[\s!.,'-]*$/.test(text)) {
+    return true;
+  }
+  if (/^help[\s!.?]*$/.test(text)) return true;
+
+  // Capability / help / meta questions about what the agent itself can do.
+  if (/\bwhat\s+can\s+you\s+do\b/.test(text)) return true;
+  if (/\bwhat\s+are\s+you\s+(?:able\s+to\s+do|capable\s+of)\b/.test(text)) return true;
+  if (/\b(?:capable\s+of|your\s+capabilities)\b/.test(text)) return true;
+  if (/\bare\s+you\s+able\s+to\b/.test(text)) return true;
   if (/\bdo\s+you\s+have\s+(?:the\s+)?(?:capability|capabilities|ability|permission|permissions)\b/.test(text)) {
     return true;
   }
-  if (/\bare\s+you\s+able\s+to\b/.test(text)) return true;
+  if (/\bwhich\s+(?:sections|things|records|files|data|kinds?|types?)\s+can\s+you\b/.test(text)) {
+    return true;
+  }
 
-  // "Can you delete property information?" is usually a capability check,
-  // while "can you delete the Turf Patio card" may be an actual request.
-  // The write backstop still protects fabricated success claims either way.
-  if (/^can\s+you\b/.test(text) && /[?]$/.test(text)) {
+  // "can you ..." / "could you ..." asking about a generic ops capability
+  // rather than a specific named record. A trailing "?" is not required —
+  // users routinely phrase capability checks as statements ("can you make a
+  // task"). The genericOpsTarget / concreteRecordCue split still keeps
+  // requests about a specific named record ("can you delete the #418 task")
+  // subject to the backstop.
+  if (/^(?:can|could)\s+you\b/.test(text)) {
     const genericOpsTarget =
       /\b(?:property\s+(?:profile|profiles|information|knowledge)|profiles?|tasks?|attachments?|documents?|photos?|videos?|files?|notes?|vendors?|contacts?|access|connectivity|interior|exterior|activity)\b/.test(text);
     const concreteRecordCue =
@@ -97,7 +119,7 @@ export function maskHallucinatedReadClaim(
   if (!looksLikeDataAnswer(text)) {
     return { text, replaced: false };
   }
-  if (isCapabilityOrHelpPrompt(prompt)) {
+  if (isNonDataLookupPrompt(prompt)) {
     return { text, replaced: false };
   }
 
