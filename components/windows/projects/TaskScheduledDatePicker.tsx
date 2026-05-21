@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { parseISO } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -36,6 +36,58 @@ function formatDisplay(value: string): string {
   return d.toLocaleDateString();
 }
 
+// Shape overlay painted inside each day cell. Diagonal corner cuts:
+//
+//   check-in  → top-left corner cut out, purple fills the bottom-right
+//   check-out → bottom-right corner cut out, purple fills the top-left
+//   reserved  → full rectangle
+//
+// Solo check-in/check-out cells use a true corner-to-corner diagonal
+// so the cut triangle's right/bottom (check-in) or left/top
+// (check-out) edges run flush to the cell border — they tile
+// seamlessly against the adjacent full reserved rectangles with no
+// "step" / upward jog in the purple band.
+//
+// When a single cell carries BOTH check-in and check-out (a same-day
+// turnover), splitGap pulls each diagonal 20% off the corner so the
+// two triangles sit apart with a constant-width gap between them.
+function DayShape({
+  variant,
+  splitGap,
+}: {
+  variant: 'reserved' | 'check-in' | 'check-out';
+  splitGap?: boolean;
+}) {
+  let clipPath: string | undefined;
+  if (variant === 'check-in') {
+    clipPath = splitGap
+      ? 'polygon(100% 20%, 100% 100%, 20% 100%)'
+      : 'polygon(100% 0, 100% 100%, 0 100%)';
+  } else if (variant === 'check-out') {
+    clipPath = splitGap
+      ? 'polygon(0 0, 80% 0, 0 80%)'
+      : 'polygon(0 0, 100% 0, 0 100%)';
+  }
+  // reserved → clipPath undefined → full rectangle fill
+  return (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute inset-0"
+      style={{
+        backgroundColor: 'rgba(167, 139, 250, 0.18)',
+        clipPath,
+        zIndex: 0,
+      }}
+    />
+  );
+}
+
+interface DayMarks {
+  checkIn: boolean;
+  checkOut: boolean;
+  reserved: boolean;
+}
+
 export function TaskScheduledDatePicker({
   propertyId,
   value,
@@ -51,7 +103,6 @@ export function TaskScheduledDatePicker({
   const [visibleMonth, setVisibleMonth] = useState<Date>(selectedDate ?? new Date());
   const [reservations, setReservations] = useState<Reservation[]>([]);
 
-  // Keep the visible month tracking the value when it changes externally.
   useEffect(() => {
     if (selectedDate) setVisibleMonth(selectedDate);
   }, [selectedDate]);
@@ -72,24 +123,70 @@ export function TaskScheduledDatePicker({
     return () => controller.abort();
   }, [propertyId, open, visibleMonth]);
 
-  const { reservedDays, checkInDays, checkOutDays } = useMemo(() => {
-    const reserved: Date[] = [];
-    const checkIn: Date[] = [];
-    const checkOut: Date[] = [];
+  // Index reservations into a Map<YYYY-MM-DD, DayMarks>. A single day
+  // can carry multiple flags — most importantly, a same-day turnover
+  // (one reservation's checkOut on the same day as another's checkIn)
+  // gets BOTH the checkIn and checkOut flags so DayCell can render
+  // both half-cell parallelograms with a gap between them.
+  const dayMarks = useMemo(() => {
+    const map = new Map<string, DayMarks>();
+    const getOrInit = (key: string): DayMarks => {
+      let m = map.get(key);
+      if (!m) {
+        m = { checkIn: false, checkOut: false, reserved: false };
+        map.set(key, m);
+      }
+      return m;
+    };
     for (const r of reservations) {
       const start = toDateOnly(r.check_in);
       const end = toDateOnly(r.check_out);
-      checkIn.push(start);
-      checkOut.push(end);
+      getOrInit(toYMD(start)).checkIn = true;
+      getOrInit(toYMD(end)).checkOut = true;
       const cursor = new Date(start);
       cursor.setDate(cursor.getDate() + 1);
       while (cursor < end) {
-        reserved.push(new Date(cursor));
+        getOrInit(toYMD(cursor)).reserved = true;
         cursor.setDate(cursor.getDate() + 1);
       }
     }
-    return { reservedDays: reserved, checkInDays: checkIn, checkOutDays: checkOut };
+    return map;
   }, [reservations]);
+
+  // Custom Day cell. Wraps the normal day button in a <td> with our
+  // shape overlay sibling. react-day-picker forwards day + style +
+  // className + ARIA props here; we keep them all (so selection,
+  // focus, today, outside-month dimming, etc. still work) and add
+  // the reservation backdrop.
+  function DayCell(props: {
+    day: { date: Date };
+    modifiers: Record<string, boolean>;
+    className?: string;
+    style?: React.CSSProperties;
+    children?: ReactNode;
+    [k: string]: unknown;
+  }) {
+    const { day, modifiers, className, style, children, ...rest } = props;
+    const marks = dayMarks.get(toYMD(day.date));
+    // Don't paint reservation overlays on the selected day — the
+    // button's primary background should read cleanly.
+    const showShapes = !!marks && !modifiers.selected;
+    // Same-day turnover: this cell is both a check-out and a check-in.
+    // Only then do the diagonals offset to leave a gap between them.
+    const splitGap = !!marks && marks.checkIn && marks.checkOut;
+    return (
+      <td className={className} style={style} {...rest}>
+        {showShapes && marks!.reserved && <DayShape variant="reserved" />}
+        {showShapes && marks!.checkOut && (
+          <DayShape variant="check-out" splitGap={splitGap} />
+        )}
+        {showShapes && marks!.checkIn && (
+          <DayShape variant="check-in" splitGap={splitGap} />
+        )}
+        {children}
+      </td>
+    );
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -104,14 +201,7 @@ export function TaskScheduledDatePicker({
       <PopoverContent
         align="start"
         sideOffset={6}
-        // Keep at least 12px between the popover and the viewport
-        // edge — the desktop panel is anchored hard to the right
-        // side of the screen so a left-aligned popover would
-        // otherwise clip / butt up against the edge.
         collisionPadding={12}
-        // z-[80] sits above the mobile detail sheet (z-60) and the
-        // mobile InlineDropdown (z-70); desktop baseline is z-50 so
-        // this is safe everywhere.
         className="w-auto p-0 z-[80]"
         data-task-scheduled-date-picker
       >
@@ -125,36 +215,10 @@ export function TaskScheduledDatePicker({
             onChange(toYMD(date));
             setOpen(false);
           }}
-          modifiers={{
-            reserved: reservedDays,
-            checkIn: checkInDays,
-            checkOut: checkOutDays,
-          }}
-          // Inline styles on the day <td>. SVG background images encode
-          // the triangle geometry explicitly as polygon coordinates, so
-          // every cell renders a pixel-identical shape — no dependence
-          // on browser gradient interpolation (which was producing the
-          // inconsistent triangles). preserveAspectRatio='none' scales
-          // the SVG to fill any cell size exactly.
-          //   Reserved: flat purple fill.
-          //   Check-in: lower-right triangle filled, top-left cut.
-          //   Check-out: upper-left triangle filled, bottom-right cut.
-          modifiersStyles={{
-            reserved: { backgroundColor: 'rgba(167, 139, 250, 0.18)' },
-            checkIn: {
-              backgroundImage:
-                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><polygon points='100,0 100,100 0,100' fill='rgba(167,139,250,0.18)'/></svg>\")",
-              backgroundSize: '100% 100%',
-              backgroundRepeat: 'no-repeat',
-            },
-            checkOut: {
-              backgroundImage:
-                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><polygon points='0,0 100,0 0,100' fill='rgba(167,139,250,0.18)'/></svg>\")",
-              backgroundSize: '100% 100%',
-              backgroundRepeat: 'no-repeat',
-            },
-          }}
-          captionLayout="dropdown"
+          // Plain month-name label (e.g. "April 2026") flanked by the
+          // built-in prev/next chevrons — no month/year dropdowns.
+          captionLayout="label"
+          components={{ Day: DayCell as never }}
         />
         {value && (
           <div className="flex justify-end border-t border-[rgba(30,25,20,0.06)] dark:border-white/10 p-2">
