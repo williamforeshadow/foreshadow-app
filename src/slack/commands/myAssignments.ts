@@ -1,62 +1,30 @@
 import type { Block } from '@slack/types';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { taskUrl } from '@/src/lib/links';
-import { getTasksByIds, type TaskByIdRow } from '@/src/server/tasks/getTaskById';
 import { buildAssignmentBlocks } from '@/src/slack/assignmentBlocks';
+import { getMyAssignmentsData } from '@/src/server/commands/myAssignments';
 
 // Handler for the `/myassignments` Slack slash command.
 //
-// Why this exists separately from the agent: the question this command
-// answers — "what tasks am I currently assigned to?" — is fully
-// deterministic. The user is already resolved (the slash command webhook
-// gives us the Slack user_id, which the dispatcher maps to our user_id),
-// and the data shape is fixed (open tasks where task_assignments.user_id
-// matches). Routing this through the LLM would add latency, cost, and
-// hallucination risk for zero gain. We just query directly and build
-// the Block Kit response ourselves.
+// Why this exists separately from the agent: the question — "what tasks am I
+// currently assigned to?" — is fully deterministic, so routing it through the
+// LLM would add latency, cost, and hallucination risk for zero gain.
 //
-// Filtering rules (mirror the in-app My Assignments page exactly):
-//   - Only tasks where task_assignments.user_id = the resolved app user.
-//   - Drop completed tasks (status = 'complete') — already done.
-//   - Do NOT filter by is_binned. "Binned" in this codebase means
-//     "filed into a project bin" (Backlog, Triage, etc.) — it's a
-//     categorization, not a hide. The in-app My Assignments view
-//     keeps binned tasks visible and we want byte-for-byte parity so
-//     the counts match between surfaces.
-//   - Sort: scheduled_date asc with nulls last, then created_at asc as a
-//     stable tiebreaker. "What's next?" is the natural reading order.
-//
-// Output (consumed by the route layer):
-//   - 0 results → text-only message ("You have no open assignments.")
-//     and an empty blocks array. The route surfaces this as a
-//     plain-text ephemeral.
-//   - 1+ results → the assignment-list blocks (header + one section
-//     per task). The route posts them as an ephemeral in the channel
-//     where /myassignments was invoked.
+// The data-fetching and filtering/sorting rules live in the surface-agnostic
+// src/server/commands/myAssignments.ts (shared with the in-app chat command).
+// This handler is just the Slack rendering shell.
 
 export interface MyAssignmentsResult {
-  /**
-   * Plain-text fallback. Slack uses this as the notification body and
-   * also renders it inline when no `blocks` are attached (the 0-results
-   * path).
-   */
+  /** Plain-text fallback / notification body and the 0-results message. */
   text: string;
   /**
-   * Block Kit payload: `header` + one top-level `card` per task. Empty
-   * when the user has no open assignments — the route falls back to
-   * the `text` field in that case.
-   *
-   * Typed as Block[] (not KnownBlock[]) because the top-level `card`
-   * block isn't in @slack/types' KnownBlock union — the SDK only
-   * models `card` as a `carousel` child. See assignmentBlocks.ts for
-   * the rationale and the fallback story.
+   * Block Kit payload: `header` + one top-level `card` per task. Empty when
+   * the user has no open assignments — the route falls back to `text`.
    */
   blocks: Block[];
 }
 
 /**
- * Run the /myassignments query for an already-resolved app user and
- * return the Slack-shaped response payload.
+ * Run the /myassignments query for an already-resolved app user and return
+ * the Slack-shaped response payload.
  */
 export async function runMyAssignments(args: {
   appUserId: string;
@@ -64,99 +32,23 @@ export async function runMyAssignments(args: {
 }): Promise<MyAssignmentsResult> {
   const { appUserId, displayName } = args;
 
-  const supabase = getSupabaseServer();
-  // Step 1: pull the assignment rows for this user. We keep this as a
-  // separate query (instead of joining task_assignments → turnover_tasks
-  // in one round-trip) because the second step reuses getTasksByIds,
-  // which already encapsulates the full select shape and shaping logic
-  // shared with the unfurl path. One extra query is cheap and the code
-  // stays consistent.
-  const { data: assignmentRows, error: assignmentErr } = await supabase
-    .from('task_assignments')
-    .select('task_id')
-    .eq('user_id', appUserId);
-  if (assignmentErr) {
-    console.error('[slack/commands] task_assignments query failed', {
-      appUserId,
-      err: assignmentErr,
-    });
+  const data = await getMyAssignmentsData(appUserId);
+  if (!data.ok) {
     return {
       text: `Sorry — I couldn't load your assignments right now. Try again in a moment.`,
       blocks: [],
     };
   }
-  const rows = (assignmentRows ?? []) as Array<{ task_id: string }>;
-  const assignedIds = Array.from(new Set(rows.map((r) => r.task_id)));
-  if (assignedIds.length === 0) {
+  if (data.tasks.length === 0) {
     return {
       text: `${displayName}, you have no open assignments. Nice.`,
       blocks: [],
     };
   }
 
-  // Step 2: fetch the full task rows so we can both filter on status
-  // (which the assignment table doesn't carry) and feed the block
-  // builder.
-  const allTasks = await getTasksByIds(assignedIds);
-  const openTasks = allTasks.filter((t) => t.status !== 'complete');
-  if (openTasks.length === 0) {
-    return {
-      text: `${displayName}, you have no open assignments. Nice.`,
-      blocks: [],
-    };
-  }
-
-  // Step 3: sort by scheduled date asc with nulls last, then created_at
-  // asc. This puts "due today / soon" at the top and "no date set"
-  // tasks at the bottom — the natural "what should I look at first"
-  // reading order. We do this in JS rather than in SQL to keep the
-  // assignment query simple and because the result count is bounded
-  // by what one user can possibly be assigned to (small).
-  openTasks.sort(compareTasksForAssignmentList);
-
-  // Step 4: shape into (task, url) pairs and hand to the block
-  // builder. Using taskUrl() keeps the URL exactly the same as what
-  // the agent's tools return, so the linked title on each section is
-  // interchangeable with links produced anywhere else in the system.
-  const ordered = openTasks.map((task) => ({
-    task,
-    url: taskUrl(task.task_id),
-  }));
-
-  const blocks = buildAssignmentBlocks(ordered);
-
-  // Notification text: short and informative. Slack uses this as the
-  // push-notification body when blocks are present; not rendered inline
-  // in that case (the header block carries the visible heading).
-  const noun = openTasks.length === 1 ? 'assignment' : 'assignments';
-  const text = `${displayName}, you have ${openTasks.length} open ${noun}.`;
+  const blocks = buildAssignmentBlocks(data.tasks);
+  const noun = data.tasks.length === 1 ? 'assignment' : 'assignments';
+  const text = `${displayName}, you have ${data.tasks.length} open ${noun}.`;
 
   return { text, blocks };
-}
-
-// Comparator for the sort step above. Pulled out so the rule is easy
-// to read at a glance and independently testable later.
-function compareTasksForAssignmentList(
-  a: TaskByIdRow,
-  b: TaskByIdRow,
-): number {
-  const ad = a.scheduled_date;
-  const bd = b.scheduled_date;
-  if (ad && bd) {
-    if (ad !== bd) return ad < bd ? -1 : 1;
-    // Same date — fall through to time / created_at tiebreakers.
-    const at = a.scheduled_time ?? '';
-    const bt = b.scheduled_time ?? '';
-    if (at !== bt) return at < bt ? -1 : 1;
-  } else if (ad && !bd) {
-    return -1;
-  } else if (!ad && bd) {
-    return 1;
-  }
-  // Stable tiebreaker: oldest first. Newest tasks creeping to the top
-  // would feel arbitrary in an "open assignments" list.
-  if (a.created_at !== b.created_at) {
-    return a.created_at < b.created_at ? -1 : 1;
-  }
-  return 0;
 }

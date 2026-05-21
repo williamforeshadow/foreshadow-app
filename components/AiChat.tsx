@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
+import { AGENT_COMMANDS } from "@/src/lib/agentCommands";
 import styles from "./AiChat.module.css";
 
 // Same-origin link interception for the chat panel.
@@ -142,12 +143,71 @@ export function AiChat() {
     }
   }, [inputValue]);
 
+  // Run a deterministic slash command (e.g. /myassignments). Bypasses the
+  // LLM entirely — hits /api/agent/command and renders the markdown result.
+  const runCommand = async (command: string) => {
+    if (!user || isLoading) return;
+
+    setMessages((prev) => [
+      ...prev,
+      { id: `user-${Date.now()}`, role: "user", content: command },
+    ]);
+    setInputValue("");
+    setIsLoading(true);
+    setShowMessages(true);
+
+    try {
+      const res = await fetch("/api/agent/command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command, user_id: user.id }),
+      });
+      const data = await res.json();
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content:
+            !res.ok || data.error
+              ? `Error: ${data.error || "Something went wrong"}`
+              : data.answer,
+        },
+      ]);
+    } catch (err: any) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: `Error: ${err.message || "Failed to run command"}`,
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!inputValue.trim() || isLoading || !user) return;
 
     const userMessage = inputValue.trim();
     const userMsgId = `user-${Date.now()}`;
+
+    // Slash command: if the input matches (or prefix-matches) a known
+    // command, run it deterministically instead of calling the agent.
+    // Unknown "/foo" text falls through to the normal agent path.
+    if (userMessage.startsWith("/")) {
+      const lower = userMessage.toLowerCase();
+      const cmd =
+        AGENT_COMMANDS.find((c) => c.name === lower) ??
+        AGENT_COMMANDS.find((c) => c.name.startsWith(lower));
+      if (cmd) {
+        runCommand(cmd.name);
+        return;
+      }
+    }
     
     // Add user message immediately to UI
     setMessages((prev) => [...prev, { id: userMsgId, role: "user", content: userMessage }]);
@@ -281,6 +341,14 @@ export function AiChat() {
     );
   }
 
+  // Slash-command autocomplete: when the input starts with "/", show a menu
+  // of commands whose name prefix-matches what's typed.
+  const trimmedInput = inputValue.trim().toLowerCase();
+  const commandMatches = trimmedInput.startsWith("/")
+    ? AGENT_COMMANDS.filter((c) => c.name.startsWith(trimmedInput))
+    : [];
+  const showCommandMenu = commandMatches.length > 0 && !isLoading;
+
   return (
     <div className={styles.container}>
       {/* Messages Area */}
@@ -390,6 +458,23 @@ export function AiChat() {
           <MessageSquare size={14} />
           <span>Show Chat</span>
         </button>
+      )}
+
+      {/* Slash-command autocomplete menu */}
+      {showCommandMenu && (
+        <div className={styles.commandMenu}>
+          {commandMatches.map((c) => (
+            <button
+              key={c.name}
+              type="button"
+              className={styles.commandMenuItem}
+              onClick={() => runCommand(c.name)}
+            >
+              <span className={styles.commandName}>{c.name}</span>
+              <span className={styles.commandDesc}>{c.description}</span>
+            </button>
+          ))}
+        </div>
       )}
 
       {/* Input Card */}

@@ -1,5 +1,6 @@
 import type { Block, KnownBlock } from '@slack/types';
 import type { TaskByIdRow } from '@/src/server/tasks/getTaskById';
+import type { ReservationSummary } from '@/src/server/commands/dailyOutlook';
 import { assignmentsUrl } from '@/src/lib/links';
 import { OPEN_BUTTON_LABEL, type SlackCardElement } from './unfurlBlocks';
 
@@ -57,11 +58,6 @@ function pageLinkContextBlock(): KnownBlock | null {
 }
 
 // ── Reservations ────────────────────────────────────────────────────────
-
-export interface ReservationSummary {
-  property_name: string;
-  guest_name: string | null;
-}
 
 function reservationsSectionBlock(args: {
   checkOuts: ReservationSummary[];

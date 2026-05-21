@@ -126,6 +126,47 @@
   margin-top: 0.625rem;
 }
 
+/* Slash-command autocomplete menu, shown above the input when typing "/". */
+.commandMenu {
+  display: flex;
+  flex-direction: column;
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  padding: 0.25rem;
+  margin-bottom: 0.5rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.commandMenuItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.125rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.5rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.commandMenuItem:hover {
+  background: hsl(var(--muted) / 0.6);
+}
+
+.commandName {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.commandDesc {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+
 /* Legacy support */
 .responseMessage {
   display: flex;
