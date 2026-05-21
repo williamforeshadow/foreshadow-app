@@ -132,30 +132,27 @@ function ReservationHoverBar({
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const openTimer = useRef<number | null>(null);
-  const closeTimer = useRef<number | null>(null);
   const [portalReady, setPortalReady] = useState(false);
   useEffect(() => setPortalReady(true), []);
-
-  const cancelTimers = () => {
-    if (openTimer.current) { window.clearTimeout(openTimer.current); openTimer.current = null; }
-    if (closeTimer.current) { window.clearTimeout(closeTimer.current); closeTimer.current = null; }
-  };
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [popPos, setPopPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
+  const openTimer = useRef<number | null>(null);
 
   const onEnter = (e: React.MouseEvent) => {
-    cancelTimers();
     setPos({ x: e.clientX, y: e.clientY });
-    openTimer.current = window.setTimeout(() => setOpen(true), 200);
+    openTimer.current = window.setTimeout(() => setOpen(true), 80);
   };
   const onMove = (e: React.MouseEvent) => {
     setPos({ x: e.clientX, y: e.clientY });
   };
   const onLeave = () => {
-    cancelTimers();
-    closeTimer.current = window.setTimeout(() => setOpen(false), 100);
+    if (openTimer.current) { window.clearTimeout(openTimer.current); openTimer.current = null; }
+    setOpen(false);
   };
 
-  useEffect(() => () => cancelTimers(), []);
+  useEffect(() => () => {
+    if (openTimer.current) window.clearTimeout(openTimer.current);
+  }, []);
 
   const guestLabel = reservation.guest_name || 'No guest';
   const checkInMs = new Date(reservation.check_in).getTime();
@@ -167,9 +164,22 @@ function ReservationHoverBar({
   const fmt = (d: Date) => formatDate(d);
 
   // Position popover with a small offset from cursor so the mouse leaving the
-  // bar onto the popover doesn't immediately retrigger close.
-  const popLeft = pos.x + 14;
-  const popTop = pos.y + 18;
+  // bar onto the popover doesn't immediately retrigger close. Flip to the
+  // other side of the cursor when it would otherwise overflow the viewport.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const margin = 8;
+    const el = popoverRef.current;
+    const w = el?.offsetWidth ?? 256;
+    const h = el?.offsetHeight ?? 0;
+    let left = pos.x + 14;
+    let top = pos.y + 18;
+    if (left + w + margin > window.innerWidth) left = pos.x - 14 - w;
+    if (left < margin) left = margin;
+    if (top + h + margin > window.innerHeight) top = pos.y - 18 - h;
+    if (top < margin) top = margin;
+    setPopPos({ left, top });
+  }, [open, pos]);
 
   return (
     <>
@@ -192,10 +202,11 @@ function ReservationHoverBar({
       </div>
       {open && portalReady && createPortal(
         <div
+          ref={popoverRef}
           // pointer-events-none so the popover can't itself capture hover —
           // keeps the bar as the single hover authority and avoids flicker.
           className="fixed pointer-events-none w-64 p-3 bg-white dark:bg-[var(--timeline-surface-4)] border border-[rgba(30,25,20,0.08)] dark:border-[var(--timeline-border-strong)] shadow-lg rounded-md"
-          style={{ left: popLeft, top: popTop, zIndex: 9999 }}
+          style={{ left: popPos.left, top: popPos.top, zIndex: 9999 }}
         >
           <div className="flex flex-col gap-2">
             <div>
