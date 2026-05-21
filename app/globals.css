@@ -645,27 +645,3 @@ a {
   }
 }
 
-/* ── TaskScheduledDatePicker reservation overlays ──
-   The cell <td> already has position:relative + aspect-square from
-   the calendar's day class, so a ::before pseudo-element with
-   inset:0 fills the cell behind the date number. clip-path applies
-   to the backdrop only — the button (and number) stay rectangular
-   and unsliced. Color is the app's turnover purple at lower alpha. */
-.tsdp-day-reserved::before,
-.tsdp-day-check-in::before,
-.tsdp-day-check-out::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-color: rgba(167, 139, 250, 0.18);
-  pointer-events: none;
-}
-/* Check-in: top-left corner cut, purple fills lower-right triangle. */
-.tsdp-day-check-in::before {
-  clip-path: polygon(100% 0, 100% 100%, 0 100%);
-}
-/* Check-out: bottom-right corner cut, purple fills upper-left
-   triangle — adjacent check-out + check-in forms a rhombus. */
-.tsdp-day-check-out::before {
-  clip-path: polygon(0 0, 100% 0, 0 100%);
-}

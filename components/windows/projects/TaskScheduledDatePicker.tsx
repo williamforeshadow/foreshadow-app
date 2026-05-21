@@ -130,10 +130,29 @@ export function TaskScheduledDatePicker({
             checkIn: checkInDays,
             checkOut: checkOutDays,
           }}
-          modifiersClassNames={{
-            reserved: 'tsdp-day-reserved',
-            checkIn: 'tsdp-day-check-in',
-            checkOut: 'tsdp-day-check-out',
+          // Inline styles on the day <td> — single renderer so every
+          // cell paints the same way. Fixed 135deg/315deg angles
+          // (not "to bottom right" keywords which infer from element
+          // aspect ratio) and a hard 50%/50% stop guarantee pixel-
+          // identical triangle geometry on every cell regardless of
+          // size variations from layout reflow.
+          // - Reserved: flat purple fill
+          // - Check-in: top-left corner cut, purple in the lower-right
+          //   triangle (135deg gradient axis = top-left → bottom-right;
+          //   transparent half closer to TL, purple half closer to BR)
+          // - Check-out: bottom-right corner cut, purple in the upper-
+          //   left triangle (315deg axis = bottom-right → top-left)
+          // Adjacent check-out + check-in cells visually form a rhombus.
+          modifiersStyles={{
+            reserved: { backgroundColor: 'rgba(167, 139, 250, 0.18)' },
+            checkIn: {
+              backgroundImage:
+                'linear-gradient(135deg, transparent 50%, rgba(167, 139, 250, 0.18) 50%)',
+            },
+            checkOut: {
+              backgroundImage:
+                'linear-gradient(315deg, transparent 50%, rgba(167, 139, 250, 0.18) 50%)',
+            },
           }}
           captionLayout="dropdown"
         />
