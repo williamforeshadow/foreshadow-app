@@ -130,28 +130,28 @@ export function TaskScheduledDatePicker({
             checkIn: checkInDays,
             checkOut: checkOutDays,
           }}
-          // Inline styles on the day <td> — single renderer so every
-          // cell paints the same way. Fixed 135deg/315deg angles
-          // (not "to bottom right" keywords which infer from element
-          // aspect ratio) and a hard 50%/50% stop guarantee pixel-
-          // identical triangle geometry on every cell regardless of
-          // size variations from layout reflow.
-          // - Reserved: flat purple fill
-          // - Check-in: top-left corner cut, purple in the lower-right
-          //   triangle (135deg gradient axis = top-left → bottom-right;
-          //   transparent half closer to TL, purple half closer to BR)
-          // - Check-out: bottom-right corner cut, purple in the upper-
-          //   left triangle (315deg axis = bottom-right → top-left)
-          // Adjacent check-out + check-in cells visually form a rhombus.
+          // Inline styles on the day <td>. SVG background images encode
+          // the triangle geometry explicitly as polygon coordinates, so
+          // every cell renders a pixel-identical shape — no dependence
+          // on browser gradient interpolation (which was producing the
+          // inconsistent triangles). preserveAspectRatio='none' scales
+          // the SVG to fill any cell size exactly.
+          //   Reserved: flat purple fill.
+          //   Check-in: lower-right triangle filled, top-left cut.
+          //   Check-out: upper-left triangle filled, bottom-right cut.
           modifiersStyles={{
             reserved: { backgroundColor: 'rgba(167, 139, 250, 0.18)' },
             checkIn: {
               backgroundImage:
-                'linear-gradient(135deg, transparent 50%, rgba(167, 139, 250, 0.18) 50%)',
+                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><polygon points='100,0 100,100 0,100' fill='rgba(167,139,250,0.18)'/></svg>\")",
+              backgroundSize: '100% 100%',
+              backgroundRepeat: 'no-repeat',
             },
             checkOut: {
               backgroundImage:
-                'linear-gradient(315deg, transparent 50%, rgba(167, 139, 250, 0.18) 50%)',
+                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><polygon points='0,0 100,0 0,100' fill='rgba(167,139,250,0.18)'/></svg>\")",
+              backgroundSize: '100% 100%',
+              backgroundRepeat: 'no-repeat',
             },
           }}
           captionLayout="dropdown"
