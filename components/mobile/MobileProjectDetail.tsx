@@ -15,6 +15,7 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import DynamicCleaningForm from '@/components/DynamicCleaningForm';
 import type { Template } from '@/components/DynamicCleaningForm';
 import { TaskScheduledDatePicker } from '@/components/windows/projects/TaskScheduledDatePicker';
+import { TaskScheduledTimePicker } from '@/components/windows/projects/TaskScheduledTimePicker';
 
 // ============================================================================
 // Types
@@ -915,8 +916,12 @@ export default function MobileProjectDetail({
                     <svg className="w-3.5 h-3.5 text-neutral-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <input type="time" value={fields.scheduled_time} onChange={(e) => updateField('scheduled_time', e.target.value)}
-                      className="flex-1 bg-transparent border-none outline-none text-[13px] text-neutral-900 dark:text-neutral-100 min-w-0" />
+                    <div className="flex-1 min-w-0 text-[13px] text-neutral-900 dark:text-neutral-100">
+                      <TaskScheduledTimePicker
+                        value={fields.scheduled_time}
+                        onChange={(next) => updateField('scheduled_time', next)}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

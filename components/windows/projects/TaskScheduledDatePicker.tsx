@@ -104,6 +104,11 @@ export function TaskScheduledDatePicker({
       <PopoverContent
         align="start"
         sideOffset={6}
+        // Keep at least 12px between the popover and the viewport
+        // edge — the desktop panel is anchored hard to the right
+        // side of the screen so a left-aligned popover would
+        // otherwise clip / butt up against the edge.
+        collisionPadding={12}
         // z-[80] sits above the mobile detail sheet (z-60) and the
         // mobile InlineDropdown (z-70); desktop baseline is z-50 so
         // this is safe everywhere.
