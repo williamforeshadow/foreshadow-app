@@ -2,7 +2,7 @@ export type DashboardView = 'turnovers' | 'timeline' | 'projects' | 'tasks';
 
 export const DASHBOARD_VIEW_LABELS: Record<DashboardView, string> = {
   turnovers: 'Turnovers',
-  timeline: 'Timeline',
+  timeline: 'Schedule',
   projects: 'Bins',
   tasks: 'Tasks',
 };

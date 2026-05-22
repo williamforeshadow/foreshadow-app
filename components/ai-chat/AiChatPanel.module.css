@@ -27,13 +27,12 @@
   border-radius: 0.875rem;
 }
 
-/* Full-screen (desktop): fills the content area; sidebar + top bar stay. */
+/* Full-screen (desktop): fills the content area; sidebar stays visible. */
 .fullscreen {
-  top: var(--topbar-height, 3rem);
+  top: 0;
   left: var(--app-sidebar-width, 0px);
   right: 0;
   bottom: 0;
-  border-top: 1px solid var(--border);
   border-radius: 0;
 }
 

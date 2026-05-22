@@ -2,9 +2,19 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import type { CSSProperties } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
+import { ArrowRightToLine, PanelLeft, Sparkles } from 'lucide-react';
 import { ModeToggle } from '@/components/mode-toggle';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { UserAvatar } from '@/components/ui/user-avatar';
+import { RowsIcon } from '@/components/windows/timeline/TimelineViewIcons';
+import { useAiChat } from '@/components/ai-chat/AiChatProvider';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -81,27 +91,18 @@ const routeItems = [
   },
 ];
 
-function Chevron({ open }: { open: boolean }) {
+function TurnoverIcon() {
   return (
-    <svg
-      className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M9 18l6-6-6-6" />
+    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m10 17l5-5l-5-5m5 5H3m12-9h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
     </svg>
   );
 }
 
-function WorkspaceIcon() {
+function BinIcon() {
   return (
     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
     </svg>
   );
 }
@@ -128,13 +129,87 @@ export default function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const {
-    isOpen,
-    isReady,
-    workspaceOpen,
-    setWorkspaceOpen,
-  } = useSidebar();
+  const { isPinned, isReady, pin, unpin } = useSidebar();
   const { user, role, loading, canEditTemplates, signOut } = useAuth();
+  const { open: openAiChat, isOpen: isAiChatOpen } = useAiChat();
+
+  // Platform-aware keyboard hint for the Agent row.
+  const [isMac, setIsMac] = useState(false);
+  useEffect(() => {
+    setIsMac(/mac/i.test(navigator.platform));
+  }, []);
+
+  // Hover-peek: the sidebar slides out as an overlay while the cursor is over
+  // the flap or the panel, and retreats when it leaves. Pinning is a separate,
+  // persisted state; while pinned the peek logic is inert.
+  const [isPeeking, setIsPeeking] = useState(false);
+  // While the notification dropdown is open, the sidebar stays out (locked)
+  // even though the cursor has moved off the panel onto the portaled dropdown.
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const openTimerRef = useRef<number | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const suppressRef = useRef(false);
+  const isVisible = isPinned || isPeeking || notificationsOpen;
+
+  const clearHoverTimers = useCallback(() => {
+    if (openTimerRef.current !== null) {
+      window.clearTimeout(openTimerRef.current);
+      openTimerRef.current = null;
+    }
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearHoverTimers, [clearHoverTimers]);
+
+  // Hovering the flap or the panel opens the peek (after a short hover-intent
+  // delay); leaving schedules a close. The flap and panel share these so
+  // travelling between them doesn't flicker.
+  const handlePeekEnter = useCallback(() => {
+    if (isPinned || suppressRef.current) return;
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    if (openTimerRef.current !== null) return;
+    openTimerRef.current = window.setTimeout(() => {
+      openTimerRef.current = null;
+      setIsPeeking(true);
+    }, 120);
+  }, [isPinned]);
+
+  const handlePeekLeave = useCallback(() => {
+    if (isPinned) return;
+    if (openTimerRef.current !== null) {
+      window.clearTimeout(openTimerRef.current);
+      openTimerRef.current = null;
+    }
+    if (closeTimerRef.current !== null) return;
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      setIsPeeking(false);
+    }, 200);
+  }, [isPinned]);
+
+  const handlePin = useCallback(() => {
+    clearHoverTimers();
+    setIsPeeking(false);
+    pin();
+  }, [clearHoverTimers, pin]);
+
+  const handleUnpin = useCallback(() => {
+    clearHoverTimers();
+    setIsPeeking(false);
+    unpin();
+    // The retreating panel passes under the cursor; briefly suppress re-peek
+    // so it doesn't immediately pop back out.
+    suppressRef.current = true;
+    window.setTimeout(() => {
+      suppressRef.current = false;
+    }, 600);
+  }, [clearHoverTimers, unpin]);
 
   const roleColors: Record<string, string> = {
     superadmin: 'bg-purple-500',
@@ -159,10 +234,6 @@ export default function Sidebar({
     'bg-neutral-100 text-neutral-900 dark:bg-[var(--sidebar-dark-active)] dark:text-white';
   const inactiveRowClass =
     'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-[var(--sidebar-dark-hover)] dark:hover:text-white';
-  const nestedActiveClass =
-    'bg-neutral-100 text-neutral-900 dark:bg-[var(--sidebar-dark-active)] dark:text-white';
-  const nestedInactiveClass =
-    'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-[var(--sidebar-dark-hover)] dark:hover:text-white';
   const sectionMutedClass = 'text-neutral-500 dark:text-neutral-500';
   const handleSignOut = async () => {
     await signOut();
@@ -170,75 +241,135 @@ export default function Sidebar({
   };
 
   return (
+    <>
+    {/* Flow spacer — reserves layout width only when the sidebar is pinned. */}
     <div
-      className={`h-full overflow-hidden flex-shrink-0 ${
+      aria-hidden
+      className={`h-full shrink-0 ${
         isReady ? 'transition-[width] duration-300 ease-in-out' : ''
-      } ${isOpen ? 'w-64' : 'w-0'}`}
-      aria-hidden={!isOpen}
+      } ${isPinned ? 'w-64' : 'w-0'}`}
+    />
+
+    {/* Sidebar panel — a fixed overlay that slides in whenever the sidebar is
+        pinned or being peeked. When pinned, the spacer above reserves matching
+        layout width so page content isn't covered. */}
+    <div
+      onMouseEnter={handlePeekEnter}
+      onMouseLeave={handlePeekLeave}
+      aria-hidden={!isVisible}
+      className={`fixed left-0 top-0 z-40 h-full w-64 ${
+        isReady ? 'transition-transform duration-300 ease-in-out' : ''
+      } ${isVisible ? 'translate-x-0' : '-translate-x-full'}`}
     >
       <div
-        className={`w-64 h-full bg-white border-r border-neutral-200 flex flex-col ${panelSurfaceClass}`}
+        className={`w-64 h-full bg-white border-r border-neutral-200 flex flex-col ${panelSurfaceClass} ${
+          isPeeking && !isPinned ? 'shadow-2xl' : ''
+        }`}
         style={sidebarVars}
       >
-        <nav className={`flex-1 min-w-0 px-2.5 pb-3 pt-4 ${SIDEBAR_SCROLL_CLASS}`}>
+        <div className="flex items-center justify-between gap-2 border-b border-neutral-200 px-3 py-2.5 dark:border-[var(--sidebar-dark-border)]">
+          <div className="min-w-0">
+            <p className="truncate text-[13px] font-semibold leading-5 text-neutral-900 dark:text-white">
+              Foreshadow
+            </p>
+            <p className="truncate text-[11px] leading-4 text-neutral-500 dark:text-neutral-500">
+              Workspace
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <NotificationBell onOpenChange={setNotificationsOpen} />
+            <button
+              type="button"
+              onClick={isPinned ? handleUnpin : handlePin}
+              tabIndex={isVisible ? 0 : -1}
+              aria-label={isPinned ? 'Unpin sidebar' : 'Pin sidebar'}
+              title={isPinned ? 'Unpin sidebar' : 'Pin sidebar'}
+              className="inline-flex items-center justify-center rounded-md p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-[var(--sidebar-dark-hover)] dark:hover:text-white"
+            >
+              {isPinned ? (
+                <PanelLeft className="h-4 w-4" />
+              ) : (
+                <ArrowRightToLine className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        <nav className={`flex-1 min-w-0 px-2.5 py-3 ${SIDEBAR_SCROLL_CLASS}`}>
             <div className="space-y-3">
-            <div className="min-w-0">
+            <div className="space-y-0.5">
+              <p className={`px-2.5 pb-1 text-[11px] font-medium uppercase tracking-[0.08em] ${sectionMutedClass}`}>
+                Workspace
+              </p>
+              {DASHBOARD_VIEWS.map((view) => {
+                const isActive =
+                  pathname === '/' && activeWorkspaceView === view;
+                return (
+                  <button
+                    key={view}
+                    type="button"
+                    onClick={() => {
+                      if (onWorkspaceViewChange) {
+                        onWorkspaceViewChange(view);
+                      } else {
+                        router.push(`/?view=${view}`);
+                      }
+                    }}
+                    tabIndex={isVisible ? 0 : -1}
+                    className={`flex w-full min-w-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] font-medium transition-colors ${
+                      isActive ? activeRowClass : inactiveRowClass
+                    }`}
+                  >
+                    <span className="shrink-0">
+                      {view === 'turnovers' ? (
+                        <TurnoverIcon />
+                      ) : view === 'timeline' ? (
+                        <RowsIcon className="h-4 w-4" />
+                      ) : view === 'projects' ? (
+                        <BinIcon />
+                      ) : (
+                        <AssignmentIcon />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {DASHBOARD_VIEW_LABELS[view]}
+                    </span>
+                  </button>
+                );
+              })}
               <button
                 type="button"
-                onClick={() => setWorkspaceOpen((open) => !open)}
-                tabIndex={isOpen ? 0 : -1}
+                onClick={openAiChat}
+                tabIndex={isVisible ? 0 : -1}
                 className={`flex w-full min-w-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] font-medium transition-colors ${
-                  pathname === '/' ? activeRowClass : inactiveRowClass
+                  isAiChatOpen ? activeRowClass : inactiveRowClass
                 }`}
-                aria-expanded={workspaceOpen}
               >
-                <Chevron open={workspaceOpen} />
-                <WorkspaceIcon />
-                <span className="min-w-0 flex-1 truncate">Workspace</span>
+                <span className="shrink-0">
+                  <Sparkles className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1 truncate">Agent</span>
+                <kbd className="shrink-0 rounded border border-neutral-300 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500 dark:border-[rgba(255,255,255,0.12)] dark:text-neutral-400">
+                  {isMac ? '⌘K' : 'Ctrl K'}
+                </kbd>
               </button>
-
-              {workspaceOpen && (
-                <div className="mt-1 w-full min-w-0 max-w-full pl-8 pr-1">
-                  <div className="space-y-0.5">
-                    {DASHBOARD_VIEWS.map((view) => {
-                      const isActive = pathname === '/' && activeWorkspaceView === view;
-                      return (
-                        <button
-                          key={view}
-                          type="button"
-                          onClick={() => {
-                            if (onWorkspaceViewChange) {
-                              onWorkspaceViewChange(view);
-                            } else {
-                              router.push(`/?view=${view}`);
-                            }
-                          }}
-                          tabIndex={isOpen ? 0 : -1}
-                          className={`flex w-full min-w-0 max-w-full overflow-hidden rounded-md px-2.5 py-1.5 text-left text-[12px] leading-4 transition-colors ${
-                            isActive ? nestedActiveClass : nestedInactiveClass
-                          }`}
-                          title={DASHBOARD_VIEW_LABELS[view]}
-                        >
-                          <span className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                            {DASHBOARD_VIEW_LABELS[view]}
-                          </span>
-                        </button>
-                        );
-                    })}
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="min-w-0">
               <Link
                 href="/assignments"
-                tabIndex={isOpen ? 0 : -1}
+                tabIndex={isVisible ? 0 : -1}
                 className={`flex min-w-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
                   pathname === '/assignments' ? activeRowClass : inactiveRowClass
                 }`}
               >
-                <span className="shrink-0"><AssignmentIcon /></span>
+                <span className="shrink-0">
+                  <UserAvatar
+                    src={user?.avatar}
+                    name={user?.name || 'Me'}
+                    size="xs"
+                  />
+                </span>
                 <span className="min-w-0 flex-1 truncate">My Assignments</span>
               </Link>
             </div>
@@ -253,7 +384,7 @@ export default function Sidebar({
                   <Link
                     key={item.path}
                     href={item.path}
-                    tabIndex={isOpen ? 0 : -1}
+                    tabIndex={isVisible ? 0 : -1}
                     className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
                       isActive ? activeRowClass : inactiveRowClass
                     }`}
@@ -273,7 +404,7 @@ export default function Sidebar({
               <DropdownMenuTrigger asChild>
                 <button
                   className="w-full flex items-center gap-3 px-3 py-3 hover:bg-neutral-50 transition-colors dark:hover:bg-[var(--sidebar-dark-hover)]"
-                  tabIndex={isOpen ? 0 : -1}
+                  tabIndex={isVisible ? 0 : -1}
                 >
                   <UserAvatar src={user.avatar} name={user.name} size="md" />
                   <div className="flex-1 text-left min-w-0">
@@ -341,7 +472,7 @@ export default function Sidebar({
                 type="button"
                 onClick={() => router.push('/login')}
                 className="rounded-md px-2.5 py-1.5 text-[13px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-300 dark:hover:bg-[var(--sidebar-dark-hover)] dark:hover:text-white"
-                tabIndex={isOpen ? 0 : -1}
+                tabIndex={isVisible ? 0 : -1}
               >
                 Sign in
               </button>
@@ -353,5 +484,17 @@ export default function Sidebar({
         </div>
       </div>
     </div>
+
+    {/* Left-edge hot zone — an invisible full-height strip; moving the cursor
+        to the screen's left edge pops the sidebar out. Hidden once visible. */}
+    {!isVisible && (
+      <div
+        aria-hidden
+        onMouseEnter={handlePeekEnter}
+        onMouseLeave={handlePeekLeave}
+        className="fixed left-0 top-0 z-40 h-full w-1.5"
+      />
+    )}
+    </>
   );
 }

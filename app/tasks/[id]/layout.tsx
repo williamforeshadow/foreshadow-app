@@ -1,7 +1,6 @@
 'use client';
 
 import Sidebar from '@/components/Sidebar';
-import { SidebarToggleButton } from '@/components/SidebarToggleButton';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
 
@@ -49,21 +48,10 @@ export default function TaskDetailLayout({
   }
 
   return (
-    <div className="flex flex-col h-screen bg-white dark:bg-card">
-      {/* Thin top bar — gives the sidebar toggle a fixed home above the
-          sidebar + page body, matching every other page in the app. */}
-      <div className="flex-shrink-0 px-3 py-2 bg-white dark:bg-card border-b border-neutral-200 dark:border-neutral-800">
-        <SidebarToggleButton />
-      </div>
-
-      {/* Body: sidebar + page content. `relative` is preserved here only
-          for parity with PropertiesLayout — the dedicated task page
-          itself doesn't render any absolute-positioned children. */}
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
-        <div className="flex-1 flex flex-col overflow-hidden relative">
-          {children}
-        </div>
+    <div className="flex h-screen overflow-hidden bg-white dark:bg-card">
+      <Sidebar />
+      <div className="flex-1 flex flex-col overflow-hidden relative">
+        {children}
       </div>
     </div>
   );

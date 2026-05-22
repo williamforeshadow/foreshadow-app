@@ -2,13 +2,12 @@
 
 import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
-import { TopBar } from './TopBar';
 import { AiChatPanel } from './ai-chat/AiChatPanel';
 
-// App-wide chrome: the universal top bar and the AI chat panel, rendered
-// once around every page. The login route renders bare (no chrome). The
-// chat panel stays mounted across route changes so the conversation
-// persists; it is position:fixed, so its placement in the tree is moot.
+// Mounts the universal AI chat panel around every page (except /login).
+// The panel is position:fixed, so its placement in the tree is moot — what
+// matters is that it stays mounted across route changes so the conversation
+// persists.
 export function AppChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
@@ -18,10 +17,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <div className="flex h-dvh flex-col">
-        <TopBar />
-        <div className="relative min-h-0 flex-1">{children}</div>
-      </div>
+      {children}
       <AiChatPanel />
     </>
   );

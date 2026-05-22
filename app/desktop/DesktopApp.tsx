@@ -86,7 +86,7 @@ export default function DesktopApp() {
   const isTimelineView = activeView === 'timeline';
 
   return (
-    <div className="flex h-full bg-neutral-50 dark:bg-background overflow-hidden">
+    <div className="flex h-screen bg-neutral-50 dark:bg-background overflow-hidden">
       <Sidebar
         surface={isTimelineView ? 'timeline' : 'default'}
         activeWorkspaceView={activeView}

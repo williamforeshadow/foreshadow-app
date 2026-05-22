@@ -6,10 +6,9 @@
 :root {
   --sidebar-width: 256px;
   --sidebar-width-collapsed: 64px;
-  /* Universal chrome metrics. --app-sidebar-width is updated live by
-     SidebarProvider (256px open / 0px collapsed) so the full-screen AI
-     chat panel aligns to the content area. */
-  --topbar-height: 3rem;
+  /* --app-sidebar-width is updated live by SidebarProvider (256px open /
+     0px collapsed) so the full-screen AI chat panel aligns to the
+     content area. */
   --app-sidebar-width: 256px;
   --background: oklch(0.9581 0 0);
   --foreground: oklch(0.3134 0.0234 253.6270);

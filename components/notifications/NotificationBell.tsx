@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Bell, CheckCheck } from 'lucide-react';
@@ -17,7 +17,14 @@ import type { NotificationRecord } from '@/lib/notifications';
 
 type ViewMode = 'unread' | 'all';
 
-export function NotificationBell({ compact = false }: { compact?: boolean }) {
+export function NotificationBell({
+  compact = false,
+  onOpenChange,
+}: {
+  compact?: boolean;
+  /** Notified whenever the notifications dropdown opens or closes. */
+  onOpenChange?: (open: boolean) => void;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ViewMode>('unread');
@@ -25,7 +32,17 @@ export function NotificationBell({ compact = false }: { compact?: boolean }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  const load = useCallback(async (mode: ViewMode = view) => {
+  // Mirror of `view` for the poll interval — keeps `load` stable while still
+  // letting the interval read the live view.
+  const viewRef = useRef<ViewMode>(view);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+
+  // Stable: callers always pass an explicit mode. (A `view`-dependent `load`
+  // would re-create on every toggle and re-fire the mount effect below,
+  // which previously snapped "All" back to "Unread".)
+  const load = useCallback(async (mode: ViewMode) => {
     setLoading(true);
     try {
       const res = await fetch(`/api/notifications?view=${mode}&limit=50`, {
@@ -38,14 +55,16 @@ export function NotificationBell({ compact = false }: { compact?: boolean }) {
     } finally {
       setLoading(false);
     }
-  }, [view]);
+  }, []);
 
+  // Initial load + 60s background poll of the current view. Runs once.
   useEffect(() => {
     load('unread');
-    const id = window.setInterval(() => load(view), 60000);
+    const id = window.setInterval(() => load(viewRef.current), 60000);
     return () => window.clearInterval(id);
-  }, [load, view]);
+  }, [load]);
 
+  // Reload when the dropdown opens or the active view changes.
   useEffect(() => {
     if (open) load(view);
   }, [load, open, view]);
@@ -68,7 +87,13 @@ export function NotificationBell({ compact = false }: { compact?: boolean }) {
   };
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        onOpenChange?.(next);
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <button
           type="button"
@@ -114,10 +139,7 @@ export function NotificationBell({ compact = false }: { compact?: boolean }) {
             <button
               key={mode}
               type="button"
-              onClick={() => {
-                setView(mode);
-                load(mode);
-              }}
+              onClick={() => setView(mode)}
               className={`h-7 flex-1 rounded text-xs font-medium capitalize transition-colors ${
                 view === mode
                   ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-950'
