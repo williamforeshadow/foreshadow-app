@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
-import { SidebarToggleButton } from '@/components/SidebarToggleButton';
 import { useUsers } from '@/lib/useUsers';
 import { useAuth } from '@/lib/authContext';
 import {
@@ -11,12 +10,10 @@ import {
   type DashboardView,
   isDashboardView,
 } from '@/lib/dashboardViews';
-import { useSidebar } from '@/lib/sidebarContext';
 import TimelineWindow from '@/components/windows/TimelineWindow';
 import TurnoversWindow from '@/components/windows/TurnoversWindow';
 import ProjectsWindow from '@/components/windows/ProjectsWindow';
 import TasksWindow from '@/components/windows/TasksWindow';
-import { AiChat } from '@/components/AiChat';
 import { ReservationDetailOverlay } from '@/components/reservations/ReservationDetailOverlay';
 import { ContextTaskDetailOverlay } from '@/components/reservations/ContextTaskDetailOverlay';
 
@@ -25,7 +22,6 @@ export default function DesktopApp() {
   const { user: currentUser } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isOpen: isSidebarOpen } = useSidebar();
 
   // Active view derives from the URL (`?view=...`). Falls back to localStorage
   // (last-used view) and finally to 'turnovers'. Lives in the URL so refresh
@@ -90,7 +86,7 @@ export default function DesktopApp() {
   const isTimelineView = activeView === 'timeline';
 
   return (
-    <div className="flex h-screen bg-neutral-50 dark:bg-background overflow-hidden">
+    <div className="flex h-full bg-neutral-50 dark:bg-background overflow-hidden">
       <Sidebar
         surface={isTimelineView ? 'timeline' : 'default'}
         activeWorkspaceView={activeView}
@@ -98,10 +94,6 @@ export default function DesktopApp() {
       />
 
       <div className="flex-1 relative overflow-hidden bg-background">
-        {!isSidebarOpen && (
-          <SidebarToggleButton className="absolute left-3 top-3 z-50 bg-white/95 shadow-sm ring-1 ring-neutral-200 dark:bg-[#111114] dark:ring-[var(--timeline-border-subtle)]" />
-        )}
-
         <div className={`absolute inset-0 ${activeView === 'turnovers' ? '' : 'hidden'}`}>
           <TurnoversWindow users={users} currentUser={currentUser} />
         </div>
@@ -122,7 +114,6 @@ export default function DesktopApp() {
           />
         </div>
 
-        <AiChat />
         <ReservationDetailOverlay />
         <ContextTaskDetailOverlay />
       </div>

@@ -7,6 +7,8 @@ import { DepartmentsProvider } from "@/lib/departmentsContext";
 import { OperationsSettingsProvider } from "@/lib/operationsSettingsContext";
 import { ReservationViewerProvider } from "@/lib/reservationViewerContext";
 import { SidebarProvider } from "@/lib/sidebarContext";
+import { AiChatProvider } from "@/components/ai-chat/AiChatProvider";
+import { AppChrome } from "@/components/AppChrome";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -60,7 +62,9 @@ export default function RootLayout({
               <OperationsSettingsProvider>
                 <ReservationViewerProvider>
                   <SidebarProvider>
-                    {children}
+                    <AiChatProvider>
+                      <AppChrome>{children}</AppChrome>
+                    </AiChatProvider>
                   </SidebarProvider>
                 </ReservationViewerProvider>
               </OperationsSettingsProvider>

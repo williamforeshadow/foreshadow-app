@@ -1,6 +1,8 @@
 'use client';
 
 import { memo, useCallback } from 'react';
+import { Sparkles } from 'lucide-react';
+import { useAiChat } from '@/components/ai-chat/AiChatProvider';
 
 export type MobileTab = 'assignments' | 'projects' | 'timeline';
 
@@ -43,6 +45,7 @@ const tabs: { id: MobileTab; label: string; icon: (active: boolean) => React.Rea
 ];
 
 const MobileNav = memo(function MobileNav({ activeTab, onTabChange, hidden }: MobileNavProps) {
+  const { isOpen: isAiOpen, open: openAiChat } = useAiChat();
   const handleTabClick = useCallback(
     (id: MobileTab) => { onTabChange(id); },
     [onTabChange],
@@ -73,6 +76,23 @@ const MobileNav = memo(function MobileNav({ activeTab, onTabChange, hidden }: Mo
             </button>
           );
         })}
+
+        <button
+          onClick={openAiChat}
+          className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors ${
+            isAiOpen
+              ? 'text-neutral-900 dark:text-[#f0efed]'
+              : 'text-neutral-400 dark:text-[#66645f]'
+          }`}
+        >
+          <Sparkles className="w-[18px] h-[18px]" strokeWidth={isAiOpen ? 2 : 1.5} />
+          <span className="text-[9.5px] uppercase tracking-[0.08em] font-medium leading-none">
+            Ask AI
+          </span>
+          {isAiOpen && (
+            <div className="w-[3px] h-[3px] rounded-full bg-neutral-900 dark:bg-[#f0efed] -mt-0.5" />
+          )}
+        </button>
       </div>
     </nav>
   );

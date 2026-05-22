@@ -4,8 +4,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { CSSProperties } from 'react';
 import { ModeToggle } from '@/components/mode-toggle';
-import { NotificationBell } from '@/components/notifications/NotificationBell';
-import { SidebarToggleButton } from '@/components/SidebarToggleButton';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import {
   DropdownMenu,
@@ -182,22 +180,7 @@ export default function Sidebar({
         className={`w-64 h-full bg-white border-r border-neutral-200 flex flex-col ${panelSurfaceClass}`}
         style={sidebarVars}
       >
-        <div className="flex items-center justify-between gap-2 border-b border-neutral-200 px-3 py-2.5 dark:border-[var(--sidebar-dark-border)]">
-          <div className="min-w-0">
-            <p className="truncate text-[13px] font-semibold leading-5 text-neutral-900 dark:text-white">
-              Foreshadow
-            </p>
-            <p className="truncate text-[11px] leading-4 text-neutral-500 dark:text-neutral-500">
-              Workspace
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <NotificationBell />
-            <SidebarToggleButton className="dark:hover:bg-[var(--sidebar-dark-hover)]" />
-          </div>
-        </div>
-
-        <nav className={`flex-1 min-w-0 px-2.5 py-3 ${SIDEBAR_SCROLL_CLASS}`}>
+        <nav className={`flex-1 min-w-0 px-2.5 pb-3 pt-4 ${SIDEBAR_SCROLL_CLASS}`}>
             <div className="space-y-3">
             <div className="min-w-0">
               <button

@@ -1,0 +1,572 @@
+'use client';
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import ReactMarkdown, { type Components } from 'react-markdown';
+import { useRouter } from 'next/navigation';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  ArrowUp,
+  Bot,
+  Maximize2,
+  Minimize2,
+  Sparkles,
+  User,
+  X,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useAuth } from '@/lib/authContext';
+import { useIsMobile } from '@/lib/useIsMobile';
+import { AGENT_COMMANDS } from '@/src/lib/agentCommands';
+import { useAiChat } from './AiChatProvider';
+import styles from './AiChatPanel.module.css';
+
+// Same-origin link interception: the agent emits markdown links to in-app
+// routes (e.g. /tasks/<uuid>). Route those through Next's client router so
+// clicking one doesn't hard-reload the page and drop the chat.
+function isSameOriginHref(href: string): boolean {
+  if (!href) return false;
+  if (href.startsWith('/')) return true;
+  if (typeof window === 'undefined') return false;
+  try {
+    return new URL(href, window.location.origin).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+function toRelativeHref(href: string): string {
+  if (href.startsWith('/')) return href;
+  if (typeof window === 'undefined') return href;
+  try {
+    const u = new URL(href, window.location.origin);
+    return `${u.pathname}${u.search}${u.hash}`;
+  } catch {
+    return href;
+  }
+}
+
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  // When the agent returns a write preview, the server hands back a durable
+  // pending-action id; the chat shows Confirm/Cancel until it's resolved.
+  pendingActionId?: string;
+  confirmation?: 'pending' | 'confirming' | 'done' | 'cancelled' | 'error';
+}
+
+const EXAMPLE_PROMPT = 'What needs my attention today?';
+
+export function AiChatPanel() {
+  const { user } = useAuth();
+  const router = useRouter();
+  const isMobile = useIsMobile() === true;
+  const { isOpen, isFullscreen, close, toggleFullscreen } = useAiChat();
+
+  const [inputValue, setInputValue] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handleInternalNav = useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+      if (
+        e.defaultPrevented ||
+        e.button !== 0 ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.shiftKey ||
+        e.altKey
+      ) {
+        return;
+      }
+      e.preventDefault();
+      router.push(toRelativeHref(href) as never);
+    },
+    [router],
+  );
+
+  const markdownComponents = useMemo<Components>(
+    () => ({
+      a: ({ href, children, ...rest }) => {
+        const safeHref = href ?? '';
+        if (isSameOriginHref(safeHref)) {
+          return (
+            <a
+              {...rest}
+              href={safeHref}
+              onClick={(e) => handleInternalNav(e, safeHref)}
+            >
+              {children}
+            </a>
+          );
+        }
+        return (
+          <a {...rest} href={safeHref} target="_blank" rel="noopener noreferrer">
+            {children}
+          </a>
+        );
+      },
+    }),
+    [handleInternalNav],
+  );
+
+  // Auto-scroll to the latest message.
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Auto-resize the textarea.
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(
+        textareaRef.current.scrollHeight,
+        140,
+      )}px`;
+    }
+  }, [inputValue]);
+
+  // Focus the input when the panel opens.
+  useEffect(() => {
+    if (isOpen) {
+      const id = window.setTimeout(() => textareaRef.current?.focus(), 60);
+      return () => window.clearTimeout(id);
+    }
+  }, [isOpen]);
+
+  // Run a deterministic slash command (e.g. /myassignments) — no LLM.
+  const runCommand = useCallback(
+    async (command: string) => {
+      if (!user || isLoading) return;
+      setMessages((prev) => [
+        ...prev,
+        { id: `user-${Date.now()}`, role: 'user', content: command },
+      ]);
+      setInputValue('');
+      setIsLoading(true);
+      try {
+        const res = await fetch('/api/agent/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command, user_id: user.id }),
+        });
+        const data = await res.json();
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `assistant-${Date.now()}`,
+            role: 'assistant',
+            content:
+              !res.ok || data.error
+                ? `Error: ${data.error || 'Something went wrong'}`
+                : data.answer,
+          },
+        ]);
+      } catch (err) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `assistant-${Date.now()}`,
+            role: 'assistant',
+            content: `Error: ${
+              err instanceof Error ? err.message : 'Failed to run command'
+            }`,
+          },
+        ]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [user, isLoading],
+  );
+
+  // Send a free-text prompt to the agent (or route a known slash command).
+  const submitMessage = useCallback(
+    async (text: string) => {
+      const message = text.trim();
+      if (!message || isLoading || !user) return;
+
+      if (message.startsWith('/')) {
+        const lower = message.toLowerCase();
+        const cmd =
+          AGENT_COMMANDS.find((c) => c.name === lower) ??
+          AGENT_COMMANDS.find((c) => c.name.startsWith(lower));
+        if (cmd) {
+          runCommand(cmd.name);
+          return;
+        }
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        { id: `user-${Date.now()}`, role: 'user', content: message },
+      ]);
+      setInputValue('');
+      setIsLoading(true);
+
+      try {
+        let clientTz: string | undefined;
+        try {
+          clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        } catch {
+          clientTz = undefined;
+        }
+
+        const res = await fetch('/api/agent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: message,
+            user_id: user.id,
+            client_tz: clientTz,
+          }),
+        });
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `assistant-${Date.now()}`,
+              role: 'assistant',
+              content: `Error: ${data.error || 'Something went wrong'}`,
+            },
+          ]);
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `assistant-${Date.now()}`,
+              role: 'assistant',
+              content: data.answer,
+              pendingActionId: data.pending_action_id ?? undefined,
+              confirmation: data.pending_action_id ? 'pending' : undefined,
+            },
+          ]);
+        }
+      } catch (err) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `assistant-${Date.now()}`,
+            role: 'assistant',
+            content: `Error: ${
+              err instanceof Error ? err.message : 'Failed to get response'
+            }`,
+          },
+        ]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [user, isLoading, runCommand],
+  );
+
+  // Confirm or cancel a previewed write — commits server-side, no LLM turn.
+  const handleConfirmAction = useCallback(
+    async (
+      messageId: string,
+      pendingActionId: string,
+      action: 'confirm' | 'cancel',
+    ) => {
+      if (!user) return;
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId ? { ...m, confirmation: 'confirming' } : m,
+        ),
+      );
+
+      const settle = (
+        state: NonNullable<Message['confirmation']>,
+        resultText: string,
+      ) => {
+        setMessages((prev) => [
+          ...prev.map((m) =>
+            m.id === messageId ? { ...m, confirmation: state } : m,
+          ),
+          { id: `assistant-${Date.now()}`, role: 'assistant', content: resultText },
+        ]);
+      };
+
+      try {
+        const res = await fetch('/api/agent/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pending_action_id: pendingActionId,
+            action,
+            user_id: user.id,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          settle('error', `Error: ${data.error || 'Something went wrong'}`);
+          return;
+        }
+        const resolved: NonNullable<Message['confirmation']> =
+          data.status === 'committed'
+            ? 'done'
+            : data.status === 'cancelled'
+              ? 'cancelled'
+              : 'error';
+        settle(resolved, data.text);
+      } catch (err) {
+        settle(
+          'error',
+          `Error: ${err instanceof Error ? err.message : 'Failed to confirm'}`,
+        );
+      }
+    },
+    [user],
+  );
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submitMessage(inputValue);
+    }
+  };
+
+  // Slash-command autocomplete.
+  const trimmedInput = inputValue.trim().toLowerCase();
+  const commandMatches = trimmedInput.startsWith('/')
+    ? AGENT_COMMANDS.filter((c) => c.name.startsWith(trimmedInput))
+    : [];
+  const showCommandMenu = commandMatches.length > 0 && !isLoading;
+
+  const layoutClass = isMobile
+    ? styles.mobile
+    : isFullscreen
+      ? styles.fullscreen
+      : styles.docked;
+
+  const isEmpty = messages.length === 0 && !isLoading;
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          className={`${styles.panel} ${layoutClass}`}
+          initial={{ opacity: 0, y: 12, scale: 0.99 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 12, scale: 0.99 }}
+          transition={{ duration: 0.16, ease: 'easeOut' }}
+          role="dialog"
+          aria-label="Foreshadow AI chat"
+        >
+          <header className={styles.header}>
+            <span className={styles.title}>
+              <Sparkles size={14} className={styles.titleIcon} />
+              Ask Foreshadow
+            </span>
+            <div className={styles.headerActions}>
+              {!isMobile && (
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  onClick={toggleFullscreen}
+                  title={isFullscreen ? 'Exit full screen' : 'Full screen'}
+                >
+                  {isFullscreen ? (
+                    <Minimize2 size={15} />
+                  ) : (
+                    <Maximize2 size={15} />
+                  )}
+                </button>
+              )}
+              <button
+                type="button"
+                className={styles.iconButton}
+                onClick={close}
+                title="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </header>
+
+          <div className={styles.body}>
+            <div className={styles.bodyInner}>
+              {isEmpty ? (
+                <div className={styles.welcome}>
+                  <div className={styles.welcomeIcon}>
+                    <Sparkles size={20} />
+                  </div>
+                  <p className={styles.welcomeTitle}>Ask Foreshadow</p>
+                  <p className={styles.welcomeText}>
+                    Ask about your properties, reservations, and tasks — or
+                    have me make changes for you.
+                  </p>
+                  <div className={styles.chips}>
+                    <button
+                      type="button"
+                      className={styles.chip}
+                      onClick={() => runCommand('/myassignments')}
+                    >
+                      My assignments
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.chip}
+                      onClick={() => runCommand('/dailyoutlook')}
+                    >
+                      Daily outlook
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.chip}
+                      onClick={() => submitMessage(EXAMPLE_PROMPT)}
+                    >
+                      {EXAMPLE_PROMPT}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className={styles.messagesContainer}>
+                  {messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`${styles.messageRow} ${
+                        msg.role === 'user'
+                          ? styles.userMessage
+                          : styles.assistantMessage
+                      }`}
+                    >
+                      <div className={styles.messageIcon}>
+                        {msg.role === 'user' ? (
+                          <User size={14} />
+                        ) : (
+                          <Bot size={14} />
+                        )}
+                      </div>
+                      <div className={styles.messageContent}>
+                        {msg.role === 'assistant' ? (
+                          <>
+                            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-3 prose-ul:my-2 prose-li:my-0.5">
+                              <ReactMarkdown components={markdownComponents}>
+                                {msg.content}
+                              </ReactMarkdown>
+                            </div>
+                            {msg.pendingActionId &&
+                              (msg.confirmation === 'pending' ||
+                                msg.confirmation === 'confirming') && (
+                                <div className={styles.confirmationButtons}>
+                                  <Button
+                                    size="sm"
+                                    onClick={() =>
+                                      handleConfirmAction(
+                                        msg.id,
+                                        msg.pendingActionId!,
+                                        'confirm',
+                                      )
+                                    }
+                                    disabled={msg.confirmation === 'confirming'}
+                                  >
+                                    {msg.confirmation === 'confirming'
+                                      ? 'Working…'
+                                      : 'Confirm'}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      handleConfirmAction(
+                                        msg.id,
+                                        msg.pendingActionId!,
+                                        'cancel',
+                                      )
+                                    }
+                                    disabled={msg.confirmation === 'confirming'}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              )}
+                          </>
+                        ) : (
+                          <p>{msg.content}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {isLoading && (
+                    <div
+                      className={`${styles.messageRow} ${styles.assistantMessage}`}
+                    >
+                      <div className={styles.messageIcon}>
+                        <Bot size={14} />
+                      </div>
+                      <div className={styles.messageContent}>
+                        <div className={styles.loadingDots}>
+                          <span className={styles.loadingDot} />
+                          <span className={styles.loadingDot} />
+                          <span className={styles.loadingDot} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className={styles.footer}>
+            <div className={styles.footerInner}>
+              {showCommandMenu && (
+                <div className={styles.commandMenu}>
+                  {commandMatches.map((c) => (
+                    <button
+                      key={c.name}
+                      type="button"
+                      className={styles.commandMenuItem}
+                      onClick={() => runCommand(c.name)}
+                    >
+                      <span className={styles.commandName}>{c.name}</span>
+                      <span className={styles.commandDesc}>
+                        {c.description}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className={styles.inputBox}>
+                <textarea
+                  ref={textareaRef}
+                  className={styles.textarea}
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask anything, or type / for commands…"
+                  rows={1}
+                />
+                <div className={styles.inputRow}>
+                  <span className={styles.inputHint}>
+                    {user ? '' : 'Sign in to chat'}
+                  </span>
+                  <button
+                    type="button"
+                    className={styles.sendButton}
+                    onClick={() => submitMessage(inputValue)}
+                    disabled={isLoading || !inputValue.trim() || !user}
+                    title="Send"
+                  >
+                    <ArrowUp size={15} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}

@@ -97,6 +97,16 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
   const close = useCallback(() => setIsOpen(false), []);
   const toggle = useCallback(() => setIsOpen((o) => !o), []);
 
+  // Expose the live sidebar width as a CSS variable so app-wide chrome
+  // (e.g. the full-screen AI chat panel) can align to the content area.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.style.setProperty(
+      '--app-sidebar-width',
+      isOpen ? '256px' : '0px',
+    );
+  }, [isOpen]);
+
   return (
     <SidebarContext.Provider
       value={{

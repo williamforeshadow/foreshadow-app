@@ -1,0 +1,391 @@
+/* Universal AI chat panel — docked, full-screen, and mobile layouts.
+ *
+ * Color note: this app's design tokens (--card, --border, --muted, …) are
+ * whole color values (oklch in light mode, hex/rgba in dark) — NOT HSL
+ * channel triplets. They must be used directly as `var(--token)`; wrapping
+ * them in `hsl(...)` yields an invalid color (which is what made an earlier
+ * version of this panel render transparent). Alpha tints use color-mix. */
+
+.panel {
+  position: fixed;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  box-shadow: 0 18px 50px -12px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+/* Docked: floating panel anchored bottom-right. */
+.docked {
+  right: 1.5rem;
+  bottom: 1.5rem;
+  width: 410px;
+  height: min(72vh, 660px);
+  border-radius: 0.875rem;
+}
+
+/* Full-screen (desktop): fills the content area; sidebar + top bar stay. */
+.fullscreen {
+  top: var(--topbar-height, 3rem);
+  left: var(--app-sidebar-width, 0px);
+  right: 0;
+  bottom: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+}
+
+/* Mobile: always covers the viewport. */
+.mobile {
+  inset: 0;
+  border: none;
+  border-radius: 0;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  flex-shrink: 0;
+  padding: 0 0.5rem 0 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.titleIcon {
+  color: var(--muted-foreground);
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.iconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 0.5rem;
+  background: transparent;
+  border: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.iconButton:hover {
+  background: color-mix(in srgb, var(--muted-foreground) 16%, transparent);
+  color: var(--foreground);
+}
+
+/* ── Body ────────────────────────────────────────────────────────────── */
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.bodyInner {
+  padding: 1rem;
+}
+
+/* In full-screen, keep content readable with a centered column. */
+.fullscreen .bodyInner,
+.fullscreen .footerInner {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+/* ── Welcome / empty state ───────────────────────────────────────────── */
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.625rem;
+  min-height: 100%;
+  padding: 2rem 1rem;
+}
+
+.welcomeIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--muted-foreground) 14%, transparent);
+  color: var(--muted-foreground);
+}
+
+.welcomeTitle {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--foreground);
+  margin: 0;
+}
+
+.welcomeText {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+  max-width: 22rem;
+  margin: 0;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4375rem;
+  justify-content: center;
+  margin-top: 0.375rem;
+}
+
+.chip {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted-foreground) 12%, transparent);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.chip:hover {
+  background: color-mix(in srgb, var(--muted-foreground) 22%, transparent);
+}
+
+/* ── Messages ────────────────────────────────────────────────────────── */
+.messagesContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.messageRow {
+  display: flex;
+  gap: 0.625rem;
+  align-items: flex-start;
+}
+
+.userMessage {
+  flex-direction: row-reverse;
+}
+
+.messageIcon {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--muted-foreground) 18%, transparent);
+  color: var(--muted-foreground);
+}
+
+.userMessage .messageIcon {
+  background: var(--accent-3);
+  color: #fff;
+}
+
+.messageContent {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--foreground);
+}
+
+.userMessage .messageContent {
+  text-align: right;
+}
+
+.userMessage .messageContent p {
+  display: inline-block;
+  background: var(--accent-3);
+  color: #fff;
+  padding: 0.5rem 0.875rem;
+  border-radius: 1rem 1rem 0.25rem 1rem;
+  margin: 0;
+  text-align: left;
+}
+
+.assistantMessage .messageContent {
+  background: color-mix(in srgb, var(--muted-foreground) 12%, transparent);
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.25rem 1rem 1rem 1rem;
+}
+
+.confirmationButtons {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.625rem;
+}
+
+/* ── Loading dots ────────────────────────────────────────────────────── */
+.loadingDots {
+  display: flex;
+  gap: 5px;
+  padding: 0.375rem 0;
+}
+
+.loadingDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+  animation: aichat-bounce 1.4s infinite ease-in-out both;
+}
+
+.loadingDot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+.loadingDot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes aichat-bounce {
+  0%,
+  80%,
+  100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
+}
+
+/* ── Footer / input ──────────────────────────────────────────────────── */
+.footer {
+  flex-shrink: 0;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.commandMenu {
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  padding: 0.25rem;
+  margin-bottom: 0.5rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+}
+
+.commandMenuItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.0625rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.4375rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.commandMenuItem:hover {
+  background: color-mix(in srgb, var(--muted-foreground) 14%, transparent);
+}
+
+.commandName {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.commandDesc {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.inputBox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--background);
+  padding: 0.5rem 0.625rem;
+  transition: border-color 0.12s;
+}
+
+.inputBox:focus-within {
+  border-color: var(--muted-foreground);
+}
+
+.textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 0.125rem 0;
+  min-height: 1.5rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--foreground);
+  font-family: inherit;
+}
+
+.textarea::placeholder {
+  color: var(--muted-foreground);
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.inputHint {
+  font-size: 0.6875rem;
+  color: var(--muted-foreground);
+}
+
+.sendButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent-3);
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.sendButton:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.sendButton:disabled {
+  background: color-mix(in srgb, var(--muted-foreground) 22%, transparent);
+  color: var(--muted-foreground);
+  cursor: default;
+}
