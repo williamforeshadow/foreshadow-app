@@ -1874,7 +1874,7 @@ export default function TimelineWindow({
                   className="contents"
                 >
                   {/* Property Name with Status Indicator */}
-                  <div className={`relative overflow-hidden px-2 py-3 text-[12px] font-medium text-[#1a1a18] dark:text-[#e8e7e3] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] sticky left-0 z-10 min-h-[56px] ${propertyCellBg} flex items-center gap-1.5`}>
+                  <div className={`relative overflow-hidden px-2 py-3 text-[12px] font-medium text-[#1a1a18] dark:text-[#e8e7e3] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] sticky left-0 z-10 min-h-[44px] ${propertyCellBg} flex items-center gap-1.5`}>
                     {view !== 'month' && (
                       <button
                         onClick={() => togglePropertyExpanded(property)}
@@ -1972,7 +1972,7 @@ export default function TimelineWindow({
                         key={idx}
                         property={property}
                         dateStr={cellDateStr}
-                        className={`group border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] h-[56px] relative overflow-visible ${isTodayDate ? 'today-tint' : 'bg-white dark:bg-[var(--timeline-surface-2)]'}`}
+                        className={`group border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] h-[44px] relative overflow-visible ${isTodayDate ? 'today-tint' : 'bg-white dark:bg-[var(--timeline-surface-2)]'}`}
                         onClick={() => {
                           const res = propertyReservations.find(r => {
                             const pos = getBlockPosition(r.check_in, r.check_out);
@@ -2033,8 +2033,8 @@ export default function TimelineWindow({
                           const barClassName =`absolute cursor-pointer transition-all duration-150 text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium flex items-center overflow-hidden border-t ${barColorClass} ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-[rgba(99,102,241,0.5)] dark:ring-[rgba(167,139,250,0.6)] shadow-lg z-30' : ''}`;
                           const barStyle: React.CSSProperties = {
                             left: leftStyle,
-                            top: '10px',
-                            height: '36px',
+                            top: '8px',
+                            height: '28px',
                             width: widthStyle,
                             zIndex: 15,
                             clipPath,
