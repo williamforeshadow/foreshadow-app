@@ -10,6 +10,8 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { STATUS_ICONS, STATUS_TITLE } from '@/lib/taskStatusIcons';
+import { PRIORITY_ICONS, PRIORITY_TITLE } from '@/lib/taskPriorityIcons';
 import { Button } from '@/components/ui/button';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
@@ -438,12 +440,39 @@ function TaskCardContent({
 
       <div className={styles.cardFooter}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4375rem', flexWrap: 'wrap' }}>
-          <span className={cn(styles.statusBadge, statusBadgeClass(task.status))}>
-            {task.status?.replace('_', ' ').replace(/^\w/, (c) => c.toUpperCase())}
+          <span
+            className={cn(styles.statusBadge, statusBadgeClass(task.status))}
+            title={STATUS_TITLE[task.status] ?? STATUS_TITLE.not_started}
+          >
+            {(() => {
+              const StatusIcon =
+                STATUS_ICONS[task.status] ?? STATUS_ICONS.not_started;
+              return <StatusIcon size={14} strokeWidth={2} aria-hidden />;
+            })()}
           </span>
           {task.priority && (
-            <span className={cn(styles.priorityBadge, priorityClass(task.priority))}>
-              {task.priority.replace(/^\w/, (c) => c.toUpperCase())}
+            <span
+              className={cn(styles.priorityBadge, priorityClass(task.priority))}
+              title={PRIORITY_TITLE[task.priority] ?? PRIORITY_TITLE.medium}
+            >
+              {(() => {
+                const PriorityIcon =
+                  PRIORITY_ICONS[task.priority] ?? PRIORITY_ICONS.medium;
+                return <PriorityIcon size={14} strokeWidth={2} aria-hidden />;
+              })()}
+            </span>
+          )}
+          {task.scheduled_date && (
+            <span
+              style={{
+                fontSize: '0.6625rem',
+                whiteSpace: 'nowrap',
+                fontVariantNumeric: 'tabular-nums',
+                color: 'rgba(30, 25, 20, 0.35)',
+              }}
+              className="dark:!text-[#66645f]"
+            >
+              {new Date(`${task.scheduled_date}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
             </span>
           )}
           {task.scheduled_time &&

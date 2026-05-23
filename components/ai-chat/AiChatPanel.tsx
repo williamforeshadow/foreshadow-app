@@ -12,11 +12,9 @@ import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowUp,
-  Bot,
   Maximize2,
   Minimize2,
   Sparkles,
-  User,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -24,6 +22,10 @@ import { useAuth } from '@/lib/authContext';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { AGENT_COMMANDS } from '@/src/lib/agentCommands';
 import { useAiChat } from './AiChatProvider';
+import { ProjectCard } from '@/components/windows/projects/ProjectCard';
+import type { TaskRow } from '@/src/agent/tools/findTasks';
+import { TaskAttachment } from './TaskAttachment';
+import { taskRowToCardItem } from './taskCardMapping';
 import styles from './AiChatPanel.module.css';
 
 // Same-origin link interception: the agent emits markdown links to in-app
@@ -59,9 +61,76 @@ interface Message {
   // pending-action id; the chat shows Confirm/Cancel until it's resolved.
   pendingActionId?: string;
   confirmation?: 'pending' | 'confirming' | 'done' | 'cancelled' | 'error';
+  // Structured task rows from any find_tasks call this turn. The tasks the
+  // answer actually links to render as kanban-style cards below the text.
+  tasks?: TaskRow[];
+}
+
+// Pick the tasks the answer text actually references — matched by the
+// /tasks/<id> deep link the agent emits — ordered by where they appear in
+// the prose so the card stack reads top-to-bottom with the text.
+function referencedTasks(content: string, tasks: TaskRow[]): TaskRow[] {
+  return tasks
+    .map((t) => ({ t, idx: content.indexOf(`/tasks/${t.task_id}`) }))
+    .filter((x) => x.idx >= 0)
+    .sort((a, b) => a.idx - b.idx)
+    .map((x) => x.t);
 }
 
 const EXAMPLE_PROMPT = 'What needs my attention today?';
+
+// Horizontally-scrollable task-card carousel. Attaches its wheel listener
+// natively (non-passive) so it can preventDefault — without that, vertical
+// wheel motion bleeds through to the chat body's vertical scroll while the
+// cursor is over the carousel.
+function TaskCardCarousel({
+  cards,
+  onOpen,
+}: {
+  cards: TaskRow[];
+  onOpen: (taskUrl: string) => void;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  }, []);
+  return (
+    <div
+      ref={ref}
+      className="mt-2 -mx-1 flex flex-row gap-2 overflow-x-auto px-1 py-1"
+    >
+      {cards.map((t) => (
+        <div
+          key={t.task_id}
+          role="button"
+          tabIndex={0}
+          className="w-[300px] shrink-0 cursor-pointer [&>div]:!cursor-pointer"
+          onClick={() => onOpen(t.task_url)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onOpen(t.task_url);
+            }
+          }}
+        >
+          <ProjectCard
+            item={taskRowToCardItem(t)}
+            viewMode="status"
+            isDragging={false}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function AiChatPanel() {
   const { user } = useAuth();
@@ -249,6 +318,7 @@ export function AiChatPanel() {
               content: data.answer,
               pendingActionId: data.pending_action_id ?? undefined,
               confirmation: data.pending_action_id ? 'pending' : undefined,
+              tasks: Array.isArray(data.tasks) ? data.tasks : undefined,
             },
           ]);
         }
@@ -440,13 +510,6 @@ export function AiChatPanel() {
                           : styles.assistantMessage
                       }`}
                     >
-                      <div className={styles.messageIcon}>
-                        {msg.role === 'user' ? (
-                          <User size={14} />
-                        ) : (
-                          <Bot size={14} />
-                        )}
-                      </div>
                       <div className={styles.messageContent}>
                         {msg.role === 'assistant' ? (
                           <>
@@ -455,6 +518,35 @@ export function AiChatPanel() {
                                 {msg.content}
                               </ReactMarkdown>
                             </div>
+                            {msg.tasks &&
+                              (() => {
+                                const cards = referencedTasks(
+                                  msg.content,
+                                  msg.tasks,
+                                );
+                                if (cards.length === 0) return null;
+                                const onOpen = (url: string) =>
+                                  router.push(toRelativeHref(url) as never);
+                                // Small-N: keep the inline carousel as a
+                                // glanceable convenience. Above the
+                                // threshold, switch to a collapsible
+                                // attachment so the chat stays compact and
+                                // the user expands to see every card.
+                                if (cards.length <= 5) {
+                                  return (
+                                    <TaskCardCarousel
+                                      cards={cards}
+                                      onOpen={onOpen}
+                                    />
+                                  );
+                                }
+                                return (
+                                  <TaskAttachment
+                                    cards={cards}
+                                    onOpen={onOpen}
+                                  />
+                                );
+                              })()}
                             {msg.pendingActionId &&
                               (msg.confirmation === 'pending' ||
                                 msg.confirmation === 'confirming') && (
@@ -501,9 +593,6 @@ export function AiChatPanel() {
                     <div
                       className={`${styles.messageRow} ${styles.assistantMessage}`}
                     >
-                      <div className={styles.messageIcon}>
-                        <Bot size={14} />
-                      </div>
                       <div className={styles.messageContent}>
                         <div className={styles.loadingDots}>
                           <span className={styles.loadingDot} />

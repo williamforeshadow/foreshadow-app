@@ -22,8 +22,8 @@
 .docked {
   right: 1.5rem;
   bottom: 1.5rem;
-  width: 410px;
-  height: min(72vh, 660px);
+  width: 560px;
+  height: min(96vh, 880px);
   border-radius: 0.875rem;
 }
 
@@ -100,7 +100,7 @@
 }
 
 .bodyInner {
-  padding: 1rem;
+  padding: 1rem 0.625rem;
 }
 
 /* In full-screen, keep content readable with a centered column. */

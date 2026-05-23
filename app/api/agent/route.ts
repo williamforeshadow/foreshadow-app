@@ -4,6 +4,7 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 import { runAgent, type AgentActor, WRITE_TOOL_NAMES } from '@/src/agent/runAgent';
 import { applyBackstops } from '@/src/agent/backstops';
 import { extractPendingActionIds } from '@/src/server/agent/slackConfirmationBlocks';
+import type { TaskRow } from '@/src/agent/tools/findTasks';
 
 // POST /api/agent
 //
@@ -175,10 +176,27 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Surface the structured task rows returned by any find_tasks call this
+    // turn so the chat can render them as kanban-style cards. Deduped by
+    // task_id; the client picks which to show based on the tasks the answer
+    // actually links to.
+    const taskCardMap = new Map<string, TaskRow>();
+    for (const c of result.toolCalls) {
+      if (c.name === 'find_tasks' && c.output.ok === true) {
+        const rows = (c.output.data ?? []) as TaskRow[];
+        for (const r of rows) {
+          if (r && typeof r.task_id === 'string') {
+            taskCardMap.set(r.task_id, r);
+          }
+        }
+      }
+    }
+
     return NextResponse.json({
       answer: finalText,
       tool_calls: result.toolCalls,
       pending_action_id: pendingActionId,
+      tasks: Array.from(taskCardMap.values()),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown server error';

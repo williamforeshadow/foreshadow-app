@@ -82,7 +82,14 @@ const inputSchema = z
       .min(2)
       .optional()
       .describe(
-        'Case-insensitive substring match on users.name. Returns tasks assigned to any user that matches; meta.resolved_assignees lists the matched users so you can disambiguate.',
+        'Case-insensitive substring match on users.name. Returns tasks assigned to any user that matches; meta.resolved_assignees lists the matched users so you can disambiguate. Use this for single-person questions only — for "tasks A and B are both on", use assigned_user_ids instead.',
+      ),
+    assigned_user_ids: z
+      .array(z.string().uuid())
+      .min(1)
+      .optional()
+      .describe(
+        "AND-filter on assignees. When the user names multiple specific people and means 'tasks all of them share' (e.g. 'tasks Billy and Gabe are both on'), resolve each name with find_users first, then pass the resulting user_ids here. Returns only tasks whose task_assignments include EVERY supplied user_id. Mutually exclusive with assignee_name.",
       ),
     scheduled_between: z
       .object({
@@ -149,6 +156,14 @@ const inputSchema = z
     {
       message: 'unscheduled cannot be combined with scheduled_between',
       path: ['unscheduled'],
+    },
+  )
+  .refine(
+    (v) => !(v.assignee_name && v.assigned_user_ids),
+    {
+      message:
+        'assignee_name and assigned_user_ids are mutually exclusive; pick one',
+      path: ['assigned_user_ids'],
     },
   );
 
@@ -345,6 +360,40 @@ async function resolveTaskIdsForUsers(
   return { ok: true, taskIds };
 }
 
+// AND-of-assignees: return task_ids that have EVERY supplied user_id in
+// task_assignments. PostgREST has no HAVING clause, so we fetch the
+// matching rows and count distinct user_ids per task in-process. Input
+// is deduped via Set so a caller passing the same id twice doesn't
+// inflate the required count.
+async function resolveTaskIdsForAllUsers(
+  supabase: Supabase,
+  userIds: string[],
+): Promise<{ ok: true; taskIds: string[] } | { ok: false; message: string }> {
+  const uniqueUserIds = Array.from(new Set(userIds));
+  if (uniqueUserIds.length === 0) return { ok: true, taskIds: [] };
+  const { data, error } = await supabase
+    .from('task_assignments')
+    .select('task_id, user_id')
+    .in('user_id', uniqueUserIds);
+  if (error) return { ok: false, message: error.message };
+  const rows = (data ?? []) as Array<{ task_id: string; user_id: string }>;
+  const perTask = new Map<string, Set<string>>();
+  for (const r of rows) {
+    let s = perTask.get(r.task_id);
+    if (!s) {
+      s = new Set();
+      perTask.set(r.task_id, s);
+    }
+    s.add(r.user_id);
+  }
+  const required = uniqueUserIds.length;
+  const taskIds: string[] = [];
+  for (const [taskId, users] of perTask) {
+    if (users.size === required) taskIds.push(taskId);
+  }
+  return { ok: true, taskIds };
+}
+
 // Foreign-key existence check. The model has a known habit of fabricating
 // well-formed UUIDs that pass Zod but match no real row, which then return
 // `ok:true, data:[]` and read to the model as "definitively no results."
@@ -454,6 +503,39 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
 
     const fkError = await validateForeignKeys(supabase, checks);
     if (fkError) return fkError;
+
+    // Batch FK check for assigned_user_ids. validateForeignKeys is
+    // one-id-per-call; for an array of user_ids we issue a single
+    // `select id from users where id in (...)` and compare against the
+    // requested set so a fabricated UUID surfaces as a loud not_found
+    // instead of silently producing zero matching tasks.
+    if (input.assigned_user_ids && input.assigned_user_ids.length > 0) {
+      const unique = Array.from(new Set(input.assigned_user_ids));
+      const { data: foundRows, error: userErr } = await supabase
+        .from('users')
+        .select('id')
+        .in('id', unique);
+      if (userErr) {
+        return {
+          ok: false,
+          error: { code: 'db_error', message: userErr.message },
+        };
+      }
+      const found = new Set(
+        ((foundRows ?? []) as Array<{ id: string }>).map((r) => r.id),
+      );
+      const missing = unique.filter((id) => !found.has(id));
+      if (missing.length > 0) {
+        return {
+          ok: false,
+          error: {
+            code: 'not_found',
+            message: `assigned_user_ids contains UUIDs not in users: ${missing.join(', ')}`,
+            hint: 'Call find_users to resolve names to valid user_ids before passing them here.',
+          },
+        };
+      }
+    }
   }
 
   // Two-step assignee resolution. We do this up front so we can short-circuit
@@ -500,6 +582,31 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
           truncated: false,
           resolved_assignees: resolvedAssignees,
         },
+      };
+    }
+  }
+
+  // AND-of-assignees resolution. Mutually exclusive with assignee_name
+  // (enforced by Zod refine); the FK pre-validation above guarantees every
+  // user_id exists, so a zero-task result here means no task has ALL of
+  // them assigned — we short-circuit the main query.
+  if (input.assigned_user_ids && !input.ids) {
+    const taskRes = await resolveTaskIdsForAllUsers(
+      supabase,
+      input.assigned_user_ids,
+    );
+    if (!taskRes.ok) {
+      return {
+        ok: false,
+        error: { code: 'db_error', message: taskRes.message },
+      };
+    }
+    assigneeTaskIds = taskRes.taskIds;
+    if (assigneeTaskIds.length === 0) {
+      return {
+        ok: true,
+        data: [],
+        meta: { returned: 0, limit, truncated: false },
       };
     }
   }
@@ -742,7 +849,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
 export const findTasks: ToolDefinition<Input, TaskRow[]> = {
   name: 'find_tasks',
   description:
-    "Find operational tasks (cleanings, inspections, recurring jobs, manual to-dos) with structured filters. Filter by property, template (id or name), department (id or name), status, priority, schedule, assignee name, or free-text. For category questions like 'show me all cleaning tasks' or 'maintenance work today', prefer department_name over search — it's more precise. For template-shaped questions ('turnover cleanings this week'), prefer template_name. Resolve references first when the user names something rather than ids: call find_properties for a property name, and call find_reservations for a specific stay or guest (then pass the resulting reservation_id). Returns rows sorted by scheduled_date asc (nulls last), scheduled_time asc, then created_at desc. JSON-heavy fields (description, form_metadata) are not returned.",
+    "Find operational tasks (cleanings, inspections, recurring jobs, manual to-dos) with structured filters. Filter by property, template (id or name), department (id or name), status, priority, schedule, assignee, or free-text. For category questions like 'show me all cleaning tasks' or 'maintenance work today', prefer department_name over search — it's more precise. For template-shaped questions ('turnover cleanings this week'), prefer template_name. Assignee filters: use assignee_name for a single-person substring match; use assigned_user_ids when the user names multiple specific people and means 'tasks all of them share' (resolve names to user_ids with find_users first). Resolve other references first when the user names something rather than ids: call find_properties for a property name, and call find_reservations for a specific stay or guest (then pass the resulting reservation_id). Returns rows sorted by scheduled_date asc (nulls last), scheduled_time asc, then created_at desc. JSON-heavy fields (description, form_metadata) are not returned.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -799,7 +906,14 @@ export const findTasks: ToolDefinition<Input, TaskRow[]> = {
         type: 'string',
         minLength: 2,
         description:
-          'Case-insensitive substring match on users.name. Returns tasks assigned to any user matching the term; meta.resolved_assignees lists the matches so you can disambiguate when multiple users share a name.',
+          'Case-insensitive substring match on users.name. Returns tasks assigned to any user matching the term; meta.resolved_assignees lists the matches so you can disambiguate when multiple users share a name. Single-person questions only — for "tasks A and B are both on", use assigned_user_ids.',
+      },
+      assigned_user_ids: {
+        type: 'array',
+        items: { type: 'string' },
+        minItems: 1,
+        description:
+          "AND-filter on assignees. When the user names multiple specific people and means 'tasks all of them share' (e.g. 'tasks Billy and Gabe are both on'), resolve each name with find_users first, then pass the resulting user_ids here. Returns only tasks whose task_assignments include EVERY supplied user_id. Mutually exclusive with assignee_name.",
       },
       scheduled_between: {
         type: 'object',
