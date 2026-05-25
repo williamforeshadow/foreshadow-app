@@ -115,21 +115,14 @@ export async function POST(req: NextRequest) {
   try {
     const result = await runAgent({ history, prompt, clientTz, actor });
 
-    // Backstops: if the model claimed a side-effect happened but no write
-    // tool succeeded, OR it produced a structured data answer with no read
-    // tool succeeded, swap in a safe message before the user ever sees it.
-    // Both flags are persisted in metadata so reviewers can spot masked
-    // rows quickly.
+    // Write-claim backstop: if the model claimed a side-effect happened
+    // but no write tool succeeded, swap in a safe message before the user
+    // sees it. The flag is persisted in metadata so reviewers can spot
+    // masked rows quickly. (The read-claim mask was removed — see
+    // backstops.ts for the rationale.)
     const masked = applyBackstops(result.text, result.toolCalls, { prompt });
     if (masked.writeMasked) {
       console.warn('[agent] masked hallucinated write claim', {
-        user_id: userId,
-        prompt,
-        original: masked.originalIfMasked,
-      });
-    }
-    if (masked.readMasked) {
-      console.warn('[agent] masked hallucinated read claim', {
         user_id: userId,
         prompt,
         original: masked.originalIfMasked,
@@ -170,7 +163,6 @@ export async function POST(req: NextRequest) {
               : { ...base, error: c.output.error };
           }),
           ...(masked.writeMasked ? { masked_write_claim: true } : {}),
-          ...(masked.readMasked ? { masked_read_claim: true } : {}),
         },
       });
     }

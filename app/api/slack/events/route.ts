@@ -605,15 +605,6 @@ async function handleSlackMessage(
       original: masked.originalIfMasked,
     });
   }
-  if (masked.readMasked) {
-    console.warn('[slack] masked hallucinated read claim', {
-      user_id: identity.appUserId,
-      slack_user: event.user,
-      kind,
-      original: masked.originalIfMasked,
-    });
-  }
-
   // Scrub trailing inline metadata from any "- [Task](url) — Property | Date"
   // bullet lines BEFORE persistence. We deliberately persist the cleaned
   // version so it propagates into future conversation history (which the
@@ -637,7 +628,6 @@ async function handleSlackMessage(
           : { ...base, error: c.output.error };
       }),
       ...(masked.writeMasked ? { masked_write_claim: true } : {}),
-      ...(masked.readMasked ? { masked_read_claim: true } : {}),
     },
   });
 
