@@ -358,6 +358,30 @@
   line-height: 1.45;
   color: var(--foreground);
   font-family: inherit;
+  /* Firefox: thin scrollbar with muted thumb so it doesn't clash with the
+   * panel chrome when a long paste pushes content past the auto-resize cap. */
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 25%, transparent)
+    transparent;
+}
+
+/* WebKit/Chromium: same intent as the Firefox properties above. Mirrors the
+ * kanban column-content scrollbar pattern (ProjectsKanban.module.css). */
+.textarea::-webkit-scrollbar {
+  width: 4px;
+}
+
+.textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.textarea::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--muted-foreground) 18%, transparent);
+  border-radius: 2px;
+}
+
+.textarea::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--muted-foreground) 32%, transparent);
 }
 
 .textarea::placeholder {

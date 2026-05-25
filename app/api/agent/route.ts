@@ -137,21 +137,20 @@ export async function POST(req: NextRequest) {
     }
     const finalText = masked.text;
 
-    // Durable confirmation buttons: if a preview tool registered a pending
-    // action this turn, hand its id to the client so it can render
-    // Confirm/Cancel. Suppress it when a commit tool already succeeded in
-    // the same turn — the write is done, so a button would double-commit.
+    // Durable confirmation buttons: if any preview tools registered pending
+    // actions this turn, hand the FULL list to the client so the single
+    // Confirm/Cancel pair below the message commits (or cancels) every
+    // preview from the turn atomically. Suppress entirely when a commit
+    // tool already succeeded in the same turn — the write is done, so a
+    // button would double-commit.
     const committedThisTurn = result.toolCalls.some(
       (c) =>
         WRITE_TOOL_NAMES.has(c.name) &&
         !c.name.startsWith('preview_') &&
         c.output.ok === true,
     );
-    const pendingActionIds = extractPendingActionIds(result.toolCalls);
-    const pendingActionId =
-      !committedThisTurn && pendingActionIds.length > 0
-        ? pendingActionIds[pendingActionIds.length - 1]
-        : null;
+    const allPendingActionIds = extractPendingActionIds(result.toolCalls);
+    const pendingActionIds = committedThisTurn ? [] : allPendingActionIds;
 
     if (userId) {
       await supabase.from('ai_chat_messages').insert({
@@ -195,7 +194,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       answer: finalText,
       tool_calls: result.toolCalls,
-      pending_action_id: pendingActionId,
+      pending_action_ids: pendingActionIds,
       tasks: Array.from(taskCardMap.values()),
     });
   } catch (err) {

@@ -402,13 +402,18 @@ async function handleSlackMessage(
   const supabase = getSupabaseServer();
 
   if (!hasFiles && isBareConfirmation(prompt)) {
+    // Confirm ALL active pending actions in this user+thread, not just
+    // one — same atomic-bundle behavior as the Block Kit button. Limit
+    // is generous (matching button capacity) so multi-action turns
+    // commit fully when the user types "yes" instead of clicking.
     const active = await listActivePendingActions({
       slackUserId: event.user,
       channelId: event.channel,
       threadTs,
-      limit: 2,
+      limit: 50,
     });
-    if (active.length === 1) {
+    if (active.length >= 1) {
+      const activeIds = active.map((a) => a.id);
       await supabase.from('ai_chat_messages').insert({
         user_id: identity.appUserId,
         role: 'user',
@@ -419,28 +424,70 @@ async function handleSlackMessage(
           slack_channel: event.channel,
           ...(threadTs ? { slack_thread_ts: threadTs } : {}),
           slack_user_id: event.user,
-          pending_action_id: active[0].id,
+          pending_action_ids: activeIds,
         },
       });
-      const confirmation = await confirmPendingAction({
-        actionId: active[0].id,
-        slackUserId: event.user,
-      });
+      // Loop in registration order, continue past failures so a single
+      // bad apple doesn't strand the rest of the bundle.
+      const perActionResults: Array<{
+        id: string;
+        ok: boolean;
+        status: string;
+        text: string;
+      }> = [];
+      for (const a of active) {
+        const r = await confirmPendingAction({
+          actionId: a.id,
+          slackUserId: event.user,
+        });
+        perActionResults.push({
+          id: a.id,
+          ok: r.ok,
+          status: r.status,
+          text: r.text,
+        });
+      }
+      // Single-action: pass through verbatim (no behavior change for the
+      // common case). Multi-action: aggregate into one message.
+      let combinedText: string;
+      if (perActionResults.length === 1) {
+        combinedText = perActionResults[0].text;
+      } else {
+        const succeeded = perActionResults.filter((r) => r.ok);
+        const failed = perActionResults.filter((r) => !r.ok);
+        const parts: string[] = [];
+        if (succeeded.length > 0) {
+          parts.push(
+            `Committed ${succeeded.length} of ${perActionResults.length}:`,
+          );
+          for (const r of succeeded) parts.push(`* ${r.text}`);
+        }
+        if (failed.length > 0) {
+          if (parts.length > 0) parts.push('');
+          parts.push(`Failed ${failed.length}:`);
+          for (const r of failed) parts.push(`* ${r.text}`);
+        }
+        combinedText = parts.join('\n');
+      }
       await supabase.from('ai_chat_messages').insert({
         user_id: identity.appUserId,
         role: 'assistant',
-        content: confirmation.text,
+        content: combinedText,
         metadata: {
           surface: 'slack',
           slack_kind: kind,
           slack_channel: event.channel,
           ...(threadTs ? { slack_thread_ts: threadTs } : {}),
           slack_user_id: event.user,
-          pending_action_id: active[0].id,
-          pending_action_status: confirmation.status,
+          pending_action_ids: activeIds,
+          pending_action_results: perActionResults.map((r) => ({
+            id: r.id,
+            status: r.status,
+            ok: r.ok,
+          })),
         },
       });
-      await postReply(web, event.channel, threadTs, confirmation.text);
+      await postReply(web, event.channel, threadTs, combinedText);
       return;
     }
   }
@@ -612,7 +659,10 @@ async function handleSlackMessage(
   const extras = taskUrls.length > 0 ? await buildTaskMessageExtras(taskUrls) : {};
   const pendingActionIds = extractPendingActionIds(result.toolCalls);
   if (pendingActionIds.length > 0) {
-    const blocks = buildConfirmationBlocks(pendingActionIds[pendingActionIds.length - 1]);
+    // Single Confirm/Cancel pair that commits (or cancels) every preview
+    // from this turn at once — the ids ride together in the button value
+    // and the interactivity route loops them in order.
+    const blocks = buildConfirmationBlocks(pendingActionIds);
     extras.blocks = [...(extras.blocks ?? []), ...blocks];
   }
   const postedTs = await postReply(web, event.channel, threadTs, mrkdwnText, extras);

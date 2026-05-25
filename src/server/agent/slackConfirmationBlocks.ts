@@ -21,7 +21,26 @@ export function extractPendingActionIds(toolCalls: ToolCallTrace[]): string[] {
   return ids;
 }
 
-export function buildConfirmationBlocks(pendingActionId: string): Block[] {
+// Encode an ordered list of pending-action ids into a single Slack button
+// `value` field. Comma-separated is short and trivial to parse on the
+// interactivity-route side; Slack caps value at 2000 chars which fits
+// ~54 UUIDs (well past any realistic preview count for one turn).
+const ID_SEPARATOR = ',';
+
+export function encodePendingActionIds(ids: string[]): string {
+  return ids.join(ID_SEPARATOR);
+}
+
+export function decodePendingActionIds(value: string | undefined | null): string[] {
+  if (!value) return [];
+  return value
+    .split(ID_SEPARATOR)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+export function buildConfirmationBlocks(pendingActionIds: string[]): Block[] {
+  const value = encodePendingActionIds(pendingActionIds);
   return [
     {
       type: 'actions',
@@ -31,14 +50,14 @@ export function buildConfirmationBlocks(pendingActionId: string): Block[] {
           text: { type: 'plain_text', text: 'Confirm' },
           style: 'primary',
           action_id: AGENT_CONFIRM_ACTION_ID,
-          value: pendingActionId,
+          value,
         },
         {
           type: 'button',
           text: { type: 'plain_text', text: 'Cancel' },
           style: 'danger',
           action_id: AGENT_CANCEL_ACTION_ID,
-          value: pendingActionId,
+          value,
         },
       ],
     } as unknown as Block,

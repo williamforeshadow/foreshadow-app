@@ -59,7 +59,10 @@ interface Message {
   content: string;
   // When the agent returns a write preview, the server hands back a durable
   // pending-action id; the chat shows Confirm/Cancel until it's resolved.
-  pendingActionId?: string;
+  // Every pending action this turn registered. The chat shows a SINGLE
+  // Confirm/Cancel pair below the message; clicking commits (or cancels)
+  // every id in this array together via /api/agent/confirm.
+  pendingActionIds?: string[];
   confirmation?: 'pending' | 'confirming' | 'done' | 'cancelled' | 'error';
   // Structured task rows from any find_tasks call this turn. The tasks the
   // answer actually links to render as kanban-style cards below the text.
@@ -192,13 +195,16 @@ export function AiChatPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Auto-resize the textarea.
+  // Auto-resize the textarea. Cap at 200px so a long paste doesn't push
+  // the input above the panel; beyond that the textarea scrolls
+  // internally (styled in AiChatPanel.module.css to match the panel's
+  // muted palette so the scrollbar isn't visually jarring).
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       textareaRef.current.style.height = `${Math.min(
         textareaRef.current.scrollHeight,
-        140,
+        200,
       )}px`;
     }
   }, [inputValue]);
@@ -310,14 +316,20 @@ export function AiChatPanel() {
             },
           ]);
         } else {
+          const ids: string[] = Array.isArray(data.pending_action_ids)
+            ? data.pending_action_ids.filter(
+                (v: unknown): v is string =>
+                  typeof v === 'string' && v.length > 0,
+              )
+            : [];
           setMessages((prev) => [
             ...prev,
             {
               id: `assistant-${Date.now()}`,
               role: 'assistant',
               content: data.answer,
-              pendingActionId: data.pending_action_id ?? undefined,
-              confirmation: data.pending_action_id ? 'pending' : undefined,
+              pendingActionIds: ids.length > 0 ? ids : undefined,
+              confirmation: ids.length > 0 ? 'pending' : undefined,
               tasks: Array.isArray(data.tasks) ? data.tasks : undefined,
             },
           ]);
@@ -340,14 +352,16 @@ export function AiChatPanel() {
     [user, isLoading, runCommand],
   );
 
-  // Confirm or cancel a previewed write — commits server-side, no LLM turn.
+  // Confirm or cancel previewed writes — commits server-side, no LLM turn.
+  // Takes the full array of pending action ids registered this turn; the
+  // server loops them in order and reports a single combined result.
   const handleConfirmAction = useCallback(
     async (
       messageId: string,
-      pendingActionId: string,
+      pendingActionIds: string[],
       action: 'confirm' | 'cancel',
     ) => {
-      if (!user) return;
+      if (!user || pendingActionIds.length === 0) return;
       setMessages((prev) =>
         prev.map((m) =>
           m.id === messageId ? { ...m, confirmation: 'confirming' } : m,
@@ -371,7 +385,7 @@ export function AiChatPanel() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            pending_action_id: pendingActionId,
+            pending_action_ids: pendingActionIds,
             action,
             user_id: user.id,
           }),
@@ -547,7 +561,8 @@ export function AiChatPanel() {
                                   />
                                 );
                               })()}
-                            {msg.pendingActionId &&
+                            {msg.pendingActionIds &&
+                              msg.pendingActionIds.length > 0 &&
                               (msg.confirmation === 'pending' ||
                                 msg.confirmation === 'confirming') && (
                                 <div className={styles.confirmationButtons}>
@@ -556,7 +571,7 @@ export function AiChatPanel() {
                                     onClick={() =>
                                       handleConfirmAction(
                                         msg.id,
-                                        msg.pendingActionId!,
+                                        msg.pendingActionIds!,
                                         'confirm',
                                       )
                                     }
@@ -572,7 +587,7 @@ export function AiChatPanel() {
                                     onClick={() =>
                                       handleConfirmAction(
                                         msg.id,
-                                        msg.pendingActionId!,
+                                        msg.pendingActionIds!,
                                         'cancel',
                                       )
                                     }

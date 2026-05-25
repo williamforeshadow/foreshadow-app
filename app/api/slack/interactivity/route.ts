@@ -7,6 +7,7 @@ import {
   cancelPendingAction,
   confirmPendingAction,
 } from '@/src/server/agent/pendingActions';
+import { decodePendingActionIds } from '@/src/server/agent/slackConfirmationBlocks';
 import {
   deleteNotificationSlackMessage,
   markNotificationRead,
@@ -94,55 +95,110 @@ async function handleInteraction(
     return;
   }
 
-  const pendingActionId = action?.value;
+  // Confirm/Cancel button value carries the ordered list of pending
+  // action ids registered in the agent turn (comma-separated). One
+  // click commits or cancels every preview from that turn atomically.
+  const pendingActionIds = decodePendingActionIds(action?.value);
   const slackUserId = payload.user?.id;
   const channelId = payload.channel?.id;
-  if (!pendingActionId || !slackUserId || !channelId) {
+  if (pendingActionIds.length === 0 || !slackUserId || !channelId) {
     console.warn('[slack/interactivity] missing action payload fields', {
       actionId,
-      pendingActionId,
+      pendingActionIds,
       slackUserId,
       channelId,
     });
     return;
   }
 
-  const result =
-    actionId === AGENT_CONFIRM_ACTION_ID
-      ? await confirmPendingAction({
-          actionId: pendingActionId,
-          slackUserId,
-        })
-      : await cancelPendingAction({
-          actionId: pendingActionId,
-          slackUserId,
-        });
+  // Loop in registration order; continue on failure so a single bad
+  // apple doesn't strand the rest of the bundle.
+  const results: Array<{
+    id: string;
+    ok: boolean;
+    text: string;
+    forbidden: boolean;
+  }> = [];
+  for (const id of pendingActionIds) {
+    const r =
+      actionId === AGENT_CONFIRM_ACTION_ID
+        ? await confirmPendingAction({ actionId: id, slackUserId })
+        : await cancelPendingAction({ actionId: id, slackUserId });
+    results.push({
+      id,
+      ok: r.ok,
+      text: r.text,
+      forbidden: r.error === 'forbidden',
+    });
+  }
 
+  // Single-action: behavior unchanged (pass the raw text through; if it
+  // was forbidden, post ephemeral as before). Multi-action: aggregate.
   const web = new WebClient(botToken);
   const messageTs = payload.message?.thread_ts ?? payload.message?.ts;
   const threadTs = channelId.startsWith('D') ? undefined : messageTs;
 
-  try {
-    if (result.error === 'forbidden') {
-      await web.chat.postEphemeral({
+  if (results.length === 1) {
+    const only = results[0];
+    try {
+      if (only.forbidden) {
+        await web.chat.postEphemeral({
+          channel: channelId,
+          user: slackUserId,
+          text: only.text,
+          ...(threadTs ? { thread_ts: threadTs } : {}),
+        });
+        return;
+      }
+      await web.chat.postMessage({
         channel: channelId,
-        user: slackUserId,
-        text: result.text,
+        text: only.text,
         ...(threadTs ? { thread_ts: threadTs } : {}),
+        unfurl_links: false,
+        unfurl_media: false,
       });
-      return;
+    } catch (err) {
+      console.error('[slack/interactivity] failed to post result', {
+        channelId,
+        pendingActionId: only.id,
+        err,
+      });
     }
+    return;
+  }
+
+  // Multi-action: produce one summary message. Forbidden entries (this
+  // user didn't own the original action) are listed in the failed
+  // section rather than as ephemerals, so the channel/thread reads as
+  // one coherent outcome.
+  const succeeded = results.filter((r) => r.ok);
+  const failed = results.filter((r) => !r.ok);
+  const successVerb =
+    actionId === AGENT_CONFIRM_ACTION_ID ? 'Committed' : 'Cancelled';
+  const parts: string[] = [];
+  if (succeeded.length > 0) {
+    parts.push(`${successVerb} ${succeeded.length} of ${results.length}:`);
+    for (const r of succeeded) parts.push(`* ${r.text}`);
+  }
+  if (failed.length > 0) {
+    if (parts.length > 0) parts.push('');
+    parts.push(`Failed ${failed.length}:`);
+    for (const r of failed) parts.push(`* ${r.text}`);
+  }
+  const combined = parts.join('\n');
+
+  try {
     await web.chat.postMessage({
       channel: channelId,
-      text: result.text,
+      text: combined,
       ...(threadTs ? { thread_ts: threadTs } : {}),
       unfurl_links: false,
       unfurl_media: false,
     });
   } catch (err) {
-    console.error('[slack/interactivity] failed to post result', {
+    console.error('[slack/interactivity] failed to post combined result', {
       channelId,
-      pendingActionId,
+      pendingActionIds,
       err,
     });
   }
