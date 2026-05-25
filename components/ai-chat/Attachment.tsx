@@ -48,9 +48,7 @@ export function Attachment({
         />
       </button>
       {expanded && (
-        <div className="flex max-h-[440px] flex-col gap-2 overflow-y-auto p-2">
-          {children}
-        </div>
+        <div className="flex flex-col gap-2 p-2">{children}</div>
       )}
     </div>
   );

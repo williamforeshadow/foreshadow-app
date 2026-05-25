@@ -1,46 +1,42 @@
 'use client';
 
-import { ProjectCard } from '@/components/windows/projects/ProjectCard';
-import type { TaskRow } from '@/src/agent/tools/findTasks';
+import { TaskListHeader, TaskRow } from '@/components/tasks/TaskRow';
+import type { TaskRow as AgentTaskRow } from '@/src/agent/tools/findTasks';
 import { Attachment } from './Attachment';
-import { taskRowToCardItem } from './taskCardMapping';
+import { taskRowToRowItem } from './taskRowMapping';
 
 // First consumer of the generic Attachment shell. Renders a collapsed
-// "{N} tasks" bar that expands to a vertical scroll of full kanban-style
-// task cards. Each card is clickable and opens the task via the caller's
-// `onOpen` callback (same route as the inline carousel uses).
+// "{N} tasks" bar that expands to the same task-row format used on the
+// My Assignments and Tasks pages — so chat results read the same way the
+// rest of the app reads.
 //
-// Pattern for future visual types: copy this file, swap ProjectCard for
-// the relevant card component, supply the appropriate title.
+// Chat-context column choice: only "when", "task" (title + status +
+// priority icons), and "assignee" are kept. Department, bin, and
+// comments are dropped — they don't fit in the docked panel and add
+// noise when the user is having a conversation rather than triaging.
+//
+// Pattern for future visual types: copy this file, swap TaskRow for the
+// relevant row/card component, supply the appropriate title.
 export function TaskAttachment({
   cards,
   onOpen,
 }: {
-  cards: TaskRow[];
+  cards: AgentTaskRow[];
   onOpen: (taskUrl: string) => void;
 }) {
   return (
     <Attachment title={`${cards.length} tasks`}>
-      {cards.map((t) => (
-        <div
+      <TaskListHeader hideDepartment hideBin hideComments />
+      {cards.map((t, idx) => (
+        <TaskRow
           key={t.task_id}
-          role="button"
-          tabIndex={0}
-          className="cursor-pointer [&>div]:!cursor-pointer"
+          item={taskRowToRowItem(t)}
           onClick={() => onOpen(t.task_url)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              onOpen(t.task_url);
-            }
-          }}
-        >
-          <ProjectCard
-            item={taskRowToCardItem(t)}
-            viewMode="status"
-            isDragging={false}
-          />
-        </div>
+          isLast={idx === cards.length - 1}
+          hideDepartment
+          hideBin
+          hideComments
+        />
       ))}
     </Attachment>
   );

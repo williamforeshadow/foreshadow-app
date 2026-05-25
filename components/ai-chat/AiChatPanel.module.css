@@ -97,6 +97,12 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Don't let the browser auto-pin scroll to anything when content height
+   * changes mid-conversation (e.g. an attachment expanding). Without this
+   * the chat tugs the viewport toward the new bottom; with it, expanding
+   * an attachment grows the message in place and the user chooses
+   * whether to scroll down to see it. */
+  overflow-anchor: none;
 }
 
 .bodyInner {
@@ -228,10 +234,13 @@
   text-align: left;
 }
 
+/* Assistant replies render as plain prose on the chat background — no
+ * bubble color, but keep the bubble-era padding so the text doesn't sit
+ * flush against the panel edge. Only user messages get the filled
+ * bubble (rule above). */
 .assistantMessage .messageContent {
-  background: color-mix(in srgb, var(--muted-foreground) 12%, transparent);
+  background: transparent;
   padding: 0.625rem 0.875rem;
-  border-radius: 0.25rem 1rem 1rem 1rem;
 }
 
 .confirmationButtons {
@@ -322,12 +331,13 @@
 
 .inputBox {
   display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 0.5rem;
   border: 1px solid var(--border);
   border-radius: 0.75rem;
   background: var(--background);
-  padding: 0.5rem 0.625rem;
+  padding: 0.375rem 0.5rem 0.375rem 0.75rem;
   transition: border-color 0.12s;
 }
 
@@ -336,12 +346,13 @@
 }
 
 .textarea {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   background: transparent;
   border: none;
   outline: none;
   resize: none;
-  padding: 0.125rem 0;
+  padding: 0.3125rem 0;
   min-height: 1.5rem;
   font-size: 0.875rem;
   line-height: 1.45;
@@ -350,18 +361,6 @@
 }
 
 .textarea::placeholder {
-  color: var(--muted-foreground);
-}
-
-.inputRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.inputHint {
-  font-size: 0.6875rem;
   color: var(--muted-foreground);
 }
 

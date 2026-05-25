@@ -634,23 +634,22 @@ export function AiChatPanel() {
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Ask anything, or type / for commands…"
+                  placeholder={
+                    user
+                      ? 'Ask anything, or type / for commands…'
+                      : 'Sign in to chat'
+                  }
                   rows={1}
                 />
-                <div className={styles.inputRow}>
-                  <span className={styles.inputHint}>
-                    {user ? '' : 'Sign in to chat'}
-                  </span>
-                  <button
-                    type="button"
-                    className={styles.sendButton}
-                    onClick={() => submitMessage(inputValue)}
-                    disabled={isLoading || !inputValue.trim() || !user}
-                    title="Send"
-                  >
-                    <ArrowUp size={15} />
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  className={styles.sendButton}
+                  onClick={() => submitMessage(inputValue)}
+                  disabled={isLoading || !inputValue.trim() || !user}
+                  title="Send"
+                >
+                  <ArrowUp size={15} />
+                </button>
               </div>
             </div>
           </div>

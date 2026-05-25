@@ -2,6 +2,8 @@
 
 import React from 'react';
 import { KeyAffordance } from './KeyAffordance';
+import { STATUS_ICONS, STATUS_TITLE } from '@/lib/taskStatusIcons';
+import { PRIORITY_ICONS, PRIORITY_TITLE } from '@/lib/taskPriorityIcons';
 
 // Shared row + visual constants used across task-list surfaces (My Assignments,
 // Property Tasks, and anywhere else we render the "status marble" list design).
@@ -94,10 +96,13 @@ export function PriorityTag({ priority }: { priority: string }) {
       : priority === 'high'
       ? 'text-neutral-800 dark:text-[#f0efed]'
       : 'text-neutral-500 dark:text-[#a09e9a]';
+  const PriorityIcon = PRIORITY_ICONS[priority] ?? PRIORITY_ICONS.medium;
   return (
     <span
-      className={`text-[11px] tracking-[0.02em] font-medium pl-2 border-l border-neutral-200 dark:border-[rgba(255,255,255,0.07)] ${colorClass}`}
+      className={`inline-flex items-center gap-1 text-[11px] tracking-[0.02em] font-medium pl-2 border-l border-neutral-200 dark:border-[rgba(255,255,255,0.07)] ${colorClass}`}
+      title={PRIORITY_TITLE[priority] ?? priority}
     >
+      <PriorityIcon size={12} strokeWidth={2} aria-hidden />
       {PRIORITY_LABELS[priority] || priority}
     </span>
   );
@@ -178,20 +183,57 @@ export function getShortDate(
 // bin / comments columns. Italic lowercase to feel annotative rather than
 // table-like.
 
-export const TASK_ROW_GRID_CLASS =
-  'grid grid-cols-[56px_minmax(0,1fr)_96px_120px_128px_56px] gap-4 px-3 -mx-3';
+// Static class portion shared by the header and every row. The dynamic
+// piece (grid-template-columns) is set inline via `taskRowGridTemplateColumns`
+// because Tailwind's JIT can't reliably synthesize arbitrary-value
+// class names from runtime-built strings.
+const TASK_ROW_GRID_CLASS = 'grid gap-4 px-3 -mx-3';
 
-export function TaskListHeader() {
+export function taskRowGridTemplateColumns(opts: {
+  hideDepartment?: boolean;
+  hideBin?: boolean;
+  hideComments?: boolean;
+} = {}): string {
+  return [
+    '56px',                                // when (date)
+    'minmax(0,1fr)',                       // task (title + status + priority)
+    '96px',                                // assignee
+    opts.hideDepartment ? null : '120px',  // department
+    opts.hideBin ? null : '128px',         // bin
+    opts.hideComments ? null : '56px',     // comments
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+interface TaskListColumnOpts {
+  hideDepartment?: boolean;
+  hideBin?: boolean;
+  hideComments?: boolean;
+}
+
+export function TaskListHeader({
+  hideDepartment = false,
+  hideBin = false,
+  hideComments = false,
+}: TaskListColumnOpts = {}) {
   return (
     <div
       className={`${TASK_ROW_GRID_CLASS} items-center pb-2 border-b border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.07)] text-[10px] italic font-medium tracking-[0.02em] text-neutral-400 dark:text-[#66645f] select-none`}
+      style={{
+        gridTemplateColumns: taskRowGridTemplateColumns({
+          hideDepartment,
+          hideBin,
+          hideComments,
+        }),
+      }}
     >
       <div className="text-right">when</div>
       <div>task</div>
       <div>assignee</div>
-      <div>department</div>
-      <div>bin</div>
-      <div className="text-right">comments</div>
+      {!hideDepartment && <div>department</div>}
+      {!hideBin && <div>bin</div>}
+      {!hideComments && <div className="text-right">comments</div>}
     </div>
   );
 }
@@ -207,6 +249,12 @@ interface TaskRowProps {
   // per-row property sub-label to reduce noise (every row would repeat it).
   hideProperty?: boolean;
   showBinPill?: boolean;
+  // Column-level hides — drop the column entirely (header + body together
+  // via the shared grid template). Used by narrow surfaces like the chat
+  // attachment where the full 6-column layout doesn't fit.
+  hideDepartment?: boolean;
+  hideBin?: boolean;
+  hideComments?: boolean;
   // Optional department icon (rendered at the row's top-right).
   departmentIcon?: React.ComponentType<{ className?: string }>;
 }
@@ -275,6 +323,9 @@ export function TaskRow({
   onClick,
   hideProperty = false,
   showBinPill = false,
+  hideDepartment = false,
+  hideBin = false,
+  hideComments = false,
   departmentIcon: DeptIcon,
 }: TaskRowProps) {
   const timeInfo = formatTimeCol(item.scheduled_time);
@@ -293,7 +344,7 @@ export function TaskRow({
           onClick?.();
         }
       }}
-      className={`grid grid-cols-[56px_minmax(0,1fr)_96px_120px_128px_56px] gap-4 py-3.5 text-left transition-colors items-center cursor-pointer ${
+      className={`grid gap-4 py-3.5 text-left transition-colors items-center cursor-pointer ${
         selected
           ? 'bg-[rgba(30,25,20,0.04)] dark:bg-[rgba(255,255,255,0.04)]'
           : 'hover:bg-[rgba(30,25,20,0.02)] dark:hover:bg-[rgba(255,255,255,0.02)]'
@@ -302,6 +353,13 @@ export function TaskRow({
           ? 'border-b border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.07)]'
           : ''
       } rounded-lg px-3 -mx-3`}
+      style={{
+        gridTemplateColumns: taskRowGridTemplateColumns({
+          hideDepartment,
+          hideBin,
+          hideComments,
+        }),
+      }}
     >
       {/* Date/time column */}
       <div className="text-right pt-0.5 self-start">
@@ -353,16 +411,15 @@ export function TaskRow({
         )}
         <div className="flex items-center gap-2 mt-2">
           <span
-            className="w-[7px] h-[7px] rounded-full shrink-0"
-            style={{
-              background:
-                STATUS_MARBLE[item.status] || STATUS_MARBLE.not_started,
-            }}
-          />
-          <span
-            className="text-[11px] tracking-[0.02em] font-medium"
+            className="inline-flex items-center gap-1 text-[11px] tracking-[0.02em] font-medium"
             style={{ color: STATUS_COLORS[item.status] || '#A78BFA' }}
+            title={STATUS_TITLE[item.status] ?? item.status}
           >
+            {(() => {
+              const StatusIcon =
+                STATUS_ICONS[item.status] ?? STATUS_ICONS.not_started;
+              return <StatusIcon size={12} strokeWidth={2} aria-hidden />;
+            })()}
             {STATUS_LABELS[item.status] || item.status}
           </span>
           <PriorityTag priority={item.priority} />
@@ -375,41 +432,47 @@ export function TaskRow({
       </div>
 
       {/* Department column (icon + name) */}
-      <div className="min-w-0 flex items-center gap-1.5 text-[12px] text-neutral-600 dark:text-[#a09e9a]">
-        {DeptIcon && item.department_id ? (
-          <>
-            <DeptIcon className="w-[14px] h-[14px] text-neutral-400 dark:text-[#66645f] shrink-0" />
-            <span className="truncate">
-              {item.department_name || 'Department'}
-            </span>
-          </>
-        ) : (
-          <EmDash />
-        )}
-      </div>
+      {!hideDepartment && (
+        <div className="min-w-0 flex items-center gap-1.5 text-[12px] text-neutral-600 dark:text-[#a09e9a]">
+          {DeptIcon && item.department_id ? (
+            <>
+              <DeptIcon className="w-[14px] h-[14px] text-neutral-400 dark:text-[#66645f] shrink-0" />
+              <span className="truncate">
+                {item.department_name || 'Department'}
+              </span>
+            </>
+          ) : (
+            <EmDash />
+          )}
+        </div>
+      )}
 
       {/* Bin column */}
-      <div className="min-w-0 flex items-center gap-1.5 text-[12px] text-neutral-600 dark:text-[#a09e9a]">
-        {showBinPill && item.is_binned ? (
-          <>
-            <BinIcon className="w-[13px] h-[13px] text-neutral-400 dark:text-[#66645f] shrink-0" />
-            <span className="truncate">{item.bin_name || 'Binned'}</span>
-          </>
-        ) : (
-          <EmDash />
-        )}
-      </div>
+      {!hideBin && (
+        <div className="min-w-0 flex items-center gap-1.5 text-[12px] text-neutral-600 dark:text-[#a09e9a]">
+          {showBinPill && item.is_binned ? (
+            <>
+              <BinIcon className="w-[13px] h-[13px] text-neutral-400 dark:text-[#66645f] shrink-0" />
+              <span className="truncate">{item.bin_name || 'Binned'}</span>
+            </>
+          ) : (
+            <EmDash />
+          )}
+        </div>
+      )}
 
       {/* Comments column */}
-      <div
-        className="flex items-center justify-end gap-1 text-[12px] tabular-nums text-neutral-500 dark:text-[#a09e9a]"
-        title={`${commentCount} comment${commentCount === 1 ? '' : 's'}`}
-      >
-        <CommentIcon className="w-[13px] h-[13px] text-neutral-400 dark:text-[#66645f] shrink-0" />
-        <span className={commentCount === 0 ? 'text-neutral-400 dark:text-[#66645f]' : ''}>
-          {commentCount}
-        </span>
-      </div>
+      {!hideComments && (
+        <div
+          className="flex items-center justify-end gap-1 text-[12px] tabular-nums text-neutral-500 dark:text-[#a09e9a]"
+          title={`${commentCount} comment${commentCount === 1 ? '' : 's'}`}
+        >
+          <CommentIcon className="w-[13px] h-[13px] text-neutral-400 dark:text-[#66645f] shrink-0" />
+          <span className={commentCount === 0 ? 'text-neutral-400 dark:text-[#66645f]' : ''}>
+            {commentCount}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

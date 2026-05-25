@@ -31,7 +31,14 @@ const inputSchema = z
       .uuid()
       .optional()
       .describe(
-        'Restrict to a single property. Use find_properties to resolve a name to an id first.',
+        "Restrict to a single property. Use find_properties to resolve a name to an id first. For 'reservations across these N properties' style questions, use property_ids instead.",
+      ),
+    property_ids: z
+      .array(z.string().uuid())
+      .min(1)
+      .optional()
+      .describe(
+        "Batch property filter. When you need reservations across multiple specific properties in one call (e.g. 'check-ins this week at properties where I have tasks'), resolve each name with find_properties first then pass the resulting property_ids here. Returns reservations whose property_id matches ANY of the supplied ids — a reservation belongs to one property, so this is OR semantics, not AND. Mutually exclusive with property_id. Combines freely with date filters; prefer one batched call + a date range over looping property_id one by one.",
       ),
     guest_name: z
       .string()
@@ -141,6 +148,14 @@ const inputSchema = z
         'current_only/upcoming/past cannot be combined with stays_overlapping, check_in_between, or check_out_between. Use one or the other.',
       path: ['current_only'],
     },
+  )
+  .refine(
+    (v) => !(v.property_id && v.property_ids),
+    {
+      message:
+        'property_id and property_ids are mutually exclusive; pick one',
+      path: ['property_ids'],
+    },
   );
 
 type Input = z.infer<typeof inputSchema>;
@@ -238,6 +253,40 @@ async function handler(input: Input): Promise<ToolResult<ReservationRow[]>> {
     resolvedProperty = r.row;
   }
 
+  // Batch FK validation for property_ids. One `select id, name from
+  // properties where id in (...)` round-trip; any UUID missing from the
+  // result is a fabricated id and surfaces as a loud not_found instead
+  // of a silent empty result set. Names are echoed back in
+  // meta.resolved_properties so the model can ground the result.
+  let resolvedProperties: ResolvedProperty[] | null = null;
+  if (!input.ids && input.property_ids && input.property_ids.length > 0) {
+    const unique = Array.from(new Set(input.property_ids));
+    const { data: foundRows, error: propsErr } = await supabase
+      .from('properties')
+      .select('id, name')
+      .in('id', unique);
+    if (propsErr) {
+      return {
+        ok: false,
+        error: { code: 'db_error', message: propsErr.message },
+      };
+    }
+    const found = (foundRows ?? []) as ResolvedProperty[];
+    const foundIds = new Set(found.map((r) => r.id));
+    const missing = unique.filter((id) => !foundIds.has(id));
+    if (missing.length > 0) {
+      return {
+        ok: false,
+        error: {
+          code: 'not_found',
+          message: `property_ids contains UUIDs not in properties: ${missing.join(', ')}`,
+          hint: 'Call find_properties to resolve names to valid property_ids before passing them here.',
+        },
+      };
+    }
+    resolvedProperties = found;
+  }
+
   // Pull `limit + 1` so we can detect truncation cheaply, same as the other
   // list tools.
   let q = supabase
@@ -252,6 +301,11 @@ async function handler(input: Input): Promise<ToolResult<ReservationRow[]>> {
   } else {
     if (resolvedProperty) {
       q = q.eq('property_id', resolvedProperty.id);
+    } else if (resolvedProperties) {
+      q = q.in(
+        'property_id',
+        resolvedProperties.map((p) => p.id),
+      );
     }
 
     if (input.guest_name) {
@@ -354,6 +408,14 @@ async function handler(input: Input): Promise<ToolResult<ReservationRow[]>> {
           },
         }
       : {}),
+    ...(resolvedProperties
+      ? {
+          resolved_properties: resolvedProperties.map((p) => ({
+            property_id: p.id,
+            name: p.name,
+          })),
+        }
+      : {}),
   };
 
   return { ok: true, data: transformed, meta };
@@ -362,7 +424,7 @@ async function handler(input: Input): Promise<ToolResult<ReservationRow[]>> {
 export const findReservations: ToolDefinition<Input, ReservationRow[]> = {
   name: 'find_reservations',
   description:
-    "Find guest reservations (stays) by property, guest name, Hostaway id, or date range. Use convenience flags current_only/upcoming/past for relative-time questions ('who's there now', 'this week's arrivals'); pass reference_date in the user's local timezone so 'today' aligns with their clock. Use find_properties first if the user mentions a property by name. Returns slim rows sorted by check_in asc (nulls last), created_at desc, with computed nights and is_back_to_back fields. There is no status column — cancellations are deletions, so you cannot ask for cancelled stays.",
+    "Find guest reservations (stays) by property, guest name, Hostaway id, or date range. Use convenience flags current_only/upcoming/past for relative-time questions ('who's there now', 'this week's arrivals'); pass reference_date in the user's local timezone so 'today' aligns with their clock. Property filtering: use property_id for one property; use property_ids for multiple (e.g. 'check-ins this week at these N properties') — always prefer the batched call + a date range over looping property_id one ID at a time. Resolve names with find_properties first. Returns slim rows sorted by check_in asc (nulls last), created_at desc, with computed nights and is_back_to_back fields. There is no status column — cancellations are deletions, so you cannot ask for cancelled stays.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -370,7 +432,14 @@ export const findReservations: ToolDefinition<Input, ReservationRow[]> = {
       property_id: {
         type: 'string',
         description:
-          'Property UUID. Resolve property names with find_properties before calling.',
+          "Property UUID for single-property questions. Resolve property names with find_properties before calling. For 'reservations across these N properties', use property_ids instead.",
+      },
+      property_ids: {
+        type: 'array',
+        items: { type: 'string' },
+        minItems: 1,
+        description:
+          "Batch property filter. When you need reservations across multiple specific properties in one call (e.g. 'check-ins this week at properties where I have tasks'), resolve each name with find_properties first then pass the resulting property_ids here. Returns reservations whose property_id matches ANY of the supplied ids — OR semantics. Mutually exclusive with property_id. Combines freely with date filters.",
       },
       guest_name: {
         type: 'string',

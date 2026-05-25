@@ -7,6 +7,7 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages';
 import { TOOLS_BY_NAME, toAnthropicTools } from './tools';
 import type { ToolContext, ToolResult } from './tools/types';
+import { SKILLS_BLOCK } from './skills';
 import { todayInTz } from '@/src/lib/dates';
 
 // Names of tools that mutate state. Used by the hallucination backstops
@@ -214,7 +215,10 @@ Write protocol (critical):
 
 If a tool returns ok:false, surface the error message to the user and use the hint, if present, to suggest a clarification. Do NOT invent or guess data that wasn't returned.
 
-If the user asks something the available tools cannot answer, say so plainly. Keep answers concise and grounded in tool output.`;
+If the user asks something the available tools cannot answer, say so plainly. Keep answers concise and grounded in tool output.
+
+Operational instincts:
+${SKILLS_BLOCK}`;
 }
 
 /**
