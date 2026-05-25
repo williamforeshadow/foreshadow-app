@@ -92,6 +92,62 @@ export function isNonDataLookupPrompt(prompt: string | undefined): boolean {
     return genericOpsTarget && !concreteRecordCue;
   }
 
+  // Meta-conversation: the user is asking about the conversation itself
+  // (what they just asked, what the agent said, what was discussed). The
+  // model resolves these from the visible chat history — there's no live
+  // record to look up, so the read-claim mask must stand down even though
+  // no tool fires. Anchor patterns on "you" / "we" referring to the agent
+  // or the conversation, so questions about live people ("did Billy ask
+  // me to fix the light") still go through the mask.
+  if (
+    /\b(?:i|we)\s+(?:just|recently|earlier|previously|last|already)?\s*(?:ask(?:ed)?|told|said|wrote|mentioned|requested|wanted)\s+(?:you|foreshadow|the\s+bot|claude)\b/.test(
+      text,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\bwhat\s+(?:was|were|is|are)\s+the\s+(?:last|previous|recent)\s+(?:thing|question|request|message|reply|response)/.test(
+      text,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\bwhat\s+did\s+(?:you|i|we)\s+(?:just|recently|earlier|previously|last|already)?\s*(?:say|said|tell\s+me|mention|reply|respond|ask|request)\b/.test(
+      text,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\byou\s+(?:just|recently|earlier|previously|last|already)?\s*(?:said|told\s+me|mentioned|sent|wrote|replied|responded)\b/.test(
+      text,
+    )
+  ) {
+    return true;
+  }
+  if (/\bremind\s+me\s+(?:what|when|how|why)\b/.test(text)) return true;
+  if (
+    /\bour\s+(?:conversation|chat|discussion|thread|exchange)\b/.test(text)
+  ) {
+    return true;
+  }
+  if (
+    /\bhave\s+(?:we|you)\s+(?:talked|discussed|been\s+doing|covered|gone\s+over)\b/.test(
+      text,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(?:summari[sz]e|recap)\s+(?:our|the|this)\s+(?:conversation|chat|discussion|thread)\b/.test(
+      text,
+    )
+  ) {
+    return true;
+  }
+
   return false;
 }
 

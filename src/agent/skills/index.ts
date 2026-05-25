@@ -33,6 +33,7 @@ const SKILL_FILES = [
   'no-markdown-tables.md',
   'aggregating-questions.md',
   'visual-handoff.md',
+  'conversation-recall.md',
 ] as const;
 
 const SKILLS_DIR = join(process.cwd(), 'src', 'agent', 'skills');
