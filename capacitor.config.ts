@@ -5,13 +5,12 @@ const config: CapacitorConfig = {
   appName: 'Foreshadow',
   webDir: '.next', // Next.js build output (for static assets)
   server: {
-    // IMPORTANT: Set this to your deployed URL for production
-    // For local development, uncomment the line below and use your computer's IP
-    // url: 'http://YOUR_LOCAL_IP:3000',
-    // cleartext: true, // Allow HTTP for local development
-    
-    // For production, set to your deployed Next.js URL:
-    // url: 'https://your-app.vercel.app',
+    // Production: TestFlight / App Store builds load the live Vercel deploy,
+    // so CSS/React changes flow to installed apps instantly via Vercel.
+    // For local dev on a physical device, temporarily swap to your LAN IP
+    // (e.g. 'http://192.168.x.x:3000') and uncomment cleartext.
+    url: 'https://foreshadow-app.vercel.app',
+    // cleartext: true,
     androidScheme: 'https',
   },
   ios: {
