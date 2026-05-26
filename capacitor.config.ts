@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.foreshadow.app',
+  appId: 'com.foreshadow.ios',
   appName: 'Foreshadow',
   webDir: '.next', // Next.js build output (for static assets)
   server: {
@@ -15,7 +15,7 @@ const config: CapacitorConfig = {
     androidScheme: 'https',
   },
   ios: {
-    contentInset: 'automatic',
+    contentInset: 'never',
     preferredContentMode: 'mobile',
     backgroundColor: '#0a0a0a',
   },
@@ -30,8 +30,9 @@ const config: CapacitorConfig = {
       showSpinner: false,
     },
     StatusBar: {
-      style: 'dark',
+      style: 'light',
       backgroundColor: '#0a0a0a',
+      overlaysWebView: true,
     },
   },
 };
