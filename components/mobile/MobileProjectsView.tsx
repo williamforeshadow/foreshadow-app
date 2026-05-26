@@ -16,6 +16,7 @@ import { ColumnPicker } from '@/components/windows/projects/ColumnPicker';
 import type { Project, User, PropertyOption, TaskTemplate } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 // ============================================================================
 // Types
@@ -28,6 +29,7 @@ type Screen =
 
 interface MobileProjectsViewProps {
   users: User[];
+  onMenuTap?: () => void;
 }
 
 // ============================================================================
@@ -111,7 +113,7 @@ function MobileViewModeToggle({
 // Component
 // ============================================================================
 
-export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
+export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsViewProps) {
   const { user: currentUser } = useAuth();
   const { departments } = useDepartments();
   const binsHook = useProjectBins({ currentUser: currentUser as User | null });
@@ -540,6 +542,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
           onCreateBin={binsHook.createBin}
           onUpdateBin={binsHook.updateBin}
           onDeleteBin={binsHook.deleteBin}
+          onMenuTap={onMenuTap}
         />
       )}
 
@@ -548,32 +551,19 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
         <div className="flex flex-col h-full relative">
           {/* Header */}
           <div className="shrink-0 px-[22px] pt-2 pb-3">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2">
               <button
                 onClick={goBack}
-                className="w-9 h-9 rounded-[10px] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] flex items-center justify-center text-neutral-500 dark:text-[#a09e9a]"
+                className="-ml-1 w-9 h-9 rounded-[10px] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] flex items-center justify-center text-neutral-500 dark:text-[#a09e9a] shrink-0"
+                aria-label="Back to bins"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
-              <div className="flex-1" />
-              <MobileViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
-              <ColumnPicker
-                columns={allColumnOptions}
-                visibleColumnIds={columnVis.visibleIds}
-                onToggle={columnVis.toggle}
-                onSelectAll={() => columnVis.selectAll(allColumnOptions.map((c) => c.id))}
-                onClearAll={columnVis.clearAll}
-              />
-            </div>
-            <h1 className="text-[30px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed]">
-              {screen.binName}
-            </h1>
-            <div className="flex items-center gap-3 mt-2.5 text-[12.5px] text-neutral-500 dark:text-[#66645f] tracking-[0.01em] font-medium">
-              <span>Operations board</span>
-              <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a]" />
-              <span>{tasks.length} total</span>
+              <h1 className="text-[20px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed] truncate">
+                {screen.binName}
+              </h1>
               {/* Global toggle — only inside the Task Bin (binId === null).
                   Widens the Task Bin to every binned task across the Task Bin
                   and every sub-bin. Persists in localStorage. */}
@@ -581,7 +571,7 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
                 <button
                   onClick={handleToggleTaskBinGlobal}
                   aria-pressed={taskBinGlobal.enabled}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors shrink-0 ${
                     taskBinGlobal.enabled
                       ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)] border-[var(--accent-3)]/30 dark:border-[var(--accent-1)]/30'
                       : 'bg-transparent border-neutral-200 dark:border-[rgba(255,255,255,0.08)] text-neutral-500 dark:text-[#a09e9a] active:opacity-70'
@@ -593,10 +583,20 @@ export default function MobileProjectsView({ users }: MobileProjectsViewProps) {
                   Global
                 </button>
               )}
+              <div className="flex-1" />
+              <MobileViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
+              <ColumnPicker
+                columns={allColumnOptions}
+                visibleColumnIds={columnVis.visibleIds}
+                onToggle={columnVis.toggle}
+                onSelectAll={() => columnVis.selectAll(allColumnOptions.map((c) => c.id))}
+                onClearAll={columnVis.clearAll}
+              />
+              <NotificationBell compact />
               {tasks.length > 0 && !kanbanSelectionMode && (
                 <button
                   onClick={() => setKanbanSelectionMode(true)}
-                  className="ml-auto flex items-center gap-1 text-neutral-600 dark:text-[#a09e9a] active:opacity-70 transition-opacity"
+                  className="flex items-center gap-1 text-[12px] text-neutral-600 dark:text-[#a09e9a] active:opacity-70 transition-opacity shrink-0"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7l-3 3-1.5-1.5" />

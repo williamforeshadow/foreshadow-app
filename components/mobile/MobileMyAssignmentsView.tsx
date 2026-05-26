@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import type { Project, Task } from '@/lib/types';
 
 interface Assignee {
@@ -92,6 +93,7 @@ interface MobileMyAssignmentsViewProps {
   onTaskClick?: BivariantCallback<Task & { id?: string }>;
   onProjectClick?: BivariantCallback<Project & { task_id?: string }>;
   refreshTrigger?: number;
+  onMenuTap?: () => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -141,6 +143,7 @@ export default function MobileMyAssignmentsView({
   onTaskClick,
   onProjectClick,
   refreshTrigger,
+  onMenuTap,
 }: MobileMyAssignmentsViewProps) {
   const { user, loading: authLoading, role } = useAuth();
   const { theme, setTheme } = useTheme();
@@ -378,10 +381,26 @@ export default function MobileMyAssignmentsView({
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-[22px] pt-2 pb-4">
-        <div className="flex items-start justify-between">
-          <h1 className="text-[28px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed]">
-            My Assignments
-          </h1>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {onMenuTap && (
+              <button
+                onClick={onMenuTap}
+                className="-ml-2 w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+                aria-label="Open menu"
+              >
+                <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            )}
+            <h1 className="text-[20px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed] truncate">
+              My Assignments
+            </h1>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <NotificationBell compact />
 
           {/* User avatar */}
           <div className="relative" ref={userMenuRef}>
@@ -427,6 +446,7 @@ export default function MobileMyAssignmentsView({
                 </div>
               </>
             )}
+          </div>
           </div>
         </div>
         <div className="flex items-center gap-3 mt-2.5 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">

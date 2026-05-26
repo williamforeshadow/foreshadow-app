@@ -14,6 +14,7 @@ import { useDepartments } from '@/lib/departmentsContext';
 import type { Task, PropertyOption } from '@/lib/types';
 import { DayDetailPanel, type DayDetailReservation } from '@/components/tasks/DayDetailPanel';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 const marbleBackground: Record<string, string> = {
   not_started: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.35) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.18) 10%, transparent 40%, rgba(255,255,255,0.12) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #A78BFA`,
@@ -54,6 +55,7 @@ interface MobileTimelineViewProps {
    * pre-filled (matches the Property Schedule drawer behavior).
    */
   onNewTask?: (params: { propertyName: string; dateStr: string }) => void;
+  onMenuTap?: () => void;
 }
 
 export default function MobileTimelineView({
@@ -62,6 +64,7 @@ export default function MobileTimelineView({
   refreshTrigger,
   onSheetOpen,
   onNewTask,
+  onMenuTap,
 }: MobileTimelineViewProps) {
   const {
     properties,
@@ -188,7 +191,27 @@ export default function MobileTimelineView({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="sticky top-0 z-30 bg-white dark:bg-card border-b border-neutral-200 dark:border-neutral-800 pl-14 pr-3 py-2.5">
+      <div className="sticky top-0 z-30 bg-white dark:bg-card border-b border-neutral-200 dark:border-neutral-800 px-[22px] pt-2 pb-2.5">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {onMenuTap && (
+              <button
+                onClick={onMenuTap}
+                className="-ml-2 w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+                aria-label="Open menu"
+              >
+                <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            )}
+            <h1 className="text-[20px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed] truncate">
+              Schedule
+            </h1>
+          </div>
+          <NotificationBell compact />
+        </div>
+
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-0.5">
             <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={goToPrevious}>
@@ -214,7 +237,7 @@ export default function MobileTimelineView({
             )}
           </div>
 
-          <div className="flex gap-1">
+          <div className="flex items-center gap-1">
             <Button
               onClick={() => setView('week')}
               variant={view === 'week' ? 'default' : 'outline'}

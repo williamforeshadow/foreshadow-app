@@ -2,6 +2,7 @@
 
 import { useState, memo, useMemo } from 'react';
 import type { ProjectBin } from '@/lib/types';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 interface MobileBinPickerProps {
   bins: ProjectBin[];
@@ -20,6 +21,7 @@ interface MobileBinPickerProps {
     updates: Partial<Pick<ProjectBin, 'name' | 'description' | 'auto_dismiss_enabled' | 'auto_dismiss_days'>>
   ) => Promise<void> | void;
   onDeleteBin?: (binId: string) => Promise<void>;
+  onMenuTap?: () => void;
 }
 
 const binCard =
@@ -36,6 +38,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
   onCreateBin,
   onUpdateBin,
   onDeleteBin,
+  onMenuTap,
 }: MobileBinPickerProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [newBinName, setNewBinName] = useState('');
@@ -126,20 +129,33 @@ const MobileBinPicker = memo(function MobileBinPicker({
     <div className="px-[22px] pt-2 pb-4 flex flex-col gap-4">
       {/* Header */}
       <div>
-        <h1 className="text-[28px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed]">Bins</h1>
-        <div className="flex items-center justify-between mt-2.5">
-          <span className="text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
-            {totalProjects} binned task{totalProjects !== 1 ? 's' : ''}
-          </span>
-          <button
-            onClick={() => setIsCreating(!isCreating)}
-            className="flex items-center gap-1.5 text-[12px] font-medium text-neutral-500 dark:text-[#a09e9a] active:opacity-70 transition-opacity"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            New Sub-Bin
-          </button>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {onMenuTap && (
+              <button
+                onClick={onMenuTap}
+                className="-ml-2 w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+                aria-label="Open menu"
+              >
+                <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            )}
+            <h1 className="text-[20px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed] truncate">Bins</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsCreating(!isCreating)}
+              className="flex items-center gap-1.5 text-[12px] font-medium text-neutral-500 dark:text-[#a09e9a] active:opacity-70 transition-opacity"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              New Sub-Bin
+            </button>
+            <NotificationBell compact />
+          </div>
         </div>
       </div>
 

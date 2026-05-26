@@ -297,11 +297,11 @@ export default function MobileApp() {
       <MobileLayout
         activeTab={mobileView}
         onTabChange={(tab) => setMobileView(tab)}
-        onMenuTap={() => setDrawerOpen(true)}
         hideNav={hideNav}
       >
         {mobileView === 'assignments' && (
           <MobileMyAssignmentsView
+            onMenuTap={() => setDrawerOpen(true)}
             onTaskClick={async (task: Task) => {
               const propName = task.property_name;
               if (task.template_id) {
@@ -331,11 +331,13 @@ export default function MobileApp() {
         {mobileView === 'projects' && (
           <MobileProjectsView
             users={users}
+            onMenuTap={() => setDrawerOpen(true)}
           />
         )}
-        
+
         {mobileView === 'timeline' && (
-          <MobileTimelineView 
+          <MobileTimelineView
+            onMenuTap={() => setDrawerOpen(true)}
             onCardClick={() => {}}
             refreshTrigger={mobileRefreshTrigger}
             onSheetOpen={setHideNav}
