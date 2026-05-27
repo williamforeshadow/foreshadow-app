@@ -18,7 +18,10 @@ export default function PropertiesLayout({ children }: { children: React.ReactNo
   if (isMobile) {
     const isDetail = !!pathname && /^\/properties\/[^/]+/.test(pathname);
     return (
-      <MobileRouteShell backHref={isDetail ? '/properties' : undefined}>
+      <MobileRouteShell
+        backHref={isDetail ? '/properties' : undefined}
+        title={isDetail ? undefined : 'Properties'}
+      >
         {children}
         <ReservationDetailOverlay />
         <ContextTaskDetailOverlay />

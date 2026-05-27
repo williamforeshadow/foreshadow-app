@@ -177,13 +177,15 @@ export default function PropertiesPage() {
     <div className="flex h-full overflow-hidden">
       <div className="w-full flex flex-col min-w-0">
         {/* Header */}
-        <div className="flex-shrink-0 px-5 sm:px-8 pt-3 sm:pt-6 pb-4">
+        <div className="flex-shrink-0 px-5 sm:px-8 pt-1 sm:pt-6 pb-4">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
-              <h1 className="text-[22px] sm:text-[24px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed]">
+              {/* Title is rendered by MobileRouteShell on mobile; show it
+                  inline only on desktop. */}
+              <h1 className="hidden sm:block text-[24px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed]">
                 Properties
               </h1>
-              <div className="flex items-center gap-3 mt-1.5 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium flex-wrap">
+              <div className="flex items-center gap-3 sm:mt-1.5 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium flex-wrap">
                 <span>{activeCount} active</span>
                 {linkedCount > 0 && (
                   <>

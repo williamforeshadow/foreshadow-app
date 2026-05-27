@@ -497,12 +497,10 @@ function MobileTasksViewContent() {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="flex-shrink-0 px-5 pt-2 pb-2">
-        <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed]">
-          Tasks
-        </h1>
-        <div className="flex items-center gap-3 mt-0.5 text-[11px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
+      {/* Subtitle row — page title is rendered by MobileRouteShell next to
+          the hamburger; this is just the supporting line. */}
+      <div className="flex-shrink-0 px-5 pt-1 pb-2">
+        <div className="flex items-center gap-3 text-[11px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
           <span>Every task in the workspace</span>
         </div>
       </div>

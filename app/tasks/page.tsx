@@ -32,7 +32,7 @@ function TasksPageInner() {
   if (!isMobile) return null;
 
   return (
-    <MobileRouteShell>
+    <MobileRouteShell title="Tasks">
       <MobileTasksView />
     </MobileRouteShell>
   );

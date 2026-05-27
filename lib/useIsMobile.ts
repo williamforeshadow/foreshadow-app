@@ -13,10 +13,16 @@ export function useIsMobile(): boolean | null {
   const [isMobile, setIsMobile] = useState<boolean | null>(null);
 
   useEffect(() => {
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    // Decide on the SHORTER viewport dimension so a phone stays "mobile"
+    // even when rotated to landscape (e.g. iPhone 844×390 -> min = 390).
+    // Tablets and desktops still resolve to desktop because their min
+    // dimension is >= 768.
+    const compute = () =>
+      Math.min(window.innerWidth, window.innerHeight) < MOBILE_BREAKPOINT;
+    setIsMobile(compute());
 
     const handleResize = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+      setIsMobile(compute());
     };
 
     window.addEventListener('resize', handleResize);

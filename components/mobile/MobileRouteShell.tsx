@@ -15,6 +15,11 @@ interface MobileRouteShellProps {
    */
   backHref?: string;
   /**
+   * Optional title rendered inline next to the hamburger / back button.
+   * When set, the page should NOT render its own <h1> for the same label.
+   */
+  title?: string;
+  /**
    * Optional right-aligned content for the top bar (e.g. an overflow menu).
    */
   rightSlot?: React.ReactNode;
@@ -33,6 +38,7 @@ interface MobileRouteShellProps {
 const MobileRouteShell = memo(function MobileRouteShell({
   children,
   backHref,
+  title,
   rightSlot,
 }: MobileRouteShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -41,12 +47,12 @@ const MobileRouteShell = memo(function MobileRouteShell({
     <>
       <div className="h-dvh bg-white dark:bg-card overflow-hidden flex flex-col safe-area-top">
         {/* Top bar */}
-        <div className="flex-shrink-0 h-11 px-2 flex items-center justify-between gap-1">
-          <div className="flex items-center">
+        <div className="flex-shrink-0 h-11 px-2 flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             {backHref ? (
               <Link
                 href={backHref}
-                className="w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+                className="w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors shrink-0"
                 aria-label="Back"
               >
                 <svg
@@ -62,7 +68,7 @@ const MobileRouteShell = memo(function MobileRouteShell({
             ) : (
               <button
                 onClick={() => setDrawerOpen(true)}
-                className="w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+                className="w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors shrink-0"
                 aria-label="Open menu"
               >
                 <svg
@@ -76,9 +82,14 @@ const MobileRouteShell = memo(function MobileRouteShell({
                 </svg>
               </button>
             )}
+            {title && (
+              <h1 className="text-[20px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed] truncate">
+                {title}
+              </h1>
+            )}
           </div>
 
-          <div className="flex items-center">{rightSlot}</div>
+          <div className="flex items-center shrink-0">{rightSlot}</div>
         </div>
 
         {/* Content region — children own the scroll */}
