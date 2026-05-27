@@ -14,7 +14,7 @@
   min-height: 0;
   overflow-x: scroll;
   overflow-y: hidden;
-  overscroll-behavior: none;
+  overscroll-behavior: contain;
   background: #ffffff;
   position: relative;
 }
