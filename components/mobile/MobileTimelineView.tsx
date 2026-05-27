@@ -581,7 +581,7 @@ export default function MobileTimelineView({
               className="absolute inset-0 bg-black/20 dark:bg-black/40"
               onClick={() => setExpandedCell(null)}
             />
-            <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-background border-t border-[rgba(30,25,20,0.08)] dark:border-white/10 rounded-t-2xl shadow-2xl max-h-[75vh] flex flex-col safe-area-bottom">
+            <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-background border-t border-[rgba(30,25,20,0.08)] dark:border-white/10 rounded-t-2xl shadow-2xl max-h-[75vh] flex flex-col">
               <DayDetailPanel
                 date={date}
                 title={expandedCell.property}

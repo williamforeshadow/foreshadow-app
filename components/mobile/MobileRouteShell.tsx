@@ -39,7 +39,7 @@ const MobileRouteShell = memo(function MobileRouteShell({
 
   return (
     <>
-      <div className="h-dvh bg-neutral-50 dark:bg-background overflow-hidden flex flex-col safe-area-top safe-area-bottom">
+      <div className="h-dvh bg-white dark:bg-card overflow-hidden flex flex-col safe-area-top">
         {/* Top bar */}
         <div className="flex-shrink-0 h-11 px-2 flex items-center justify-between gap-1">
           <div className="flex items-center">

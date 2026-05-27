@@ -1123,7 +1123,7 @@ export default function MobileProjectDetail({
 
         {/* ── Create Task button — draft mode only ── */}
         {isNewTask && onConfirmCreate && (
-          <div className="shrink-0 px-4 py-3 border-t border-[rgba(30,25,20,0.06)] dark:border-white/10 safe-area-bottom">
+          <div className="shrink-0 px-4 py-3 border-t border-[rgba(30,25,20,0.06)] dark:border-white/10">
             <button
               onClick={() => onConfirmCreate(fields)}
               disabled={creatingTask}
@@ -1140,7 +1140,7 @@ export default function MobileProjectDetail({
 
         {/* ── Comment Input — sticky bottom (hidden in draft mode) ── */}
         {!isNewTask && activeSection !== 'checklist' && (
-          <div className="shrink-0 border-t border-[rgba(30,25,20,0.06)] dark:border-neutral-800 bg-white dark:bg-card px-4 py-3 safe-area-bottom">
+          <div className="shrink-0 border-t border-[rgba(30,25,20,0.06)] dark:border-neutral-800 bg-white dark:bg-card px-4 py-3">
             <div className="flex items-end gap-2">
               <textarea
                 ref={commentInputRef}
