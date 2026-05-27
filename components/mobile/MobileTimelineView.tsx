@@ -190,7 +190,10 @@ export default function MobileTimelineView({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="sticky top-0 z-30 bg-white dark:bg-card border-b border-neutral-200 dark:border-neutral-800 px-[22px] pt-2 pb-2.5">
+      <div
+        className="sticky top-0 z-30 bg-white dark:bg-card border-b border-neutral-200 dark:border-neutral-800 px-[22px] pb-2.5"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
+      >
         <div className="flex items-center justify-between gap-2 mb-2">
           <div className="flex items-center gap-2 min-w-0">
             {onMenuTap && (

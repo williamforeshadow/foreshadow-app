@@ -125,7 +125,10 @@ const MobileBinPicker = memo(function MobileBinPicker({
   const systemMenuOpen = !!systemBin && menuBinId === systemBin.id;
 
   return (
-    <div className="px-[22px] pt-2 pb-4 flex flex-col gap-4">
+    <div
+      className="px-[22px] pb-4 flex flex-col gap-4"
+      style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
+    >
       {/* Header */}
       <div>
         <div className="flex items-center justify-between gap-2">

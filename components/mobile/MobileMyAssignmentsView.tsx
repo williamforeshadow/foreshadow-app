@@ -360,7 +360,10 @@ export default function MobileMyAssignmentsView({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-[22px] pt-2 pb-4">
+      <div
+        className="px-[22px] pb-4"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
+      >
         <div className="flex items-center gap-2 min-w-0">
           {onMenuTap && (
             <button
