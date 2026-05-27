@@ -625,27 +625,30 @@ a {
 }
 
 @media (max-width: 768px) {
+  /* Board: 2D pan + scroll (Notion-style canvas) — no snap, no per-column
+     vertical scroll. Horizontal AND vertical drag both move the whole board. */
   .mobile-kanban-wrapper [data-kanban-board] {
     gap: 0.75rem;
     padding: 0.75rem 0.75rem 0 0.75rem;
-    scroll-snap-type: x mandatory;
+    overflow: auto;
+    overflow-y: auto;
+    overscroll-behavior: none;
+    align-items: flex-start;
     -webkit-overflow-scrolling: touch;
-    touch-action: pan-x;
-  }
-
-  .mobile-kanban-wrapper.is-dragging [data-kanban-board] {
-    scroll-snap-type: none;
+    touch-action: pan-x pan-y;
   }
 
   .mobile-kanban-wrapper [data-kanban-board] [data-kanban-column] {
     width: 260px;
     min-width: 260px;
-    scroll-snap-align: start;
-    touch-action: pan-y;
   }
 
-  .mobile-kanban-wrapper.is-dragging [data-kanban-board] [data-kanban-column] {
-    scroll-snap-align: none;
+  /* Each column's card list takes its natural height — vertical scroll
+     happens at the board level, not per column. */
+  .mobile-kanban-wrapper [data-kanban-content="true"] {
+    overflow: visible;
+    flex: none;
+    min-height: 0;
   }
 }
 

@@ -588,7 +588,7 @@ function DroppableColumn({ columnId, children }: { columnId: string; children: R
   const { setNodeRef, isOver } = useDroppable({ id: columnId });
 
   return (
-    <div ref={setNodeRef} className={cn(styles.columnContent, isOver && styles.columnOver)}>
+    <div ref={setNodeRef} className={cn(styles.columnContent, isOver && styles.columnOver)} data-kanban-content="true">
       {children}
     </div>
   );
