@@ -13,16 +13,15 @@ export function useIsMobile(): boolean | null {
   const [isMobile, setIsMobile] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Decide on the SHORTER viewport dimension so a phone stays "mobile"
-    // even when rotated to landscape (e.g. iPhone 844×390 -> min = 390).
-    // Tablets and desktops still resolve to desktop because their min
-    // dimension is >= 768.
-    const compute = () =>
-      Math.min(window.innerWidth, window.innerHeight) < MOBILE_BREAKPOINT;
-    setIsMobile(compute());
+    // Width-only breakpoint. Desktop browsers stay on the desktop layout
+    // even when the window is short (a narrow browser window crosses the
+    // line, but a short-but-wide window does not). Native mobile devices
+    // are locked to portrait at the iOS level, so width is the only axis
+    // that ever changes on them.
+    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
 
     const handleResize = () => {
-      setIsMobile(compute());
+      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
     };
 
     window.addEventListener('resize', handleResize);

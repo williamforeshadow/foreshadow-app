@@ -9,10 +9,11 @@ import {
   PRIORITY_LABELS,
   STATUS_COLORS,
   STATUS_LABELS,
-  STATUS_MARBLE,
   type TaskRowItem,
   type TaskRowAssignee,
 } from './TaskRow';
+import { STATUS_ICONS, STATUS_TITLE } from '@/lib/taskStatusIcons';
+import { PRIORITY_ICONS, PRIORITY_TITLE } from '@/lib/taskPriorityIcons';
 
 // Mobile counterpart to <TaskRow>. Same props (TaskRowItem) — different
 // visual layout:
@@ -49,10 +50,13 @@ function PriorityTag({ priority }: { priority: string }) {
       : priority === 'high'
         ? 'text-neutral-800 dark:text-[#f0efed]'
         : 'text-neutral-500 dark:text-[#a09e9a]';
+  const PriorityIcon = PRIORITY_ICONS[priority] ?? PRIORITY_ICONS.medium;
   return (
     <span
-      className={`text-[10.5px] tracking-[0.02em] font-medium pl-2 border-l border-neutral-200 dark:border-[rgba(255,255,255,0.07)] ${colorClass}`}
+      className={`inline-flex items-center gap-1 text-[10.5px] tracking-[0.02em] font-medium pl-2 border-l border-neutral-200 dark:border-[rgba(255,255,255,0.07)] ${colorClass}`}
+      title={PRIORITY_TITLE[priority] ?? priority}
     >
+      <PriorityIcon size={12} strokeWidth={2} aria-hidden />
       {PRIORITY_LABELS[priority] || priority}
     </span>
   );
@@ -188,16 +192,14 @@ export function MobileTaskRow({
 
         <div className="flex items-center gap-2 mt-2">
           <span
-            className="w-[7px] h-[7px] rounded-full shrink-0"
-            style={{
-              background:
-                STATUS_MARBLE[item.status] || STATUS_MARBLE.not_started,
-            }}
-          />
-          <span
-            className="text-[10.5px] tracking-[0.02em] font-medium"
+            className="inline-flex items-center gap-1 text-[10.5px] tracking-[0.02em] font-medium"
             style={{ color: STATUS_COLORS[item.status] || '#A78BFA' }}
+            title={STATUS_TITLE[item.status] ?? item.status}
           >
+            {(() => {
+              const StatusIcon = STATUS_ICONS[item.status] ?? STATUS_ICONS.not_started;
+              return <StatusIcon size={12} strokeWidth={2} aria-hidden />;
+            })()}
             {STATUS_LABELS[item.status] || item.status}
           </span>
           <PriorityTag priority={item.priority} />
