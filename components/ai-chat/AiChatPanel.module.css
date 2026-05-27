@@ -36,11 +36,13 @@
   border-radius: 0;
 }
 
-/* Mobile: always covers the viewport. */
+/* Mobile: always covers the viewport. The padding-top keeps the header
+   (and its close button) clear of the iOS status bar / Dynamic Island. */
 .mobile {
   inset: 0;
   border: none;
   border-radius: 0;
+  padding-top: env(safe-area-inset-top);
 }
 
 /* ── Header ──────────────────────────────────────────────────────────── */

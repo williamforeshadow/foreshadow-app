@@ -144,7 +144,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-4">
+    <div className="min-h-screen bg-background p-4 safe-area-top">
       <div className="max-w-3xl mx-auto">
         {/* Back Button */}
         <Link 
