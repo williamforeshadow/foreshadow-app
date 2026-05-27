@@ -260,7 +260,7 @@ export default function MobileTimelineView({
       </div>
 
       {/* Grid */}
-      <div className="flex-1 overflow-auto hide-scrollbar">
+      <div className="flex-1 overflow-auto hide-scrollbar overscroll-none">
         <div className="min-w-max overflow-x-clip">
           {/* Date header row */}
           <div className="flex sticky top-0 z-30">
