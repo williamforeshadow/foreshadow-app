@@ -1,10 +1,12 @@
 'use client';
 
 import { memo, useEffect } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { useAuth } from '@/lib/authContext';
 import { UserAvatar } from '@/components/ui/user-avatar';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
+import { useAiChat } from '@/components/ai-chat/AiChatProvider';
 
 interface MobileDrawerProps {
   open: boolean;
@@ -17,15 +19,10 @@ const roleColors: Record<string, string> = {
   staff: 'bg-emerald-500',
 };
 
-// Routes the drawer can navigate to. Active state is derived from the
-// current pathname so the drawer stays correct whether it's rendered from
-// MobileApp (at /) or from a MobileRouteShell on any other route.
-const NAV_ROUTES = {
-  home: '/',
-  properties: '/properties',
-  tasks: '/tasks',
-  profile: '/profile',
-} as const;
+// Tab params drive the in-/ view switcher. Drawer items navigate cross-route
+// by routing back to '/' with the appropriate ?tab=. MobileApp reads the
+// search param to decide which view to render.
+type WorkspaceTab = 'timeline' | 'projects' | 'assignments';
 
 function isActiveRoute(pathname: string | null, route: string): boolean {
   if (!pathname) return false;
@@ -36,8 +33,12 @@ function isActiveRoute(pathname: string | null, route: string): boolean {
 const MobileDrawer = memo(function MobileDrawer({ open, onClose }: MobileDrawerProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, role, signOut } = useAuth();
+  const searchParams = useSearchParams();
+  const { user, role, canEditTemplates, signOut } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { open: openAiChat } = useAiChat();
+
+  const currentTab = searchParams?.get('tab') ?? null;
 
   useEffect(() => {
     if (!open) return;
@@ -58,13 +59,27 @@ const MobileDrawer = memo(function MobileDrawer({ open, onClose }: MobileDrawerP
   const navigate = (path: string) => {
     onClose();
     // Avoid noisy history entries when tapping the route you're already on.
-    if (pathname !== path) router.push(path);
+    const current = pathname + (searchParams?.toString() ? `?${searchParams.toString()}` : '');
+    if (current !== path) router.push(path);
+  };
+
+  const handleAgent = () => {
+    onClose();
+    openAiChat();
   };
 
   const handleSignOut = async () => {
     await signOut();
     onClose();
     router.push('/login');
+  };
+
+  // Active state for tab-switching items: only when at '/' AND the current
+  // ?tab= matches (or assignments is the default when no ?tab= is set).
+  const isTabActive = (tab: WorkspaceTab) => {
+    if (pathname !== '/') return false;
+    if (tab === 'assignments') return currentTab === null || currentTab === 'assignments';
+    return currentTab === tab;
   };
 
   return (
@@ -103,37 +118,43 @@ const MobileDrawer = memo(function MobileDrawer({ open, onClose }: MobileDrawerP
                   </span>
                 </div>
               </div>
+              <NotificationBell compact />
             </div>
           </div>
         )}
 
-        {/* Nav items */}
+        {/* Nav body */}
         <nav className="flex-1 overflow-auto hide-scrollbar">
-          <div className="py-2">
+          {/* Workspace section */}
+          <div className="pt-3">
+            <p className="px-5 pb-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-400 dark:text-[#66645f]">
+              Workspace
+            </p>
             <DrawerNavItem
-              active={isActiveRoute(pathname, NAV_ROUTES.home)}
-              label="Home"
-              onClick={() => navigate(NAV_ROUTES.home)}
+              active={isTabActive('timeline')}
+              label="Schedule"
+              onClick={() => navigate('/?tab=timeline')}
               icon={
                 <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l9-9 9 9M5 10v10h4v-6h6v6h4V10" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               }
             />
             <DrawerNavItem
-              active={isActiveRoute(pathname, NAV_ROUTES.properties)}
-              label="Properties"
-              onClick={() => navigate(NAV_ROUTES.properties)}
+              active={isTabActive('projects')}
+              label="Bins"
+              onClick={() => navigate('/?tab=projects')}
               icon={
                 <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  <rect x="3" y="3" width="7" height="18" rx="1" />
+                  <rect x="14" y="3" width="7" height="11" rx="1" />
                 </svg>
               }
             />
             <DrawerNavItem
-              active={isActiveRoute(pathname, NAV_ROUTES.tasks)}
+              active={isActiveRoute(pathname, '/tasks')}
               label="Tasks"
-              onClick={() => navigate(NAV_ROUTES.tasks)}
+              onClick={() => navigate('/tasks')}
               icon={
                 <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
@@ -141,12 +162,59 @@ const MobileDrawer = memo(function MobileDrawer({ open, onClose }: MobileDrawerP
               }
             />
             <DrawerNavItem
-              active={isActiveRoute(pathname, NAV_ROUTES.profile)}
-              label="Edit Profile"
-              onClick={() => navigate(NAV_ROUTES.profile)}
+              active={false}
+              label="Agent"
+              onClick={handleAgent}
+              icon={
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4zM19 14l.9 2.3L22 17l-2.1.7L19 20l-.9-2.3L16 17l2.1-.7z" />
+                </svg>
+              }
+            />
+          </div>
+
+          {/* My Assignments — own section, no header */}
+          <div className="pt-3 mt-3 border-t border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
+            <DrawerNavItem
+              active={isTabActive('assignments')}
+              label="My Assignments"
+              onClick={() => navigate('/')}
               icon={
                 <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              }
+            />
+          </div>
+
+          {/* Admin section (gated) */}
+          {canEditTemplates && (
+            <div className="pt-3 mt-3 border-t border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
+              <p className="px-5 pb-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-400 dark:text-[#66645f]">
+                Admin
+              </p>
+              <DrawerNavItem
+                active={isActiveRoute(pathname, '/properties')}
+                label="Properties"
+                onClick={() => navigate('/properties')}
+                icon={
+                  <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  </svg>
+                }
+              />
+            </div>
+          )}
+
+          {/* Profile section */}
+          <div className="pt-3 mt-3 border-t border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
+            <DrawerNavItem
+              active={isActiveRoute(pathname, '/profile')}
+              label="Edit Profile"
+              onClick={() => navigate('/profile')}
+              icon={
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
               }
             />
@@ -163,7 +231,7 @@ const MobileDrawer = memo(function MobileDrawer({ open, onClose }: MobileDrawerP
           </div>
 
           {/* Theme toggle */}
-          <div className="px-5 py-3 border-t border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
+          <div className="px-5 py-3 mt-3 border-t border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
             <div className="flex items-center justify-between">
               <span className="text-[13px] text-neutral-700 dark:text-[#a09e9a] flex items-center gap-2.5">
                 <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
@@ -186,7 +254,6 @@ const MobileDrawer = memo(function MobileDrawer({ open, onClose }: MobileDrawerP
               </button>
             </div>
           </div>
-
         </nav>
       </aside>
     </>

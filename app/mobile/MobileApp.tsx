@@ -2,7 +2,7 @@
 
 import { apiFetch } from '@/lib/apiFetch';
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
 import { useUsers } from '@/lib/useUsers';
 import { useTurnovers } from '@/lib/useTurnovers';
@@ -66,14 +66,17 @@ export default function MobileApp() {
     })();
   }, []);
 
-  // Mobile-specific state. Admin surfaces (Properties, Profile, etc.) live on
-  // their own routes and are opened from the drawer; they don't need inline
-  // state here. The bottom-tab views remain fully local.
-  const [mobileView, setMobileView] = useState<MobileTab>('assignments');
+  // Tab state is driven by ?tab= so the drawer (rendered from any route) can
+  // navigate cross-route into the right workspace view via router.push().
+  // Default (no param) = My Assignments.
+  const searchParams = useSearchParams();
+  const tabParam = searchParams?.get('tab');
+  const mobileView: MobileTab =
+    tabParam === 'projects' || tabParam === 'timeline' ? tabParam : 'assignments';
+
   const [mobileSelectedTask, setMobileSelectedTask] = useState<Task | null>(null);
   const [mobileSelectedProject, setMobileSelectedProject] = useState<Project | null>(null);
   const [mobileRefreshTrigger, setMobileRefreshTrigger] = useState(0);
-  const [hideNav, setHideNav] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
@@ -294,11 +297,7 @@ export default function MobileApp() {
 
   return (
     <>
-      <MobileLayout
-        activeTab={mobileView}
-        onTabChange={(tab) => setMobileView(tab)}
-        hideNav={hideNav}
-      >
+      <MobileLayout>
         {mobileView === 'assignments' && (
           <MobileMyAssignmentsView
             onMenuTap={() => setDrawerOpen(true)}
@@ -340,7 +339,6 @@ export default function MobileApp() {
             onMenuTap={() => setDrawerOpen(true)}
             onCardClick={() => {}}
             refreshTrigger={mobileRefreshTrigger}
-            onSheetOpen={setHideNav}
             onTaskClick={async (task: Task) => {
               const propName = task.property_name;
               if (task.template_id) {

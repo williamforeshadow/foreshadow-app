@@ -16,7 +16,6 @@ import { ColumnPicker } from '@/components/windows/projects/ColumnPicker';
 import type { Project, User, PropertyOption, TaskTemplate } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
-import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 // ============================================================================
 // Types
@@ -592,7 +591,6 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
                 onSelectAll={() => columnVis.selectAll(allColumnOptions.map((c) => c.id))}
                 onClearAll={columnVis.clearAll}
               />
-              <NotificationBell compact />
               {tasks.length > 0 && !kanbanSelectionMode && (
                 <button
                   onClick={() => setKanbanSelectionMode(true)}

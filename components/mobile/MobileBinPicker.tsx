@@ -2,7 +2,6 @@
 
 import { useState, memo, useMemo } from 'react';
 import type { ProjectBin } from '@/lib/types';
-import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 interface MobileBinPickerProps {
   bins: ProjectBin[];
@@ -144,18 +143,15 @@ const MobileBinPicker = memo(function MobileBinPicker({
             )}
             <h1 className="text-[20px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed] truncate">Bins</h1>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsCreating(!isCreating)}
-              className="flex items-center gap-1.5 text-[12px] font-medium text-neutral-500 dark:text-[#a09e9a] active:opacity-70 transition-opacity"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              New Sub-Bin
-            </button>
-            <NotificationBell compact />
-          </div>
+          <button
+            onClick={() => setIsCreating(!isCreating)}
+            className="flex items-center gap-1.5 text-[12px] font-medium text-neutral-500 dark:text-[#a09e9a] active:opacity-70 transition-opacity"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            New Sub-Bin
+          </button>
         </div>
       </div>
 

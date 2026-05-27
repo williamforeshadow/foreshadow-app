@@ -1,14 +1,12 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { KeyAffordance } from '@/components/tasks/KeyAffordance';
 import { useAuth } from '@/lib/authContext';
-import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
-import { NotificationBell } from '@/components/notifications/NotificationBell';
 import type { Project, Task } from '@/lib/types';
 
 interface Assignee {
@@ -145,31 +143,13 @@ export default function MobileMyAssignmentsView({
   refreshTrigger,
   onMenuTap,
 }: MobileMyAssignmentsViewProps) {
-  const { user, loading: authLoading, role } = useAuth();
-  const { theme, setTheme } = useTheme();
+  const { user, loading: authLoading } = useAuth();
   const { departments: allDepts } = useDepartments();
   const [rawData, setRawData] = useState<{ tasks: RawTask[]; projects: RawProject[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const userMenuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-
-  useEffect(() => {
-    if (!showUserMenu) return;
-    function onTap(e: MouseEvent | TouchEvent) {
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
-        setShowUserMenu(false);
-      }
-    }
-    document.addEventListener('mousedown', onTap);
-    document.addEventListener('touchstart', onTap);
-    return () => {
-      document.removeEventListener('mousedown', onTap);
-      document.removeEventListener('touchstart', onTap);
-    };
-  }, [showUserMenu]);
 
   const fetchAssignments = useCallback(async () => {
     if (!user?.id) return;
@@ -381,73 +361,21 @@ export default function MobileMyAssignmentsView({
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-[22px] pt-2 pb-4">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            {onMenuTap && (
-              <button
-                onClick={onMenuTap}
-                className="-ml-2 w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
-                aria-label="Open menu"
-              >
-                <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
-            )}
-            <h1 className="text-[20px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed] truncate">
-              My Assignments
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-1">
-            <NotificationBell compact />
-
-          {/* User avatar */}
-          <div className="relative" ref={userMenuRef}>
+        <div className="flex items-center gap-2 min-w-0">
+          {onMenuTap && (
             <button
-              onClick={() => setShowUserMenu(v => !v)}
-              className="w-9 h-9 rounded-full overflow-hidden ring-2 ring-neutral-200/60 dark:ring-[rgba(255,255,255,0.07)] active:scale-95 transition-transform"
+              onClick={onMenuTap}
+              className="-ml-2 w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+              aria-label="Open menu"
             >
-              {user?.avatar ? (
-                <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full bg-neutral-200 dark:bg-[#1a1a1d] flex items-center justify-center text-[11px] font-semibold text-neutral-600 dark:text-[#a09e9a]">
-                  {user?.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?'}
-                </div>
-              )}
+              <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
             </button>
-
-            {showUserMenu && (
-              <>
-                <div className="fixed inset-0 z-[39]" onClick={() => setShowUserMenu(false)} />
-                <div className="absolute right-0 top-full mt-2 z-40 w-[200px] py-2 rounded-xl bg-white dark:bg-[#1a1a1d] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] shadow-xl">
-                  {/* Current user */}
-                  <div className="px-3 pb-2 mb-1 border-b border-neutral-100 dark:border-[rgba(255,255,255,0.07)]">
-                    <p className="text-[13px] font-medium text-neutral-800 dark:text-[#f0efed] truncate">{user?.name}</p>
-                    <p className="text-[11px] text-neutral-400 dark:text-[#66645f] capitalize">{role}</p>
-                  </div>
-
-                  {/* Theme toggle */}
-                  <button
-                    onClick={() => { setTheme(theme === 'dark' ? 'light' : 'dark'); setShowUserMenu(false); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-[12px] text-neutral-500 dark:text-[#a09e9a] active:bg-neutral-50 dark:active:bg-[rgba(255,255,255,0.03)] transition-colors"
-                  >
-                    {theme === 'dark' ? (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                      </svg>
-                    ) : (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                      </svg>
-                    )}
-                    {theme === 'dark' ? 'Light mode' : 'Dark mode'}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-          </div>
+          )}
+          <h1 className="text-[20px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed] truncate">
+            My Assignments
+          </h1>
         </div>
         <div className="flex items-center gap-3 mt-2.5 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
           <span>{todayFormatted}</span>
