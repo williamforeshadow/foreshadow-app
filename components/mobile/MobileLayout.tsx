@@ -8,8 +8,8 @@ interface MobileLayoutProps {
 
 const MobileLayout = memo(function MobileLayout({ children }: MobileLayoutProps) {
   return (
-    <div className="h-dvh bg-neutral-50 dark:bg-background overflow-hidden flex flex-col safe-area-top safe-area-bottom">
-      <main className="flex-1 min-h-0 overflow-auto hide-scrollbar">
+    <div className="h-dvh bg-neutral-50 dark:bg-background overflow-hidden flex flex-col safe-area-top">
+      <main className="flex-1 min-h-0 overflow-auto hide-scrollbar safe-area-bottom">
         {children}
       </main>
     </div>
