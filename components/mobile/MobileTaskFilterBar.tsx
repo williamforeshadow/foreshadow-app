@@ -9,7 +9,6 @@ import type {
   DateRange,
 } from '@/components/tasks/TaskFilterBar';
 import { CompactSearch } from '@/components/ui/compact-search';
-import { ChipScrollLane } from '@/components/ui/chip-scroll-lane';
 
 // Mobile-native filter/sort UX for the global Tasks ledger.
 //
@@ -127,12 +126,13 @@ export function MobileTaskFilterBar(props: Props) {
 
   return (
     <div className="flex items-center gap-2 px-4 pt-2 pb-3 flex-nowrap min-w-0">
-      {/* Chevron-bounded scroll lane locks the row to the screen width — the
-          search input + pills can never push past the viewport edge. The
-          chevrons are the only scroll affordance (touch/wheel scroll on the
-          strip is disabled inside ChipScrollLane). New task stays pinned
-          outside the lane so it's always reachable. */}
-      <ChipScrollLane>
+      {/* Swipeable carousel lane. `overflow-x-auto` + `flex-1 min-w-0` keeps
+          the strip bounded to the available width, so finger-swiping scrolls
+          the pills WITHIN the lane instead of dragging the whole page off the
+          edge. `overscroll-x-contain` stops the scroll from chaining to the
+          page; `hide-scrollbar` hides the bar. New task stays pinned outside
+          the lane so it's always reachable. */}
+      <div className="flex items-center gap-2 flex-nowrap min-w-0 flex-1 overflow-x-auto overscroll-x-contain hide-scrollbar">
         <div className="flex-shrink-0">
           <CompactSearch
             value={props.search}
@@ -195,7 +195,7 @@ export function MobileTaskFilterBar(props: Props) {
             </span>
           </button>
         )}
-      </ChipScrollLane>
+      </div>
 
       {props.onNewTask && (
         <button
