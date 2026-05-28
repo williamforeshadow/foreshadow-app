@@ -25,7 +25,9 @@ import type {
 import type { Template } from '@/components/DynamicCleaningForm';
 import { ProjectDetailPanel, AttachmentLightbox } from './projects';
 import { TaskRow, TaskListHeader, type TaskRowItem } from '@/components/tasks/TaskRow';
-import { TaskFilterBar } from '@/components/tasks/TaskFilterBar';
+import { TaskFilterBar, SortSelect } from '@/components/tasks/TaskFilterBar';
+import { CompactSearch } from '@/components/ui/compact-search';
+import { Filter as FilterIcon } from 'lucide-react';
 import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import { useRouter } from 'next/navigation';
@@ -565,6 +567,9 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
     () => new Set(['completed'])
   );
+  // Filter pills collapsed behind a funnel icon, mirroring the
+  // Schedule / Bins / Turnovers pattern.
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
   const toggleSection = useCallback((id: string) => {
     setCollapsedSections((prev) => {
       const next = new Set(prev);
@@ -585,48 +590,85 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
           <h1 className="text-[24px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed]">
             Tasks
           </h1>
-          <div className="flex items-center gap-3 mt-1.5 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
-            <span>Every task in the workspace</span>
-          </div>
         </div>
 
-        {/* Filter bar */}
-        <div className="flex-shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
-          <TaskFilterBar
-            search={filters.search}
-            onSearchChange={setSearch}
-            statusOptions={filterOptions.statuses}
-            statusSelected={filters.statuses}
-            onStatusChange={setStatuses}
-            assigneeOptions={filterOptions.assignees}
-            assigneeSelected={filters.assignees}
-            onAssigneeChange={setAssignees}
-            departmentOptions={filterOptions.departments}
-            departmentSelected={filters.departments}
-            onDepartmentChange={setDepartments}
-            binOptions={filterOptions.bins}
-            binSelected={filters.bins}
-            onBinChange={setBins}
-            originOptions={filterOptions.origins}
-            originSelected={filters.origins}
-            onOriginChange={setOrigins}
-            priorityOptions={filterOptions.priorities}
-            prioritySelected={filters.priorities}
-            onPriorityChange={setPriorities}
-            propertyOptions={filterOptions.properties}
-            propertySelected={filters.properties}
-            onPropertyChange={setProperties}
-            scheduledDateRange={filters.scheduledDateRange}
-            onScheduledDateRangeChange={setScheduledDateRange}
-            sortKey={sort.key}
-            sortDir={sort.dir}
-            onSortChange={setSort}
-            onClearAll={clearFilters}
-            anyFilterActive={anyFilterActive}
-            onNewTask={handleNewTask}
-            totalCount={allTasks.length}
-            filteredCount={tasks.length}
-          />
+        {/* Filter bar — same single-row pattern as Schedule / Bins / Turnovers.
+            Sort + New Task live OUTSIDE the funnel expansion (always visible
+            on the right); the funnel only toggles the chip lane. */}
+        <div className="flex-shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] px-8 py-3">
+          <div className="flex items-center gap-2 flex-nowrap min-w-0">
+            <CompactSearch
+              value={filters.search}
+              onChange={setSearch}
+              placeholder="Search tasks…"
+            />
+
+            <button
+              type="button"
+              onClick={() => setFiltersExpanded((v) => !v)}
+              title={filtersExpanded ? 'Hide filters' : 'Show filters'}
+              aria-pressed={filtersExpanded}
+              className={`flex-shrink-0 p-1.5 rounded transition-colors ${
+                filtersExpanded || anyFilterActive
+                  ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)]'
+                  : 'text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3]'
+              }`}
+            >
+              <FilterIcon className="w-4 h-4" />
+            </button>
+
+            {filtersExpanded && (
+              <TaskFilterBar
+                inline
+                statusOptions={filterOptions.statuses}
+                statusSelected={filters.statuses}
+                onStatusChange={setStatuses}
+                assigneeOptions={filterOptions.assignees}
+                assigneeSelected={filters.assignees}
+                onAssigneeChange={setAssignees}
+                departmentOptions={filterOptions.departments}
+                departmentSelected={filters.departments}
+                onDepartmentChange={setDepartments}
+                binOptions={filterOptions.bins}
+                binSelected={filters.bins}
+                onBinChange={setBins}
+                originOptions={filterOptions.origins}
+                originSelected={filters.origins}
+                onOriginChange={setOrigins}
+                priorityOptions={filterOptions.priorities}
+                prioritySelected={filters.priorities}
+                onPriorityChange={setPriorities}
+                propertyOptions={filterOptions.properties}
+                propertySelected={filters.properties}
+                onPropertyChange={setProperties}
+                scheduledDateRange={filters.scheduledDateRange}
+                onScheduledDateRangeChange={setScheduledDateRange}
+                onClearAll={clearFilters}
+                anyFilterActive={anyFilterActive}
+                totalCount={allTasks.length}
+                filteredCount={tasks.length}
+              />
+            )}
+
+            {/* Right-anchored: Sort + New Task. Always visible regardless of
+                whether the filter pills are expanded. */}
+            <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+              <SortSelect
+                sortKey={sort.key}
+                sortDir={sort.dir}
+                onChange={setSort}
+              />
+              <button
+                onClick={handleNewTask}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                New task
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* List */}

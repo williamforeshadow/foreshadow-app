@@ -141,7 +141,8 @@ function TurnoversWindowContent(props: TurnoversWindowProps) {
     error,
     loading,
     filters,
-    toggleFilter,
+    setFilterValues,
+    setSearch,
     clearAllFilters,
     getActiveFilterCount,
     selectedCard,
@@ -151,6 +152,21 @@ function TurnoversWindowContent(props: TurnoversWindowProps) {
     rightPanelRef,
     scrollPositionRef,
   } = useTurnovers();
+
+  // Unique property names from the cards response, sorted A→Z, fed to the
+  // Property MultiSelect chip. Derived (not fetched) so the option set is
+  // exactly the properties present in the current data.
+  const propertyOptions = useMemo(() => {
+    const set = new Set<string>();
+    if (Array.isArray(response)) {
+      for (const card of response) {
+        if (card.property_name) set.add(card.property_name);
+      }
+    }
+    return Array.from(set)
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => ({ value: name, label: name }));
+  }, [response]);
 
   // One detail layer at a time. selectedTask, when set, takes precedence and
   // hides the reservation panel beneath.
@@ -222,9 +238,11 @@ function TurnoversWindowContent(props: TurnoversWindowProps) {
           <div className="space-y-3">
             <TurnoverFilterBar
               filters={filters}
-              toggleFilter={toggleFilter}
+              setFilterValues={setFilterValues}
+              setSearch={setSearch}
               clearAllFilters={clearAllFilters}
               getActiveFilterCount={getActiveFilterCount}
+              propertyOptions={propertyOptions}
             />
 
             <TurnoverCards

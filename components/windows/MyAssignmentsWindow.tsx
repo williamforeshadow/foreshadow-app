@@ -12,6 +12,9 @@ import type { User, Project, ProjectFormFields, TaskTemplate, PropertyOption } f
 import type { Template } from '@/components/DynamicCleaningForm';
 import { ProjectDetailPanel, AttachmentLightbox } from './projects';
 import { TaskRow, TaskListHeader } from '@/components/tasks/TaskRow';
+import { TaskFilterBar, type FilterOption } from '@/components/tasks/TaskFilterBar';
+import { CompactSearch } from '@/components/ui/compact-search';
+import { Filter as FilterIcon } from 'lucide-react';
 import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -110,6 +113,43 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
   const [error, setError] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [selectedItem, setSelectedItem] = useState<UnifiedItem | null>(null);
+
+  // Filter pills + search — mirrors the Tasks page pattern. All state lives
+  // here; the chip lane is collapsed behind a funnel by default.
+  const NO_DEPT = '__no_department__';
+  const NO_BIN = '__no_bin__';
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusSel, setStatusSel] = useState<Set<string>>(new Set());
+  const [assigneeSel, setAssigneeSel] = useState<Set<string>>(new Set());
+  const [deptSel, setDeptSel] = useState<Set<string>>(new Set());
+  const [prioritySel, setPrioritySel] = useState<Set<string>>(new Set());
+  const [propSel, setPropSel] = useState<Set<string>>(new Set());
+  const [binSel, setBinSel] = useState<Set<string>>(new Set());
+  const [scheduledDateRange, setScheduledDateRange] = useState<{ from: string | null; to: string | null }>(
+    { from: null, to: null }
+  );
+  const clearAllAssignmentFilters = useCallback(() => {
+    setSearch('');
+    setStatusSel(new Set());
+    setAssigneeSel(new Set());
+    setDeptSel(new Set());
+    setPrioritySel(new Set());
+    setPropSel(new Set());
+    setBinSel(new Set());
+    setScheduledDateRange({ from: null, to: null });
+  }, []);
+  const anyAssignmentFilterActive =
+    !!search.trim() ||
+    statusSel.size +
+      assigneeSel.size +
+      deptSel.size +
+      prioritySel.size +
+      propSel.size +
+      binSel.size >
+      0 ||
+    !!scheduledDateRange.from ||
+    !!scheduledDateRange.to;
   const openTaskParam = searchParams?.get('openTask') ?? null;
   const pendingOpenTaskParamRef = useRef<string | null>(null);
 
@@ -323,6 +363,127 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
     setOpenTaskParam,
   ]);
 
+  // ── Filter chip options (derived from `items`) ────────────────────────
+  // Assignees here means *co-assignees* — every row is assigned to the
+  // current user, but tasks can be shared. Filtering by a co-assignee is
+  // useful to narrow to "tasks I'm working on with X".
+  const assignmentFilterOptions = useMemo(() => {
+    const statusCounts: Record<string, number> = {};
+    const priorityCounts: Record<string, number> = {};
+    const deptMap = new Map<string, { name: string; count: number }>();
+    const propertyMap = new Map<string, number>();
+    const binMap = new Map<string, { name: string; count: number }>();
+    const assigneeMap = new Map<string, { name: string; count: number }>();
+    let noDeptCount = 0;
+    let noBinCount = 0;
+    items.forEach((t) => {
+      statusCounts[t.status] = (statusCounts[t.status] || 0) + 1;
+      priorityCounts[t.priority] = (priorityCounts[t.priority] || 0) + 1;
+      if (t.department_id) {
+        const ex = deptMap.get(t.department_id);
+        deptMap.set(t.department_id, {
+          name: t.department_name || 'Department',
+          count: (ex?.count || 0) + 1,
+        });
+      } else {
+        noDeptCount++;
+      }
+      if (t.property_name) {
+        propertyMap.set(t.property_name, (propertyMap.get(t.property_name) || 0) + 1);
+      }
+      if (t.bin_id) {
+        const ex = binMap.get(t.bin_id);
+        binMap.set(t.bin_id, {
+          name: t.bin_name || 'Bin',
+          count: (ex?.count || 0) + 1,
+        });
+      } else {
+        noBinCount++;
+      }
+      (t.assignees || []).forEach((a) => {
+        const ex = assigneeMap.get(a.user_id);
+        assigneeMap.set(a.user_id, {
+          name: a.name || 'Unknown',
+          count: (ex?.count || 0) + 1,
+        });
+      });
+    });
+    const statuses: FilterOption[] = [
+      { value: 'not_started', label: 'Not started', count: statusCounts.not_started || 0 },
+      { value: 'in_progress', label: 'In progress', count: statusCounts.in_progress || 0 },
+      { value: 'paused', label: 'Paused', count: statusCounts.paused || 0 },
+      { value: 'complete', label: 'Complete', count: statusCounts.complete || 0 },
+    ];
+    const priorities: FilterOption[] = [
+      { value: 'urgent', label: 'Urgent', count: priorityCounts.urgent || 0 },
+      { value: 'high', label: 'High', count: priorityCounts.high || 0 },
+      { value: 'medium', label: 'Medium', count: priorityCounts.medium || 0 },
+      { value: 'low', label: 'Low', count: priorityCounts.low || 0 },
+    ];
+    const departmentsOpt: FilterOption[] = [
+      ...Array.from(deptMap.entries())
+        .map(([id, v]) => ({ value: id, label: v.name, count: v.count }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+      { value: NO_DEPT, label: 'No department', count: noDeptCount },
+    ];
+    const propertiesOpt: FilterOption[] = Array.from(propertyMap.entries())
+      .map(([name, count]) => ({ value: name, label: name, count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    const binsOpt: FilterOption[] = [
+      ...Array.from(binMap.entries())
+        .map(([id, v]) => ({ value: id, label: v.name, count: v.count }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+      { value: NO_BIN, label: 'No bin', count: noBinCount },
+    ];
+    const assignees: FilterOption[] = Array.from(assigneeMap.entries())
+      .map(([id, v]) => ({ value: id, label: v.name, count: v.count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    return { statuses, priorities, departments: departmentsOpt, propertiesOpt, binsOpt, assignees };
+  }, [items]);
+
+  // Apply filter predicate before grouping.
+  const filteredItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const fromMs = scheduledDateRange.from
+      ? new Date(scheduledDateRange.from + 'T00:00:00').getTime()
+      : null;
+    const toMs = scheduledDateRange.to
+      ? new Date(scheduledDateRange.to + 'T23:59:59').getTime()
+      : null;
+    return items.filter((t) => {
+      if (q) {
+        const hay = [t.title, t.property_name, t.department_name || '', t.bin_name || '']
+          .join(' ')
+          .toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (statusSel.size > 0 && !statusSel.has(t.status)) return false;
+      if (assigneeSel.size > 0) {
+        const has = (t.assignees || []).some((a) => assigneeSel.has(a.user_id));
+        if (!has) return false;
+      }
+      if (prioritySel.size > 0 && !prioritySel.has(t.priority || '')) return false;
+      if (deptSel.size > 0) {
+        const key = t.department_id || NO_DEPT;
+        if (!deptSel.has(key)) return false;
+      }
+      if (propSel.size > 0) {
+        if (!t.property_name || !propSel.has(t.property_name)) return false;
+      }
+      if (binSel.size > 0) {
+        const key = t.bin_id || NO_BIN;
+        if (!binSel.has(key)) return false;
+      }
+      if (fromMs !== null || toMs !== null) {
+        if (!t.scheduled_date) return false;
+        const ts = new Date(t.scheduled_date).getTime();
+        if (fromMs !== null && ts < fromMs) return false;
+        if (toMs !== null && ts > toMs) return false;
+      }
+      return true;
+    });
+  }, [items, search, statusSel, assigneeSel, prioritySel, deptSel, propSel, binSel, scheduledDateRange]);
+
   // Group by date
   const { groups, openCount } = useMemo(() => {
     const now = new Date();
@@ -339,7 +500,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
     const unscheduled: UnifiedItem[] = [];
     let open = 0;
 
-    for (const item of items) {
+    for (const item of filteredItems) {
       if (item.status === 'complete') continue;
       open++;
       const d = item.scheduled_date;
@@ -384,7 +545,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
     if (unscheduled.length > 0) result.push({ label: 'No Date', sublabel: `${unscheduled.length}`, items: unscheduled });
 
     return { groups: result, openCount: open };
-  }, [items]);
+  }, [filteredItems]);
 
   const todayFormatted = useMemo(() => {
     const now = new Date();
@@ -653,14 +814,69 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
       {/* Assignment list */}
       <div className="w-full h-full flex flex-col min-w-0">
         {/* Header */}
-        <div className="flex-shrink-0 px-8 pt-6 pb-4">
+        <div className="flex-shrink-0 px-8 pt-6 pb-1">
           <h1 className="text-[24px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed]">
             My Assignments
           </h1>
-          <div className="flex items-center gap-3 mt-1.5 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
-            <span>{todayFormatted}</span>
-            <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a]" />
-            <span>{openCount} open</span>
+        </div>
+
+        {/* Filter bar — mirrors the Tasks page: CompactSearch icon + filter
+            funnel + inline chip lane on one row. No Sort / New Task on the
+            right since assignments are existing tasks delivered by the
+            backend; sort order is governed by the date sections below. */}
+        <div className="flex-shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] px-8 py-3">
+          <div className="flex items-center gap-2 flex-nowrap min-w-0">
+            <CompactSearch
+              value={search}
+              onChange={setSearch}
+              placeholder="Search assignments…"
+            />
+
+            <button
+              type="button"
+              onClick={() => setFiltersExpanded((v) => !v)}
+              title={filtersExpanded ? 'Hide filters' : 'Show filters'}
+              aria-pressed={filtersExpanded}
+              className={`flex-shrink-0 p-1.5 rounded transition-colors ${
+                filtersExpanded || anyAssignmentFilterActive
+                  ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)]'
+                  : 'text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3]'
+              }`}
+            >
+              <FilterIcon className="w-4 h-4" />
+            </button>
+
+            {filtersExpanded && (
+              <TaskFilterBar
+                inline
+                statusOptions={assignmentFilterOptions.statuses}
+                statusSelected={statusSel}
+                onStatusChange={setStatusSel}
+                // Co-assignee filter — every row is assigned to the current
+                // user; this narrows to tasks shared with a specific teammate.
+                assigneeOptions={assignmentFilterOptions.assignees}
+                assigneeSelected={assigneeSel}
+                onAssigneeChange={setAssigneeSel}
+                departmentOptions={assignmentFilterOptions.departments}
+                departmentSelected={deptSel}
+                onDepartmentChange={setDeptSel}
+                binOptions={assignmentFilterOptions.binsOpt}
+                binSelected={binSel}
+                onBinChange={setBinSel}
+                priorityOptions={assignmentFilterOptions.priorities}
+                prioritySelected={prioritySel}
+                onPriorityChange={setPrioritySel}
+                propertyOptions={assignmentFilterOptions.propertiesOpt}
+                propertySelected={propSel}
+                onPropertyChange={setPropSel}
+                scheduledDateRange={scheduledDateRange}
+                onScheduledDateRangeChange={setScheduledDateRange}
+                onClearAll={clearAllAssignmentFilters}
+                anyFilterActive={anyAssignmentFilterActive}
+                totalCount={items.length}
+                filteredCount={filteredItems.length}
+              />
+            )}
           </div>
         </div>
 

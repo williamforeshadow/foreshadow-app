@@ -2,9 +2,15 @@ export interface CleaningFilters {
   turnoverStatus: string[];
   occupancyStatus: string[];
   timeline: string[];  // 'active' | 'upcoming'
+  // Property name multi-select. Empty = no property filter.
+  properties: string[];
+  // Free-text guest-name search (case-insensitive substring match). Empty
+  // string = no search filter applied.
+  search: string;
 }
 
 export function applyCleaningFilters(items: any[], filters: CleaningFilters): any[] {
+  const searchLower = filters.search.trim().toLowerCase();
   return items.filter(item => {
     // Turnover Status filter
     if (filters.turnoverStatus.length > 0) {
@@ -12,15 +18,37 @@ export function applyCleaningFilters(items: any[], filters: CleaningFilters): an
         return false;
       }
     }
-    
-    // Occupancy Status filter
+
+    // Occupancy Status filter. Only reservations whose check-in has already
+    // happened can have a real occupancy state — upcoming reservations are
+    // neither "occupied" nor "checked out" (the guest hasn't arrived yet),
+    // so they're excluded whenever an occupancy filter is active.
     if (filters.occupancyStatus.length > 0) {
+      const checkIn = item.check_in ? new Date(item.check_in) : null;
+      const hasCheckedIn = !!checkIn && new Date() >= checkIn;
+      if (!hasCheckedIn) return false;
+
       const status = item.occupancy_status === 'occupied' ? 'occupied' : 'vacant';
       if (!filters.occupancyStatus.includes(status)) {
         return false;
       }
     }
-    
+
+    // Property filter
+    if (filters.properties.length > 0) {
+      if (!filters.properties.includes(item.property_name || '')) {
+        return false;
+      }
+    }
+
+    // Guest-name search
+    if (searchLower) {
+      const guest = (item.guest_name || '').toLowerCase();
+      if (!guest.includes(searchLower)) {
+        return false;
+      }
+    }
+
     return true;
   });
 }

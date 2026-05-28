@@ -26,6 +26,8 @@ export function useTurnovers() {
     turnoverStatus: [],
     occupancyStatus: [],
     timeline: [],
+    properties: [],
+    search: '',
   });
   const [sortBy, setSortBy] = useState('status-priority');
 
@@ -72,14 +74,32 @@ export function useTurnovers() {
     fetchTurnovers();
   }, [fetchTurnovers]);
 
-  // Filter functions
-  const toggleFilter = useCallback((category: keyof CleaningFilters, value: string) => {
-    setFilters(prev => ({
-      ...prev,
-      [category]: prev[category].includes(value)
-        ? prev[category].filter(v => v !== value)
-        : [...prev[category], value]
-    }));
+  // Filter functions. `toggleFilter` only operates on the array-typed
+  // filter axes (status/occupancy/timeline/properties); the free-text
+  // search is set via `setSearch` instead.
+  const toggleFilter = useCallback(
+    (category: 'turnoverStatus' | 'occupancyStatus' | 'timeline' | 'properties', value: string) => {
+      setFilters(prev => ({
+        ...prev,
+        [category]: prev[category].includes(value)
+          ? prev[category].filter(v => v !== value)
+          : [...prev[category], value]
+      }));
+    },
+    []
+  );
+
+  // Bulk setter for a multi-select axis — used by the MultiSelect chip
+  // (which emits the full next Set on every change).
+  const setFilterValues = useCallback(
+    (category: 'turnoverStatus' | 'occupancyStatus' | 'timeline' | 'properties', values: string[]) => {
+      setFilters(prev => ({ ...prev, [category]: values }));
+    },
+    []
+  );
+
+  const setSearch = useCallback((value: string) => {
+    setFilters(prev => ({ ...prev, search: value }));
   }, []);
 
   const clearAllFilters = useCallback(() => {
@@ -87,11 +107,19 @@ export function useTurnovers() {
       turnoverStatus: [],
       occupancyStatus: [],
       timeline: [],
+      properties: [],
+      search: '',
     });
   }, []);
 
   const getActiveFilterCount = useCallback(() => {
-    return filters.turnoverStatus.length + filters.occupancyStatus.length + filters.timeline.length;
+    return (
+      filters.turnoverStatus.length +
+      filters.occupancyStatus.length +
+      filters.timeline.length +
+      filters.properties.length +
+      (filters.search.trim() ? 1 : 0)
+    );
   }, [filters]);
 
   // Helper to recalculate turnover_status on the cached card after a task
@@ -409,6 +437,8 @@ export function useTurnovers() {
 
     // Filter functions
     toggleFilter,
+    setFilterValues,
+    setSearch,
     clearAllFilters,
     getActiveFilterCount,
 

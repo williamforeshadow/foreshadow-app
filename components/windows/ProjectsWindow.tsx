@@ -27,6 +27,9 @@ import { useRouter } from 'next/navigation';
 import { taskPath } from '@/src/lib/links';
 import type { User, Project, Attachment, Comment, ProjectFormFields, PropertyOption, TaskTemplate } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
+import { Filter as FilterIcon } from 'lucide-react';
+import { CompactSearch } from '@/components/ui/compact-search';
+import { TaskFilterBar, type FilterOption } from '@/components/tasks/TaskFilterBar';
 
 // ============================================================================
 // View Mode Toggle — compact pill that expands on click
@@ -63,38 +66,40 @@ function ViewModeToggle({
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
+  // Pill aesthetic shared with the schedule-page filter chips. Single-select
+  // (one board orientation at a time) — label stays "Boards" with the current
+  // mode rendered as a `· summary` tail so the visual matches MultiSelect.
   return (
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-xl bg-white/30 dark:bg-white/[0.08] backdrop-blur-sm border border-white/20 dark:border-white/10 text-neutral-900 dark:text-white transition-all hover:bg-white/50 dark:hover:bg-white/[0.12]"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-800 dark:hover:text-[#f0efed]"
       >
-        {VIEW_MODE_LABELS[viewMode]}
-        <svg className={`w-3.5 h-3.5 opacity-50 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <span>Boards</span>
+        <span className="text-[10px] tabular-nums opacity-80">· {VIEW_MODE_LABELS[viewMode]}</span>
+        <svg className={`w-3 h-3 opacity-60 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 z-50 rounded-xl glass-card bg-white/[0.97] dark:bg-card/[0.98] border border-white/30 dark:border-white/15 min-w-[140px]">
-          <div className="relative overflow-hidden rounded-xl glass-sheen flex flex-col gap-0.5 p-1.5">
-            {ALL_VIEW_MODES.map((mode) => (
-              <button
-                key={mode}
-                onClick={() => {
-                  setViewMode(mode);
-                  setOpen(false);
-                }}
-                className={`px-3.5 py-2 text-sm font-medium rounded-lg text-left transition-all ${
-                  viewMode === mode
-                    ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
-                    : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/30 dark:hover:bg-white/10'
-                }`}
-              >
-                {VIEW_MODE_LABELS[mode]}
-              </button>
-            ))}
-          </div>
+        <div className="absolute right-0 top-full mt-1.5 z-50 min-w-[160px] rounded-lg border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] bg-white dark:bg-[#1a1a1a] shadow-lg py-1">
+          {ALL_VIEW_MODES.map((mode) => (
+            <button
+              key={mode}
+              onClick={() => {
+                setViewMode(mode);
+                setOpen(false);
+              }}
+              className={`w-full px-3 py-1.5 text-left text-[12px] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] ${
+                viewMode === mode
+                  ? 'text-[var(--accent-3)] dark:text-[var(--accent-1)] font-medium'
+                  : 'text-neutral-700 dark:text-[#f0efed]'
+              }`}
+            >
+              {VIEW_MODE_LABELS[mode]}
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -136,6 +141,41 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   // View mode
   const [viewMode, setViewMode] = useState<ProjectViewMode>('status');
   const [kanbanSelectionMode, setKanbanSelectionMode] = useState(false);
+
+  // Task-filter state (mirrors the Schedule page's filter axes, plus a
+  // Scheduled date-range borrowed from the Tasks page). All state is
+  // controlled here; pills are rendered behind a funnel toggle so the header
+  // stays compact when nothing's filtered.
+  const NO_DEPT = '__no_department__';
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusSel, setStatusSel] = useState<Set<string>>(new Set());
+  const [assigneeSel, setAssigneeSel] = useState<Set<string>>(new Set());
+  const [deptSel, setDeptSel] = useState<Set<string>>(new Set());
+  const [prioritySel, setPrioritySel] = useState<Set<string>>(new Set());
+  const [propSel, setPropSel] = useState<Set<string>>(new Set());
+  const [scheduledDateRange, setScheduledDateRange] = useState<{ from: string | null; to: string | null }>(
+    { from: null, to: null }
+  );
+  const clearAllTaskFilters = useCallback(() => {
+    setSearch('');
+    setStatusSel(new Set());
+    setAssigneeSel(new Set());
+    setDeptSel(new Set());
+    setPrioritySel(new Set());
+    setPropSel(new Set());
+    setScheduledDateRange({ from: null, to: null });
+  }, []);
+  const anyTaskFilterActive =
+    !!search.trim() ||
+    statusSel.size +
+      assigneeSel.size +
+      deptSel.size +
+      prioritySel.size +
+      propSel.size >
+      0 ||
+    !!scheduledDateRange.from ||
+    !!scheduledDateRange.to;
 
   // Sub-hooks for detail panel features
   const commentsHook = useProjectComments({ currentUser });
@@ -351,6 +391,107 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       columnVis.initWithDefaults(allColumnOptions.map((c) => c.id));
     }
   }, [allColumnOptions, columnVis.initialized]);
+
+  // ── Filter chip options (derived from the current bin's tasks) ──────────
+  const binFilterOptions = useMemo(() => {
+    const statusCounts: Record<string, number> = {};
+    const priorityCounts: Record<string, number> = {};
+    const assigneeMap = new Map<string, { name: string; count: number }>();
+    const deptMap = new Map<string, { name: string; count: number }>();
+    const propertyMap = new Map<string, number>();
+    let noDeptCount = 0;
+    tasks.forEach((t) => {
+      statusCounts[t.status] = (statusCounts[t.status] || 0) + 1;
+      if (t.priority) priorityCounts[t.priority] = (priorityCounts[t.priority] || 0) + 1;
+      if (t.department_id) {
+        const ex = deptMap.get(t.department_id);
+        deptMap.set(t.department_id, {
+          name: t.department_name || 'Department',
+          count: (ex?.count || 0) + 1,
+        });
+      } else {
+        noDeptCount++;
+      }
+      if (t.property_name) {
+        propertyMap.set(t.property_name, (propertyMap.get(t.property_name) || 0) + 1);
+      }
+      (t.project_assignments || []).forEach((a) => {
+        const ex = assigneeMap.get(a.user_id);
+        assigneeMap.set(a.user_id, {
+          name: a.user?.name || 'Unknown',
+          count: (ex?.count || 0) + 1,
+        });
+      });
+    });
+    const statuses: FilterOption[] = [
+      { value: 'not_started', label: 'Not started', count: statusCounts.not_started || 0 },
+      { value: 'in_progress', label: 'In progress', count: statusCounts.in_progress || 0 },
+      { value: 'paused', label: 'Paused', count: statusCounts.paused || 0 },
+      { value: 'complete', label: 'Complete', count: statusCounts.complete || 0 },
+    ];
+    const priorities: FilterOption[] = [
+      { value: 'urgent', label: 'Urgent', count: priorityCounts.urgent || 0 },
+      { value: 'high', label: 'High', count: priorityCounts.high || 0 },
+      { value: 'medium', label: 'Medium', count: priorityCounts.medium || 0 },
+      { value: 'low', label: 'Low', count: priorityCounts.low || 0 },
+    ];
+    const assignees: FilterOption[] = Array.from(assigneeMap.entries())
+      .map(([id, v]) => ({ value: id, label: v.name, count: v.count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    const departmentsOpt: FilterOption[] = [
+      ...Array.from(deptMap.entries())
+        .map(([id, v]) => ({ value: id, label: v.name, count: v.count }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+      { value: NO_DEPT, label: 'No department', count: noDeptCount },
+    ];
+    const propertiesOpt: FilterOption[] = Array.from(propertyMap.entries())
+      .map(([name, count]) => ({ value: name, label: name, count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    return { statuses, priorities, assignees, departments: departmentsOpt, propertiesOpt };
+  }, [tasks]);
+
+  // Apply the filter predicate. The kanban itself receives this filtered
+  // list, so column groupings + counts reflect the active filters.
+  const filteredTasks = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const fromMs = scheduledDateRange.from
+      ? new Date(scheduledDateRange.from + 'T00:00:00').getTime()
+      : null;
+    const toMs = scheduledDateRange.to
+      ? new Date(scheduledDateRange.to + 'T23:59:59').getTime()
+      : null;
+    return tasks.filter((t) => {
+      if (q) {
+        const hay = [
+          t.title || '',
+          t.template_name || '',
+          t.property_name || '',
+          t.department_name || '',
+        ].join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (statusSel.size > 0 && !statusSel.has(t.status)) return false;
+      if (prioritySel.size > 0 && !prioritySel.has(t.priority || '')) return false;
+      if (deptSel.size > 0) {
+        const key = t.department_id || NO_DEPT;
+        if (!deptSel.has(key)) return false;
+      }
+      if (assigneeSel.size > 0) {
+        const has = (t.project_assignments || []).some((a) => assigneeSel.has(a.user_id));
+        if (!has) return false;
+      }
+      if (propSel.size > 0) {
+        if (!t.property_name || !propSel.has(t.property_name)) return false;
+      }
+      if (fromMs !== null || toMs !== null) {
+        if (!t.scheduled_date) return false;
+        const ts = new Date(t.scheduled_date).getTime();
+        if (fromMs !== null && ts < fromMs) return false;
+        if (toMs !== null && ts > toMs) return false;
+      }
+      return true;
+    });
+  }, [tasks, search, statusSel, assigneeSel, deptSel, prioritySel, propSel, scheduledDateRange]);
 
   // ============================================================================
   // Bin Navigation
@@ -723,19 +864,22 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     <div className="relative h-full overflow-hidden bg-white dark:bg-card">
       {/* Left Panel - Kanban Board */}
       <div className="w-full h-full flex flex-col">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/20 dark:border-white/10 glass-panel bg-white/40 dark:bg-white/[0.06] flex-shrink-0 relative z-20">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-white/20 dark:border-white/10 glass-panel bg-white/40 dark:bg-white/[0.06] flex-shrink-0 relative z-20 flex-nowrap">
+          {/* Left group: bin breadcrumb + Global toggle + task search/filter.
+              `min-w-0 flex-1` lets the chip lane inside absorb any overflow
+              instead of wrapping the row. */}
+          <div className="flex items-center gap-3 min-w-0 flex-1 flex-nowrap">
             <button
               onClick={handleBackToBins}
-              className="flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
+              className="flex-shrink-0 flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
               Bins
             </button>
-            <span className="text-neutral-400/50 dark:text-white/20">/</span>
-            <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
+            <span className="flex-shrink-0 text-neutral-400/50 dark:text-white/20">/</span>
+            <h3 className="flex-shrink-0 text-lg font-semibold text-neutral-900 dark:text-white">
               {selectedBinName}
             </h3>
             {/* Global toggle — only inside the Task Bin (selectedBinId === null).
@@ -748,7 +892,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
                   ? 'Global view ON — showing every binned task. Click to scope back to the Task Bin only.'
                   : 'Global view OFF — showing only the Task Bin. Click to widen to every binned task.'}
                 aria-pressed={taskBinGlobal.enabled}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors ${
+                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors ${
                   taskBinGlobal.enabled
                     ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)] border-[var(--accent-3)]/30 dark:border-[var(--accent-1)]/30'
                     : 'bg-transparent text-neutral-500 dark:text-[#a09e9a] border-neutral-200 dark:border-white/10 hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-white/[0.04] hover:text-neutral-800 dark:hover:text-white'
@@ -760,8 +904,56 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
                 Global
               </button>
             )}
+
+            {/* Task search + filter pills (matches the Schedule page UX) */}
+            <CompactSearch value={search} onChange={setSearch} placeholder="Search tasks…" />
+
+            <button
+              type="button"
+              onClick={() => setFiltersExpanded((v) => !v)}
+              title={filtersExpanded ? 'Hide filters' : 'Show filters'}
+              aria-pressed={filtersExpanded}
+              className={`flex-shrink-0 p-1.5 rounded transition-colors ${
+                filtersExpanded || anyTaskFilterActive
+                  ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)]'
+                  : 'text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3]'
+              }`}
+            >
+              <FilterIcon className="w-4 h-4" />
+            </button>
+
+            {filtersExpanded && (
+              <TaskFilterBar
+                inline
+                statusOptions={binFilterOptions.statuses}
+                statusSelected={statusSel}
+                onStatusChange={setStatusSel}
+                assigneeOptions={binFilterOptions.assignees}
+                assigneeSelected={assigneeSel}
+                onAssigneeChange={setAssigneeSel}
+                departmentOptions={binFilterOptions.departments}
+                departmentSelected={deptSel}
+                onDepartmentChange={setDeptSel}
+                priorityOptions={binFilterOptions.priorities}
+                prioritySelected={prioritySel}
+                onPriorityChange={setPrioritySel}
+                propertyOptions={binFilterOptions.propertiesOpt}
+                propertySelected={propSel}
+                onPropertyChange={setPropSel}
+                scheduledDateRange={scheduledDateRange}
+                onScheduledDateRangeChange={setScheduledDateRange}
+                onClearAll={clearAllTaskFilters}
+                anyFilterActive={anyTaskFilterActive}
+                totalCount={tasks.length}
+                filteredCount={filteredTasks.length}
+              />
+            )}
           </div>
-          <div className="flex items-center gap-3">
+
+          {/* Right group: board orientation + column visibility + new task +
+              select. `flex-shrink-0` guards against the long chip lane from
+              the left group ever crushing these. */}
+          <div className="flex items-center gap-3 flex-shrink-0">
             <ViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
             <ColumnPicker
               columns={allColumnOptions}
@@ -809,7 +1001,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
           </div>
         ) : (
           <ProjectsKanban
-            projects={tasks}
+            projects={filteredTasks}
             viewMode={viewMode}
             allProperties={allProperties}
             users={users}

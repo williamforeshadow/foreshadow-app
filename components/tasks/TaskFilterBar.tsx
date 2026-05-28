@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ChipScrollLane } from '@/components/ui/chip-scroll-lane';
 
 // Shared filter + sort header used by every task-ledger surface (Property
 // Tasks, dashboard Tasks tab, mobile Tasks page).
@@ -195,11 +197,6 @@ export function TaskFilterBar(props: TaskFilterBarProps) {
 
   const meta = (
     <div className="ml-auto flex items-center gap-2">
-      <div className="text-[12px] text-neutral-500 dark:text-[#66645f] tabular-nums">
-        {props.anyFilterActive
-          ? `${props.filteredCount} of ${props.totalCount}`
-          : `${props.totalCount} total`}
-      </div>
       {props.anyFilterActive && (
         <button
           onClick={props.onClearAll}
@@ -228,10 +225,23 @@ export function TaskFilterBar(props: TaskFilterBarProps) {
   );
 
   if (inline) {
+    // Two-track inline layout: a chevron-driven scrollable chip lane that
+    // absorbs overflow on narrow viewports / many active filters, then an
+    // optional Sort pill (Tasks page uses this), then an anchored meta
+    // block (clear + new-task) that stays put.
     return (
-      <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
-        {chips}
-        {meta}
+      <div className="flex items-center gap-2 flex-nowrap min-w-0 flex-1">
+        <ChipScrollLane>{chips}</ChipScrollLane>
+        {props.sortKey && props.sortDir && props.onSortChange && (
+          <div className="flex-shrink-0">
+            <SortSelect
+              sortKey={props.sortKey}
+              sortDir={props.sortDir}
+              onChange={props.onSortChange}
+            />
+          </div>
+        )}
+        <div className="flex-shrink-0">{meta}</div>
       </div>
     );
   }
@@ -287,7 +297,7 @@ export function TaskFilterBar(props: TaskFilterBarProps) {
 
 // ---- MultiSelect popover ---------------------------------------------------
 
-interface MultiSelectProps {
+export interface MultiSelectProps {
   label: string;
   options: FilterOption[];
   selected: Set<string>;
@@ -295,7 +305,7 @@ interface MultiSelectProps {
   searchable?: boolean;
 }
 
-function MultiSelect({
+export function MultiSelect({
   label,
   options,
   selected,
@@ -304,12 +314,47 @@ function MultiSelect({
 }: MultiSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const ref = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  // Popover rendered via portal so it escapes the chip-scroll lane's
+  // `overflow-x-hidden` clip — without this, the dropdown gets cut off and
+  // becomes effectively unusable. Position is computed from the trigger's
+  // bounding rect and re-evaluated on scroll / resize.
+  const [mounted, setMounted] = useState(false);
+  const [pos, setPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
+
+  useEffect(() => setMounted(true), []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const updatePos = () => {
+      const el = triggerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      // Clamp inside the viewport with an 8px gutter so right-edge chips
+      // don't push the popover off-screen.
+      const gutter = 8;
+      const popWidth = popoverRef.current?.offsetWidth ?? 220;
+      const maxLeft = window.innerWidth - popWidth - gutter;
+      const left = Math.min(rect.left, Math.max(gutter, maxLeft));
+      setPos({ left, top: rect.bottom + 6 });
+    };
+    updatePos();
+    window.addEventListener('resize', updatePos);
+    window.addEventListener('scroll', updatePos, true);
+    return () => {
+      window.removeEventListener('resize', updatePos);
+      window.removeEventListener('scroll', updatePos, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t)) return;
+      if (popoverRef.current?.contains(t)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
@@ -338,7 +383,7 @@ function MultiSelect({
     : options;
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative flex-shrink-0" ref={triggerRef}>
       <button
         onClick={() => setOpen((v) => !v)}
         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors ${
@@ -347,17 +392,21 @@ function MultiSelect({
             : 'bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-800 dark:hover:text-[#f0efed]'
         }`}
       >
-        <span>{label}</span>
+        <span className="whitespace-nowrap">{label}</span>
         {active && (
-          <span className="text-[10px] tabular-nums opacity-80">· {summary}</span>
+          <span className="text-[10px] tabular-nums opacity-80 max-w-[120px] truncate inline-block align-middle">· {summary}</span>
         )}
-        <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-3 h-3 opacity-60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
-      {open && (
-        <div className="absolute left-0 top-full mt-1.5 z-50 min-w-[220px] max-h-[360px] overflow-auto rounded-lg border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] bg-white dark:bg-[#1a1a1a] shadow-lg py-1">
+      {open && mounted && createPortal(
+        <div
+          ref={popoverRef}
+          style={{ position: 'fixed', left: pos.left, top: pos.top, zIndex: 9999 }}
+          className="min-w-[220px] max-h-[360px] overflow-auto rounded-lg border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] bg-white dark:bg-[#1a1a1a] shadow-lg py-1"
+        >
           {searchable && (
             <div className="px-2 pb-1.5 pt-1 sticky top-0 bg-white dark:bg-[#1a1a1a] border-b border-neutral-100 dark:border-[rgba(255,255,255,0.06)]">
               <input
@@ -451,7 +500,8 @@ function MultiSelect({
               })}
             </>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -488,12 +538,41 @@ function DateRangeChip({
   onChange: (next: DateRange) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const [pos, setPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
+
+  useEffect(() => setMounted(true), []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const updatePos = () => {
+      const el = triggerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const gutter = 8;
+      const popWidth = popoverRef.current?.offsetWidth ?? 260;
+      const maxLeft = window.innerWidth - popWidth - gutter;
+      const left = Math.min(rect.left, Math.max(gutter, maxLeft));
+      setPos({ left, top: rect.bottom + 6 });
+    };
+    updatePos();
+    window.addEventListener('resize', updatePos);
+    window.addEventListener('scroll', updatePos, true);
+    return () => {
+      window.removeEventListener('resize', updatePos);
+      window.removeEventListener('scroll', updatePos, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t)) return;
+      if (popoverRef.current?.contains(t)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
@@ -503,7 +582,7 @@ function DateRangeChip({
   const summary = formatRangeSummary(range);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative flex-shrink-0" ref={triggerRef}>
       <button
         onClick={() => setOpen((v) => !v)}
         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors ${
@@ -512,17 +591,21 @@ function DateRangeChip({
             : 'bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-800 dark:hover:text-[#f0efed]'
         }`}
       >
-        <span>{label}</span>
+        <span className="whitespace-nowrap">{label}</span>
         {active && (
-          <span className="text-[10px] tabular-nums opacity-80">· {summary}</span>
+          <span className="text-[10px] tabular-nums opacity-80 max-w-[120px] truncate inline-block align-middle">· {summary}</span>
         )}
-        <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-3 h-3 opacity-60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
-      {open && (
-        <div className="absolute left-0 top-full mt-1.5 z-50 min-w-[260px] rounded-lg border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] bg-white dark:bg-[#1a1a1a] shadow-lg p-3 space-y-2">
+      {open && mounted && createPortal(
+        <div
+          ref={popoverRef}
+          style={{ position: 'fixed', left: pos.left, top: pos.top, zIndex: 9999 }}
+          className="min-w-[260px] rounded-lg border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] bg-white dark:bg-[#1a1a1a] shadow-lg p-3 space-y-2"
+        >
           <div className="flex items-center gap-2">
             <label className="text-[11px] uppercase tracking-[0.04em] text-neutral-500 dark:text-[#66645f] w-10">
               From
@@ -553,7 +636,8 @@ function DateRangeChip({
               Clear
             </button>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -561,7 +645,7 @@ function DateRangeChip({
 
 // ---- Sort select ----------------------------------------------------------
 
-function SortSelect({
+export function SortSelect({
   sortKey,
   sortDir,
   onChange,

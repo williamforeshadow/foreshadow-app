@@ -40,7 +40,8 @@ import {
   DESKTOP_TIMELINE_DETAIL_PANEL_CLASS,
   DESKTOP_TIMELINE_DETAIL_PANEL_FLEX,
 } from '@/lib/detailPanelGeometry';
-import { ClipboardCheck } from 'lucide-react';
+import { ClipboardCheck, Filter as FilterIcon } from 'lucide-react';
+import { CompactSearch } from '@/components/ui/compact-search';
 import { RowsIcon, KanbanColumnsIcon } from './timeline/TimelineViewIcons';
 import type { Project, Task, User, ProjectFormFields, Turnover, TaskTemplate, PropertyOption } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
@@ -246,62 +247,6 @@ function ReservationHoverBar({
   );
 }
 
-// Compact expandable search: an icon button that expands to a small text
-// input on click and collapses back when blurred while empty. Keeps the
-// Timeline header on one row when search is unused.
-function CompactSearch({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const open = expanded || !!value;
-  useEffect(() => {
-    if (expanded) inputRef.current?.focus();
-  }, [expanded]);
-  return (
-    <div className="inline-flex items-center">
-      {open ? (
-        <div className="relative">
-          <svg
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 dark:text-[#66645f] pointer-events-none"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input
-            ref={inputRef}
-            type="text"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            onBlur={() => { if (!value) setExpanded(false); }}
-            placeholder="Search…"
-            className="w-44 pl-8 pr-2 py-1.5 text-[13px] bg-transparent border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] rounded-md focus:outline-none focus:border-[var(--accent-3)] dark:focus:border-[var(--accent-1)] text-neutral-800 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f]"
-          />
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setExpanded(true)}
-          title="Search"
-          className="p-1.5 rounded text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3] transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        </button>
-      )}
-    </div>
-  );
-}
-
 export default function TimelineWindow({
   users,
   currentUser,
@@ -341,6 +286,9 @@ export default function TimelineWindow({
       prioritySel.size +
       propSel.size >
       0;
+  // Filter pills are collapsed behind a funnel icon by default to keep the
+  // Timeline header compact; click the icon to expand them inline.
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
 
   // State for the day detail panel (clicking a day header in the grid view).
   // Kanban access is preserved via the top-left view-mode toggle; clicking a
@@ -1727,7 +1675,7 @@ export default function TimelineWindow({
     <div className="h-full flex flex-col relative bg-white dark:bg-card">
       {/* Header with navigation - fixed at top */}
       <div className="flex-shrink-0 px-4 py-3 bg-white dark:bg-[var(--timeline-surface-2)] border-b border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)]">
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-3 flex-nowrap min-w-0">
           {/* View Mode Icons */}
           <div className="flex items-center gap-1">
             <button
@@ -1771,42 +1719,64 @@ export default function TimelineWindow({
 
           <CompactSearch value={search} onChange={setSearch} />
 
-          <TaskFilterBar
-            inline
-            statusOptions={timelineFilterOptions.statuses}
-            statusSelected={statusSel}
-            onStatusChange={setStatusSel}
-            assigneeOptions={timelineFilterOptions.assignees}
-            assigneeSelected={assigneeSel}
-            onAssigneeChange={setAssigneeSel}
-            departmentOptions={timelineFilterOptions.departments}
-            departmentSelected={deptSel}
-            onDepartmentChange={setDeptSel}
-            priorityOptions={timelineFilterOptions.priorities}
-            prioritySelected={prioritySel}
-            onPriorityChange={setPrioritySel}
-            propertyOptions={timelineFilterOptions.propertiesOpt}
-            propertySelected={propSel}
-            onPropertyChange={setPropSel}
-            onClearAll={clearAllFilters}
-            anyFilterActive={anyFilterActive}
-            totalCount={allScheduledTasks.length}
-            filteredCount={displayedScheduledTasks.length}
-          />
-
-          <WeatherWidgetTrigger />
-
           <button
             type="button"
-            onClick={handleCreateProjectFromHeader}
-            title="Create Task"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
+            onClick={() => setFiltersExpanded((v) => !v)}
+            title={filtersExpanded ? 'Hide filters' : 'Show filters'}
+            aria-pressed={filtersExpanded}
+            className={`p-1.5 rounded transition-colors ${
+              filtersExpanded || anyFilterActive
+                ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)]'
+                : 'text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3]'
+            }`}
           >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            New task
+            <FilterIcon className="w-4 h-4" />
           </button>
+
+          {filtersExpanded && (
+            <TaskFilterBar
+              inline
+              statusOptions={timelineFilterOptions.statuses}
+              statusSelected={statusSel}
+              onStatusChange={setStatusSel}
+              assigneeOptions={timelineFilterOptions.assignees}
+              assigneeSelected={assigneeSel}
+              onAssigneeChange={setAssigneeSel}
+              departmentOptions={timelineFilterOptions.departments}
+              departmentSelected={deptSel}
+              onDepartmentChange={setDeptSel}
+              priorityOptions={timelineFilterOptions.priorities}
+              prioritySelected={prioritySel}
+              onPriorityChange={setPrioritySel}
+              propertyOptions={timelineFilterOptions.propertiesOpt}
+              propertySelected={propSel}
+              onPropertyChange={setPropSel}
+              onClearAll={clearAllFilters}
+              anyFilterActive={anyFilterActive}
+              totalCount={allScheduledTasks.length}
+              filteredCount={displayedScheduledTasks.length}
+            />
+          )}
+
+          {/* Right-anchored controls — ml-auto keeps them flush with the
+              right edge whether or not the filter pills are expanded inline.
+              `flex-shrink-0` guards against ever wrapping or being crushed
+              by a long chip strip; the chip lane handles its own overflow. */}
+          <div className="ml-auto flex items-center gap-3 flex-shrink-0">
+            <WeatherWidgetTrigger />
+
+            <button
+              type="button"
+              onClick={handleCreateProjectFromHeader}
+              title="Create Task"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              New task
+            </button>
+          </div>
         </div>
       </div>
 
