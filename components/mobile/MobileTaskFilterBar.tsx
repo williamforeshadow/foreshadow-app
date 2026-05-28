@@ -75,6 +75,11 @@ interface Props {
 
   onNewTask?: () => void;
 
+  // Pinned controls rendered to the RIGHT of the swipeable search/filter
+  // lane (before the New task button). Stay fixed while the lane scrolls.
+  // Used by the Schedule view for its date-nav pill + date range.
+  extraControls?: React.ReactNode;
+
   totalCount: number;
   filteredCount: number;
 }
@@ -126,14 +131,14 @@ export function MobileTaskFilterBar(props: Props) {
 
   return (
     <div className="flex items-center gap-2 px-4 pt-2 pb-3 flex-nowrap min-w-0">
-      {/* Swipeable carousel lane. `overflow-x-auto` + `flex-1 min-w-0` keeps
-          the strip bounded to the available width, so finger-swiping scrolls
-          the pills WITHIN the lane instead of dragging the whole page off the
-          edge. `overscroll-x-contain` stops the scroll from chaining to the
-          page; `hide-scrollbar` hides the bar. New task stays pinned outside
-          the lane so it's always reachable. */}
-      <div className="flex items-center gap-2 flex-nowrap min-w-0 flex-1 overflow-x-auto overscroll-x-contain hide-scrollbar">
-        <div className="flex-shrink-0">
+      {/* Swipeable carousel lane. `min-w-0` + default flex-shrink (no
+          flex-1) lets it size to its content and shrink/scroll when space
+          is tight, so it never stretches full-width and pushes the trailing
+          controls apart. `overflow-x-auto` makes the overflow swipe within
+          the lane; `overscroll-x-contain` stops the scroll chaining to the
+          page; `hide-scrollbar` hides the bar. */}
+      <div className="flex items-center gap-2 flex-nowrap min-w-0 overflow-x-auto overscroll-x-contain hide-scrollbar">
+        <div className="flex-shrink-0 flex items-center">
           <CompactSearch
             value={props.search}
             onChange={props.onSearchChange}
@@ -141,16 +146,19 @@ export function MobileTaskFilterBar(props: Props) {
           />
         </div>
 
+        {/* Filter — icon-only (matches the search icon). Funnel turns accent
+            when filters are active; a small badge shows the count. */}
         <button
           onClick={() => setFilterOpen(true)}
-          className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
+          aria-label="Filter"
+          className={`relative flex-shrink-0 p-1.5 rounded transition-colors ${
             activeCount > 0
-              ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)] border-[var(--accent-3)]/30 dark:border-[var(--accent-1)]/30'
-              : 'bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)]'
+              ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)]'
+              : 'text-[#9a9892] dark:text-[#66645f] active:bg-[rgba(30,25,20,0.04)] dark:active:bg-[rgba(255,255,255,0.04)]'
           }`}
         >
           <svg
-            className="w-3.5 h-3.5"
+            className="w-4 h-4"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -162,9 +170,8 @@ export function MobileTaskFilterBar(props: Props) {
               d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L15 12.414V19a1 1 0 01-.553.894l-4 2A1 1 0 019 21v-8.586L3.293 6.707A1 1 0 013 6V4z"
             />
           </svg>
-          <span>Filter</span>
           {activeCount > 0 && (
-            <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[var(--accent-3)] dark:bg-[var(--accent-2)] text-white dark:text-[#1a1a1a] text-[10px] font-semibold tabular-nums px-1">
+            <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] rounded-full bg-[var(--accent-3)] dark:bg-[var(--accent-2)] text-white dark:text-[#1a1a1a] text-[9px] font-semibold tabular-nums px-1">
               {activeCount}
             </span>
           )}
@@ -197,10 +204,14 @@ export function MobileTaskFilterBar(props: Props) {
         )}
       </div>
 
+      {/* Pinned controls to the right of the lane (e.g. Schedule's date nav +
+          range). Fixed while the lane scrolls. */}
+      {props.extraControls}
+
       {props.onNewTask && (
         <button
           onClick={props.onNewTask}
-          className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
+          className="ml-auto flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
           aria-label="New task"
         >
           <svg

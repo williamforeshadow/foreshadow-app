@@ -1,13 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTimeline } from '@/lib/useTimeline';
 import {
   useExclusiveDetailPanelHost,
   useReservationViewer,
 } from '@/lib/reservationViewerContext';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useDepartments } from '@/lib/departmentsContext';
@@ -85,6 +85,14 @@ export default function MobileTimelineView({
     fetchReservations,
   } = useTimeline();
   const { departments } = useDepartments();
+  const router = useRouter();
+
+  // Header "+ task" — mobile has no schedule-scoped draft flow, so route to
+  // the standalone Tasks page where the create flow lives (matches the
+  // other mobile pages' New task affordance).
+  const handleHeaderNewTask = useCallback(() => {
+    router.push('/tasks');
+  }, [router]);
 
   // Global reservation viewer — used by the day-cell drawer's
   // "Active reservation(s)" rows so tapping a guest opens the same
@@ -305,79 +313,51 @@ export default function MobileTimelineView({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
+      {/* Title row — matches the Tasks / My Assignments mobile pattern:
+          hamburger + page title, then a single controls row underneath. */}
       <div
-        className="sticky top-0 z-30 bg-white dark:bg-card border-b border-neutral-200 dark:border-neutral-800 px-[22px] pb-2.5"
+        className="flex-shrink-0 px-[22px]"
         style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
       >
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <div className="flex items-center gap-2 min-w-0">
-            {onMenuTap && (
-              <button
-                onClick={onMenuTap}
-                className="-ml-2 w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
-                aria-label="Open menu"
-              >
-                <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
-            )}
-            <h1 className="text-[20px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed] truncate">
-              Schedule
-            </h1>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-0.5">
-            <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={goToPrevious}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        <div className="flex items-center gap-2 min-w-0">
+          {onMenuTap && (
+            <button
+              onClick={onMenuTap}
+              className="-ml-2 w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+              aria-label="Open menu"
+            >
+              <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
-            </Button>
-            <Button variant="ghost" size="sm" className="h-9 px-3 text-sm font-semibold" onClick={goToToday}>
-              Today
-            </Button>
-            <Button variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={goToNext}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Button>
-          </div>
+            </button>
+          )}
+          <h1 className="text-[20px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed] truncate">
+            Schedule
+          </h1>
 
-          <div className="text-sm font-semibold text-neutral-900 dark:text-white">
+          {/* Right cluster, inline with the title: Week/Month toggle pill +
+              the current date range (styled as a matching pill). */}
+          <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => setView(view === 'week' ? 'month' : 'week')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] active:opacity-70 transition-opacity"
+              aria-label={`Switch to ${view === 'week' ? 'month' : 'week'} view`}
+            >
+              {view === 'week' ? 'Week' : 'Month'}
+            </button>
+
             {dateRange.length > 0 && (
-              <>
+              <span className="inline-flex items-center px-3 py-1.5 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] whitespace-nowrap">
                 {formatDate(dateRange[0])} – {formatDate(dateRange[dateRange.length - 1])}
-              </>
+              </span>
             )}
-          </div>
-
-          <div className="flex items-center gap-1">
-            <Button
-              onClick={() => setView('week')}
-              variant={view === 'week' ? 'default' : 'outline'}
-              size="sm"
-              className="h-8 px-2.5 text-sm"
-            >
-              W
-            </Button>
-            <Button
-              onClick={() => setView('month')}
-              variant={view === 'month' ? 'default' : 'outline'}
-              size="sm"
-              className="h-8 px-2.5 text-sm"
-            >
-              M
-            </Button>
           </div>
         </div>
       </div>
 
-      {/* Filter / search bar — same axes as desktop Schedule (status,
-          assignee, department, priority, property). Sticky below the
-          date-nav header so it stays in view while scrolling the grid. */}
+      {/* Single controls row: search/filter (swipeable lane) → ‹ Today ›
+          nav (pinned, via extraControls) → + task (pinned). The W/M toggle
+          and date range live up in the title row. */}
       <div className="flex-shrink-0 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-card">
         <MobileTaskFilterBar
           search={search}
@@ -399,8 +379,46 @@ export default function MobileTimelineView({
           onPropertyChange={setPropSel}
           onClearAll={clearAllFilters}
           anyFilterActive={anyFilterActive}
+          onNewTask={handleHeaderNewTask}
           totalCount={allScheduledTasks.length}
           filteredCount={displayedScheduledTasks.length}
+          extraControls={
+            <>
+              {/* Date-nav pill — replicates the desktop TimelineNavBar's
+                  segmented ‹ │ Today │ › control. */}
+              <div className="flex-shrink-0 inline-flex items-stretch rounded-lg border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] bg-white dark:bg-card overflow-hidden">
+                <button
+                  type="button"
+                  onClick={goToPrevious}
+                  className="px-2 py-1.5 flex items-center text-[#9a9892] dark:text-[#66645f] active:bg-[rgba(30,25,20,0.04)] dark:active:bg-[rgba(255,255,255,0.04)]"
+                  aria-label="Previous"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <span className="w-px self-stretch bg-neutral-200 dark:bg-[rgba(255,255,255,0.08)]" />
+                <button
+                  type="button"
+                  onClick={goToToday}
+                  className="px-3 py-1.5 text-[13px] font-medium text-[#6b6963] dark:text-[#9a9893] active:bg-[rgba(30,25,20,0.04)] dark:active:bg-[rgba(255,255,255,0.04)]"
+                >
+                  Today
+                </button>
+                <span className="w-px self-stretch bg-neutral-200 dark:bg-[rgba(255,255,255,0.08)]" />
+                <button
+                  type="button"
+                  onClick={goToNext}
+                  className="px-2 py-1.5 flex items-center text-[#9a9892] dark:text-[#66645f] active:bg-[rgba(30,25,20,0.04)] dark:active:bg-[rgba(255,255,255,0.04)]"
+                  aria-label="Next"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            </>
+          }
         />
       </div>
 

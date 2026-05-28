@@ -542,7 +542,7 @@ export default function MobileMyAssignmentsView({
     <div className="flex flex-col h-full">
       {/* Header */}
       <div
-        className="px-[22px] pb-4"
+        className="px-[22px] pb-2"
         style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -561,7 +561,7 @@ export default function MobileMyAssignmentsView({
             My Assignments
           </h1>
         </div>
-        <div className="flex items-center gap-3 mt-2.5 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
+        <div className="flex items-center gap-3 mt-1 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
           <span>{todayFormatted}</span>
           <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a]" />
           <span>{openCount} open</span>
