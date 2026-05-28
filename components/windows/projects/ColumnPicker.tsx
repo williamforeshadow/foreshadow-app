@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 interface ColumnOption {
   id: string;
@@ -30,6 +31,34 @@ export function ColumnPicker({
   const [search, setSearch] = useState('');
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Portal the dropdown to <body> so it escapes any ancestor that clips
+  // overflow (e.g. the mobile filter lane's `overflow-x-auto`). Positioned
+  // from the trigger's rect, right-aligned, re-evaluated on scroll/resize.
+  const [mounted, setMounted] = useState(false);
+  const [pos, setPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
+  useEffect(() => setMounted(true), []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const el = buttonRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const gutter = 8;
+      const w = popoverRef.current?.offsetWidth ?? 256;
+      // Right-align the 256px popover to the button's right edge, clamped.
+      const left = Math.min(Math.max(gutter, r.right - w), window.innerWidth - w - gutter);
+      setPos({ left, top: r.bottom + 6 });
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -86,10 +115,11 @@ export function ColumnPicker({
         </svg>
       </button>
 
-      {open && (
+      {open && mounted && createPortal(
         <div
           ref={popoverRef}
-          className="absolute right-0 top-full mt-1.5 w-64 z-50 rounded-xl glass-card bg-white/[0.97] dark:bg-card/[0.98] border border-white/30 dark:border-white/15"
+          style={{ position: 'fixed', left: pos.left, top: pos.top, zIndex: 9999 }}
+          className="w-64 rounded-xl glass-card bg-white/[0.97] dark:bg-card/[0.98] border border-white/30 dark:border-white/15"
         >
           <div className="relative overflow-hidden rounded-xl glass-sheen">
             {/* Search */}
@@ -154,7 +184,8 @@ export function ColumnPicker({
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

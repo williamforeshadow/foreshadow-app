@@ -1,7 +1,8 @@
 'use client';
 
 import { apiFetch } from '@/lib/apiFetch';
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import MobileBinPicker from '@/components/mobile/MobileBinPicker';
 import MobileProjectDetail from '@/components/mobile/MobileProjectDetail';
 import { ProjectsKanban } from '@/components/windows/projects/ProjectsKanban';
@@ -55,15 +56,43 @@ function MobileViewModeToggle({
   setViewMode: (m: ProjectViewMode) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  // Portal the dropdown to <body> so it escapes the filter lane's
+  // `overflow-x-auto` clip (the lane is what makes the pills swipeable).
+  const [mounted, setMounted] = useState(false);
+  const [pos, setPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
+
+  useEffect(() => setMounted(true), []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const el = triggerRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const gutter = 8;
+      const w = popRef.current?.offsetWidth ?? 140;
+      const left = Math.min(r.left, Math.max(gutter, window.innerWidth - w - gutter));
+      setPos({ left, top: r.bottom + 6 });
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
-    function onTap(e: MouseEvent | TouchEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
+    const onTap = (e: MouseEvent | TouchEvent) => {
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t)) return;
+      if (popRef.current?.contains(t)) return;
+      setOpen(false);
+    };
     document.addEventListener('mousedown', onTap);
     document.addEventListener('touchstart', onTap);
     return () => {
@@ -73,13 +102,14 @@ function MobileViewModeToggle({
   }, [open]);
 
   return (
-    <div className="relative" ref={ref}>
+    <>
       {/* Standard pill — single-select board orientation. The chosen mode is
           surfaced in the header fine print ("By Status"), not inside the
           pill, so the label stays a clean "Boards". */}
       <button
+        ref={triggerRef}
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] active:opacity-70 transition-opacity"
+        className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] active:opacity-70 transition-opacity"
       >
         Boards
         <svg className={`w-3 h-3 opacity-50 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -87,29 +117,34 @@ function MobileViewModeToggle({
         </svg>
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-full mt-1.5 z-20 rounded-xl bg-white dark:bg-[#1a1a1d] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] shadow-xl min-w-[140px]">
+      {open && mounted && createPortal(
+        <div
+          ref={popRef}
+          style={{ position: 'fixed', left: pos.left, top: pos.top, zIndex: 9999 }}
+          className="rounded-xl bg-white dark:bg-[#1a1a1d] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] shadow-xl min-w-[140px]"
+        >
           <div className="flex flex-col gap-0.5 p-1.5">
-          {ALL_VIEW_MODES.map((mode) => (
-            <button
-              key={mode}
-              onClick={() => {
-                setViewMode(mode);
-                setOpen(false);
-              }}
-              className={`px-3.5 py-2 text-[12px] font-medium rounded-lg text-left transition-all ${
-                viewMode === mode
-                  ? 'bg-neutral-100 dark:bg-[rgba(255,255,255,0.06)] text-neutral-900 dark:text-[#f0efed]'
-                  : 'text-neutral-500 dark:text-[#66645f] active:bg-neutral-50 dark:active:bg-[rgba(255,255,255,0.03)]'
-              }`}
-            >
-              {VIEW_MODE_LABELS[mode]}
-            </button>
-          ))}
+            {ALL_VIEW_MODES.map((mode) => (
+              <button
+                key={mode}
+                onClick={() => {
+                  setViewMode(mode);
+                  setOpen(false);
+                }}
+                className={`px-3.5 py-2 text-[12px] font-medium rounded-lg text-left transition-all ${
+                  viewMode === mode
+                    ? 'bg-neutral-100 dark:bg-[rgba(255,255,255,0.06)] text-neutral-900 dark:text-[#f0efed]'
+                    : 'text-neutral-500 dark:text-[#66645f] active:bg-neutral-50 dark:active:bg-[rgba(255,255,255,0.03)]'
+                }`}
+              >
+                {VIEW_MODE_LABELS[mode]}
+              </button>
+            ))}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
 
@@ -766,7 +801,7 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
               onNewTask={handleNewTask}
               totalCount={tasks.length}
               filteredCount={filteredTasks.length}
-              extraControls={
+              laneControls={
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <MobileViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
                   <ColumnPicker
@@ -783,11 +818,8 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
                 tasks.length > 0 && !kanbanSelectionMode ? (
                   <button
                     onClick={() => setKanbanSelectionMode(true)}
-                    className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] active:opacity-70 transition-opacity"
+                    className="flex-shrink-0 inline-flex items-center px-3 py-1.5 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] active:opacity-70 transition-opacity"
                   >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7l-3 3-1.5-1.5" />
-                    </svg>
                     Select
                   </button>
                 ) : undefined

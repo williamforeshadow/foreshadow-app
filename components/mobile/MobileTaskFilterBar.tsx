@@ -75,6 +75,11 @@ interface Props {
 
   onNewTask?: () => void;
 
+  // Controls rendered INSIDE the swipeable lane, after the Filter/Sort
+  // pills — they scroll together with search/filter. Used by the Bins view
+  // for its Boards + Columns pills so search can expand without crowding.
+  laneControls?: React.ReactNode;
+
   // Pinned controls rendered immediately to the right of the swipeable
   // search/filter lane (clustered next to it). Stay fixed while the lane
   // scrolls. Used by the Schedule view for its < Today > date-nav pill.
@@ -206,6 +211,8 @@ export function MobileTaskFilterBar(props: Props) {
             </span>
           </button>
         )}
+
+        {props.laneControls}
       </div>
 
       {/* Pinned controls immediately right of the lane (e.g. Schedule's
