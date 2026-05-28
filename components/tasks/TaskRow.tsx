@@ -219,7 +219,7 @@ export function TaskListHeader({
 }: TaskListColumnOpts = {}) {
   return (
     <div
-      className={`${TASK_ROW_GRID_CLASS} items-center pb-2 border-b border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.07)] text-[10px] italic font-medium tracking-[0.02em] text-neutral-400 dark:text-[#66645f] select-none`}
+      className={`${TASK_ROW_GRID_CLASS} items-center pb-2 text-[10px] italic font-medium tracking-[0.02em] text-neutral-400 dark:text-[#66645f] select-none`}
       style={{
         gridTemplateColumns: taskRowGridTemplateColumns({
           hideDepartment,

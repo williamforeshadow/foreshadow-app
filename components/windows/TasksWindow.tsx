@@ -30,7 +30,7 @@ import { CompactSearch } from '@/components/ui/compact-search';
 import { Filter as FilterIcon } from 'lucide-react';
 import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { taskPath } from '@/src/lib/links';
 
 interface DateGroup {
@@ -225,6 +225,23 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
   const handleDeleteDraft = useCallback(() => {
     setDraftTask(null);
   }, []);
+
+  // Auto-open the new-task draft when arriving via `?newTask=1` (e.g. from
+  // the New task button on /assignments). The sentinel is consumed once and
+  // then stripped from the URL so a refresh doesn't keep re-opening the
+  // draft.
+  const searchParams = useSearchParams();
+  const newTaskSentinel = searchParams?.get('newTask');
+  const handledNewTaskSentinelRef = useRef(false);
+  useEffect(() => {
+    if (!newTaskSentinel || handledNewTaskSentinelRef.current) return;
+    handledNewTaskSentinelRef.current = true;
+    handleNewTask();
+    const params = new URLSearchParams(searchParams?.toString());
+    params.delete('newTask');
+    const qs = params.toString();
+    router.replace(qs ? `/?${qs}` : '/');
+  }, [newTaskSentinel, handleNewTask, router, searchParams]);
 
   // ---- Selection effects (seed editingFields, fetch sub-data) -----------
 

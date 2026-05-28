@@ -12,7 +12,13 @@ import type { User, Project, ProjectFormFields, TaskTemplate, PropertyOption } f
 import type { Template } from '@/components/DynamicCleaningForm';
 import { ProjectDetailPanel, AttachmentLightbox } from './projects';
 import { TaskRow, TaskListHeader } from '@/components/tasks/TaskRow';
-import { TaskFilterBar, type FilterOption } from '@/components/tasks/TaskFilterBar';
+import {
+  TaskFilterBar,
+  SortSelect,
+  type FilterOption,
+  type SortKey,
+  type SortDir,
+} from '@/components/tasks/TaskFilterBar';
 import { CompactSearch } from '@/components/ui/compact-search';
 import { Filter as FilterIcon } from 'lucide-react';
 import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
@@ -129,6 +135,19 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
   const [scheduledDateRange, setScheduledDateRange] = useState<{ from: string | null; to: string | null }>(
     { from: null, to: null }
   );
+  const [sortKey, setSortKey] = useState<SortKey>('scheduled');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const handleSortChange = useCallback((k: SortKey, d: SortDir) => {
+    setSortKey(k);
+    setSortDir(d);
+  }, []);
+  // "New Task" routes over to the Tasks workspace view with a sentinel
+  // query param. TasksWindow reads it and auto-opens its new-task draft
+  // flow on mount — the assignments page doesn't have its own create flow,
+  // so this hands off to the canonical surface that does.
+  const handleNewTask = useCallback(() => {
+    router.push('/?view=tasks&newTask=1');
+  }, [router]);
   const clearAllAssignmentFilters = useCallback(() => {
     setSearch('');
     setStatusSel(new Set());
@@ -517,24 +536,51 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
       }
     }
 
+    // Within-group sort obeys the user's SortKey/SortDir selection. The
+    // outer grouping (overdue / today / this week / later / no date) is
+    // structural and not user-configurable from the Sort pill.
     const statusOrder: Record<string, number> = { in_progress: 0, paused: 1, not_started: 2 };
-    const sortItems = (a: UnifiedItem, b: UnifiedItem, dateAsc = true) => {
-      const da = a.scheduled_date || '';
-      const db = b.scheduled_date || '';
-      if (da !== db) return dateAsc ? da.localeCompare(db) : db.localeCompare(da);
-      const sa = statusOrder[a.status] ?? 3;
-      const sb = statusOrder[b.status] ?? 3;
-      if (sa !== sb) return sa - sb;
-      return (a.scheduled_time || '').localeCompare(b.scheduled_time || '');
+    const priorityRank: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+    const compareItems = (a: UnifiedItem, b: UnifiedItem): number => {
+      let cmp = 0;
+      switch (sortKey) {
+        case 'scheduled': {
+          const da = a.scheduled_date || '';
+          const db = b.scheduled_date || '';
+          cmp = da.localeCompare(db);
+          if (cmp === 0) {
+            cmp = (a.scheduled_time || '').localeCompare(b.scheduled_time || '');
+          }
+          break;
+        }
+        case 'created':
+          cmp = (a.raw.created_at || '').localeCompare(b.raw.created_at || '');
+          break;
+        case 'updated':
+        case 'completed':
+          // No completed_at on UnifiedItem — sort by updated_at as the
+          // closest available proxy.
+          cmp = (a.raw.updated_at || '').localeCompare(b.raw.updated_at || '');
+          break;
+        case 'priority':
+          cmp = (priorityRank[a.priority] ?? 99) - (priorityRank[b.priority] ?? 99);
+          break;
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
     };
-    overdue.sort((a, b) => sortItems(a, b, false));
-    today.sort((a, b) => sortItems(a, b));
-    thisWeek.sort((a, b) => sortItems(a, b));
-    later.sort((a, b) => sortItems(a, b));
+    overdue.sort(compareItems);
+    today.sort(compareItems);
+    thisWeek.sort(compareItems);
+    later.sort(compareItems);
+    // Unscheduled rows can't be sorted by scheduled_date — fall back to
+    // status when the user picked that axis.
     unscheduled.sort((a, b) => {
-      const sa = statusOrder[a.status] ?? 3;
-      const sb = statusOrder[b.status] ?? 3;
-      return sa - sb;
+      if (sortKey === 'scheduled') {
+        const sa = statusOrder[a.status] ?? 3;
+        const sb = statusOrder[b.status] ?? 3;
+        return sa - sb;
+      }
+      return compareItems(a, b);
     });
 
     const result: DateGroup[] = [];
@@ -545,7 +591,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
     if (unscheduled.length > 0) result.push({ label: 'No Date', sublabel: `${unscheduled.length}`, items: unscheduled });
 
     return { groups: result, openCount: open };
-  }, [filteredItems]);
+  }, [filteredItems, sortKey, sortDir]);
 
   const todayFormatted = useMemo(() => {
     const now = new Date();
@@ -877,6 +923,26 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
                 filteredCount={filteredItems.length}
               />
             )}
+
+            {/* Right-anchored: Sort + New Task. Always visible regardless of
+                whether the filter pills are expanded — matches the Tasks
+                page layout. */}
+            <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+              <SortSelect
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onChange={handleSortChange}
+              />
+              <button
+                onClick={handleNewTask}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                New task
+              </button>
+            </div>
           </div>
         </div>
 

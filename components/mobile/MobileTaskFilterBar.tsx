@@ -8,6 +8,7 @@ import type {
   SortDir,
   DateRange,
 } from '@/components/tasks/TaskFilterBar';
+import { CompactSearch } from '@/components/ui/compact-search';
 
 // Mobile-native filter/sort UX for the global Tasks ledger.
 //
@@ -25,28 +26,33 @@ import type {
 // as `TaskFilterBar`). The data shapes are 1:1 with `useTasks` outputs.
 
 interface Props {
+  // Search is always present.
   search: string;
   onSearchChange: (v: string) => void;
 
-  statusOptions: FilterOption[];
-  statusSelected: Set<string>;
-  onStatusChange: (next: Set<string>) => void;
+  // Every filter axis is optional — only render the chip when both the
+  // options and the change handler are passed. Mirrors the desktop
+  // TaskFilterBar contract so Schedule / Bins / Assignments can omit
+  // axes that don't apply.
+  statusOptions?: FilterOption[];
+  statusSelected?: Set<string>;
+  onStatusChange?: (next: Set<string>) => void;
 
-  assigneeOptions: FilterOption[];
-  assigneeSelected: Set<string>;
-  onAssigneeChange: (next: Set<string>) => void;
+  assigneeOptions?: FilterOption[];
+  assigneeSelected?: Set<string>;
+  onAssigneeChange?: (next: Set<string>) => void;
 
-  departmentOptions: FilterOption[];
-  departmentSelected: Set<string>;
-  onDepartmentChange: (next: Set<string>) => void;
+  departmentOptions?: FilterOption[];
+  departmentSelected?: Set<string>;
+  onDepartmentChange?: (next: Set<string>) => void;
 
-  binOptions: FilterOption[];
-  binSelected: Set<string>;
-  onBinChange: (next: Set<string>) => void;
+  binOptions?: FilterOption[];
+  binSelected?: Set<string>;
+  onBinChange?: (next: Set<string>) => void;
 
-  originOptions: FilterOption[];
-  originSelected: Set<string>;
-  onOriginChange: (next: Set<string>) => void;
+  originOptions?: FilterOption[];
+  originSelected?: Set<string>;
+  onOriginChange?: (next: Set<string>) => void;
 
   priorityOptions?: FilterOption[];
   prioritySelected?: Set<string>;
@@ -59,9 +65,10 @@ interface Props {
   scheduledDateRange?: DateRange;
   onScheduledDateRangeChange?: (next: DateRange) => void;
 
-  sortKey: SortKey;
-  sortDir: SortDir;
-  onSortChange: (k: SortKey, d: SortDir) => void;
+  // Sort pill renders only when all three are present.
+  sortKey?: SortKey;
+  sortDir?: SortDir;
+  onSortChange?: (k: SortKey, d: SortDir) => void;
 
   onClearAll: () => void;
   anyFilterActive: boolean;
@@ -84,18 +91,19 @@ export function MobileTaskFilterBar(props: Props) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
 
-  // Active-filter chip count for the "Filter" button badge. Origin counts
-  // only when exactly one of (manual / automated) is selected — both
+  // Active-filter chip count for the "Filter" button badge. Each axis only
+  // contributes if it's actually wired (the consumer might omit it). Origin
+  // counts only when exactly one of (manual / automated) is selected — both
   // selected is functionally "no filter" at the consumer's filter layer.
   const activeCount = useMemo(() => {
     let n = 0;
-    n += props.statusSelected.size;
-    n += props.assigneeSelected.size;
-    n += props.departmentSelected.size;
-    n += props.binSelected.size;
-    if (props.originSelected.size === 1) n += 1;
-    if (props.prioritySelected) n += props.prioritySelected.size;
-    if (props.propertySelected) n += props.propertySelected.size;
+    n += props.statusSelected?.size ?? 0;
+    n += props.assigneeSelected?.size ?? 0;
+    n += props.departmentSelected?.size ?? 0;
+    n += props.binSelected?.size ?? 0;
+    if (props.originSelected && props.originSelected.size === 1) n += 1;
+    n += props.prioritySelected?.size ?? 0;
+    n += props.propertySelected?.size ?? 0;
     if (
       props.scheduledDateRange &&
       (props.scheduledDateRange.from || props.scheduledDateRange.to)
@@ -113,12 +121,27 @@ export function MobileTaskFilterBar(props: Props) {
     props.scheduledDateRange,
   ]);
 
+  const sortEnabled =
+    !!props.sortKey && !!props.sortDir && !!props.onSortChange;
+
   return (
-    <div className="flex flex-col gap-2 px-4 pt-2 pb-3">
-      {/* Row 1: search */}
-      <div className="relative">
+    <div className="flex items-center gap-2 px-4 pt-2 pb-3 flex-nowrap min-w-0">
+      <CompactSearch
+        value={props.search}
+        onChange={props.onSearchChange}
+        placeholder="Search…"
+      />
+
+      <button
+        onClick={() => setFilterOpen(true)}
+        className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
+          activeCount > 0
+            ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)] border-[var(--accent-3)]/30 dark:border-[var(--accent-1)]/30'
+            : 'bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)]'
+        }`}
+      >
         <svg
-          className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 dark:text-[#66645f] pointer-events-none"
+          className="w-3.5 h-3.5"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -127,52 +150,21 @@ export function MobileTaskFilterBar(props: Props) {
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth={2}
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L15 12.414V19a1 1 0 01-.553.894l-4 2A1 1 0 019 21v-8.586L3.293 6.707A1 1 0 013 6V4z"
           />
         </svg>
-        <input
-          type="text"
-          value={props.search}
-          onChange={(e) => props.onSearchChange(e.target.value)}
-          placeholder="Search tasks..."
-          className="w-full pl-9 pr-3 py-2 text-[14px] bg-transparent border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] rounded-md focus:outline-none focus:border-[var(--accent-3)] dark:focus:border-[var(--accent-1)] focus:ring-1 focus:ring-[var(--accent-ring)] dark:focus:ring-[var(--accent-ring-dark)] text-neutral-800 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f]"
-        />
-      </div>
+        <span>Filter</span>
+        {activeCount > 0 && (
+          <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[var(--accent-3)] dark:bg-[var(--accent-2)] text-white dark:text-[#1a1a1a] text-[10px] font-semibold tabular-nums px-1">
+            {activeCount}
+          </span>
+        )}
+      </button>
 
-      {/* Row 2: Filter, Sort, count, new task */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => setFilterOpen(true)}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
-            activeCount > 0
-              ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)] border-[var(--accent-3)]/30 dark:border-[var(--accent-1)]/30'
-              : 'bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)]'
-          }`}
-        >
-          <svg
-            className="w-3.5 h-3.5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L15 12.414V19a1 1 0 01-.553.894l-4 2A1 1 0 019 21v-8.586L3.293 6.707A1 1 0 013 6V4z"
-            />
-          </svg>
-          <span>Filter</span>
-          {activeCount > 0 && (
-            <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[var(--accent-3)] dark:bg-[var(--accent-2)] text-white dark:text-[#1a1a1a] text-[10px] font-semibold tabular-nums px-1">
-              {activeCount}
-            </span>
-          )}
-        </button>
-
+      {sortEnabled && (
         <button
           onClick={() => setSortOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)]"
+          className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)]"
         >
           <svg
             className="w-3.5 h-3.5"
@@ -188,40 +180,35 @@ export function MobileTaskFilterBar(props: Props) {
             />
           </svg>
           <span className="text-neutral-400 dark:text-[#66645f]">Sort:</span>
-          <span>{SORT_KEY_LABELS[props.sortKey]}</span>
+          <span>{SORT_KEY_LABELS[props.sortKey!]}</span>
           <span className="text-neutral-400 dark:text-[#66645f]">
             {props.sortDir === 'asc' ? '↑' : '↓'}
           </span>
         </button>
+      )}
 
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-[11px] text-neutral-500 dark:text-[#66645f] tabular-nums">
-            {props.anyFilterActive
-              ? `${props.filteredCount}/${props.totalCount}`
-              : `${props.totalCount}`}
-          </span>
-          {props.onNewTask && (
-            <button
-              onClick={props.onNewTask}
-              className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
-              aria-label="New task"
+      <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+        {props.onNewTask && (
+          <button
+            onClick={props.onNewTask}
+            className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
+            aria-label="New task"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2.5}
-                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                />
-              </svg>
-            </button>
-          )}
-        </div>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.5}
+                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+              />
+            </svg>
+          </button>
+        )}
       </div>
 
       <FilterSheet
@@ -254,13 +241,15 @@ export function MobileTaskFilterBar(props: Props) {
         onScheduledDateRangeChange={props.onScheduledDateRangeChange}
       />
 
-      <SortSheet
-        open={sortOpen}
-        onClose={() => setSortOpen(false)}
-        sortKey={props.sortKey}
-        sortDir={props.sortDir}
-        onChange={props.onSortChange}
-      />
+      {sortEnabled && (
+        <SortSheet
+          open={sortOpen}
+          onClose={() => setSortOpen(false)}
+          sortKey={props.sortKey!}
+          sortDir={props.sortDir!}
+          onChange={props.onSortChange!}
+        />
+      )}
     </div>
   );
 }
@@ -376,25 +365,25 @@ interface FilterSheetProps {
   activeCount: number;
   onClearAll: () => void;
 
-  statusOptions: FilterOption[];
-  statusSelected: Set<string>;
-  onStatusChange: (next: Set<string>) => void;
+  statusOptions?: FilterOption[];
+  statusSelected?: Set<string>;
+  onStatusChange?: (next: Set<string>) => void;
 
-  assigneeOptions: FilterOption[];
-  assigneeSelected: Set<string>;
-  onAssigneeChange: (next: Set<string>) => void;
+  assigneeOptions?: FilterOption[];
+  assigneeSelected?: Set<string>;
+  onAssigneeChange?: (next: Set<string>) => void;
 
-  departmentOptions: FilterOption[];
-  departmentSelected: Set<string>;
-  onDepartmentChange: (next: Set<string>) => void;
+  departmentOptions?: FilterOption[];
+  departmentSelected?: Set<string>;
+  onDepartmentChange?: (next: Set<string>) => void;
 
-  binOptions: FilterOption[];
-  binSelected: Set<string>;
-  onBinChange: (next: Set<string>) => void;
+  binOptions?: FilterOption[];
+  binSelected?: Set<string>;
+  onBinChange?: (next: Set<string>) => void;
 
-  originOptions: FilterOption[];
-  originSelected: Set<string>;
-  onOriginChange: (next: Set<string>) => void;
+  originOptions?: FilterOption[];
+  originSelected?: Set<string>;
+  onOriginChange?: (next: Set<string>) => void;
 
   priorityOptions?: FilterOption[];
   prioritySelected?: Set<string>;
@@ -431,70 +420,80 @@ function FilterSheet(props: FilterSheetProps) {
       fullHeight
     >
       <div className="divide-y divide-neutral-200 dark:divide-[rgba(255,255,255,0.06)]">
-        <AccordionSection
-          label="Status"
-          summary={summarizeSet(props.statusSelected, props.statusOptions)}
-        >
-          <CheckboxList
-            options={props.statusOptions}
-            selected={props.statusSelected}
-            onChange={props.onStatusChange}
-          />
-        </AccordionSection>
+        {props.statusOptions && props.statusSelected && props.onStatusChange && (
+          <AccordionSection
+            label="Status"
+            summary={summarizeSet(props.statusSelected, props.statusOptions)}
+          >
+            <CheckboxList
+              options={props.statusOptions}
+              selected={props.statusSelected}
+              onChange={props.onStatusChange}
+            />
+          </AccordionSection>
+        )}
 
-        <AccordionSection
-          label="Assignee"
-          summary={summarizeSet(props.assigneeSelected, props.assigneeOptions)}
-        >
-          <CheckboxList
-            options={props.assigneeOptions}
-            selected={props.assigneeSelected}
-            onChange={props.onAssigneeChange}
-            searchable
-          />
-        </AccordionSection>
+        {props.assigneeOptions && props.assigneeSelected && props.onAssigneeChange && (
+          <AccordionSection
+            label="Assignee"
+            summary={summarizeSet(props.assigneeSelected, props.assigneeOptions)}
+          >
+            <CheckboxList
+              options={props.assigneeOptions}
+              selected={props.assigneeSelected}
+              onChange={props.onAssigneeChange}
+              searchable
+            />
+          </AccordionSection>
+        )}
 
-        <AccordionSection
-          label="Department"
-          summary={summarizeSet(
-            props.departmentSelected,
-            props.departmentOptions
-          )}
-        >
-          <CheckboxList
-            options={props.departmentOptions}
-            selected={props.departmentSelected}
-            onChange={props.onDepartmentChange}
-          />
-        </AccordionSection>
+        {props.departmentOptions && props.departmentSelected && props.onDepartmentChange && (
+          <AccordionSection
+            label="Department"
+            summary={summarizeSet(
+              props.departmentSelected,
+              props.departmentOptions
+            )}
+          >
+            <CheckboxList
+              options={props.departmentOptions}
+              selected={props.departmentSelected}
+              onChange={props.onDepartmentChange}
+            />
+          </AccordionSection>
+        )}
 
-        <AccordionSection
-          label="Bin"
-          summary={summarizeSet(props.binSelected, props.binOptions)}
-        >
-          <CheckboxList
-            options={props.binOptions}
-            selected={props.binSelected}
-            onChange={props.onBinChange}
-          />
-        </AccordionSection>
+        {props.binOptions && props.binSelected && props.onBinChange && (
+          <AccordionSection
+            label="Bin"
+            summary={summarizeSet(props.binSelected, props.binOptions)}
+          >
+            <CheckboxList
+              options={props.binOptions}
+              selected={props.binSelected}
+              onChange={props.onBinChange}
+            />
+          </AccordionSection>
+        )}
 
-        <AccordionSection
-          label="Origin"
-          summary={
-            props.originSelected.size === 1
-              ? props.originOptions.find((o) =>
-                  props.originSelected.has(o.value)
-                )?.label || ''
-              : ''
-          }
-        >
-          <CheckboxList
-            options={props.originOptions}
-            selected={props.originSelected}
-            onChange={props.onOriginChange}
-          />
-        </AccordionSection>
+        {props.originOptions && props.originSelected && props.onOriginChange && (
+          <AccordionSection
+            label="Origin"
+            summary={
+              props.originSelected.size === 1
+                ? props.originOptions.find((o) =>
+                    props.originSelected!.has(o.value)
+                  )?.label || ''
+                : ''
+            }
+          >
+            <CheckboxList
+              options={props.originOptions}
+              selected={props.originSelected}
+              onChange={props.onOriginChange}
+            />
+          </AccordionSection>
+        )}
 
         {props.priorityOptions && props.prioritySelected && props.onPriorityChange && (
           <AccordionSection

@@ -10,6 +10,12 @@ import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { STATUS_ICONS, STATUS_TITLE } from '@/lib/taskStatusIcons';
 import { PRIORITY_ICONS, PRIORITY_TITLE } from '@/lib/taskPriorityIcons';
 import type { Project, Task } from '@/lib/types';
+import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
+import type {
+  FilterOption,
+  SortKey,
+  SortDir,
+} from '@/components/tasks/TaskFilterBar';
 
 interface Assignee {
   user_id: string;
@@ -152,11 +158,54 @@ export default function MobileMyAssignmentsView({
 }: MobileMyAssignmentsViewProps) {
   const { user, loading: authLoading } = useAuth();
   const { departments: allDepts } = useDepartments();
+  const router = useRouter();
+
+  // ---- Filter / search / sort state (mirrors desktop My Assignments) ----
+  const NO_DEPT = '__no_department__';
+  const [search, setSearch] = useState('');
+  const [statusSel, setStatusSel] = useState<Set<string>>(new Set());
+  const [assigneeSel, setAssigneeSel] = useState<Set<string>>(new Set());
+  const [deptSel, setDeptSel] = useState<Set<string>>(new Set());
+  const [prioritySel, setPrioritySel] = useState<Set<string>>(new Set());
+  const [propSel, setPropSel] = useState<Set<string>>(new Set());
+  const [scheduledDateRange, setScheduledDateRange] = useState<{ from: string | null; to: string | null }>(
+    { from: null, to: null }
+  );
+  const [sortKey, setSortKey] = useState<SortKey>('scheduled');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const handleSortChange = useCallback((k: SortKey, d: SortDir) => {
+    setSortKey(k);
+    setSortDir(d);
+  }, []);
+  const clearAllAssignmentFilters = useCallback(() => {
+    setSearch('');
+    setStatusSel(new Set());
+    setAssigneeSel(new Set());
+    setDeptSel(new Set());
+    setPrioritySel(new Set());
+    setPropSel(new Set());
+    setScheduledDateRange({ from: null, to: null });
+  }, []);
+  const anyAssignmentFilterActive =
+    !!search.trim() ||
+    statusSel.size +
+      assigneeSel.size +
+      deptSel.size +
+      prioritySel.size +
+      propSel.size >
+      0 ||
+    !!scheduledDateRange.from ||
+    !!scheduledDateRange.to;
+  // "+ New task" hands off to the workspace Tasks view, which auto-opens
+  // its new-task draft when the `newTask=1` sentinel is present. Same
+  // pattern as the desktop My Assignments → Tasks hand-off.
+  const handleNewTask = useCallback(() => {
+    router.push('/?view=tasks&newTask=1');
+  }, [router]);
   const [rawData, setRawData] = useState<{ tasks: RawTask[]; projects: RawProject[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
-  const router = useRouter();
 
   const fetchAssignments = useCallback(async () => {
     if (!user?.id) return;
@@ -231,6 +280,104 @@ export default function MobileMyAssignmentsView({
     return result;
   }, [rawData]);
 
+  // ---- Filter options (derived from items) ------------------------------
+  const assignmentFilterOptions = useMemo(() => {
+    const deptIdToName = new Map<string, string>();
+    for (const d of allDepts) {
+      if (d.id) deptIdToName.set(d.id, d.name || 'Department');
+    }
+    const statusCounts: Record<string, number> = {};
+    const priorityCounts: Record<string, number> = {};
+    const assigneeMap = new Map<string, { name: string; count: number }>();
+    const deptMap = new Map<string, { name: string; count: number }>();
+    const propertyMap = new Map<string, number>();
+    let noDeptCount = 0;
+    items.forEach((t) => {
+      statusCounts[t.status] = (statusCounts[t.status] || 0) + 1;
+      priorityCounts[t.priority] = (priorityCounts[t.priority] || 0) + 1;
+      if (t.department_id) {
+        const ex = deptMap.get(t.department_id);
+        deptMap.set(t.department_id, {
+          name: deptIdToName.get(t.department_id) || 'Department',
+          count: (ex?.count || 0) + 1,
+        });
+      } else {
+        noDeptCount++;
+      }
+      if (t.property_name) {
+        propertyMap.set(t.property_name, (propertyMap.get(t.property_name) || 0) + 1);
+      }
+      (t.assignees || []).forEach((a) => {
+        const ex = assigneeMap.get(a.user_id);
+        assigneeMap.set(a.user_id, {
+          name: a.name || 'Unknown',
+          count: (ex?.count || 0) + 1,
+        });
+      });
+    });
+    const statuses: FilterOption[] = [
+      { value: 'not_started', label: 'Not started', count: statusCounts.not_started || 0 },
+      { value: 'in_progress', label: 'In progress', count: statusCounts.in_progress || 0 },
+      { value: 'paused', label: 'Paused', count: statusCounts.paused || 0 },
+      { value: 'complete', label: 'Complete', count: statusCounts.complete || 0 },
+    ];
+    const priorities: FilterOption[] = [
+      { value: 'urgent', label: 'Urgent', count: priorityCounts.urgent || 0 },
+      { value: 'high', label: 'High', count: priorityCounts.high || 0 },
+      { value: 'medium', label: 'Medium', count: priorityCounts.medium || 0 },
+      { value: 'low', label: 'Low', count: priorityCounts.low || 0 },
+    ];
+    const assignees: FilterOption[] = Array.from(assigneeMap.entries())
+      .map(([id, v]) => ({ value: id, label: v.name, count: v.count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    const departmentsOpt: FilterOption[] = [
+      ...Array.from(deptMap.entries())
+        .map(([id, v]) => ({ value: id, label: v.name, count: v.count }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+      { value: NO_DEPT, label: 'No department', count: noDeptCount },
+    ];
+    const propertiesOpt: FilterOption[] = Array.from(propertyMap.entries())
+      .map(([name, count]) => ({ value: name, label: name, count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    return { statuses, priorities, assignees, departments: departmentsOpt, propertiesOpt };
+  }, [items, allDepts]);
+
+  const filteredItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const fromMs = scheduledDateRange.from
+      ? new Date(scheduledDateRange.from + 'T00:00:00').getTime()
+      : null;
+    const toMs = scheduledDateRange.to
+      ? new Date(scheduledDateRange.to + 'T23:59:59').getTime()
+      : null;
+    return items.filter((t) => {
+      if (q) {
+        const hay = [t.title, t.property_name].join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (statusSel.size > 0 && !statusSel.has(t.status)) return false;
+      if (prioritySel.size > 0 && !prioritySel.has(t.priority || '')) return false;
+      if (deptSel.size > 0) {
+        const key = t.department_id || NO_DEPT;
+        if (!deptSel.has(key)) return false;
+      }
+      if (assigneeSel.size > 0) {
+        const has = (t.assignees || []).some((a) => assigneeSel.has(a.user_id));
+        if (!has) return false;
+      }
+      if (propSel.size > 0) {
+        if (!t.property_name || !propSel.has(t.property_name)) return false;
+      }
+      if (fromMs !== null || toMs !== null) {
+        if (!t.scheduled_date) return false;
+        const ts = new Date(t.scheduled_date).getTime();
+        if (fromMs !== null && ts < fromMs) return false;
+        if (toMs !== null && ts > toMs) return false;
+      }
+      return true;
+    });
+  }, [items, search, statusSel, assigneeSel, deptSel, prioritySel, propSel, scheduledDateRange]);
+
   const { groups, todayTurnoverCount, openCount } = useMemo(() => {
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -249,7 +396,7 @@ export default function MobileMyAssignmentsView({
     let turnoverCount = 0;
     let open = 0;
 
-    for (const item of items) {
+    for (const item of filteredItems) {
       if (item.status === 'complete') continue;
       open++;
       const d = item.scheduled_date;
@@ -270,24 +417,51 @@ export default function MobileMyAssignmentsView({
       }
     }
 
+    // Within-group sort honors the user-selected SortKey / SortDir from
+    // the filter bar. Outer grouping (overdue / today / this week / later
+    // / no date) is structural and not user-configurable.
     const statusOrder: Record<string, number> = { in_progress: 0, paused: 1, not_started: 2 };
-    const sortItems = (a: UnifiedItem, b: UnifiedItem, dateAsc = true) => {
-      const da = a.scheduled_date || '';
-      const db = b.scheduled_date || '';
-      if (da !== db) return dateAsc ? da.localeCompare(db) : db.localeCompare(da);
-      const sa = statusOrder[a.status] ?? 3;
-      const sb = statusOrder[b.status] ?? 3;
-      if (sa !== sb) return sa - sb;
-      return (a.scheduled_time || '').localeCompare(b.scheduled_time || '');
+    const priorityRank: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+    const compareItems = (a: UnifiedItem, b: UnifiedItem): number => {
+      let cmp = 0;
+      switch (sortKey) {
+        case 'scheduled': {
+          const da = a.scheduled_date || '';
+          const db = b.scheduled_date || '';
+          cmp = da.localeCompare(db);
+          if (cmp === 0) {
+            cmp = (a.scheduled_time || '').localeCompare(b.scheduled_time || '');
+          }
+          break;
+        }
+        case 'created':
+          cmp = String((a.raw as any).created_at || '').localeCompare(
+            String((b.raw as any).created_at || '')
+          );
+          break;
+        case 'updated':
+        case 'completed':
+          cmp = String((a.raw as any).updated_at || '').localeCompare(
+            String((b.raw as any).updated_at || '')
+          );
+          break;
+        case 'priority':
+          cmp = (priorityRank[a.priority] ?? 99) - (priorityRank[b.priority] ?? 99);
+          break;
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
     };
-    overdue.sort((a, b) => sortItems(a, b, false));
-    today.sort((a, b) => sortItems(a, b));
-    thisWeek.sort((a, b) => sortItems(a, b));
-    later.sort((a, b) => sortItems(a, b));
+    overdue.sort(compareItems);
+    today.sort(compareItems);
+    thisWeek.sort(compareItems);
+    later.sort(compareItems);
     unscheduled.sort((a, b) => {
-      const sa = statusOrder[a.status] ?? 3;
-      const sb = statusOrder[b.status] ?? 3;
-      return sa - sb;
+      if (sortKey === 'scheduled') {
+        const sa = statusOrder[a.status] ?? 3;
+        const sb = statusOrder[b.status] ?? 3;
+        return sa - sb;
+      }
+      return compareItems(a, b);
     });
 
     const result: DateGroup[] = [];
@@ -298,7 +472,7 @@ export default function MobileMyAssignmentsView({
     if (unscheduled.length > 0) result.push({ label: 'No Date', sublabel: `${unscheduled.length}`, items: unscheduled });
 
     return { groups: result, todayTurnoverCount: turnoverCount, openCount: open };
-  }, [items]);
+  }, [filteredItems, sortKey, sortDir]);
 
   const formatTimeCol = (timeString?: string | null) => {
     if (!timeString) return null;
@@ -392,6 +566,39 @@ export default function MobileMyAssignmentsView({
           <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a]" />
           <span>{openCount} open</span>
         </div>
+      </div>
+
+      {/* Filter / search / sort bar — same axes as desktop My Assignments. */}
+      <div className="shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
+        <MobileTaskFilterBar
+          search={search}
+          onSearchChange={setSearch}
+          statusOptions={assignmentFilterOptions.statuses}
+          statusSelected={statusSel}
+          onStatusChange={setStatusSel}
+          assigneeOptions={assignmentFilterOptions.assignees}
+          assigneeSelected={assigneeSel}
+          onAssigneeChange={setAssigneeSel}
+          departmentOptions={assignmentFilterOptions.departments}
+          departmentSelected={deptSel}
+          onDepartmentChange={setDeptSel}
+          priorityOptions={assignmentFilterOptions.priorities}
+          prioritySelected={prioritySel}
+          onPriorityChange={setPrioritySel}
+          propertyOptions={assignmentFilterOptions.propertiesOpt}
+          propertySelected={propSel}
+          onPropertyChange={setPropSel}
+          scheduledDateRange={scheduledDateRange}
+          onScheduledDateRangeChange={setScheduledDateRange}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onSortChange={handleSortChange}
+          onClearAll={clearAllAssignmentFilters}
+          anyFilterActive={anyAssignmentFilterActive}
+          onNewTask={handleNewTask}
+          totalCount={items.length}
+          filteredCount={filteredItems.length}
+        />
       </div>
 
       {/* Turnover banner */}

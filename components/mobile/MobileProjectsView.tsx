@@ -16,6 +16,8 @@ import { ColumnPicker } from '@/components/windows/projects/ColumnPicker';
 import type { Project, User, PropertyOption, TaskTemplate } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
+import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
+import type { FilterOption } from '@/components/tasks/TaskFilterBar';
 
 // ============================================================================
 // Types
@@ -141,6 +143,37 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
   // Draft task state — local-only project not yet persisted
   const [draftTask, setDraftTask] = useState<Project | null>(null);
   const [creatingTask, setCreatingTask] = useState(false);
+
+  // ---- Task filter / search state (mirrors desktop Bins) ---------------
+  const NO_DEPT = '__no_department__';
+  const [search, setSearch] = useState('');
+  const [statusSel, setStatusSel] = useState<Set<string>>(new Set());
+  const [assigneeSel, setAssigneeSel] = useState<Set<string>>(new Set());
+  const [deptSel, setDeptSel] = useState<Set<string>>(new Set());
+  const [prioritySel, setPrioritySel] = useState<Set<string>>(new Set());
+  const [propSel, setPropSel] = useState<Set<string>>(new Set());
+  const [scheduledDateRange, setScheduledDateRange] = useState<{ from: string | null; to: string | null }>(
+    { from: null, to: null }
+  );
+  const clearAllTaskFilters = useCallback(() => {
+    setSearch('');
+    setStatusSel(new Set());
+    setAssigneeSel(new Set());
+    setDeptSel(new Set());
+    setPrioritySel(new Set());
+    setPropSel(new Set());
+    setScheduledDateRange({ from: null, to: null });
+  }, []);
+  const anyTaskFilterActive =
+    !!search.trim() ||
+    statusSel.size +
+      assigneeSel.size +
+      deptSel.size +
+      prioritySel.size +
+      propSel.size >
+      0 ||
+    !!scheduledDateRange.from ||
+    !!scheduledDateRange.to;
 
   // Fetch properties on mount
   useEffect(() => {
@@ -318,6 +351,105 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
       columnVis.initWithDefaults(allColumnOptions.map((c) => c.id));
     }
   }, [allColumnOptions, columnVis.initialized]);
+
+  // ---- Filter chip options derived from the current bin's tasks --------
+  const binFilterOptions = useMemo(() => {
+    const statusCounts: Record<string, number> = {};
+    const priorityCounts: Record<string, number> = {};
+    const assigneeMap = new Map<string, { name: string; count: number }>();
+    const deptMap = new Map<string, { name: string; count: number }>();
+    const propertyMap = new Map<string, number>();
+    let noDeptCount = 0;
+    tasks.forEach((t) => {
+      statusCounts[t.status] = (statusCounts[t.status] || 0) + 1;
+      if (t.priority) priorityCounts[t.priority] = (priorityCounts[t.priority] || 0) + 1;
+      if (t.department_id) {
+        const ex = deptMap.get(t.department_id);
+        deptMap.set(t.department_id, {
+          name: t.department_name || 'Department',
+          count: (ex?.count || 0) + 1,
+        });
+      } else {
+        noDeptCount++;
+      }
+      if (t.property_name) {
+        propertyMap.set(t.property_name, (propertyMap.get(t.property_name) || 0) + 1);
+      }
+      (t.project_assignments || []).forEach((a) => {
+        const ex = assigneeMap.get(a.user_id);
+        assigneeMap.set(a.user_id, {
+          name: a.user?.name || 'Unknown',
+          count: (ex?.count || 0) + 1,
+        });
+      });
+    });
+    const statuses: FilterOption[] = [
+      { value: 'not_started', label: 'Not started', count: statusCounts.not_started || 0 },
+      { value: 'in_progress', label: 'In progress', count: statusCounts.in_progress || 0 },
+      { value: 'paused', label: 'Paused', count: statusCounts.paused || 0 },
+      { value: 'complete', label: 'Complete', count: statusCounts.complete || 0 },
+    ];
+    const priorities: FilterOption[] = [
+      { value: 'urgent', label: 'Urgent', count: priorityCounts.urgent || 0 },
+      { value: 'high', label: 'High', count: priorityCounts.high || 0 },
+      { value: 'medium', label: 'Medium', count: priorityCounts.medium || 0 },
+      { value: 'low', label: 'Low', count: priorityCounts.low || 0 },
+    ];
+    const assignees: FilterOption[] = Array.from(assigneeMap.entries())
+      .map(([id, v]) => ({ value: id, label: v.name, count: v.count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    const departmentsOpt: FilterOption[] = [
+      ...Array.from(deptMap.entries())
+        .map(([id, v]) => ({ value: id, label: v.name, count: v.count }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+      { value: NO_DEPT, label: 'No department', count: noDeptCount },
+    ];
+    const propertiesOpt: FilterOption[] = Array.from(propertyMap.entries())
+      .map(([name, count]) => ({ value: name, label: name, count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    return { statuses, priorities, assignees, departments: departmentsOpt, propertiesOpt };
+  }, [tasks]);
+
+  const filteredTasks = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const fromMs = scheduledDateRange.from
+      ? new Date(scheduledDateRange.from + 'T00:00:00').getTime()
+      : null;
+    const toMs = scheduledDateRange.to
+      ? new Date(scheduledDateRange.to + 'T23:59:59').getTime()
+      : null;
+    return tasks.filter((t) => {
+      if (q) {
+        const hay = [
+          t.title || '',
+          t.template_name || '',
+          t.property_name || '',
+          t.department_name || '',
+        ].join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (statusSel.size > 0 && !statusSel.has(t.status)) return false;
+      if (prioritySel.size > 0 && !prioritySel.has(t.priority || '')) return false;
+      if (deptSel.size > 0) {
+        const key = t.department_id || NO_DEPT;
+        if (!deptSel.has(key)) return false;
+      }
+      if (assigneeSel.size > 0) {
+        const has = (t.project_assignments || []).some((a) => assigneeSel.has(a.user_id));
+        if (!has) return false;
+      }
+      if (propSel.size > 0) {
+        if (!t.property_name || !propSel.has(t.property_name)) return false;
+      }
+      if (fromMs !== null || toMs !== null) {
+        if (!t.scheduled_date) return false;
+        const ts = new Date(t.scheduled_date).getTime();
+        if (fromMs !== null && ts < fromMs) return false;
+        if (toMs !== null && ts > toMs) return false;
+      }
+      return true;
+    });
+  }, [tasks, search, statusSel, assigneeSel, deptSel, prioritySel, propSel, scheduledDateRange]);
 
   // Navigation
   const navigateToBin = useCallback(async (binId: string | null, binName: string) => {
@@ -608,6 +740,36 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
             </div>
           </div>
 
+          {/* Filter / search bar — same axes as desktop Bins (status,
+              assignee, department, priority, property, scheduled range). */}
+          <div className="shrink-0 border-b border-neutral-200 dark:border-[rgba(255,255,255,0.07)]">
+            <MobileTaskFilterBar
+              search={search}
+              onSearchChange={setSearch}
+              statusOptions={binFilterOptions.statuses}
+              statusSelected={statusSel}
+              onStatusChange={setStatusSel}
+              assigneeOptions={binFilterOptions.assignees}
+              assigneeSelected={assigneeSel}
+              onAssigneeChange={setAssigneeSel}
+              departmentOptions={binFilterOptions.departments}
+              departmentSelected={deptSel}
+              onDepartmentChange={setDeptSel}
+              priorityOptions={binFilterOptions.priorities}
+              prioritySelected={prioritySel}
+              onPriorityChange={setPrioritySel}
+              propertyOptions={binFilterOptions.propertiesOpt}
+              propertySelected={propSel}
+              onPropertyChange={setPropSel}
+              scheduledDateRange={scheduledDateRange}
+              onScheduledDateRangeChange={setScheduledDateRange}
+              onClearAll={clearAllTaskFilters}
+              anyFilterActive={anyTaskFilterActive}
+              totalCount={tasks.length}
+              filteredCount={filteredTasks.length}
+            />
+          </div>
+
           <div className={`flex-1 min-h-0 flex flex-col mobile-kanban-wrapper${kanbanDragging ? ' is-dragging' : ''}`}>
             {loadingTasks ? (
               <div className="flex items-center justify-center h-full">
@@ -625,7 +787,7 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
               </div>
             ) : (
               <ProjectsKanban
-                projects={tasks}
+                projects={filteredTasks}
                 viewMode={viewMode}
                 allProperties={allProperties}
                 users={users}

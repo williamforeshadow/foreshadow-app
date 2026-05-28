@@ -14,6 +14,8 @@ import { useDepartments } from '@/lib/departmentsContext';
 import type { Task, PropertyOption } from '@/lib/types';
 import { DayDetailPanel, type DayDetailReservation } from '@/components/tasks/DayDetailPanel';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
+import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
+import type { FilterOption } from '@/components/tasks/TaskFilterBar';
 
 const marbleBackground: Record<string, string> = {
   not_started: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.35) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.18) 10%, transparent 40%, rgba(255,255,255,0.12) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #A78BFA`,
@@ -168,12 +170,126 @@ export default function MobileTimelineView({
     return allTasksWithProperty.filter(task => task.scheduled_date);
   }, [allTasksWithProperty]);
 
+  // ---- Filter state + options + predicate (mirrors desktop Schedule) ----
+  const NO_DEPT = '__no_department__';
+  const [search, setSearch] = useState('');
+  const [statusSel, setStatusSel] = useState<Set<string>>(new Set());
+  const [assigneeSel, setAssigneeSel] = useState<Set<string>>(new Set());
+  const [deptSel, setDeptSel] = useState<Set<string>>(new Set());
+  const [prioritySel, setPrioritySel] = useState<Set<string>>(new Set());
+  const [propSel, setPropSel] = useState<Set<string>>(new Set());
+  const clearAllFilters = useCallback(() => {
+    setSearch('');
+    setStatusSel(new Set());
+    setAssigneeSel(new Set());
+    setDeptSel(new Set());
+    setPrioritySel(new Set());
+    setPropSel(new Set());
+  }, []);
+  const anyFilterActive =
+    !!search.trim() ||
+    statusSel.size +
+      assigneeSel.size +
+      deptSel.size +
+      prioritySel.size +
+      propSel.size >
+      0;
+
+  const timelineFilterOptions = useMemo(() => {
+    const statusCounts: Record<string, number> = {};
+    const priorityCounts: Record<string, number> = {};
+    const assigneeMap = new Map<string, { name: string; count: number }>();
+    const deptMap = new Map<string, { name: string; count: number }>();
+    const propertyMap = new Map<string, number>();
+    let noDeptCount = 0;
+    allScheduledTasks.forEach((t: any) => {
+      statusCounts[t.status] = (statusCounts[t.status] || 0) + 1;
+      if (t.priority) priorityCounts[t.priority] = (priorityCounts[t.priority] || 0) + 1;
+      if (t.department_id) {
+        const ex = deptMap.get(t.department_id);
+        deptMap.set(t.department_id, {
+          name: t.department_name || 'Department',
+          count: (ex?.count || 0) + 1,
+        });
+      } else {
+        noDeptCount++;
+      }
+      if (t.property_name) propertyMap.set(t.property_name, (propertyMap.get(t.property_name) || 0) + 1);
+      (t.assigned_users || []).forEach((a: any) => {
+        const ex = assigneeMap.get(a.user_id);
+        assigneeMap.set(a.user_id, {
+          name: a.name || 'Unknown',
+          count: (ex?.count || 0) + 1,
+        });
+      });
+    });
+    const statuses: FilterOption[] = [
+      { value: 'not_started', label: 'Not started', count: statusCounts.not_started || 0 },
+      { value: 'in_progress', label: 'In progress', count: statusCounts.in_progress || 0 },
+      { value: 'paused', label: 'Paused', count: statusCounts.paused || 0 },
+      { value: 'complete', label: 'Complete', count: statusCounts.complete || 0 },
+    ];
+    const priorities: FilterOption[] = [
+      { value: 'urgent', label: 'Urgent', count: priorityCounts.urgent || 0 },
+      { value: 'high', label: 'High', count: priorityCounts.high || 0 },
+      { value: 'medium', label: 'Medium', count: priorityCounts.medium || 0 },
+      { value: 'low', label: 'Low', count: priorityCounts.low || 0 },
+    ];
+    const assignees: FilterOption[] = Array.from(assigneeMap.entries())
+      .map(([id, v]) => ({ value: id, label: v.name, count: v.count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    const departmentsOpt: FilterOption[] = [
+      ...Array.from(deptMap.entries())
+        .map(([id, v]) => ({ value: id, label: v.name, count: v.count }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+      { value: NO_DEPT, label: 'No department', count: noDeptCount },
+    ];
+    const propertiesOpt: FilterOption[] = Array.from(propertyMap.entries())
+      .map(([name, count]) => ({ value: name, label: name, count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    return { statuses, priorities, assignees, departments: departmentsOpt, propertiesOpt };
+  }, [allScheduledTasks]);
+
+  const displayedScheduledTasks = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return allScheduledTasks.filter((t: any) => {
+      if (q) {
+        const hay = [
+          t.title || '',
+          t.template_name || '',
+          t.property_name || '',
+          t.department_name || '',
+        ].join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (statusSel.size > 0 && !statusSel.has(t.status)) return false;
+      if (prioritySel.size > 0 && !prioritySel.has(t.priority || '')) return false;
+      if (deptSel.size > 0) {
+        const key = t.department_id || NO_DEPT;
+        if (!deptSel.has(key)) return false;
+      }
+      if (assigneeSel.size > 0) {
+        if (!(t.assigned_users || []).some((a: any) => assigneeSel.has(a.user_id))) return false;
+      }
+      if (propSel.size > 0) {
+        if (!t.property_name || !propSel.has(t.property_name)) return false;
+      }
+      return true;
+    });
+  }, [allScheduledTasks, search, statusSel, assigneeSel, deptSel, prioritySel, propSel]);
+
+  // Property rows shrink to the property filter selection (matches desktop).
+  const displayedProperties = useMemo(() => {
+    if (propSel.size === 0) return properties;
+    return properties.filter((p) => propSel.has(p));
+  }, [properties, propSel]);
+
   const getCellTasks = useCallback((propertyName: string, date: Date) => {
     const dateStr = toDateString(date);
-    return allScheduledTasks
+    return displayedScheduledTasks
       .filter(t => t.property_name === propertyName && t.scheduled_date === dateStr)
       .sort(byScheduleThenTitle);
-  }, [allScheduledTasks]);
+  }, [displayedScheduledTasks]);
 
   const cellWidth = view === 'week' ? 72 : 38;
   const propertyCellWidth = 130;
@@ -259,6 +375,35 @@ export default function MobileTimelineView({
         </div>
       </div>
 
+      {/* Filter / search bar — same axes as desktop Schedule (status,
+          assignee, department, priority, property). Sticky below the
+          date-nav header so it stays in view while scrolling the grid. */}
+      <div className="flex-shrink-0 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-card">
+        <MobileTaskFilterBar
+          search={search}
+          onSearchChange={setSearch}
+          statusOptions={timelineFilterOptions.statuses}
+          statusSelected={statusSel}
+          onStatusChange={setStatusSel}
+          assigneeOptions={timelineFilterOptions.assignees}
+          assigneeSelected={assigneeSel}
+          onAssigneeChange={setAssigneeSel}
+          departmentOptions={timelineFilterOptions.departments}
+          departmentSelected={deptSel}
+          onDepartmentChange={setDeptSel}
+          priorityOptions={timelineFilterOptions.priorities}
+          prioritySelected={prioritySel}
+          onPriorityChange={setPrioritySel}
+          propertyOptions={timelineFilterOptions.propertiesOpt}
+          propertySelected={propSel}
+          onPropertyChange={setPropSel}
+          onClearAll={clearAllFilters}
+          anyFilterActive={anyFilterActive}
+          totalCount={allScheduledTasks.length}
+          filteredCount={displayedScheduledTasks.length}
+        />
+      </div>
+
       {/* Grid */}
       <div className="flex-1 overflow-auto hide-scrollbar overscroll-none">
         <div className="min-w-max overflow-x-clip">
@@ -301,7 +446,7 @@ export default function MobileTimelineView({
           </div>
 
           {/* Property rows */}
-          {properties.map((property) => {
+          {displayedProperties.map((property) => {
             const propReservations = getReservationsForProperty(property);
 
             return (
