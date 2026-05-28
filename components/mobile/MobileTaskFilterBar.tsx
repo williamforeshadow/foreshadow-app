@@ -9,6 +9,7 @@ import type {
   DateRange,
 } from '@/components/tasks/TaskFilterBar';
 import { CompactSearch } from '@/components/ui/compact-search';
+import { ChipScrollLane } from '@/components/ui/chip-scroll-lane';
 
 // Mobile-native filter/sort UX for the global Tasks ledger.
 //
@@ -126,45 +127,27 @@ export function MobileTaskFilterBar(props: Props) {
 
   return (
     <div className="flex items-center gap-2 px-4 pt-2 pb-3 flex-nowrap min-w-0">
-      <CompactSearch
-        value={props.search}
-        onChange={props.onSearchChange}
-        placeholder="Search…"
-      />
-
-      <button
-        onClick={() => setFilterOpen(true)}
-        className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
-          activeCount > 0
-            ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)] border-[var(--accent-3)]/30 dark:border-[var(--accent-1)]/30'
-            : 'bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)]'
-        }`}
-      >
-        <svg
-          className="w-3.5 h-3.5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L15 12.414V19a1 1 0 01-.553.894l-4 2A1 1 0 019 21v-8.586L3.293 6.707A1 1 0 013 6V4z"
+      {/* Chevron-bounded scroll lane locks the row to the screen width — the
+          search input + pills can never push past the viewport edge. The
+          chevrons are the only scroll affordance (touch/wheel scroll on the
+          strip is disabled inside ChipScrollLane). New task stays pinned
+          outside the lane so it's always reachable. */}
+      <ChipScrollLane>
+        <div className="flex-shrink-0">
+          <CompactSearch
+            value={props.search}
+            onChange={props.onSearchChange}
+            placeholder="Search…"
           />
-        </svg>
-        <span>Filter</span>
-        {activeCount > 0 && (
-          <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[var(--accent-3)] dark:bg-[var(--accent-2)] text-white dark:text-[#1a1a1a] text-[10px] font-semibold tabular-nums px-1">
-            {activeCount}
-          </span>
-        )}
-      </button>
+        </div>
 
-      {sortEnabled && (
         <button
-          onClick={() => setSortOpen(true)}
-          className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)]"
+          onClick={() => setFilterOpen(true)}
+          className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
+            activeCount > 0
+              ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)] border-[var(--accent-3)]/30 dark:border-[var(--accent-1)]/30'
+              : 'bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)]'
+          }`}
         >
           <svg
             className="w-3.5 h-3.5"
@@ -176,26 +159,24 @@ export function MobileTaskFilterBar(props: Props) {
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth={2}
-              d="M3 4h13M3 8h9M3 12h5M17 4v16m0 0l-4-4m4 4l4-4"
+              d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L15 12.414V19a1 1 0 01-.553.894l-4 2A1 1 0 019 21v-8.586L3.293 6.707A1 1 0 013 6V4z"
             />
           </svg>
-          <span className="text-neutral-400 dark:text-[#66645f]">Sort:</span>
-          <span>{SORT_KEY_LABELS[props.sortKey!]}</span>
-          <span className="text-neutral-400 dark:text-[#66645f]">
-            {props.sortDir === 'asc' ? '↑' : '↓'}
-          </span>
+          <span>Filter</span>
+          {activeCount > 0 && (
+            <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[var(--accent-3)] dark:bg-[var(--accent-2)] text-white dark:text-[#1a1a1a] text-[10px] font-semibold tabular-nums px-1">
+              {activeCount}
+            </span>
+          )}
         </button>
-      )}
 
-      <div className="ml-auto flex items-center gap-2 flex-shrink-0">
-        {props.onNewTask && (
+        {sortEnabled && (
           <button
-            onClick={props.onNewTask}
-            className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
-            aria-label="New task"
+            onClick={() => setSortOpen(true)}
+            className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)]"
           >
             <svg
-              className="w-4 h-4"
+              className="w-3.5 h-3.5"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -203,13 +184,40 @@ export function MobileTaskFilterBar(props: Props) {
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth={2.5}
-                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                strokeWidth={2}
+                d="M3 4h13M3 8h9M3 12h5M17 4v16m0 0l-4-4m4 4l4-4"
               />
             </svg>
+            <span className="text-neutral-400 dark:text-[#66645f]">Sort:</span>
+            <span>{SORT_KEY_LABELS[props.sortKey!]}</span>
+            <span className="text-neutral-400 dark:text-[#66645f]">
+              {props.sortDir === 'asc' ? '↑' : '↓'}
+            </span>
           </button>
         )}
-      </div>
+      </ChipScrollLane>
+
+      {props.onNewTask && (
+        <button
+          onClick={props.onNewTask}
+          className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
+          aria-label="New task"
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2.5}
+              d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+            />
+          </svg>
+        </button>
+      )}
 
       <FilterSheet
         open={filterOpen}
