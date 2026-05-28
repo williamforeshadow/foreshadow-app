@@ -196,11 +196,11 @@ export default function MobileMyAssignmentsView({
       0 ||
     !!scheduledDateRange.from ||
     !!scheduledDateRange.to;
-  // "+ New task" hands off to the workspace Tasks view, which auto-opens
-  // its new-task draft when the `newTask=1` sentinel is present. Same
-  // pattern as the desktop My Assignments → Tasks hand-off.
+  // "+ New task" hands off to the standalone mobile Tasks page, which
+  // auto-opens its new-task draft detail when the `newTask=1` sentinel is
+  // present.
   const handleNewTask = useCallback(() => {
-    router.push('/?view=tasks&newTask=1');
+    router.push('/tasks?newTask=1');
   }, [router]);
   const [rawData, setRawData] = useState<{ tasks: RawTask[]; projects: RawProject[] } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -540,6 +540,10 @@ export default function MobileMyAssignmentsView({
 
   return (
     <div className="flex flex-col h-full">
+      {/* Header region — one continuous neutral gradient behind the title,
+          fine print + toolbar, capped with a hairline where it meets the
+          content below. */}
+      <div className="flex-shrink-0 bg-[linear-gradient(to_bottom,#f4f4f6,#ffffff)] dark:bg-[linear-gradient(to_bottom,#30303a,#202027)] border-b border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.06)]">
       {/* Header */}
       <div
         className="px-[22px] pb-2"
@@ -568,8 +572,9 @@ export default function MobileMyAssignmentsView({
         </div>
       </div>
 
-      {/* Filter / search / sort bar — same axes as desktop My Assignments. */}
-      <div className="shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
+      {/* Filter / search / sort bar — same axes as desktop My Assignments.
+          Background comes from the header-gradient wrapper. */}
+      <div className="shrink-0">
         <MobileTaskFilterBar
           search={search}
           onSearchChange={setSearch}
@@ -599,6 +604,7 @@ export default function MobileMyAssignmentsView({
           totalCount={items.length}
           filteredCount={filteredItems.length}
         />
+      </div>
       </div>
 
       {/* Turnover banner */}

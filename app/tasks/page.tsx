@@ -3,7 +3,6 @@
 import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useIsMobile } from '@/lib/useIsMobile';
-import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import MobileTasksView from '@/components/mobile/MobileTasksView';
 
 // Standalone Tasks route. Reachable from the mobile drawer ("Tasks" entry)
@@ -31,11 +30,11 @@ function TasksPageInner() {
   if (isMobile === null) return null;
   if (!isMobile) return null;
 
-  return (
-    <MobileRouteShell title="Tasks">
-      <MobileTasksView />
-    </MobileRouteShell>
-  );
+  // MobileTasksView owns its own full-screen chrome (safe-area container,
+  // gradient header with title, and drawer), so it renders directly without
+  // MobileRouteShell — that keeps the header gradient continuous from the
+  // title down through the toolbar.
+  return <MobileTasksView />;
 }
 
 export default function TasksPage() {

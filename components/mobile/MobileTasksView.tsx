@@ -26,7 +26,9 @@ import { MobileTaskRow } from '@/components/tasks/MobileTaskRow';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
 import MobileProjectDetail from '@/components/mobile/MobileProjectDetail';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
+import MobileDrawer from '@/components/mobile/MobileDrawer';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 // Mobile-tailored Tasks view. Shares the same useTasks hook + filter bar as
 // the desktop dashboard tab — only the row + detail components swap out for
@@ -80,6 +82,11 @@ function toRowItem(task: TaskRowData): TaskRowItem {
 }
 
 function MobileTasksViewContent() {
+  // This view owns the full mobile page chrome (safe-area container + drawer)
+  // so its header — title + subtitle + toolbar — lives in one gradient block,
+  // matching the Schedule / My Assignments / Bins pattern. (Previously the
+  // title sat in MobileRouteShell's separate bar, breaking the gradient.)
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const { user: authUser } = useAuth();
   const { users: rawUsers } = useUsers();
   const users = rawUsers as unknown as User[];
@@ -351,6 +358,24 @@ function MobileTasksViewContent() {
     setDraftTask(draft);
   }, [closeGlobals, setSelectedTask]);
 
+  // Auto-open the new-task draft when arriving via `/tasks?newTask=1` (e.g.
+  // the + task button on Schedule / My Assignments, which have no local
+  // draft flow). Fires once, then strips the param so a refresh doesn't
+  // re-open it.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const newTaskSentinel = searchParams?.get('newTask');
+  const handledNewTaskRef = useRef(false);
+  useEffect(() => {
+    if (!newTaskSentinel || handledNewTaskRef.current) return;
+    handledNewTaskRef.current = true;
+    handleNewTask();
+    const params = new URLSearchParams(searchParams?.toString());
+    params.delete('newTask');
+    const qs = params.toString();
+    router.replace(qs ? `/tasks?${qs}` : '/tasks');
+  }, [newTaskSentinel, handleNewTask, router, searchParams]);
+
   const handleConfirmCreate = useCallback(
     async (fields?: ProjectFormFields) => {
       if (!draftTask) return;
@@ -496,10 +521,35 @@ function MobileTasksViewContent() {
   const isDraft = draftTask != null;
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Subtitle row — page title is rendered by MobileRouteShell next to
-          the hamburger; this is just the supporting line. */}
-      <div className="flex-shrink-0 px-5 pt-1 pb-2">
+    <div className="h-dvh flex flex-col overflow-hidden bg-white dark:bg-card">
+      {/* Header region — one continuous neutral gradient behind the title +
+          subtitle + toolbar, capped with a hairline where it meets the flat
+          list. */}
+      <div className="flex-shrink-0 bg-[linear-gradient(to_bottom,#f4f4f6,#ffffff)] dark:bg-[linear-gradient(to_bottom,#30303a,#202027)] border-b border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.06)]">
+      {/* Title row — hamburger + page title (rendered here, inside the
+          gradient, so the fade reaches the very top). */}
+      <div
+        className="px-[22px] pb-1"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="-ml-2 w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+            aria-label="Open menu"
+          >
+            <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <h1 className="text-[20px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed] truncate">
+            Tasks
+          </h1>
+        </div>
+      </div>
+
+      {/* Subtitle row — supporting line under the title. */}
+      <div className="px-[22px] pb-2">
         <div className="flex items-center gap-3 text-[11px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
           <span>Every task in the workspace</span>
         </div>
@@ -508,8 +558,8 @@ function MobileTasksViewContent() {
       {/* Mobile-native filter bar: compact row + portalled bottom sheets.
           Avoids cramming 8+ desktop chips into a horizontally-scrolling row,
           and renders its sheets via portal so they can't be clipped by the
-          list's scroll container. */}
-      <div className="flex-shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
+          list's scroll container. Background comes from the gradient wrapper. */}
+      <div>
         <MobileTaskFilterBar
           search={filters.search}
           onSearchChange={setSearch}
@@ -545,6 +595,7 @@ function MobileTasksViewContent() {
           totalCount={allTasks.length}
           filteredCount={tasks.length}
         />
+      </div>
       </div>
 
       {/* List */}
@@ -697,6 +748,8 @@ function MobileTasksViewContent() {
           creatingTask={creatingTask}
         />
       )}
+
+      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </div>
   );
 }

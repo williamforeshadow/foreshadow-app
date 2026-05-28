@@ -718,11 +718,15 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
       {/* Kanban screen */}
       {screen.type === 'kanban' && (
         <div className="flex flex-col h-full relative">
+          {/* Header region — one continuous neutral gradient behind the title
+              + fine print + toolbar, capped with a hairline where it meets
+              the flat kanban below. */}
+          <div className="shrink-0 bg-[linear-gradient(to_bottom,#f4f4f6,#ffffff)] dark:bg-[linear-gradient(to_bottom,#30303a,#202027)] border-b border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.06)]">
           {/* Title row — back button + bin name (Global scope toggle inline
               on the right, Task Bin only). Mirrors the Tasks / Assignments /
               Schedule mobile header pattern. */}
           <div
-            className="shrink-0 px-[22px] pb-2"
+            className="px-[22px] pb-2"
             style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
           >
             <div className="flex items-center gap-2 min-w-0">
@@ -773,9 +777,10 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
           </div>
 
           {/* Single controls row: search/filter (swipeable lane) →
-              Boards + Columns (pinned next to filter, via extraControls) →
-              Select + task (pinned right, via trailingControls + onNewTask). */}
-          <div className="shrink-0 border-b border-neutral-200 dark:border-[rgba(255,255,255,0.07)]">
+              Boards + Columns (in-lane, via laneControls) → Select + task
+              (pinned right, via trailingControls + onNewTask). Background
+              comes from the header-gradient wrapper. */}
+          <div className="shrink-0">
             <MobileTaskFilterBar
               search={search}
               onSearchChange={setSearch}
@@ -825,6 +830,7 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
                 ) : undefined
               }
             />
+          </div>
           </div>
 
           <div className={`flex-1 min-h-0 flex flex-col mobile-kanban-wrapper${kanbanDragging ? ' is-dragging' : ''}`}>

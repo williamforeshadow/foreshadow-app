@@ -87,11 +87,13 @@ export default function MobileTimelineView({
   const { departments } = useDepartments();
   const router = useRouter();
 
-  // Header "+ task" — mobile has no schedule-scoped draft flow, so route to
-  // the standalone Tasks page where the create flow lives (matches the
-  // other mobile pages' New task affordance).
+  // Header "+ task" — the general (non-date-specific) new task. Schedule has
+  // no local draft flow, so route to the standalone Tasks page with the
+  // newTask sentinel; MobileTasksView auto-opens its new-task detail draft
+  // (same destination the day-cell drawer's + new task uses, minus the
+  // pre-filled date).
   const handleHeaderNewTask = useCallback(() => {
-    router.push('/tasks');
+    router.push('/tasks?newTask=1');
   }, [router]);
 
   // Global reservation viewer — used by the day-cell drawer's
@@ -313,10 +315,14 @@ export default function MobileTimelineView({
 
   return (
     <div className="flex flex-col h-full">
+      {/* Header region — one continuous neutral gradient behind the title +
+          fine print + toolbar row, capped with a hairline where it meets the
+          flat grid below. */}
+      <div className="flex-shrink-0 bg-[linear-gradient(to_bottom,#f4f4f6,#ffffff)] dark:bg-[linear-gradient(to_bottom,#30303a,#202027)] border-b border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.06)]">
       {/* Title row — matches the Tasks / My Assignments mobile pattern:
           hamburger + page title, then a single controls row underneath. */}
       <div
-        className="flex-shrink-0 px-[22px] pb-2"
+        className="px-[22px] pb-2"
         style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -350,8 +356,8 @@ export default function MobileTimelineView({
       {/* Single controls row: search/filter (swipeable lane) → ‹ Today ›
           nav (pinned, via extraControls) → Week/Month toggle + task (pinned
           right, via trailingControls). The date range lives in the title
-          fine print. */}
-      <div className="flex-shrink-0 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-card">
+          fine print. Background comes from the header-gradient wrapper. */}
+      <div>
         <MobileTaskFilterBar
           search={search}
           onSearchChange={setSearch}
@@ -422,6 +428,7 @@ export default function MobileTimelineView({
             </>
           }
         />
+      </div>
       </div>
 
       {/* Grid */}
