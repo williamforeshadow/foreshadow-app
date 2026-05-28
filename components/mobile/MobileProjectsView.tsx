@@ -74,11 +74,14 @@ function MobileViewModeToggle({
 
   return (
     <div className="relative" ref={ref}>
+      {/* Standard pill — single-select board orientation. The chosen mode is
+          surfaced in the header fine print ("By Status"), not inside the
+          pill, so the label stays a clean "Boards". */}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 h-9 px-3 text-[12px] font-medium rounded-[10px] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] text-neutral-600 dark:text-[#a09e9a]"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] active:opacity-70 transition-opacity"
       >
-        {VIEW_MODE_LABELS[viewMode]}
+        Boards
         <svg className={`w-3 h-3 opacity-50 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
@@ -680,19 +683,21 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
       {/* Kanban screen */}
       {screen.type === 'kanban' && (
         <div className="flex flex-col h-full relative">
-          {/* Header */}
+          {/* Title row — back button + bin name (Global scope toggle inline
+              on the right, Task Bin only). Mirrors the Tasks / Assignments /
+              Schedule mobile header pattern. */}
           <div
-            className="shrink-0 px-[22px] pb-3"
+            className="shrink-0 px-[22px] pb-2"
             style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <button
                 onClick={goBack}
-                className="-ml-1 w-9 h-9 rounded-[10px] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] flex items-center justify-center text-neutral-500 dark:text-[#a09e9a] shrink-0"
+                className="-ml-2 w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors shrink-0"
                 aria-label="Back to bins"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19l-7-7 7-7" />
+                <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
               <h1 className="text-[20px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed] truncate">
@@ -705,43 +710,36 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
                 <button
                   onClick={handleToggleTaskBinGlobal}
                   aria-pressed={taskBinGlobal.enabled}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors shrink-0 ${
+                  className={`ml-auto shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
                     taskBinGlobal.enabled
                       ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)] border-[var(--accent-3)]/30 dark:border-[var(--accent-1)]/30'
                       : 'bg-transparent border-neutral-200 dark:border-[rgba(255,255,255,0.08)] text-neutral-500 dark:text-[#a09e9a] active:opacity-70'
                   }`}
                 >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 100-18 9 9 0 000 18zM3 12h18M12 3a13.5 13.5 0 010 18M12 3a13.5 13.5 0 000 18" />
                   </svg>
                   Global
                 </button>
               )}
-              <div className="flex-1" />
-              <MobileViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
-              <ColumnPicker
-                columns={allColumnOptions}
-                visibleColumnIds={columnVis.visibleIds}
-                onToggle={columnVis.toggle}
-                onSelectAll={() => columnVis.selectAll(allColumnOptions.map((c) => c.id))}
-                onClearAll={columnVis.clearAll}
-              />
-              {tasks.length > 0 && !kanbanSelectionMode && (
-                <button
-                  onClick={() => setKanbanSelectionMode(true)}
-                  className="flex items-center gap-1 text-[12px] text-neutral-600 dark:text-[#a09e9a] active:opacity-70 transition-opacity shrink-0"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7l-3 3-1.5-1.5" />
-                  </svg>
-                  Select
-                </button>
-              )}
+            </div>
+
+            {/* Fine print — task count + current board orientation
+                ("43 tasks · By Status"). */}
+            <div className="flex items-center gap-2 mt-1 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
+              <span>
+                {anyTaskFilterActive
+                  ? `${filteredTasks.length} of ${tasks.length} tasks`
+                  : `${tasks.length} task${tasks.length === 1 ? '' : 's'}`}
+              </span>
+              <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a]" />
+              <span>By {VIEW_MODE_LABELS[viewMode]}</span>
             </div>
           </div>
 
-          {/* Filter / search bar — same axes as desktop Bins (status,
-              assignee, department, priority, property, scheduled range). */}
+          {/* Single controls row: search/filter (swipeable lane) →
+              Boards + Columns (pinned next to filter, via extraControls) →
+              Select + task (pinned right, via trailingControls + onNewTask). */}
           <div className="shrink-0 border-b border-neutral-200 dark:border-[rgba(255,255,255,0.07)]">
             <MobileTaskFilterBar
               search={search}
@@ -765,8 +763,35 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
               onScheduledDateRangeChange={setScheduledDateRange}
               onClearAll={clearAllTaskFilters}
               anyFilterActive={anyTaskFilterActive}
+              onNewTask={handleNewTask}
               totalCount={tasks.length}
               filteredCount={filteredTasks.length}
+              extraControls={
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <MobileViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
+                  <ColumnPicker
+                    columns={allColumnOptions}
+                    visibleColumnIds={columnVis.visibleIds}
+                    onToggle={columnVis.toggle}
+                    onSelectAll={() => columnVis.selectAll(allColumnOptions.map((c) => c.id))}
+                    onClearAll={columnVis.clearAll}
+                    showCount={false}
+                  />
+                </div>
+              }
+              trailingControls={
+                tasks.length > 0 && !kanbanSelectionMode ? (
+                  <button
+                    onClick={() => setKanbanSelectionMode(true)}
+                    className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] active:opacity-70 transition-opacity"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7l-3 3-1.5-1.5" />
+                    </svg>
+                    Select
+                  </button>
+                ) : undefined
+              }
             />
           </div>
 
@@ -825,16 +850,6 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
               />
             )}
           </div>
-
-          {/* FAB */}
-          <button
-            onClick={handleNewTask}
-            className="absolute right-[22px] bottom-6 w-[52px] h-[52px] rounded-full bg-neutral-800 dark:bg-[#f0efed] text-white dark:text-background flex items-center justify-center shadow-[0_10px_30px_-8px_rgba(0,0,0,0.5)] active:scale-95 transition-transform z-30"
-          >
-            <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" viewBox="0 0 24 24">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-          </button>
         </div>
       )}
 

@@ -75,10 +75,14 @@ interface Props {
 
   onNewTask?: () => void;
 
-  // Pinned controls rendered to the RIGHT of the swipeable search/filter
-  // lane (before the New task button). Stay fixed while the lane scrolls.
-  // Used by the Schedule view for its date-nav pill + date range.
+  // Pinned controls rendered immediately to the right of the swipeable
+  // search/filter lane (clustered next to it). Stay fixed while the lane
+  // scrolls. Used by the Schedule view for its < Today > date-nav pill.
   extraControls?: React.ReactNode;
+
+  // Right-anchored controls rendered just before the New task button (e.g.
+  // Schedule's Week/Month toggle). Share the far-right cluster with + task.
+  trailingControls?: React.ReactNode;
 
   totalCount: number;
   filteredCount: number;
@@ -204,30 +208,38 @@ export function MobileTaskFilterBar(props: Props) {
         )}
       </div>
 
-      {/* Pinned controls to the right of the lane (e.g. Schedule's date nav +
-          range). Fixed while the lane scrolls. */}
+      {/* Pinned controls immediately right of the lane (e.g. Schedule's
+          < Today > nav), clustered next to the search/filter. */}
       {props.extraControls}
 
-      {props.onNewTask && (
-        <button
-          onClick={props.onNewTask}
-          className="ml-auto flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
-          aria-label="New task"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2.5}
-              d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-            />
-          </svg>
-        </button>
+      {/* Right-anchored cluster: optional trailing controls (e.g. Schedule's
+          Week/Month pill) + the New task button. ml-auto pushes them to the
+          far right while the lane + extraControls stay clustered left. */}
+      {(props.trailingControls || props.onNewTask) && (
+        <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+          {props.trailingControls}
+          {props.onNewTask && (
+            <button
+              onClick={props.onNewTask}
+              className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
+              aria-label="New task"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                />
+              </svg>
+            </button>
+          )}
+        </div>
       )}
 
       <FilterSheet

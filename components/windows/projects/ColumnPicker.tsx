@@ -13,6 +13,9 @@ interface ColumnPickerProps {
   onToggle: (columnId: string) => void;
   onSelectAll: () => void;
   onClearAll: () => void;
+  // When false, the `· N/M` count tail is hidden (mobile keeps the pill
+  // clean). Defaults to true so desktop is unchanged.
+  showCount?: boolean;
 }
 
 export function ColumnPicker({
@@ -21,6 +24,7 @@ export function ColumnPicker({
   onToggle,
   onSelectAll,
   onClearAll,
+  showCount = true,
 }: ColumnPickerProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -72,9 +76,11 @@ export function ColumnPicker({
         }`}
       >
         <span>Columns</span>
-        <span className="text-[10px] tabular-nums opacity-80">
-          · {selectedCount}/{totalCount}
-        </span>
+        {showCount && (
+          <span className="text-[10px] tabular-nums opacity-80">
+            · {selectedCount}/{totalCount}
+          </span>
+        )}
         <svg className={`w-3 h-3 opacity-60 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>

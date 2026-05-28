@@ -316,7 +316,7 @@ export default function MobileTimelineView({
       {/* Title row — matches the Tasks / My Assignments mobile pattern:
           hamburger + page title, then a single controls row underneath. */}
       <div
-        className="flex-shrink-0 px-[22px]"
+        className="flex-shrink-0 px-[22px] pb-2"
         style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -334,30 +334,23 @@ export default function MobileTimelineView({
           <h1 className="text-[20px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed] truncate">
             Schedule
           </h1>
-
-          {/* Right cluster, inline with the title: Week/Month toggle pill +
-              the current date range (styled as a matching pill). */}
-          <div className="ml-auto flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={() => setView(view === 'week' ? 'month' : 'week')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] active:opacity-70 transition-opacity"
-              aria-label={`Switch to ${view === 'week' ? 'month' : 'week'} view`}
-            >
-              {view === 'week' ? 'Week' : 'Month'}
-            </button>
-
-            {dateRange.length > 0 && (
-              <span className="inline-flex items-center px-3 py-1.5 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] whitespace-nowrap">
-                {formatDate(dateRange[0])} – {formatDate(dateRange[dateRange.length - 1])}
-              </span>
-            )}
-          </div>
         </div>
+
+        {/* Fine print — current date range, matching the Tasks / My
+            Assignments supporting line. */}
+        {dateRange.length > 0 && (
+          <div className="flex items-center gap-3 mt-1 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
+            <span>
+              {formatDate(dateRange[0])} – {formatDate(dateRange[dateRange.length - 1])}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Single controls row: search/filter (swipeable lane) → ‹ Today ›
-          nav (pinned, via extraControls) → + task (pinned). The W/M toggle
-          and date range live up in the title row. */}
+          nav (pinned, via extraControls) → Week/Month toggle + task (pinned
+          right, via trailingControls). The date range lives in the title
+          fine print. */}
       <div className="flex-shrink-0 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-card">
         <MobileTaskFilterBar
           search={search}
@@ -382,6 +375,15 @@ export default function MobileTimelineView({
           onNewTask={handleHeaderNewTask}
           totalCount={allScheduledTasks.length}
           filteredCount={displayedScheduledTasks.length}
+          trailingControls={
+            <button
+              onClick={() => setView(view === 'week' ? 'month' : 'week')}
+              className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] active:opacity-70 transition-opacity"
+              aria-label={`Switch to ${view === 'week' ? 'month' : 'week'} view`}
+            >
+              {view === 'week' ? 'Week' : 'Month'}
+            </button>
+          }
           extraControls={
             <>
               {/* Date-nav pill — replicates the desktop TimelineNavBar's
