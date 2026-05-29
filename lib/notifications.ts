@@ -49,6 +49,8 @@ export interface NotificationPreference {
   type: NotificationType;
   native_enabled: boolean;
   slack_enabled: boolean;
+  /** Send a real mobile push (APNs) to the user's registered devices. */
+  push_enabled: boolean;
   /**
    * Wall-clock hour (HH:MM) in the org's default timezone at which the
    * task_due_today reminder fires. Only meaningful when type === 'task_due_today'.
@@ -86,6 +88,7 @@ export function defaultNotificationPreference(
     type,
     native_enabled: true,
     slack_enabled: false,
+    push_enabled: true,
     due_today_time: type === 'task_due_today' ? DEFAULT_DUE_TODAY_TIME : null,
   };
 }

@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { AiChatPanel } from './ai-chat/AiChatPanel';
+import { PushNotificationsBridge } from '@/lib/push/PushNotificationsBridge';
 
 // Mounts the universal AI chat panel around every page (except /login).
 // The panel is position:fixed, so its placement in the tree is moot — what
@@ -19,6 +20,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
     <>
       {children}
       <AiChatPanel />
+      <PushNotificationsBridge />
     </>
   );
 }

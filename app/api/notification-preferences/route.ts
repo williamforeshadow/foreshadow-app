@@ -61,7 +61,7 @@ export async function GET() {
   const [{ data, error }, orgTimezone] = await Promise.all([
     getSupabaseServer()
       .from('notification_preferences')
-      .select('type, native_enabled, slack_enabled, due_today_time')
+      .select('type, native_enabled, slack_enabled, push_enabled, due_today_time')
       .eq('user_id', user.id),
     getOrgTimezone(),
   ]);
@@ -115,6 +115,7 @@ export async function PATCH(request: Request) {
         type: NotificationType;
         native_enabled: boolean;
         slack_enabled: boolean;
+        push_enabled: boolean;
         updated_at: string;
         due_today_time?: string | null;
       } = {
@@ -124,6 +125,8 @@ export async function PATCH(request: Request) {
           typeof pref.native_enabled === 'boolean' ? pref.native_enabled : true,
         slack_enabled:
           typeof pref.slack_enabled === 'boolean' ? pref.slack_enabled : false,
+        push_enabled:
+          typeof pref.push_enabled === 'boolean' ? pref.push_enabled : true,
         updated_at: now,
       };
       if (type === 'task_due_today') {

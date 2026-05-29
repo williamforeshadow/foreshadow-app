@@ -20,6 +20,7 @@ function defaults(): PreferenceMap {
         type,
         native_enabled: true,
         slack_enabled: false,
+        push_enabled: true,
         due_today_time: type === 'task_due_today' ? DEFAULT_DUE_TODAY_TIME : null,
       },
     ]),
@@ -163,7 +164,7 @@ export function NotificationPreferencesPanel() {
                 </div>
               </div>
               {enabled ? (
-                <div className="mt-3 pl-0 sm:pl-4">
+                <div className="mt-3 flex flex-col gap-2 pl-0 sm:pl-4">
                   <label
                     className={`inline-flex items-center gap-2 text-sm ${
                       switchDisabled
@@ -183,6 +184,26 @@ export function NotificationPreferencesPanel() {
                       className="h-4 w-4 rounded border-neutral-300 accent-[var(--accent-3)]"
                     />
                     Also notify in Slack
+                  </label>
+                  <label
+                    className={`inline-flex items-center gap-2 text-sm ${
+                      switchDisabled
+                        ? 'text-neutral-400 dark:text-neutral-600'
+                        : 'text-neutral-700 dark:text-neutral-300'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={pref.push_enabled}
+                      disabled={switchDisabled}
+                      onChange={(event) =>
+                        updatePreference(type, {
+                          push_enabled: event.target.checked,
+                        })
+                      }
+                      className="h-4 w-4 rounded border-neutral-300 accent-[var(--accent-3)]"
+                    />
+                    Also send a push to my phone
                   </label>
                 </div>
               ) : null}

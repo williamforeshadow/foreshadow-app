@@ -8,6 +8,7 @@ import {
   type NotificationType,
 } from '@/lib/notifications';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { pushToUser } from '@/src/server/notifications/apns';
 import { taskPath, taskUrl } from '@/src/lib/links';
 import { todayInTz, currentHourInTz, DEFAULT_TIMEZONE } from '@/src/lib/dates';
 import { lookupSlackUserByEmail } from '@/src/slack/identity';
@@ -492,7 +493,7 @@ async function loadPreferences(
 
   const { data, error } = await supabase
     .from('notification_preferences')
-    .select('user_id, type, native_enabled, slack_enabled, due_today_time')
+    .select('user_id, type, native_enabled, slack_enabled, push_enabled, due_today_time')
     .in('user_id', userIds);
 
   if (error) {
@@ -505,6 +506,7 @@ async function loadPreferences(
     type: NotificationType;
     native_enabled: boolean;
     slack_enabled: boolean;
+    push_enabled: boolean;
     due_today_time: string | null;
   }>) {
     if (!NOTIFICATION_TYPES.includes(row.type)) continue;
@@ -512,6 +514,7 @@ async function loadPreferences(
       type: row.type,
       native_enabled: row.native_enabled,
       slack_enabled: row.slack_enabled,
+      push_enabled: row.push_enabled,
       due_today_time: row.due_today_time,
     });
   }
@@ -681,7 +684,13 @@ async function deliverTaskNotification(args: {
 
   for (const recipientId of recipientSet) {
     const preference = preferenceFor(prefs, recipientId, args.type);
-    if (!preference.native_enabled && !preference.slack_enabled) continue;
+    if (
+      !preference.native_enabled &&
+      !preference.slack_enabled &&
+      !preference.push_enabled
+    ) {
+      continue;
+    }
     const email = emails.get(recipientId) ?? null;
 
     // Coalesce path: for edit-type notifications, if an unread one already
@@ -786,6 +795,20 @@ async function deliverTaskNotification(args: {
         email,
         text: rendered.slackText,
         blocks: rendered.buildBlocks(notificationId),
+      });
+    }
+
+    // Real mobile push (APNs). pushToUser is best-effort and never throws, so
+    // a push failure can't break in-app/Slack delivery. Awaited (not
+    // fire-and-forget) so it completes inside the request lifecycle on
+    // serverless. Only fresh inserts push — coalesced edits `continue` above,
+    // so rapid changes don't spam the lock screen.
+    if (preference.push_enabled && data?.id) {
+      await pushToUser(recipientId, {
+        title: rendered.title,
+        body: rendered.body,
+        href: taskPath(task.id),
+        notificationId: data.id as string,
       });
     }
   }
