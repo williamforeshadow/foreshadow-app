@@ -76,7 +76,6 @@ function ViewModeToggle({
         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-800 dark:hover:text-[#f0efed]"
       >
         <span>Boards</span>
-        <span className="text-[10px] tabular-nums opacity-80">· {VIEW_MODE_LABELS[viewMode]}</span>
         <svg className={`w-3 h-3 opacity-60 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
@@ -864,47 +863,63 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     <div className="relative h-full overflow-hidden bg-white dark:bg-card">
       {/* Left Panel - Kanban Board */}
       <div className="w-full h-full flex flex-col">
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-white/20 dark:border-white/10 glass-panel bg-white/40 dark:bg-white/[0.06] flex-shrink-0 relative z-20 flex-nowrap">
-          {/* Left group: bin breadcrumb + Global toggle + task search/filter.
-              `min-w-0 flex-1` lets the chip lane inside absorb any overflow
-              instead of wrapping the row. */}
-          <div className="flex items-center gap-3 min-w-0 flex-1 flex-nowrap">
-            <button
-              onClick={handleBackToBins}
-              className="flex-shrink-0 flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Bins
-            </button>
-            <span className="flex-shrink-0 text-neutral-400/50 dark:text-white/20">/</span>
-            <h3 className="flex-shrink-0 text-lg font-semibold text-neutral-900 dark:text-white">
-              {selectedBinName}
-            </h3>
-            {/* Global toggle — only inside the Task Bin (selectedBinId === null).
-                When ON, widens the Task Bin to every binned task across the
-                Task Bin and every sub-bin. Persists across sessions. */}
-            {selectedBinId === null && (
+        <div className="flex-shrink-0 relative z-20 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)]">
+          {/* Title block — back-to-bins breadcrumb + bin name as the page
+              title, Global scope toggle, and a fine-print line (task count +
+              current board orientation). */}
+          <div className="px-8 pt-6 pb-1">
+            <div className="flex items-center gap-3 min-w-0">
               <button
-                onClick={handleToggleTaskBinGlobal}
-                title={taskBinGlobal.enabled
-                  ? 'Global view ON — showing every binned task. Click to scope back to the Task Bin only.'
-                  : 'Global view OFF — showing only the Task Bin. Click to widen to every binned task.'}
-                aria-pressed={taskBinGlobal.enabled}
-                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors ${
-                  taskBinGlobal.enabled
-                    ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)] border-[var(--accent-3)]/30 dark:border-[var(--accent-1)]/30'
-                    : 'bg-transparent text-neutral-500 dark:text-[#a09e9a] border-neutral-200 dark:border-white/10 hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-white/[0.04] hover:text-neutral-800 dark:hover:text-white'
-                }`}
+                onClick={handleBackToBins}
+                className="flex-shrink-0 flex items-center gap-1 text-[12px] font-medium text-neutral-500 dark:text-[#a09e9a] hover:text-neutral-900 dark:hover:text-white transition-colors uppercase tracking-[0.04em]"
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 100-18 9 9 0 000 18zM3 12h18M12 3a13.5 13.5 0 010 18M12 3a13.5 13.5 0 000 18" />
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
-                Global
+                Bins
               </button>
-            )}
+              <span className="flex-shrink-0 text-neutral-400/50 dark:text-white/20">/</span>
+              <h1 className="text-[24px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed] truncate">
+                {selectedBinName}
+              </h1>
+              {/* Global toggle — only inside the Task Bin (selectedBinId === null).
+                  When ON, widens the Task Bin to every binned task across the
+                  Task Bin and every sub-bin. Persists across sessions. */}
+              {selectedBinId === null && (
+                <button
+                  onClick={handleToggleTaskBinGlobal}
+                  title={taskBinGlobal.enabled
+                    ? 'Global view ON — showing every binned task. Click to scope back to the Task Bin only.'
+                    : 'Global view OFF — showing only the Task Bin. Click to widen to every binned task.'}
+                  aria-pressed={taskBinGlobal.enabled}
+                  className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors ${
+                    taskBinGlobal.enabled
+                      ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)] border-[var(--accent-3)]/30 dark:border-[var(--accent-1)]/30'
+                      : 'bg-transparent text-neutral-500 dark:text-[#a09e9a] border-neutral-200 dark:border-white/10 hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-white/[0.04] hover:text-neutral-800 dark:hover:text-white'
+                  }`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 100-18 9 9 0 000 18zM3 12h18M12 3a13.5 13.5 0 010 18M12 3a13.5 13.5 0 000 18" />
+                  </svg>
+                  Global
+                </button>
+              )}
+            </div>
+            {/* Fine print — task count + current board orientation. */}
+            <div className="flex items-center gap-3 mt-1.5 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
+              <span>
+                {anyTaskFilterActive
+                  ? `${filteredTasks.length} of ${tasks.length} tasks`
+                  : `${tasks.length} task${tasks.length === 1 ? '' : 's'}`}
+              </span>
+              <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a]" />
+              <span>By {VIEW_MODE_LABELS[viewMode]}</span>
+            </div>
+          </div>
 
+          {/* Controls row */}
+          <div className="px-8 pb-4">
+          <div className="flex items-center gap-3 min-w-0 flex-nowrap">
             {/* Task search + filter pills (matches the Schedule page UX) */}
             <CompactSearch value={search} onChange={setSearch} placeholder="Search tasks…" />
 
@@ -948,12 +963,11 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
                 filteredCount={filteredTasks.length}
               />
             )}
-          </div>
 
-          {/* Right group: board orientation + column visibility + new task +
-              select. `flex-shrink-0` guards against the long chip lane from
-              the left group ever crushing these. */}
-          <div className="flex items-center gap-3 flex-shrink-0">
+            {/* Right group: board orientation + column visibility + new task +
+                select. `ml-auto` pins them to the right of the controls row;
+                `flex-shrink-0` guards against the chip lane crushing them. */}
+            <div className="ml-auto flex items-center gap-3 flex-shrink-0">
             <ViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
             <ColumnPicker
               columns={allColumnOptions}
@@ -981,6 +995,8 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
                 Select
               </Button>
             )}
+            </div>
+          </div>
           </div>
         </div>
 

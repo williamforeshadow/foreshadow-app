@@ -1673,8 +1673,27 @@ export default function TimelineWindow({
 
   return (
     <div className="h-full flex flex-col relative bg-white dark:bg-card">
-      {/* Header with navigation - fixed at top */}
-      <div className="flex-shrink-0 px-4 py-3 bg-white dark:bg-[var(--timeline-surface-2)] border-b border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)]">
+      {/* Header region — title + fine print + controls row. The gradient
+          fades to transparent over the content background (bg-white /
+          dark:bg-card base), so the header blends seamlessly into the grid
+          below — no divider. */}
+      <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)]">
+        {/* Title + fine print (current date range) */}
+        <div className="px-8 pt-6 pb-1">
+          <h1 className="text-[24px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed]">
+            Schedule
+          </h1>
+          {dateRange.length > 0 && (
+            <div className="flex items-center gap-3 mt-1.5 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
+              <span>
+                {formatDate(dateRange[0])} – {formatDate(dateRange[dateRange.length - 1])}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Controls row */}
+        <div className="px-8 pb-4">
         <div className="flex items-center gap-3 flex-nowrap min-w-0">
           {/* View Mode Icons */}
           <div className="flex items-center gap-1">
@@ -1777,6 +1796,7 @@ export default function TimelineWindow({
               New task
             </button>
           </div>
+        </div>
         </div>
       </div>
 

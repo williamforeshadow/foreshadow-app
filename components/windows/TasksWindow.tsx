@@ -602,8 +602,12 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
   return (
     <div className="relative h-full overflow-hidden bg-white dark:bg-card">
       <div className="w-full h-full flex flex-col min-w-0">
+        {/* Header region — title + controls row. The gradient fades to
+            transparent over the content background (bg-white / dark:bg-card
+            base), so the header blends seamlessly into the list below. */}
+        <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)]">
         {/* Header */}
-        <div className="flex-shrink-0 px-8 pt-6 pb-1">
+        <div className="px-8 pt-6 pb-1">
           <h1 className="text-[24px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed]">
             Tasks
           </h1>
@@ -612,7 +616,7 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
         {/* Filter bar — same single-row pattern as Schedule / Bins / Turnovers.
             Sort + New Task live OUTSIDE the funnel expansion (always visible
             on the right); the funnel only toggles the chip lane. */}
-        <div className="flex-shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] px-8 py-3">
+        <div className="px-8 pb-4">
           <div className="flex items-center gap-2 flex-nowrap min-w-0">
             <CompactSearch
               value={filters.search}
@@ -686,6 +690,7 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
               </button>
             </div>
           </div>
+        </div>
         </div>
 
         {/* List */}

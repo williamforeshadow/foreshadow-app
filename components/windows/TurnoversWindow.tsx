@@ -228,14 +228,19 @@ function TurnoversWindowContent(props: TurnoversWindowProps) {
   );
 
   return (
-    <div className="relative h-full overflow-hidden bg-white dark:bg-card">
-      {/* Left Panel — Cards. Always full-width; the detail panel below
-          floats over the right 1/3 (overlay) instead of compressing the
-          list, matching every other detail panel in the app. */}
-      <div className="w-full h-full overflow-y-auto hide-scrollbar p-6 space-y-4">
-
+    <div className="relative h-full overflow-hidden bg-white dark:bg-card flex flex-col">
+      {/* Header region — EXPERIMENT: the gradient fades to transparent over
+          the content background (bg-white / dark:bg-card as the base layer),
+          so by the bottom edge it's exactly the body color and the header
+          blends seamlessly into the cards below (no hairline divider). */}
+      <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)]">
+        <div className="px-8 pt-6 pb-1">
+          <h1 className="text-[24px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed]">
+            Turnovers
+          </h1>
+        </div>
         {response !== null && (
-          <div className="space-y-3">
+          <div className="px-8 pb-4">
             <TurnoverFilterBar
               filters={filters}
               setFilterValues={setFilterValues}
@@ -244,17 +249,23 @@ function TurnoversWindowContent(props: TurnoversWindowProps) {
               getActiveFilterCount={getActiveFilterCount}
               propertyOptions={propertyOptions}
             />
-
-            <TurnoverCards
-              data={Array.isArray(response) ? response : [response]}
-              filters={filters}
-              onCardClick={(card: Turnover) => {
-                closeGlobals();
-                setSelectedTask(null);
-                setSelectedCard(card);
-              }}
-            />
           </div>
+        )}
+      </div>
+
+      {/* Cards — scrollable body below the fixed header. */}
+      <div className="flex-1 overflow-y-auto hide-scrollbar px-6 pb-6 pt-4">
+
+        {response !== null && (
+          <TurnoverCards
+            data={Array.isArray(response) ? response : [response]}
+            filters={filters}
+            onCardClick={(card: Turnover) => {
+              closeGlobals();
+              setSelectedTask(null);
+              setSelectedCard(card);
+            }}
+          />
         )}
 
         {loading && (

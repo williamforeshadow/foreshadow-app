@@ -859,8 +859,12 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
     <div className="relative h-full overflow-hidden">
       {/* Assignment list */}
       <div className="w-full h-full flex flex-col min-w-0">
+        {/* Header region — title + controls row. The gradient fades to
+            transparent over the content background (bg-white / dark:bg-card
+            base), so the header blends seamlessly into the list below. */}
+        <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)]">
         {/* Header */}
-        <div className="flex-shrink-0 px-8 pt-6 pb-1">
+        <div className="px-8 pt-6 pb-1">
           <h1 className="text-[24px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed]">
             My Assignments
           </h1>
@@ -870,7 +874,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
             funnel + inline chip lane on one row. No Sort / New Task on the
             right since assignments are existing tasks delivered by the
             backend; sort order is governed by the date sections below. */}
-        <div className="flex-shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] px-8 py-3">
+        <div className="px-8 pb-4">
           <div className="flex items-center gap-2 flex-nowrap min-w-0">
             <CompactSearch
               value={search}
@@ -944,6 +948,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
               </button>
             </div>
           </div>
+        </div>
         </div>
 
         {/* Content */}
