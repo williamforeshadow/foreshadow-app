@@ -318,7 +318,7 @@ export default function MobileTimelineView({
       {/* Header region — one continuous neutral gradient behind the title +
           fine print + toolbar row, capped with a hairline where it meets the
           flat grid below. */}
-      <div className="flex-shrink-0 bg-[linear-gradient(to_bottom,#f4f4f6,#ffffff)] dark:bg-[linear-gradient(to_bottom,#30303a,#202027)] border-b border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.06)]">
+      <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)]">
       {/* Title row — matches the Tasks / My Assignments mobile pattern:
           hamburger + page title, then a single controls row underneath. */}
       <div

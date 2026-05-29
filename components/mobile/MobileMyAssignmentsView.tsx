@@ -543,7 +543,7 @@ export default function MobileMyAssignmentsView({
       {/* Header region — one continuous neutral gradient behind the title,
           fine print + toolbar, capped with a hairline where it meets the
           content below. */}
-      <div className="flex-shrink-0 bg-[linear-gradient(to_bottom,#f4f4f6,#ffffff)] dark:bg-[linear-gradient(to_bottom,#30303a,#202027)] border-b border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.06)]">
+      <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)]">
       {/* Header */}
       <div
         className="px-[22px] pb-2"
