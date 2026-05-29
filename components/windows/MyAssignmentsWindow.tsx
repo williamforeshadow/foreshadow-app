@@ -862,7 +862,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
         {/* Header region — title + controls row. The gradient fades to
             transparent over the content background (bg-white / dark:bg-card
             base), so the header blends seamlessly into the list below. */}
-        <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)]">
+        <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
         {/* Header */}
         <div className="px-8 pt-6 pb-1">
           <h1 className="text-[24px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed]">

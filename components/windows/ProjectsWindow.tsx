@@ -863,7 +863,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     <div className="relative h-full overflow-hidden bg-white dark:bg-card">
       {/* Left Panel - Kanban Board */}
       <div className="w-full h-full flex flex-col">
-        <div className="flex-shrink-0 relative z-20 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)]">
+        <div className="flex-shrink-0 relative z-20 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
           {/* Title block — back-to-bins breadcrumb + bin name as the page
               title, Global scope toggle, and a fine-print line (task count +
               current board orientation). */}

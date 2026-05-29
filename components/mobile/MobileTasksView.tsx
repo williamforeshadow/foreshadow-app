@@ -525,7 +525,7 @@ function MobileTasksViewContent() {
       {/* Header region — one continuous neutral gradient behind the title +
           subtitle + toolbar, capped with a hairline where it meets the flat
           list. */}
-      <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)]">
+      <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
       {/* Title row — hamburger + page title (rendered here, inside the
           gradient, so the fade reaches the very top). */}
       <div

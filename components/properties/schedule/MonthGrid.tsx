@@ -511,9 +511,9 @@ export function MonthGrid({
                     <button
                       key={`${weekIdx}-${r.id}`}
                       onClick={() => onReservationClick?.(r)}
-                      className={`pointer-events-auto absolute text-left transition-all flex items-center overflow-hidden border-t text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium bg-[var(--turnover-purple-bg)] border-[var(--turnover-purple-border)] ${
+                      className={`pointer-events-auto absolute text-left transition-all flex items-center overflow-hidden border-t text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium bg-[rgba(120,113,108,0.28)] border-[rgba(120,113,108,0.55)] dark:bg-[rgba(168,158,150,0.18)] dark:border-[rgba(168,158,150,0.45)] ${
                         isSelected
-                          ? 'ring-2 ring-[rgba(99,102,241,0.5)] dark:ring-[rgba(167,139,250,0.6)] shadow-lg z-10'
+                          ? 'ring-2 ring-[rgba(120,113,108,0.6)] dark:ring-[rgba(168,158,150,0.6)] shadow-lg z-10'
                           : ''
                       }`}
                       style={{

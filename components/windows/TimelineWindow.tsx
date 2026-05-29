@@ -1677,7 +1677,7 @@ export default function TimelineWindow({
           fades to transparent over the content background (bg-white /
           dark:bg-card base), so the header blends seamlessly into the grid
           below — no divider. */}
-      <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)]">
+      <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
         {/* Title + fine print (current date range) */}
         <div className="px-8 pt-6 pb-1">
           <h1 className="text-[24px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed]">
@@ -1864,7 +1864,7 @@ export default function TimelineWindow({
                   className="contents"
                 >
                   {/* Property Name with Status Indicator */}
-                  <div className={`relative overflow-hidden px-2 py-3 text-[12px] font-medium text-[#1a1a18] dark:text-[#e8e7e3] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] sticky left-0 z-10 min-h-[44px] ${propertyCellBg} flex items-center gap-1.5`}>
+                  <div className={`relative overflow-hidden px-2 text-[12px] font-medium text-[#1a1a18] dark:text-[#e8e7e3] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] sticky left-0 z-10 h-[44px] ${propertyCellBg} flex items-center gap-1.5`}>
                     {view !== 'month' && (
                       <button
                         onClick={() => togglePropertyExpanded(property)}
@@ -2017,10 +2017,16 @@ export default function TimelineWindow({
                           // (--turnover-purple-bg / --turnover-purple-border)
                           // so TurnoverCards, MobileTimelineView, and the
                           // property Schedule MonthGrid all stay in lockstep.
+                          // Opaque fill (the exact blend of the translucent
+                          // gray over the cell surface) so the faint vertical
+                          // gridlines beneath the bar are fully occluded rather
+                          // than bleeding through. The bar's top:8/height:28
+                          // inset keeps it off the horizontal borders, so those
+                          // stay visible as before.
                           const barColorClass =
-                            'bg-[var(--turnover-purple-bg)] border-[var(--turnover-purple-border)]';
+                            'bg-[#d9d7d6] border-[rgba(120,113,108,0.55)] dark:bg-[#343234] dark:border-[rgba(168,158,150,0.45)]';
 
-                          const barClassName =`absolute cursor-pointer transition-all duration-150 text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium flex items-center overflow-hidden border-t ${barColorClass} ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-[rgba(99,102,241,0.5)] dark:ring-[rgba(167,139,250,0.6)] shadow-lg z-30' : ''}`;
+                          const barClassName =`absolute cursor-pointer transition-all duration-150 text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium flex items-center overflow-hidden border-t ${barColorClass} ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-[rgba(120,113,108,0.6)] dark:ring-[rgba(168,158,150,0.6)] shadow-lg z-30' : ''}`;
                           const barStyle: React.CSSProperties = {
                             left: leftStyle,
                             top: '8px',

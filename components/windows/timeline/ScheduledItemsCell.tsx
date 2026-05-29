@@ -107,7 +107,7 @@ function TaskIcon({
         onClick?.(task);
       }}
       className={cn(
-        'flex items-center justify-center rounded shadow-sm transition-all cursor-pointer hover:brightness-110 hover:scale-110 relative overflow-hidden text-white',
+        'flex items-center justify-center rounded shadow-sm transition-all cursor-pointer hover:brightness-110 hover:scale-110 relative overflow-hidden text-[#1a1a18]',
         box,
         isContingent &&
           'border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[rgba(255,255,255,0.35)] bg-white dark:bg-[var(--timeline-surface-3)] text-[#1a1a18] dark:text-white',
@@ -154,7 +154,7 @@ export function ScheduledItemsCell({
   // the reservation, so stop propagation.
   if (viewMode === 'month') {
     return (
-      <div className="absolute bottom-0.5 left-0.5 right-0.5 flex flex-wrap items-end gap-0.5 z-[5]">
+      <div className="absolute bottom-0.5 left-0.5 right-0.5 flex flex-wrap items-end gap-0.5 z-[16]">
         {scheduledTasks.map((task) => {
           const isContingent = task.status === 'contingent';
           return (
@@ -221,7 +221,7 @@ export function ScheduledItemsCell({
   );
 
   return (
-    <div className="absolute bottom-0.5 left-0.5 z-[5]">
+    <div className="absolute bottom-0.5 left-0.5 z-[16]">
       {expanded ? (
         // Property row is expanded — the full per-task list renders in the
         // detail row below (same TaskRowList), so the cell shows icons only.

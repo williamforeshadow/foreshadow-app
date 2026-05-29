@@ -318,7 +318,7 @@ export default function MobileTimelineView({
       {/* Header region — one continuous neutral gradient behind the title +
           fine print + toolbar row, capped with a hairline where it meets the
           flat grid below. */}
-      <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)]">
+      <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
       {/* Title row — matches the Tasks / My Assignments mobile pattern:
           hamburger + page title, then a single controls row underneath. */}
       <div
@@ -558,12 +558,15 @@ export default function MobileTimelineView({
 
                         const borderRadius = `${startsBeforeRange ? '0' : '8'}px ${flushRight ? '0' : '8'}px ${flushRight ? '0' : '8'}px ${startsBeforeRange ? '0' : '8'}px`;
 
-                        // Reservation bar color — single shared lavender,
-                        // sourced from --turnover-purple-* tokens so this
-                        // bar matches TurnoverCards + the desktop Timeline +
-                        // the property Schedule MonthGrid in both themes.
+                        // Reservation bar color — opaque gray, matching the
+                        // desktop Timeline. The fill is the exact blend of the
+                        // translucent gray over the cell surface (white / card
+                        // #1A1A1F) so the faint vertical gridlines beneath the
+                        // bar are occluded instead of bleeding through. The
+                        // top:6/height:24 inset keeps it off the horizontal
+                        // borders, so those stay visible.
                         const bgClass =
-                          'bg-[var(--turnover-purple-bg)] border-[var(--turnover-purple-border)]';
+                          'bg-[#d9d7d6] border-[rgba(120,113,108,0.55)] dark:bg-[#343234] dark:border-[rgba(168,158,150,0.45)]';
 
                         return (
                           <div
@@ -598,7 +601,7 @@ export default function MobileTimelineView({
                         // Month: status dots (all tasks, wrap). No hover on
                         // mobile — the cell's onClick opens the bottom sheet
                         // (full list); dots are pure indicators.
-                        <div className="absolute bottom-0.5 left-0.5 right-0.5 flex flex-wrap items-end gap-0.5 z-[5]">
+                        <div className="absolute bottom-0.5 left-0.5 right-0.5 flex flex-wrap items-end gap-0.5 z-[16]">
                           {cellTasks.map((task) => {
                             const isContingent = task.status === 'contingent';
                             return (
@@ -626,7 +629,7 @@ export default function MobileTimelineView({
                         const box = 'w-[22px] h-[22px]';
                         const glyph = 'w-3 h-3';
                         return (
-                          <div className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 z-[5]">
+                          <div className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 z-[16]">
                             {visible.map((task) => {
                               const dept = departments.find((d) => d.id === task.department_id);
                               const Icon = getDepartmentIcon(dept?.icon);

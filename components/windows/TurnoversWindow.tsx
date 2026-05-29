@@ -233,7 +233,7 @@ function TurnoversWindowContent(props: TurnoversWindowProps) {
           the content background (bg-white / dark:bg-card as the base layer),
           so by the bottom edge it's exactly the body color and the header
           blends seamlessly into the cards below (no hairline divider). */}
-      <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)]">
+      <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
         <div className="px-8 pt-6 pb-1">
           <h1 className="text-[24px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed]">
             Turnovers

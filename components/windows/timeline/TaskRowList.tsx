@@ -8,7 +8,8 @@
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { cn } from '@/lib/utils';
 import type { Task } from '@/lib/types';
-import { marbleBackground } from './timelineStatus';
+import { STATUS_ICONS, STATUS_TITLE } from '@/lib/taskStatusIcons';
+import { STATUS_COLORS } from '@/components/tasks/TaskRow';
 
 export function TaskRowList({
   tasks,
@@ -20,8 +21,8 @@ export function TaskRowList({
   return (
     <div className="flex flex-col">
       {tasks.map((task) => {
-        const isContingent = task.status === 'contingent';
         const extra = (task.assigned_users?.length ?? 0) - 1;
+        const StatusIcon = STATUS_ICONS[task.status] ?? STATUS_ICONS.not_started;
         return (
           <div
             key={task.task_id}
@@ -38,20 +39,12 @@ export function TaskRowList({
             }}
           >
             <span
-              className={cn(
-                'w-2 h-2 rounded-full shrink-0',
-                isContingent &&
-                  'border border-dashed border-[rgba(30,25,20,0.4)] dark:border-[rgba(255,255,255,0.4)]',
-              )}
-              style={
-                isContingent
-                  ? undefined
-                  : {
-                      background:
-                        marbleBackground[task.status] || marbleBackground.not_started,
-                    }
-              }
-            />
+              className="shrink-0 flex items-center justify-center"
+              style={{ color: STATUS_COLORS[task.status] || '#A78BFA' }}
+              title={STATUS_TITLE[task.status] ?? task.status}
+            >
+              <StatusIcon size={14} strokeWidth={2} aria-hidden />
+            </span>
             <span className="truncate text-sm flex-1 min-w-0">
               {task.title || task.template_name || 'Task'}
             </span>
