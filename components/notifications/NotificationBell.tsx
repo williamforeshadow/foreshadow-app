@@ -111,10 +111,18 @@ export function NotificationBell({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        align={compact ? 'end' : 'end'}
+        align={compact ? 'end' : 'start'}
         side={compact ? 'bottom' : 'right'}
-        className="w-[min(640px,calc(100vw-24px))] border border-neutral-200 bg-white p-0 shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
+        alignOffset={compact ? 0 : 8}
+        className="relative w-[min(640px,calc(100vw-24px))] overflow-hidden border border-[var(--surface-elevated-line)] p-0 shadow-[var(--glass-shadow)]"
       >
+        {/* Liquid-glass backing. Lives on its own non-transformed layer so
+            Chromium actually renders the backdrop blur (it drops blur when the
+            element itself is positioned via transform, as Radix does here). */}
+        <div
+          aria-hidden
+          className="liquid-glass-surface pointer-events-none absolute inset-0 -z-10 rounded-[inherit]"
+        />
         <div className="flex items-center justify-between gap-2 px-3 py-2.5">
           <div>
             <p className="text-sm font-semibold text-neutral-900 dark:text-white">
@@ -128,13 +136,13 @@ export function NotificationBell({
             type="button"
             onClick={() => markRead('all')}
             disabled={unreadCount === 0}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-40 dark:hover:bg-neutral-800 dark:hover:text-white"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-40 dark:hover:bg-white/10 dark:hover:text-white"
             aria-label="Mark all read"
           >
             <CheckCheck className="h-4 w-4" />
           </button>
         </div>
-        <div className="flex border-y border-neutral-200 p-1 dark:border-neutral-800">
+        <div className="flex border-y border-[var(--surface-elevated-divider)] p-1">
           {(['unread', 'all'] as ViewMode[]).map((mode) => (
             <button
               key={mode}
@@ -143,14 +151,14 @@ export function NotificationBell({
               className={`h-7 flex-1 rounded text-xs font-medium capitalize transition-colors ${
                 view === mode
                   ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-950'
-                  : 'text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                  : 'text-neutral-500 hover:bg-neutral-100 dark:hover:bg-white/10'
               }`}
             >
               {mode}
             </button>
           ))}
         </div>
-        <div className="max-h-[720px] overflow-y-auto py-1">
+        <div className="max-h-[720px] divide-y divide-[var(--surface-elevated-divider)] overflow-y-auto">
           {loading && notifications.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-neutral-500">
               Loading
@@ -172,14 +180,14 @@ export function NotificationBell({
                   <button
                     type="button"
                     onClick={() => openNotification(notification)}
-                    className="mx-1 flex w-[calc(100%-0.5rem)] items-start gap-2.5 rounded-md px-3 py-3 text-left transition hover:bg-neutral-50 hover:shadow-md dark:hover:bg-white/[0.06] dark:hover:shadow-none"
+                    className="flex w-full items-start gap-2.5 px-3 py-3 text-left transition hover:bg-neutral-50 dark:hover:bg-white/[0.06]"
                   >
                     <span className="relative mt-0.5 shrink-0">
                       <UserAvatar name={actorName} size="sm" />
                       {unread ? (
                         <span
                           aria-hidden
-                          className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-[var(--accent-3)] ring-2 ring-white dark:ring-neutral-800"
+                          className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-[var(--accent-3)] ring-2 ring-[var(--surface-elevated)]"
                         />
                       ) : null}
                     </span>
@@ -206,7 +214,7 @@ export function NotificationBell({
         <div className="px-2 py-1.5">
           <Link
             href="/profile"
-            className="block rounded-md px-2 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white"
+            className="block rounded-md px-2 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white"
             onClick={() => setOpen(false)}
           >
             Notification settings

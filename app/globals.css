@@ -72,6 +72,23 @@
   --accent-bg-soft: rgba(99, 102, 241, 0.08);
   --accent-bg-soft-dark: rgba(167, 139, 250, 0.1);
 
+  /* Elevated popout surface — the "closest to the user" tier.
+     Dark mode follows the rule: highest z-index → lightest surface, so
+     popouts sit ABOVE cards/sidebar (which share --card #1A1A1F) on the
+     lightest rung of the cool ramp. Light mode stays plain white.
+     Opt future popovers/menus into this via bg-elevated +
+     border-elevated-line so "lightest = closest" stays consistent. */
+  --surface-elevated: #ffffff;
+  --surface-elevated-line: oklch(0.9219 0 0);   /* hairline border (~neutral-200) */
+  --surface-elevated-divider: oklch(0.9219 0 0); /* internal dividers */
+  /* Liquid-glass surface tokens (light). Consumed by .liquid-glass-surface.
+     Tint frosts toward white; rim/sheen are the light edges that make it
+     read as glass rather than a flat panel. */
+  --glass-tint: rgba(255, 255, 255, 0.6);
+  --glass-rim: rgba(255, 255, 255, 0.8);    /* inset top highlight */
+  --glass-sheen: rgba(255, 255, 255, 0.45); /* top-down sheen gradient */
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+
   /* Dashboard Timeline dark-mode audit ramp. These are intentionally
      page-scoped tokens so the Timeline tab can become the reference dark
      hierarchy before the rest of the dashboard follows it. */
@@ -129,6 +146,20 @@
   --sidebar-accent-foreground: #f0efed;
   --sidebar-border: rgba(255,255,255,0.07);
   --sidebar-ring: rgba(255,255,255,0.2);
+
+  /* Elevated popout surface (dark) — lightest rung of the cool ramp,
+     matching --timeline-surface-4 so popouts read as the top layer
+     instead of the off-hue neutral gray they used before. */
+  --surface-elevated: #2A2A32;
+  --surface-elevated-line: rgba(255, 255, 255, 0.14);
+  --surface-elevated-divider: rgba(255, 255, 255, 0.075);
+  /* Liquid-glass surface tokens (dark). A light, very translucent tint over
+     the blurred backdrop reads as Apple-style dark vibrancy; the white rim +
+     sheen supply the light edges that sell it as glass on a near-black app. */
+  --glass-tint: rgba(58, 58, 68, 0.45);
+  --glass-rim: rgba(255, 255, 255, 0.18);
+  --glass-sheen: rgba(255, 255, 255, 0.12);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 
   /* Dark-mode turnover purple — the values that ship today and that
      the user has signed off on. Light-mode counterparts live in :root. */
@@ -243,6 +274,28 @@ a {
     radial-gradient(ellipse at 80% 20%, oklch(0.21 0.005 240 / 0.25) 0%, transparent 50%),
     radial-gradient(ellipse at 60% 80%, oklch(0.17 0.005 280 / 0.2) 0%, transparent 50%),
     var(--background);
+}
+
+/* Liquid-glass surface — Apple-style vibrancy (tint + blur + top sheen +
+   rim light). Reads as glass against dark OR light backgrounds.
+   IMPORTANT: for Radix popouts (positioned via transform, which makes
+   Chromium drop backdrop blur), apply this to a NON-transformed backing
+   layer inside the content — not the content element itself. The element
+   needs `position` set so the ::before sheen anchors to it. */
+.liquid-glass-surface {
+  background: var(--glass-tint);
+  backdrop-filter: blur(28px) saturate(1.8);
+  -webkit-backdrop-filter: blur(28px) saturate(1.8);
+  box-shadow: inset 0 1px 0 var(--glass-rim);
+}
+
+.liquid-glass-surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(to bottom, var(--glass-sheen) 0%, transparent 55%);
+  pointer-events: none;
 }
 
 /* Base glass card surface */
