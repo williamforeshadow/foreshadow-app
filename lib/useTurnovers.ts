@@ -146,7 +146,7 @@ export function useTurnovers() {
         await (window as any).__currentFormSave();
       }
 
-      const res = await fetch('/api/update-task-action', {
+      const res = await apiFetch('/api/update-task-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId, action })
@@ -273,7 +273,7 @@ export function useTurnovers() {
   const updateTaskSchedule = useCallback(
     async (taskId: string, scheduledDate: string | null, scheduledTime: string | null) => {
       try {
-        const res = await fetch('/api/update-task-schedule', {
+        const res = await apiFetch('/api/update-task-schedule', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ taskId, scheduledDate, scheduledTime })

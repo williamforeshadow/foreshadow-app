@@ -721,7 +721,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
       const calls: Promise<Response>[] = [];
       if (hasFieldChanges) {
         calls.push(
-          fetch('/api/update-task-fields', {
+          apiFetch('/api/update-task-fields', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ taskId, fields: fieldUpdates }),
@@ -730,7 +730,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
       }
       if (statusChanged) {
         calls.push(
-          fetch('/api/update-task-action', {
+          apiFetch('/api/update-task-action', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ taskId, action: newStatus }),
@@ -739,7 +739,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
       }
       if (scheduleChanged) {
         calls.push(
-          fetch('/api/update-task-schedule', {
+          apiFetch('/api/update-task-schedule', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -777,7 +777,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
       : null;
     updateSelectedRaw({ template_id: templateId || null, template_name: templateName });
     try {
-      await fetch('/api/update-task-fields', {
+      await apiFetch('/api/update-task-fields', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId, fields: { template_id: templateId || null } }),
@@ -796,7 +796,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
     const taskId = getRawTaskId(selectedItem.raw);
     updateSelectedRaw({ property_name: propertyName || null });
     try {
-      await fetch('/api/update-task-fields', {
+      await apiFetch('/api/update-task-fields', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId, fields: { property_name: propertyName || null } }),
@@ -1122,7 +1122,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
               const taskId = getRawTaskId(selectedItem.raw);
               updateSelectedRaw({ bin_id: binId || null });
               try {
-                await fetch('/api/update-task-fields', {
+                await apiFetch('/api/update-task-fields', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ taskId, fields: { bin_id: binId || null } }),
@@ -1142,7 +1142,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
               try {
                 const fields: Record<string, unknown> = { is_binned: isBinned };
                 if (!isBinned) fields.bin_id = null;
-                await fetch('/api/update-task-fields', {
+                await apiFetch('/api/update-task-fields', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ taskId, fields }),

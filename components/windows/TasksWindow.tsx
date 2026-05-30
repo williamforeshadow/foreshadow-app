@@ -9,6 +9,7 @@ import {
   useState,
 } from 'react';
 import { useTasks, type TaskRow as TaskRowData } from '@/lib/useTasks';
+import { apiFetch } from '@/lib/apiFetch';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
@@ -322,7 +323,7 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
         template_name: templateName || 'Unnamed Task',
       });
       try {
-        await fetch('/api/update-task-fields', {
+        await apiFetch('/api/update-task-fields', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ taskId, fields: { template_id: templateId || null } }),
@@ -343,7 +344,7 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
       const taskId = selectedTask.task_id;
       updateTaskInState(taskId, { property_name: propertyName || 'Unknown Property' });
       try {
-        await fetch('/api/update-task-fields', {
+        await apiFetch('/api/update-task-fields', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -366,7 +367,7 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
       const taskId = selectedTask.task_id;
       updateTaskInState(taskId, { bin_id: binId || null });
       try {
-        await fetch('/api/update-task-fields', {
+        await apiFetch('/api/update-task-fields', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ taskId, fields: { bin_id: binId || null } }),
@@ -389,7 +390,7 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
       try {
         const fields: Record<string, unknown> = { is_binned: isBinned };
         if (!isBinned) fields.bin_id = null;
-        await fetch('/api/update-task-fields', {
+        await apiFetch('/api/update-task-fields', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ taskId, fields }),

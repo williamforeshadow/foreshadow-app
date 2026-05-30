@@ -787,7 +787,7 @@ export function useTasks(options: UseTasksOptions = {}) {
         const calls: Promise<Response>[] = [];
         if (hasFieldChanges) {
           calls.push(
-            fetch('/api/update-task-fields', {
+            apiFetch('/api/update-task-fields', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ taskId, fields: fieldUpdates }),
@@ -796,7 +796,7 @@ export function useTasks(options: UseTasksOptions = {}) {
         }
         if (statusChanged) {
           calls.push(
-            fetch('/api/update-task-action', {
+            apiFetch('/api/update-task-action', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ taskId, action: newStatus }),
@@ -805,7 +805,7 @@ export function useTasks(options: UseTasksOptions = {}) {
         }
         if (scheduleChanged) {
           calls.push(
-            fetch('/api/update-task-schedule', {
+            apiFetch('/api/update-task-schedule', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

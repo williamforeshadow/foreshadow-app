@@ -561,7 +561,7 @@ export default function TimelineWindow({
 
   const handleUpdateTaskStatus = useCallback(async (taskId: string, action: string) => {
     try {
-      const res = await fetch('/api/update-task-action', {
+      const res = await apiFetch('/api/update-task-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId, action })
@@ -706,7 +706,7 @@ export default function TimelineWindow({
     }
 
     try {
-      const res = await fetch('/api/update-task-schedule', {
+      const res = await apiFetch('/api/update-task-schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId, scheduledDate, scheduledTime })
@@ -1106,7 +1106,7 @@ export default function TimelineWindow({
 
     if (Object.keys(fieldUpdates).length > 0) {
       try {
-        const res = await fetch('/api/update-task-fields', {
+        const res = await apiFetch('/api/update-task-fields', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ taskId, fields: fieldUpdates }),
@@ -2267,7 +2267,7 @@ export default function TimelineWindow({
                 : async (templateId) => {
                     const task = localTask || floatingData.item as Task;
                     try {
-                      await fetch('/api/update-task-fields', {
+                      await apiFetch('/api/update-task-fields', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ taskId: task.task_id, fields: { template_id: templateId || null } }),
@@ -2318,7 +2318,7 @@ export default function TimelineWindow({
               onBinChange={async (binId) => {
                 const task = localTask || floatingData.item as Task;
                 try {
-                  await fetch('/api/update-task-fields', {
+                  await apiFetch('/api/update-task-fields', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ taskId: task.task_id, fields: { bin_id: binId || null } }),
@@ -2344,7 +2344,7 @@ export default function TimelineWindow({
                 try {
                   const fields: Record<string, unknown> = { is_binned: isBinned };
                   if (!isBinned) fields.bin_id = null;
-                  await fetch('/api/update-task-fields', {
+                  await apiFetch('/api/update-task-fields', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ taskId: task.task_id, fields }),

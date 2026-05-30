@@ -171,7 +171,7 @@ export default function MobileApp() {
       await updateTaskAction(projectId, nextStatus);
     }
     if (Object.keys(updates).length > 0) {
-      await fetch('/api/update-task-fields', {
+      await apiFetch('/api/update-task-fields', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId: projectId, fields: updates }),
@@ -195,7 +195,7 @@ export default function MobileApp() {
 
   const handleTaskTemplateChange = useCallback(async (templateId: string | null) => {
     if (!mobileSelectedTask) return;
-    await fetch('/api/update-task-fields', {
+    await apiFetch('/api/update-task-fields', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ taskId: mobileSelectedTask.task_id, fields: { template_id: templateId } }),
@@ -382,7 +382,7 @@ export default function MobileApp() {
           onDelete={handleDeleteTask}
           allProperties={allProperties}
           onPropertyChange={async (propertyId, propertyName) => {
-            await fetch('/api/update-task-fields', {
+            await apiFetch('/api/update-task-fields', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -394,7 +394,7 @@ export default function MobileApp() {
           }}
           bins={binsHook.bins}
           onBinChange={async (binId) => {
-            await fetch('/api/update-task-fields', {
+            await apiFetch('/api/update-task-fields', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -408,7 +408,7 @@ export default function MobileApp() {
           onIsBinnedChange={async (isBinned) => {
             const fields: Record<string, unknown> = { is_binned: isBinned };
             if (!isBinned) fields.bin_id = null;
-            await fetch('/api/update-task-fields', {
+            await apiFetch('/api/update-task-fields', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ taskId: mobileSelectedTask.task_id, fields }),

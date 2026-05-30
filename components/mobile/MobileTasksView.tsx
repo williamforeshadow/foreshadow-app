@@ -13,6 +13,7 @@ import { useUsers } from '@/lib/useUsers';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useTasks, type TaskRow as TaskRowData } from '@/lib/useTasks';
+import { apiFetch } from '@/lib/apiFetch';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import type {
   Project,
@@ -213,7 +214,7 @@ function MobileTasksViewContent() {
         property_name: propertyName || 'Unknown Property',
       });
       try {
-        await fetch('/api/update-task-fields', {
+        await apiFetch('/api/update-task-fields', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -236,7 +237,7 @@ function MobileTasksViewContent() {
       const taskId = selectedTask.task_id;
       updateTaskInState(taskId, { bin_id: binId || null });
       try {
-        await fetch('/api/update-task-fields', {
+        await apiFetch('/api/update-task-fields', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ taskId, fields: { bin_id: binId || null } }),
@@ -259,7 +260,7 @@ function MobileTasksViewContent() {
       try {
         const fields: Record<string, unknown> = { is_binned: isBinned };
         if (!isBinned) fields.bin_id = null;
-        await fetch('/api/update-task-fields', {
+        await apiFetch('/api/update-task-fields', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ taskId, fields }),
@@ -286,7 +287,7 @@ function MobileTasksViewContent() {
         template_name: templateName || 'Unnamed Task',
       });
       try {
-        await fetch('/api/update-task-fields', {
+        await apiFetch('/api/update-task-fields', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

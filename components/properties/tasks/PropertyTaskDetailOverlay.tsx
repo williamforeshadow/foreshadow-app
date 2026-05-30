@@ -369,7 +369,7 @@ export function PropertyTaskDetailOverlay({
         const calls: Promise<Response>[] = [];
         if (hasFieldChanges) {
           calls.push(
-            fetch('/api/update-task-fields', {
+            apiFetch('/api/update-task-fields', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ taskId, fields: fieldUpdates }),
@@ -378,7 +378,7 @@ export function PropertyTaskDetailOverlay({
         }
         if (statusChanged) {
           calls.push(
-            fetch('/api/update-task-action', {
+            apiFetch('/api/update-task-action', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ taskId, action: newStatus }),
@@ -387,7 +387,7 @@ export function PropertyTaskDetailOverlay({
         }
         if (scheduleChanged) {
           calls.push(
-            fetch('/api/update-task-schedule', {
+            apiFetch('/api/update-task-schedule', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -433,7 +433,7 @@ export function PropertyTaskDetailOverlay({
         template_name: templateName,
       });
       try {
-        await fetch('/api/update-task-fields', {
+        await apiFetch('/api/update-task-fields', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -458,7 +458,7 @@ export function PropertyTaskDetailOverlay({
       const taskId = effectiveTask.task_id;
       updateLocalPatch({ property_name: propName || null });
       try {
-        await fetch('/api/update-task-fields', {
+        await apiFetch('/api/update-task-fields', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -578,7 +578,7 @@ export function PropertyTaskDetailOverlay({
         onBinChange={async (binId) => {
           updateLocalPatch({ bin_id: binId || null });
           try {
-            await fetch('/api/update-task-fields', {
+            await apiFetch('/api/update-task-fields', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -599,7 +599,7 @@ export function PropertyTaskDetailOverlay({
           try {
             const fields: Record<string, unknown> = { is_binned: isBinned };
             if (!isBinned) fields.bin_id = null;
-            await fetch('/api/update-task-fields', {
+            await apiFetch('/api/update-task-fields', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ taskId: task.task_id, fields }),
@@ -691,7 +691,7 @@ export function PropertyTaskDetailOverlay({
           onBinChange={async (binId) => {
             updateLocalPatch({ bin_id: binId || null });
             try {
-              await fetch('/api/update-task-fields', {
+              await apiFetch('/api/update-task-fields', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -712,7 +712,7 @@ export function PropertyTaskDetailOverlay({
             try {
               const fields: Record<string, unknown> = { is_binned: isBinned };
               if (!isBinned) fields.bin_id = null;
-              await fetch('/api/update-task-fields', {
+              await apiFetch('/api/update-task-fields', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ taskId: task.task_id, fields }),
