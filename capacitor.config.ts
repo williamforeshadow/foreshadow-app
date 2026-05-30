@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.foreshadow.ios',
+  appId: 'app.foreshadow.ios',
   appName: 'Foreshadow',
   webDir: '.next', // Next.js build output (for static assets)
   server: {
