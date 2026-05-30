@@ -1,21 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Bell, CheckCheck } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { UserAvatar } from '@/components/ui/user-avatar';
-import { formatRelative } from '@/src/lib/dates';
 import type { NotificationRecord } from '@/lib/notifications';
-
-type ViewMode = 'unread' | 'all';
+import { useNotificationFeed } from './useNotificationFeed';
+import { NotificationRows, NotificationViewTabs } from './NotificationList';
 
 export function NotificationBell({
   compact = false,
@@ -27,56 +24,30 @@ export function NotificationBell({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<ViewMode>('unread');
-  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const { view, setView, notifications, unreadCount, loading, markRead } =
+    useNotificationFeed();
 
-  // Mirror of `view` for the poll interval — keeps `load` stable while still
-  // letting the interval read the live view.
-  const viewRef = useRef<ViewMode>(view);
-  useEffect(() => {
-    viewRef.current = view;
-  }, [view]);
+  const badge =
+    unreadCount > 0 ? (
+      <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--accent-3)] px-1 text-[10px] font-semibold leading-none text-white">
+        {unreadCount > 9 ? '9+' : unreadCount}
+      </span>
+    ) : null;
 
-  // Stable: callers always pass an explicit mode. (A `view`-dependent `load`
-  // would re-create on every toggle and re-fire the mount effect below,
-  // which previously snapped "All" back to "Unread".)
-  const load = useCallback(async (mode: ViewMode) => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/notifications?view=${mode}&limit=50`, {
-        cache: 'no-store',
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      setNotifications(data.notifications ?? []);
-      setUnreadCount(data.unread_count ?? 0);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Initial load + 60s background poll of the current view. Runs once.
-  useEffect(() => {
-    load('unread');
-    const id = window.setInterval(() => load(viewRef.current), 60000);
-    return () => window.clearInterval(id);
-  }, [load]);
-
-  // Reload when the dropdown opens or the active view changes.
-  useEffect(() => {
-    if (open) load(view);
-  }, [load, open, view]);
-
-  const markRead = async (ids: string[] | 'all') => {
-    await fetch('/api/notifications/mark-read', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ids === 'all' ? { all: true } : { ids }),
-    });
-    await load(view);
-  };
+  // Mobile: the bell is a plain link into the dedicated /notifications page
+  // (no dropdown). The unread badge still polls via the shared feed hook.
+  if (compact) {
+    return (
+      <Link
+        href="/notifications"
+        className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white"
+        aria-label="Notifications"
+      >
+        <Bell className="h-4 w-4" />
+        {badge}
+      </Link>
+    );
+  }
 
   const openNotification = async (notification: NotificationRecord) => {
     if (!notification.read_at) {
@@ -97,23 +68,17 @@ export function NotificationBell({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className={`relative inline-flex items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white ${
-            compact ? 'h-9 w-9' : 'h-8 w-8'
-          }`}
+          className="relative inline-flex h-8 w-8 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white"
           aria-label="Notifications"
         >
           <Bell className="h-4 w-4" />
-          {unreadCount > 0 ? (
-            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--accent-3)] px-1 text-[10px] font-semibold leading-none text-white">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          ) : null}
+          {badge}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        align={compact ? 'end' : 'start'}
-        side={compact ? 'bottom' : 'right'}
-        alignOffset={compact ? 0 : 8}
+        align="start"
+        side="right"
+        alignOffset={8}
         className="relative w-[min(640px,calc(100vw-24px))] overflow-hidden border border-[var(--surface-elevated-line)] p-0 shadow-[var(--glass-shadow)]"
       >
         {/* Liquid-glass backing. Lives on its own non-transformed layer so
@@ -142,73 +107,13 @@ export function NotificationBell({
             <CheckCheck className="h-4 w-4" />
           </button>
         </div>
-        <div className="flex border-y border-[var(--surface-elevated-divider)] p-1">
-          {(['unread', 'all'] as ViewMode[]).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => setView(mode)}
-              className={`h-7 flex-1 rounded text-xs font-medium capitalize transition-colors ${
-                view === mode
-                  ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-950'
-                  : 'text-neutral-500 hover:bg-neutral-100 dark:hover:bg-white/10'
-              }`}
-            >
-              {mode}
-            </button>
-          ))}
-        </div>
-        <div className="max-h-[720px] divide-y divide-[var(--surface-elevated-divider)] overflow-y-auto">
-          {loading && notifications.length === 0 ? (
-            <div className="px-3 py-8 text-center text-sm text-neutral-500">
-              Loading
-            </div>
-          ) : notifications.length === 0 ? (
-            <div className="px-3 py-8 text-center text-sm text-neutral-500">
-              No notifications
-            </div>
-          ) : (
-            notifications.map((notification) => {
-              const actorName = notification.actor_name ?? 'System';
-              const unread = !notification.read_at;
-              return (
-                <DropdownMenuItem
-                  key={notification.id}
-                  asChild
-                  className="cursor-pointer px-0 py-0 focus:bg-transparent data-[highlighted]:bg-transparent"
-                >
-                  <button
-                    type="button"
-                    onClick={() => openNotification(notification)}
-                    className="flex w-full items-start gap-2.5 px-3 py-3 text-left transition hover:bg-neutral-50 dark:hover:bg-white/[0.06]"
-                  >
-                    <span className="relative mt-0.5 shrink-0">
-                      <UserAvatar name={actorName} size="sm" />
-                      {unread ? (
-                        <span
-                          aria-hidden
-                          className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-[var(--accent-3)] ring-2 ring-[var(--surface-elevated)]"
-                        />
-                      ) : null}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-baseline gap-2">
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-900 dark:text-white">
-                          {notification.title}
-                        </span>
-                        <span className="shrink-0 text-[11px] text-neutral-400 dark:text-neutral-500">
-                          {formatRelative(notification.created_at)}
-                        </span>
-                      </span>
-                      <span className="mt-0.5 line-clamp-2 block text-xs leading-5 text-neutral-500 dark:text-neutral-400">
-                        {notification.body}
-                      </span>
-                    </span>
-                  </button>
-                </DropdownMenuItem>
-              );
-            })
-          )}
+        <NotificationViewTabs view={view} onChange={setView} />
+        <div className="max-h-[720px] overflow-y-auto">
+          <NotificationRows
+            notifications={notifications}
+            loading={loading}
+            onOpen={openNotification}
+          />
         </div>
         <DropdownMenuSeparator />
         <div className="px-2 py-1.5">
