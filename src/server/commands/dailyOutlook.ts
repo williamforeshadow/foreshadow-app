@@ -1,17 +1,21 @@
 import { getSupabaseServer } from '@/lib/supabaseServer';
-import { todayInTz, DEFAULT_TIMEZONE } from '@/src/lib/dates';
+import { todayInTz, addDays, DEFAULT_TIMEZONE } from '@/src/lib/dates';
 import { taskUrl } from '@/src/lib/links';
 import { getTasksByIds, type TaskByIdRow } from '@/src/server/tasks/getTaskById';
 import type { AssignmentTask } from './myAssignments';
 
-// Surface-agnostic data layer for the "daily outlook" command — today's
-// reservation check-ins/outs plus the invoking user's tasks scheduled for
-// today. Shared by the Slack `/dailyoutlook` handler and the in-app chat
-// command so both surfaces report identical data.
+// Surface-agnostic data layer for the "daily outlook" family of commands —
+// a target day's reservation check-ins/outs plus the invoking user's tasks
+// scheduled for that day. Shared by the Slack handlers and the in-app chat
+// commands so both surfaces report identical data.
 //
-// Timezone: "today" is resolved against the org default timezone.
-// Property-level timezones are not yet factored in (same simplification as
-// /myassignments).
+// `offsetDays` selects the target day relative to "today": 0 powers
+// /dailyoutlook, 1 powers /tomorrow. Reservations and tasks are filtered on
+// the resolved calendar date, so the whole query path is reused unchanged.
+//
+// Timezone: "today" is resolved against the org default timezone, and the
+// offset is added as plain calendar days. Property-level timezones are not
+// yet factored in (same simplification as /myassignments).
 
 export interface ReservationSummary {
   property_name: string;
@@ -21,7 +25,7 @@ export interface ReservationSummary {
 export interface DailyOutlookData {
   /** False only when the task query errored. */
   ok: boolean;
-  /** YYYY-MM-DD "today" in the org timezone. */
+  /** YYYY-MM-DD target day (today + offsetDays) in the org timezone. */
   date: string;
   checkOuts: ReservationSummary[];
   checkIns: ReservationSummary[];
@@ -30,6 +34,7 @@ export interface DailyOutlookData {
 
 export async function getDailyOutlookData(
   appUserId: string,
+  offsetDays = 0,
 ): Promise<DailyOutlookData> {
   const supabase = getSupabaseServer();
 
@@ -45,17 +50,18 @@ export async function getDailyOutlookData(
     // Table may not exist yet — use the constant default.
   }
   const { date: today } = todayInTz(orgTimezone);
+  const targetDate = offsetDays === 0 ? today : addDays(today, offsetDays);
 
   const [checkOutRes, checkInRes] = await Promise.all([
     supabase
       .from('reservations')
       .select('property_name, guest_name')
-      .eq('check_out', today)
+      .eq('check_out', targetDate)
       .order('property_name', { ascending: true }),
     supabase
       .from('reservations')
       .select('property_name, guest_name')
-      .eq('check_in', today)
+      .eq('check_in', targetDate)
       .order('property_name', { ascending: true }),
   ]);
 
@@ -81,7 +87,7 @@ export async function getDailyOutlookData(
       appUserId,
       err: error,
     });
-    return { ok: false, date: today, checkOuts, checkIns, tasks: [] };
+    return { ok: false, date: targetDate, checkOuts, checkIns, tasks: [] };
   }
 
   const assignedIds = Array.from(
@@ -95,7 +101,7 @@ export async function getDailyOutlookData(
   let todayTasks: TaskByIdRow[] = [];
   if (assignedIds.length > 0) {
     todayTasks = (await getTasksByIds(assignedIds)).filter(
-      (t) => t.status !== 'complete' && t.scheduled_date === today,
+      (t) => t.status !== 'complete' && t.scheduled_date === targetDate,
     );
   }
   // scheduled_time asc (nulls last), then created_at asc.
@@ -108,7 +114,7 @@ export async function getDailyOutlookData(
 
   return {
     ok: true,
-    date: today,
+    date: targetDate,
     checkOuts,
     checkIns,
     tasks: todayTasks.map((task) => ({ task, url: taskUrl(task.task_id) })),

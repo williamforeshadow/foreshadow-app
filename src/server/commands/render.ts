@@ -49,9 +49,32 @@ function reservationLines(label: string, rows: ReservationSummary[]): string[] {
   ];
 }
 
+// Per-command copy for the daily-outlook family. Defaults render the
+// `/dailyoutlook` (today) wording byte-for-byte unchanged; /tomorrow passes
+// its own variant. `headerLabel` precedes "— <date>"; `dayWord` fills "Your
+// tasks <dayWord>"; `emptyBody` is the sentence after "<name>, ".
+export interface OutlookCopy {
+  headerLabel: string;
+  dayWord: string;
+  emptyBody: string;
+}
+
+export const TODAY_OUTLOOK_COPY: OutlookCopy = {
+  headerLabel: 'Daily outlook',
+  dayWord: 'today',
+  emptyBody: 'nothing on the board today. Enjoy the quiet.',
+};
+
+export const TOMORROW_OUTLOOK_COPY: OutlookCopy = {
+  headerLabel: 'Tomorrow',
+  dayWord: 'tomorrow',
+  emptyBody: 'nothing scheduled for tomorrow.',
+};
+
 export function renderDailyOutlookMarkdown(
   data: DailyOutlookData,
   displayName: string,
+  copy: OutlookCopy = TODAY_OUTLOOK_COPY,
 ): string {
   if (!data.ok) {
     return "Sorry — I couldn't load your daily outlook right now. Try again in a moment.";
@@ -61,15 +84,15 @@ export function renderDailyOutlookMarkdown(
     data.checkOuts.length === 0 &&
     data.checkIns.length === 0
   ) {
-    return `${displayName}, nothing on the board today. Enjoy the quiet.`;
+    return `${displayName}, ${copy.emptyBody}`;
   }
 
-  const lines: string[] = [`**Daily outlook — ${data.date}**`, ''];
+  const lines: string[] = [`**${copy.headerLabel} — ${data.date}**`, ''];
   lines.push(...reservationLines('Check-ins', data.checkIns));
   lines.push(...reservationLines('Check-outs', data.checkOuts));
   if (data.tasks.length > 0) {
     const noun = data.tasks.length === 1 ? 'task' : 'tasks';
-    lines.push(`**Your ${noun} today (${data.tasks.length})**`);
+    lines.push(`**Your ${noun} ${copy.dayWord} (${data.tasks.length})**`);
     lines.push(...data.tasks.map(taskLine));
   }
   return lines.join('\n').trim();

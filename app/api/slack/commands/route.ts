@@ -6,6 +6,7 @@ import { verifySlackSignature } from '@/src/slack/verify';
 import { resolveSlackUser } from '@/src/slack/identity';
 import { runMyAssignments } from '@/src/slack/commands/myAssignments';
 import { runDailyOutlook } from '@/src/slack/commands/dailyOutlook';
+import { runTomorrow } from '@/src/slack/commands/tomorrow';
 
 // POST /api/slack/commands
 //
@@ -176,6 +177,25 @@ export async function POST(req: NextRequest) {
       });
       return new NextResponse(null, { status: 200 });
     }
+    case '/tomorrow': {
+      after(async () => {
+        const web = new WebClient(botToken);
+        try {
+          await handleTomorrow(web, payload);
+        } catch (err) {
+          console.error('[slack/commands] /tomorrow handler crashed', {
+            user_id: payload.user_id,
+            err,
+          });
+          await postEphemeralSafe(web, {
+            channel: payload.channel_id,
+            user: payload.user_id,
+            text: `Sorry — something went wrong running /tomorrow. Try again in a moment.`,
+          });
+        }
+      });
+      return new NextResponse(null, { status: 200 });
+    }
     default: {
       // Inline ephemeral via the immediate response. This is the one
       // place response_url-style inline replies still make sense:
@@ -263,6 +283,33 @@ async function handleDailyOutlook(
   }
 
   const result = await runDailyOutlook({
+    appUserId: identity.appUserId,
+    displayName: identity.appUserName,
+  });
+
+  await postEphemeralSafe(web, {
+    channel: payload.channel_id,
+    user: payload.user_id,
+    text: result.text,
+    blocks: result.blocks.length > 0 ? result.blocks : undefined,
+  });
+}
+
+async function handleTomorrow(
+  web: WebClient,
+  payload: SlashCommandPayload,
+): Promise<void> {
+  const identity = await resolveSlackUser(web, payload.user_id);
+  if (!identity) {
+    await postEphemeralSafe(web, {
+      channel: payload.channel_id,
+      user: payload.user_id,
+      text: `I don't recognize this Slack account. Ask Billy to add your email to Foreshadow so I can connect you, then try again.`,
+    });
+    return;
+  }
+
+  const result = await runTomorrow({
     appUserId: identity.appUserId,
     displayName: identity.appUserName,
   });

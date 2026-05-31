@@ -37,11 +37,15 @@ function formatDateForHeader(dateStr: string): string {
   });
 }
 
-function outlookHeaderBlock(dateStr: string): Block {
+function outlookHeaderBlock(dateStr: string, headerLabel: string): Block {
   const formatted = formatDateForHeader(dateStr);
   return {
     type: 'header',
-    text: { type: 'plain_text', text: `Daily Outlook \u2014 ${formatted}`, emoji: true },
+    text: {
+      type: 'plain_text',
+      text: `${headerLabel} \u2014 ${formatted}`,
+      emoji: true,
+    },
     level: 1,
   } as unknown as Block;
 }
@@ -142,13 +146,13 @@ function taskBulletBlock(
   };
 }
 
-function tasksSectionHeader(count: number): KnownBlock {
+function tasksSectionHeader(count: number, dayWord: string): KnownBlock {
   const noun = count === 1 ? 'task' : 'tasks';
   return {
     type: 'section',
     text: {
       type: 'mrkdwn',
-      text: `*Your tasks today (${count} ${noun})*`,
+      text: `*Your tasks ${dayWord} (${count} ${noun})*`,
     },
   };
 }
@@ -160,10 +164,21 @@ export function buildDailyOutlookBlocks(args: {
   checkOuts: ReservationSummary[];
   checkIns: ReservationSummary[];
   orderedTasks: Array<{ url: string; task: TaskByIdRow }>;
+  /** Header label before "— <date>". Defaults to "Daily Outlook" (today). */
+  headerLabel?: string;
+  /** Word in "Your tasks <dayWord>". Defaults to "today". */
+  dayWord?: string;
 }): Block[] {
-  const { dateStr, checkOuts, checkIns, orderedTasks } = args;
+  const {
+    dateStr,
+    checkOuts,
+    checkIns,
+    orderedTasks,
+    headerLabel = 'Daily Outlook',
+    dayWord = 'today',
+  } = args;
 
-  const blocks: Block[] = [outlookHeaderBlock(dateStr)];
+  const blocks: Block[] = [outlookHeaderBlock(dateStr, headerLabel)];
 
   const link = pageLinkContextBlock();
   if (link) blocks.push(link as unknown as Block);
@@ -180,7 +195,9 @@ export function buildDailyOutlookBlocks(args: {
       blocks.push({ type: 'divider' } as unknown as Block);
     }
 
-    blocks.push(tasksSectionHeader(orderedTasks.length) as unknown as Block);
+    blocks.push(
+      tasksSectionHeader(orderedTasks.length, dayWord) as unknown as Block,
+    );
 
     if (orderedTasks.length <= MAX_OUTLOOK_CARDS) {
       for (const row of orderedTasks) {
@@ -199,8 +216,14 @@ export function dailyOutlookText(args: {
   taskCount: number;
   checkOutCount: number;
   checkInCount: number;
+  /** Notification-fallback label. Defaults to "Daily Outlook" (today). */
+  label?: string;
+  /** Word in the empty-state "Nothing on the board <dayWord>.". */
+  dayWord?: string;
 }): string {
-  const parts: string[] = [`Daily Outlook for ${args.displayName}:`];
+  const label = args.label ?? 'Daily Outlook';
+  const dayWord = args.dayWord ?? 'today';
+  const parts: string[] = [`${label} for ${args.displayName}:`];
 
   if (args.checkOutCount > 0 || args.checkInCount > 0) {
     const resParts: string[] = [];
@@ -214,7 +237,7 @@ export function dailyOutlookText(args: {
   }
 
   if (args.taskCount === 0 && args.checkOutCount === 0 && args.checkInCount === 0) {
-    parts.push('Nothing on the board today.');
+    parts.push(`Nothing on the board ${dayWord}.`);
   }
 
   return parts.join(' \u2014 ');

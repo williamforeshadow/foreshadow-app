@@ -243,6 +243,10 @@ export function AiChatPanel() {
               !res.ok || data.error
                 ? `Error: ${data.error || 'Something went wrong'}`
                 : data.answer,
+            tasks:
+              !res.ok || data.error || !Array.isArray(data.tasks)
+                ? undefined
+                : data.tasks,
           },
         ]);
       } catch (err) {

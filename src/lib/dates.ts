@@ -25,6 +25,20 @@ export function todayInTz(tz: string | undefined): { date: string; tz: string } 
   return { date: new Date().toISOString().slice(0, 10), tz: 'UTC' };
 }
 
+/**
+ * Add (or subtract, with a negative `days`) whole calendar days to a bare
+ * YYYY-MM-DD string, returning the resulting YYYY-MM-DD. Pure calendar
+ * arithmetic anchored at noon UTC so it can never drift across a day boundary
+ * from DST or the host's timezone — consistent with the wall-clock convention
+ * above, where only the calendar date matters, not a real instant.
+ */
+export function addDays(dateStr: string, days: number): string {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(year, month - 1, day, 12));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}
+
 /** Default org timezone used when operations_settings hasn't been configured. */
 export const DEFAULT_TIMEZONE = 'America/Los_Angeles';
 

@@ -14,6 +14,10 @@ export const AGENT_COMMANDS: AgentCommand[] = [
     name: '/dailyoutlook',
     description: "Today's check-ins, check-outs & tasks",
   },
+  {
+    name: '/tomorrow',
+    description: "Tomorrow's check-ins, check-outs & tasks",
+  },
 ];
 
 /** True when `text` (trimmed, case-insensitive) is exactly a known command. */
