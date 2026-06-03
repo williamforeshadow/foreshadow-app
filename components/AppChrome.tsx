@@ -12,7 +12,9 @@ import { PushNotificationsBridge } from '@/lib/push/PushNotificationsBridge';
 export function AppChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
-  if (pathname === '/login') {
+  // The public /demo/* marketing routes render their own (mocked) chrome and
+  // must not mount the global agent panel / push bridge.
+  if (pathname === '/login' || pathname.startsWith('/demo')) {
     return <>{children}</>;
   }
 

@@ -2,7 +2,9 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { updateSupabaseSession } from '@/lib/supabaseSession';
 
-const PUBLIC_PATHS = ['/login', '/auth/callback', '/auth/confirm'];
+// '/demo' is the public, fully-mocked marketing demo (app/demo/*) — no auth,
+// no real data; safe to embed publicly.
+const PUBLIC_PATHS = ['/login', '/auth/callback', '/auth/confirm', '/demo'];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));

@@ -23,7 +23,9 @@ interface AiChatContextValue {
   toggleFullscreen: () => void;
 }
 
-const AiChatContext = createContext<AiChatContextValue | undefined>(undefined);
+// Exported so the isolated marketing demo (app/demo/*) can supply an
+// always-open value to the real AiChatPanel. Inert for existing importers.
+export const AiChatContext = createContext<AiChatContextValue | undefined>(undefined);
 
 export function AiChatProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);

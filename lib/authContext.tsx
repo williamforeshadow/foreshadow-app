@@ -32,7 +32,11 @@ interface AuthContextType {
   canManageProjects: boolean;
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
+// Exported so an isolated, fully-mocked marketing demo (app/demo/*) can supply
+// a fake auth value to the real components without going through AuthProvider
+// (which resolves the user via Supabase). Exporting a constant is inert for all
+// existing importers — no runtime behavior change.
+export const AuthContext = createContext<AuthContextType | null>(null);
 
 // Define permissions per role
 const getPermissions = (r: Role | null) => ({

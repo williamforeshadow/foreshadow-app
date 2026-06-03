@@ -82,11 +82,13 @@ interface ReservationViewerContextValue {
   setSelectedTask: (task: OverlayTaskInput | null) => void;
 }
 
-const ReservationViewerContext = createContext<
+// Exported so the isolated, fully-mocked marketing demo (app/demo/*) can supply
+// a no-op value to the real Schedule component. Inert for existing importers.
+export const ReservationViewerContext = createContext<
   ReservationViewerContextValue | undefined
 >(undefined);
 
-const NOOP_VALUE: ReservationViewerContextValue = {
+export const NOOP_VALUE: ReservationViewerContextValue = {
   open: () => {},
   close: () => {},
   currentReservationId: null,

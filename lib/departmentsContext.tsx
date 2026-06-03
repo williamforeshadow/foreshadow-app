@@ -12,7 +12,9 @@ interface DepartmentsContextType {
   refreshDepartments: () => Promise<void>;
 }
 
-const DepartmentsContext = createContext<DepartmentsContextType | null>(null);
+// Exported so the isolated marketing demo (app/demo/*) can supply a mock value.
+// Inert for existing importers.
+export const DepartmentsContext = createContext<DepartmentsContextType | null>(null);
 
 export function DepartmentsProvider({ children }: { children: ReactNode }) {
   const [departments, setDepartments] = useState<Department[]>([]);

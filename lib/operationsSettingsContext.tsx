@@ -44,14 +44,16 @@ interface OperationsSettingsContextType {
 
 // Defaults match the SQL seed. Kept in sync intentionally so the UI has a
 // sane render even on a cold cache or a failed fetch.
-const DEFAULT_SETTINGS: OperationsSettings = {
+export const DEFAULT_SETTINGS: OperationsSettings = {
   default_check_in_time: '15:00',
   default_check_out_time: '11:00',
   default_timezone: DEFAULT_TIMEZONE,
   updated_at: null,
 };
 
-const OperationsSettingsContext = createContext<OperationsSettingsContextType | null>(null);
+// Exported so the isolated marketing demo (app/demo/*) can supply a mock value.
+// Inert for existing importers.
+export const OperationsSettingsContext = createContext<OperationsSettingsContextType | null>(null);
 
 export function OperationsSettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<OperationsSettings>(DEFAULT_SETTINGS);
