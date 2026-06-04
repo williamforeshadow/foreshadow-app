@@ -58,23 +58,30 @@ const KNOWLEDGE_PILLS: KnowledgePill[] = [
 export function PropertyShell({
   propertyId,
   children,
+  basePath,
 }: {
   propertyId: string;
   children: React.ReactNode;
+  // Route prefix the tab links + active-tab detection hang off of. Defaults to
+  // the real `/properties/:id`; the public property demo passes its own
+  // `/demo/property/:id` so the tabs navigate within the demo.
+  basePath?: string;
 }) {
   return (
     <PropertyProvider propertyId={propertyId}>
-      <ShellBody propertyId={propertyId}>{children}</ShellBody>
+      <ShellBody basePath={basePath ?? `/properties/${propertyId}`}>
+        {children}
+      </ShellBody>
     </PropertyProvider>
   );
 }
 
 function ShellBody({
-  propertyId,
   children,
+  basePath,
 }: {
-  propertyId: string;
   children: React.ReactNode;
+  basePath: string;
 }) {
   const { property, loading, error } = usePropertyContext();
   const router = useRouter();
@@ -88,7 +95,7 @@ function ShellBody({
   //   /properties/:id/tasks                     → primary=tasks
   //   /properties/:id/schedule                  → primary=schedule
   const { activePrimaryId, activePillId } = React.useMemo(() => {
-    const base = `/properties/${propertyId}`;
+    const base = basePath;
     const trail = pathname.startsWith(base)
       ? pathname.slice(base.length).replace(/^\/+/, '')
       : '';
@@ -106,7 +113,7 @@ function ShellBody({
       pillId = match?.id ?? 'info';
     }
     return { activePrimaryId: primaryId, activePillId: pillId };
-  }, [pathname, propertyId]);
+  }, [pathname, basePath]);
 
   if (loading) {
     return (
@@ -185,7 +192,7 @@ function ShellBody({
             className="flex items-end gap-0.5 overflow-x-auto -mx-5 sm:-mx-8 px-5 sm:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {PRIMARY_TABS.map((tab) => {
-              const href = `/properties/${propertyId}/${tab.segment}`;
+              const href = `${basePath}/${tab.segment}`;
               const isActive = activePrimaryId === tab.id;
               return (
                 <Link
@@ -211,8 +218,8 @@ function ShellBody({
             >
               {KNOWLEDGE_PILLS.map((pill) => {
                 const href = pill.slug
-                  ? `/properties/${propertyId}/knowledge/${pill.slug}`
-                  : `/properties/${propertyId}/knowledge`;
+                  ? `${basePath}/knowledge/${pill.slug}`
+                  : `${basePath}/knowledge`;
                 const isActive = activePillId === pill.id;
                 return (
                   <Link

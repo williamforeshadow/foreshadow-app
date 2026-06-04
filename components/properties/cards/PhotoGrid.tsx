@@ -166,6 +166,13 @@ export function PhotoGrid({
 
 // Public Supabase URL resolver shared across photo consumers.
 export function resolvePublicPhotoUrl(storagePath: string): string {
+  // Already absolute (http/https) or root-relative (e.g. bundled /demo-property
+  // assets used by the public property demo) — serve as-is. Real storage paths
+  // are random hex segments and never start with "/" or a scheme, so this is
+  // inert for production data.
+  if (/^https?:\/\//.test(storagePath) || storagePath.startsWith('/')) {
+    return storagePath;
+  }
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (base) {
     return `${base}/storage/v1/object/public/property-photos/${storagePath}`;

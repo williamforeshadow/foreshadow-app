@@ -23,7 +23,7 @@ import {
 import { ReservationViewerContext, NOOP_VALUE } from '@/lib/reservationViewerContext';
 import TimelineWindow from '@/components/windows/TimelineWindow';
 import { AiChatPanel } from '@/components/ai-chat/AiChatPanel';
-import { useAiChat } from '@/components/ai-chat/AiChatProvider';
+import { AgentDemoBridge } from '@/components/ai-chat/AgentDemoBridge';
 import {
   DEMO_USER,
   DEMO_USERS,
@@ -162,36 +162,6 @@ const OPS_VALUE = {
 
 // Floating "Ask Foreshadow" launcher — opens the real agent panel (which reads
 // the root AiChatProvider's open state, also toggled by Cmd/Ctrl+K).
-function AgentLauncher() {
-  const { open, isOpen } = useAiChat();
-  if (isOpen) return null;
-  return (
-    <button
-      type="button"
-      onClick={open}
-      style={{
-        position: 'fixed',
-        right: 22,
-        bottom: 22,
-        zIndex: 80,
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '11px 17px',
-        borderRadius: 999,
-        border: 'none',
-        cursor: 'pointer',
-        fontSize: 13.5,
-        fontWeight: 600,
-        color: '#fff',
-        background: '#6366f1',
-        boxShadow: '0 10px 28px -8px rgba(99,102,241,0.7)',
-      }}
-    >
-      ✦ Ask Foreshadow
-    </button>
-  );
-}
 
 export default function DemoSchedulePage() {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -228,7 +198,7 @@ export default function DemoSchedulePage() {
               {/* Real agent — opens via the launcher or Cmd/Ctrl+K, replies
                   with the canned script (see the /api/agent interceptor). */}
               <AiChatPanel />
-              <AgentLauncher />
+              <AgentDemoBridge />
             </ReservationViewerContext.Provider>
           </OperationsSettingsContext.Provider>
         </DepartmentsContext.Provider>

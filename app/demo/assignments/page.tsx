@@ -1,13 +1,14 @@
 'use client';
 
 // =============================================================================
-// PUBLIC MARKETING DEMO — the real Bins/Boards (ProjectsWindow), fully mocked.
-// Same isolation pattern as app/demo/schedule: render the real component inside
-// mock context providers + a window.fetch interceptor so NO request reaches the
-// backend. Read-only; the Ask Foreshadow agent works here too.
+// PUBLIC MARKETING DEMO — the real "My Assignments" (MyAssignmentsWindow), fully
+// mocked. Same isolation pattern as the other /demo routes: render the real
+// component inside mock context providers + a window.fetch interceptor so NO
+// request reaches the backend. Read-only; the Ask Foreshadow agent works here.
+// Shows one teammate's personal task queue (Maya Singh).
 // =============================================================================
 
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef } from 'react';
 import { useDemoGuards } from '../useDemoGuards';
 import { AuthContext, type Role } from '@/lib/authContext';
 import { DepartmentsContext } from '@/lib/departmentsContext';
@@ -16,17 +17,16 @@ import {
   DEFAULT_SETTINGS,
 } from '@/lib/operationsSettingsContext';
 import { ReservationViewerContext, NOOP_VALUE } from '@/lib/reservationViewerContext';
-import ProjectsWindow from '@/components/windows/ProjectsWindow';
+import MyAssignmentsWindow from '@/components/windows/MyAssignmentsWindow';
 import { AiChatPanel } from '@/components/ai-chat/AiChatPanel';
 import { AgentDemoBridge } from '@/components/ai-chat/AgentDemoBridge';
 import {
-  DEMO_USER,
   DEMO_USERS,
   DEMO_DEPARTMENTS,
   DEMO_DEPT_ICON_MAP,
   DEMO_PROPERTY_OPTIONS,
 } from '../schedule/demoScheduleData';
-import { DEMO_PROJECT_BINS, getDemoBinTasks } from './demoBinsData';
+import { DEMO_ASSIGNMENTS_USER, getDemoAssignments } from './demoAssignmentsData';
 
 const SB = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 
@@ -56,23 +56,19 @@ const CANNED_ANSWER = [
 function makeMockFetch(original: typeof fetch): typeof fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = urlOf(input);
-    const method = (init?.method || 'GET').toUpperCase();
 
     if (url.includes('/api/agent')) {
       await delay(850);
       return json({ answer: CANNED_ANSWER });
     }
-    if (url.includes('/api/project-bins')) {
-      return json({ data: DEMO_PROJECT_BINS, total_projects: 27 });
-    }
-    // GET list of tasks for the board (mutations fall through to the catch-all)
-    if (url.includes('/api/tasks-for-bin') && method === 'GET') {
-      await delay(120);
-      return json({ data: getDemoBinTasks() });
+    if (url.includes('/api/my-assignments')) {
+      await delay(140);
+      return json(getDemoAssignments());
     }
     if (url.includes('/api/properties')) return json({ properties: DEMO_PROPERTY_OPTIONS });
+    if (url.includes('/api/project-bins')) return json({ data: [], total_projects: 0 });
     if (url.includes('/api/tasks')) return json({ data: [] });
-    if (url.includes('/api/auth/me')) return json({ user: DEMO_USER });
+    if (url.includes('/api/auth/me')) return json({ user: DEMO_ASSIGNMENTS_USER });
     if (url.includes('/api/users')) return json({ data: DEMO_USERS });
     if (url.includes('/api/departments')) return json({ departments: [] });
     if (url.includes('/api/operations-settings')) return json({ settings: DEFAULT_SETTINGS });
@@ -87,29 +83,29 @@ function makeMockFetch(original: typeof fetch): typeof fetch {
 let savedFetch: typeof fetch | null = null;
 function installInterceptor() {
   if (typeof window === 'undefined') return;
-  const w = window as Window & { __demoBinsPatched?: boolean };
-  if (w.__demoBinsPatched) return;
+  const w = window as Window & { __demoAssignPatched?: boolean };
+  if (w.__demoAssignPatched) return;
   savedFetch = window.fetch.bind(window);
   window.fetch = makeMockFetch(savedFetch);
-  w.__demoBinsPatched = true;
+  w.__demoAssignPatched = true;
 }
 installInterceptor();
 
 const AUTH_VALUE = {
-  user: DEMO_USER,
+  user: DEMO_ASSIGNMENTS_USER,
   allUsers: DEMO_USERS,
-  role: 'manager' as Role,
+  role: 'staff' as Role,
   loading: false,
   error: null,
   signOut: async () => {},
   refreshUser: async () => {},
   canManageUsers: false,
-  canEditTemplates: true,
+  canEditTemplates: false,
   canViewAllTasks: true,
   canEditTasks: true,
   canViewAllProperties: true,
   canEditProperties: false,
-  canManageProjects: true,
+  canManageProjects: false,
 };
 const DEPTS_VALUE = {
   departments: DEMO_DEPARTMENTS,
@@ -126,73 +122,53 @@ const OPS_VALUE = {
   save: async () => ({ ok: true as const }),
 };
 
-export default function DemoBinsPage() {
+export default function DemoAssignmentsPage() {
   const stageRef = useRef<HTMLDivElement>(null);
-  // Cover the bin-overview screen until the board is open, so the demo never
-  // flashes the overview before landing on the populated Task Bin board.
-  const [boardReady, setBoardReady] = useState(false);
 
   useEffect(() => {
     installInterceptor();
     return () => {
-      const w = window as Window & { __demoBinsPatched?: boolean };
-      if (savedFetch && w.__demoBinsPatched) {
+      const w = window as Window & { __demoAssignPatched?: boolean };
+      if (savedFetch && w.__demoAssignPatched) {
         window.fetch = savedFetch;
-        w.__demoBinsPatched = false;
+        w.__demoAssignPatched = false;
       }
     };
   }, []);
 
-  // Read-only guards (block task-detail open, contenteditable edits, nav, etc.).
+  // Shared read-only guards (contenteditable, file uploads, links, create).
   useDemoGuards(stageRef);
 
-  // ProjectsWindow opens on a bin OVERVIEW; click the system "Task Bin" card so
-  // the demo lands straight on the populated board. (No way to set the
-  // component's internal showKanban state without editing it.) Reveal only once
-  // the kanban board has mounted — the overlay hides the overview underneath.
+  // A TaskRow is <div role="button" class="grid … cursor-pointer">. Clicking it
+  // opens ProjectDetailPanel AND router.replace('/assignments?openTask=…'),
+  // which would navigate the iframe out of /demo. Swallow the row click.
   useEffect(() => {
-    let tries = 0;
-    const id = window.setInterval(() => {
-      tries += 1;
-      if (document.querySelector('[data-kanban-board]')) {
-        setBoardReady(true);
-        window.clearInterval(id);
-        return;
+    const el = stageRef.current;
+    if (!el) return;
+    const block = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      if (target?.closest?.('[role="button"][class*="grid"][class*="cursor-pointer"]')) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
       }
-      const card = Array.from(
-        document.querySelectorAll<HTMLElement>('[role="button"]'),
-      ).find((c) => /task bin/i.test(c.textContent || '') && /\btasks?\b/i.test(c.textContent || ''));
-      if (card) card.click();
-      if (tries > 90) {
-        setBoardReady(true);
-        window.clearInterval(id);
-      }
-    }, 60);
-    return () => window.clearInterval(id);
+    };
+    el.addEventListener('click', block, true);
+    return () => el.removeEventListener('click', block, true);
   }, []);
 
   return (
     <div
       ref={stageRef}
-      style={{ height: '100dvh', background: 'var(--background)', overflow: 'hidden' }}
+      style={{ height: '100dvh', background: 'var(--card)', overflow: 'hidden' }}
     >
-      {!boardReady && (
-        <div
-          aria-hidden
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 85,
-            background: 'var(--background)',
-          }}
-        />
-      )}
       <AuthContext.Provider value={AUTH_VALUE}>
         <DepartmentsContext.Provider value={DEPTS_VALUE}>
           <OperationsSettingsContext.Provider value={OPS_VALUE}>
             <ReservationViewerContext.Provider value={NOOP_VALUE}>
               <div style={{ height: '100%' }}>
-                <ProjectsWindow users={DEMO_USERS} currentUser={DEMO_USER} />
+                <Suspense fallback={null}>
+                  <MyAssignmentsWindow users={DEMO_USERS} currentUser={DEMO_ASSIGNMENTS_USER} />
+                </Suspense>
               </div>
               <AiChatPanel />
               <AgentDemoBridge />
