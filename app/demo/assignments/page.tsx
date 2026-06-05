@@ -10,6 +10,8 @@
 
 import { Suspense, useEffect, useRef } from 'react';
 import { useDemoGuards } from '../useDemoGuards';
+import { useIsMobile } from '@/lib/useIsMobile';
+import { MobileMyAssignmentsView } from '@/components/mobile';
 import { AuthContext, type Role } from '@/lib/authContext';
 import { DepartmentsContext } from '@/lib/departmentsContext';
 import {
@@ -124,6 +126,7 @@ const OPS_VALUE = {
 
 export default function DemoAssignmentsPage() {
   const stageRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     installInterceptor();
@@ -167,7 +170,11 @@ export default function DemoAssignmentsPage() {
             <ReservationViewerContext.Provider value={NOOP_VALUE}>
               <div style={{ height: '100%' }}>
                 <Suspense fallback={null}>
-                  <MyAssignmentsWindow users={DEMO_USERS} currentUser={DEMO_ASSIGNMENTS_USER} />
+                  {isMobile === null ? null : isMobile ? (
+                    <MobileMyAssignmentsView />
+                  ) : (
+                    <MyAssignmentsWindow users={DEMO_USERS} currentUser={DEMO_ASSIGNMENTS_USER} />
+                  )}
                 </Suspense>
               </div>
               <AiChatPanel />

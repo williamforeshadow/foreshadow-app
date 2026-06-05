@@ -9,6 +9,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useDemoGuards } from '../useDemoGuards';
+import { useIsMobile } from '@/lib/useIsMobile';
+import { MobileProjectsView } from '@/components/mobile';
 import { AuthContext, type Role } from '@/lib/authContext';
 import { DepartmentsContext } from '@/lib/departmentsContext';
 import {
@@ -128,8 +130,10 @@ const OPS_VALUE = {
 
 export default function DemoBinsPage() {
   const stageRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
   // Cover the bin-overview screen until the board is open, so the demo never
   // flashes the overview before landing on the populated Task Bin board.
+  // (Desktop ProjectsWindow only — the mobile view has no overview screen.)
   const [boardReady, setBoardReady] = useState(false);
 
   useEffect(() => {
@@ -151,6 +155,7 @@ export default function DemoBinsPage() {
   // component's internal showKanban state without editing it.) Reveal only once
   // the kanban board has mounted — the overlay hides the overview underneath.
   useEffect(() => {
+    if (isMobile !== false) return; // desktop-only: mobile has no overview screen
     let tries = 0;
     const id = window.setInterval(() => {
       tries += 1;
@@ -169,14 +174,36 @@ export default function DemoBinsPage() {
       }
     }, 60);
     return () => window.clearInterval(id);
-  }, []);
+  }, [isMobile]);
+
+  // Mobile: MobileProjectsView opens on the bin list; tap the "Task Bin" card so
+  // the demo lands on the populated board instead of the sparse overview.
+  useEffect(() => {
+    if (isMobile !== true) return;
+    let tries = 0;
+    const id = window.setInterval(() => {
+      tries += 1;
+      const body = document.body.textContent || '';
+      if (/BY STATUS/i.test(body) || /Columns/i.test(body)) {
+        window.clearInterval(id);
+        return; // already on the board
+      }
+      const el = Array.from(document.querySelectorAll<HTMLElement>('*')).find(
+        (e) => (e.textContent || '').trim() === 'Task Bin',
+      );
+      const target = (el?.closest('button,[role="button"]') as HTMLElement | null) || el;
+      target?.click();
+      if (tries > 60) window.clearInterval(id);
+    }, 90);
+    return () => window.clearInterval(id);
+  }, [isMobile]);
 
   return (
     <div
       ref={stageRef}
       style={{ height: '100dvh', background: 'var(--background)', overflow: 'hidden' }}
     >
-      {!boardReady && (
+      {isMobile === false && !boardReady && (
         <div
           aria-hidden
           style={{
@@ -192,7 +219,11 @@ export default function DemoBinsPage() {
           <OperationsSettingsContext.Provider value={OPS_VALUE}>
             <ReservationViewerContext.Provider value={NOOP_VALUE}>
               <div style={{ height: '100%' }}>
-                <ProjectsWindow users={DEMO_USERS} currentUser={DEMO_USER} />
+                {isMobile === null ? null : isMobile ? (
+                  <MobileProjectsView users={DEMO_USERS} />
+                ) : (
+                  <ProjectsWindow users={DEMO_USERS} currentUser={DEMO_USER} />
+                )}
               </div>
               <AiChatPanel />
               <AgentDemoBridge />

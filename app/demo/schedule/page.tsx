@@ -14,6 +14,8 @@
 
 import { useEffect, useRef } from 'react';
 import { useDemoGuards } from '../useDemoGuards';
+import { useIsMobile } from '@/lib/useIsMobile';
+import { MobileTimelineView } from '@/components/mobile';
 import { AuthContext, type Role } from '@/lib/authContext';
 import { DepartmentsContext } from '@/lib/departmentsContext';
 import {
@@ -165,6 +167,7 @@ const OPS_VALUE = {
 
 export default function DemoSchedulePage() {
   const stageRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     installInterceptor();
@@ -193,7 +196,11 @@ export default function DemoSchedulePage() {
           <OperationsSettingsContext.Provider value={OPS_VALUE}>
             <ReservationViewerContext.Provider value={NOOP_VALUE}>
               <div style={{ height: '100%' }}>
-                <TimelineWindow users={DEMO_USERS} currentUser={DEMO_USER} />
+                {isMobile === null ? null : isMobile ? (
+                  <MobileTimelineView />
+                ) : (
+                  <TimelineWindow users={DEMO_USERS} currentUser={DEMO_USER} />
+                )}
               </div>
               {/* Real agent — opens via the launcher or Cmd/Ctrl+K, replies
                   with the canned script (see the /api/agent interceptor). */}
