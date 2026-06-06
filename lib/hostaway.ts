@@ -97,3 +97,32 @@ export async function fetchReservations(departureDateStart: string) {
 
   return all;
 }
+
+/**
+ * Fetch the full message history of a conversation — BOTH directions (guest +
+ * host). The `message.received` webhook only delivers inbound guest messages, so
+ * host replies must be pulled from here. Returns raw Hostaway message objects.
+ */
+export async function fetchConversationMessages(
+  conversationId: string | number,
+): Promise<Record<string, unknown>[]> {
+  const token = await getToken();
+  const all: Record<string, unknown>[] = [];
+  let offset = 0;
+
+  while (true) {
+    const url = `https://api.hostaway.com/v1/conversations/${conversationId}/messages?limit=100&offset=${offset}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) {
+      throw new Error(`Conversation messages fetch failed (${res.status})`);
+    }
+
+    const { result = [] } = await res.json();
+    all.push(...result);
+    if (result.length < 100) break;
+    offset += 100;
+    await new Promise((r) => setTimeout(r, 700)); // rate-limit friendly
+  }
+
+  return all;
+}

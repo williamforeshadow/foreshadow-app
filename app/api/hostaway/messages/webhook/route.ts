@@ -1,14 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { mapHostawayMessagePayload } from '@/lib/messages';
+import { ingestConversation } from '@/src/server/messages/ingest';
 
 // Hostaway guest-message webhook receiver.
 //
-// Hostaway POSTs here when a new conversation message arrives (guest inbound or
-// host outbound). We validate a shared secret, normalize the payload, resolve
-// the local reservation, and idempotently insert the message — then ack 200
-// quickly so Hostaway stops retrying. Mirrors the validate -> parse -> dedup ->
-// ack shape of app/api/slack/events/route.ts.
+// Hostaway's `message.received` event only delivers INBOUND guest messages —
+// host replies never webhook to us. So we store the inbound message immediately
+// (so it's never lost), then off the response path pull the conversation's FULL
+// thread from the API to bring in host/outbound messages too. Validate -> store
+// inbound -> ack 200 fast -> sync full thread, mirroring app/api/slack/events.
 
 export const maxDuration = 60;
 
@@ -102,6 +103,20 @@ export async function POST(request: Request) {
       console.error('[Hostaway Messages] insert error:', error.message);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    // Off the response path: pull the whole thread so host/outbound replies
+    // (which never webhook to us) get synced. Idempotent; failures are logged
+    // but don't fail the ack.
+    after(async () => {
+      try {
+        await ingestConversation(msg.hostawayConversationId);
+      } catch (err) {
+        console.error('[Hostaway Messages] thread sync failed', {
+          conversationId: msg.hostawayConversationId,
+          err,
+        });
+      }
+    });
 
     return NextResponse.json({ ok: true, reservation_linked: reservationId != null });
   } catch (err: unknown) {
