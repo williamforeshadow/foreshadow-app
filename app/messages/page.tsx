@@ -4,13 +4,14 @@ import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { useMessageFeed } from '@/components/messages/useMessageFeed';
-import { MessageList } from '@/components/messages/MessageList';
+import { ConversationList } from '@/components/messages/ConversationList';
 
-// /messages — guest-message inbox (v1). Read-only list of guest<->host messages
-// ingested from Hostaway. Branches desktop/mobile like app/assignments/page.tsx.
+// /messages — guest-message inbox (v1). One row per conversation thread; tap to
+// expand the full back-and-forth. Branches desktop/mobile like
+// app/assignments/page.tsx.
 export default function MessagesPage() {
   const isMobile = useIsMobile();
-  const { messages, loading } = useMessageFeed();
+  const { conversations, loading } = useMessageFeed();
 
   if (isMobile === null) return null;
 
@@ -18,7 +19,7 @@ export default function MessagesPage() {
     return (
       <MobileRouteShell backHref="/" title="Messages">
         <div className="min-h-0 flex-1 overflow-y-auto hide-scrollbar">
-          <MessageList messages={messages} loading={loading} />
+          <ConversationList conversations={conversations} loading={loading} />
         </div>
       </MobileRouteShell>
     );
@@ -31,7 +32,7 @@ export default function MessagesPage() {
           Messages
         </h1>
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <MessageList messages={messages} loading={loading} />
+          <ConversationList conversations={conversations} loading={loading} />
         </div>
       </div>
     </DesktopSidebarShell>

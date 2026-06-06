@@ -49,10 +49,6 @@ export async function POST(request: Request) {
     return new Response('invalid json', { status: 400 });
   }
 
-  // TEMP (remove once the live payload shape is confirmed): log the first raw
-  // payload so the field-map in lib/messages.ts can be corrected in one place.
-  console.log('[Hostaway Messages] payload', JSON.stringify(payload));
-
   const msg = mapHostawayMessagePayload(payload);
   if (!msg) {
     // No usable message id — ack so Hostaway doesn't retry a payload we can't

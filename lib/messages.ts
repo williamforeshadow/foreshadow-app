@@ -24,6 +24,72 @@ export interface GuestMessageRecord {
   created_at: string;
 }
 
+// One conversation thread = one inbox row. Built by grouping guest_messages on
+// their hostaway_conversation_id.
+export interface GuestConversation {
+  conversation_id: string;
+  guest_name: string | null;
+  property_name: string | null;
+  reservation_id: string | null;
+  last_message_at: string | null;
+  last_message_preview: string;
+  last_direction: MessageDirection;
+  message_count: number;
+  // Full thread, oldest -> newest, so the row can expand into the conversation.
+  messages: GuestMessageRecord[];
+}
+
+/**
+ * Group a flat list of messages into conversation threads (one per
+ * hostaway_conversation_id). Messages with no conversation id fall back to a
+ * per-reservation, then per-message, key so they never vanish. Returns
+ * conversations sorted newest-activity-first, each with its messages oldest-first.
+ */
+export function groupMessagesIntoConversations(
+  messages: GuestMessageRecord[],
+): GuestConversation[] {
+  const byKey = new Map<string, GuestMessageRecord[]>();
+  for (const m of messages) {
+    const key =
+      m.hostaway_conversation_id ??
+      (m.reservation_id ? `res:${m.reservation_id}` : `msg:${m.id}`);
+    const list = byKey.get(key);
+    if (list) list.push(m);
+    else byKey.set(key, [m]);
+  }
+
+  const when = (m: GuestMessageRecord) => m.sent_at ?? m.created_at ?? '';
+
+  const conversations: GuestConversation[] = [];
+  for (const [key, list] of byKey) {
+    const ordered = [...list].sort((a, b) => when(a).localeCompare(when(b)));
+    const last = ordered[ordered.length - 1];
+    // Prefer the most recent message that actually has text for the preview.
+    const lastWithText = [...ordered].reverse().find((m) => m.body?.trim());
+    // Guest/property: take the first non-null across the thread.
+    const guest = ordered.find((m) => m.guest_name)?.guest_name ?? null;
+    const property = ordered.find((m) => m.property_name)?.property_name ?? null;
+    const reservation = ordered.find((m) => m.reservation_id)?.reservation_id ?? null;
+
+    conversations.push({
+      conversation_id: key,
+      guest_name: guest,
+      property_name: property,
+      reservation_id: reservation,
+      last_message_at: last.sent_at ?? last.created_at,
+      last_message_preview: lastWithText?.body?.trim() || '(no text)',
+      last_direction: last.direction,
+      message_count: ordered.length,
+      messages: ordered,
+    });
+  }
+
+  conversations.sort((a, b) =>
+    (b.last_message_at ?? '').localeCompare(a.last_message_at ?? ''),
+  );
+  return conversations;
+}
+
 // Normalized, PMS-agnostic message extracted from a raw Hostaway payload.
 // guest_name / property_name are intentionally NOT here — they aren't on the
 // message object (they're on the parent conversation), so the webhook route
