@@ -170,6 +170,7 @@ export async function POST() {
           guest_name: guestName,
           check_in: r.arrivalDate,
           check_out: r.departureDate,
+          channel: r.channelName ?? null,
           updated_at: new Date().toISOString(),
         });
       } else {

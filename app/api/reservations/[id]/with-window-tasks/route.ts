@@ -42,7 +42,7 @@ export async function GET(
   const { data: reservation, error: resError } = await supabase
     .from('reservations')
     .select(
-      'id, guest_name, check_in, check_out, next_check_in, property_id, property_name'
+      'id, guest_name, check_in, check_out, next_check_in, property_id, property_name, channel'
     )
     .eq('id', id)
     .maybeSingle();
@@ -58,9 +58,19 @@ export async function GET(
   }
 
   const start = (reservation.check_in || '').slice(0, 10);
+  const checkOut = (reservation.check_out || '').slice(0, 10);
   const end = reservation.next_check_in
     ? reservation.next_check_in.slice(0, 10)
     : addDaysISO(start, FALLBACK_WINDOW_DAYS);
+
+  // Nights = whole days between check-in and check-out.
+  let nights: number | null = null;
+  if (start && checkOut) {
+    const ms =
+      new Date(`${checkOut}T00:00:00Z`).getTime() -
+      new Date(`${start}T00:00:00Z`).getTime();
+    nights = ms > 0 ? Math.round(ms / 86400000) : null;
+  }
 
   // Reservations always carry a property_id. If a row somehow lacks one,
   // surface a 500 rather than silently returning an empty list — that's a
@@ -165,12 +175,14 @@ export async function GET(
       id: reservation.id,
       guest_name: reservation.guest_name,
       check_in: start,
-      check_out: (reservation.check_out || '').slice(0, 10),
+      check_out: checkOut,
       next_check_in: reservation.next_check_in
         ? reservation.next_check_in.slice(0, 10)
         : null,
       property_id: reservation.property_id,
       property_name: resolvedPropertyName,
+      channel: reservation.channel ?? null,
+      nights,
     },
     tasks: transformedTasks,
     window: { start, end },

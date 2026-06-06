@@ -5,6 +5,7 @@ import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { useMessages } from '@/components/messages/MessagesProvider';
 import { ConversationThread } from '@/components/messages/ConversationThread';
+import { ConversationDetailPanel } from '@/components/messages/ConversationDetailPanel';
 
 // /messages/[conversationId] — the selected conversation. Reads the shared
 // conversations from context (fetched once in the layout). Desktop renders bare
@@ -38,5 +39,16 @@ export default function ConversationPage() {
     );
   }
 
-  return <ConversationThread conversation={conversation} loading={loading} />;
+  // Desktop: conversation thread fills the center, reservation context panel on
+  // the right.
+  return (
+    <div className="flex h-full">
+      <div className="min-w-0 flex-1">
+        <ConversationThread conversation={conversation} loading={loading} />
+      </div>
+      <aside className="hidden w-80 shrink-0 border-l border-[var(--surface-elevated-divider)] lg:block">
+        <ConversationDetailPanel conversation={conversation} />
+      </aside>
+    </div>
+  );
 }
