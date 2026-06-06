@@ -99,6 +99,42 @@ export async function fetchReservations(departureDateStart: string) {
 }
 
 /**
+ * Fetch a single conversation object. Carries the guest's name
+ * (`recipientName`) and `listingMapId` independent of any reservation — this is
+ * how inquiry threads (no booked reservation) get a name + property.
+ */
+export async function fetchConversation(
+  conversationId: string | number,
+): Promise<Record<string, unknown> | null> {
+  const token = await getToken();
+  const res = await fetch(
+    `https://api.hostaway.com/v1/conversations/${conversationId}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) throw new Error(`Conversation fetch failed (${res.status})`);
+  const { result = null } = await res.json();
+  return result;
+}
+
+/**
+ * List recent conversations (all types, including inquiries). Used by the
+ * backfill/cron to discover threads that have no synced reservation and so never
+ * surface via reservation sync. Returns raw conversation objects.
+ */
+export async function fetchConversationsList(
+  limit = 100,
+): Promise<Record<string, unknown>[]> {
+  const token = await getToken();
+  const res = await fetch(
+    `https://api.hostaway.com/v1/conversations?limit=${limit}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) throw new Error(`Conversations list fetch failed (${res.status})`);
+  const { result = [] } = await res.json();
+  return result;
+}
+
+/**
  * Fetch the full message history of a conversation — BOTH directions (guest +
  * host). The `message.received` webhook only delivers inbound guest messages, so
  * host replies must be pulled from here. Returns raw Hostaway message objects.
