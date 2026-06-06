@@ -162,6 +162,16 @@ const MobileDrawer = memo(function MobileDrawer({ open, onClose }: MobileDrawerP
               }
             />
             <DrawerNavItem
+              active={isActiveRoute(pathname, '/messages')}
+              label="Messages"
+              onClick={() => navigate('/messages')}
+              icon={
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.3-3.9A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              }
+            />
+            <DrawerNavItem
               active={false}
               label="Agent"
               onClick={handleAgent}
