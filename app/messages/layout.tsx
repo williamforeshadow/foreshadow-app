@@ -6,32 +6,17 @@ import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { MessagesProvider, useMessages } from '@/components/messages/MessagesProvider';
 import { ConversationList } from '@/components/messages/ConversationList';
-import { ConversationListControls } from '@/components/messages/ConversationListControls';
+import { ConversationControls } from '@/components/messages/ConversationControls';
 import { ConversationTabs } from '@/components/messages/ConversationTabs';
-import { ConversationFilterBar } from '@/components/messages/ConversationFilterBar';
 
 // Master-detail chrome for /messages. The conversation list + its tabs/filters/
 // sort live here (state in MessagesProvider) so they persist while the selected
 // conversation (the child route) changes.
 function ListControls() {
-  const {
-    tab,
-    setTab,
-    counts,
-    query,
-    setQuery,
-    sort,
-    toggleSort,
-  } = useMessages();
+  const { tab, setTab, counts } = useMessages();
   return (
     <>
-      <ConversationListControls
-        query={query}
-        onQueryChange={setQuery}
-        sort={sort}
-        onToggleSort={toggleSort}
-      />
-      <ConversationFilterBar />
+      <ConversationControls />
       <ConversationTabs tab={tab} onChange={setTab} counts={counts} />
     </>
   );
@@ -75,7 +60,7 @@ function MessagesChrome({ children }: { children: React.ReactNode }) {
     <DesktopSidebarShell>
       <div className="flex h-full">
         <aside className="flex w-80 shrink-0 flex-col border-r border-[var(--surface-elevated-divider)]">
-          <h1 className="shrink-0 px-3 pb-1 pt-3 text-lg font-semibold text-neutral-900 dark:text-white">
+          <h1 className="shrink-0 px-3 pb-4 pt-3 text-lg font-semibold text-neutral-900 dark:text-white">
             Messages
           </h1>
           <ListControls />
