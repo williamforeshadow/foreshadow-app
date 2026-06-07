@@ -119,7 +119,8 @@ const FIELD = {
   conversationId: 'conversationId',
   reservationId: 'reservationId',
   body: 'body',
-  // "2026-04-07 18:53:43" — no tz; falls back to insertedOn.
+  // "2026-04-07 18:53:43" — naive UTC, no tz; falls back to insertedOn.
+  // Normalized through hostawayDateToUtcIso so it stores as the right instant.
   sentAt: 'date',
   // 1 => from the guest (inbound); 0 => host/automation reply (outbound).
   isIncoming: 'isIncoming',
@@ -137,6 +138,24 @@ function toNumberOrNull(v: unknown): number | null {
   if (v == null || v === '') return null;
   const n = Number(v);
   return Number.isNaN(n) ? null : n;
+}
+
+/**
+ * Hostaway's message `date` / `insertedOn` is a naive **UTC** timestamp with no
+ * zone, e.g. "2026-06-07 19:33:22". Mark it as UTC and normalize to an ISO
+ * string before it's stored, so it lands as the correct instant in a timestamptz
+ * column. Without the explicit zone the database parses the naive value in its
+ * own session timezone (America/Los_Angeles here) and shifts every message ~7-8h
+ * into the future — which then mis-renders times and trips the scheduled check.
+ */
+export function hostawayDateToUtcIso(raw: string | null): string | null {
+  if (!raw) return null;
+  const s = raw.trim();
+  // Already carries a zone (Z or ±HH:MM)? Trust it and let Date parse natively.
+  const zoned = /([zZ])$|([+-]\d{2}:?\d{2})$/.test(s);
+  const iso = zoned ? s : `${s.replace(' ', 'T')}Z`;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 /**
@@ -169,7 +188,7 @@ export function mapHostawayMessagePayload(
     hostawayConversationId: conversationId,
     hostawayReservationId: toNumberOrNull(m[FIELD.reservationId]),
     body: firstString(m[FIELD.body]) ?? '',
-    sentAt: firstString(m[FIELD.sentAt], m.insertedOn),
+    sentAt: hostawayDateToUtcIso(firstString(m[FIELD.sentAt], m.insertedOn)),
     direction: m[FIELD.isIncoming] ? 'inbound' : 'outbound',
   };
 }

@@ -135,9 +135,10 @@ export function ConversationThread({
           const next = messages[i + 1];
           const outbound = m.direction === 'outbound';
           const ts = whenOf(m);
-          // A message whose send time is still in the future is scheduled
-          // (a Hostaway automation), not sent — show it, but muted.
-          const scheduled = !!ts && new Date(ts).getTime() > nowMs;
+          // Only an OUTBOUND message with a future send time is scheduled (a
+          // Hostaway automation). A guest's inbound message is always already
+          // sent, so it can never be scheduled regardless of its timestamp.
+          const scheduled = outbound && !!ts && new Date(ts).getTime() > nowMs;
 
           const newDay = !prev || dayKey(whenOf(prev)) !== dayKey(ts);
           const firstOfRun = newDay || !prev || prev.direction !== m.direction;
