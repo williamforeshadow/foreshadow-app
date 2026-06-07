@@ -107,8 +107,10 @@ export async function fetchConversation(
   conversationId: string | number,
 ): Promise<Record<string, unknown> | null> {
   const token = await getToken();
+  // includeResources=1 embeds the Reservation (status, channelName, dates) — the
+  // conversation object alone doesn't carry those.
   const res = await fetch(
-    `https://api.hostaway.com/v1/conversations/${conversationId}`,
+    `https://api.hostaway.com/v1/conversations/${conversationId}?includeResources=1`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   if (!res.ok) throw new Error(`Conversation fetch failed (${res.status})`);
@@ -125,8 +127,10 @@ export async function fetchConversationsList(
   limit = 100,
 ): Promise<Record<string, unknown>[]> {
   const token = await getToken();
+  // includeResources=1 embeds each conversation's Reservation (status, channel,
+  // dates) so the backfill can set booking_state/channel without a second call.
   const res = await fetch(
-    `https://api.hostaway.com/v1/conversations?limit=${limit}`,
+    `https://api.hostaway.com/v1/conversations?limit=${limit}&includeResources=1`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   if (!res.ok) throw new Error(`Conversations list fetch failed (${res.status})`);

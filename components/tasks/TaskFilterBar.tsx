@@ -528,7 +528,7 @@ function formatRangeSummary(range: DateRange): string {
   return '';
 }
 
-function DateRangeChip({
+export function DateRangeChip({
   label,
   range,
   onChange,

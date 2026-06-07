@@ -1,7 +1,7 @@
 'use client';
 
-import { channelLabel } from '@/lib/bookingChannel';
-import type { GuestConversation } from '@/lib/messages';
+import { canonicalChannelLabel } from '@/lib/bookingChannel';
+import type { ConversationRow } from '@/lib/conversations';
 import { useReservationContext } from '@/components/messages/useReservationContext';
 
 // Right-hand context panel for the open conversation: reservation details on top,
@@ -39,7 +39,7 @@ const STATUS_LABELS: Record<string, string> = {
 export function ConversationDetailPanel({
   conversation,
 }: {
-  conversation: GuestConversation | undefined;
+  conversation: ConversationRow | undefined;
 }) {
   const reservationId = conversation?.reservation_id ?? null;
   const { reservation, tasks, loading } = useReservationContext(reservationId);
@@ -51,7 +51,7 @@ export function ConversationDetailPanel({
     reservation?.guest_name ?? conversation.guest_name ?? 'Guest';
   const propertyName =
     reservation?.property_name ?? conversation.property_name ?? null;
-  const channel = channelLabel(reservation?.channel);
+  const channel = conversation.channel ? canonicalChannelLabel(conversation.channel) : null;
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">

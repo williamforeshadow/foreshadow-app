@@ -109,7 +109,9 @@ export async function POST(request: Request) {
     // but don't fail the ack.
     after(async () => {
       try {
-        await ingestConversation(msg.hostawayConversationId);
+        await ingestConversation(msg.hostawayConversationId, null, {
+          realtime: true,
+        });
       } catch (err) {
         console.error('[Hostaway Messages] thread sync failed', {
           conversationId: msg.hostawayConversationId,
