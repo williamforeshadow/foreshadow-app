@@ -25,7 +25,6 @@ function ListControls() {
   } = useMessages();
   return (
     <>
-      <ConversationTabs tab={tab} onChange={setTab} counts={counts} />
       <ConversationListControls
         query={query}
         onQueryChange={setQuery}
@@ -33,6 +32,7 @@ function ListControls() {
         onToggleSort={toggleSort}
       />
       <ConversationFilterBar />
+      <ConversationTabs tab={tab} onChange={setTab} counts={counts} />
     </>
   );
 }

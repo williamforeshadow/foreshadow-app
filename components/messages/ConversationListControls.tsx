@@ -5,8 +5,7 @@ import { Search, ArrowDown, ArrowUp } from 'lucide-react';
 export type ConversationSort = 'newest' | 'oldest';
 
 /**
- * Search + sort controls above the conversation list. Search filters by guest
- * name only; the sort toggle flips newest-first / oldest-first by last activity.
+ * Search bar (guest names) + a boxed sort-direction toggle (arrow only).
  */
 export function ConversationListControls({
   query,
@@ -34,15 +33,15 @@ export function ConversationListControls({
       <button
         type="button"
         onClick={onToggleSort}
-        className="inline-flex items-center gap-1 text-[11px] font-medium text-neutral-500 transition-colors hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-white"
-        title="Toggle sort order"
+        title={sort === 'newest' ? 'Newest first' : 'Oldest first'}
+        aria-label={`Sort: ${sort === 'newest' ? 'newest first' : 'oldest first'}`}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[var(--surface-elevated-divider)] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
       >
         {sort === 'newest' ? (
-          <ArrowDown className="h-3.5 w-3.5" />
+          <ArrowDown className="h-4 w-4" />
         ) : (
-          <ArrowUp className="h-3.5 w-3.5" />
+          <ArrowUp className="h-4 w-4" />
         )}
-        {sort === 'newest' ? 'Newest first' : 'Oldest first'}
       </button>
     </div>
   );
