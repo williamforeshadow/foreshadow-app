@@ -48,6 +48,56 @@ function rollup(mapped: RawGuestMessage[]) {
 }
 
 /**
+ * Recompute a conversation's denormalized "last message" rollup from its stored
+ * messages, EXCLUDING any with a future `sent_at` (Hostaway returns scheduled /
+ * automated host messages with their future send time — those are not yet sent,
+ * so they must never drive the inbox's sort, timestamp, or preview). Compared
+ * against the DB clock so it's timezone-correct regardless of the naive strings
+ * Hostaway delivers. message_count is intentionally left as the full thread
+ * count (scheduled messages still render in the thread, just muted).
+ */
+async function recomputeSentRollup(
+  supabase: ReturnType<typeof getSupabaseServer>,
+  convId: string,
+): Promise<void> {
+  const nowIso = new Date().toISOString();
+  const { data } = await supabase
+    .from('guest_messages')
+    .select('sent_at, direction, body')
+    .eq('conversation_id', convId)
+    .or(`sent_at.is.null,sent_at.lte.${nowIso}`)
+    .order('sent_at', { ascending: false, nullsFirst: false });
+  const rows = (data ?? []) as {
+    sent_at: string | null;
+    direction: 'inbound' | 'outbound';
+    body: string | null;
+  }[];
+  if (rows.length === 0) {
+    // Only scheduled (future) messages exist — no real activity yet, so the
+    // conversation has no "last message" and sorts to the bottom of the inbox.
+    await supabase
+      .from('conversations')
+      .update({
+        last_message_at: null,
+        last_direction: null,
+        last_message_preview: '(no text)',
+      })
+      .eq('id', convId);
+    return;
+  }
+  const last = rows[0];
+  const lastWithText = rows.find((r) => r.body?.trim());
+  await supabase
+    .from('conversations')
+    .update({
+      last_message_at: last.sent_at,
+      last_direction: last.direction,
+      last_message_preview: lastWithText?.body?.trim() || '(no text)',
+    })
+    .eq('id', convId);
+}
+
+/**
  * Ingest one conversation: upsert its canonical row + full message thread.
  * Pass `convObj` (from a list fetch) to skip the per-conversation API call.
  * `opts.realtime` (webhook) makes a brand-new conversation start unread.
@@ -181,6 +231,10 @@ export async function ingestConversation(
     .upsert(msgRows, { onConflict: 'hostaway_message_id' });
   if (msgErr) throw new Error(msgErr.message);
 
+  // The upsert above seeded last_* from the JS rollup, which can't tell future
+  // (scheduled) messages from sent ones. Correct it against the DB clock.
+  await recomputeSentRollup(supabase, convId);
+
   return msgRows.length;
 }
 
@@ -242,6 +296,9 @@ async function upsertConversationFromStored(externalId: string): Promise<number>
     .from('guest_messages')
     .update({ conversation_id: convId })
     .eq('hostaway_conversation_id', externalId);
+
+  // Exclude future (scheduled) messages from the inbox rollup.
+  await recomputeSentRollup(supabase, convId);
 
   return ordered.length;
 }

@@ -89,7 +89,13 @@ export function formatRelative(iso: string | Date | null | undefined): string {
   if (!iso) return '';
   const date = iso instanceof Date ? iso : new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
-  const diffSec = Math.max(0, (Date.now() - date.getTime()) / 1000);
+  const diffSec = (Date.now() - date.getTime()) / 1000;
+  // Future timestamps (e.g. a scheduled/automated message) must never read as
+  // "just now" — fall through to the absolute "Mon D" label below.
+  if (diffSec < 0) {
+    const m = MONTH_SHORT[date.getMonth()] ?? '';
+    return `${m} ${date.getDate()}`;
+  }
   if (diffSec < 60) return 'just now';
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m`;
   if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h`;

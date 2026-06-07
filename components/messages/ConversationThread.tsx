@@ -1,7 +1,7 @@
 'use client';
 
-import { Fragment } from 'react';
-import { MessagesSquare, AlertCircle } from 'lucide-react';
+import { Fragment, useState } from 'react';
+import { MessagesSquare, AlertCircle, Clock } from 'lucide-react';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { canonicalChannelLabel } from '@/lib/bookingChannel';
 import type { GuestMessageRecord } from '@/lib/messages';
@@ -70,6 +70,9 @@ export function ConversationThread({
   showHeader?: boolean;
   actions?: React.ReactNode;
 }) {
+  // Render-stable "now" for the scheduled-vs-sent check (one value per mount).
+  const [nowMs] = useState(() => Date.now());
+
   const header = showHeader ? (
     <div className="flex shrink-0 items-center gap-3 border-b border-[var(--surface-elevated-divider)] bg-[var(--surface-elevated)] px-4 py-3">
       <UserAvatar name={guestName ?? 'Guest'} size="md" />
@@ -132,6 +135,9 @@ export function ConversationThread({
           const next = messages[i + 1];
           const outbound = m.direction === 'outbound';
           const ts = whenOf(m);
+          // A message whose send time is still in the future is scheduled
+          // (a Hostaway automation), not sent — show it, but muted.
+          const scheduled = !!ts && new Date(ts).getTime() > nowMs;
 
           const newDay = !prev || dayKey(whenOf(prev)) !== dayKey(ts);
           const firstOfRun = newDay || !prev || prev.direction !== m.direction;
@@ -163,13 +169,15 @@ export function ConversationThread({
                   </span>
                 ) : null}
 
-                <div className="flex max-w-[78%] flex-col">
+                <div className={`flex max-w-[78%] flex-col ${scheduled ? 'opacity-80' : ''}`}>
                   <div
                     style={{ borderRadius: roundedFor(outbound, firstOfRun, lastOfRun) }}
-                    className={`px-3.5 py-2 text-sm leading-relaxed shadow-sm ${
-                      outbound
-                        ? 'bg-[var(--accent-3)] text-white'
-                        : 'bg-card text-foreground ring-1 ring-[var(--surface-elevated-line)]'
+                    className={`px-3.5 py-2 text-sm leading-relaxed ${
+                      scheduled
+                        ? 'border border-dashed border-[var(--accent-3)]/50 bg-[var(--accent-bg-soft)] text-foreground dark:bg-[var(--accent-bg-soft-dark)]'
+                        : outbound
+                          ? 'bg-[var(--accent-3)] text-white shadow-sm'
+                          : 'bg-card text-foreground shadow-sm ring-1 ring-[var(--surface-elevated-line)]'
                     }`}
                   >
                     <div className="whitespace-pre-wrap break-words">
@@ -182,11 +190,18 @@ export function ConversationThread({
                   </div>
                   {lastOfRun ? (
                     <div
-                      className={`mt-1 px-1 text-[10px] tabular-nums text-muted-foreground ${
-                        outbound ? 'text-right' : 'text-left'
+                      className={`mt-1 flex items-center gap-1 px-1 text-[10px] tabular-nums text-muted-foreground ${
+                        outbound ? 'justify-end' : 'justify-start'
                       }`}
                     >
-                      {clockTime(ts)}
+                      {scheduled ? (
+                        <>
+                          <Clock className="h-3 w-3" aria-hidden />
+                          <span>Scheduled · {clockTime(ts)}</span>
+                        </>
+                      ) : (
+                        clockTime(ts)
+                      )}
                     </div>
                   ) : null}
                 </div>

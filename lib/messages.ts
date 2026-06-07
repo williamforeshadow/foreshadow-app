@@ -59,13 +59,23 @@ export function groupMessagesIntoConversations(
   }
 
   const when = (m: GuestMessageRecord) => m.sent_at ?? m.created_at ?? '';
+  // Scheduled/automated messages carry a future send time; they're not yet sent,
+  // so they must not drive the conversation's last-message time, preview, or sort.
+  const nowMs = Date.now();
+  const isSent = (m: GuestMessageRecord) => {
+    const t = m.sent_at ?? m.created_at;
+    return !t || new Date(t).getTime() <= nowMs;
+  };
 
   const conversations: GuestConversation[] = [];
   for (const [key, list] of byKey) {
     const ordered = [...list].sort((a, b) => when(a).localeCompare(when(b)));
-    const last = ordered[ordered.length - 1];
-    // Prefer the most recent message that actually has text for the preview.
-    const lastWithText = [...ordered].reverse().find((m) => m.body?.trim());
+    const reversed = [...ordered].reverse();
+    // Last *sent* message anchors the row; fall back to the latest if all are
+    // scheduled (a brand-new thread with only a queued automation).
+    const last = reversed.find(isSent) ?? ordered[ordered.length - 1];
+    // Prefer the most recent sent message that actually has text for the preview.
+    const lastWithText = reversed.find((m) => isSent(m) && !!m.body?.trim());
     // Guest/property: take the first non-null across the thread.
     const guest = ordered.find((m) => m.guest_name)?.guest_name ?? null;
     const property = ordered.find((m) => m.property_name)?.property_name ?? null;
