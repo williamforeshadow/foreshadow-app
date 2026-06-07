@@ -14,10 +14,12 @@ export function ConversationList({
   conversations,
   loading,
   activeId,
+  emptyLabel = 'No messages yet',
 }: {
   conversations: GuestConversation[];
   loading: boolean;
   activeId?: string | null;
+  emptyLabel?: string;
 }) {
   if (loading && conversations.length === 0) {
     return (
@@ -28,7 +30,7 @@ export function ConversationList({
   if (conversations.length === 0) {
     return (
       <div className="px-3 py-8 text-center text-sm text-neutral-500">
-        No messages yet
+        {emptyLabel}
       </div>
     );
   }
