@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
+import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { useMessages } from '@/components/messages/MessagesProvider';
 import { ConversationThread } from '@/components/messages/ConversationThread';
@@ -24,16 +25,23 @@ export default function ConversationPage() {
   const [conversation, setConversation] = useState<ConversationRow | undefined>();
   const [messages, setMessages] = useState<GuestMessageRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
     if (!conversationId) return;
     setLoading(true);
+    setError(false);
     try {
       const res = await fetch(`/api/messages/${conversationId}`, { cache: 'no-store' });
-      if (!res.ok) return;
+      if (!res.ok) {
+        setError(true);
+        return;
+      }
       const data = await res.json();
       setConversation(data.conversation ?? undefined);
       setMessages(data.messages ?? []);
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -71,24 +79,21 @@ export default function ConversationPage() {
 
   if (isMobile === null) return null;
 
-  const btn =
-    'rounded-md border border-[var(--surface-elevated-divider)] px-2.5 py-1 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/10';
-
   const actions = conversation ? (
-    <div className="flex shrink-0 items-center gap-2 border-b border-[var(--surface-elevated-divider)] px-4 py-2">
+    <>
       {conversation.app_status === 'complete' ? (
-        <button type="button" className={btn} onClick={() => patchStatus({ app_status: 'active' })}>
+        <Button variant="outline" size="sm" onClick={() => patchStatus({ app_status: 'active' })}>
           Reopen
-        </button>
+        </Button>
       ) : (
-        <button type="button" className={btn} onClick={() => patchStatus({ app_status: 'complete' })}>
+        <Button variant="default" size="sm" onClick={() => patchStatus({ app_status: 'complete' })}>
           Mark complete
-        </button>
+        </Button>
       )}
-      <button type="button" className={btn} onClick={() => patchStatus({ unread: true })}>
+      <Button variant="ghost" size="sm" onClick={() => patchStatus({ unread: true })}>
         Mark unread
-      </button>
-    </div>
+      </Button>
+    </>
   ) : null;
 
   if (isMobile) {
@@ -98,16 +103,17 @@ export default function ConversationPage() {
         title={conversation?.guest_name ?? 'Conversation'}
       >
         <div className="flex h-full flex-col">
-          {actions}
-          <div className="min-h-0 flex-1">
-            <ConversationThread
-              messages={messages}
-              guestName={conversation?.guest_name}
-              propertyName={conversation?.property_name}
-              loading={loading}
-              showHeader={false}
-            />
-          </div>
+          <ConversationThread
+            messages={messages}
+            guestName={conversation?.guest_name}
+            propertyName={conversation?.property_name}
+            channel={conversation?.channel}
+            loading={loading}
+            error={error}
+            onRetry={load}
+            showHeader={false}
+            actions={actions}
+          />
         </div>
       </MobileRouteShell>
     );
@@ -116,15 +122,16 @@ export default function ConversationPage() {
   return (
     <div className="flex h-full">
       <div className="flex min-w-0 flex-1 flex-col">
-        {actions}
-        <div className="min-h-0 flex-1">
-          <ConversationThread
-            messages={messages}
-            guestName={conversation?.guest_name}
-            propertyName={conversation?.property_name}
-            loading={loading}
-          />
-        </div>
+        <ConversationThread
+          messages={messages}
+          guestName={conversation?.guest_name}
+          propertyName={conversation?.property_name}
+          channel={conversation?.channel}
+          loading={loading}
+          error={error}
+          onRetry={load}
+          actions={actions}
+        />
       </div>
       <aside className="hidden w-80 shrink-0 border-l border-[var(--surface-elevated-divider)] lg:block">
         <ConversationDetailPanel conversation={conversation} />

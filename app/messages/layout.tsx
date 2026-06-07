@@ -59,8 +59,8 @@ function MessagesChrome({ children }: { children: React.ReactNode }) {
   return (
     <DesktopSidebarShell>
       <div className="flex h-full">
-        <aside className="flex w-80 shrink-0 flex-col border-r border-[var(--surface-elevated-divider)]">
-          <h1 className="shrink-0 px-3 pb-4 pt-3 text-lg font-semibold text-neutral-900 dark:text-white">
+        <aside className="flex w-80 shrink-0 flex-col border-r border-[var(--surface-elevated-divider)] bg-[var(--surface-elevated)]">
+          <h1 className="shrink-0 px-3 pb-3 pt-3.5 text-lg font-semibold tracking-tight text-foreground">
             Messages
           </h1>
           <ListControls />

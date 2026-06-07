@@ -20,10 +20,10 @@ function fmtDate(d: string | null | undefined): string {
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
-      <div className="text-sm text-neutral-900 dark:text-neutral-100">{value}</div>
+      <div className="mt-0.5 text-sm text-foreground">{value}</div>
     </div>
   );
 }
@@ -34,6 +34,15 @@ const STATUS_LABELS: Record<string, string> = {
   paused: 'Paused',
   complete: 'Complete',
   contingent: 'Contingent',
+};
+
+// Status dot colors — green=done, violet=active, amber=paused/contingent, muted=idle.
+const STATUS_DOT: Record<string, string> = {
+  not_started: 'bg-muted-foreground/50',
+  in_progress: 'bg-[var(--accent-3)]',
+  paused: 'bg-amber-500',
+  complete: 'bg-emerald-500',
+  contingent: 'bg-amber-500',
 };
 
 export function ConversationDetailPanel({
@@ -54,10 +63,10 @@ export function ConversationDetailPanel({
   const channel = conversation.channel ? canonicalChannelLabel(conversation.channel) : null;
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto">
+    <div className="flex h-full flex-col overflow-y-auto bg-[var(--surface-elevated)]">
       {/* Reservation details */}
       <div className="border-b border-[var(--surface-elevated-divider)] px-4 py-4">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-900 dark:text-white">
+        <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           Reservation
         </h2>
 
@@ -65,12 +74,12 @@ export function ConversationDetailPanel({
           <div className="space-y-3">
             <Field label="Guest" value={guestName} />
             <Field label="Property" value={propertyName ?? '—'} />
-            <div className="rounded-md bg-neutral-100 px-3 py-2 text-xs text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400">
+            <div className="rounded-md bg-accent px-3 py-2 text-xs text-muted-foreground">
               Inquiry — no booking yet
             </div>
           </div>
         ) : loading && !reservation ? (
-          <div className="text-sm text-neutral-400">Loading</div>
+          <DetailSkeleton />
         ) : (
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
@@ -93,43 +102,53 @@ export function ConversationDetailPanel({
       {/* Associated tasks */}
       {!isInquiry ? (
         <div className="px-4 py-4">
-          <h2 className="mb-3 text-sm font-semibold text-neutral-900 dark:text-white">
+          <h2 className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Associated tasks
             {tasks.length > 0 ? (
-              <span className="ml-2 text-xs font-normal text-neutral-400">
+              <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
                 {tasks.length}
               </span>
             ) : null}
           </h2>
 
           {loading && tasks.length === 0 ? (
-            <div className="text-sm text-neutral-400">Loading</div>
+            <DetailSkeleton rows={2} />
           ) : tasks.length === 0 ? (
-            <div className="text-sm text-neutral-400">No associated tasks</div>
+            <p className="text-sm text-muted-foreground">No associated tasks</p>
           ) : (
             <div className="space-y-2">
               {tasks.map((t) => (
                 <div
                   key={t.task_id}
-                  className="rounded-md border border-[var(--surface-elevated-divider)] px-3 py-2"
+                  className="rounded-lg border border-[var(--surface-elevated-line)] bg-card px-3 py-2.5"
                 >
-                  <div className="text-sm text-neutral-900 dark:text-neutral-100">
-                    {t.title || t.template_name || 'Task'}
-                  </div>
-                  <div className="mt-0.5 flex items-center gap-2 text-[11px] text-neutral-400">
-                    <span>{STATUS_LABELS[t.status] ?? t.status}</span>
-                    {t.scheduled_date ? (
-                      <>
-                        <span>·</span>
-                        <span>{fmtDate(t.scheduled_date)}</span>
-                      </>
-                    ) : null}
-                    {t.department_name ? (
-                      <>
-                        <span>·</span>
-                        <span>{t.department_name}</span>
-                      </>
-                    ) : null}
+                  <div className="flex items-start gap-2">
+                    <span
+                      aria-hidden
+                      className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                        STATUS_DOT[t.status] ?? 'bg-muted-foreground/50'
+                      }`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm text-foreground">
+                        {t.title || t.template_name || 'Task'}
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                        <span>{STATUS_LABELS[t.status] ?? t.status}</span>
+                        {t.scheduled_date ? (
+                          <>
+                            <span aria-hidden>·</span>
+                            <span>{fmtDate(t.scheduled_date)}</span>
+                          </>
+                        ) : null}
+                        {t.department_name ? (
+                          <>
+                            <span aria-hidden>·</span>
+                            <span>{t.department_name}</span>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -137,6 +156,19 @@ export function ConversationDetailPanel({
           )}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function DetailSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="space-y-3" aria-hidden>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="space-y-1.5">
+          <span className="block h-2.5 w-16 animate-pulse rounded bg-accent" />
+          <span className="block h-3.5 w-28 animate-pulse rounded bg-accent" />
+        </div>
+      ))}
     </div>
   );
 }

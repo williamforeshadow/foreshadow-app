@@ -103,13 +103,13 @@ export function ConversationControls() {
     <div className="shrink-0 px-3 pb-2">
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search guests"
-            className="w-full rounded-md border border-[var(--surface-elevated-divider)] bg-transparent py-1.5 pl-8 pr-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:text-white dark:focus:ring-white/20"
+            className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-[var(--accent-3)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)]"
           />
         </div>
 
@@ -118,7 +118,7 @@ export function ConversationControls() {
           onClick={toggleSort}
           title={sort === 'newest' ? 'Newest first' : 'Oldest first'}
           aria-label={`Sort: ${sort === 'newest' ? 'newest first' : 'oldest first'}`}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--surface-elevated-divider)] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           {sort === 'newest' ? (
             <ArrowDown className="h-4 w-4" />
@@ -136,7 +136,7 @@ export function ConversationControls() {
           className={`relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors ${
             filterActive
               ? 'bg-[var(--accent-bg-soft)] text-[var(--accent-3)] dark:bg-[var(--accent-bg-soft-dark)] dark:text-[var(--accent-1)]'
-              : 'border border-[var(--surface-elevated-divider)] text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white'
+              : 'border border-border text-muted-foreground hover:bg-accent hover:text-foreground'
           }`}
         >
           <FilterIcon className="h-4 w-4" />
@@ -195,7 +195,7 @@ export function ConversationControls() {
                   <button
                     type="button"
                     onClick={clearFilters}
-                    className="text-[11px] font-medium text-neutral-400 hover:text-neutral-700 dark:hover:text-white"
+                    className="text-xs font-medium text-muted-foreground hover:text-foreground"
                   >
                     Clear ({activeFilterCount})
                   </button>
