@@ -17,6 +17,14 @@ function fmtDate(d: string | null | undefined): string {
   return `${months[m - 1]} ${day}, ${y}`;
 }
 
+function nightsBetween(start: string | null | undefined, end: string | null | undefined): number | null {
+  if (!start || !end) return null;
+  const s = Date.parse(`${start.slice(0, 10)}T00:00:00Z`);
+  const e = Date.parse(`${end.slice(0, 10)}T00:00:00Z`);
+  if (!Number.isFinite(s) || !Number.isFinite(e)) return null;
+  return Math.max(0, Math.round((e - s) / 86_400_000));
+}
+
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
@@ -55,12 +63,20 @@ export function ConversationDetailPanel({
 
   if (!conversation) return null;
 
-  const isInquiry = !reservationId;
+  // Inquiry vs booked is driven by the conversation's own booking_state, NOT by
+  // whether a reservation row is linked — a conversation can be booked before
+  // its reservation has synced/linked, in which case we show what we have.
+  const isInquiry = conversation.booking_state === 'inquiry';
+  const isCancelled = conversation.booking_state === 'cancelled';
+  const hasReservation = !!reservationId;
   const guestName =
     reservation?.guest_name ?? conversation.guest_name ?? 'Guest';
   const propertyName =
     reservation?.property_name ?? conversation.property_name ?? null;
   const channel = conversation.channel ? canonicalChannelLabel(conversation.channel) : null;
+  const checkIn = reservation?.check_in ?? conversation.check_in ?? null;
+  const checkOut = reservation?.check_out ?? conversation.check_out ?? null;
+  const nights = reservation?.nights ?? nightsBetween(checkIn, checkOut);
 
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-[var(--surface-elevated)]">
@@ -86,29 +102,37 @@ export function ConversationDetailPanel({
                 : 'Inquiry — no booking yet'}
             </div>
           </div>
-        ) : loading && !reservation ? (
+        ) : hasReservation && loading && !reservation ? (
           <DetailSkeleton />
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <Field label="Guest" value={guestName} />
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <Field label="Guest" value={guestName} />
+              </div>
+              <div className="col-span-2">
+                <Field label="Property" value={propertyName ?? '—'} />
+              </div>
+              <Field label="Check-in" value={fmtDate(checkIn)} />
+              <Field label="Check-out" value={fmtDate(checkOut)} />
+              <Field label="Nights" value={nights != null ? nights : '—'} />
+              <Field label="Channel" value={channel ?? '—'} />
             </div>
-            <div className="col-span-2">
-              <Field label="Property" value={propertyName ?? '—'} />
-            </div>
-            <Field label="Check-in" value={fmtDate(reservation?.check_in)} />
-            <Field label="Check-out" value={fmtDate(reservation?.check_out)} />
-            <Field
-              label="Nights"
-              value={reservation?.nights != null ? reservation.nights : '—'}
-            />
-            <Field label="Channel" value={channel ?? '—'} />
+            {isCancelled ? (
+              <div className="rounded-md bg-accent px-3 py-2 text-xs text-muted-foreground">
+                Reservation cancelled
+              </div>
+            ) : !hasReservation ? (
+              <div className="rounded-md bg-accent px-3 py-2 text-xs text-muted-foreground">
+                Booked — syncing full reservation details
+              </div>
+            ) : null}
           </div>
         )}
       </div>
 
-      {/* Associated tasks */}
-      {!isInquiry ? (
+      {/* Associated tasks — only once a reservation row is linked. */}
+      {hasReservation ? (
         <div className="px-4 py-4">
           <h2 className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Associated tasks

@@ -10,7 +10,12 @@ export const maxDuration = 300;
 
 export async function POST() {
   try {
-    const result = await backfillRecentConversations();
+    // Cap covers the full inbox (currently ~108 threads) so every thread's
+    // status mirrors the PMS each 30-min cycle, not just the most recent 80.
+    // ~1.5s/thread (the Hostaway rate-limit sleep dominates), so 150 stays well
+    // within maxDuration (300s). Revisit — paginate or refresh incrementally —
+    // before the inbox approaches ~180 threads.
+    const result = await backfillRecentConversations(150);
     return NextResponse.json({ success: true, ...result });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
