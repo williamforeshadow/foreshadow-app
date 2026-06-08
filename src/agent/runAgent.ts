@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import type {
   MessageParam,
   ToolUseBlock,
@@ -8,6 +7,7 @@ import type {
 import { TOOLS_BY_NAME, toAnthropicTools } from './tools';
 import type { ToolContext, ToolResult } from './tools/types';
 import { SKILLS_BLOCK } from './skills';
+import { getAnthropic, MODEL } from './anthropic';
 import { todayInTz } from '@/src/lib/dates';
 
 // Names of tools that mutate state. Used by the hallucination backstops
@@ -54,21 +54,9 @@ export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set([
 // dispatch + return structured results, then ask the model again until it
 // stops calling tools.
 
-let client: Anthropic | null = null;
-function getAnthropic(): Anthropic {
-  if (!client) {
-    client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' });
-  }
-  return client;
-}
+// getAnthropic() and MODEL now live in ./anthropic so the draft generator can
+// share them without importing this module (which would be circular).
 
-// Sonnet 4.6 is the current production sweet spot for tool-grounded ops chat:
-// faster than Opus 4.x, cheaper, and (per Anthropic's release notes for the
-// 4.6 family) tighter on instruction-following and structured tool use —
-// which directly addresses the UUID/token fabrication we've seen Opus 4 do
-// when it tries to shortcut find_* resolvers. The 2024-05-14 Opus alias was
-// also flagged for retirement on 2026-06-15 so we'd be migrating regardless.
-const MODEL = 'claude-sonnet-4-6';
 // Bumped from 1024 so multi-tool turns (e.g. listing 25 tasks after a
 // find_tasks call) never get truncated mid-enumeration. Truncation pushes the
 // model toward summarizing/inferring instead of citing what it received.
@@ -141,6 +129,12 @@ Capability/help questions:
 - If the user asks what you can do, whether you have the capability to do something, or whether you can edit/delete/upload/read a category of records, answer directly from this tool catalog and the write protocol below. Do not call a read tool unless they ask about a specific live property, task, reservation, person, or file.
 - For Property Knowledge capability questions, be explicit: you can create/update/delete rooms, room cards, documents, notes, and vendor contacts where tools exist; you can clear/update Access and Connectivity fields; you cannot write to Property Information or Activity.
 - Avoid self-doubt language in user-facing replies. If something needs a live lookup and you lack enough context, ask for the missing property, task, or section.
+
+Guest messaging:
+- You can read guest conversations and draft replies (you do NOT send — drafts are for a human to review, edit, and send). Tools: find_conversations (resolve a guest name / property / recent activity to a conversation), read_conversation_thread (the full message history plus the linked reservation), and draft_guest_reply (generate a reply draft for a conversation).
+- To draft a reply, you usually call read_conversation_thread first to understand what the guest asked, then call draft_guest_reply with the conversation_id. Pass the user's intent as the guidance argument when they tell you what to say (e.g. "let them know checkout is 11am").
+- If the guest's message asks something property-specific (wifi, check-in/access, parking, a known issue), call get_property_knowledge for that property FIRST and pass the relevant facts into draft_guest_reply's context_notes argument. Only include facts you actually retrieved — never invent property details in a guest-facing draft.
+- draft_guest_reply returns a draft string. Show it to the user as a proposed reply they can copy or edit; do not claim the message was sent.
 
 Grounding rules (critical):
 - If a tool call returns zero rows or a not_found error, say so plainly. Never substitute remembered or invented data for missing tool output.

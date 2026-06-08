@@ -105,6 +105,7 @@ export default function ConversationPage() {
         <div className="flex h-full flex-col">
           <ConversationThread
             messages={messages}
+            conversationId={conversationId}
             guestName={conversation?.guest_name}
             propertyName={conversation?.property_name}
             channel={conversation?.channel}
@@ -124,6 +125,7 @@ export default function ConversationPage() {
       <div className="flex min-w-0 flex-1 flex-col">
         <ConversationThread
           messages={messages}
+          conversationId={conversationId}
           guestName={conversation?.guest_name}
           propertyName={conversation?.property_name}
           channel={conversation?.channel}

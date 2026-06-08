@@ -74,8 +74,16 @@ export function ConversationDetailPanel({
           <div className="space-y-3">
             <Field label="Guest" value={guestName} />
             <Field label="Property" value={propertyName ?? '—'} />
+            {conversation.check_in || conversation.check_out ? (
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Check-in" value={fmtDate(conversation.check_in)} />
+                <Field label="Check-out" value={fmtDate(conversation.check_out)} />
+              </div>
+            ) : null}
             <div className="rounded-md bg-accent px-3 py-2 text-xs text-muted-foreground">
-              Inquiry — no booking yet
+              {conversation.check_in || conversation.check_out
+                ? 'Inquiry — requested dates, not booked yet'
+                : 'Inquiry — no booking yet'}
             </div>
           </div>
         ) : loading && !reservation ? (
