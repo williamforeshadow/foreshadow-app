@@ -36,6 +36,7 @@ import { commitSlackFileAttachmentTool } from './commitSlackFileAttachment';
 import { findConversations } from './findConversations';
 import { readConversationThread } from './readConversationThread';
 import { draftGuestReply } from './draftGuestReply';
+import { findConciergeTraining } from './findConciergeTraining';
 
 // Tool registry. To add a new tool: define it in its own file, then add it
 // here. The agent loop pulls from this list — there's no other registration
@@ -82,6 +83,7 @@ export const TOOLS: ReadonlyArray<ToolDefinition<unknown, unknown>> = [
   findConversations as unknown as ToolDefinition<unknown, unknown>,
   readConversationThread as unknown as ToolDefinition<unknown, unknown>,
   draftGuestReply as unknown as ToolDefinition<unknown, unknown>,
+  findConciergeTraining as unknown as ToolDefinition<unknown, unknown>,
 ];
 
 export const TOOLS_BY_NAME: Readonly<Record<string, ToolDefinition<unknown, unknown>>> =

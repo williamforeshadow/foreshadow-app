@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+import { GraduationCap } from 'lucide-react';
 import { useSelectedLayoutSegment } from 'next/navigation';
 import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
@@ -60,9 +62,19 @@ function MessagesChrome({ children }: { children: React.ReactNode }) {
     <DesktopSidebarShell>
       <div className="flex h-full">
         <aside className="flex w-80 shrink-0 flex-col border-r border-[var(--surface-elevated-divider)] bg-[var(--surface-elevated)]">
-          <h1 className="shrink-0 px-3 pb-3 pt-3.5 text-lg font-semibold tracking-tight text-foreground">
-            Messages
-          </h1>
+          <div className="flex shrink-0 items-center justify-between px-3 pb-3 pt-3.5">
+            <h1 className="text-lg font-semibold tracking-tight text-foreground">
+              Messages
+            </h1>
+            <Link
+              href="/messages/concierge-training"
+              title="Concierge Training"
+              aria-label="Concierge Training"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <GraduationCap className="h-4 w-4" aria-hidden />
+            </Link>
+          </div>
           <ListControls />
           <div className="min-h-0 flex-1 overflow-y-auto">
             <ListBody activeId={activeId} />
