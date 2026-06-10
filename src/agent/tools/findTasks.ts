@@ -146,6 +146,12 @@ const inputSchema = z
       .max(100)
       .optional()
       .describe('Max rows to return. Default 25, hard cap 100.'),
+    sort: z
+      .enum(['soonest', 'latest'])
+      .optional()
+      .describe(
+        "Result ordering by scheduled date. 'soonest' (default) = earliest scheduled_date first; 'latest' = most recent scheduled_date first. Resolved order echoed in meta.sort.",
+      ),
   })
   .refine(
     (v) =>
@@ -669,14 +675,26 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
     templateIdsFilter = r.rows.map((row) => row.id);
   }
 
-  // Pull `limit + 1` to detect truncation cheaply.
-  let q = supabase
-    .from('turnover_tasks')
-    .select(SELECT)
-    .order('scheduled_date', { ascending: true, nullsFirst: false })
-    .order('scheduled_time', { ascending: true, nullsFirst: false })
-    .order('created_at', { ascending: false })
-    .limit(limit + 1);
+  // Ordering by intent. A single hard-coded direction can't serve both "the
+  // next/soonest task" and "the last/most recent task" — so we default to
+  // soonest (the forward-looking work queue) and let the caller override with
+  // `sort`. nulls-last in both directions keeps unscheduled tasks out of the
+  // way of a `limit:1` "latest" lookup. The resolved order is echoed in
+  // meta.sort. Pull `limit + 1` to detect truncation cheaply.
+  const sort: 'soonest' | 'latest' = input.sort ?? 'soonest';
+  let q = supabase.from('turnover_tasks').select(SELECT);
+  if (sort === 'latest') {
+    q = q
+      .order('scheduled_date', { ascending: false, nullsFirst: false })
+      .order('scheduled_time', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false });
+  } else {
+    q = q
+      .order('scheduled_date', { ascending: true, nullsFirst: false })
+      .order('scheduled_time', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: false });
+  }
+  q = q.limit(limit + 1);
 
   if (input.ids && input.ids.length > 0) {
     q = q.in('id', input.ids);
@@ -838,6 +856,10 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
     returned: transformed.length,
     limit,
     truncated,
+    sort:
+      sort === 'latest'
+        ? 'latest (most recent scheduled_date first)'
+        : 'soonest (earliest scheduled_date first)',
     ...(resolvedAssignees ? { resolved_assignees: resolvedAssignees } : {}),
     ...(resolvedDepartments ? { resolved_departments: resolvedDepartments } : {}),
     ...(resolvedTemplates ? { resolved_templates: resolvedTemplates } : {}),
@@ -849,7 +871,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
 export const findTasks: ToolDefinition<Input, TaskRow[]> = {
   name: 'find_tasks',
   description:
-    "Find operational tasks (cleanings, inspections, recurring jobs, manual to-dos) with structured filters. Filter by property, template (id or name), department (id or name), status, priority, schedule, assignee, or free-text. For category questions like 'show me all cleaning tasks' or 'maintenance work today', prefer department_name over search — it's more precise. For template-shaped questions ('turnover cleanings this week'), prefer template_name. Assignee filters: use assignee_name for a single-person substring match; use assigned_user_ids when the user names multiple specific people and means 'tasks all of them share' (resolve names to user_ids with find_users first). Resolve other references first when the user names something rather than ids: call find_properties for a property name, and call find_reservations for a specific stay or guest (then pass the resulting reservation_id). Returns rows sorted by scheduled_date asc (nulls last), scheduled_time asc, then created_at desc. JSON-heavy fields (description, form_metadata) are not returned.",
+    "Find operational tasks (cleanings, inspections, recurring jobs, manual to-dos) with structured filters. Filter by property, template (id or name), department (id or name), status, priority, schedule, assignee, or free-text. For category questions like 'show me all cleaning tasks' or 'maintenance work today', prefer department_name over search — it's more precise. For template-shaped questions ('turnover cleanings this week'), prefer template_name. Assignee filters: use assignee_name for a single-person substring match; use assigned_user_ids when the user names multiple specific people and means 'tasks all of them share' (resolve names to user_ids with find_users first). Resolve other references first when the user names something rather than ids: call find_properties for a property name, and call find_reservations for a specific stay or guest (then pass the resulting reservation_id). ORDERING: `sort` controls direction — 'soonest' (default) = earliest scheduled_date first; 'latest' = most recent scheduled_date first. The resolved order is echoed in meta.sort. Note scheduled_date can be in the future: turnovers are auto-spawned and 'contingent' tasks are dated months/years ahead, so the latest-dated task is frequently not the last one actually performed. JSON-heavy fields (description, form_metadata) are not returned.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -960,6 +982,12 @@ export const findTasks: ToolDefinition<Input, TaskRow[]> = {
         minimum: 1,
         maximum: 100,
         description: 'Max rows to return. Default 25.',
+      },
+      sort: {
+        type: 'string',
+        enum: ['soonest', 'latest'],
+        description:
+          "Ordering by scheduled date. 'soonest' (default) = earliest scheduled_date first; 'latest' = most recent scheduled_date first. Resolved order is returned in meta.sort. Note scheduled_date can be future-dated (turnovers are auto-spawned and 'contingent' tasks run months/years ahead), so the latest-dated task is often not the last one actually performed.",
       },
     },
     additionalProperties: false,

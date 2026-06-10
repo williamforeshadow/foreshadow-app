@@ -22,7 +22,7 @@ const inputSchema = z
     status: z
       .enum(['active', 'complete'])
       .optional()
-      .describe("Filter by inbox status. 'active' is the default working set; 'complete' is resolved threads."),
+      .describe("Filter by inbox status: 'active' is the open working set, 'complete' is resolved threads. Omit to return BOTH (the handler applies no status filter when this is unset)."),
     unread_only: z
       .boolean()
       .optional()
@@ -35,7 +35,7 @@ const inputSchema = z
       .optional()
       .describe('Max rows. Default 20, hard cap 50.'),
   })
-  .describe('All filters optional. With none, returns the most recent active conversations.');
+  .describe('All filters optional. With none, returns the most recent non-archived conversations (active and complete).');
 
 type Input = z.infer<typeof inputSchema>;
 
@@ -89,6 +89,10 @@ async function handler(input: Input): Promise<ToolResult<ConversationMatch[]>> {
   const rows = (data ?? []) as Array<Record<string, unknown>>;
   const truncated = rows.length > limit;
   const trimmed = truncated ? rows.slice(0, limit) : rows;
+  // Surface what scoping actually ran. With no `status`, this returns BOTH
+  // active and complete (only archived rows are excluded) — make that
+  // explicit so the model doesn't assume it only saw active threads.
+  const statusFilter = input.status ?? 'all (active + complete)';
 
   const matches: ConversationMatch[] = trimmed.map((r) => ({
     conversation_id: r.id as string,
@@ -102,14 +106,20 @@ async function handler(input: Input): Promise<ToolResult<ConversationMatch[]>> {
     last_message_preview: (r.last_message_preview as string | null) ?? '',
   }));
 
-  const meta: ToolMeta = { returned: matches.length, limit, truncated };
+  const meta: ToolMeta = {
+    returned: matches.length,
+    limit,
+    truncated,
+    status_filter: statusFilter,
+    archived: 'excluded',
+  };
   return { ok: true, data: matches, meta };
 }
 
 export const findConversations: ToolDefinition<Input, ConversationMatch[]> = {
   name: 'find_conversations',
   description:
-    "Find guest message conversations (inbox threads) by guest name, property, status, or recency. Use this to resolve a guest name to a conversation_id before reading the thread or drafting a reply. Returns slim rows sorted by most recent activity. With no filters, returns the most recent active conversations.",
+    "Find guest message conversations (inbox threads) by guest name, property, status, or recency. Use this to resolve a guest name to a conversation_id before reading the thread or drafting a reply. Returns slim rows sorted by most recent activity (last_message_at desc). Archived threads are always excluded. With no `status` filter it returns BOTH active and complete conversations (meta.status_filter records what ran); pass status:'active' to scope to the open working set.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -127,7 +137,7 @@ export const findConversations: ToolDefinition<Input, ConversationMatch[]> = {
       status: {
         type: 'string',
         enum: ['active', 'complete'],
-        description: "Filter by inbox status. 'active' is the working set; 'complete' is resolved threads.",
+        description: "Filter by inbox status: 'active' is the open working set, 'complete' is resolved threads. Omit to return BOTH (no status filter is applied when unset).",
       },
       unread_only: {
         type: 'boolean',
