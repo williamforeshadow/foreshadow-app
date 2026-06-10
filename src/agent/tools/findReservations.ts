@@ -122,6 +122,12 @@ const inputSchema = z
       .max(100)
       .optional()
       .describe('Max rows to return. Default 25, hard cap 100.'),
+    sort: z
+      .enum(['most_recent', 'earliest'])
+      .optional()
+      .describe(
+        "Result ordering. 'most_recent' returns the latest stays first — use this with limit:1 for 'the last / most recent guest'. 'earliest' returns the oldest first — use for 'the first guest'. Default: 'most_recent' when past=true, otherwise 'earliest' (so upcoming returns the soonest arrival first). ALWAYS think about which end you want before relying on limit:1.",
+      ),
   })
   .refine(
     (v) => {
@@ -287,14 +293,25 @@ async function handler(input: Input): Promise<ToolResult<ReservationRow[]>> {
     resolvedProperties = found;
   }
 
-  // Pull `limit + 1` so we can detect truncation cheaply, same as the other
-  // list tools.
-  let q = supabase
-    .from('reservations')
-    .select(SELECT)
-    .order('check_in', { ascending: true, nullsFirst: false })
-    .order('created_at', { ascending: false })
-    .limit(limit + 1);
+  // Ordering by intent. A single hard-coded direction can't serve both "the
+  // last guest" and "the first guest" — so we default by bucket (past →
+  // newest-first, everything else → earliest/soonest-first) and let the caller
+  // override with `sort`. The resolved order is echoed in meta.sort so it's
+  // never hidden. Pull `limit + 1` to detect truncation cheaply.
+  const sort: 'most_recent' | 'earliest' =
+    input.sort ?? (input.past === true ? 'most_recent' : 'earliest');
+
+  let q = supabase.from('reservations').select(SELECT);
+  if (sort === 'most_recent') {
+    q = q
+      .order('check_out', { ascending: false, nullsFirst: false })
+      .order('check_in', { ascending: false, nullsFirst: false });
+  } else {
+    q = q
+      .order('check_in', { ascending: true, nullsFirst: false })
+      .order('check_out', { ascending: true, nullsFirst: false });
+  }
+  q = q.order('created_at', { ascending: false }).limit(limit + 1);
 
   if (input.ids && input.ids.length > 0) {
     q = q.in('id', input.ids);
@@ -400,6 +417,10 @@ async function handler(input: Input): Promise<ToolResult<ReservationRow[]>> {
     returned: transformed.length,
     limit,
     truncated,
+    sort:
+      sort === 'most_recent'
+        ? 'most_recent (latest check_out first)'
+        : 'earliest (earliest check_in first)',
     ...(resolvedProperty
       ? {
           resolved_property: {
@@ -424,7 +445,7 @@ async function handler(input: Input): Promise<ToolResult<ReservationRow[]>> {
 export const findReservations: ToolDefinition<Input, ReservationRow[]> = {
   name: 'find_reservations',
   description:
-    "Find guest reservations (stays) by property, guest name, Hostaway id, or date range. Use convenience flags current_only/upcoming/past for relative-time questions ('who's there now', 'this week's arrivals'); pass reference_date in the user's local timezone so 'today' aligns with their clock. Property filtering: use property_id for one property; use property_ids for multiple (e.g. 'check-ins this week at these N properties') — always prefer the batched call + a date range over looping property_id one ID at a time. Resolve names with find_properties first. Returns slim rows sorted by check_in asc (nulls last), created_at desc, with computed nights and is_back_to_back fields. There is no status column — cancellations are deletions, so you cannot ask for cancelled stays.",
+    "Find guest reservations (stays) by property, guest name, Hostaway id, or date range. Use convenience flags current_only/upcoming/past for relative-time questions ('who's there now', 'this week's arrivals'); pass reference_date in the user's local timezone so 'today' aligns with their clock. Property filtering: use property_id for one property; use property_ids for multiple (e.g. 'check-ins this week at these N properties') — always prefer the batched call + a date range over looping property_id one ID at a time. Resolve names with find_properties first. ORDERING: controlled by `sort` ('most_recent' = latest first, 'earliest' = oldest first), defaulting to most_recent for past=true and earliest otherwise; the resolved order is returned in meta.sort. For 'the last/most recent guest' use sort:'most_recent' with limit:1; for 'the first guest' use sort:'earliest'. Returns slim rows with computed nights and is_back_to_back fields. There is no status column — cancellations are deletions, so you cannot ask for cancelled stays.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -522,6 +543,12 @@ export const findReservations: ToolDefinition<Input, ReservationRow[]> = {
         minimum: 1,
         maximum: 100,
         description: 'Max rows to return. Default 25.',
+      },
+      sort: {
+        type: 'string',
+        enum: ['most_recent', 'earliest'],
+        description:
+          "Result ordering. 'most_recent' = latest stays first (use with limit:1 for 'the last/most recent guest'); 'earliest' = oldest first (for 'the first guest'). Default: most_recent when past=true, else earliest. Decide which end you want before trusting limit:1.",
       },
     },
     additionalProperties: false,
