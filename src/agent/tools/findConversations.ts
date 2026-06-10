@@ -5,7 +5,7 @@ import type { ToolDefinition, ToolResult, ToolMeta } from './types';
 // find_conversations — resolve a guest conversation (the messaging inbox row) by
 // guest name, property, status, or recency. The entry point for "draft a reply
 // to Wendy" style requests: get the conversation_id here, then
-// read_conversation_thread / draft_guest_reply.
+// read_conversation_thread / concierge.
 
 const inputSchema = z
   .object({

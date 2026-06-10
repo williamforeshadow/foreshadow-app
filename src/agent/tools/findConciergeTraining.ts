@@ -10,7 +10,7 @@ import type { ToolDefinition, ToolResult, ToolMeta } from './types';
 // intelligence") for a property: named playbooks the host's team follows for
 // recurring guest situations (door lock issues, parking, check-in, etc).
 //
-// Read-only. NOT in WRITE_TOOL_NAMES. Note that draft_guest_reply already
+// Read-only. NOT in WRITE_TOOL_NAMES. Note that the concierge tool already
 // auto-incorporates a property's training, so this tool is for the operator
 // asking "what's our procedure for X" — and is the foundation for a future
 // add/update_concierge_training write tool.
@@ -88,7 +88,7 @@ async function handler(input: Input): Promise<ToolResult<TrainingRule[]>> {
 export const findConciergeTraining: ToolDefinition<Input, TrainingRule[]> = {
   name: 'find_concierge_training',
   description:
-    "Read the configured concierge training (operating procedures / playbooks) for a property — the host team's instructions for recurring guest situations like door-lock issues, parking, or check-in. Scope with property_id or conversation_id; with neither, returns only global rules that apply to every property. Use 'query' to filter by topic. Read-only. Note: draft_guest_reply already applies a property's training automatically, so reach for this when the operator asks what a procedure is, or to confirm what's configured.",
+    "Read the configured concierge training (operating procedures / playbooks) for a property — the host team's instructions for recurring guest situations like door-lock issues, parking, or check-in. Scope with property_id or conversation_id; with neither, returns only global rules that apply to every property. Use 'query' to filter by topic. Read-only. Note: the concierge tool already applies a property's training automatically, so reach for this when the operator asks what a procedure is, or to confirm what's configured.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,

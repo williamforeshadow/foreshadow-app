@@ -4,8 +4,9 @@ import type {
   ToolResultBlockParam,
   TextBlock,
 } from '@anthropic-ai/sdk/resources/messages';
-import { TOOLS_BY_NAME, toAnthropicTools } from './tools';
-import type { ToolContext, ToolResult } from './tools/types';
+import { toAnthropicTools } from './tools';
+import type { ToolContext } from './tools/types';
+import { dispatchToolUse, type ToolCallTrace } from './dispatch';
 import { SKILLS_BLOCK } from './skills';
 import { getAnthropic, MODEL } from './anthropic';
 import { todayInTz } from '@/src/lib/dates';
@@ -131,11 +132,9 @@ Capability/help questions:
 - Avoid self-doubt language in user-facing replies. If something needs a live lookup and you lack enough context, ask for the missing property, task, or section.
 
 Guest messaging:
-- You can read guest conversations and draft replies (you do NOT send — drafts are for a human to review, edit, and send). Tools: find_conversations (resolve a guest name / property / recent activity to a conversation), read_conversation_thread (the full message history plus the linked reservation), and draft_guest_reply (generate a reply draft for a conversation).
-- To draft a reply, you usually call read_conversation_thread first to understand what the guest asked, then call draft_guest_reply with the conversation_id. Pass the user's intent as the guidance argument when they tell you what to say (e.g. "let them know checkout is 11am").
-- If the guest's message asks something property-specific (wifi, check-in/access, parking, a known issue), call get_property_knowledge for that property FIRST and pass the relevant facts into draft_guest_reply's context_notes argument. Only include facts you actually retrieved — never invent property details in a guest-facing draft.
-- draft_guest_reply returns a draft string. Show it to the user as a proposed reply they can copy or edit; do not claim the message was sent.
-- find_concierge_training returns a property's configured operating procedures ("playbooks" the host team follows for situations like door-lock issues or parking). draft_guest_reply already applies a property's training automatically, so you don't need to fetch-then-pass it; reach for find_concierge_training when the operator asks what a procedure is, or to confirm what's configured for a property.
+- You can READ guest conversations for operator-facing requests (summarizing, reviewing): find_conversations (resolve a guest name / property / recent activity to a conversation) and read_conversation_thread (the full message history plus the linked reservation).
+- You do NOT write to guests yourself. Guest-facing communication is handled by the Concierge, a separate guest-facing agent. When the operator wants something said to — or done for — a guest, call the concierge tool with the conversation_id and a plain-English instruction of the intent (e.g. "let them know checkout is 11am"). The Concierge grounds the reply in the property's guest-shareable knowledge and concierge training on its own — you don't pass property facts. It returns a proposed draft (nothing is sent); show it to the operator to review.
+- find_concierge_training returns a property's configured operating procedures ("playbooks" for situations like door-lock issues or parking). Reach for it when the operator asks what a procedure is or to confirm what's configured — the Concierge already applies training automatically when it drafts.
 
 Grounding rules (critical):
 - If a tool call returns zero rows or a not_found error, say so plainly. Never substitute remembered or invented data for missing tool output.
@@ -294,11 +293,7 @@ export interface RunAgentInput {
   contextBlocks?: string[];
 }
 
-export interface ToolCallTrace {
-  name: string;
-  input: unknown;
-  output: ToolResult<unknown>;
-}
+export type { ToolCallTrace };
 
 export interface RunAgentOutput {
   text: string;
@@ -385,68 +380,3 @@ export async function runAgent({
   };
 }
 
-async function dispatchToolUse(
-  use: ToolUseBlock,
-  trace: ToolCallTrace[],
-  ctx: ToolContext,
-): Promise<ToolResultBlockParam> {
-  const tool = TOOLS_BY_NAME[use.name];
-  if (!tool) {
-    const result: ToolResult<unknown> = {
-      ok: false,
-      error: { code: 'unknown_tool', message: `Tool "${use.name}" is not registered.` },
-    };
-    trace.push({ name: use.name, input: use.input, output: result });
-    return {
-      type: 'tool_result',
-      tool_use_id: use.id,
-      is_error: true,
-      content: JSON.stringify(result),
-    };
-  }
-
-  const parsed = tool.inputSchema.safeParse(use.input);
-  if (!parsed.success) {
-    const result: ToolResult<unknown> = {
-      ok: false,
-      error: {
-        code: 'invalid_input',
-        message: 'Tool input failed validation.',
-        hint: parsed.error.issues
-          .map((iss) => `${iss.path.join('.') || '(root)'}: ${iss.message}`)
-          .join('; '),
-      },
-    };
-    trace.push({ name: use.name, input: use.input, output: result });
-    return {
-      type: 'tool_result',
-      tool_use_id: use.id,
-      is_error: true,
-      content: JSON.stringify(result),
-    };
-  }
-
-  try {
-    const result = await tool.handler(parsed.data, ctx);
-    trace.push({ name: use.name, input: parsed.data, output: result });
-    return {
-      type: 'tool_result',
-      tool_use_id: use.id,
-      is_error: result.ok === false,
-      content: JSON.stringify(result),
-    };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Tool handler threw';
-    const result: ToolResult<unknown> = {
-      ok: false,
-      error: { code: 'db_error', message },
-    };
-    trace.push({ name: use.name, input: parsed.data, output: result });
-    return {
-      type: 'tool_result',
-      tool_use_id: use.id,
-      is_error: true,
-      content: JSON.stringify(result),
-    };
-  }
-}

@@ -1,5 +1,13 @@
-import type { TextBlock } from '@anthropic-ai/sdk/resources/messages';
+import type {
+  MessageParam,
+  TextBlock,
+  ToolUseBlock,
+  ToolResultBlockParam,
+} from '@anthropic-ai/sdk/resources/messages';
 import { getAnthropic, MODEL } from '@/src/agent/anthropic';
+import { dispatchTool, type ToolCallTrace } from '@/src/agent/dispatchTool';
+import { getPropertyKnowledgeForGuest } from '@/src/agent/tools/getPropertyKnowledgeForGuest';
+import type { ToolContext, ToolDefinition } from '@/src/agent/tools/types';
 import {
   getConversationContext,
   type ConversationContext,
@@ -11,8 +19,18 @@ import {
 } from './conciergeTraining';
 import type { GuestMessageRecord } from '@/lib/messages';
 
+// The Concierge's curated, read-only toolset. One tool for now — it can look up
+// the guest-shareable property facts the operator has unlocked. The full ops
+// registry is intentionally NOT imported here (that would cycle through
+// concierge → draftReply); the Concierge holds its tools directly.
+const CONCIERGE_TOOLS: ReadonlyArray<ToolDefinition<unknown, unknown>> = [
+  getPropertyKnowledgeForGuest as unknown as ToolDefinition<unknown, unknown>,
+];
+const CONCIERGE_TOOLS_BY_NAME = new Map(CONCIERGE_TOOLS.map((t) => [t.name, t]));
+const MAX_DRAFT_ITERATIONS = 4;
+
 // Guest-reply draft generator — the single source of truth for AI message
-// creation. Reused by the draft_guest_reply agent tool (chat / Slack) and the
+// creation. Reused by the concierge agent tool (chat / Slack) and the
 // inbox composer's "AI draft" endpoint. It DRAFTS only; sending is a separate,
 // human-confirmed step that doesn't exist yet.
 //
@@ -21,7 +39,7 @@ import type { GuestMessageRecord } from '@/lib/messages';
 // warmth comes from instruction, not sampling randomness (higher temp has been
 // a reliable source of confabulation in this codebase).
 
-const DRAFT_MAX_TOKENS = 500;
+const DRAFT_MAX_TOKENS = 700; // headroom for a tool-call turn + the final reply
 const MAX_THREAD_MESSAGES = 30; // recent context is enough; threads are short
 
 const SYSTEM_PROMPT = `You draft the next message a short-term-rental host's team should send to a guest in an ongoing conversation. Your entire output is that message, ready to send.
@@ -37,25 +55,36 @@ Voice:
 - Plain prose only: no markdown, headings, bullet lists, or labels.
 
 Grounding (critical — this text may be sent to a real customer):
-- Use ONLY facts present in the conversation, the reservation/inquiry details, and the "Known facts" you are given.
+- Use ONLY facts present in the conversation, the reservation/inquiry details, the property facts you retrieve via tools, and any concierge training. Do not state anything else as fact.
 - NEVER invent or guess specifics: dates, times, prices, codes, wifi passwords, addresses, amenities, or availability.
 - Do not confirm, promise, deny, or rule on anything — policies, permissions, rules, what is or isn't allowed — unless a provided fact states it. The guest asking about or mentioning something is never license to affirm or deny it. When you don't have the fact, warmly say you'll confirm with the team and follow up; do not reassure or refuse on your own.
 - If the guest asked a direct question you CAN answer from the given facts, answer it directly.
 - "Concierge training" (when present) is operating guidance from the host's team: procedures to follow when the situation matches. Follow the applicable steps and use any specifics it states (e.g. phone numbers, sequences). It is instruction, not license to invent — never fabricate a code, date, price, or fact that neither the training, the facts, nor the conversation provides.
 
+Looking things up:
+- When the guest asks something property-specific (wifi, check-in/access, parking, an amenity, a house rule) that you don't already have, call get_property_knowledge_for_guest — with no arguments; it already knows which property. Do this BEFORE replying so your answer is grounded.
+- It returns only what the host's team has made available for guests. If it comes back empty, or doesn't include the specific fact the guest needs, that information hasn't been shared — do NOT guess it. Warmly tell the guest you'll confirm with the team and follow up.
+
+Operator instruction:
+- You may be given an "instruction" describing what the operator wants accomplished or conveyed (e.g. "let them know checkout is 11am"). Treat it as INTENT, not a script. Express it naturally in your own guest-facing voice, grounded only in facts you have or retrieve. Never copy the instruction verbatim, never repeat internal or operator phrasing or notes to the guest, and never relay anything in it that isn't meant for the guest's eyes. If the instruction references a specific fact (a time, price, code), only state it if it's actually provided — otherwise say you'll confirm.
+
 Output: return ONLY the reply text the host would send. No preamble, no quotes, no explanation.`;
 
 export interface GenerateDraftInput {
   conversationId: string;
-  /** Extra facts the caller gathered (e.g. property knowledge) to ground the reply. */
-  contextNotes?: string;
-  /** What the human wants the message to convey, if specified. */
-  guidance?: string;
+  /**
+   * Plain-English directive from the operator describing what to accomplish or
+   * convey for the guest (e.g. "let them know checkout is 11am"). Intent only —
+   * the Concierge decides the wording and grounds it itself. Never a place to
+   * pass property facts (the Concierge retrieves its own, gated to what's
+   * unlocked for guests).
+   */
+  instruction?: string;
 }
 
 /**
  * Generate a guest-reply draft for a conversation. Throws on a missing
- * conversation, an empty basis (no thread and no guidance), or an API error —
+ * conversation, an empty basis (no thread and no instruction), or an API error —
  * callers map that to their own error shape.
  */
 export async function generateGuestReplyDraft(
@@ -66,16 +95,13 @@ export async function generateGuestReplyDraft(
     throw new Error('Conversation not found');
   }
   return generateGuestReplyDraftFromContext(ctx, {
-    contextNotes: input.contextNotes,
-    guidance: input.guidance,
+    instruction: input.instruction,
   });
 }
 
 export interface GenerateDraftFromContextOptions {
-  /** Extra facts the caller gathered (e.g. property knowledge) to ground the reply. */
-  contextNotes?: string;
-  /** What the human wants the message to convey, if specified. */
-  guidance?: string;
+  /** Operator's plain-English intent for the message (see GenerateDraftInput.instruction). */
+  instruction?: string;
   /**
    * Today's date (YYYY-MM-DD) used to ground "now" and derive the guest's
    * current relationship to the stay (checked in / upcoming / ended). Defaults
@@ -98,7 +124,7 @@ export async function generateGuestReplyDraftFromContext(
   opts: GenerateDraftFromContextOptions = {},
 ): Promise<{ draft: string }> {
   // Concierge training: the property's configured operating procedures. Loaded
-  // here so the inbox draft path, the draft_guest_reply tool, and the test
+  // here so the inbox draft path, the concierge tool, and the test
   // harness all honor it identically.
   let trainingBlock = '';
   try {
@@ -117,8 +143,8 @@ export async function generateGuestReplyDraftFromContext(
   );
   const recent = sent.slice(-MAX_THREAD_MESSAGES);
 
-  if (recent.length === 0 && !opts.guidance?.trim()) {
-    throw new Error('Nothing to draft from: the conversation has no messages and no guidance was given.');
+  if (recent.length === 0 && !opts.instruction?.trim()) {
+    throw new Error('Nothing to draft from: the conversation has no messages and no instruction was given.');
   }
 
   const guestName =
@@ -147,9 +173,6 @@ export async function generateGuestReplyDraftFromContext(
     'Reservation details:',
     facts.map((f) => `- ${f}`).join('\n'),
   ];
-  if (opts.contextNotes?.trim()) {
-    userParts.push('', 'Known facts (use these to answer; do not go beyond them):', opts.contextNotes.trim());
-  }
   if (trainingBlock) {
     userParts.push(
       '',
@@ -158,34 +181,80 @@ export async function generateGuestReplyDraftFromContext(
     );
   }
   userParts.push('', 'Conversation so far (oldest to newest):', transcript);
-  if (opts.guidance?.trim()) {
-    userParts.push('', `What this reply should convey: ${opts.guidance.trim()}`);
+  if (opts.instruction?.trim()) {
+    userParts.push(
+      '',
+      `Operator instruction (intent — express it in your own guest-facing voice; do not repeat it verbatim or relay anything not meant for the guest): ${opts.instruction.trim()}`,
+    );
   }
   userParts.push(
     '',
     'Write the message to send to the guest now. If the host sent the most recent message, write a natural follow-up. Output only the message text.',
   );
 
+  // The Concierge loop. The model may call its read-only tool(s) to gather
+  // facts before replying; when it stops calling tools, its text is the draft.
+  // With no tool call this is identical to the old single-shot path.
   const client = getAnthropic();
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: DRAFT_MAX_TOKENS,
-    temperature: 0,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userParts.join('\n') }],
-  });
+  const tools = CONCIERGE_TOOLS.map((t) => ({
+    name: t.name,
+    description: t.description,
+    input_schema: t.jsonSchema,
+  }));
+  // Bind the one property this draft is for so the guest tool can't be steered
+  // to another property — it reads the id from context, not from the model.
+  const toolCtx: ToolContext = { draft: { propertyId: ctx.conversation.property_id } };
+  const conversation: MessageParam[] = [{ role: 'user', content: userParts.join('\n') }];
+  const trace: ToolCallTrace[] = [];
 
-  const draft = response.content
-    .filter((b): b is TextBlock => b.type === 'text')
-    .map((b) => b.text)
-    .join('')
-    .trim();
+  for (let i = 0; i < MAX_DRAFT_ITERATIONS; i++) {
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: DRAFT_MAX_TOKENS,
+      temperature: 0,
+      system: SYSTEM_PROMPT,
+      tools,
+      messages: conversation,
+    });
 
-  if (!draft) {
-    throw new Error('The model returned an empty draft.');
+    conversation.push({ role: 'assistant', content: response.content });
+
+    if (response.stop_reason !== 'tool_use') {
+      const draft = response.content
+        .filter((b): b is TextBlock => b.type === 'text')
+        .map((b) => b.text)
+        .join('')
+        .trim();
+      if (!draft) {
+        throw new Error('The model returned an empty draft.');
+      }
+      return { draft };
+    }
+
+    const toolUses = response.content.filter(
+      (b): b is ToolUseBlock => b.type === 'tool_use',
+    );
+    const toolResults: ToolResultBlockParam[] = await Promise.all(
+      toolUses.map((use) => {
+        const tool = CONCIERGE_TOOLS_BY_NAME.get(use.name);
+        if (!tool) {
+          return Promise.resolve<ToolResultBlockParam>({
+            type: 'tool_result',
+            tool_use_id: use.id,
+            is_error: true,
+            content: JSON.stringify({
+              ok: false,
+              error: { code: 'unknown_tool', message: `Tool "${use.name}" is not available here.` },
+            }),
+          });
+        }
+        return dispatchTool(tool, use, trace, toolCtx);
+      }),
+    );
+    conversation.push({ role: 'user', content: toolResults });
   }
 
-  return { draft };
+  throw new Error('The concierge could not finish drafting a reply.');
 }
 
 function isFuture(m: GuestMessageRecord, nowMs: number): boolean {

@@ -100,7 +100,7 @@ async function handler(input: Input): Promise<ToolResult<ConversationThreadView>
 export const readConversationThread: ToolDefinition<Input, ConversationThreadView> = {
   name: 'read_conversation_thread',
   description:
-    "Read a guest conversation's full message history plus its linked reservation (guest, property, check-in/out). Use this to understand what a guest asked before drafting a reply with draft_guest_reply. Messages are oldest-first; a message marked scheduled=true is a future-dated host automation that hasn't been sent yet. Resolve a guest name or property to a conversation_id with find_conversations first.",
+    "Read a guest conversation's full message history plus its linked reservation (guest, property, check-in/out). Use this to understand what a guest asked before handing the conversation to the concierge tool. Messages are oldest-first; a message marked scheduled=true is a future-dated host automation that hasn't been sent yet. Resolve a guest name or property to a conversation_id with find_conversations first.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,

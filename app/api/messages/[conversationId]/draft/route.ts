@@ -5,9 +5,8 @@ import { generateGuestReplyDraft } from '@/src/server/messages/draftReply';
 export const maxDuration = 60;
 
 // POST /api/messages/[conversationId]/draft — generate an AI reply draft for the
-// inbox composer's "AI draft" button. Default context (thread + reservation);
-// the richer, property-aware path is the agent's draft_guest_reply tool. Drafts
-// only — nothing is sent.
+// inbox composer's "AI draft" button. Runs the Concierge over the conversation
+// (same path the ops agent's concierge tool uses). Drafts only — nothing is sent.
 export async function POST(
   _request: Request,
   context: { params: Promise<{ conversationId: string }> },

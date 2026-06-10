@@ -95,6 +95,15 @@ export interface ToolContext {
     messageTs?: string;
     userId: string;
   };
+  /**
+   * Set only when running inside the Concierge guest-reply sub-agent. Binds the
+   * one property the draft is for, so guest-facing tools
+   * (get_property_knowledge_for_guest) read the property from context rather
+   * than trusting the model — the Concierge cannot reach another property's data.
+   */
+  draft?: {
+    propertyId: string | null;
+  };
 }
 
 export interface ToolDefinition<TInput, TOutput> {
