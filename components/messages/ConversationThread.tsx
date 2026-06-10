@@ -62,6 +62,10 @@ export function ConversationThread({
   onRetry,
   showHeader = true,
   actions,
+  proposedReply = null,
+  proposedReplySource = null,
+  proposedReplyAnswersMessageId = null,
+  onProposedReplyChange,
 }: {
   messages: GuestMessageRecord[];
   conversationId?: string;
@@ -73,16 +77,16 @@ export function ConversationThread({
   onRetry?: () => void;
   showHeader?: boolean;
   actions?: React.ReactNode;
+  /** The conversation's persisted proposed reply (read, not regenerated here). */
+  proposedReply?: string | null;
+  proposedReplySource?: 'auto' | 'assistant' | null;
+  proposedReplyAnswersMessageId?: string | null;
+  onProposedReplyChange?: () => void;
 }) {
   // Render-stable "now" for the scheduled-vs-sent check (one value per mount).
   const [nowMs] = useState(() => Date.now());
   const [composerText, setComposerText] = useState('');
   const [focusSignal, setFocusSignal] = useState(0);
-  // Inbound message ids that have an in-thread proposed reply. Once a message
-  // gets one it STAYS (anchored beneath that message): Edit copies the text to
-  // the composer but never removes the card, and a real reply just appears after
-  // it. New guest messages add their own proposal.
-  const [proposedIds, setProposedIds] = useState<string[]>([]);
   const [prevConvId, setPrevConvId] = useState(conversationId);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -91,23 +95,20 @@ export function ConversationThread({
   if (conversationId !== prevConvId) {
     setPrevConvId(conversationId);
     setComposerText('');
-    setProposedIds([]);
   }
 
   // The latest actually-sent message (future-dated host automations don't count).
-  // When it's from the guest, the conversation is awaiting a host reply.
+  // When it's from the guest, the conversation is awaiting a host reply — that's
+  // where the persisted proposed reply is anchored.
   const sentMessages = messages.filter(
     (m) => !(m.direction === 'outbound' && m.sent_at && new Date(m.sent_at).getTime() > nowMs),
   );
   const lastSent = sentMessages.length ? sentMessages[sentMessages.length - 1] : undefined;
   const awaitingReply = lastSent?.direction === 'inbound';
   const lastInboundId = awaitingReply ? lastSent!.id : null;
-
-  // Auto-propose a reply for a guest message awaiting a response. Adding to the
-  // set is one-way (converges), so the proposal persists once created.
-  if (conversationId && !loading && !error && lastInboundId && !proposedIds.includes(lastInboundId)) {
-    setProposedIds((prev) => [...prev, lastInboundId]);
-  }
+  // The stored draft is stale if it was written against an older message.
+  const proposalStale =
+    !!proposedReply && !!lastInboundId && proposedReplyAnswersMessageId !== lastInboundId;
 
   const handleEditProposed = (text: string) => {
     setComposerText(text);
@@ -118,7 +119,7 @@ export function ConversationThread({
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [conversationId, messages.length, proposedIds.length]);
+  }, [conversationId, messages.length, lastInboundId, proposedReply]);
 
   const header = showHeader ? (
     <div className="flex shrink-0 items-center gap-3 border-b border-[var(--surface-elevated-divider)] bg-[var(--surface-elevated)] px-4 py-3">
@@ -255,11 +256,15 @@ export function ConversationThread({
                 </div>
               </div>
 
-              {conversationId && proposedIds.includes(m.id) ? (
+              {conversationId && !loading && !error && m.id === lastInboundId ? (
                 <ProposedReply
                   key={`proposal-${m.id}`}
                   conversationId={conversationId}
+                  draft={proposedReply}
+                  source={proposedReplySource}
+                  stale={proposalStale}
                   onEdit={handleEditProposed}
+                  onChanged={onProposedReplyChange}
                 />
               ) : null}
             </Fragment>

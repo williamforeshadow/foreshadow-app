@@ -166,6 +166,10 @@ export async function runConciergeTest(
     app_status: 'active',
     unread: false,
     archived: false,
+    proposed_reply: null,
+    proposed_reply_answers_message_id: null,
+    proposed_reply_source: null,
+    proposed_reply_generated_at: null,
   };
 
   const ctx: ConversationContext = {

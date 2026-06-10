@@ -2,6 +2,7 @@ import { NextResponse, after } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { mapHostawayMessagePayload } from '@/lib/messages';
 import { ingestConversation } from '@/src/server/messages/ingest';
+import { maybeGenerateProposedReplyForExternal } from '@/src/server/messages/proposedReply';
 
 // Hostaway guest-message webhook receiver.
 //
@@ -118,6 +119,10 @@ export async function POST(request: Request) {
           err,
         });
       }
+      // Eager Concierge draft: once the thread is synced, if the guest is now
+      // awaiting a reply, draft one and store it so it's waiting in the inbox.
+      // Best-effort — never fails the webhook (the helper swallows its errors).
+      await maybeGenerateProposedReplyForExternal(msg.hostawayConversationId);
     });
 
     return NextResponse.json({ ok: true, reservation_linked: reservationId != null });

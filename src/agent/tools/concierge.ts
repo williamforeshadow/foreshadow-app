@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { generateGuestReplyDraft } from '@/src/server/messages/draftReply';
+import { generateAndStoreProposedReply } from '@/src/server/messages/proposedReply';
 import type { ToolDefinition, ToolResult } from './types';
 
 // concierge — the ops agent's handle to the guest-facing Concierge sub-agent.
@@ -32,8 +32,11 @@ type Input = z.infer<typeof inputSchema>;
 
 async function handler(input: Input): Promise<ToolResult<{ draft: string }>> {
   try {
-    const { draft } = await generateGuestReplyDraft({
-      conversationId: input.conversation_id,
+    // Generate AND persist the draft on the conversation (source 'assistant'),
+    // so the proposed reply the operator approves here is the same one waiting in
+    // the messaging inbox — not a separate one the inbox regenerates.
+    const { draft } = await generateAndStoreProposedReply(input.conversation_id, {
+      source: 'assistant',
       instruction: input.instruction,
     });
     return { ok: true, data: { draft } };
@@ -56,7 +59,7 @@ async function handler(input: Input): Promise<ToolResult<{ draft: string }>> {
 export const concierge: ToolDefinition<Input, { draft: string }> = {
   name: 'concierge',
   description:
-    "Hand a guest-facing job to the Concierge — the separate guest-facing agent that writes and (eventually) sends messages to guests. Use this whenever the operator wants something said to, or done for, a guest. Pass the conversation_id and a plain-English instruction of the intent; the Concierge grounds the reply in the property's guest-shareable (unlocked) knowledge and any concierge training on its own — do NOT fetch or pass property facts yourself. Returns a proposed draft for the operator to review (nothing is sent). Usually call read_conversation_thread first if you need to understand the thread.",
+    "Hand a guest-facing job to the Concierge — the separate guest-facing agent that writes and (eventually) sends messages to guests. Use this whenever the operator wants something said to, or done for, a guest. Pass the conversation_id and a plain-English instruction of the intent; the Concierge grounds the reply in the property's guest-shareable (unlocked) knowledge and any concierge training on its own — do NOT fetch or pass property facts yourself. Returns a proposed draft AND saves it as the conversation's proposed reply, so it's waiting in the messaging inbox for the operator to review and send (nothing is sent automatically). Usually call read_conversation_thread first if you need to understand the thread.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,

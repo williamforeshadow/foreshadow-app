@@ -114,6 +114,10 @@ export default function ConversationPage() {
             onRetry={load}
             showHeader={false}
             actions={actions}
+            proposedReply={conversation?.proposed_reply ?? null}
+            proposedReplySource={conversation?.proposed_reply_source ?? null}
+            proposedReplyAnswersMessageId={conversation?.proposed_reply_answers_message_id ?? null}
+            onProposedReplyChange={load}
           />
         </div>
       </MobileRouteShell>
@@ -133,6 +137,10 @@ export default function ConversationPage() {
           error={error}
           onRetry={load}
           actions={actions}
+          proposedReply={conversation?.proposed_reply ?? null}
+          proposedReplySource={conversation?.proposed_reply_source ?? null}
+          proposedReplyAnswersMessageId={conversation?.proposed_reply_answers_message_id ?? null}
+          onProposedReplyChange={load}
         />
       </div>
       <aside className="hidden w-80 shrink-0 border-l border-[var(--surface-elevated-divider)] lg:block">

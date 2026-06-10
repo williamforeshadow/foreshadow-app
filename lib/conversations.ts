@@ -48,6 +48,13 @@ export interface ConversationRow {
   app_status: ConversationTab;
   unread: boolean;
   archived: boolean;
+  // Persisted Concierge draft (generated eagerly on inbound / by the ops agent;
+  // the inbox reads it rather than regenerating). null until first generated.
+  proposed_reply: string | null;
+  /** guest_messages.id the draft was written against — used to detect staleness. */
+  proposed_reply_answers_message_id: string | null;
+  proposed_reply_source: 'auto' | 'assistant' | null;
+  proposed_reply_generated_at: string | null;
 }
 
 export interface ConversationCounts {

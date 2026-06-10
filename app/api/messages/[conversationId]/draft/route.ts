@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getCurrentAppUser } from '@/src/server/users/currentUser';
-import { generateGuestReplyDraft } from '@/src/server/messages/draftReply';
+import { generateAndStoreProposedReply } from '@/src/server/messages/proposedReply';
 
 export const maxDuration = 60;
 
-// POST /api/messages/[conversationId]/draft — generate an AI reply draft for the
-// inbox composer's "AI draft" button. Runs the Concierge over the conversation
-// (same path the ops agent's concierge tool uses). Drafts only — nothing is sent.
+// POST /api/messages/[conversationId]/draft — (re)generate the conversation's
+// proposed reply for the inbox. Runs the Concierge and PERSISTS the result on the
+// conversation (source 'auto'), so the inbox reads one stored draft rather than
+// regenerating on every open. Drafts only — nothing is sent.
 export async function POST(
   _request: Request,
   context: { params: Promise<{ conversationId: string }> },
@@ -25,8 +26,11 @@ export async function POST(
   const { conversationId } = await context.params;
 
   try {
-    const { draft } = await generateGuestReplyDraft({ conversationId });
-    return NextResponse.json({ draft });
+    const { draft, answers_message_id } = await generateAndStoreProposedReply(
+      conversationId,
+      { source: 'auto' },
+    );
+    return NextResponse.json({ draft, answers_message_id });
   } catch (err) {
     console.error('[messages draft] generation failed:', err);
     const message = err instanceof Error ? err.message : 'Failed to draft a reply';
