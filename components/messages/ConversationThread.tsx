@@ -5,6 +5,7 @@ import { MessagesSquare, AlertCircle, Clock } from 'lucide-react';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { MessageComposer } from '@/components/messages/MessageComposer';
 import { ProposedReply } from '@/components/messages/ProposedReply';
+import { ProposedTask, type ProposedTaskData } from '@/components/messages/ProposedTask';
 import { canonicalChannelLabel } from '@/lib/bookingChannel';
 import type { GuestMessageRecord } from '@/lib/messages';
 
@@ -66,6 +67,8 @@ export function ConversationThread({
   proposedReplySource = null,
   proposedReplyAnswersMessageId = null,
   onProposedReplyChange,
+  proposedTask = null,
+  onProposedTaskChange,
 }: {
   messages: GuestMessageRecord[];
   conversationId?: string;
@@ -82,6 +85,9 @@ export function ConversationThread({
   proposedReplySource?: 'auto' | 'assistant' | null;
   proposedReplyAnswersMessageId?: string | null;
   onProposedReplyChange?: () => void;
+  /** The conversation's pending proposed task, if the concierge drafted one. */
+  proposedTask?: ProposedTaskData | null;
+  onProposedTaskChange?: () => void;
 }) {
   // Render-stable "now" for the scheduled-vs-sent check (one value per mount).
   const [nowMs] = useState(() => Date.now());
@@ -265,6 +271,14 @@ export function ConversationThread({
                   stale={proposalStale}
                   onEdit={handleEditProposed}
                   onChanged={onProposedReplyChange}
+                />
+              ) : null}
+
+              {!loading && !error && proposedTask && m.id === lastInboundId ? (
+                <ProposedTask
+                  key={`proposed-task-${proposedTask.id}`}
+                  proposal={proposedTask}
+                  onChanged={onProposedTaskChange}
                 />
               ) : null}
             </Fragment>

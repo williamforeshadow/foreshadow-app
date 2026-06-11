@@ -126,6 +126,29 @@ export function assignmentsUrl(): string | null {
   return `${base}${assignmentsPath()}`;
 }
 
+/**
+ * Path (no host) for a guest-messaging conversation in the inbox. Renders via
+ * `app/messages/(inbox)/[conversationId]/page.tsx`. Used as the deep-link
+ * target for proposal notifications (proposed_task / proposed_reply) — the
+ * pending proposal bubble renders at the bottom of the thread where the user
+ * lands. (Scroll-to-bubble anchoring is not wired yet; the thread has no
+ * per-message anchors today.)
+ */
+export function conversationPath(conversationId: string): string {
+  return `/messages/${encodeURIComponent(conversationId)}`;
+}
+
+/**
+ * Absolute URL for the same conversation. Returns the path alone when
+ * APP_BASE_URL isn't configured — mirrors taskUrl's fallback rules so a Slack
+ * link degrades to non-clickable rather than crashing.
+ */
+export function conversationUrl(conversationId: string): string {
+  const base = getAppBaseUrl();
+  const path = conversationPath(conversationId);
+  return base ? `${base}${path}` : path;
+}
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

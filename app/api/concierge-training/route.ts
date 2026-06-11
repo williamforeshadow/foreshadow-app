@@ -7,16 +7,24 @@ import { getCurrentAppUser } from '@/src/server/users/currentUser';
 // is service-role here; the UI page is gated client-side. Mirrors the
 // departments route conventions ({ error } JSON, 23505 -> 409).
 
+export type ConciergeTrainingCategory = 'reply' | 'task';
+
 export interface ConciergeTrainingRule {
   id: string;
   title: string;
   instructions: string;
+  /** Which drafting path the rule feeds: guest replies or task triage. */
+  category: ConciergeTrainingCategory;
   applies_to_all: boolean;
   is_active: boolean;
   sort_order: number;
   property_ids: string[];
   created_at: string;
   updated_at: string;
+}
+
+function normalizeCategory(value: unknown): ConciergeTrainingCategory {
+  return value === 'task' ? 'task' : 'reply';
 }
 
 // GET /api/concierge-training — all rules with their associated property ids.
@@ -30,7 +38,7 @@ export async function GET() {
     const supabase = getSupabaseServer();
     const { data: rows, error } = await supabase
       .from('concierge_training')
-      .select('id, title, instructions, applies_to_all, is_active, sort_order, created_at, updated_at')
+      .select('id, title, instructions, category, applies_to_all, is_active, sort_order, created_at, updated_at')
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true });
     if (error) {
@@ -55,6 +63,7 @@ export async function GET() {
       id: r.id as string,
       title: (r.title as string | null) ?? '',
       instructions: (r.instructions as string | null) ?? '',
+      category: normalizeCategory(r.category),
       applies_to_all: Boolean(r.applies_to_all),
       is_active: Boolean(r.is_active),
       sort_order: (r.sort_order as number | null) ?? 0,
@@ -81,6 +90,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     const instructions = typeof body.instructions === 'string' ? body.instructions.trim() : '';
+    const category = normalizeCategory(body.category);
     const appliesToAll = Boolean(body.applies_to_all);
     const propertyIds: string[] = Array.isArray(body.property_ids)
       ? body.property_ids.filter((p: unknown): p is string => typeof p === 'string')
@@ -96,11 +106,12 @@ export async function POST(request: NextRequest) {
       .insert({
         title,
         instructions,
+        category,
         applies_to_all: appliesToAll,
         created_by_user_id: user?.id ?? null,
         updated_by_user_id: user?.id ?? null,
       })
-      .select('id, title, instructions, applies_to_all, is_active, sort_order, created_at, updated_at')
+      .select('id, title, instructions, category, applies_to_all, is_active, sort_order, created_at, updated_at')
       .single();
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

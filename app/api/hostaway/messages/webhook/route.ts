@@ -3,6 +3,7 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 import { mapHostawayMessagePayload } from '@/lib/messages';
 import { ingestConversation } from '@/src/server/messages/ingest';
 import { maybeGenerateProposedReplyForExternal } from '@/src/server/messages/proposedReply';
+import { maybeGenerateProposedTaskForExternal } from '@/src/server/messages/proposedTask';
 
 // Hostaway guest-message webhook receiver.
 //
@@ -123,6 +124,10 @@ export async function POST(request: Request) {
       // awaiting a reply, draft one and store it so it's waiting in the inbox.
       // Best-effort — never fails the webhook (the helper swallows its errors).
       await maybeGenerateProposedReplyForExternal(msg.hostawayConversationId);
+      // Eager task triage: independently decide whether the guest's message
+      // implies operational work and, if so, draft a task for review. Also
+      // best-effort and self-contained.
+      await maybeGenerateProposedTaskForExternal(msg.hostawayConversationId);
     });
 
     return NextResponse.json({ ok: true, reservation_linked: reservationId != null });

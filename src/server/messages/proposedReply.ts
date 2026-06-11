@@ -1,5 +1,6 @@
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { generateGuestReplyDraft } from './draftReply';
+import { notifyProposedReply } from '@/src/server/notifications/notifyProposal';
 
 // Persisted proposed replies. The Concierge drafts a reply ONCE and we store it
 // on the conversation; the inbox reads it instead of regenerating on every open.
@@ -19,7 +20,7 @@ interface LatestSent {
 }
 
 /** The latest actually-sent message in a conversation (future-dated automations excluded). */
-async function getLatestSentMessage(conversationId: string): Promise<LatestSent | null> {
+export async function getLatestSentMessage(conversationId: string): Promise<LatestSent | null> {
   const nowIso = new Date().toISOString();
   const { data, error } = await getSupabaseServer()
     .from('guest_messages')
@@ -45,15 +46,25 @@ export interface StoredProposedReply {
  */
 export async function generateAndStoreProposedReply(
   conversationId: string,
-  opts: { source: ProposedReplySource; instruction?: string },
+  opts: {
+    source: ProposedReplySource;
+    instruction?: string;
+    /**
+     * Emit a `proposed_reply` notification to opted-in users. Only the eager
+     * (webhook) path sets this — a manual in-app "Regenerate" shouldn't ping
+     * everyone. Only fires when the draft answers a fresh inbound message.
+     */
+    notify?: boolean;
+  },
 ): Promise<StoredProposedReply> {
+  const supabase = getSupabaseServer();
   const latest = await getLatestSentMessage(conversationId);
   const { draft } = await generateGuestReplyDraft({
     conversationId,
     instruction: opts.instruction,
   });
 
-  const { error } = await getSupabaseServer()
+  const { error } = await supabase
     .from('conversations')
     .update({
       proposed_reply: draft,
@@ -63,6 +74,33 @@ export async function generateAndStoreProposedReply(
     })
     .eq('id', conversationId);
   if (error) throw new Error(error.message);
+
+  // Notify only on the eager path, and only when we're actually answering a
+  // guest (inbound) message — not a host follow-up nudge.
+  if (opts.notify && latest?.direction === 'inbound') {
+    try {
+      const { data: conv } = await supabase
+        .from('conversations')
+        .select('property_id, property_name, guest_name')
+        .eq('id', conversationId)
+        .maybeSingle();
+      const c = (conv ?? {}) as {
+        property_id?: string | null;
+        property_name?: string | null;
+        guest_name?: string | null;
+      };
+      await notifyProposedReply({
+        conversationId,
+        propertyId: c.property_id ?? null,
+        answersMessageId: latest.id,
+        propertyName: c.property_name ?? null,
+        guestName: c.guest_name ?? null,
+      });
+    } catch (err) {
+      // Notification is best-effort; never fail the draft on it.
+      console.error('[proposed reply] notify failed', { conversationId, err });
+    }
+  }
 
   return { draft, answers_message_id: latest?.id ?? null };
 }
@@ -100,7 +138,7 @@ export async function maybeGenerateProposedReplyForExternal(
     // Already drafted for this exact message — nothing new to answer.
     if (c.proposed_reply_answers_message_id === latest.id) return;
 
-    await generateAndStoreProposedReply(c.id, { source: 'auto' });
+    await generateAndStoreProposedReply(c.id, { source: 'auto', notify: true });
   } catch (err) {
     console.error('[proposed reply] eager generation failed', {
       externalConversationId,

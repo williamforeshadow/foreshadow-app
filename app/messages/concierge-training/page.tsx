@@ -40,10 +40,13 @@ import {
 import { MultiSelect, type FilterOption } from '@/components/tasks/TaskFilterBar';
 import { cn } from '@/lib/utils';
 
+type TrainingCategory = 'reply' | 'task';
+
 interface TrainingRule {
   id: string;
   title: string;
   instructions: string;
+  category: TrainingCategory;
   applies_to_all: boolean;
   is_active: boolean;
   sort_order: number;
@@ -51,6 +54,22 @@ interface TrainingRule {
   created_at: string;
   updated_at: string;
 }
+
+const CATEGORY_META: Record<
+  TrainingCategory,
+  { label: string; blurb: string; placeholderTitle: string }
+> = {
+  reply: {
+    label: 'Reply rules',
+    blurb: 'Procedures the AI follows when drafting guest replies.',
+    placeholderTitle: 'Door Lock Troubleshooting',
+  },
+  task: {
+    label: 'Task rules',
+    blurb: 'When and how the AI should draft operational tasks from guest messages.',
+    placeholderTitle: 'Create a maintenance task for AC issues',
+  },
+};
 
 interface PropertyOption {
   id: string;
@@ -60,13 +79,14 @@ interface PropertyOption {
 type Section = 'training' | 'test';
 
 type EditorState =
-  | { mode: 'create' }
+  | { mode: 'create'; category: TrainingCategory }
   | { mode: 'edit'; rule: TrainingRule }
   | null;
 
 export default function ConciergeTrainingPage() {
   const isMobile = useIsMobile();
   const [section, setSection] = useState<Section>('training');
+  const [categoryFilter, setCategoryFilter] = useState<TrainingCategory>('reply');
   const [rules, setRules] = useState<TrainingRule[]>([]);
   const [properties, setProperties] = useState<PropertyOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,6 +100,11 @@ export default function ConciergeTrainingPage() {
     for (const p of properties) m.set(p.id, p.name);
     return m;
   }, [properties]);
+
+  const visibleRules = useMemo(
+    () => rules.filter((r) => r.category === categoryFilter),
+    [rules, categoryFilter],
+  );
 
   const loadRules = useCallback(async () => {
     const res = await fetch('/api/concierge-training');
@@ -149,11 +174,14 @@ export default function ConciergeTrainingPage() {
 
   const trainingPanel = (
     <>
+      <CategoryTabs category={categoryFilter} onChange={setCategoryFilter} />
+      <p className="-mt-1 text-xs text-muted-foreground">{CATEGORY_META[categoryFilter].blurb}</p>
+
       <div className="flex items-center justify-between">
         <Badge variant="secondary" className="text-xs">
-          {rules.length} rule{rules.length !== 1 ? 's' : ''}
+          {visibleRules.length} rule{visibleRules.length !== 1 ? 's' : ''}
         </Badge>
-        <Button onClick={() => setEditor({ mode: 'create' })}>
+        <Button onClick={() => setEditor({ mode: 'create', category: categoryFilter })}>
           <Plus className="mr-2 h-4 w-4" />
           New rule
         </Button>
@@ -161,19 +189,20 @@ export default function ConciergeTrainingPage() {
 
       {loading ? (
         <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div>
-      ) : rules.length === 0 ? (
+      ) : visibleRules.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border py-12 text-center">
           <p className="mb-4 text-sm text-muted-foreground">
-            No training yet. Add your first procedure — e.g. “Door Lock Troubleshooting”.
+            No {CATEGORY_META[categoryFilter].label.toLowerCase()} yet. Add your first procedure — e.g.
+            “{CATEGORY_META[categoryFilter].placeholderTitle}”.
           </p>
-          <Button onClick={() => setEditor({ mode: 'create' })}>
+          <Button onClick={() => setEditor({ mode: 'create', category: categoryFilter })}>
             <Plus className="mr-2 h-4 w-4" />
             Create first rule
           </Button>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {rules.map((rule) => (
+          {visibleRules.map((rule) => (
             <Card key={rule.id} className={cn('group', !rule.is_active && 'opacity-60')}>
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -305,6 +334,42 @@ export default function ConciergeTrainingPage() {
         />
       )}
     </>
+  );
+}
+
+function CategoryTabs({
+  category,
+  onChange,
+}: {
+  category: TrainingCategory;
+  onChange: (c: TrainingCategory) => void;
+}) {
+  const items: { key: TrainingCategory; label: string }[] = [
+    { key: 'reply', label: 'Reply rules' },
+    { key: 'task', label: 'Task rules' },
+  ];
+  return (
+    <div className="inline-flex gap-1 self-start rounded-lg border border-border bg-muted/40 p-1">
+      {items.map((it) => {
+        const active = category === it.key;
+        return (
+          <button
+            key={it.key}
+            type="button"
+            onClick={() => onChange(it.key)}
+            aria-pressed={active}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              active
+                ? 'bg-[var(--accent-3)] text-white shadow-sm'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+            )}
+          >
+            {it.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -577,6 +642,9 @@ function RuleEditorDialog({
   const existing = state.mode === 'edit' ? state.rule : null;
   const [title, setTitle] = useState(existing?.title ?? '');
   const [instructions, setInstructions] = useState(existing?.instructions ?? '');
+  const [category, setCategory] = useState<TrainingCategory>(
+    existing?.category ?? (state.mode === 'create' ? state.category : 'reply'),
+  );
   const [appliesToAll, setAppliesToAll] = useState(existing?.applies_to_all ?? false);
   const [selected, setSelected] = useState<Set<string>>(
     new Set(existing?.property_ids ?? []),
@@ -598,6 +666,7 @@ function RuleEditorDialog({
     const payload = {
       title: title.trim(),
       instructions: instructions.trim(),
+      category,
       applies_to_all: appliesToAll,
       property_ids: appliesToAll ? [] : [...selected],
     };
@@ -626,18 +695,41 @@ function RuleEditorDialog({
         <DialogHeader>
           <DialogTitle>{existing ? 'Edit rule' : 'New rule'}</DialogTitle>
           <DialogDescription>
-            A named procedure the AI follows when drafting replies for the selected properties.
+            {category === 'task'
+              ? 'A rule guiding when and how the AI drafts operational tasks from guest messages.'
+              : 'A named procedure the AI follows when drafting guest replies for the selected properties.'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label>Rule type</Label>
+            <div className="flex items-center gap-2">
+              {(['reply', 'task'] as TrainingCategory[]).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setCategory(c)}
+                  className={cn(
+                    'rounded-md border px-3 py-1.5 text-sm transition-colors',
+                    category === c
+                      ? 'border-[var(--accent-3)] bg-[var(--accent-bg-soft)] text-[var(--accent-3)]'
+                      : 'border-border text-muted-foreground hover:bg-accent',
+                  )}
+                >
+                  {CATEGORY_META[c].label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="rule-title">Title</Label>
             <Input
               id="rule-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Door Lock Troubleshooting"
+              placeholder={`e.g. ${CATEGORY_META[category].placeholderTitle}`}
               autoFocus
             />
           </div>

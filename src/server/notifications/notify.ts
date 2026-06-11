@@ -529,7 +529,7 @@ function preferenceFor(
   return prefs.get(userId)?.get(type) ?? defaultNotificationPreference(type);
 }
 
-async function loadRecipientEmails(
+export async function loadRecipientEmails(
   supabase: Supabase,
   userIds: string[],
 ): Promise<Map<string, string>> {
@@ -549,7 +549,7 @@ async function loadRecipientEmails(
   return out;
 }
 
-async function sendSlackDm(args: {
+export async function sendSlackDm(args: {
   notificationId: string;
   email: string | null;
   text: string;

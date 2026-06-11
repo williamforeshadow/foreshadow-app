@@ -1,14 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   DEFAULT_DUE_TODAY_TIME,
   NOTIFICATION_TYPE_DESCRIPTIONS,
   NOTIFICATION_TYPE_LABELS,
   NOTIFICATION_TYPES,
+  PROPERTY_NOTIFICATION_TYPES,
+  PROPERTY_NOTIFICATION_TYPE_DESCRIPTIONS,
+  PROPERTY_NOTIFICATION_TYPE_LABELS,
   type NotificationPreference,
   type NotificationType,
+  type PropertyNotificationType,
 } from '@/lib/notifications';
+import { MultiSelect, type FilterOption } from '@/components/tasks/TaskFilterBar';
 
 type PreferenceMap = Record<NotificationType, NotificationPreference>;
 
@@ -93,6 +98,7 @@ export function NotificationPreferencesPanel() {
   };
 
   return (
+    <div className="space-y-6">
     <section className="rounded-lg border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="mb-5">
         <h2 className="text-lg font-semibold text-neutral-900 dark:text-white">
@@ -211,6 +217,220 @@ export function NotificationPreferencesPanel() {
                 <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
                   Times are in your org timezone ({orgTimezone}).
                 </p>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+    <ProposalNotificationPreferences />
+    </div>
+  );
+}
+
+interface PropertyPrefRow {
+  property_id: string;
+  type: PropertyNotificationType;
+  native_enabled: boolean;
+  slack_enabled: boolean;
+  push_enabled: boolean;
+}
+
+/**
+ * Per-property opt-in for the two conversation-scoped proposal notifications.
+ * Opt-in: a property is "on" for a type when a row exists. Selecting a property
+ * creates the row (native on); deselecting deletes it. The Slack/push toggles
+ * apply to every currently-selected property for that type.
+ */
+function ProposalNotificationPreferences() {
+  const [properties, setProperties] = useState<{ id: string; name: string }[]>([]);
+  const [rows, setRows] = useState<PropertyPrefRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const [propsRes, prefsRes] = await Promise.all([
+        fetch('/api/properties').then((r) => r.json()).catch(() => ({})),
+        fetch('/api/notification-property-preferences', { cache: 'no-store' })
+          .then((r) => r.json())
+          .catch(() => ({})),
+      ]);
+      if (cancelled) return;
+      setProperties(
+        Array.isArray(propsRes?.properties)
+          ? propsRes.properties.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name }))
+          : [],
+      );
+      setRows(Array.isArray(prefsRes?.preferences) ? prefsRes.preferences : []);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const propertyOptions = useMemo<FilterOption[]>(
+    () => properties.map((p) => ({ value: p.id, label: p.name })),
+    [properties],
+  );
+
+  const rowFor = (type: PropertyNotificationType, propertyId: string) =>
+    rows.find((r) => r.type === type && r.property_id === propertyId) ?? null;
+
+  const selectedFor = (type: PropertyNotificationType) =>
+    new Set(rows.filter((r) => r.type === type).map((r) => r.property_id));
+
+  // Type-level channel intent: a channel is "on" for a type when ANY opted-in
+  // property has it on (or, when nothing is selected yet, the sensible default).
+  const channelOn = (type: PropertyNotificationType, channel: 'slack' | 'push') => {
+    const typeRows = rows.filter((r) => r.type === type);
+    if (typeRows.length === 0) return channel === 'push';
+    return typeRows.some((r) =>
+      channel === 'slack' ? r.slack_enabled : r.push_enabled,
+    );
+  };
+
+  const patch = async (body: {
+    property_id: string;
+    type: PropertyNotificationType;
+    native_enabled: boolean;
+    slack_enabled: boolean;
+    push_enabled: boolean;
+  }) => {
+    const res = await fetch('/api/notification-property-preferences', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data?.preferences)) setRows(data.preferences);
+    }
+  };
+
+  const handleSelectionChange = async (
+    type: PropertyNotificationType,
+    next: Set<string>,
+  ) => {
+    const prev = selectedFor(type);
+    const added = [...next].filter((id) => !prev.has(id));
+    const removed = [...prev].filter((id) => !next.has(id));
+    setBusy(true);
+    try {
+      for (const id of added) {
+        await patch({
+          property_id: id,
+          type,
+          native_enabled: true,
+          slack_enabled: channelOn(type, 'slack'),
+          push_enabled: channelOn(type, 'push'),
+        });
+      }
+      for (const id of removed) {
+        // All channels false → the API deletes the row (opt out).
+        await patch({
+          property_id: id,
+          type,
+          native_enabled: false,
+          slack_enabled: false,
+          push_enabled: false,
+        });
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleChannelToggle = async (
+    type: PropertyNotificationType,
+    channel: 'slack' | 'push',
+    value: boolean,
+  ) => {
+    const selected = [...selectedFor(type)];
+    if (selected.length === 0) return;
+    setBusy(true);
+    try {
+      for (const id of selected) {
+        const existing = rowFor(type, id);
+        await patch({
+          property_id: id,
+          type,
+          native_enabled: existing?.native_enabled ?? true,
+          slack_enabled: channel === 'slack' ? value : existing?.slack_enabled ?? false,
+          push_enabled: channel === 'push' ? value : existing?.push_enabled ?? true,
+        });
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="rounded-lg border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="mb-5">
+        <h2 className="text-lg font-semibold text-neutral-900 dark:text-white">
+          Proposal notifications
+        </h2>
+        <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+          Get notified when the concierge drafts something for review. Choose which
+          properties you want these for.
+        </p>
+      </div>
+
+      <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
+        {PROPERTY_NOTIFICATION_TYPES.map((type) => {
+          const selected = selectedFor(type);
+          const anySelected = selected.size > 0;
+          return (
+            <div key={type} className="py-4">
+              <p className="text-sm font-medium text-neutral-900 dark:text-white">
+                {PROPERTY_NOTIFICATION_TYPE_LABELS[type]}
+              </p>
+              <p className="mt-1 text-sm leading-5 text-neutral-500 dark:text-neutral-400">
+                {PROPERTY_NOTIFICATION_TYPE_DESCRIPTIONS[type]}
+              </p>
+              <div className="mt-3 max-w-sm">
+                <MultiSelect
+                  label="Properties"
+                  options={propertyOptions}
+                  selected={selected}
+                  onChange={(next) => handleSelectionChange(type, next)}
+                  searchable
+                />
+                {loading ? (
+                  <p className="mt-1.5 text-xs text-neutral-400">Loading…</p>
+                ) : !anySelected ? (
+                  <p className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+                    Off everywhere. Pick a property to start receiving these.
+                  </p>
+                ) : null}
+              </div>
+              {anySelected ? (
+                <div className="mt-3 flex flex-col gap-2 sm:pl-1">
+                  <label className="inline-flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
+                    <input
+                      type="checkbox"
+                      checked={channelOn(type, 'slack')}
+                      disabled={busy}
+                      onChange={(e) => handleChannelToggle(type, 'slack', e.target.checked)}
+                      className="h-4 w-4 rounded border-neutral-300 accent-[var(--accent-3)]"
+                    />
+                    Also notify in Slack
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
+                    <input
+                      type="checkbox"
+                      checked={channelOn(type, 'push')}
+                      disabled={busy}
+                      onChange={(e) => handleChannelToggle(type, 'push', e.target.checked)}
+                      className="h-4 w-4 rounded border-neutral-300 accent-[var(--accent-3)]"
+                    />
+                    Also send a push to my phone
+                  </label>
+                </div>
               ) : null}
             </div>
           );

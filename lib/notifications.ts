@@ -15,6 +15,49 @@ export const NOTIFICATION_TYPES = [
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
+// Conversation-scoped proposal notifications. Kept SEPARATE from
+// NOTIFICATION_TYPES on purpose: that array drives the global notification-
+// preferences UI/API/loader, where absence of a row means the ON defaults.
+// These two types are per-property OPT-IN (absence = off) and live in the
+// notification_property_preferences table instead, so mixing them into the
+// global list would break their semantics.
+export const PROPERTY_NOTIFICATION_TYPES = [
+  'proposed_task',
+  'proposed_reply',
+] as const;
+
+export type PropertyNotificationType =
+  (typeof PROPERTY_NOTIFICATION_TYPES)[number];
+
+/** Union of every value the `notifications.type` column may hold. */
+export type AnyNotificationType = NotificationType | PropertyNotificationType;
+
+export const PROPERTY_NOTIFICATION_TYPE_LABELS: Record<
+  PropertyNotificationType,
+  string
+> = {
+  proposed_task: 'Proposed tasks',
+  proposed_reply: 'Proposed replies',
+};
+
+export const PROPERTY_NOTIFICATION_TYPE_DESCRIPTIONS: Record<
+  PropertyNotificationType,
+  string
+> = {
+  proposed_task:
+    'The concierge drafts an operational task from a guest message at this property.',
+  proposed_reply:
+    'The concierge drafts a reply to a guest message at this property.',
+};
+
+export interface PropertyNotificationPreference {
+  property_id: string;
+  type: PropertyNotificationType;
+  native_enabled: boolean;
+  slack_enabled: boolean;
+  push_enabled: boolean;
+}
+
 export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   task_created_assigned: 'New assigned task',
   task_assigned: 'Task assigned',

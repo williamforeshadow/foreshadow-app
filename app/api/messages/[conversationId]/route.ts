@@ -44,5 +44,27 @@ export async function GET(
     return NextResponse.json({ error: msgError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ conversation, messages: messages ?? [] });
+  // The pending concierge-proposed task, if one was drafted from a recent guest
+  // message. Surfaced as a bubble in the thread; null when there's none.
+  const { data: proposedTaskRow } = await supabase
+    .from('proposed_tasks')
+    .select('id, title, description, priority, department_id, departments(name)')
+    .eq('conversation_id', conversationId)
+    .eq('status', 'pending')
+    .order('generated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const proposed_task = proposedTaskRow
+    ? {
+        id: proposedTaskRow.id as string,
+        title: (proposedTaskRow.title as string | null) ?? '',
+        description: (proposedTaskRow.description as string | null) ?? null,
+        priority: (proposedTaskRow.priority as string | null) ?? 'medium',
+        department_name:
+          ((proposedTaskRow.departments as { name: string | null } | null)?.name) ?? null,
+      }
+    : null;
+
+  return NextResponse.json({ conversation, messages: messages ?? [], proposed_task });
 }

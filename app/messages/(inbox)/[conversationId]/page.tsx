@@ -8,6 +8,7 @@ import { useIsMobile } from '@/lib/useIsMobile';
 import { useMessages } from '@/components/messages/MessagesProvider';
 import { ConversationThread } from '@/components/messages/ConversationThread';
 import { ConversationDetailPanel } from '@/components/messages/ConversationDetailPanel';
+import type { ProposedTaskData } from '@/components/messages/ProposedTask';
 import type { ConversationRow } from '@/lib/conversations';
 import type { GuestMessageRecord } from '@/lib/messages';
 
@@ -24,6 +25,7 @@ export default function ConversationPage() {
 
   const [conversation, setConversation] = useState<ConversationRow | undefined>();
   const [messages, setMessages] = useState<GuestMessageRecord[]>([]);
+  const [proposedTask, setProposedTask] = useState<ProposedTaskData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -40,6 +42,7 @@ export default function ConversationPage() {
       const data = await res.json();
       setConversation(data.conversation ?? undefined);
       setMessages(data.messages ?? []);
+      setProposedTask((data.proposed_task as ProposedTaskData | null) ?? null);
     } catch {
       setError(true);
     } finally {
@@ -118,6 +121,8 @@ export default function ConversationPage() {
             proposedReplySource={conversation?.proposed_reply_source ?? null}
             proposedReplyAnswersMessageId={conversation?.proposed_reply_answers_message_id ?? null}
             onProposedReplyChange={load}
+            proposedTask={proposedTask}
+            onProposedTaskChange={load}
           />
         </div>
       </MobileRouteShell>
@@ -141,6 +146,8 @@ export default function ConversationPage() {
           proposedReplySource={conversation?.proposed_reply_source ?? null}
           proposedReplyAnswersMessageId={conversation?.proposed_reply_answers_message_id ?? null}
           onProposedReplyChange={load}
+          proposedTask={proposedTask}
+          onProposedTaskChange={load}
         />
       </div>
       <aside className="hidden w-80 shrink-0 border-l border-[var(--surface-elevated-divider)] lg:block">
