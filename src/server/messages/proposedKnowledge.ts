@@ -1,6 +1,7 @@
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getConversationContext } from './conversationContext';
 import { getLatestSentMessage } from './proposedReply';
+import { loadConciergeProposalFlags } from './conciergeCapabilities';
 import { generateProposedKnowledgeFromContext } from './draftKnowledge';
 import { notifyProposedKnowledge } from '@/src/server/notifications/notifyProposal';
 
@@ -78,6 +79,11 @@ export async function maybeGenerateProposedKnowledgeForConversation(
   opts: { requireHostMessage?: boolean } = {},
 ): Promise<void> {
   try {
+    // Master switch: when autonomous knowledge proposing is off, skip entirely.
+    // This is the single chokepoint for all autonomous knowledge generation
+    // (both the per-message eager hook and any on-complete caller).
+    if (!(await loadConciergeProposalFlags()).knowledge) return;
+
     if (opts.requireHostMessage && !(await threadHasHostMessage(conversationId))) {
       return;
     }

@@ -1,6 +1,7 @@
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getConversationContext } from './conversationContext';
 import { getLatestSentMessage } from './proposedReply';
+import { loadConciergeProposalFlags } from './conciergeCapabilities';
 import { generateProposedTaskDraftFromContext } from './draftTask';
 import { notifyProposedTask } from '@/src/server/notifications/notifyProposal';
 
@@ -76,6 +77,9 @@ export async function maybeGenerateProposedTaskForExternal(
   source = 'hostaway',
 ): Promise<void> {
   try {
+    // Master switch: when autonomous task proposing is off, skip entirely.
+    if (!(await loadConciergeProposalFlags()).task) return;
+
     const supabase = getSupabaseServer();
     const { data: conv } = await supabase
       .from('conversations')

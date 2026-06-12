@@ -20,6 +20,7 @@ import { DEFAULT_TIMEZONE } from '@/src/lib/dates';
 const FALLBACK_CHECK_IN = '15:00';
 const FALLBACK_CHECK_OUT = '11:00';
 const FALLBACK_SENSITIVITY = 2;
+const FALLBACK_REPLY_SENSITIVITY = 3;
 
 // Read the org task-proposal sensitivity (1-5) off a settings row, falling back
 // to 2. Tolerates the column being absent (migration not yet applied).
@@ -35,6 +36,47 @@ function normalizeSensitivity(value: unknown): number | null {
   if (!Number.isFinite(n)) return null;
   const r = Math.round(n);
   return r >= 1 && r <= 5 ? r : null;
+}
+
+// Read the org reply-proposal sensitivity (1-4) off a settings row, falling back
+// to 3. Tolerates the column being absent (migration not yet applied).
+function readReplySensitivity(value: unknown): number {
+  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  if (Number.isFinite(n) && n >= 1 && n <= 4) return Math.round(n);
+  return FALLBACK_REPLY_SENSITIVITY;
+}
+
+// Validate an incoming reply sensitivity value; returns 1-4 or null.
+function normalizeReplySensitivity(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  if (!Number.isFinite(n)) return null;
+  const r = Math.round(n);
+  return r >= 1 && r <= 4 ? r : null;
+}
+
+// Concierge capability master switches — autonomous-generation gates that live
+// alongside the sensitivity dial. Absent column (migration pending) reads as
+// enabled; an unparseable value also falls back to true.
+const CAPABILITY_FLAG_KEYS = [
+  'reply_proposal_enabled',
+  'task_proposal_enabled',
+  'knowledge_proposal_enabled',
+] as const;
+type CapabilityFlagKey = (typeof CAPABILITY_FLAG_KEYS)[number];
+
+function readBool(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') return value;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return fallback;
+}
+
+// Validate an incoming boolean flag; returns the boolean or null when absent/invalid.
+function normalizeBool(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return null;
 }
 
 // Postgres TIME comes back from PostgREST as 'HH:MM:SS'. The UI only ever
@@ -74,7 +116,12 @@ function isMissingColumnError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const e = error as { code?: string; message?: string };
   if (e.code === PG_UNDEFINED_COLUMN) return true;
-  return typeof e.message === 'string' && e.message.includes('task_proposal_sensitivity');
+  if (typeof e.message !== 'string') return false;
+  return (
+    e.message.includes('task_proposal_sensitivity') ||
+    e.message.includes('reply_proposal_sensitivity') ||
+    CAPABILITY_FLAG_KEYS.some((k) => e.message!.includes(k))
+  );
 }
 
 export async function GET() {
@@ -100,6 +147,10 @@ export async function GET() {
             default_check_out_time: FALLBACK_CHECK_OUT,
             default_timezone: DEFAULT_TIMEZONE,
             task_proposal_sensitivity: FALLBACK_SENSITIVITY,
+            reply_proposal_sensitivity: FALLBACK_REPLY_SENSITIVITY,
+            reply_proposal_enabled: true,
+            task_proposal_enabled: true,
+            knowledge_proposal_enabled: true,
             updated_at: null,
           },
           migration_pending: true,
@@ -118,6 +169,10 @@ export async function GET() {
           default_check_out_time: FALLBACK_CHECK_OUT,
           default_timezone: DEFAULT_TIMEZONE,
           task_proposal_sensitivity: FALLBACK_SENSITIVITY,
+          reply_proposal_sensitivity: FALLBACK_REPLY_SENSITIVITY,
+          reply_proposal_enabled: true,
+          task_proposal_enabled: true,
+          knowledge_proposal_enabled: true,
           updated_at: null,
         },
       });
@@ -129,6 +184,10 @@ export async function GET() {
         default_check_out_time: trimTime(data.default_check_out_time) || FALLBACK_CHECK_OUT,
         default_timezone: data.default_timezone || DEFAULT_TIMEZONE,
         task_proposal_sensitivity: readSensitivity(data.task_proposal_sensitivity),
+        reply_proposal_sensitivity: readReplySensitivity(data.reply_proposal_sensitivity),
+        reply_proposal_enabled: readBool(data.reply_proposal_enabled, true),
+        task_proposal_enabled: readBool(data.task_proposal_enabled, true),
+        knowledge_proposal_enabled: readBool(data.knowledge_proposal_enabled, true),
         updated_at: data.updated_at,
       },
     });
@@ -233,21 +292,52 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// PATCH — partial update. Today only `task_proposal_sensitivity` (1-5), so the
-// concierge-training page can change the dial without resending check-in/out
-// times or timezone. Updates the singleton in place (or seeds it with fallbacks).
+// PATCH — partial update. Accepts `task_proposal_sensitivity` (1-5) and the
+// three concierge capability flags (booleans), in any subset, so the
+// concierge-training page can change a single control without resending
+// check-in/out times or timezone. Updates the singleton in place (or seeds it
+// with fallbacks).
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    if (body?.task_proposal_sensitivity === undefined) {
-      return NextResponse.json({ error: 'No supported fields to update' }, { status: 400 });
+
+    // Collect the supported, present fields into the update payload, validating
+    // each. An empty payload (no supported fields) is a 400.
+    const patch: Record<string, unknown> = {};
+
+    if (body?.task_proposal_sensitivity !== undefined) {
+      const sensitivity = normalizeSensitivity(body.task_proposal_sensitivity);
+      if (sensitivity === null) {
+        return NextResponse.json(
+          { error: 'task_proposal_sensitivity must be an integer between 1 and 5' },
+          { status: 400 },
+        );
+      }
+      patch.task_proposal_sensitivity = sensitivity;
     }
-    const sensitivity = normalizeSensitivity(body.task_proposal_sensitivity);
-    if (sensitivity === null) {
-      return NextResponse.json(
-        { error: 'task_proposal_sensitivity must be an integer between 1 and 5' },
-        { status: 400 },
-      );
+
+    if (body?.reply_proposal_sensitivity !== undefined) {
+      const replySensitivity = normalizeReplySensitivity(body.reply_proposal_sensitivity);
+      if (replySensitivity === null) {
+        return NextResponse.json(
+          { error: 'reply_proposal_sensitivity must be an integer between 1 and 4' },
+          { status: 400 },
+        );
+      }
+      patch.reply_proposal_sensitivity = replySensitivity;
+    }
+
+    for (const key of CAPABILITY_FLAG_KEYS) {
+      if (body?.[key] === undefined) continue;
+      const flag = normalizeBool(body[key]);
+      if (flag === null) {
+        return NextResponse.json({ error: `${key} must be a boolean` }, { status: 400 });
+      }
+      patch[key] = flag;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return NextResponse.json({ error: 'No supported fields to update' }, { status: 400 });
     }
 
     const supabase = getSupabaseServer();
@@ -272,7 +362,7 @@ export async function PATCH(request: NextRequest) {
       ? (
           await supabase
             .from('operations_settings')
-            .update({ task_proposal_sensitivity: sensitivity, updated_at: now })
+            .update({ ...patch, updated_at: now })
             .eq('id', 1)
         ).error
       : (
@@ -281,7 +371,8 @@ export async function PATCH(request: NextRequest) {
             default_check_in_time: FALLBACK_CHECK_IN,
             default_check_out_time: FALLBACK_CHECK_OUT,
             default_timezone: DEFAULT_TIMEZONE,
-            task_proposal_sensitivity: sensitivity,
+            task_proposal_sensitivity: FALLBACK_SENSITIVITY,
+            ...patch,
             updated_at: now,
           })
         ).error;
@@ -290,7 +381,7 @@ export async function PATCH(request: NextRequest) {
       if (isMissingTableError(writeErr) || isMissingColumnError(writeErr)) {
         return NextResponse.json(
           {
-            error: 'task_proposal_sensitivity isn’t available yet. Apply the migration in Supabase.',
+            error: 'These settings aren’t available yet. Apply the migration in Supabase.',
             migration_pending: true,
           },
           { status: 503 },

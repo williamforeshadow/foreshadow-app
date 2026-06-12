@@ -1,5 +1,6 @@
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { generateGuestReplyDraft } from './draftReply';
+import { loadConciergeProposalFlags, loadReplyProposalSensitivity } from './conciergeCapabilities';
 import { notifyProposedReply } from '@/src/server/notifications/notifyProposal';
 
 // Persisted proposed replies. The Concierge drafts a reply ONCE and we store it
@@ -38,6 +39,8 @@ export async function getLatestSentMessage(conversationId: string): Promise<Late
 export interface StoredProposedReply {
   draft: string;
   answers_message_id: string | null;
+  /** True when the sensitivity gate decided no reply was warranted (nothing stored). */
+  skipped?: boolean;
 }
 
 /**
@@ -55,14 +58,28 @@ export async function generateAndStoreProposedReply(
      * everyone. Only fires when the draft answers a fresh inbound message.
      */
     notify?: boolean;
+    /**
+     * Apply the reply-warrant sensitivity gate. Only the autonomous (webhook)
+     * path sets this; manual "Regenerate" and the ops-agent tool always draft.
+     */
+    gate?: boolean;
   },
 ): Promise<StoredProposedReply> {
   const supabase = getSupabaseServer();
   const latest = await getLatestSentMessage(conversationId);
-  const { draft } = await generateGuestReplyDraft({
+
+  // On the autonomous path, gate drafting by the org reply-sensitivity level.
+  const replySensitivity = opts.gate ? await loadReplyProposalSensitivity() : undefined;
+  const { draft, warranted } = await generateGuestReplyDraft({
     conversationId,
     instruction: opts.instruction,
+    replySensitivity,
   });
+
+  // The message didn't clear the sensitivity bar — store nothing, notify no one.
+  if (!warranted) {
+    return { draft: '', answers_message_id: latest?.id ?? null, skipped: true };
+  }
 
   const { error } = await supabase
     .from('conversations')
@@ -116,6 +133,11 @@ export async function maybeGenerateProposedReplyForExternal(
   source = 'hostaway',
 ): Promise<void> {
   try {
+    // Master switch: when autonomous reply drafting is off, skip entirely.
+    // Manual "Regenerate" and the ops-agent tool call generateAndStoreProposedReply
+    // directly and are unaffected.
+    if (!(await loadConciergeProposalFlags()).reply) return;
+
     const supabase = getSupabaseServer();
     const { data: conv } = await supabase
       .from('conversations')
@@ -138,7 +160,7 @@ export async function maybeGenerateProposedReplyForExternal(
     // Already drafted for this exact message — nothing new to answer.
     if (c.proposed_reply_answers_message_id === latest.id) return;
 
-    await generateAndStoreProposedReply(c.id, { source: 'auto', notify: true });
+    await generateAndStoreProposedReply(c.id, { source: 'auto', notify: true, gate: true });
   } catch (err) {
     console.error('[proposed reply] eager generation failed', {
       externalConversationId,

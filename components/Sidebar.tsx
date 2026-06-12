@@ -9,7 +9,7 @@ import {
   useState,
   type CSSProperties,
 } from 'react';
-import { ArrowRightToLine, PanelLeft, Sparkles } from 'lucide-react';
+import { ArrowRightToLine, FlaskConical, GraduationCap, PanelLeft, Sparkles } from 'lucide-react';
 import { ModeToggle } from '@/components/mode-toggle';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { UserAvatar } from '@/components/ui/user-avatar';
@@ -48,11 +48,6 @@ const routeItems = [
     name: 'Properties',
     path: '/properties',
     icon: <PropertyIcon />,
-  },
-  {
-    name: 'Messages',
-    path: '/messages',
-    icon: <MessageIcon />,
   },
   {
     name: 'Templates',
@@ -234,6 +229,29 @@ export default function Sidebar({
     if (item.permission === 'templates') return canEditTemplates;
     return true;
   });
+
+  // Messages + its concierge sub-pages live under Workspace. The inbox owns
+  // /messages and conversation detail routes; the concierge pages are explicit
+  // sub-paths, so the parent row stays inactive while one of them is open.
+  const onConciergeTraining = pathname?.startsWith('/messages/concierge-training') ?? false;
+  const onConciergeTesting = pathname?.startsWith('/messages/concierge-testing') ?? false;
+  const onMessagesInbox =
+    pathname === '/messages' ||
+    ((pathname?.startsWith('/messages/') ?? false) && !onConciergeTraining && !onConciergeTesting);
+  const messagesSubItems = [
+    {
+      name: 'Concierge Training',
+      path: '/messages/concierge-training',
+      active: onConciergeTraining,
+      icon: <GraduationCap className="h-4 w-4" />,
+    },
+    {
+      name: 'Concierge Testing',
+      path: '/messages/concierge-testing',
+      active: onConciergeTesting,
+      icon: <FlaskConical className="h-4 w-4" />,
+    },
+  ];
   const sidebarVars = {
     '--sidebar-dark-surface': SIDEBAR_DARK_SURFACE,
     '--sidebar-dark-border': SIDEBAR_DARK_BORDER,
@@ -366,6 +384,32 @@ export default function Sidebar({
                   {isMac ? '⌘K' : 'Ctrl K'}
                 </kbd>
               </button>
+
+              <Link
+                href="/messages"
+                tabIndex={isVisible ? 0 : -1}
+                className={`flex min-w-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
+                  onMessagesInbox ? activeRowClass : inactiveRowClass
+                }`}
+              >
+                <span className="shrink-0">
+                  <MessageIcon />
+                </span>
+                <span className="min-w-0 flex-1 truncate">Messages</span>
+              </Link>
+              {messagesSubItems.map((sub) => (
+                <Link
+                  key={sub.path}
+                  href={sub.path}
+                  tabIndex={isVisible ? 0 : -1}
+                  className={`flex min-w-0 items-center gap-2 rounded-md py-1.5 pl-8 pr-2.5 text-[13px] font-medium transition-colors ${
+                    sub.active ? activeRowClass : inactiveRowClass
+                  }`}
+                >
+                  <span className="shrink-0">{sub.icon}</span>
+                  <span className="min-w-0 flex-1 truncate">{sub.name}</span>
+                </Link>
+              ))}
             </div>
 
             <div className="min-w-0">

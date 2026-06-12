@@ -70,6 +70,35 @@ Operator instruction:
 
 Output: return ONLY the reply text the host would send. No preamble, no quotes, no explanation.`;
 
+// Reply-warrant gate. On the AUTONOMOUS path the operator sets a sensitivity
+// level (1-4) deciding how readily the concierge drafts a reply at all. We fold
+// the decision into this same draft call (no extra classifier): the model
+// decides FIRST and, when the message doesn't clear the bar, emits the sentinel
+// and stops — no tool calls, no draft. Level 4 (and the manual/test paths) skip
+// the gate entirely and always draft, matching the prior behavior.
+const NO_REPLY_SENTINEL = '<<NO_REPLY>>';
+
+// Cumulative ladder — each level includes everything a stricter (lower) level
+// would answer. Kept terse and domain-light; the model judges against the bar.
+const REPLY_SENSITIVITY_LADDER: Record<number, string> = {
+  1: 'Urgent only — a time-sensitive problem or question: an access issue, something disrupting or blocking their stay, a safety concern, or a question that clearly needs a prompt answer.',
+  2: 'Questions & issues — also any genuine question, problem, or piece of feedback that wants an answer, even if it is not urgent.',
+  3: 'Anything substantive — also any message that merits a courteous response (a comment, a plan, a request, a remark). Skip ONLY pure acknowledgments or pleasantries with nothing to respond to: e.g. "thanks", "great", "sounds good", "ok", "see you then".',
+  4: 'Everything — reply to every inbound message.',
+};
+
+/** Build the gate clause appended to the system prompt for levels 1-3. */
+function buildReplyGateClause(level: number): string {
+  const ladder = [1, 2, 3, 4]
+    .map((l) => `  ${l}. ${REPLY_SENSITIVITY_LADDER[l]}`)
+    .join('\n');
+  return `\n\nReply-warrant gate (overrides "Always produce a real reply" above):
+Before anything else, decide whether the LATEST guest message warrants a reply at the configured sensitivity level. The levels are cumulative — a level also answers everything a lower level would:
+${ladder}
+Configured level: ${level}.
+If the latest message does NOT clear the level-${level} bar, output exactly ${NO_REPLY_SENTINEL} and nothing else — do not call any tool, do not write a message. Otherwise, draft the reply exactly as instructed above. Judge only the latest guest message (use earlier messages for context); if the host sent the most recent message, treat a follow-up as warranted only at level 4.`;
+}
+
 export interface GenerateDraftInput {
   conversationId: string;
   /**
@@ -80,6 +109,13 @@ export interface GenerateDraftInput {
    * unlocked for guests).
    */
   instruction?: string;
+  /**
+   * Reply-warrant gate level (1-4). When 1-3, the concierge first decides
+   * whether the latest message warrants a reply and skips drafting if not
+   * (returns warranted=false). Omit (or pass 4) to always draft — the manual
+   * "Regenerate" and concierge-tool paths leave this unset.
+   */
+  replySensitivity?: number;
 }
 
 /**
@@ -89,13 +125,14 @@ export interface GenerateDraftInput {
  */
 export async function generateGuestReplyDraft(
   input: GenerateDraftInput,
-): Promise<{ draft: string }> {
+): Promise<GuestReplyDraftResult> {
   const ctx = await getConversationContext(input.conversationId);
   if (!ctx) {
     throw new Error('Conversation not found');
   }
   return generateGuestReplyDraftFromContext(ctx, {
     instruction: input.instruction,
+    replySensitivity: input.replySensitivity,
   });
 }
 
@@ -109,6 +146,18 @@ export interface GenerateDraftFromContextOptions {
    * so simulated scenarios resolve correctly.
    */
   today?: string;
+  /** Reply-warrant gate level (1-4); see GenerateDraftInput.replySensitivity. */
+  replySensitivity?: number;
+}
+
+export interface GuestReplyDraftResult {
+  /** The reply text, or '' when the gate decided no reply was warranted. */
+  draft: string;
+  /**
+   * Whether a reply was warranted. Always true on the ungated paths (manual /
+   * test / level 4). False only when the sensitivity gate short-circuited.
+   */
+  warranted: boolean;
 }
 
 /**
@@ -122,7 +171,7 @@ export interface GenerateDraftFromContextOptions {
 export async function generateGuestReplyDraftFromContext(
   ctx: ConversationContext,
   opts: GenerateDraftFromContextOptions = {},
-): Promise<{ draft: string }> {
+): Promise<GuestReplyDraftResult> {
   // Concierge training: the property's configured operating procedures. Loaded
   // here so the inbox draft path, the concierge tool, and the test
   // harness all honor it identically.
@@ -195,6 +244,14 @@ export async function generateGuestReplyDraftFromContext(
   // The Concierge loop. The model may call its read-only tool(s) to gather
   // facts before replying; when it stops calling tools, its text is the draft.
   // With no tool call this is identical to the old single-shot path.
+  // Gate is active only for levels 1-3; level 4 (or an unset level on the
+  // manual/test paths) always drafts, so the system prompt is left untouched.
+  const gateActive =
+    typeof opts.replySensitivity === 'number' &&
+    opts.replySensitivity >= 1 &&
+    opts.replySensitivity <= 3;
+  const system = gateActive ? SYSTEM_PROMPT + buildReplyGateClause(opts.replySensitivity!) : SYSTEM_PROMPT;
+
   const client = getAnthropic();
   const tools = CONCIERGE_TOOLS.map((t) => ({
     name: t.name,
@@ -212,7 +269,7 @@ export async function generateGuestReplyDraftFromContext(
       model: MODEL,
       max_tokens: DRAFT_MAX_TOKENS,
       temperature: 0,
-      system: SYSTEM_PROMPT,
+      system,
       tools,
       messages: conversation,
     });
@@ -225,10 +282,14 @@ export async function generateGuestReplyDraftFromContext(
         .map((b) => b.text)
         .join('')
         .trim();
+      // Gate short-circuit: the model judged no reply warranted at this level.
+      if (gateActive && draft.includes(NO_REPLY_SENTINEL)) {
+        return { draft: '', warranted: false };
+      }
       if (!draft) {
         throw new Error('The model returned an empty draft.');
       }
-      return { draft };
+      return { draft, warranted: true };
     }
 
     const toolUses = response.content.filter(
