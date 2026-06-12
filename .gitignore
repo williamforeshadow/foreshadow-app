@@ -42,3 +42,8 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# local tooling / scratch (not part of the app)
+.claude/
+.impeccable/
+session_full_export.md
