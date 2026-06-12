@@ -164,7 +164,7 @@ export function ConversationThread({
   }, [conversationId, messages.length, lastInboundId, proposedReply, proposedTasks.length, proposedKnowledge.length]);
 
   const header = showHeader ? (
-    <div className="flex shrink-0 items-center gap-3 border-b border-[var(--surface-elevated-divider)] bg-[var(--surface-elevated)] px-4 py-3">
+    <div className="msg-divider flex shrink-0 items-center gap-3 border-b px-4 py-3">
       <UserAvatar name={guestName ?? 'Guest'} size="md" />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold text-foreground">
@@ -181,7 +181,7 @@ export function ConversationThread({
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
     </div>
   ) : actions ? (
-    <div className="flex shrink-0 items-center justify-end gap-2 border-b border-[var(--surface-elevated-divider)] bg-[var(--surface-elevated)] px-4 py-2">
+    <div className="msg-divider flex shrink-0 items-center justify-end gap-2 border-b px-4 py-2">
       {actions}
     </div>
   ) : null;
@@ -219,7 +219,10 @@ export function ConversationThread({
     );
   } else {
     body = (
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-1 px-4 py-5">
+      <div
+        key={conversationId}
+        className="msg-in mx-auto flex w-full max-w-3xl flex-col gap-1 px-4 py-5"
+      >
         {messages.map((m, i) => {
           const prev = messages[i - 1];
           const next = messages[i + 1];
@@ -241,7 +244,7 @@ export function ConversationThread({
             <Fragment key={m.id}>
               {newDay ? (
                 <div className="my-3 flex items-center justify-center">
-                  <span className="rounded-full bg-accent px-3 py-1 text-[11px] font-medium text-muted-foreground">
+                  <span className="msg-well rounded-full px-3 py-1 text-[11px] font-medium text-muted-foreground">
                     {dayLabel(ts)}
                   </span>
                 </div>
@@ -265,10 +268,10 @@ export function ConversationThread({
                     style={{ borderRadius: roundedFor(outbound, firstOfRun, lastOfRun) }}
                     className={`px-3.5 py-2 text-sm leading-relaxed ${
                       scheduled
-                        ? 'border border-dashed border-[var(--accent-3)]/50 bg-[var(--accent-bg-soft)] text-foreground dark:bg-[var(--accent-bg-soft-dark)]'
+                        ? 'border border-dashed border-[var(--accent-3)]/50 bg-[var(--accent-bg-soft)] text-foreground dark:border-[var(--accent-1)]/50 dark:bg-[var(--accent-bg-soft-dark)]'
                         : outbound
                           ? 'bg-[var(--accent-3)] text-white shadow-sm'
-                          : 'bg-card text-foreground shadow-sm ring-1 ring-[var(--surface-elevated-line)]'
+                          : 'bg-white/85 text-foreground shadow-sm ring-1 ring-black/[0.05] dark:bg-white/[0.07] dark:ring-white/[0.06]'
                     }`}
                   >
                     <div className="whitespace-pre-wrap break-words">
@@ -362,9 +365,9 @@ export function ConversationThread({
   const showComposer = !(error && messages.length === 0);
 
   return (
-    <div className="flex h-full flex-col bg-[var(--background)]">
+    <div className="flex h-full flex-col">
       {header}
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="overlay-scrollbar min-h-0 flex-1 overflow-y-auto">
         {body}
       </div>
       {showComposer ? (
@@ -409,7 +412,7 @@ function ThreadState({
 }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-muted-foreground">
+      <span className="msg-well flex h-12 w-12 items-center justify-center rounded-2xl text-muted-foreground">
         {icon}
       </span>
       <div>
@@ -428,7 +431,7 @@ function ThreadSkeleton() {
       {rows.map((side, i) => (
         <div key={i} className={`flex ${side === 'out' ? 'justify-end' : 'justify-start'}`}>
           <span
-            className="h-9 animate-pulse rounded-2xl bg-accent"
+            className="h-9 animate-pulse rounded-2xl bg-black/[0.06] dark:bg-white/[0.07]"
             style={{ width: `${40 + ((i * 13) % 45)}%` }}
           />
         </div>

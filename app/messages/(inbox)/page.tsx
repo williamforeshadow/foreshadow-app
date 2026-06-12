@@ -7,13 +7,13 @@ import { MessagesSquare } from 'lucide-react';
 // mobile the layout shows the list instead and never renders this.
 export default function MessagesIndexPage() {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent text-muted-foreground">
+    <div className="msg-pane flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+      <span className="msg-well flex h-14 w-14 items-center justify-center rounded-2xl text-muted-foreground">
         <MessagesSquare className="h-6 w-6" />
       </span>
       <div>
         <p className="text-sm font-medium text-foreground">Select a conversation</p>
-        <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+        <p className="mt-1 max-w-xs text-xs leading-relaxed text-muted-foreground">
           Pick a guest from the list to read the thread and see their reservation
           and tasks alongside it.
         </p>

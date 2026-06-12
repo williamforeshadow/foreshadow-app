@@ -110,7 +110,7 @@ export function MessageComposer({
 
   return (
     <div
-      className="shrink-0 border-t border-[var(--surface-elevated-divider)] bg-[var(--surface-elevated)] px-3 pt-3"
+      className="shrink-0 px-3 pt-2"
       style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
     >
       {note ? (
@@ -119,7 +119,7 @@ export function MessageComposer({
         </p>
       ) : null}
 
-      <div className="flex items-end gap-2 rounded-2xl border border-border bg-background px-2 py-2 transition-colors focus-within:border-[var(--accent-3)] focus-within:ring-2 focus-within:ring-[var(--accent-ring)]">
+      <div className="msg-well flex items-end gap-2 rounded-2xl px-2 py-2 transition-[border-color,box-shadow] focus-within:border-[var(--accent-3)] focus-within:ring-2 focus-within:ring-[var(--accent-ring)] dark:focus-within:ring-[var(--accent-ring-dark)]">
         {conversationId ? (
           <button
             type="button"

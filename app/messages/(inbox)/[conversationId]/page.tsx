@@ -135,8 +135,8 @@ export default function ConversationPage() {
   }
 
   return (
-    <div className="flex h-full">
-      <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex h-full gap-2.5">
+      <div className="msg-pane flex min-w-0 flex-1 flex-col overflow-hidden">
         <ConversationThread
           messages={messages}
           conversationId={conversationId}
@@ -157,7 +157,7 @@ export default function ConversationPage() {
           onProposedKnowledgeChange={load}
         />
       </div>
-      <aside className="hidden w-80 shrink-0 border-l border-[var(--surface-elevated-divider)] lg:block">
+      <aside className="msg-pane hidden w-80 shrink-0 overflow-hidden lg:block">
         <ConversationDetailPanel conversation={conversation} />
       </aside>
     </div>

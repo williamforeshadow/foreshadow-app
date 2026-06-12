@@ -92,11 +92,11 @@ export function ProposedTask({
 
   return (
     <div className="mt-4 flex justify-start">
-      <div className="w-full max-w-[88%] overflow-hidden rounded-2xl border border-violet-500/60 bg-violet-500/5 dark:border-violet-400/40 dark:bg-violet-400/10">
-        <div className="flex items-center gap-1.5 border-b border-violet-500/30 px-3.5 py-1.5 text-[11px] font-medium text-violet-700 dark:text-violet-300">
+      <div className="msg-in w-full max-w-[88%] overflow-hidden rounded-2xl border border-[var(--accent-3)]/30 bg-[var(--accent-3)]/[0.06] dark:border-[var(--accent-1)]/25 dark:bg-[var(--accent-1)]/[0.08]">
+        <div className="flex items-center gap-1.5 px-3.5 pt-2.5 text-[11px] font-medium text-[var(--accent-3)] dark:text-[var(--accent-1)]">
           <ClipboardList className="h-3 w-3" aria-hidden />
           <span>Proposed task</span>
-          <span className="font-normal text-violet-600/80 dark:text-violet-400/70">· review</span>
+          <span className="font-normal opacity-70">· review</span>
           <span
             className={`ml-auto rounded-full px-1.5 text-[10px] font-medium capitalize ${PRIORITY_STYLES[proposal.priority]}`}
           >
@@ -120,13 +120,13 @@ export function ProposedTask({
 
         {error ? (
           <div className="flex items-start gap-2 px-3.5 pb-2 text-[11px] text-muted-foreground">
-            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-600" aria-hidden />
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-3)] dark:text-[var(--accent-1)]" aria-hidden />
             <span>{error}</span>
           </div>
         ) : null}
 
         {created ? (
-          <div className="flex items-center justify-between gap-2 border-t border-violet-500/20 px-3.5 py-2 text-xs text-violet-700 dark:text-violet-300">
+          <div className="flex items-center justify-between gap-2 px-3.5 pb-2.5 text-xs text-[var(--accent-3)] dark:text-[var(--accent-1)]">
             <span className="inline-flex items-center gap-1.5">
               <Check className="h-3.5 w-3.5" aria-hidden />
               Task created
@@ -142,12 +142,12 @@ export function ProposedTask({
             ) : null}
           </div>
         ) : (
-          <div className="flex items-center justify-end gap-2 border-t border-violet-500/20 px-3 py-2">
+          <div className="flex items-center justify-end gap-2 px-3 pb-2.5">
             <button
               type="button"
               onClick={dismiss}
               disabled={busy !== null}
-              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-[var(--accent-3)]/10 hover:text-foreground disabled:opacity-40 dark:hover:bg-[var(--accent-1)]/15"
             >
               {busy === 'dismiss' ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -160,7 +160,7 @@ export function ProposedTask({
               type="button"
               onClick={accept}
               disabled={busy !== null}
-              className="inline-flex items-center gap-1.5 rounded-md bg-[var(--accent-3)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-3)] px-3.5 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               {busy === 'accept' ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />

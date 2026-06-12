@@ -709,3 +709,103 @@ a {
   }
 }
 
+/* ============================================================
+   Messages cockpit — /messages floating glass panes (page-scoped)
+   The inbox renders as detached translucent panes over the canvas;
+   depth separates panes, not border lines. Stays aligned with the
+   global glass tiers (--glass-*, --surface-elevated).
+   ============================================================ */
+.msg-pane {
+  position: relative;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  box-shadow:
+    0 1px 1px rgba(15, 18, 26, 0.03),
+    0 12px 32px rgba(15, 18, 26, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.dark .msg-pane {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(26, 26, 31, 0.6);
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.25),
+    0 12px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* Hairline divider inside a pane (header / composer separations). */
+.msg-divider {
+  border-color: rgba(15, 18, 26, 0.07);
+}
+.dark .msg-divider {
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+/* Inset field (search, composer, stat tiles) — a soft well sunk into
+   the glass rather than a bordered box sitting on it. */
+.msg-well {
+  background: rgba(15, 18, 26, 0.045);
+  border: 1px solid rgba(15, 18, 26, 0.06);
+}
+.dark .msg-well {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* One-shot entrance for a freshly opened thread / proposal card. */
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.msg-in {
+  animation: msg-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Concierge "thinking" shimmer while a draft generates. */
+@keyframes msg-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+.msg-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(99, 102, 241, 0.12) 25%,
+    rgba(99, 102, 241, 0.26) 50%,
+    rgba(99, 102, 241, 0.12) 75%
+  );
+  background-size: 200% 100%;
+  animation: msg-shimmer 1.6s linear infinite;
+}
+.dark .msg-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(167, 139, 250, 0.1) 25%,
+    rgba(167, 139, 250, 0.24) 50%,
+    rgba(167, 139, 250, 0.1) 75%
+  );
+  background-size: 200% 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msg-in {
+    animation: none;
+  }
+  .msg-shimmer {
+    animation: none;
+  }
+}
+

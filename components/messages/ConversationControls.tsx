@@ -109,7 +109,7 @@ export function ConversationControls() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search guests"
-            className="w-full rounded-md border border-border bg-background py-1.5 pl-8 pr-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-[var(--accent-3)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)]"
+            className="msg-well w-full rounded-lg py-1.5 pl-8 pr-2 text-sm text-foreground transition-[border-color,box-shadow] placeholder:text-muted-foreground focus:border-[var(--accent-3)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)] dark:focus:ring-[var(--accent-ring-dark)]"
           />
         </div>
 
@@ -118,7 +118,7 @@ export function ConversationControls() {
           onClick={toggleSort}
           title={sort === 'newest' ? 'Newest first' : 'Oldest first'}
           aria-label={`Sort: ${sort === 'newest' ? 'newest first' : 'oldest first'}`}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-black/[0.05] hover:text-foreground dark:hover:bg-white/[0.06]"
         >
           {sort === 'newest' ? (
             <ArrowDown className="h-4 w-4" />
@@ -133,10 +133,10 @@ export function ConversationControls() {
           onClick={() => setOpen((v) => !v)}
           aria-pressed={open}
           title={open ? 'Hide filters' : 'Show filters'}
-          className={`relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors ${
+          className={`relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
             filterActive
               ? 'bg-[var(--accent-bg-soft)] text-[var(--accent-3)] dark:bg-[var(--accent-bg-soft-dark)] dark:text-[var(--accent-1)]'
-              : 'border border-border text-muted-foreground hover:bg-accent hover:text-foreground'
+              : 'text-muted-foreground hover:bg-black/[0.05] hover:text-foreground dark:hover:bg-white/[0.06]'
           }`}
         >
           <FilterIcon className="h-4 w-4" />
@@ -153,7 +153,7 @@ export function ConversationControls() {
             <div
               ref={panelRef}
               style={{ position: 'fixed', left: pos.left, top: pos.top, zIndex: 50 }}
-              className="w-[min(560px,calc(100vw-16px))] rounded-lg border border-[var(--surface-elevated-divider)] bg-[var(--surface-elevated)] p-3 shadow-xl"
+              className="liquid-glass-surface w-[min(560px,calc(100vw-16px))] rounded-xl border border-[var(--surface-elevated-line)] p-3 shadow-xl"
             >
               <div className="flex flex-wrap items-center gap-2">
                 <MultiSelect

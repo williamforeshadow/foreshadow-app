@@ -74,11 +74,11 @@ export function ProposedKnowledge({
 
   return (
     <div className="mt-4 flex justify-start">
-      <div className="w-full max-w-[88%] overflow-hidden rounded-2xl border border-teal-500/60 bg-teal-500/5 dark:border-teal-400/40 dark:bg-teal-400/10">
-        <div className="flex items-center gap-1.5 border-b border-teal-500/30 px-3.5 py-1.5 text-[11px] font-medium text-teal-700 dark:text-teal-300">
+      <div className="msg-in w-full max-w-[88%] overflow-hidden rounded-2xl border border-[var(--accent-3)]/30 bg-[var(--accent-3)]/[0.06] dark:border-[var(--accent-1)]/25 dark:bg-[var(--accent-1)]/[0.08]">
+        <div className="flex items-center gap-1.5 px-3.5 pt-2.5 text-[11px] font-medium text-[var(--accent-3)] dark:text-[var(--accent-1)]">
           <BookPlus className="h-3 w-3" aria-hidden />
           <span>Proposed knowledge</span>
-          <span className="font-normal text-teal-600/80 dark:text-teal-400/70">· review</span>
+          <span className="font-normal opacity-70">· review</span>
         </div>
 
         <div className="px-3.5 py-2.5">
@@ -87,24 +87,24 @@ export function ProposedKnowledge({
 
         {error ? (
           <div className="flex items-start gap-2 px-3.5 pb-2 text-[11px] text-muted-foreground">
-            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-teal-600" aria-hidden />
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-3)] dark:text-[var(--accent-1)]" aria-hidden />
             <span>{error}</span>
           </div>
         ) : null}
 
         {added ? (
-          <div className="flex items-center gap-1.5 border-t border-teal-500/20 px-3.5 py-2 text-xs text-teal-700 dark:text-teal-300">
+          <div className="flex items-center gap-1.5 px-3.5 pb-2.5 text-xs text-[var(--accent-3)] dark:text-[var(--accent-1)]">
             <Check className="h-3.5 w-3.5" aria-hidden />
             Added to property knowledge{guestVisible ? ' · visible to guests' : ' · internal'}
           </div>
         ) : (
-          <div className="flex items-center justify-between gap-2 border-t border-teal-500/20 px-3 py-2">
+          <div className="flex items-center justify-between gap-2 px-3 pb-2.5">
             <button
               type="button"
               onClick={() => setGuestVisible((v) => !v)}
               disabled={busy !== null}
               title="Toggle whether the concierge can share this with guests"
-              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-[var(--accent-3)]/10 hover:text-foreground disabled:opacity-40 dark:hover:bg-[var(--accent-1)]/15"
             >
               {guestVisible ? (
                 <>
@@ -123,7 +123,7 @@ export function ProposedKnowledge({
                 type="button"
                 onClick={dismiss}
                 disabled={busy !== null}
-                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-[var(--accent-3)]/10 hover:text-foreground disabled:opacity-40 dark:hover:bg-[var(--accent-1)]/15"
               >
                 {busy === 'dismiss' ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -136,7 +136,7 @@ export function ProposedKnowledge({
                 type="button"
                 onClick={accept}
                 disabled={busy !== null}
-                className="inline-flex items-center gap-1.5 rounded-md bg-[var(--accent-3)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-3)] px-3.5 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
               >
                 {busy === 'accept' ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
