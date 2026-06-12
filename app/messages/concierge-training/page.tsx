@@ -15,7 +15,6 @@ import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
@@ -256,7 +255,7 @@ export default function ConciergeTrainingPage() {
       />
 
       {activeTab === 'knowledge' ? (
-        <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-black/[0.12] p-5 text-sm text-muted-foreground dark:border-white/[0.12]">
           <p>
             When a guest conversation reveals a lasting fact about a property — a quirk, an access
             detail, a recurring service — the concierge can propose saving it to that property’s
@@ -272,10 +271,10 @@ export default function ConciergeTrainingPage() {
       {activeTab === 'task' ? <SensitivityControl /> : null}
 
       <div className="flex items-center justify-between">
-        <Badge variant="secondary" className="text-xs">
+        <span className="msg-well rounded-full px-2.5 py-1 text-xs font-medium tabular-nums text-muted-foreground">
           {visibleRules.length} {visibleRules.length === 1 ? 'entry' : 'entries'}
-        </Badge>
-        <Button onClick={() => setEditor({ mode: 'create', category: activeTab })}>
+        </span>
+        <Button className="rounded-full" onClick={() => setEditor({ mode: 'create', category: activeTab })}>
           <Plus className="mr-2 h-4 w-4" />
           New training
         </Button>
@@ -284,12 +283,12 @@ export default function ConciergeTrainingPage() {
       {loading ? (
         <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div>
       ) : visibleRules.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border py-12 text-center">
+        <div className="rounded-xl border border-dashed border-black/[0.12] py-12 text-center dark:border-white/[0.12]">
           <p className="mb-4 text-sm text-muted-foreground">
             No {CATEGORY_META[activeTab].label.toLowerCase()} yet. Add your first procedure — e.g.
             “{CATEGORY_META[activeTab].placeholderTitle}”.
           </p>
-          <Button onClick={() => setEditor({ mode: 'create', category: activeTab })}>
+          <Button className="rounded-full" onClick={() => setEditor({ mode: 'create', category: activeTab })}>
             <Plus className="mr-2 h-4 w-4" />
             Create your first
           </Button>
@@ -297,8 +296,7 @@ export default function ConciergeTrainingPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {visibleRules.map((rule) => (
-            <Card key={rule.id} className={cn('group', !rule.is_active && 'opacity-60')}>
-              <CardContent className="p-4">
+            <div key={rule.id} className={cn('msg-well group rounded-xl p-4', !rule.is_active && 'opacity-60')}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -330,8 +328,8 @@ export default function ConciergeTrainingPage() {
                       className={cn(
                         'rounded-md px-2 py-1 text-xs font-medium transition-colors',
                         rule.is_active
-                          ? 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
-                          : 'text-muted-foreground hover:bg-accent',
+                          ? 'text-emerald-600 hover:bg-emerald-500/[0.08] dark:text-emerald-400'
+                          : 'text-muted-foreground hover:bg-black/[0.05] dark:hover:bg-white/[0.06]',
                       )}
                     >
                       {rule.is_active ? 'Active' : 'Off'}
@@ -339,7 +337,7 @@ export default function ConciergeTrainingPage() {
                     <button
                       onClick={() => setEditor({ mode: 'edit', rule })}
                       title="Edit"
-                      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-black/[0.05] hover:text-foreground dark:hover:bg-white/[0.06]"
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
@@ -347,14 +345,13 @@ export default function ConciergeTrainingPage() {
                       onClick={() => handleDelete(rule)}
                       disabled={deletingId === rule.id}
                       title="Delete"
-                      className="rounded-md p-1.5 text-red-400 transition-colors hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-900/20"
+                      className="rounded-md p-1.5 text-red-400 transition-colors hover:bg-red-500/[0.08] disabled:opacity-50"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+            </div>
           ))}
         </div>
       )}
@@ -377,7 +374,7 @@ export default function ConciergeTrainingPage() {
         </div>
         <Link
           href="/messages/concierge-testing"
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="msg-well inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <FlaskConical className="h-3.5 w-3.5" aria-hidden />
           Test replies
@@ -385,7 +382,7 @@ export default function ConciergeTrainingPage() {
       </header>
 
       {error && (
-        <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+        <div className="flex items-center justify-between rounded-xl border border-red-500/25 bg-red-500/[0.07] p-3 text-sm text-red-700 dark:border-red-400/25 dark:bg-red-400/[0.08] dark:text-red-300">
           <span>{error}</span>
           <button onClick={() => setError(null)} className="ml-2 text-red-500 hover:text-red-700">✕</button>
         </div>
@@ -403,17 +400,19 @@ export default function ConciergeTrainingPage() {
         </MobileRouteShell>
       ) : (
         <DesktopSidebarShell>
-          <div className="flex h-full flex-col overflow-auto">
-            <div className="shrink-0 border-b border-[var(--surface-elevated-divider)] px-6 py-2">
-              <Link
-                href="/messages"
-                className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <ArrowLeft className="h-4 w-4" aria-hidden />
-                Back to Messages
-              </Link>
+          <div className="glass-bg-neutral flex h-full p-2.5">
+            <div className="msg-pane flex min-w-0 flex-1 flex-col overflow-hidden">
+              <div className="msg-divider shrink-0 border-b px-4 py-2.5">
+                <Link
+                  href="/messages"
+                  className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <ArrowLeft className="h-4 w-4" aria-hidden />
+                  Back to Messages
+                </Link>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar">{content}</div>
             </div>
-            {content}
           </div>
         </DesktopSidebarShell>
       )}
@@ -442,7 +441,7 @@ function CategoryTabs({
   onChange: (c: TrainingTab) => void;
 }) {
   return (
-    <div className="inline-flex gap-1 self-start rounded-lg border border-border bg-muted/40 p-1">
+    <div className="msg-well inline-flex gap-1 self-start rounded-lg p-1">
       {TAB_ORDER.map((key) => {
         const isActive = active === key;
         return (
@@ -452,10 +451,10 @@ function CategoryTabs({
             onClick={() => onChange(key)}
             aria-pressed={isActive}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150',
               isActive
                 ? 'bg-[var(--accent-3)] text-white shadow-sm'
-                : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                : 'text-muted-foreground hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.05]',
             )}
           >
             {TAB_META[key].label}
@@ -482,8 +481,7 @@ function CapabilityToggle({
   const copy = CAPABILITY_COPY[capability];
   const isOn = enabled !== false; // treat the loading/unknown state as on
   return (
-    <Card>
-      <CardContent className="flex items-start justify-between gap-4 p-4">
+    <div className="msg-well flex items-start justify-between gap-4 rounded-xl p-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p className="text-sm font-medium text-foreground">{copy.title}</p>
@@ -507,7 +505,7 @@ function CapabilityToggle({
           onClick={() => onChange(!isOn)}
           className={cn(
             'relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50',
-            isOn ? 'bg-[var(--accent-3)]' : 'bg-neutral-300 dark:bg-neutral-600',
+            isOn ? 'bg-[var(--accent-3)]' : 'bg-black/[0.15] dark:bg-white/[0.18]',
           )}
         >
           <span
@@ -517,8 +515,7 @@ function CapabilityToggle({
             )}
           />
         </button>
-      </CardContent>
-    </Card>
+    </div>
   );
 }
 
@@ -604,8 +601,7 @@ function SensitivityControl() {
   const current = SENSITIVITY_LEVELS.find((l) => l.level === level);
 
   return (
-    <Card>
-      <CardContent className="space-y-3 p-4">
+    <div className="msg-well space-y-3 rounded-xl p-4">
         <div className="flex items-center gap-2">
           <SlidersHorizontal className="h-4 w-4 text-[var(--accent-3)]" aria-hidden />
           <div className="min-w-0">
@@ -617,7 +613,7 @@ function SensitivityControl() {
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="inline-flex gap-1 rounded-lg border border-border bg-muted/40 p-1">
+          <div className="inline-flex gap-1 rounded-lg bg-black/[0.05] p-1 dark:bg-white/[0.06]">
             {SENSITIVITY_LEVELS.map((l) => {
               const active = level === l.level;
               return (
@@ -628,10 +624,10 @@ function SensitivityControl() {
                   disabled={saving || level === null}
                   aria-pressed={active}
                   className={cn(
-                    'h-8 w-9 rounded-md text-sm font-semibold transition-colors disabled:opacity-50',
+                    'h-8 w-9 rounded-md text-sm font-semibold transition-colors duration-150 disabled:opacity-50',
                     active
                       ? 'bg-[var(--accent-3)] text-white shadow-sm'
-                      : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                      : 'text-muted-foreground hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.05]',
                   )}
                 >
                   {l.level}
@@ -664,8 +660,7 @@ function SensitivityControl() {
           </ul>
           <p className="mt-2 italic">Levels are cumulative — each includes everything below it.</p>
         </details>
-      </CardContent>
-    </Card>
+    </div>
   );
 }
 
@@ -724,8 +719,7 @@ function ReplySensitivityControl() {
   const current = REPLY_SENSITIVITY_LEVELS.find((l) => l.level === level);
 
   return (
-    <Card>
-      <CardContent className="space-y-3 p-4">
+    <div className="msg-well space-y-3 rounded-xl p-4">
         <div className="flex items-center gap-2">
           <SlidersHorizontal className="h-4 w-4 text-[var(--accent-3)]" aria-hidden />
           <div className="min-w-0">
@@ -737,7 +731,7 @@ function ReplySensitivityControl() {
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="inline-flex gap-1 rounded-lg border border-border bg-muted/40 p-1">
+          <div className="inline-flex gap-1 rounded-lg bg-black/[0.05] p-1 dark:bg-white/[0.06]">
             {REPLY_SENSITIVITY_LEVELS.map((l) => {
               const active = level === l.level;
               return (
@@ -748,10 +742,10 @@ function ReplySensitivityControl() {
                   disabled={saving || level === null}
                   aria-pressed={active}
                   className={cn(
-                    'h-8 w-9 rounded-md text-sm font-semibold transition-colors disabled:opacity-50',
+                    'h-8 w-9 rounded-md text-sm font-semibold transition-colors duration-150 disabled:opacity-50',
                     active
                       ? 'bg-[var(--accent-3)] text-white shadow-sm'
-                      : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                      : 'text-muted-foreground hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.05]',
                   )}
                 >
                   {l.level}
@@ -784,8 +778,7 @@ function ReplySensitivityControl() {
           </ul>
           <p className="mt-2 italic">Levels are cumulative — each includes everything below it.</p>
         </details>
-      </CardContent>
-    </Card>
+    </div>
   );
 }
 
@@ -872,7 +865,7 @@ function RuleEditorDialog({
                   type="button"
                   onClick={() => setCategory(c)}
                   className={cn(
-                    'rounded-md border px-3 py-1.5 text-sm transition-colors',
+                    'rounded-full border px-3 py-1.5 text-sm transition-colors',
                     category === c
                       ? 'border-[var(--accent-3)] bg-[var(--accent-bg-soft)] text-[var(--accent-3)]'
                       : 'border-border text-muted-foreground hover:bg-accent',
@@ -914,7 +907,7 @@ function RuleEditorDialog({
                 type="button"
                 onClick={() => setAppliesToAll(true)}
                 className={cn(
-                  'rounded-md border px-3 py-1.5 text-sm transition-colors',
+                  'rounded-full border px-3 py-1.5 text-sm transition-colors',
                   appliesToAll
                     ? 'border-[var(--accent-3)] bg-[var(--accent-bg-soft)] text-[var(--accent-3)]'
                     : 'border-border text-muted-foreground hover:bg-accent',
@@ -926,7 +919,7 @@ function RuleEditorDialog({
                 type="button"
                 onClick={() => setAppliesToAll(false)}
                 className={cn(
-                  'rounded-md border px-3 py-1.5 text-sm transition-colors',
+                  'rounded-full border px-3 py-1.5 text-sm transition-colors',
                   !appliesToAll
                     ? 'border-[var(--accent-3)] bg-[var(--accent-bg-soft)] text-[var(--accent-3)]'
                     : 'border-border text-muted-foreground hover:bg-accent',
@@ -959,8 +952,8 @@ function RuleEditorDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving || !canSave}>
+          <Button variant="outline" className="rounded-full" onClick={onClose}>Cancel</Button>
+          <Button className="rounded-full" onClick={handleSave} disabled={saving || !canSave}>
             {saving ? 'Saving…' : existing ? 'Save changes' : 'Create training'}
           </Button>
         </DialogFooter>

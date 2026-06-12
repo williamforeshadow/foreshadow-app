@@ -94,17 +94,19 @@ export default function ConciergeTestingPage() {
     </MobileRouteShell>
   ) : (
     <DesktopSidebarShell>
-      <div className="flex h-full flex-col overflow-auto">
-        <div className="shrink-0 border-b border-[var(--surface-elevated-divider)] px-6 py-2">
-          <Link
-            href="/messages"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden />
-            Back to Messages
-          </Link>
+      <div className="glass-bg-neutral flex h-full p-2.5">
+        <div className="msg-pane flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="msg-divider shrink-0 border-b px-4 py-2.5">
+            <Link
+              href="/messages"
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden />
+              Back to Messages
+            </Link>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar">{content}</div>
         </div>
-        {content}
       </div>
     </DesktopSidebarShell>
   );
@@ -191,7 +193,7 @@ function TestConsole({
   return (
     <div className="flex flex-col gap-3">
       {/* Test identity controls */}
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-muted/30 p-3">
+      <div className="msg-well flex flex-wrap items-end gap-3 rounded-xl p-3">
         <div className="flex flex-col gap-1.5">
           <Label className="text-xs">Property</Label>
           <Select value={propertyId} onValueChange={changeProperty}>
@@ -233,7 +235,7 @@ function TestConsole({
           />
         </div>
         {turns.length > 0 && (
-          <Button variant="outline" size="sm" onClick={reset} className="ml-auto">
+          <Button variant="outline" size="sm" onClick={reset} className="ml-auto rounded-full">
             <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
             New conversation
           </Button>
@@ -248,7 +250,7 @@ function TestConsole({
       {/* Transcript */}
       <div
         ref={scrollRef}
-        className="flex min-h-[280px] flex-col gap-3 overflow-y-auto rounded-xl border border-border bg-background p-4"
+        className="msg-well flex min-h-[280px] flex-col gap-3 overflow-y-auto rounded-xl p-4 overlay-scrollbar"
       >
         {turns.length === 0 && !sending ? (
           <div className="m-auto max-w-sm text-center text-sm text-muted-foreground">
@@ -259,15 +261,15 @@ function TestConsole({
         ) : (
           turns.map((t, i) =>
             t.role === 'guest' ? (
-              <div key={i} className="flex justify-end">
+              <div key={i} className="msg-in flex justify-end">
                 <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-[var(--accent-3)] px-3.5 py-2 text-sm text-white">
                   <p className="whitespace-pre-wrap break-words">{t.text}</p>
                 </div>
               </div>
             ) : (
-              <div key={i} className="flex flex-col items-start">
+              <div key={i} className="msg-in flex flex-col items-start">
                 <span className="mb-0.5 ml-1 text-[11px] font-medium text-muted-foreground">Concierge</span>
-                <div className="max-w-[80%] rounded-2xl rounded-bl-sm border border-border bg-muted/50 px-3.5 py-2 text-sm text-foreground">
+                <div className="max-w-[80%] rounded-2xl rounded-bl-sm bg-white/85 px-3.5 py-2 text-sm text-foreground ring-1 ring-black/[0.05] dark:bg-white/[0.07] dark:ring-white/[0.06]">
                   <p className="whitespace-pre-wrap break-words">{t.text}</p>
                 </div>
               </div>
@@ -275,9 +277,9 @@ function TestConsole({
           )
         )}
         {sending && (
-          <div className="flex flex-col items-start">
+          <div className="msg-in flex flex-col items-start">
             <span className="mb-0.5 ml-1 text-[11px] font-medium text-muted-foreground">Concierge</span>
-            <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm border border-border bg-muted/50 px-3.5 py-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm bg-white/85 px-3.5 py-2 text-sm text-muted-foreground ring-1 ring-black/[0.05] dark:bg-white/[0.07] dark:ring-white/[0.06]">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               Thinking…
             </div>
@@ -290,7 +292,7 @@ function TestConsole({
       )}
 
       {/* Composer */}
-      <div className="flex items-end gap-2 rounded-2xl border border-border bg-background px-2 py-2 focus-within:border-[var(--accent-3)] focus-within:ring-2 focus-within:ring-[var(--accent-ring)]">
+      <div className="msg-well flex items-end gap-2 rounded-2xl px-2 py-2 transition-[border-color,box-shadow] focus-within:border-[var(--accent-3)] focus-within:ring-2 focus-within:ring-[var(--accent-ring)] dark:focus-within:ring-[var(--accent-ring-dark)]">
         <textarea
           rows={1}
           value={input}
