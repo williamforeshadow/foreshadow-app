@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getCurrentAppUser } from '@/src/server/users/currentUser';
+import { maybeGenerateProposedKnowledgeForConversation } from '@/src/server/messages/proposedKnowledge';
 
 // Update a conversation's app state: app_status (active/complete), unread, or
 // archived. Used by: open conversation -> mark read; Mark complete / Reopen;
@@ -46,6 +47,17 @@ export async function POST(
     .eq('id', conversationId);
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  // Marking a conversation complete is a "settled" signal — run knowledge triage
+  // over the whole thread (catches threads where the guest never replied to a
+  // host info message). Off the response path, best-effort.
+  if (patch.app_status === 'complete') {
+    after(async () => {
+      await maybeGenerateProposedKnowledgeForConversation(conversationId, {
+        requireHostMessage: false,
+      });
+    });
   }
 
   return NextResponse.json({ ok: true });

@@ -6,6 +6,7 @@ import { UserAvatar } from '@/components/ui/user-avatar';
 import { MessageComposer } from '@/components/messages/MessageComposer';
 import { ProposedReply } from '@/components/messages/ProposedReply';
 import { ProposedTask, type ProposedTaskData } from '@/components/messages/ProposedTask';
+import { ProposedKnowledge, type ProposedKnowledgeData } from '@/components/messages/ProposedKnowledge';
 import { canonicalChannelLabel } from '@/lib/bookingChannel';
 import type { GuestMessageRecord } from '@/lib/messages';
 
@@ -67,8 +68,10 @@ export function ConversationThread({
   proposedReplySource = null,
   proposedReplyAnswersMessageId = null,
   onProposedReplyChange,
-  proposedTask = null,
+  proposedTasks = [],
   onProposedTaskChange,
+  proposedKnowledge = [],
+  onProposedKnowledgeChange,
 }: {
   messages: GuestMessageRecord[];
   conversationId?: string;
@@ -85,9 +88,12 @@ export function ConversationThread({
   proposedReplySource?: 'auto' | 'assistant' | null;
   proposedReplyAnswersMessageId?: string | null;
   onProposedReplyChange?: () => void;
-  /** The conversation's pending proposed task, if the concierge drafted one. */
-  proposedTask?: ProposedTaskData | null;
+  /** The conversation's pending proposed tasks (multiple can coexist). */
+  proposedTasks?: ProposedTaskData[];
   onProposedTaskChange?: () => void;
+  /** The conversation's pending proposed knowledge additions. */
+  proposedKnowledge?: ProposedKnowledgeData[];
+  onProposedKnowledgeChange?: () => void;
 }) {
   // Render-stable "now" for the scheduled-vs-sent check (one value per mount).
   const [nowMs] = useState(() => Date.now());
@@ -116,6 +122,36 @@ export function ConversationThread({
   const proposalStale =
     !!proposedReply && !!lastInboundId && proposedReplyAnswersMessageId !== lastInboundId;
 
+  // Each proposed task anchors to the message that triggered it — NOT the latest
+  // inbound — so it persists until a human accepts or dismisses it, even after a
+  // reply lands (from the app, a PMS, or another channel), and multiple distinct
+  // proposals can coexist. Proposals whose triggering message isn't in the loaded
+  // thread render at the bottom (fallback) so none are ever lost.
+  const messageIdSet = new Set(messages.map((m) => m.id));
+  const tasksByAnchor = new Map<string, ProposedTaskData[]>();
+  const orphanTasks: ProposedTaskData[] = [];
+  for (const pt of proposedTasks) {
+    if (pt.triggering_message_id && messageIdSet.has(pt.triggering_message_id)) {
+      const list = tasksByAnchor.get(pt.triggering_message_id) ?? [];
+      list.push(pt);
+      tasksByAnchor.set(pt.triggering_message_id, list);
+    } else {
+      orphanTasks.push(pt);
+    }
+  }
+  // Proposed knowledge anchors the same way as tasks.
+  const knowledgeByAnchor = new Map<string, ProposedKnowledgeData[]>();
+  const orphanKnowledge: ProposedKnowledgeData[] = [];
+  for (const pk of proposedKnowledge) {
+    if (pk.triggering_message_id && messageIdSet.has(pk.triggering_message_id)) {
+      const list = knowledgeByAnchor.get(pk.triggering_message_id) ?? [];
+      list.push(pk);
+      knowledgeByAnchor.set(pk.triggering_message_id, list);
+    } else {
+      orphanKnowledge.push(pk);
+    }
+  }
+
   const handleEditProposed = (text: string) => {
     setComposerText(text);
     setFocusSignal((n) => n + 1);
@@ -125,7 +161,7 @@ export function ConversationThread({
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [conversationId, messages.length, lastInboundId, proposedReply]);
+  }, [conversationId, messages.length, lastInboundId, proposedReply, proposedTasks.length, proposedKnowledge.length]);
 
   const header = showHeader ? (
     <div className="flex shrink-0 items-center gap-3 border-b border-[var(--surface-elevated-divider)] bg-[var(--surface-elevated)] px-4 py-3">
@@ -274,16 +310,50 @@ export function ConversationThread({
                 />
               ) : null}
 
-              {!loading && !error && proposedTask && m.id === lastInboundId ? (
-                <ProposedTask
-                  key={`proposed-task-${proposedTask.id}`}
-                  proposal={proposedTask}
-                  onChanged={onProposedTaskChange}
-                />
-              ) : null}
+              {!loading && !error && tasksByAnchor.has(m.id)
+                ? tasksByAnchor.get(m.id)!.map((pt) => (
+                    <ProposedTask
+                      key={`proposed-task-${pt.id}`}
+                      proposal={pt}
+                      onChanged={onProposedTaskChange}
+                    />
+                  ))
+                : null}
+
+              {!loading && !error && knowledgeByAnchor.has(m.id)
+                ? knowledgeByAnchor.get(m.id)!.map((pk) => (
+                    <ProposedKnowledge
+                      key={`proposed-knowledge-${pk.id}`}
+                      proposal={pk}
+                      onChanged={onProposedKnowledgeChange}
+                    />
+                  ))
+                : null}
             </Fragment>
           );
         })}
+
+        {/* Fallback: proposals whose triggering message isn't in the loaded
+            thread render at the bottom so they're always visible until accepted
+            or dismissed. */}
+        {!loading && !error
+          ? orphanTasks.map((pt) => (
+              <ProposedTask
+                key={`proposed-task-${pt.id}`}
+                proposal={pt}
+                onChanged={onProposedTaskChange}
+              />
+            ))
+          : null}
+        {!loading && !error
+          ? orphanKnowledge.map((pk) => (
+              <ProposedKnowledge
+                key={`proposed-knowledge-${pk.id}`}
+                proposal={pk}
+                onChanged={onProposedKnowledgeChange}
+              />
+            ))
+          : null}
       </div>
     );
   }

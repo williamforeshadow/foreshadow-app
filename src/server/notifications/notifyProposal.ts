@@ -213,6 +213,31 @@ export async function notifyProposedReply(args: {
   });
 }
 
+/**
+ * Notify opted-in users that the concierge suggested a property-knowledge
+ * addition from a conversation. One notification per proposal per user.
+ */
+export async function notifyProposedKnowledge(args: {
+  proposedKnowledgeId: string;
+  conversationId: string;
+  propertyId: string | null;
+  propertyName?: string | null;
+  summary: string;
+}): Promise<void> {
+  const where = args.propertyName ? ` at ${args.propertyName}` : '';
+  await deliverConversationNotification({
+    type: 'proposed_knowledge',
+    conversationId: args.conversationId,
+    propertyId: args.propertyId,
+    entityId: args.proposedKnowledgeId,
+    entityType: 'proposed_knowledge',
+    title: 'Proposed knowledge to review',
+    body: `The concierge suggests saving "${args.summary}"${where}.`,
+    dedupeKeyFor: (recipientId) =>
+      `proposed_knowledge:${args.proposedKnowledgeId}:${recipientId}`,
+  });
+}
+
 /** Exported for tests / callers that want the raw type guard. */
 export function isPropertyNotificationType(
   value: string,

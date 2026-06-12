@@ -104,15 +104,13 @@ export default function PropertyNotesTab() {
         const res = await apiFetch(`/api/properties/${propertyId}/notes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ scope, body: ' ' }),
+          body: JSON.stringify({ scope, body: '' }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to create note');
-        // Server rejects empty body; we seed with a space so the row
-        // exists immediately, then the UI focuses the body field so the
-        // user can replace the seed text without thinking about it.
-        const seeded: Note = { ...(data.note as Note), body: '' };
-        setNotes((prev) => [...prev, seeded]);
+        // The note is created empty; the UI focuses the body so the user can
+        // fill it in immediately.
+        setNotes((prev) => [...prev, data.note as Note]);
       } catch (err: any) {
         showToast('error', err.message || 'Failed to create note');
       }
@@ -289,7 +287,10 @@ function NoteCard({
 
   const onTitleChange = (v: string) => {
     setTitle(v);
-    scheduleSave({ title: v, body });
+    // The server rejects an empty body, so a title-only edit (common when the
+    // user types the title before the body) must NOT include body. Only send
+    // body once it's non-empty — mirrors onBodyChange's guard.
+    scheduleSave(body.trim() === '' ? { title: v } : { title: v, body });
   };
 
   const onBodyChange = (v: string) => {

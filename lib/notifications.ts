@@ -24,6 +24,7 @@ export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 export const PROPERTY_NOTIFICATION_TYPES = [
   'proposed_task',
   'proposed_reply',
+  'proposed_knowledge',
 ] as const;
 
 export type PropertyNotificationType =
@@ -38,6 +39,7 @@ export const PROPERTY_NOTIFICATION_TYPE_LABELS: Record<
 > = {
   proposed_task: 'Proposed tasks',
   proposed_reply: 'Proposed replies',
+  proposed_knowledge: 'Proposed knowledge',
 };
 
 export const PROPERTY_NOTIFICATION_TYPE_DESCRIPTIONS: Record<
@@ -48,6 +50,8 @@ export const PROPERTY_NOTIFICATION_TYPE_DESCRIPTIONS: Record<
     'The concierge drafts an operational task from a guest message at this property.',
   proposed_reply:
     'The concierge drafts a reply to a guest message at this property.',
+  proposed_knowledge:
+    'The concierge suggests saving something learned in a conversation to this property’s knowledge.',
 };
 
 export interface PropertyNotificationPreference {

@@ -4,6 +4,7 @@ import { mapHostawayMessagePayload } from '@/lib/messages';
 import { ingestConversation } from '@/src/server/messages/ingest';
 import { maybeGenerateProposedReplyForExternal } from '@/src/server/messages/proposedReply';
 import { maybeGenerateProposedTaskForExternal } from '@/src/server/messages/proposedTask';
+import { maybeGenerateProposedKnowledgeForExternal } from '@/src/server/messages/proposedKnowledge';
 
 // Hostaway guest-message webhook receiver.
 //
@@ -128,6 +129,10 @@ export async function POST(request: Request) {
       // implies operational work and, if so, draft a task for review. Also
       // best-effort and self-contained.
       await maybeGenerateProposedTaskForExternal(msg.hostawayConversationId);
+      // Eager knowledge triage: if the (now-synced) thread revealed a durable
+      // fact about the property worth saving, draft a knowledge proposal. Gated
+      // internally to threads that have a host message; best-effort.
+      await maybeGenerateProposedKnowledgeForExternal(msg.hostawayConversationId);
     });
 
     return NextResponse.json({ ok: true, reservation_linked: reservationId != null });

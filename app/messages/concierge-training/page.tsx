@@ -12,6 +12,7 @@ import {
   SendHorizontal,
   Loader2,
   RotateCcw,
+  SlidersHorizontal,
 } from 'lucide-react';
 import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
@@ -176,6 +177,8 @@ export default function ConciergeTrainingPage() {
     <>
       <CategoryTabs category={categoryFilter} onChange={setCategoryFilter} />
       <p className="-mt-1 text-xs text-muted-foreground">{CATEGORY_META[categoryFilter].blurb}</p>
+
+      {categoryFilter === 'task' ? <SensitivityControl /> : null}
 
       <div className="flex items-center justify-between">
         <Badge variant="secondary" className="text-xs">
@@ -370,6 +373,139 @@ function CategoryTabs({
         );
       })}
     </div>
+  );
+}
+
+const SENSITIVITY_LEVELS: { level: number; name: string; blurb: string }[] = [
+  { level: 1, name: 'Critical only', blurb: 'Only urgent or safety issues, or anything making the space unusable.' },
+  { level: 2, name: 'Clear operational work', blurb: 'Repairs, maintenance, supplies, and explicit “please do X” requests. (Default)' },
+  { level: 3, name: 'Operational + administrative', blurb: 'Also booking/stay changes, special arrangements, and follow-ups that need an action — not just an answer.' },
+  { level: 4, name: 'Proactive', blurb: 'Most actionable requests, plus notable feedback or preferences that likely need follow-up.' },
+  { level: 5, name: 'Track everything', blurb: 'Almost any feedback, request, or issue worth tracking — skip only pure pleasantries.' },
+];
+
+function clampLevel(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (Number.isFinite(n) && n >= 1 && n <= 5) return Math.round(n);
+  return 2;
+}
+
+/**
+ * Org-level "how eager is the concierge to draft tasks" dial (1-5). Lives on the
+ * Task rules tab because it's the other half of "what becomes a task." Persists
+ * to operations_settings via PATCH /api/operations-settings.
+ */
+function SensitivityControl() {
+  const [level, setLevel] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/operations-settings', { cache: 'no-store' });
+        const data = await res.json();
+        if (active && res.ok) setLevel(clampLevel(data?.settings?.task_proposal_sensitivity));
+        else if (active) setLevel(2);
+      } catch {
+        if (active) setLevel(2);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const update = async (next: number) => {
+    const prev = level;
+    setLevel(next);
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/operations-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task_proposal_sensitivity: next }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(typeof data?.error === 'string' ? data.error : 'Failed to save');
+        setLevel(prev);
+      }
+    } catch {
+      setError('Failed to save');
+      setLevel(prev);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const current = SENSITIVITY_LEVELS.find((l) => l.level === level);
+
+  return (
+    <Card>
+      <CardContent className="space-y-3 p-4">
+        <div className="flex items-center gap-2">
+          <SlidersHorizontal className="h-4 w-4 text-[var(--accent-3)]" aria-hidden />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">Task proposal sensitivity</p>
+            <p className="text-xs text-muted-foreground">
+              How eager the concierge is to draft a task from a guest message. Applies everywhere; task rules below add specifics on top.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="inline-flex gap-1 rounded-lg border border-border bg-muted/40 p-1">
+            {SENSITIVITY_LEVELS.map((l) => {
+              const active = level === l.level;
+              return (
+                <button
+                  key={l.level}
+                  type="button"
+                  onClick={() => update(l.level)}
+                  disabled={saving || level === null}
+                  aria-pressed={active}
+                  className={cn(
+                    'h-8 w-9 rounded-md text-sm font-semibold transition-colors disabled:opacity-50',
+                    active
+                      ? 'bg-[var(--accent-3)] text-white shadow-sm'
+                      : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                  )}
+                >
+                  {l.level}
+                </button>
+              );
+            })}
+          </div>
+          {current ? (
+            <div className="min-w-0">
+              <span className="text-sm font-medium text-foreground">{current.name}</span>
+              <span className="ml-2 text-xs text-muted-foreground">· {current.blurb}</span>
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground">Loading…</span>
+          )}
+        </div>
+
+        {error ? <p className="text-xs text-red-600 dark:text-red-400">{error}</p> : null}
+
+        <details className="text-xs text-muted-foreground">
+          <summary className="cursor-pointer select-none font-medium text-foreground/80">
+            What the levels mean
+          </summary>
+          <ul className="mt-2 space-y-1">
+            {SENSITIVITY_LEVELS.map((l) => (
+              <li key={l.level}>
+                <span className="font-medium text-foreground">{l.level} · {l.name}</span> — {l.blurb}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 italic">Levels are cumulative — each includes everything below it.</p>
+        </details>
+      </CardContent>
+    </Card>
   );
 }
 

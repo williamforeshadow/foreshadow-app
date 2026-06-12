@@ -57,13 +57,11 @@ export async function POST(
     return NextResponse.json({ error: 'scope is required' }, { status: 400 });
   }
 
+  // Empty body is allowed on CREATE: the UI adds a blank note card and the user
+  // fills in title/body inline. (The PATCH route still prevents emptying an
+  // existing note's body.) Previously this rejected empty bodies, which broke
+  // "Add note" because the client seeds an empty card.
   const noteBody = typeof body?.body === 'string' ? body.body.trim() : '';
-  if (!noteBody) {
-    return NextResponse.json(
-      { error: 'Note body cannot be empty' },
-      { status: 400 }
-    );
-  }
 
   const title =
     typeof body?.title === 'string' && body.title.trim() !== ''

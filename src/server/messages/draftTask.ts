@@ -30,23 +30,52 @@ const MAX_THREAD_MESSAGES = 30;
 const PRIORITIES = ['urgent', 'high', 'medium', 'low'] as const;
 type Priority = (typeof PRIORITIES)[number];
 
-const SYSTEM_PROMPT = `You triage a short-term-rental guest conversation for the host's operations team. Your ONLY job: decide whether the latest guest message implies operational work the host's team must do, and if so, draft a single task for a human to review.
+// Domain-agnostic scaffold. What actually QUALIFIES as a task is NOT hardcoded
+// here — it comes from two per-organization inputs injected into the user
+// message: the Sensitivity calibration (a 1-5 dial) and the team's Task rules.
+// So this prompt makes no assumptions about the business (short-term rental,
+// hotel, long-term property management, etc.) or what kind of work a task is.
+const SYSTEM_PROMPT = `You triage a conversation between a guest (or resident/customer) and a property or hospitality operations team. Your job: identify EVERY distinct operational task the latest guest message warrants, and draft each one for a human to review.
 
-Be conservative. The overwhelming majority of guest messages need NO task. Draft a task ONLY when the message clearly implies physical or operational work for the host's team — for example: a broken or malfunctioning appliance/fixture, a maintenance or repair need, a cleaning problem, a missing/used-up supply that must be restocked, a safety issue, or an explicit request that requires staff action (e.g. "can someone bring extra towels").
+An "operational task" is any actionable item the team should do or follow up on — it may be maintenance, administrative, or service work. It is NOT an answer to a question; things the team can simply reply to are not tasks on their own.
 
-Do NOT draft a task for: questions and information requests (check-in time, wifi, directions, recommendations), booking/availability/pricing logistics, small talk, thanks, complaints with no actionable remedy, or anything the team would simply answer rather than act on. When in doubt, do NOT draft a task.
+How to decide WHAT qualifies:
+- Apply the "Sensitivity" calibration provided below — it sets the threshold for how much warrants a task at this organization. Do not impose your own assumptions about what counts; follow the calibrated level.
+- Also follow the team's "Task rules" when provided — they add organization- and property-specific guidance and concrete examples.
+- Create a SEPARATE task for EACH distinct issue or request that meets the threshold. If one message reports several unrelated problems (e.g. a broken appliance AND a cleanliness issue), that is multiple tasks, not one. Only combine things that are genuinely the same piece of work.
+- When nothing in the latest message meets the threshold, or you are unsure, return an empty list.
+- Do NOT include any task that is already covered by the "Already raised" list (when provided) — those are handled. But DO include new, distinct issues even when other issues in the same conversation were already raised.
 
-If you draft a task:
-- title: a short imperative summary of the work (e.g. "Fix AC — not cooling in unit"). Required.
-- description: 1-3 sentences of useful context drawn ONLY from the conversation (what the guest reported, any specifics). Never invent details.
-- priority: one of urgent | high | medium | low. Reserve "urgent" for safety issues or anything making the unit unusable during an active stay.
+For each task:
+- title: a short imperative summary of that one issue. Required.
+- description: 1-3 sentences of context drawn ONLY from the conversation (what the guest said, any specifics). Never invent details, names, times, or numbers.
+- priority: one of urgent | high | medium | low. Reserve "urgent" for safety issues or anything making the space unusable during an active stay.
 - department_id: choose from the provided department list if one clearly fits; otherwise omit it. Use ONLY an id from that list — never invent one.
 
-"Concierge training" (when present) is the team's guidance for when and how to create tasks at this property — follow it.
-
 Output: respond with ONLY a single JSON object, no prose, no code fences. Shape:
-{"should_draft": boolean, "task": {"title": string, "description": string, "priority": "urgent"|"high"|"medium"|"low", "department_id": string|null} | null, "reasoning": string}
-When should_draft is false, set "task" to null. Keep "reasoning" to one short sentence.`;
+{"tasks": [{"title": string, "description": string, "priority": "urgent"|"high"|"medium"|"low", "department_id": string|null}], "reasoning": string}
+"tasks" is an array of zero or more tasks (empty when nothing qualifies). Keep "reasoning" to one short sentence.`;
+
+// The sensitivity ladder. Cumulative: each level includes everything below it.
+// Generic by design — concrete, domain-specific examples belong in Task rules.
+const SENSITIVITY_LADDER = [
+  'Critical only — draft a task ONLY for urgent or safety-critical issues, or anything making the space unusable. Ignore everything else.',
+  'Clear operational work — draft a task when the message clearly calls for hands-on work or an explicit action: repairs, maintenance, a problem with the space, restocking/supplies, or a direct request for staff to do something. Not for questions, information requests, logistics, small talk, or thanks.',
+  'Operational + administrative — everything above, plus administrative or service actions the team must handle: booking or stay changes, special arrangements, accommodations, and follow-ups that require an action (not just an answer).',
+  'Proactive — everything above, plus most actionable requests and any notable feedback, problem, or preference that likely needs follow-up, even when the guest did not explicitly ask for action.',
+  'Track everything — draft a task for essentially any guest feedback, request, issue, or preference the team might want to track or follow up on. Skip only pure pleasantries (greetings, thanks) with nothing to act on.',
+] as const;
+
+function buildSensitivityBlock(level: number): string {
+  const clamped = Math.min(5, Math.max(1, Math.round(level)));
+  const lines = SENSITIVITY_LADDER.map((text, i) => `- Level ${i + 1} — ${text}`);
+  return [
+    `Sensitivity is set to ${clamped} of 5. The levels are cumulative:`,
+    ...lines,
+    '',
+    `Apply level ${clamped}: draft a task only when the latest guest message meets the level ${clamped} threshold.`,
+  ].join('\n');
+}
 
 export interface ProposedTaskDraft {
   title: string;
@@ -56,8 +85,8 @@ export interface ProposedTaskDraft {
 }
 
 export interface TriageResult {
-  should_draft: boolean;
-  task: ProposedTaskDraft | null;
+  /** Zero or more distinct tasks to propose; empty when nothing qualifies. */
+  tasks: ProposedTaskDraft[];
   reasoning: string;
 }
 
@@ -76,6 +105,42 @@ async function loadDepartments(): Promise<DepartmentRow[]> {
     return [];
   }
   return (data ?? []) as DepartmentRow[];
+}
+
+/** Org-level task-proposal sensitivity (1-5). Falls back to 2 when unset. */
+async function loadTaskProposalSensitivity(): Promise<number> {
+  try {
+    const { data } = await getSupabaseServer()
+      .from('operations_settings')
+      .select('task_proposal_sensitivity')
+      .eq('id', 1)
+      .maybeSingle();
+    const v = (data as { task_proposal_sensitivity?: number } | null)?.task_proposal_sensitivity;
+    if (typeof v === 'number' && v >= 1 && v <= 5) return v;
+  } catch {
+    // Column/table may be missing in older environments — fall back.
+  }
+  return 2;
+}
+
+/**
+ * Titles of tasks already raised for this conversation (pending or accepted), so
+ * the model can avoid re-proposing the same issue on a follow-up message. This
+ * is the semantic dedup that replaces the old one-proposal-per-conversation gate.
+ */
+async function loadExistingProposalTitles(conversationId: string): Promise<string[]> {
+  const { data, error } = await getSupabaseServer()
+    .from('proposed_tasks')
+    .select('title, status')
+    .eq('conversation_id', conversationId)
+    .in('status', ['pending', 'accepted']);
+  if (error) {
+    console.warn('[task triage] existing-proposal lookup failed', { conversationId, error });
+    return [];
+  }
+  return ((data ?? []) as Array<{ title: string | null }>)
+    .map((r) => (r.title ?? '').trim())
+    .filter(Boolean);
 }
 
 /** Pull the first JSON object out of a model response, tolerating code fences. */
@@ -97,33 +162,30 @@ function parseTriageJson(raw: string): TriageResult | null {
   }
   if (!obj || typeof obj !== 'object') return null;
   const o = obj as Record<string, unknown>;
-  const shouldDraft = o.should_draft === true;
   const reasoning = typeof o.reasoning === 'string' ? o.reasoning : '';
 
-  if (!shouldDraft) return { should_draft: false, task: null, reasoning };
+  const rawTasks = Array.isArray(o.tasks) ? o.tasks : [];
+  const tasks: ProposedTaskDraft[] = [];
+  for (const t of rawTasks) {
+    if (!t || typeof t !== 'object') continue;
+    const tt = t as Record<string, unknown>;
+    const title = typeof tt.title === 'string' ? tt.title.trim() : '';
+    if (!title) continue; // a task with no title is meaningless — drop it
+    const priority: Priority = PRIORITIES.includes(tt.priority as Priority)
+      ? (tt.priority as Priority)
+      : 'medium';
+    const description =
+      typeof tt.description === 'string' && tt.description.trim()
+        ? tt.description.trim()
+        : null;
+    const departmentId =
+      typeof tt.department_id === 'string' && tt.department_id.trim()
+        ? tt.department_id.trim()
+        : null;
+    tasks.push({ title, description, priority, department_id: departmentId });
+  }
 
-  const t = o.task;
-  if (!t || typeof t !== 'object') return { should_draft: false, task: null, reasoning };
-  const tt = t as Record<string, unknown>;
-  const title = typeof tt.title === 'string' ? tt.title.trim() : '';
-  if (!title) return { should_draft: false, task: null, reasoning };
-  const priority: Priority = PRIORITIES.includes(tt.priority as Priority)
-    ? (tt.priority as Priority)
-    : 'medium';
-  const description =
-    typeof tt.description === 'string' && tt.description.trim()
-      ? tt.description.trim()
-      : null;
-  const departmentId =
-    typeof tt.department_id === 'string' && tt.department_id.trim()
-      ? tt.department_id.trim()
-      : null;
-
-  return {
-    should_draft: true,
-    task: { title, description, priority, department_id: departmentId },
-    reasoning,
-  };
+  return { tasks, reasoning };
 }
 
 /**
@@ -145,13 +207,17 @@ export async function generateProposedTaskDraftFromContext(
     trainingBlock = '';
   }
 
-  const departments = await loadDepartments();
+  const [departments, sensitivity, existingTitles] = await Promise.all([
+    loadDepartments(),
+    loadTaskProposalSensitivity(),
+    loadExistingProposalTitles(ctx.conversation.id),
+  ]);
 
   const nowMs = Date.now();
   const sent = ctx.messages.filter((m) => !isFuture(m, nowMs));
   const recent = sent.slice(-MAX_THREAD_MESSAGES);
   if (recent.length === 0) {
-    return { should_draft: false, task: null, reasoning: 'No messages to triage.' };
+    return { tasks: [], reasoning: 'No messages to triage.' };
   }
 
   const guestName =
@@ -182,14 +248,24 @@ export async function generateProposedTaskDraftFromContext(
     'Conversation facts:',
     facts.map((f) => `- ${f}`).join('\n'),
     '',
+    'Sensitivity calibration:',
+    buildSensitivityBlock(sensitivity),
+    '',
     'Departments you may assign (use the exact id, or omit):',
     departmentBlock,
   ];
   if (trainingBlock) {
     userParts.push(
       '',
-      'Concierge training — when and how to create tasks at this property:',
+      'Task rules — when and how to create tasks for this team/property:',
       trainingBlock,
+    );
+  }
+  if (existingTitles.length) {
+    userParts.push(
+      '',
+      'Already raised for this conversation — do NOT propose anything that duplicates these:',
+      existingTitles.map((t) => `- ${t}`).join('\n'),
     );
   }
   userParts.push(
@@ -197,7 +273,7 @@ export async function generateProposedTaskDraftFromContext(
     'Conversation so far (oldest to newest):',
     transcript,
     '',
-    'Decide whether the latest guest activity implies operational work for the host team, and respond with the JSON object only.',
+    'Identify every distinct task the latest guest message warrants under the sensitivity calibration above (one per distinct issue, excluding anything already raised), and respond with the JSON object only.',
   );
 
   const client = getAnthropic();
@@ -217,16 +293,17 @@ export async function generateProposedTaskDraftFromContext(
 
   const parsed = parseTriageJson(raw);
   if (!parsed) {
-    // A malformed response is treated as "no task" — never fabricate a task from
-    // an unparseable triage output.
+    // A malformed response is treated as "no tasks" — never fabricate a task
+    // from an unparseable triage output.
     console.warn('[task triage] unparseable model output', { raw: raw.slice(0, 200) });
-    return { should_draft: false, task: null, reasoning: 'Unparseable triage output.' };
+    return { tasks: [], reasoning: 'Unparseable triage output.' };
   }
 
   // Guard against a hallucinated department_id not in the real list.
-  if (parsed.task?.department_id) {
-    const valid = departments.some((d) => d.id === parsed.task!.department_id);
-    if (!valid) parsed.task.department_id = null;
+  for (const task of parsed.tasks) {
+    if (task.department_id && !departments.some((d) => d.id === task.department_id)) {
+      task.department_id = null;
+    }
   }
 
   return parsed;

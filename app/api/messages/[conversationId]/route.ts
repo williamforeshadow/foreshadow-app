@@ -44,27 +44,44 @@ export async function GET(
     return NextResponse.json({ error: msgError.message }, { status: 500 });
   }
 
-  // The pending concierge-proposed task, if one was drafted from a recent guest
-  // message. Surfaced as a bubble in the thread; null when there's none.
-  const { data: proposedTaskRow } = await supabase
+  // All pending concierge-proposed tasks for this conversation. Multiple can
+  // coexist (one per distinct issue); each renders as its own bubble, anchored
+  // to the message that triggered it. Oldest first so they read in order.
+  const { data: proposedTaskRows } = await supabase
     .from('proposed_tasks')
-    .select('id, title, description, priority, department_id, departments(name)')
+    .select('id, title, description, priority, triggering_message_id, department_id, departments(name)')
     .eq('conversation_id', conversationId)
     .eq('status', 'pending')
-    .order('generated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order('generated_at', { ascending: true });
 
-  const proposed_task = proposedTaskRow
-    ? {
-        id: proposedTaskRow.id as string,
-        title: (proposedTaskRow.title as string | null) ?? '',
-        description: (proposedTaskRow.description as string | null) ?? null,
-        priority: (proposedTaskRow.priority as string | null) ?? 'medium',
-        department_name:
-          ((proposedTaskRow.departments as { name: string | null } | null)?.name) ?? null,
-      }
-    : null;
+  const proposed_tasks = ((proposedTaskRows ?? []) as Array<Record<string, unknown>>).map((r) => ({
+    id: r.id as string,
+    title: (r.title as string | null) ?? '',
+    description: (r.description as string | null) ?? null,
+    priority: (r.priority as string | null) ?? 'medium',
+    triggering_message_id: (r.triggering_message_id as string | null) ?? null,
+    department_name: ((r.departments as { name: string | null } | null)?.name) ?? null,
+  }));
 
-  return NextResponse.json({ conversation, messages: messages ?? [], proposed_task });
+  // Pending concierge-proposed knowledge additions, oldest first.
+  const { data: knowledgeRows } = await supabase
+    .from('proposed_knowledge')
+    .select('id, summary, guest_visible, triggering_message_id')
+    .eq('conversation_id', conversationId)
+    .eq('status', 'pending')
+    .order('generated_at', { ascending: true });
+
+  const proposed_knowledge = ((knowledgeRows ?? []) as Array<Record<string, unknown>>).map((r) => ({
+    id: r.id as string,
+    summary: (r.summary as string | null) ?? '',
+    guest_visible: Boolean(r.guest_visible),
+    triggering_message_id: (r.triggering_message_id as string | null) ?? null,
+  }));
+
+  return NextResponse.json({
+    conversation,
+    messages: messages ?? [],
+    proposed_tasks,
+    proposed_knowledge,
+  });
 }

@@ -25,6 +25,8 @@ export interface OperationsSettings {
   default_check_in_time: string; // 'HH:MM'
   default_check_out_time: string; // 'HH:MM'
   default_timezone: string; // IANA tz, e.g. 'America/Los_Angeles'
+  /** How eager the concierge is to draft tasks from guest messages (1-5). */
+  task_proposal_sensitivity: number;
   updated_at: string | null;
 }
 
@@ -48,6 +50,7 @@ export const DEFAULT_SETTINGS: OperationsSettings = {
   default_check_in_time: '15:00',
   default_check_out_time: '11:00',
   default_timezone: DEFAULT_TIMEZONE,
+  task_proposal_sensitivity: 2,
   updated_at: null,
 };
 
@@ -78,11 +81,13 @@ export function OperationsSettingsProvider({ children }: { children: ReactNode }
           default_check_in_time: data.settings.default_check_in_time || DEFAULT_SETTINGS.default_check_in_time,
           default_check_out_time: data.settings.default_check_out_time || DEFAULT_SETTINGS.default_check_out_time,
           default_timezone: data.settings.default_timezone || DEFAULT_SETTINGS.default_timezone,
+          task_proposal_sensitivity:
+            data.settings.task_proposal_sensitivity ?? DEFAULT_SETTINGS.task_proposal_sensitivity,
           updated_at: data.settings.updated_at ?? null,
         });
       }
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load operations settings');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load operations settings');
     } finally {
       setLoading(false);
     }
@@ -113,12 +118,16 @@ export function OperationsSettingsProvider({ children }: { children: ReactNode }
         }
         setMigrationPending(false);
         if (data?.settings) {
-          setSettings({
+          // PUT only touches times/timezone; preserve the current sensitivity
+          // (its own value comes back via GET / the PATCH path, not here).
+          setSettings((prev) => ({
             default_check_in_time: data.settings.default_check_in_time || next.default_check_in_time,
             default_check_out_time: data.settings.default_check_out_time || next.default_check_out_time,
             default_timezone: data.settings.default_timezone || next.default_timezone,
+            task_proposal_sensitivity:
+              data.settings.task_proposal_sensitivity ?? prev.task_proposal_sensitivity,
             updated_at: data.settings.updated_at ?? null,
-          });
+          }));
         } else {
           setSettings((prev) => ({
             ...prev,
@@ -127,8 +136,8 @@ export function OperationsSettingsProvider({ children }: { children: ReactNode }
           }));
         }
         return { ok: true };
-      } catch (err: any) {
-        return { ok: false, error: err?.message || 'Failed to save settings' };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : 'Failed to save settings' };
       }
     },
     []

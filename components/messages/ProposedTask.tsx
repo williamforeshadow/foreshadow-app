@@ -17,6 +17,8 @@ export interface ProposedTaskData {
   title: string;
   description: string | null;
   priority: 'urgent' | 'high' | 'medium' | 'low';
+  /** The inbound message that triggered the draft; the bubble anchors here. */
+  triggering_message_id: string | null;
   department_name: string | null;
 }
 

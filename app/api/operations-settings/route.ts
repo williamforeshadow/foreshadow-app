@@ -19,6 +19,23 @@ import { DEFAULT_TIMEZONE } from '@/src/lib/dates';
 
 const FALLBACK_CHECK_IN = '15:00';
 const FALLBACK_CHECK_OUT = '11:00';
+const FALLBACK_SENSITIVITY = 2;
+
+// Read the org task-proposal sensitivity (1-5) off a settings row, falling back
+// to 2. Tolerates the column being absent (migration not yet applied).
+function readSensitivity(value: unknown): number {
+  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  if (Number.isFinite(n) && n >= 1 && n <= 5) return Math.round(n);
+  return FALLBACK_SENSITIVITY;
+}
+
+// Validate an incoming sensitivity value; returns 1-5 or null.
+function normalizeSensitivity(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  if (!Number.isFinite(n)) return null;
+  const r = Math.round(n);
+  return r >= 1 && r <= 5 ? r : null;
+}
 
 // Postgres TIME comes back from PostgREST as 'HH:MM:SS'. The UI only ever
 // cares about HH:MM, so trim consistently here.
@@ -49,13 +66,26 @@ function isMissingTableError(error: unknown): boolean {
   return typeof e.message === 'string' && e.message.includes('operations_settings') && e.message.includes('does not exist');
 }
 
+// Postgres "undefined_column" — the task_proposal_sensitivity column hasn't been
+// added yet (migration pending). Surfaced the same way as a missing table.
+const PG_UNDEFINED_COLUMN = '42703';
+
+function isMissingColumnError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const e = error as { code?: string; message?: string };
+  if (e.code === PG_UNDEFINED_COLUMN) return true;
+  return typeof e.message === 'string' && e.message.includes('task_proposal_sensitivity');
+}
+
 export async function GET() {
   try {
     const supabase = getSupabaseServer();
 
+    // select('*') so a not-yet-applied `task_proposal_sensitivity` column
+    // doesn't error the whole query — it's simply absent and we fall back.
     const { data, error } = await supabase
       .from('operations_settings')
-      .select('default_check_in_time, default_check_out_time, default_timezone, updated_at')
+      .select('*')
       .eq('id', 1)
       .maybeSingle();
 
@@ -69,6 +99,7 @@ export async function GET() {
             default_check_in_time: FALLBACK_CHECK_IN,
             default_check_out_time: FALLBACK_CHECK_OUT,
             default_timezone: DEFAULT_TIMEZONE,
+            task_proposal_sensitivity: FALLBACK_SENSITIVITY,
             updated_at: null,
           },
           migration_pending: true,
@@ -86,6 +117,7 @@ export async function GET() {
           default_check_in_time: FALLBACK_CHECK_IN,
           default_check_out_time: FALLBACK_CHECK_OUT,
           default_timezone: DEFAULT_TIMEZONE,
+          task_proposal_sensitivity: FALLBACK_SENSITIVITY,
           updated_at: null,
         },
       });
@@ -96,12 +128,13 @@ export async function GET() {
         default_check_in_time: trimTime(data.default_check_in_time) || FALLBACK_CHECK_IN,
         default_check_out_time: trimTime(data.default_check_out_time) || FALLBACK_CHECK_OUT,
         default_timezone: data.default_timezone || DEFAULT_TIMEZONE,
+        task_proposal_sensitivity: readSensitivity(data.task_proposal_sensitivity),
         updated_at: data.updated_at,
       },
     });
-  } catch (err: any) {
+  } catch (err) {
     return NextResponse.json(
-      { error: err?.message || 'Failed to load operations settings' },
+      { error: err instanceof Error ? err.message : 'Failed to load operations settings' },
       { status: 500 }
     );
   }
@@ -192,10 +225,86 @@ export async function PUT(request: NextRequest) {
         updated_at: data.updated_at,
       },
     });
-  } catch (err: any) {
+  } catch (err) {
     return NextResponse.json(
-      { error: err?.message || 'Failed to save operations settings' },
+      { error: err instanceof Error ? err.message : 'Failed to save operations settings' },
       { status: 500 }
+    );
+  }
+}
+
+// PATCH — partial update. Today only `task_proposal_sensitivity` (1-5), so the
+// concierge-training page can change the dial without resending check-in/out
+// times or timezone. Updates the singleton in place (or seeds it with fallbacks).
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json().catch(() => ({}));
+    if (body?.task_proposal_sensitivity === undefined) {
+      return NextResponse.json({ error: 'No supported fields to update' }, { status: 400 });
+    }
+    const sensitivity = normalizeSensitivity(body.task_proposal_sensitivity);
+    if (sensitivity === null) {
+      return NextResponse.json(
+        { error: 'task_proposal_sensitivity must be an integer between 1 and 5' },
+        { status: 400 },
+      );
+    }
+
+    const supabase = getSupabaseServer();
+    const now = new Date().toISOString();
+
+    const { data: existing, error: readErr } = await supabase
+      .from('operations_settings')
+      .select('id')
+      .eq('id', 1)
+      .maybeSingle();
+    if (readErr && isMissingTableError(readErr)) {
+      return NextResponse.json(
+        {
+          error: 'operations_settings table is missing. Apply the migration in Supabase before saving.',
+          migration_pending: true,
+        },
+        { status: 503 },
+      );
+    }
+
+    const writeErr = existing
+      ? (
+          await supabase
+            .from('operations_settings')
+            .update({ task_proposal_sensitivity: sensitivity, updated_at: now })
+            .eq('id', 1)
+        ).error
+      : (
+          await supabase.from('operations_settings').insert({
+            id: 1,
+            default_check_in_time: FALLBACK_CHECK_IN,
+            default_check_out_time: FALLBACK_CHECK_OUT,
+            default_timezone: DEFAULT_TIMEZONE,
+            task_proposal_sensitivity: sensitivity,
+            updated_at: now,
+          })
+        ).error;
+
+    if (writeErr) {
+      if (isMissingTableError(writeErr) || isMissingColumnError(writeErr)) {
+        return NextResponse.json(
+          {
+            error: 'task_proposal_sensitivity isn’t available yet. Apply the migration in Supabase.',
+            migration_pending: true,
+          },
+          { status: 503 },
+        );
+      }
+      return NextResponse.json({ error: writeErr.message }, { status: 500 });
+    }
+
+    // Return the full, refreshed settings.
+    return GET();
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Failed to update operations settings' },
+      { status: 500 },
     );
   }
 }

@@ -5,46 +5,26 @@ import { generateProposedTaskDraftFromContext } from './draftTask';
 import { notifyProposedTask } from '@/src/server/notifications/notifyProposal';
 
 // Persisted proposed tasks. The concierge triages an inbound guest message and,
-// when it implies operational work, drafts a task ONCE and stores it as a
-// pending row. The inbox surfaces it as a "proposed task" bubble; a human
-// accepts (→ createTaskService) or dismisses it. Mirrors proposedReply.ts.
-
-interface PendingProposedTask {
-  id: string;
-}
-
-/** Whether the conversation already has a pending proposal (dedup gate). */
-async function hasPendingProposedTask(conversationId: string): Promise<boolean> {
-  const { data, error } = await getSupabaseServer()
-    .from('proposed_tasks')
-    .select('id')
-    .eq('conversation_id', conversationId)
-    .eq('status', 'pending')
-    .limit(1)
-    .maybeSingle();
-  if (error) {
-    console.warn('[proposed task] pending lookup failed', { conversationId, error });
-    // Fail safe: assume one exists so we don't double-draft on a transient error.
-    return true;
-  }
-  return Boolean((data as PendingProposedTask | null)?.id);
-}
+// for each distinct issue that meets the threshold, stores a pending row. The
+// inbox surfaces each as a "proposed task" bubble; a human accepts (→
+// createTaskService) or dismisses it. Multiple tasks can come from one message.
+// Mirrors proposedReply.ts.
 
 /**
- * Generate a triage draft for a conversation and, if warranted, PERSIST it as a
- * pending proposed_tasks row + emit a notification. Returns the new proposal id
- * or null when nothing was drafted. Throws on generation/DB errors (the eager
- * hook below swallows them).
+ * Triage a conversation and PERSIST a pending proposed_tasks row for EACH
+ * distinct task the model returns, emitting a notification per task. Returns the
+ * new proposal ids (empty when nothing was drafted). Throws on generation/DB
+ * errors (the eager hook below swallows them).
  */
 export async function generateAndStoreProposedTask(
   conversationId: string,
   triggeringMessageId: string | null,
-): Promise<string | null> {
+): Promise<string[]> {
   const ctx = await getConversationContext(conversationId);
-  if (!ctx) return null;
+  if (!ctx) return [];
 
   const result = await generateProposedTaskDraftFromContext(ctx);
-  if (!result.should_draft || !result.task) return null;
+  if (result.tasks.length === 0) return [];
 
   const propertyId = ctx.conversation.property_id ?? null;
   const propertyName =
@@ -52,43 +32,38 @@ export async function generateAndStoreProposedTask(
   const guestName =
     ctx.reservation?.guest_name ?? ctx.conversation.guest_name ?? null;
 
+  const rows = result.tasks.map((task) => ({
+    conversation_id: conversationId,
+    triggering_message_id: triggeringMessageId,
+    property_id: propertyId,
+    title: task.title,
+    description: task.description,
+    priority: task.priority,
+    department_id: task.department_id,
+    status: 'pending',
+    source: 'auto',
+    reasoning: result.reasoning || null,
+  }));
+
   const { data, error } = await getSupabaseServer()
     .from('proposed_tasks')
-    .insert({
-      conversation_id: conversationId,
-      triggering_message_id: triggeringMessageId,
-      property_id: propertyId,
-      title: result.task.title,
-      description: result.task.description,
-      priority: result.task.priority,
-      department_id: result.task.department_id,
-      status: 'pending',
-      source: 'auto',
-      reasoning: result.reasoning || null,
-    })
-    .select('id')
-    .single();
+    .insert(rows)
+    .select('id, title');
+  if (error) throw new Error(error.message);
 
-  if (error) {
-    // 23505 = the partial unique index fired (a pending proposal already exists
-    // for this triggering message). Treat as already-handled.
-    if (error.code === '23505') return null;
-    throw new Error(error.message);
+  const inserted = (data ?? []) as Array<{ id: string; title: string }>;
+  for (const row of inserted) {
+    await notifyProposedTask({
+      proposedTaskId: row.id,
+      conversationId,
+      propertyId,
+      propertyName,
+      guestName,
+      title: row.title,
+    });
   }
 
-  const proposedTaskId = data?.id as string | undefined;
-  if (!proposedTaskId) return null;
-
-  await notifyProposedTask({
-    proposedTaskId,
-    conversationId,
-    propertyId,
-    propertyName,
-    guestName,
-    title: result.task.title,
-  });
-
-  return proposedTaskId;
+  return inserted.map((r) => r.id);
 }
 
 /**
@@ -119,9 +94,11 @@ export async function maybeGenerateProposedTaskForExternal(
     const latest = await getLatestSentMessage(c.id);
     // Only triage when the guest is the one awaiting action.
     if (!latest || latest.direction !== 'inbound') return;
-    // Dedup: one pending proposal per conversation — follow-ups are skipped.
-    if (await hasPendingProposedTask(c.id)) return;
 
+    // Each inbound message is triaged and can yield several tasks. Dedup is the
+    // model's job — the triage prompt sees this conversation's already-raised
+    // tasks and won't repeat them (so a follow-up about the same issue makes no
+    // new proposal, but genuinely separate issues each become a task).
     await generateAndStoreProposedTask(c.id, latest.id);
   } catch (err) {
     console.error('[proposed task] eager generation failed', {
