@@ -60,7 +60,11 @@ function MessagesChrome({ children }: { children: React.ReactNode }) {
 
   return (
     <DesktopSidebarShell>
-      <div className="glass-bg-neutral flex h-full gap-2.5 p-2.5">
+      {/* `relative` so the conversation page's task-editor panel anchors here —
+          spanning the full content row (list + conversation), making its w-1/3
+          width match the detail sheet on Bins/Tasks rather than 1/3 of just the
+          narrower conversation column. */}
+      <div className="glass-bg-neutral relative flex h-full gap-2.5 p-2.5">
         <aside className="msg-pane flex w-80 shrink-0 flex-col overflow-hidden">
           <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-3.5">
             <h1 className="text-lg font-semibold tracking-tight text-foreground">

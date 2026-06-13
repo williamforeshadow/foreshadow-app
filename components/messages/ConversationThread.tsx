@@ -70,6 +70,7 @@ export function ConversationThread({
   onProposedReplyChange,
   proposedTasks = [],
   onProposedTaskChange,
+  onOpenTaskEditor,
   proposedKnowledge = [],
   onProposedKnowledgeChange,
 }: {
@@ -91,6 +92,8 @@ export function ConversationThread({
   /** The conversation's pending proposed tasks (multiple can coexist). */
   proposedTasks?: ProposedTaskData[];
   onProposedTaskChange?: () => void;
+  /** Open the full task editor for a proposal (rendered at the page level). */
+  onOpenTaskEditor?: (proposal: ProposedTaskData) => void;
   /** The conversation's pending proposed knowledge additions. */
   proposedKnowledge?: ProposedKnowledgeData[];
   onProposedKnowledgeChange?: () => void;
@@ -240,6 +243,17 @@ export function ConversationThread({
             next.direction !== m.direction ||
             dayKey(whenOf(next)) !== dayKey(ts);
 
+          // The previous message carried one or more proposals (reply/task/
+          // knowledge) beneath it. Give this message the same breathing room
+          // above it as sits above a proposal (its mt-4), so the gap after a
+          // proposal matches the gap before it. Back-to-back proposals are
+          // unaffected — this only pads the next real message bubble.
+          const prevHadProposal =
+            !!prev &&
+            (prev.id === lastInboundId ||
+              tasksByAnchor.has(prev.id) ||
+              knowledgeByAnchor.has(prev.id));
+
           return (
             <Fragment key={m.id}>
               {newDay ? (
@@ -252,7 +266,7 @@ export function ConversationThread({
 
               <div
                 className={`flex items-end gap-2 ${outbound ? 'justify-end' : 'justify-start'} ${
-                  firstOfRun ? 'mt-2' : 'mt-0.5'
+                  prevHadProposal ? 'mt-4' : firstOfRun ? 'mt-2' : 'mt-0.5'
                 }`}
               >
                 {!outbound ? (
@@ -318,6 +332,8 @@ export function ConversationThread({
                     <ProposedTask
                       key={`proposed-task-${pt.id}`}
                       proposal={pt}
+                      propertyName={propertyName}
+                      onOpenEditor={() => onOpenTaskEditor?.(pt)}
                       onChanged={onProposedTaskChange}
                     />
                   ))
@@ -344,6 +360,8 @@ export function ConversationThread({
               <ProposedTask
                 key={`proposed-task-${pt.id}`}
                 proposal={pt}
+                propertyName={propertyName}
+                onOpenEditor={() => onOpenTaskEditor?.(pt)}
                 onChanged={onProposedTaskChange}
               />
             ))

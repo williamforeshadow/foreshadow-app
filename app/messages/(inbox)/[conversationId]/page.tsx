@@ -8,6 +8,7 @@ import { useIsMobile } from '@/lib/useIsMobile';
 import { useMessages } from '@/components/messages/MessagesProvider';
 import { ConversationThread } from '@/components/messages/ConversationThread';
 import { ConversationDetailPanel } from '@/components/messages/ConversationDetailPanel';
+import { ProposedTaskEditorOverlay } from '@/components/messages/ProposedTaskEditorOverlay';
 import type { ProposedTaskData } from '@/components/messages/ProposedTask';
 import type { ProposedKnowledgeData } from '@/components/messages/ProposedKnowledge';
 import type { ConversationRow } from '@/lib/conversations';
@@ -30,6 +31,9 @@ export default function ConversationPage() {
   const [proposedKnowledge, setProposedKnowledge] = useState<ProposedKnowledgeData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  // The proposal whose task editor is open (in-layout right-side panel). Stays
+  // open until the user closes it or opens another — not a click-away modal.
+  const [editorProposal, setEditorProposal] = useState<ProposedTaskData | null>(null);
 
   const load = useCallback(async () => {
     if (!conversationId) return;
@@ -126,10 +130,24 @@ export default function ConversationPage() {
             onProposedReplyChange={load}
             proposedTasks={proposedTasks}
             onProposedTaskChange={load}
+            onOpenTaskEditor={setEditorProposal}
             proposedKnowledge={proposedKnowledge}
             onProposedKnowledgeChange={load}
           />
         </div>
+        {editorProposal ? (
+          <ProposedTaskEditorOverlay
+            proposal={editorProposal}
+            propertyId={conversation?.property_id ?? null}
+            propertyName={conversation?.property_name ?? null}
+            onClose={() => setEditorProposal(null)}
+            onCreated={() => {
+              setEditorProposal(null);
+              load();
+              reload();
+            }}
+          />
+        ) : null}
       </MobileRouteShell>
     );
   }
@@ -153,6 +171,7 @@ export default function ConversationPage() {
           onProposedReplyChange={load}
           proposedTasks={proposedTasks}
           onProposedTaskChange={load}
+          onOpenTaskEditor={setEditorProposal}
           proposedKnowledge={proposedKnowledge}
           onProposedKnowledgeChange={load}
         />
@@ -160,6 +179,19 @@ export default function ConversationPage() {
       <aside className="msg-pane hidden w-80 shrink-0 overflow-hidden lg:block">
         <ConversationDetailPanel conversation={conversation} />
       </aside>
+      {editorProposal ? (
+        <ProposedTaskEditorOverlay
+          proposal={editorProposal}
+          propertyId={conversation?.property_id ?? null}
+          propertyName={conversation?.property_name ?? null}
+          onClose={() => setEditorProposal(null)}
+          onCreated={() => {
+            setEditorProposal(null);
+            load();
+            reload();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

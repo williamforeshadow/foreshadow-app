@@ -172,15 +172,16 @@ export async function notifyProposedTask(args: {
   propertyName?: string | null;
   title: string;
 }): Promise<void> {
-  const where = args.propertyName ? ` at ${args.propertyName}` : '';
+  const who = args.guestName ? args.guestName : 'the guest';
+  const where = args.propertyName ? ` staying at ${args.propertyName}` : '';
   await deliverConversationNotification({
     type: 'proposed_task',
     conversationId: args.conversationId,
     propertyId: args.propertyId,
     entityId: args.proposedTaskId,
     entityType: 'proposed_task',
-    title: 'Proposed task to review',
-    body: `The concierge drafted "${args.title}"${where} from a guest message.`,
+    title: `Task Proposal — ${args.title}`,
+    body: `View conversation with ${who}${where}`,
     dedupeKeyFor: (recipientId) =>
       `proposed_task:${args.proposedTaskId}:${recipientId}`,
   });
@@ -199,15 +200,15 @@ export async function notifyProposedReply(args: {
   propertyName?: string | null;
 }): Promise<void> {
   const who = args.guestName ? args.guestName : 'a guest';
-  const where = args.propertyName ? ` at ${args.propertyName}` : '';
+  const where = args.propertyName ? ` staying at ${args.propertyName}` : '';
   await deliverConversationNotification({
     type: 'proposed_reply',
     conversationId: args.conversationId,
     propertyId: args.propertyId,
     entityId: args.conversationId,
     entityType: 'conversation',
-    title: 'Proposed reply to review',
-    body: `The concierge drafted a reply to ${who}${where}.`,
+    title: `Reply Proposal — ${who}`,
+    body: `View conversation with ${who}${where}`,
     dedupeKeyFor: (recipientId) =>
       `proposed_reply:${args.conversationId}:${args.answersMessageId ?? 'none'}:${recipientId}`,
   });
@@ -224,15 +225,17 @@ export async function notifyProposedKnowledge(args: {
   propertyName?: string | null;
   summary: string;
 }): Promise<void> {
-  const where = args.propertyName ? ` at ${args.propertyName}` : '';
+  const title = args.propertyName
+    ? `Property Knowledge Proposal — ${args.propertyName}`
+    : 'Property Knowledge Proposal';
   await deliverConversationNotification({
     type: 'proposed_knowledge',
     conversationId: args.conversationId,
     propertyId: args.propertyId,
     entityId: args.proposedKnowledgeId,
     entityType: 'proposed_knowledge',
-    title: 'Proposed knowledge to review',
-    body: `The concierge suggests saving "${args.summary}"${where}.`,
+    title,
+    body: `Needs approval: ${args.summary}`,
     dedupeKeyFor: (recipientId) =>
       `proposed_knowledge:${args.proposedKnowledgeId}:${recipientId}`,
   });

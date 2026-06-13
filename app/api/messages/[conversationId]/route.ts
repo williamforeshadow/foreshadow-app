@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getCurrentAppUser } from '@/src/server/users/currentUser';
+import { taskUrl } from '@/src/lib/links';
 
 // Thread for one conversation: the conversation header + its messages (oldest
 // first), for the detail view.
@@ -44,24 +45,60 @@ export async function GET(
     return NextResponse.json({ error: msgError.message }, { status: 500 });
   }
 
-  // All pending concierge-proposed tasks for this conversation. Multiple can
-  // coexist (one per distinct issue); each renders as its own bubble, anchored
-  // to the message that triggered it. Oldest first so they read in order.
+  // Pending AND accepted concierge-proposed tasks for this conversation.
+  // Multiple can coexist (one per distinct issue); each renders anchored to the
+  // message that triggered it. Pending ones render as an editable card; accepted
+  // ones render as an "approved by … " tombstone (kept in-thread, not dropped).
+  // Dismissed proposals are excluded. Oldest first so they read in order.
   const { data: proposedTaskRows } = await supabase
     .from('proposed_tasks')
-    .select('id, title, description, priority, triggering_message_id, department_id, departments(name)')
+    .select(
+      'id, title, description, priority, triggering_message_id, department_id, departments(name), status, decided_by, decided_at, resulting_task_id',
+    )
     .eq('conversation_id', conversationId)
-    .eq('status', 'pending')
+    .in('status', ['pending', 'accepted'])
     .order('generated_at', { ascending: true });
 
-  const proposed_tasks = ((proposedTaskRows ?? []) as Array<Record<string, unknown>>).map((r) => ({
-    id: r.id as string,
-    title: (r.title as string | null) ?? '',
-    description: (r.description as string | null) ?? null,
-    priority: (r.priority as string | null) ?? 'medium',
-    triggering_message_id: (r.triggering_message_id as string | null) ?? null,
-    department_name: ((r.departments as { name: string | null } | null)?.name) ?? null,
-  }));
+  const taskRows = (proposedTaskRows ?? []) as Array<Record<string, unknown>>;
+
+  // Resolve decider display names for accepted proposals (the tombstone shows
+  // who approved it). One batched lookup keyed by the distinct decider ids.
+  const deciderIds = Array.from(
+    new Set(
+      taskRows
+        .map((r) => r.decided_by as string | null)
+        .filter((v): v is string => !!v),
+    ),
+  );
+  const deciderNames = new Map<string, string>();
+  if (deciderIds.length) {
+    const { data: deciders } = await supabase
+      .from('users')
+      .select('id, name')
+      .in('id', deciderIds);
+    for (const u of (deciders ?? []) as Array<{ id: string; name: string | null }>) {
+      deciderNames.set(u.id, u.name ?? '');
+    }
+  }
+
+  const proposed_tasks = taskRows.map((r) => {
+    const resultingTaskId = (r.resulting_task_id as string | null) ?? null;
+    const decidedBy = (r.decided_by as string | null) ?? null;
+    return {
+      id: r.id as string,
+      title: (r.title as string | null) ?? '',
+      description: (r.description as string | null) ?? null,
+      priority: (r.priority as string | null) ?? 'medium',
+      triggering_message_id: (r.triggering_message_id as string | null) ?? null,
+      department_id: (r.department_id as string | null) ?? null,
+      department_name: ((r.departments as { name: string | null } | null)?.name) ?? null,
+      status: (r.status as string | null) ?? 'pending',
+      decided_by_name: decidedBy ? deciderNames.get(decidedBy) ?? null : null,
+      decided_at: (r.decided_at as string | null) ?? null,
+      resulting_task_id: resultingTaskId,
+      task_url: resultingTaskId ? taskUrl(resultingTaskId) : null,
+    };
+  });
 
   // Pending concierge-proposed knowledge additions, oldest first.
   const { data: knowledgeRows } = await supabase

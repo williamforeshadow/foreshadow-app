@@ -12,8 +12,34 @@ import { taskUrl } from '@/src/lib/links';
 // confirmation, so we skip the agent's token protocol and call the same
 // createTaskService commit path directly, attributing the new task to the
 // clicking user. Dismissing it (DELETE) just records the decision.
+//
+// Accept has two entry points that share this route:
+//   - Quick-create: POST with no body → create from the stored proposal as-is.
+//   - Edited create: POST with a JSON body of edited fields (the inbox opens
+//     the same task editor used elsewhere, pre-filled from the proposal) →
+//     the edits are merged over the stored proposal before the commit. The
+//     proposal is still marked accepted/decided regardless of edits.
 
 export const maxDuration = 60;
+
+// Optional edited fields sent by the inbox task editor. Any omitted field
+// falls back to the stored proposal. Empty strings from form inputs are
+// coerced to null so they pass createTask's uuid/date validators.
+interface AcceptEdits {
+  title?: string;
+  description?: unknown; // Tiptap JSON doc or plain string
+  priority?: string;
+  department_id?: string | null;
+  property_id?: string | null;
+  template_id?: string | null;
+  scheduled_date?: string | null;
+  scheduled_time?: string | null;
+  status?: string;
+  assigned_user_ids?: string[];
+}
+
+const blankToNull = (v: string | null | undefined): string | null =>
+  v == null || v === '' ? null : v;
 
 interface ProposedTaskRow {
   id: string;
@@ -71,6 +97,15 @@ export async function POST(
   const { id } = await context.params;
   const actorId = getActorUserIdFromRequest(request) ?? user.id;
 
+  // Optional edited fields from the inbox task editor. No body → quick-create.
+  let edits: AcceptEdits = {};
+  try {
+    const raw = await request.json();
+    if (raw && typeof raw === 'object') edits = raw as AcceptEdits;
+  } catch {
+    // No/!JSON body — accept the stored proposal verbatim.
+  }
+
   let proposal: ProposedTaskRow | null;
   try {
     proposal = await loadProposal(id);
@@ -98,14 +133,37 @@ export async function POST(
     );
   }
 
+  // Merge any editor edits over the stored proposal. Each field falls back to
+  // the proposal when the editor didn't send it; blanks coerce to null.
   const result = await createTaskService(
     {
-      title: proposal.title,
-      description: proposal.description,
-      priority: proposal.priority as 'urgent' | 'high' | 'medium' | 'low',
-      property_id: proposal.property_id,
-      department_id: proposal.department_id,
-      assigned_user_ids: proposal.suggested_assignee_ids ?? [],
+      title: edits.title ?? proposal.title,
+      description:
+        edits.description !== undefined ? edits.description : proposal.description,
+      priority: (edits.priority ?? proposal.priority) as
+        | 'urgent'
+        | 'high'
+        | 'medium'
+        | 'low',
+      status: edits.status as
+        | 'contingent'
+        | 'not_started'
+        | 'in_progress'
+        | 'paused'
+        | 'complete'
+        | undefined,
+      property_id:
+        edits.property_id !== undefined
+          ? blankToNull(edits.property_id)
+          : proposal.property_id,
+      department_id:
+        edits.department_id !== undefined
+          ? blankToNull(edits.department_id)
+          : proposal.department_id,
+      template_id: blankToNull(edits.template_id),
+      scheduled_date: blankToNull(edits.scheduled_date),
+      scheduled_time: blankToNull(edits.scheduled_time),
+      assigned_user_ids: edits.assigned_user_ids ?? proposal.suggested_assignee_ids ?? [],
     },
     { actor: { user_id: actorId, name: user.name } },
   );
