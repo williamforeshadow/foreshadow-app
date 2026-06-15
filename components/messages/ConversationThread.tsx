@@ -58,6 +58,7 @@ export function ConversationThread({
   conversationId,
   guestName,
   propertyName,
+  propertyId,
   channel,
   loading,
   error,
@@ -78,6 +79,7 @@ export function ConversationThread({
   conversationId?: string;
   guestName?: string | null;
   propertyName?: string | null;
+  propertyId?: string | null;
   channel?: string | null;
   loading: boolean;
   error?: boolean;
@@ -344,6 +346,7 @@ export function ConversationThread({
                     <ProposedKnowledge
                       key={`proposed-knowledge-${pk.id}`}
                       proposal={pk}
+                      propertyId={propertyId}
                       onChanged={onProposedKnowledgeChange}
                     />
                   ))
@@ -371,6 +374,7 @@ export function ConversationThread({
               <ProposedKnowledge
                 key={`proposed-knowledge-${pk.id}`}
                 proposal={pk}
+                propertyId={propertyId}
                 onChanged={onProposedKnowledgeChange}
               />
             ))

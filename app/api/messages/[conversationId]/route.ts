@@ -100,20 +100,49 @@ export async function GET(
     };
   });
 
-  // Pending concierge-proposed knowledge additions, oldest first.
+  // Pending AND accepted concierge-proposed knowledge additions. Pending ones
+  // render as an editable bubble (attribute or room note); accepted ones render
+  // as an "approved by … " tombstone. Dismissed are excluded. Oldest first.
   const { data: knowledgeRows } = await supabase
     .from('proposed_knowledge')
-    .select('id, summary, guest_visible, triggering_message_id')
+    .select(
+      'id, summary, guest_visible, triggering_message_id, target, status, decided_by, decided_at, resulting_resource_type, resulting_resource_id',
+    )
     .eq('conversation_id', conversationId)
-    .eq('status', 'pending')
+    .in('status', ['pending', 'accepted'])
     .order('generated_at', { ascending: true });
 
-  const proposed_knowledge = ((knowledgeRows ?? []) as Array<Record<string, unknown>>).map((r) => ({
-    id: r.id as string,
-    summary: (r.summary as string | null) ?? '',
-    guest_visible: Boolean(r.guest_visible),
-    triggering_message_id: (r.triggering_message_id as string | null) ?? null,
-  }));
+  const knowledgeRowsArr = (knowledgeRows ?? []) as Array<Record<string, unknown>>;
+
+  // Resolve any knowledge-decider names not already looked up for tasks.
+  const knowledgeDeciderIds = knowledgeRowsArr
+    .map((r) => r.decided_by as string | null)
+    .filter((v): v is string => !!v && !deciderNames.has(v));
+  if (knowledgeDeciderIds.length) {
+    const { data: kDeciders } = await supabase
+      .from('users')
+      .select('id, name')
+      .in('id', Array.from(new Set(knowledgeDeciderIds)));
+    for (const u of (kDeciders ?? []) as Array<{ id: string; name: string | null }>) {
+      deciderNames.set(u.id, u.name ?? '');
+    }
+  }
+
+  const proposed_knowledge = knowledgeRowsArr.map((r) => {
+    const decidedBy = (r.decided_by as string | null) ?? null;
+    return {
+      id: r.id as string,
+      summary: (r.summary as string | null) ?? '',
+      guest_visible: Boolean(r.guest_visible),
+      triggering_message_id: (r.triggering_message_id as string | null) ?? null,
+      target: (r.target as Record<string, unknown> | null) ?? null,
+      status: (r.status as string | null) ?? 'pending',
+      decided_by_name: decidedBy ? deciderNames.get(decidedBy) ?? null : null,
+      decided_at: (r.decided_at as string | null) ?? null,
+      resulting_resource_type: (r.resulting_resource_type as string | null) ?? null,
+      resulting_resource_id: (r.resulting_resource_id as string | null) ?? null,
+    };
+  });
 
   return NextResponse.json({
     conversation,

@@ -142,6 +142,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const guestVisible =
     typeof body.guest_visible === 'boolean' ? body.guest_visible : proposal.guest_visible;
 
+  // Optional inline edits from the proposal bubble, merged over the stored
+  // target. Omitted fields keep the concierge's draft.
+  const editTitle = typeof body.title === 'string' ? body.title.trim() : undefined;
+  const editBody = typeof body.body === 'string' ? body.body : undefined;
+  const editNotes = typeof body.notes === 'string' ? body.notes : undefined;
+  const editTags = Array.isArray(body.tags) ? normalizeTags(body.tags) : undefined;
+
   if (!proposal.property_id) {
     return NextResponse.json(
       { error: 'This conversation has no linked property, so the proposal cannot be saved.' },
@@ -158,8 +165,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   try {
     if (target.kind === 'room_note') {
       const room = await ensureRoom(supabase, propertyId, target.room, actorId);
+      const notesText =
+        editNotes != null && editNotes.trim() !== '' ? editNotes.trim() : target.notes;
       // Append to any existing room notes rather than overwrite.
-      const nextNotes = room.notes ? `${room.notes}\n${target.notes}` : target.notes;
+      const nextNotes = room.notes ? `${room.notes}\n${notesText}` : notesText;
       const { error } = await supabase
         .from('property_rooms')
         .update({ notes: nextNotes, updated_by_user_id: actorId, updated_at: new Date().toISOString() })
@@ -173,15 +182,23 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     } else {
       // attribute
       const room = await ensureRoom(supabase, propertyId, target.room, actorId);
+      const attrTitle = editTitle && editTitle !== '' ? editTitle : target.attribute.title;
+      const attrBody =
+        editBody !== undefined
+          ? editBody.trim() === ''
+            ? null
+            : editBody.trim()
+          : target.attribute.body;
+      const attrTags = editTags !== undefined ? editTags : normalizeTags(target.attribute.tags);
       const { data: attribute, error } = await supabase
         .from('property_attributes')
         .insert({
           property_id: propertyId,
           room_id: room.id,
           scope: room.scope,
-          tags: normalizeTags(target.attribute.tags),
-          title: target.attribute.title,
-          body: target.attribute.body,
+          tags: attrTags,
+          title: attrTitle,
+          body: attrBody,
           sort_order: 0,
           created_by_user_id: actorId,
           updated_by_user_id: actorId,

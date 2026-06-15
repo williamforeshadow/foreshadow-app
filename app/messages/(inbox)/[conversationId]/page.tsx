@@ -118,6 +118,7 @@ export default function ConversationPage() {
             conversationId={conversationId}
             guestName={conversation?.guest_name}
             propertyName={conversation?.property_name}
+            propertyId={conversation?.property_id}
             channel={conversation?.channel}
             loading={loading}
             error={error}
@@ -160,6 +161,7 @@ export default function ConversationPage() {
           conversationId={conversationId}
           guestName={conversation?.guest_name}
           propertyName={conversation?.property_name}
+          propertyId={conversation?.property_id}
           channel={conversation?.channel}
           loading={loading}
           error={error}

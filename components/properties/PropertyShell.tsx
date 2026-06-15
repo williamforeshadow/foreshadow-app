@@ -214,7 +214,7 @@ function ShellBody({
           {activePrimaryId === 'knowledge' && (
             <nav
               aria-label="Knowledge sub-sections"
-              className="flex items-center gap-1.5 overflow-x-auto -mx-5 sm:-mx-8 px-5 sm:px-8 pt-3 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              className="flex flex-wrap items-center gap-1.5 -mx-5 sm:-mx-8 px-5 sm:px-8 pt-3 pb-3"
             >
               {KNOWLEDGE_PILLS.map((pill) => {
                 const href = pill.slug
