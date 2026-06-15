@@ -47,8 +47,8 @@ export async function POST(request: NextRequest) {
         text: typeof m.text === 'string' ? m.text : '',
       }));
 
-    const { reply } = await runConciergeTest({ propertyId, guestName, scenario, messages });
-    return NextResponse.json({ reply });
+    const result = await runConciergeTest({ propertyId, guestName, scenario, messages });
+    return NextResponse.json(result);
   } catch (err) {
     console.error('[concierge test] generation failed:', err);
     const message = err instanceof Error ? err.message : 'Failed to generate a reply';

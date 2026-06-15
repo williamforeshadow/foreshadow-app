@@ -87,17 +87,28 @@ function formatDecidedAt(iso: string | null | undefined): string {
 export function ProposedTask({
   proposal,
   propertyName = null,
+  align = 'end',
   onOpenEditor,
   onChanged,
+  onAccept,
+  onDismiss,
 }: {
   proposal: ProposedTaskData;
   propertyName?: string | null;
+  /** Which side the bubble sits on. 'end' (right) in the inbox; 'start' (left)
+   *  in the concierge test console, where the AI sits on the left. */
+  align?: 'start' | 'end';
   /** Open the full task editor (rendered at the page level, in-layout). */
   onOpenEditor?: () => void;
   onChanged?: () => void;
+  /** Test-mode override: replaces the persisted accept (no DB write). */
+  onAccept?: () => void | Promise<void>;
+  /** Test-mode override: replaces the persisted dismiss (no DB write). */
+  onDismiss?: () => void | Promise<void>;
 }) {
   const [busy, setBusy] = useState<'accept' | 'dismiss' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const justify = align === 'start' ? 'justify-start' : 'justify-end';
 
   // Quick-create: accept the proposal as-is (no edits). The body is omitted so
   // the endpoint creates straight from the stored proposal.
@@ -105,6 +116,10 @@ export function ProposedTask({
     setBusy('accept');
     setError(null);
     try {
+      if (onAccept) {
+        await onAccept();
+        return;
+      }
       const res = await apiFetch(`/api/proposed-tasks/${proposal.id}`, {
         method: 'POST',
       });
@@ -119,12 +134,16 @@ export function ProposedTask({
     } finally {
       setBusy(null);
     }
-  }, [proposal.id, onChanged]);
+  }, [proposal.id, onChanged, onAccept]);
 
   const dismiss = useCallback(async () => {
     setBusy('dismiss');
     setError(null);
     try {
+      if (onDismiss) {
+        await onDismiss();
+        return;
+      }
       const res = await apiFetch(`/api/proposed-tasks/${proposal.id}`, {
         method: 'DELETE',
       });
@@ -139,14 +158,14 @@ export function ProposedTask({
     } finally {
       setBusy(null);
     }
-  }, [proposal.id, onChanged]);
+  }, [proposal.id, onChanged, onDismiss]);
 
   // Accepted → compact "approved by … " tombstone, kept in the thread.
   if (proposal.status === 'accepted') {
     const when = formatDecidedAt(proposal.decided_at);
     const who = proposal.decided_by_name || 'someone';
     return (
-      <div className="mt-4 flex justify-end">
+      <div className={`mt-4 flex ${justify}`}>
         <div className="msg-in flex w-full max-w-[20rem] items-center gap-2 rounded-2xl border border-[var(--accent-3)]/20 px-3 py-2 text-[12px] text-muted-foreground dark:border-[var(--accent-1)]/20">
           <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent-3)] dark:text-[var(--accent-1)]" aria-hidden />
           <span className="min-w-0 flex-1">
@@ -169,7 +188,7 @@ export function ProposedTask({
   }
 
   return (
-    <div className="mt-4 flex justify-end">
+    <div className={`mt-4 flex ${justify}`}>
       <div className="msg-in flex w-full max-w-[20rem] flex-col gap-2 rounded-2xl border border-[var(--accent-3)]/30 p-2.5 dark:border-[var(--accent-1)]/25">
         {/* Provenance label — marks this as a concierge draft, not a live task.
             Uses the same Tasks icon as the app sidebar for consistency. */}
@@ -177,7 +196,7 @@ export function ProposedTask({
           <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
           </svg>
-          <span>Proposed task</span>
+          <span>Proposed Task</span>
         </div>
 
         {/* The proposal previews as the same task card used everywhere else.

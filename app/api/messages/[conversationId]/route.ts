@@ -100,16 +100,17 @@ export async function GET(
     };
   });
 
-  // Pending AND accepted concierge-proposed knowledge additions. Pending ones
-  // render as an editable bubble (attribute or room note); accepted ones render
-  // as an "approved by … " tombstone. Dismissed are excluded. Oldest first.
+  // Pending, accepted, AND dismissed concierge-proposed knowledge additions.
+  // Pending → editable bubble (attribute or room/area note); accepted → an
+  // "approved by … " tombstone; dismissed → a "dismissed by … " tombstone (kept
+  // in-thread as a record, not dropped). Oldest first.
   const { data: knowledgeRows } = await supabase
     .from('proposed_knowledge')
     .select(
       'id, summary, guest_visible, triggering_message_id, target, status, decided_by, decided_at, resulting_resource_type, resulting_resource_id',
     )
     .eq('conversation_id', conversationId)
-    .in('status', ['pending', 'accepted'])
+    .in('status', ['pending', 'accepted', 'dismissed'])
     .order('generated_at', { ascending: true });
 
   const knowledgeRowsArr = (knowledgeRows ?? []) as Array<Record<string, unknown>>;

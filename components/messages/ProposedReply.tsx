@@ -86,13 +86,13 @@ export function ProposedReply({
 
   return (
     <div className="mt-4 flex justify-end">
-      <div className="msg-in w-full max-w-[88%] overflow-hidden rounded-2xl border border-[var(--accent-3)]/30 bg-[var(--accent-3)]/[0.06] dark:border-[var(--accent-1)]/25 dark:bg-[var(--accent-1)]/[0.08]">
-        <div className="flex items-center gap-1.5 px-3.5 pt-2.5 text-[11px] font-medium text-[var(--accent-3)] dark:text-[var(--accent-1)]">
+      <div className="msg-in w-full max-w-[88%] overflow-hidden rounded-2xl border border-amber-500/35 dark:border-amber-400/30">
+        <div className="flex items-center gap-1.5 px-3.5 pt-2.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
           <Sparkles className="h-3 w-3" aria-hidden />
-          <span>Proposed reply</span>
+          <span>Proposed Reply</span>
           <span className="font-normal opacity-70">· not sent</span>
           {source === 'assistant' ? (
-            <span className="rounded-full bg-[var(--accent-3)]/10 px-1.5 text-[10px] font-medium dark:bg-[var(--accent-1)]/15">
+            <span className="rounded-full bg-amber-500/15 px-1.5 text-[10px] font-medium dark:bg-amber-400/15">
               via assistant
             </span>
           ) : null}
@@ -102,14 +102,14 @@ export function ProposedReply({
             disabled={loading}
             aria-label="Regenerate proposed reply"
             title="Regenerate"
-            className="ml-auto inline-flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-[var(--accent-3)]/10 disabled:opacity-40 dark:hover:bg-[var(--accent-1)]/15"
+            className="ml-auto inline-flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-amber-500/15 disabled:opacity-40 dark:hover:bg-amber-400/15"
           >
             <RotateCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} aria-hidden />
           </button>
         </div>
 
         {stale && !loading ? (
-          <p className="mx-3.5 mt-2 rounded-md bg-[var(--accent-bg-soft)] px-2.5 py-1.5 text-[11px] text-[var(--accent-2)] dark:bg-[var(--accent-bg-soft-dark)] dark:text-[var(--accent-1)]">
+          <p className="mx-3.5 mt-2 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-700 dark:bg-amber-400/10 dark:text-amber-300">
             A newer guest message has arrived since this draft — regenerate to refresh it.
           </p>
         ) : null}
@@ -122,7 +122,7 @@ export function ProposedReply({
             </div>
           ) : error ? (
             <div className="flex items-start gap-2 text-sm text-muted-foreground">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent-3)] dark:text-[var(--accent-1)]" aria-hidden />
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
               <span>{error} Use ↻ to try again.</span>
             </div>
           ) : (
@@ -143,7 +143,7 @@ export function ProposedReply({
             <button
               type="button"
               onClick={() => onEdit(draft)}
-              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-[var(--accent-3)]/10 dark:hover:bg-[var(--accent-1)]/15"
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-amber-500/15 dark:hover:bg-amber-400/15"
             >
               <Pencil className="h-3.5 w-3.5" aria-hidden />
               Edit
@@ -151,7 +151,7 @@ export function ProposedReply({
             <button
               type="button"
               onClick={handleSend}
-              className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-3)] px-3.5 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity hover:opacity-90"
+              className="inline-flex items-center gap-1.5 rounded-full bg-amber-500 px-3.5 py-1.5 text-xs font-medium text-amber-950 shadow-sm transition-opacity hover:opacity-90"
             >
               <SendHorizontal className="h-3.5 w-3.5" aria-hidden />
               Send

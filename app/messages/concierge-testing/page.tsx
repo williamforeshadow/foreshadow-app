@@ -1,18 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import {
-  ArrowLeft,
-  FlaskConical,
   SendHorizontal,
   Loader2,
   RotateCcw,
+  ChevronDown,
+  Home,
+  CalendarClock,
 } from 'lucide-react';
 import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -20,26 +19,43 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ProposedTask, type ProposedTaskData } from '@/components/messages/ProposedTask';
+import { ProposedKnowledge, type ProposedKnowledgeData } from '@/components/messages/ProposedKnowledge';
+import { cn } from '@/lib/utils';
 
 interface PropertyOption {
   id: string;
   name: string;
 }
 
-interface TestTurn {
+// A back-and-forth turn sent to the test API (a guest message or a prior
+// concierge reply). Notes and proposals are NOT turns — only real messages are.
+interface ConversationTurn {
   role: 'guest' | 'host';
   text: string;
 }
 
+// Items rendered in the test transcript. 'guest'/'concierge' are real messages;
+// 'note' explains a gated-out reply; 'task'/'knowledge' are DUMMY proposals
+// rendered through the real inbox bubbles (nothing is persisted).
+type TranscriptItem =
+  | { kind: 'guest'; id: string; text: string }
+  | { kind: 'concierge'; id: string; text: string }
+  | { kind: 'note'; id: string; text: string }
+  | { kind: 'task'; id: string; data: ProposedTaskData }
+  | { kind: 'knowledge'; id: string; data: ProposedKnowledgeData };
+
 type TestScenario = 'checked_in' | 'upcoming' | 'past' | 'inquiry';
 
-const SCENARIO_OPTIONS: { value: TestScenario; label: string }[] = [
-  { value: 'checked_in', label: 'Currently checked in' },
-  { value: 'upcoming', label: 'Upcoming reservation' },
-  { value: 'past', label: 'Past stay (checked out)' },
-  { value: 'inquiry', label: 'Inquiry (not booked)' },
+// `short` is what the inline composer trigger shows; `label` is the full
+// dropdown option. Keeping the trigger terse is what keeps the bar minimal.
+const SCENARIO_OPTIONS: { value: TestScenario; label: string; short: string }[] = [
+  { value: 'checked_in', label: 'Currently checked in', short: 'Checked in' },
+  { value: 'upcoming', label: 'Upcoming reservation', short: 'Upcoming' },
+  { value: 'past', label: 'Past stay (checked out)', short: 'Past stay' },
+  { value: 'inquiry', label: 'Inquiry (not booked)', short: 'Inquiry' },
 ];
 
 export default function ConciergeTestingPage() {
@@ -70,47 +86,27 @@ export default function ConciergeTestingPage() {
     };
   }, []);
 
-  const content = (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-6">
-      <header className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-bg-soft)] text-[var(--accent-3)]">
-          <FlaskConical className="h-5 w-5" aria-hidden />
-        </div>
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold tracking-tight text-foreground">Concierge Testing</h1>
-          <p className="text-sm text-muted-foreground">
-            Chat as a guest and see exactly how the concierge would reply — without sending anything.
-          </p>
-        </div>
-      </header>
-
-      <TestConsole properties={properties} loadingProperties={loading} />
-    </div>
-  );
+  const console_ = <TestConsole properties={properties} loadingProperties={loading} />;
 
   return isMobile ? (
     <MobileRouteShell backHref="/messages" title="Concierge Testing">
-      {content}
+      {console_}
     </MobileRouteShell>
   ) : (
     <DesktopSidebarShell>
       <div className="glass-bg-neutral flex h-full p-2.5">
         <div className="msg-pane flex min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="msg-divider shrink-0 border-b px-4 py-2.5">
-            <Link
-              href="/messages"
-              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <ArrowLeft className="h-4 w-4" aria-hidden />
-              Back to Messages
-            </Link>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar">{content}</div>
+          {console_}
         </div>
       </div>
     </DesktopSidebarShell>
   );
 }
+
+// Low-chrome inline trigger shared by every control in the composer bar, so the
+// Property select, Guest-status select, and Guest popover read as one family.
+const TRIGGER_CLASS =
+  'inline-flex h-8 items-center gap-1.5 rounded-full border-0 bg-transparent px-2.5 text-[13px] font-medium text-muted-foreground shadow-none outline-none transition-colors hover:bg-black/[0.05] hover:text-foreground data-[state=open]:bg-black/[0.05] data-[state=open]:text-foreground focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] dark:hover:bg-white/[0.06] dark:data-[state=open]:bg-white/[0.06] dark:focus-visible:ring-[var(--accent-ring-dark)]';
 
 function TestConsole({
   properties,
@@ -122,46 +118,105 @@ function TestConsole({
   const [propertyId, setPropertyId] = useState<string>('');
   const [guestName, setGuestName] = useState<string>('');
   const [scenario, setScenario] = useState<TestScenario>('checked_in');
-  const [turns, setTurns] = useState<TestTurn[]>([]);
+  const [items, setItems] = useState<TranscriptItem[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Monotonic id source for transcript items (stable React keys across turns;
+  // the server reuses ids like "test-task-0" every turn, so we mint our own).
+  const idSeq = useRef(0);
+  const mintId = () => `c${idSeq.current++}`;
 
   const ready = propertyId.length > 0;
+  const started = items.length > 0;
+  const propertyName = properties.find((p) => p.id === propertyId)?.name ?? null;
+  const scenarioShort = SCENARIO_OPTIONS.find((o) => o.value === scenario)?.short ?? '';
 
   // Changing the property or scenario changes the test identity mid-thread,
   // which would make an in-progress conversation incoherent — so reset it.
   const changeProperty = (v: string) => {
     setPropertyId(v);
-    setTurns([]);
+    setItems([]);
     setError(null);
   };
   const changeScenario = (v: TestScenario) => {
     setScenario(v);
-    setTurns([]);
+    setItems([]);
     setError(null);
   };
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [turns, sending]);
+  }, [items, sending]);
 
   const reset = () => {
-    setTurns([]);
+    setItems([]);
     setInput('');
     setError(null);
   };
 
+  // Dummy accept: flip the proposal to its in-thread "approved" tombstone — the
+  // same UI a real accept produces, minus the database write.
+  const acceptItem = useCallback((id: string) => {
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.id !== id) return it;
+        const decided = {
+          status: 'accepted' as const,
+          decided_by_name: 'You',
+          decided_at: new Date().toISOString(),
+        };
+        if (it.kind === 'task') return { ...it, data: { ...it.data, ...decided } };
+        if (it.kind === 'knowledge') return { ...it, data: { ...it.data, ...decided } };
+        return it;
+      }),
+    );
+  }, []);
+
+  // Dummy dismiss: knowledge flips to a "dismissed by …" tombstone (mirroring
+  // the inbox, which keeps a record); tasks just drop from the transcript.
+  const dismissItem = useCallback((id: string) => {
+    setItems((prev) =>
+      prev.flatMap((it) => {
+        if (it.id !== id) return [it];
+        if (it.kind === 'knowledge') {
+          return [
+            {
+              ...it,
+              data: {
+                ...it.data,
+                status: 'dismissed' as const,
+                decided_by_name: 'You',
+                decided_at: new Date().toISOString(),
+              },
+            },
+          ];
+        }
+        return [];
+      }),
+    );
+  }, []);
+
   const send = useCallback(async () => {
     const text = input.trim();
     if (!text || !ready || sending) return;
-    const nextTurns: TestTurn[] = [...turns, { role: 'guest', text }];
-    setTurns(nextTurns);
+
+    setItems((prev) => [...prev, { kind: 'guest', id: mintId(), text }]);
     setInput('');
     setError(null);
     setSending(true);
+
+    // The conversation turns the API sees: prior real messages + this one.
+    const priorTurns: ConversationTurn[] = items
+      .filter(
+        (it): it is Extract<TranscriptItem, { kind: 'guest' | 'concierge' }> =>
+          it.kind === 'guest' || it.kind === 'concierge',
+      )
+      .map((it) => ({ role: it.kind === 'guest' ? 'guest' : 'host', text: it.text }));
+    const turns: ConversationTurn[] = [...priorTurns, { role: 'guest', text }];
+
     try {
       const res = await fetch('/api/concierge-training/test', {
         method: 'POST',
@@ -170,18 +225,56 @@ function TestConsole({
           property_id: propertyId,
           guest_name: guestName.trim(),
           scenario,
-          messages: nextTurns.map((t) => ({ role: t.role, text: t.text })),
+          messages: turns,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Failed to generate a reply');
-      setTurns((prev) => [...prev, { role: 'host', text: typeof data.reply === 'string' ? data.reply : '' }]);
+
+      const appended: TranscriptItem[] = [];
+
+      // Reply — or a note when the gate / master switch suppressed it.
+      const reply = typeof data.reply === 'string' ? data.reply : '';
+      if (data.warranted && reply) {
+        appended.push({ kind: 'concierge', id: mintId(), text: reply });
+      } else {
+        appended.push({
+          kind: 'note',
+          id: mintId(),
+          text:
+            data.replyEnabled === false
+              ? 'Autonomous replies are off — the concierge didn’t draft one.'
+              : 'The concierge judged no reply was needed at the current sensitivity.',
+        });
+      }
+
+      // Dummy task proposals (rendered through the real inbox bubble).
+      for (const t of Array.isArray(data.tasks) ? data.tasks : []) {
+        const id = mintId();
+        appended.push({
+          kind: 'task',
+          id,
+          data: { ...(t as ProposedTaskData), id, triggering_message_id: null },
+        });
+      }
+
+      // Dummy knowledge proposals.
+      for (const k of Array.isArray(data.knowledge) ? data.knowledge : []) {
+        const id = mintId();
+        appended.push({
+          kind: 'knowledge',
+          id,
+          data: { ...(k as ProposedKnowledgeData), id, triggering_message_id: null },
+        });
+      }
+
+      setItems((prev) => [...prev, ...appended]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate a reply');
     } finally {
       setSending(false);
     }
-  }, [input, ready, sending, turns, propertyId, guestName, scenario]);
+  }, [input, ready, sending, items, propertyId, guestName, scenario]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -190,127 +283,216 @@ function TestConsole({
     }
   };
 
-  return (
-    <div className="flex flex-col gap-3">
-      {/* Test identity controls */}
-      <div className="msg-well flex flex-wrap items-end gap-3 rounded-xl p-3">
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-xs">Property</Label>
-          <Select value={propertyId} onValueChange={changeProperty}>
-            <SelectTrigger className="w-[200px]" disabled={loadingProperties}>
-              <SelectValue placeholder={loadingProperties ? 'Loading…' : 'Select a property'} />
-            </SelectTrigger>
-            <SelectContent>
-              {properties.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-xs">Guest status</Label>
-          <Select value={scenario} onValueChange={(v) => changeScenario(v as TestScenario)}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SCENARIO_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="test-guest" className="text-xs">Guest name</Label>
-          <Input
-            id="test-guest"
-            value={guestName}
-            onChange={(e) => setGuestName(e.target.value)}
-            placeholder="e.g. Jordan"
-            className="w-[150px]"
-          />
-        </div>
-        {turns.length > 0 && (
-          <Button variant="outline" size="sm" onClick={reset} className="ml-auto rounded-full">
-            <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-            New conversation
-          </Button>
-        )}
-      </div>
+  // ---- The composer (identical in the hero + docked states) --------------
+  const composer = (
+    <div className="rounded-2xl border border-black/[0.08] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)] transition-[border-color,box-shadow] focus-within:border-[var(--accent-3)] focus-within:ring-2 focus-within:ring-[var(--accent-ring)] dark:border-white/[0.09] dark:bg-card dark:focus-within:ring-[var(--accent-ring-dark)]">
+      <textarea
+        rows={started ? 1 : 2}
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={handleKeyDown}
+        disabled={!ready || sending}
+        placeholder={ready ? 'Message the concierge as a guest…' : 'Select a property to start'}
+        className="block max-h-40 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
+      />
+      <div className="flex flex-wrap items-center gap-1 px-2 pb-2 pt-1">
+        {/* Identity controls live in the hero only. Once a conversation starts
+            they'd change the test mid-thread, so we hide them — Reset returns to
+            the hero to change them. */}
+        {!started && (
+          <>
+        {/* Property — the required action; tinted with the signal accent until chosen. */}
+        <Select value={propertyId} onValueChange={changeProperty}>
+          <SelectTrigger
+            size="sm"
+            aria-label="Property"
+            disabled={loadingProperties}
+            className={cn(
+              TRIGGER_CLASS,
+              !ready &&
+                'text-[var(--accent-3)] hover:text-[var(--accent-3)] dark:text-[var(--accent-1)] dark:hover:text-[var(--accent-1)]',
+            )}
+          >
+            <Home className="size-3.5" />
+            <span className="max-w-[10rem] truncate">
+              {loadingProperties ? 'Loading…' : propertyName ?? 'Select property'}
+            </span>
+          </SelectTrigger>
+          <SelectContent align="start" side="bottom" sideOffset={6} avoidCollisions={false}>
+            {properties.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-      <p className="text-xs text-muted-foreground">
-        Messages run through the live concierge exactly as a real guest at this property would — the AI
-        doesn’t know it’s a test. Nothing here is saved or sent.
-      </p>
+        {/* Guest status (scenario) */}
+        <Select value={scenario} onValueChange={(v) => changeScenario(v as TestScenario)}>
+          <SelectTrigger size="sm" aria-label="Guest status" className={TRIGGER_CLASS}>
+            <CalendarClock className="size-3.5" />
+            <span>{scenarioShort}</span>
+          </SelectTrigger>
+          <SelectContent align="start">
+            {SCENARIO_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-      {/* Transcript */}
-      <div
-        ref={scrollRef}
-        className="msg-well flex min-h-[280px] flex-col gap-3 overflow-y-auto rounded-xl p-4 overlay-scrollbar"
-      >
-        {turns.length === 0 && !sending ? (
-          <div className="m-auto max-w-sm text-center text-sm text-muted-foreground">
-            {ready
-              ? 'Type a guest message below to see how the concierge replies.'
-              : 'Select a property to start testing.'}
-          </div>
-        ) : (
-          turns.map((t, i) =>
-            t.role === 'guest' ? (
-              <div key={i} className="msg-in flex justify-end">
-                <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-[var(--accent-3)] px-3.5 py-2 text-sm text-white">
-                  <p className="whitespace-pre-wrap break-words">{t.text}</p>
-                </div>
-              </div>
-            ) : (
-              <div key={i} className="msg-in flex flex-col items-start">
-                <span className="mb-0.5 ml-1 text-[11px] font-medium text-muted-foreground">Concierge</span>
-                <div className="max-w-[80%] rounded-2xl rounded-bl-sm bg-white/85 px-3.5 py-2 text-sm text-foreground ring-1 ring-black/[0.05] dark:bg-white/[0.07] dark:ring-white/[0.06]">
-                  <p className="whitespace-pre-wrap break-words">{t.text}</p>
-                </div>
-              </div>
-            ),
-          )
-        )}
-        {sending && (
-          <div className="msg-in flex flex-col items-start">
-            <span className="mb-0.5 ml-1 text-[11px] font-medium text-muted-foreground">Concierge</span>
-            <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm bg-white/85 px-3.5 py-2 text-sm text-muted-foreground ring-1 ring-black/[0.05] dark:bg-white/[0.07] dark:ring-white/[0.06]">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Thinking…
+        {/* Guest identity (name) */}
+        <Popover>
+          <PopoverTrigger className={TRIGGER_CLASS} aria-label="Guest name">
+            <span
+              className="size-3 rounded-full bg-gradient-to-br from-[var(--accent-1)] to-[var(--accent-3)]"
+              aria-hidden
+            />
+            <span className="max-w-[8rem] truncate">{guestName.trim() || 'Guest'}</span>
+            <ChevronDown className="size-3.5 opacity-50" aria-hidden />
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-64">
+            <div className="space-y-2">
+              <Label htmlFor="test-guest" className="text-xs">
+                Guest name
+              </Label>
+              <Input
+                id="test-guest"
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+                placeholder="e.g. Jordan"
+                autoFocus
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Optional — how the concierge addresses the guest. Doesn’t reset the conversation.
+              </p>
             </div>
-          </div>
+          </PopoverContent>
+        </Popover>
+          </>
         )}
+
+        <div className="ml-auto flex items-center gap-1">
+          {started && (
+            <button
+              type="button"
+              onClick={reset}
+              aria-label="New conversation"
+              title="New conversation"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-black/[0.05] hover:text-foreground dark:hover:bg-white/[0.06]"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void send()}
+            disabled={!ready || sending || !input.trim()}
+            aria-label="Send test message"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--accent-3)] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ---- Empty hero: the screenshot's centered, minimal composer -----------
+  if (!started) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center px-4 pb-[8vh]">
+        <div className="w-full max-w-2xl">
+          <h1 className="mb-2 text-center text-[2.75rem] font-semibold leading-tight tracking-tight text-foreground text-balance">
+            Concierge Testing
+          </h1>
+          <p className="mx-auto mb-7 max-w-md text-center text-base leading-relaxed text-muted-foreground text-balance">
+            Simulate conversations with your Concierge Agent
+          </p>
+          {composer}
+          {error && (
+            <p className="mt-3 text-center text-sm text-[var(--destructive)]">{error}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Active: transcript scrolls; composer docks at the bottom ----------
+  return (
+    <div className="flex h-full flex-col">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar">
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 px-4 py-6">
+          {items.map((it) => {
+            if (it.kind === 'guest') {
+              return (
+                <div key={it.id} className="msg-in flex justify-end">
+                  <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-[var(--accent-3)] px-3.5 py-2 text-sm text-white">
+                    <p className="whitespace-pre-wrap break-words">{it.text}</p>
+                  </div>
+                </div>
+              );
+            }
+            if (it.kind === 'concierge') {
+              return (
+                <div key={it.id} className="msg-in flex flex-col items-start">
+                  <span className="mb-0.5 ml-1 text-[11px] font-medium text-muted-foreground">Concierge</span>
+                  <div className="max-w-[80%] rounded-2xl rounded-bl-sm bg-white/85 px-3.5 py-2 text-sm text-foreground ring-1 ring-black/[0.05] dark:bg-white/[0.07] dark:ring-white/[0.06]">
+                    <p className="whitespace-pre-wrap break-words">{it.text}</p>
+                  </div>
+                </div>
+              );
+            }
+            if (it.kind === 'note') {
+              return (
+                <div key={it.id} className="msg-in flex justify-start">
+                  <span className="rounded-full bg-black/[0.04] px-3 py-1 text-[11px] text-muted-foreground dark:bg-white/[0.05]">
+                    {it.text}
+                  </span>
+                </div>
+              );
+            }
+            if (it.kind === 'task') {
+              return (
+                <ProposedTask
+                  key={it.id}
+                  proposal={it.data}
+                  propertyName={propertyName}
+                  align="start"
+                  onAccept={() => acceptItem(it.id)}
+                  onDismiss={() => dismissItem(it.id)}
+                />
+              );
+            }
+            return (
+              <ProposedKnowledge
+                key={it.id}
+                proposal={it.data}
+                propertyId={propertyId}
+                align="start"
+                onAccept={() => acceptItem(it.id)}
+                onDismiss={() => dismissItem(it.id)}
+              />
+            );
+          })}
+          {sending && (
+            <div className="msg-in flex flex-col items-start">
+              <span className="mb-0.5 ml-1 text-[11px] font-medium text-muted-foreground">Concierge</span>
+              <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm bg-white/85 px-3.5 py-2 text-sm text-muted-foreground ring-1 ring-black/[0.05] dark:bg-white/[0.07] dark:ring-white/[0.06]">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Thinking…
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {error && (
-        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-      )}
-
-      {/* Composer */}
-      <div className="msg-well flex items-end gap-2 rounded-2xl px-2 py-2 transition-[border-color,box-shadow] focus-within:border-[var(--accent-3)] focus-within:ring-2 focus-within:ring-[var(--accent-ring)] dark:focus-within:ring-[var(--accent-ring-dark)]">
-        <textarea
-          rows={1}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={!ready || sending}
-          placeholder={ready ? 'Message as the guest…' : 'Select a property first'}
-          className="max-h-40 min-h-[1.5rem] flex-1 resize-none bg-transparent py-1 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
-        />
-        <button
-          type="button"
-          onClick={() => void send()}
-          disabled={!ready || sending || !input.trim()}
-          aria-label="Send test message"
-          className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--accent-3)] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
-        >
-          {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
-        </button>
+      <div className="shrink-0 px-4 pb-4">
+        <div className="mx-auto w-full max-w-2xl">
+          {error && <p className="mb-2 text-sm text-[var(--destructive)]">{error}</p>}
+          {composer}
+        </div>
       </div>
     </div>
   );

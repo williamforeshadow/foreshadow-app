@@ -1,5 +1,14 @@
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { generateGuestReplyDraftFromContext } from './draftReply';
+import { generateProposedTaskDraftFromContext } from './draftTask';
+import {
+  generateProposedKnowledgeFromContext,
+  type KnowledgeTarget,
+} from './draftKnowledge';
+import {
+  loadConciergeProposalFlags,
+  loadReplyProposalSensitivity,
+} from './conciergeCapabilities';
 import type { ConversationContext, StayWindow } from './conversationContext';
 import type { ConversationRow, BookingState } from '@/lib/conversations';
 import type { GuestMessageRecord } from '@/lib/messages';
@@ -28,6 +37,37 @@ export interface RunConciergeTestInput {
   guestName: string;
   scenario: TestScenario;
   messages: TestMessage[];
+}
+
+/** A dummy proposed task, shaped to match the inbox's ProposedTaskData. */
+export interface TestProposedTask {
+  id: string;
+  title: string;
+  description: string | null;
+  priority: 'urgent' | 'high' | 'medium' | 'low';
+  department_id: string | null;
+  department_name: string | null;
+}
+
+/** A dummy proposed-knowledge addition, shaped to match ProposedKnowledgeData. */
+export interface TestProposedKnowledge {
+  id: string;
+  summary: string;
+  guest_visible: boolean;
+  target: KnowledgeTarget | null;
+}
+
+export interface RunConciergeTestResult {
+  /** The drafted reply, or '' when none was warranted / replies are disabled. */
+  reply: string;
+  /** Whether a reply was actually drafted (false when gated out or disabled). */
+  warranted: boolean;
+  /** Master switch state for autonomous replies — distinguishes "off" from "below threshold". */
+  replyEnabled: boolean;
+  /** Dummy proposed tasks for this turn (never persisted). */
+  tasks: TestProposedTask[];
+  /** Dummy proposed-knowledge additions for this turn (never persisted). */
+  knowledge: TestProposedKnowledge[];
 }
 
 interface PropertyMeta {
@@ -107,13 +147,32 @@ function buildScenario(scenario: TestScenario, today: string): {
   };
 }
 
+/** Resolve department id → name for proposed-task cards (best-effort, empty on error). */
+async function loadDepartmentNames(): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  try {
+    const { data } = await getSupabaseServer().from('departments').select('id, name');
+    for (const d of (data ?? []) as Array<{ id: string; name: string | null }>) {
+      if (d.name) map.set(d.id, d.name);
+    }
+  } catch {
+    // Best-effort — a missing name just renders the card without a department label.
+  }
+  return map;
+}
+
 /**
  * Construct a synthetic ConversationContext for the chosen property + scenario,
- * then generate the concierge reply.
+ * then run the concierge's three capabilities against it EXACTLY as production
+ * would: the reply path (gated by the master switch + reply sensitivity), task
+ * triage (gated by the task switch + its sensitivity), and knowledge triage
+ * (gated by the knowledge switch, and — like production — only once the thread
+ * has a host message). Tasks and knowledge are returned as dummy proposals: the
+ * real generation runs, but nothing is persisted and no notifications fire.
  */
 export async function runConciergeTest(
   input: RunConciergeTestInput,
-): Promise<{ reply: string }> {
+): Promise<RunConciergeTestResult> {
   const guestName = input.guestName.trim() || 'the guest';
   const cleaned = input.messages
     .map((m) => ({ role: m.role, text: (m.text ?? '').trim() }))
@@ -179,8 +238,74 @@ export async function runConciergeTest(
     stay,
   };
 
-  // Pass the property-local date so "currently checked in" etc. resolve the same
-  // way the model would experience for a real guest at this property right now.
-  const { draft } = await generateGuestReplyDraftFromContext(ctx, { today });
-  return { reply: draft };
+  // Mirror production gating: the same master switches + sensitivity dials that
+  // govern the autonomous webhook path govern the test, so the operator sees
+  // exactly what the concierge would do with the current configuration.
+  const flags = await loadConciergeProposalFlags();
+  // Knowledge, like the webhook path, only triages once the thread has a host
+  // (concierge) message — i.e. after at least one reply has been drafted.
+  const hasHostMessage = cleaned.some((m) => m.role === 'host');
+
+  // Run the three capabilities concurrently — they're independent. Task and
+  // knowledge are best-effort (a failure there must not sink the whole test);
+  // the reply is primary and allowed to throw up to the route.
+  const [replyResult, tasks, knowledge] = await Promise.all([
+    // Reply — gated by the master switch, then by the reply-sensitivity ladder.
+    (async (): Promise<{ reply: string; warranted: boolean }> => {
+      if (!flags.reply) return { reply: '', warranted: false };
+      // Pass the property-local date so "currently checked in" etc. resolve the
+      // same way the model would for a real guest at this property right now.
+      const replySensitivity = await loadReplyProposalSensitivity();
+      const { draft, warranted } = await generateGuestReplyDraftFromContext(ctx, {
+        today,
+        replySensitivity,
+      });
+      return { reply: draft, warranted };
+    })(),
+    // Tasks — gated by the master switch; the generator applies task sensitivity.
+    (async (): Promise<TestProposedTask[]> => {
+      if (!flags.task) return [];
+      try {
+        const [result, deptNames] = await Promise.all([
+          generateProposedTaskDraftFromContext(ctx, { today }),
+          loadDepartmentNames(),
+        ]);
+        return result.tasks.map((t, i) => ({
+          id: `test-task-${i}`,
+          title: t.title,
+          description: t.description,
+          priority: t.priority,
+          department_id: t.department_id,
+          department_name: t.department_id ? deptNames.get(t.department_id) ?? null : null,
+        }));
+      } catch (err) {
+        console.error('[concierge test] task triage failed:', err);
+        return [];
+      }
+    })(),
+    // Knowledge — gated by the master switch + the host-message requirement.
+    (async (): Promise<TestProposedKnowledge[]> => {
+      if (!flags.knowledge || !hasHostMessage) return [];
+      try {
+        const result = await generateProposedKnowledgeFromContext(ctx);
+        return result.proposals.map((p, i) => ({
+          id: `test-knowledge-${i}`,
+          summary: p.summary,
+          guest_visible: p.guest_visible,
+          target: p.target,
+        }));
+      } catch (err) {
+        console.error('[concierge test] knowledge triage failed:', err);
+        return [];
+      }
+    })(),
+  ]);
+
+  return {
+    reply: replyResult.reply,
+    warranted: replyResult.warranted,
+    replyEnabled: flags.reply,
+    tasks,
+    knowledge,
+  };
 }
