@@ -2,22 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
 import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
-import {
-  CARD_TAGS,
-  normalizeTagData,
-  type CardScope,
-  type CardTag,
-} from '@/lib/propertyCards';
+import { normalizeTags, type AttributeScope } from '@/lib/propertyAttributes';
 
-// PATCH /api/properties/[id]/cards/[cardId]
-// Editable: title, body, tag, tag_data, room_id, sort_order.
-// Moving a card to another room is allowed (must still belong to the
-// same property); the card's `scope` is re-derived from the new room.
+// PATCH /api/properties/[id]/attributes/[attributeId]
+// Editable: title, body, tags, room_id, sort_order.
+// Moving an attribute to another room is allowed (must still belong to the
+// same property); the attribute's `scope` is re-derived from the new room.
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string; cardId: string }> }
+  { params }: { params: Promise<{ id: string; attributeId: string }> }
 ) {
-  const { id, cardId } = await params;
+  const { id, attributeId } = await params;
   const body = await req.json().catch(() => ({}));
   const patch: Record<string, unknown> = {};
   const supabase = getSupabaseServer();
@@ -38,36 +33,8 @@ export async function PATCH(
     patch.body = typeof v === 'string' && v.trim() !== '' ? v.trim() : null;
   }
 
-  // Tag changes are allowed; tag_data is re-normalized against the new
-  // tag below if either of them is being patched.
-  let nextTag: CardTag | undefined;
-  if ('tag' in body) {
-    const v = body.tag;
-    if (typeof v !== 'string' || !CARD_TAGS.includes(v as CardTag)) {
-      return NextResponse.json({ error: 'Invalid tag' }, { status: 400 });
-    }
-    nextTag = v as CardTag;
-    patch.tag = nextTag;
-  }
-
-  if ('tag_data' in body) {
-    let t = nextTag;
-    if (!t) {
-      const { data: existing, error: exErr } = await supabase
-        .from('property_cards')
-        .select('tag')
-        .eq('id', cardId)
-        .eq('property_id', id)
-        .maybeSingle();
-      if (exErr) {
-        return NextResponse.json({ error: exErr.message }, { status: 500 });
-      }
-      if (!existing) {
-        return NextResponse.json({ error: 'Card not found' }, { status: 404 });
-      }
-      t = existing.tag as CardTag;
-    }
-    patch.tag_data = normalizeTagData(t, body.tag_data);
+  if ('tags' in body) {
+    patch.tags = normalizeTags(body.tags);
   }
 
   if ('room_id' in body) {
@@ -94,7 +61,7 @@ export async function PATCH(
       );
     }
     patch.room_id = v;
-    patch.scope = room.scope as CardScope;
+    patch.scope = room.scope as AttributeScope;
   }
 
   if ('sort_order' in body) {
@@ -122,90 +89,81 @@ export async function PATCH(
   }
 
   const { data: before } = await supabase
-    .from('property_cards')
-    .select('id, room_id, tag, title, body, tag_data, sort_order')
-    .eq('id', cardId)
+    .from('property_attributes')
+    .select('id, room_id, tags, title, body, sort_order')
+    .eq('id', attributeId)
     .eq('property_id', id)
     .maybeSingle();
 
   const { data, error } = await supabase
-    .from('property_cards')
+    .from('property_attributes')
     .update(patch)
-    .eq('id', cardId)
+    .eq('id', attributeId)
     .eq('property_id', id)
-    .select('*, property_card_photos(id, storage_path, caption, sort_order)')
+    .select('*, property_attribute_photos(id, storage_path, caption, sort_order)')
     .maybeSingle();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   if (!data) {
-    return NextResponse.json({ error: 'Card not found' }, { status: 404 });
+    return NextResponse.json({ error: 'Attribute not found' }, { status: 404 });
   }
 
   if (before) {
     const entries: Array<{ field: string; before: unknown; after: unknown }> = [];
-    for (const f of [
-      'room_id',
-      'tag',
-      'title',
-      'body',
-      'tag_data',
-      'sort_order',
-    ] as const) {
+    for (const f of ['room_id', 'tags', 'title', 'body', 'sort_order'] as const) {
       const b = (before as Record<string, unknown>)[f];
       const a = (data as Record<string, unknown>)[f];
-      // tag_data is a json blob; compare via JSON.stringify to avoid
-      // false-positive diff entries from object identity differences.
       const changed =
-        f === 'tag_data' ? JSON.stringify(b) !== JSON.stringify(a) : b !== a;
+        f === 'tags' ? JSON.stringify(b) !== JSON.stringify(a) : b !== a;
       if (changed) entries.push({ field: f, before: b, after: a });
     }
     if (entries.length > 0) {
       await logPropertyKnowledgeActivity({
         property_id: id,
         user_id: actorUserId,
-        resource_type: 'card',
+        resource_type: 'attribute',
         resource_id: data.id,
         action: 'update',
         changes: { kind: 'diff', entries },
-        subject_label: data.title || `${data.tag} card`,
+        subject_label: data.title || 'attribute',
         source: 'web',
       });
     }
   }
 
-  return NextResponse.json({ card: data });
+  return NextResponse.json({ attribute: data });
 }
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string; cardId: string }> }
+  { params }: { params: Promise<{ id: string; attributeId: string }> }
 ) {
-  const { id, cardId } = await params;
+  const { id, attributeId } = await params;
   const supabase = getSupabaseServer();
 
   // Snapshot the row + grab storage paths before the cascade fires.
   const [beforeRes, photosRes] = await Promise.all([
     supabase
-      .from('property_cards')
-      .select('id, room_id, tag, title, body')
-      .eq('id', cardId)
+      .from('property_attributes')
+      .select('id, room_id, tags, title, body')
+      .eq('id', attributeId)
       .eq('property_id', id)
       .maybeSingle(),
     supabase
-      .from('property_card_photos')
+      .from('property_attribute_photos')
       .select('storage_path')
-      .eq('card_id', cardId),
+      .eq('attribute_id', attributeId),
   ]);
   const before = beforeRes.data;
   const photos: Array<{ storage_path: string | null }> =
     (photosRes.data as Array<{ storage_path: string | null }> | null) ?? [];
 
   const { error } = await supabase
-    .from('property_cards')
+    .from('property_attributes')
     .delete()
-    .eq('id', cardId)
+    .eq('id', attributeId)
     .eq('property_id', id);
 
   if (error) {
@@ -226,19 +184,19 @@ export async function DELETE(
     await logPropertyKnowledgeActivity({
       property_id: id,
       user_id: actorUserId,
-      resource_type: 'card',
+      resource_type: 'attribute',
       resource_id: null,
       action: 'delete',
       changes: {
         kind: 'snapshot',
         row: {
           room_id: before.room_id,
-          tag: before.tag,
+          tags: before.tags,
           title: before.title,
           body: before.body,
         },
       },
-      subject_label: before.title || `${before.tag} card`,
+      subject_label: before.title || 'attribute',
       source: 'web',
     });
   }

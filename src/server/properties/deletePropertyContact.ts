@@ -4,8 +4,9 @@ import {
   logPropertyKnowledgeActivity,
   type KnowledgeSource,
 } from '@/lib/logPropertyKnowledgeActivity';
+import { normalizeContactTags, type ContactTag } from '@/lib/propertyAttributes';
 
-// Service: hard-delete a property contact. Mirrors deletePropertyNote.
+// Service: hard-delete a property contact.
 
 const inputSchema = z.object({
   property_id: z.string().uuid(),
@@ -31,7 +32,7 @@ export interface DeleteContactError {
 export interface DeletedContactSnapshot {
   contact_id: string;
   property_id: string;
-  category: string;
+  tags: ContactTag[];
   name: string;
   role: string | null;
   phone: string | null;
@@ -62,7 +63,7 @@ export async function deletePropertyContact(
 
   const { data: existing, error: loadErr } = await supabase
     .from('property_contacts')
-    .select('id, property_id, category, name, role, phone, email')
+    .select('id, property_id, tags, name, role, phone, email')
     .eq('id', input.contact_id)
     .eq('property_id', input.property_id)
     .maybeSingle();
@@ -92,15 +93,16 @@ export async function deletePropertyContact(
     return { ok: false, error: { code: 'db_error', message: delErr.message } };
   }
 
-  const row = existing as {
+  const raw = existing as {
     id: string;
     property_id: string;
-    category: string;
+    tags: unknown;
     name: string;
     role: string | null;
     phone: string | null;
     email: string | null;
   };
+  const row = { ...raw, tags: normalizeContactTags(raw.tags) };
 
   await logPropertyKnowledgeActivity({
     property_id: row.property_id,
@@ -111,7 +113,7 @@ export async function deletePropertyContact(
     changes: {
       kind: 'snapshot',
       row: {
-        category: row.category,
+        tags: row.tags,
         name: row.name,
         role: row.role,
         phone: row.phone,
@@ -128,7 +130,7 @@ export async function deletePropertyContact(
     snapshot: {
       contact_id: row.id,
       property_id: row.property_id,
-      category: row.category,
+      tags: row.tags,
       name: row.name,
       role: row.role,
       phone: row.phone,
@@ -143,7 +145,7 @@ export interface DeleteContactPlan {
   property: { property_id: string; name: string };
   contact: {
     contact_id: string;
-    category: string;
+    tags: ContactTag[];
     name: string;
     role: string | null;
     phone: string | null;
@@ -181,7 +183,7 @@ export async function previewDeletePropertyContact(
       .maybeSingle(),
     supabase
       .from('property_contacts')
-      .select('id, category, name, role, phone, email, property_id')
+      .select('id, tags, name, role, phone, email, property_id')
       .eq('id', input.contact_id)
       .eq('property_id', input.property_id)
       .maybeSingle(),
@@ -230,7 +232,7 @@ export async function previewDeletePropertyContact(
 
   const c = contactRes.data as {
     id: string;
-    category: string;
+    tags: unknown;
     name: string;
     role: string | null;
     phone: string | null;
@@ -244,7 +246,7 @@ export async function previewDeletePropertyContact(
       property: { property_id: p.id, name: p.name },
       contact: {
         contact_id: c.id,
-        category: c.category,
+        tags: normalizeContactTags(c.tags),
         name: c.name,
         role: c.role,
         phone: c.phone,

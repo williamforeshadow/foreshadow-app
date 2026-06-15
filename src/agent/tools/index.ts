@@ -21,10 +21,6 @@ import { previewTaskDelete } from './previewTaskDelete';
 import { deleteTask } from './deleteTask';
 import { previewComment } from './previewComment';
 import { addComment } from './addComment';
-import { previewPropertyNoteUpsert } from './previewPropertyNoteUpsert';
-import { commitPropertyNoteUpsert } from './commitPropertyNoteUpsert';
-import { previewPropertyNoteDelete } from './previewPropertyNoteDelete';
-import { commitPropertyNoteDelete } from './commitPropertyNoteDelete';
 import { previewPropertyContactUpsert } from './previewPropertyContactUpsert';
 import { commitPropertyContactUpsert } from './commitPropertyContactUpsert';
 import { previewPropertyContactDelete } from './previewPropertyContactDelete';
@@ -69,10 +65,6 @@ export const TOOLS: ReadonlyArray<ToolDefinition<unknown, unknown>> = [
   deleteTask as unknown as ToolDefinition<unknown, unknown>,
   previewComment as unknown as ToolDefinition<unknown, unknown>,
   addComment as unknown as ToolDefinition<unknown, unknown>,
-  previewPropertyNoteUpsert as unknown as ToolDefinition<unknown, unknown>,
-  commitPropertyNoteUpsert as unknown as ToolDefinition<unknown, unknown>,
-  previewPropertyNoteDelete as unknown as ToolDefinition<unknown, unknown>,
-  commitPropertyNoteDelete as unknown as ToolDefinition<unknown, unknown>,
   previewPropertyContactUpsert as unknown as ToolDefinition<unknown, unknown>,
   commitPropertyContactUpsert as unknown as ToolDefinition<unknown, unknown>,
   previewPropertyContactDelete as unknown as ToolDefinition<unknown, unknown>,

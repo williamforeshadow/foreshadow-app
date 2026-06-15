@@ -2,7 +2,6 @@
 
 import { useParams } from 'next/navigation';
 import { RoomsBoard } from '@/components/properties/cards/RoomsBoard';
-import { INTERIOR_ROOM_TYPES } from '@/lib/propertyCards';
 
 export default function PropertyInteriorTab() {
   const params = useParams<{ id: string }>();
@@ -14,10 +13,9 @@ export default function PropertyInteriorTab() {
       propertyId={propertyId}
       scope="interior"
       sectionLabel="Interior"
-      sectionCaption="Add rooms like bedrooms, bathrooms, kitchen, or anything else. Each room can hold photos and tagged cards (appliances, amenities, safety items, quirks)."
+      sectionCaption="Add rooms like bedrooms, bathrooms, kitchen, or anything else. Each room can hold notes, photos, and tagged attributes (appliances, amenities, safety items, quirks, known issues)."
       noun="room"
       nounPlural="rooms"
-      roomTypes={INTERIOR_ROOM_TYPES}
     />
   );
 }

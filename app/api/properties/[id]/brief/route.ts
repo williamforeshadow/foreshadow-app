@@ -13,12 +13,11 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 //    access: { ... property_access row ... } | null,
 //    connectivity: { wifi_ssid, wifi_password, wifi_router_location } | null,
 //    tech_accounts: Array<{ kind, service_name, username, password, notes, photos: [...] }>,
-//    notes: Array<{ scope, title, body, ... }>,
-//    contacts: Array<{ category, name, phone, ... }>,
+//    contacts: Array<{ tags, name, phone, schedule, preferences, ... }>,
 //    rooms: Array<{
-//      id, scope, type, title,
+//      id, scope, title, notes,
 //      photos: [...],
-//      cards: Array<{ tag, title, body, tag_data, photos: [...] }>,
+//      property_attributes: Array<{ tags, title, body, photos: [...] }>,
 //    }>,
 //    documents: Array<{ tag, title, notes, storage_path, ... }>,
 //  }
@@ -35,7 +34,6 @@ export async function GET(
     accessRes,
     connectivityRes,
     techAccountsRes,
-    notesRes,
     contactsRes,
     roomsRes,
     docsRes,
@@ -68,26 +66,19 @@ export async function GET(
       .eq('property_id', id)
       .order('sort_order', { ascending: true }),
     supabase
-      .from('property_notes')
-      .select('id, scope, title, body, sort_order, updated_at')
-      .eq('property_id', id)
-      .order('scope', { ascending: true })
-      .order('sort_order', { ascending: true }),
-    supabase
       .from('property_contacts')
-      .select('id, category, name, role, phone, email, notes, sort_order')
+      .select('id, tags, name, role, phone, email, schedule, preferences, notes, sort_order')
       .eq('property_id', id)
-      .order('category', { ascending: true })
       .order('sort_order', { ascending: true }),
     supabase
       .from('property_rooms')
       .select(
         `
-        id, scope, type, title, sort_order,
+        id, scope, title, notes, sort_order,
         property_room_photos (id, storage_path, caption, sort_order),
-        property_cards (
-          id, tag, title, body, tag_data, sort_order,
-          property_card_photos (id, storage_path, caption, sort_order)
+        property_attributes (
+          id, tags, title, body, sort_order,
+          property_attribute_photos (id, storage_path, caption, sort_order)
         )
         `
       )
@@ -119,7 +110,6 @@ export async function GET(
     ['access', accessRes],
     ['connectivity', connectivityRes],
     ['tech_accounts', techAccountsRes],
-    ['notes', notesRes],
     ['contacts', contactsRes],
     ['rooms', roomsRes],
     ['documents', docsRes],
@@ -134,7 +124,6 @@ export async function GET(
     access: accessRes.error ? null : accessRes.data ?? null,
     connectivity: connectivityRes.error ? null : connectivityRes.data ?? null,
     tech_accounts: techAccountsRes.error ? [] : techAccountsRes.data ?? [],
-    notes: notesRes.error ? [] : notesRes.data ?? [],
     contacts: contactsRes.error ? [] : contactsRes.data ?? [],
     rooms: roomsRes.error ? [] : roomsRes.data ?? [],
     documents: docsRes.error ? [] : docsRes.data ?? [],

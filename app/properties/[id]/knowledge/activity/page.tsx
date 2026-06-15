@@ -40,14 +40,16 @@ interface ActivityEntry {
 }
 
 const RESOURCE_LABELS: Record<string, string> = {
-  note: 'Note',
   contact: 'Contact',
   room: 'Room',
-  card: 'Card',
+  attribute: 'Attribute',
   access: 'Access',
   connectivity: 'Connectivity',
   tech_account: 'Tech account',
   document: 'Document',
+  // Retired types kept so historical ledger rows still render a label.
+  note: 'Note',
+  card: 'Card',
 };
 
 const ACTION_LABELS: Record<KnowledgeAction, string> = {

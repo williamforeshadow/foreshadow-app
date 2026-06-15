@@ -2,15 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
 import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
+import { normalizeContactTags } from '@/lib/propertyAttributes';
 
-const CATEGORIES = new Set([
-  'cleaning',
-  'maintenance',
-  'stakeholder',
-  'emergency',
-]);
-
-const EDITABLE = ['name', 'role', 'phone', 'email', 'notes'] as const;
+const EDITABLE = ['name', 'role', 'phone', 'email', 'schedule', 'preferences', 'notes'] as const;
 
 export async function PATCH(
   req: NextRequest,
@@ -44,12 +38,8 @@ export async function PATCH(
     }
   }
 
-  if ('category' in body) {
-    const c = body.category;
-    if (typeof c !== 'string' || !CATEGORIES.has(c)) {
-      return NextResponse.json({ error: 'Invalid category' }, { status: 400 });
-    }
-    patch.category = c;
+  if ('tags' in body) {
+    patch.tags = normalizeContactTags(body.tags);
   }
 
   if ('sort_order' in body) {
@@ -74,10 +64,10 @@ export async function PATCH(
 
   const supabase = getSupabaseServer();
 
-  // Pre-read for the activity diff. Same trade-off as the notes PATCH.
+  // Pre-read for the activity diff.
   const { data: before } = await supabase
     .from('property_contacts')
-    .select('id, category, name, role, phone, email, notes, sort_order')
+    .select('id, tags, name, role, phone, email, schedule, preferences, notes, sort_order')
     .eq('id', contactId)
     .eq('property_id', id)
     .maybeSingle();
@@ -100,17 +90,21 @@ export async function PATCH(
   if (before) {
     const entries: Array<{ field: string; before: unknown; after: unknown }> = [];
     for (const f of [
-      'category',
+      'tags',
       'name',
       'role',
       'phone',
       'email',
+      'schedule',
+      'preferences',
       'notes',
       'sort_order',
     ] as const) {
       const b = (before as Record<string, unknown>)[f];
       const a = (data as Record<string, unknown>)[f];
-      if (b !== a) entries.push({ field: f, before: b, after: a });
+      const changed =
+        f === 'tags' ? JSON.stringify(b) !== JSON.stringify(a) : b !== a;
+      if (changed) entries.push({ field: f, before: b, after: a });
     }
     if (entries.length > 0) {
       await logPropertyKnowledgeActivity({
@@ -141,7 +135,7 @@ export async function DELETE(
 
   const { data: before } = await supabase
     .from('property_contacts')
-    .select('id, category, name, role, phone, email')
+    .select('id, tags, name, role, phone, email')
     .eq('id', contactId)
     .eq('property_id', id)
     .maybeSingle();
@@ -166,7 +160,7 @@ export async function DELETE(
       changes: {
         kind: 'snapshot',
         row: {
-          category: before.category,
+          tags: before.tags,
           name: before.name,
           role: before.role,
           phone: before.phone,

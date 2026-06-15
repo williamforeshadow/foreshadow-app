@@ -3,8 +3,8 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 
 // POST multipart/form-data { file: File, caption?: string }
 // Uploads to the `property-photos` public bucket under an unguessable
-// path, then inserts a row in property_card_photos. Enforces a 20-photo
-// cap per card and a 10MB size cap per file (matches the client).
+// path, then inserts a row in property_attribute_photos. Enforces a
+// 20-photo cap per attribute and a 10MB size cap per file.
 
 const MAX_PHOTOS = 20;
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -16,9 +16,9 @@ function randomSegment(len = 16) {
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string; cardId: string }> }
+  { params }: { params: Promise<{ id: string; attributeId: string }> }
 ) {
-  const { id, cardId } = await params;
+  const { id, attributeId } = await params;
 
   const formData = await req.formData().catch(() => null);
   if (!formData) {
@@ -48,43 +48,41 @@ export async function POST(
 
   const supabase = getSupabaseServer();
 
-  // Verify the card exists and belongs to this property before we
+  // Verify the attribute exists and belongs to this property before we
   // blow storage cycles uploading.
-  const { data: card, error: cardErr } = await supabase
-    .from('property_cards')
+  const { data: attribute, error: attrErr } = await supabase
+    .from('property_attributes')
     .select('id')
-    .eq('id', cardId)
+    .eq('id', attributeId)
     .eq('property_id', id)
     .maybeSingle();
-  if (cardErr) {
-    return NextResponse.json({ error: cardErr.message }, { status: 500 });
+  if (attrErr) {
+    return NextResponse.json({ error: attrErr.message }, { status: 500 });
   }
-  if (!card) {
-    return NextResponse.json({ error: 'Card not found' }, { status: 404 });
+  if (!attribute) {
+    return NextResponse.json({ error: 'Attribute not found' }, { status: 404 });
   }
 
   // Enforce the 20-photo cap server-side in addition to the UI check.
   const { count, error: countErr } = await supabase
-    .from('property_card_photos')
+    .from('property_attribute_photos')
     .select('*', { count: 'exact', head: true })
-    .eq('card_id', cardId);
+    .eq('attribute_id', attributeId);
   if (countErr) {
     return NextResponse.json({ error: countErr.message }, { status: 500 });
   }
   if ((count ?? 0) >= MAX_PHOTOS) {
     return NextResponse.json(
-      { error: `Photo limit reached (${MAX_PHOTOS} per card).` },
+      { error: `Photo limit reached (${MAX_PHOTOS} per attribute).` },
       { status: 409 }
     );
   }
 
-  // Build an unguessable storage path. Layout: properties/{propertyId}/cards/{cardId}/{random}.{ext}
-  // The random segment is the unguessable token; bucket is public so
-  // anyone with the full URL can read but can't enumerate.
+  // Layout: properties/{propertyId}/attributes/{attributeId}/{random}.{ext}
   const ext =
     (file.name.match(/\.([a-zA-Z0-9]+)$/)?.[1] || 'jpg').toLowerCase();
   const token = randomSegment(16);
-  const storagePath = `properties/${id}/cards/${cardId}/${token}.${ext}`;
+  const storagePath = `properties/${id}/attributes/${attributeId}/${token}.${ext}`;
 
   const arrayBuf = await file.arrayBuffer();
   const { error: uploadErr } = await supabase.storage
@@ -98,9 +96,9 @@ export async function POST(
   }
 
   const { data: photoRow, error: insertErr } = await supabase
-    .from('property_card_photos')
+    .from('property_attribute_photos')
     .insert({
-      card_id: cardId,
+      attribute_id: attributeId,
       storage_path: storagePath,
       caption,
       sort_order: count ?? 0,

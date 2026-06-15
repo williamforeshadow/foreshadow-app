@@ -66,7 +66,7 @@ async function handler(
 export const previewPropertyContactDelete: ToolDefinition<Input, PreviewDeleteContactData> = {
   name: 'preview_property_contact_delete',
   description:
-    "PREVIEW deleting a property contact. Returns a plan showing the contact's category, name, role, and contact info so the user can confirm. Returns a confirmation_token for commit_property_contact_delete. Delete is HARD — the row is removed permanently. Required workflow: preview → present → user confirms → commit.",
+    "PREVIEW deleting a property contact. Returns a plan showing the contact's tags, name, role, and contact info so the user can confirm. Returns a confirmation_token for commit_property_contact_delete. Delete is HARD — the row is removed permanently. Required workflow: preview → present → user confirms → commit.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,

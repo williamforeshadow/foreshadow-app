@@ -2,21 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
 import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
+import { CONTACT_TAG_SET, normalizeContactTags, type ContactTag } from '@/lib/propertyAttributes';
 
-const CATEGORIES = new Set([
-  'cleaning',
-  'maintenance',
-  'stakeholder',
-  'emergency',
-]);
-
-// GET /api/properties/[id]/contacts[?category=cleaning]
+// GET /api/properties/[id]/contacts[?tag=cleaning]
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const category = req.nextUrl.searchParams.get('category');
+  const tag = req.nextUrl.searchParams.get('tag');
 
   const supabase = getSupabaseServer();
   let query = supabase
@@ -26,11 +20,11 @@ export async function GET(
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true });
 
-  if (category) {
-    if (!CATEGORIES.has(category)) {
-      return NextResponse.json({ error: 'Invalid category' }, { status: 400 });
+  if (tag) {
+    if (!CONTACT_TAG_SET.has(tag as ContactTag)) {
+      return NextResponse.json({ error: 'Invalid tag' }, { status: 400 });
     }
-    query = query.eq('category', category);
+    query = query.contains('tags', [tag]);
   }
 
   const { data, error } = await query;
@@ -40,7 +34,7 @@ export async function GET(
   return NextResponse.json({ contacts: data || [] });
 }
 
-// POST — create. name + category required; everything else optional.
+// POST — create. name required; tags + everything else optional.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -48,10 +42,6 @@ export async function POST(
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
 
-  const category = typeof body?.category === 'string' ? body.category : '';
-  if (!CATEGORIES.has(category)) {
-    return NextResponse.json({ error: 'category is required' }, { status: 400 });
-  }
   const name = typeof body?.name === 'string' ? body.name.trim() : '';
   if (!name) {
     return NextResponse.json({ error: 'Name is required' }, { status: 400 });
@@ -64,11 +54,13 @@ export async function POST(
 
   const payload = {
     property_id: id,
-    category,
+    tags: normalizeContactTags(body?.tags),
     name,
     role: pickString(body?.role),
     phone: pickString(body?.phone),
     email: pickString(body?.email),
+    schedule: pickString(body?.schedule),
+    preferences: pickString(body?.preferences),
     notes: pickString(body?.notes),
     sort_order:
       typeof body?.sort_order === 'number' && Number.isFinite(body.sort_order)
@@ -112,11 +104,12 @@ export async function POST(
       changes: {
         kind: 'snapshot',
         row: {
-          category: data.category,
+          tags: data.tags,
           name: data.name,
           role: data.role,
           phone: data.phone,
           email: data.email,
+          schedule: data.schedule,
         },
       },
       subject_label:

@@ -36,10 +36,10 @@ export const slackFileAttachmentInputSchema = z.discriminatedUnion('destination'
     caption: z.string().nullable().optional(),
   }),
   z.object({
-    destination: z.literal('property_card_photo'),
+    destination: z.literal('property_attribute_photo'),
     inbound_file_id: z.string().uuid(),
     property_id: z.string().uuid(),
-    card_id: z.string().uuid(),
+    attribute_id: z.string().uuid(),
     caption: z.string().nullable().optional(),
   }),
   z.object({
@@ -224,22 +224,22 @@ async function buildPlan(
     };
   }
 
-  if (input.destination === 'property_card_photo') {
+  if (input.destination === 'property_attribute_photo') {
     const { data, error } = await supabase
-      .from('property_cards')
-      .select('id, title, tag')
-      .eq('id', input.card_id)
+      .from('property_attributes')
+      .select('id, title')
+      .eq('id', input.attribute_id)
       .eq('property_id', input.property_id)
       .maybeSingle();
     if (error) return { ok: false, error: { code: 'db_error', message: error.message } };
-    if (!data) return { ok: false, error: { code: 'not_found', message: 'Card not found.', field: 'card_id' } };
+    if (!data) return { ok: false, error: { code: 'not_found', message: 'Attribute not found.', field: 'attribute_id' } };
     return {
       ok: true,
       plan: {
         destination: input.destination,
         inbound_file: file,
-        target: { type: 'property_card_photo', id: data.id, label: data.title || data.tag },
-        summary: `Add "${file.name}" as a photo on card "${data.title || data.tag}".`,
+        target: { type: 'property_attribute_photo', id: data.id, label: data.title || 'attribute' },
+        summary: `Add "${file.name}" as a photo on attribute "${data.title || ''}".`,
       },
       canonicalInput: input,
     };
@@ -397,8 +397,8 @@ export async function commitSlackFileAttachment(
     const photoTarget =
       input.destination === 'property_room_photo'
         ? { bucketPath: `properties/${input.property_id}/rooms/${input.room_id}/${randomSegment(16)}.${ext}`, table: 'property_room_photos', fk: 'room_id', id: input.room_id, countField: 'room_id', max: 50, caption: input.caption ?? null }
-        : input.destination === 'property_card_photo'
-          ? { bucketPath: `properties/${input.property_id}/cards/${input.card_id}/${randomSegment(16)}.${ext}`, table: 'property_card_photos', fk: 'card_id', id: input.card_id, countField: 'card_id', max: 20, caption: input.caption ?? null }
+        : input.destination === 'property_attribute_photo'
+          ? { bucketPath: `properties/${input.property_id}/attributes/${input.attribute_id}/${randomSegment(16)}.${ext}`, table: 'property_attribute_photos', fk: 'attribute_id', id: input.attribute_id, countField: 'attribute_id', max: 20, caption: input.caption ?? null }
           : { bucketPath: `properties/${input.property_id}/tech-accounts/${input.account_id}/${randomSegment(16)}.${ext}`, table: 'property_tech_account_photos', fk: 'account_id', id: input.account_id, countField: 'account_id', max: 10, caption: null };
 
     const { count } = await supabase

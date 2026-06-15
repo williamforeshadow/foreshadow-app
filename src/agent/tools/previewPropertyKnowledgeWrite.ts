@@ -15,14 +15,14 @@ const inputSchema = z
       'upsert_connectivity',
       'upsert_room',
       'delete_room',
-      'upsert_card',
-      'delete_card',
+      'upsert_attribute',
+      'delete_attribute',
       'update_document',
       'delete_document',
     ]),
     property_id: z.string().uuid(),
     room_id: z.string().uuid().optional(),
-    card_id: z.string().uuid().optional(),
+    attribute_id: z.string().uuid().optional(),
     document_id: z.string().uuid().optional(),
     fields: z.record(z.string(), z.unknown()).optional(),
     attachment_inbound_file_ids: z.array(z.string().uuid()).optional(),
@@ -49,7 +49,7 @@ async function handler(
   } = input;
   if (
     attachment_inbound_file_ids?.length &&
-    input.action !== 'upsert_card' &&
+    input.action !== 'upsert_attribute' &&
     input.action !== 'upsert_room'
   ) {
     return {
@@ -57,7 +57,7 @@ async function handler(
       error: {
         code: 'invalid_input',
         message:
-          'Slack file attachments on Property Knowledge compound writes are supported only for room or card photo destinations.',
+          'Slack file attachments on Property Knowledge compound writes are supported only for room or attribute photo destinations.',
       },
     };
   }
@@ -123,7 +123,7 @@ export const previewPropertyKnowledgeWriteTool: ToolDefinition<
 > = {
   name: 'preview_property_knowledge_write',
   description:
-    "PREVIEW writes to Property Knowledge sections that are not Information or Activity: Access, Connectivity, Interior/Exterior rooms, Interior/Exterior cards, and Document metadata/deletes. Use this for access codes, parking instructions, wifi/router details, creating/updating/deleting rooms, creating/updating/deleting room cards, and editing/deleting existing documents. It does NOT upload new document files, and it does NOT write property Information or Activity. Existing specialized tools still handle Notes and Vendor contacts. Required workflow: call this preview tool, present the plan/diff to the user, get explicit confirmation, then call commit_property_knowledge_write with the returned token. If plan.changes is empty on an update, tell the user nothing would change and do not commit.",
+    "PREVIEW writes to Property Knowledge sections that are not Information or Activity: Access, Connectivity, Interior/Exterior rooms, Interior/Exterior attributes, and Document metadata/deletes. Use this for access codes, parking instructions, wifi/router details, creating/updating/deleting rooms, creating/updating/deleting room attributes, and editing/deleting existing documents. It does NOT upload new document files, and it does NOT write property Information or Activity. The specialized contact tool still handles Vendor contacts. Required workflow: call this preview tool, present the plan/diff to the user, get explicit confirmation, then call commit_property_knowledge_write with the returned token. If plan.changes is empty on an update, tell the user nothing would change and do not commit.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -135,13 +135,13 @@ export const previewPropertyKnowledgeWriteTool: ToolDefinition<
           'upsert_connectivity',
           'upsert_room',
           'delete_room',
-          'upsert_card',
-          'delete_card',
+          'upsert_attribute',
+          'delete_attribute',
           'update_document',
           'delete_document',
         ],
         description:
-          'Which Property Knowledge write to preview. upsert_room/upsert_card create when id is omitted and update when id is supplied.',
+          'Which Property Knowledge write to preview. upsert_room/upsert_attribute create when id is omitted and update when id is supplied.',
       },
       property_id: {
         type: 'string',
@@ -152,10 +152,10 @@ export const previewPropertyKnowledgeWriteTool: ToolDefinition<
         description:
           'Room UUID for updating/deleting a room, or omitted when creating a room.',
       },
-      card_id: {
+      attribute_id: {
         type: 'string',
         description:
-          'Card UUID for updating/deleting a card, or omitted when creating a card.',
+          'Attribute UUID for updating/deleting an attribute, or omitted when creating one.',
       },
       document_id: {
         type: 'string',
@@ -164,18 +164,18 @@ export const previewPropertyKnowledgeWriteTool: ToolDefinition<
       fields: {
         type: 'object',
         description:
-          "Fields for the selected action. Access fields include guest_code, cleaner_code, backup_code, code_rotation_notes, outer_door_code, gate_code, elevator_notes, unit_door_code, key_location, lockbox_code, parking_spot_number, parking_type, parking_instructions. Connectivity fields: wifi_ssid, wifi_password, wifi_router_location. Room fields: scope ('interior'|'exterior'), type, title, notes, sort_order. Card fields: room_id, tag, title, body, tag_data, sort_order. Document fields: title, notes, tag. Pass null to clear nullable text fields.",
+          "Fields for the selected action. Access fields include guest_code, cleaner_code, backup_code, code_rotation_notes, outer_door_code, gate_code, elevator_notes, unit_door_code, key_location, lockbox_code, parking_spot_number, parking_type, parking_instructions. Connectivity fields: wifi_ssid, wifi_password, wifi_router_location. Room fields: scope ('interior'|'exterior'), title, notes, sort_order. Attribute fields: room_id, tags (array of: appliance, amenity, safety, quirk, utility, access, known_issue, other), title, body, sort_order. Document fields: title, notes, tag. Pass null to clear nullable text fields.",
       },
       attachment_inbound_file_ids: {
         type: 'array',
         items: { type: 'string' },
         description:
-          'Slack-only: inbound_file_id UUIDs to attach as photos after an upsert_room or upsert_card write. Use only ids from the Slack uploaded-files context block.',
+          'Slack-only: inbound_file_id UUIDs to attach as photos after an upsert_room or upsert_attribute write. Use only ids from the Slack uploaded-files context block.',
       },
       attachment_caption: {
         type: 'string',
         description:
-          'Optional caption to apply to room/card photos attached by attachment_inbound_file_ids.',
+          'Optional caption to apply to room/attribute photos attached by attachment_inbound_file_ids.',
       },
     },
     required: ['action', 'property_id'],

@@ -35,7 +35,6 @@ export interface PropertyKnowledge {
   access: Json | null;
   connectivity: Json | null;
   tech_accounts: Json[];
-  notes: Json[];
   contacts: Json[];
   rooms: Json[];
   documents: Json[];
@@ -61,7 +60,6 @@ export async function loadPropertyKnowledge(
     accessRes,
     connectivityRes,
     techAccountsRes,
-    notesRes,
     contactsRes,
     roomsRes,
     docsRes,
@@ -82,25 +80,18 @@ export async function loadPropertyKnowledge(
       .eq('property_id', propertyId)
       .order('sort_order', { ascending: true }),
     supabase
-      .from('property_notes')
-      .select('id, scope, title, body, sort_order, updated_at')
-      .eq('property_id', propertyId)
-      .order('scope', { ascending: true })
-      .order('sort_order', { ascending: true }),
-    supabase
       .from('property_contacts')
-      .select('id, category, name, role, phone, email, notes, sort_order')
+      .select('id, tags, name, role, phone, email, schedule, preferences, notes, sort_order')
       .eq('property_id', propertyId)
-      .order('category', { ascending: true })
       .order('sort_order', { ascending: true }),
     supabase
       .from('property_rooms')
       .select(
-        `id, scope, type, title, notes, sort_order,
+        `id, scope, title, notes, sort_order,
          property_room_photos (id, storage_path, caption, sort_order),
-         property_cards (
-           id, tag, title, body, tag_data, sort_order,
-           property_card_photos (id, storage_path, caption, sort_order)
+         property_attributes (
+           id, tags, title, body, sort_order,
+           property_attribute_photos (id, storage_path, caption, sort_order)
          )`,
       )
       .eq('property_id', propertyId)
@@ -130,7 +121,6 @@ export async function loadPropertyKnowledge(
   note('access', accessRes.error);
   note('connectivity', connectivityRes.error);
   note('tech_accounts', techAccountsRes.error);
-  note('notes', notesRes.error);
   note('contacts', contactsRes.error);
   note('rooms', roomsRes.error);
   note('documents', docsRes.error);
@@ -140,7 +130,6 @@ export async function loadPropertyKnowledge(
     access: accessRes.error ? null : ((accessRes.data as Json | null) ?? null),
     connectivity: connectivityRes.error ? null : ((connectivityRes.data as Json | null) ?? null),
     tech_accounts: techAccountsRes.error ? [] : ((techAccountsRes.data as Json[] | null) ?? []),
-    notes: notesRes.error ? [] : ((notesRes.data as Json[] | null) ?? []),
     contacts: contactsRes.error ? [] : ((contactsRes.data as Json[] | null) ?? []),
     rooms: roomsRes.error ? [] : ((roomsRes.data as Json[] | null) ?? []),
     documents: docsRes.error ? [] : ((docsRes.data as Json[] | null) ?? []),

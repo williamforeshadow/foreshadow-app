@@ -1,24 +1,28 @@
 import { z } from 'zod';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { loadPropertyKnowledge, type Json } from '@/src/server/properties/propertyKnowledge';
-import { visibilityKey, type VisibilityResourceType } from '@/lib/propertyKnowledgeVisibility';
+import {
+  visibilityKey,
+  encodeFieldResourceId,
+  RESOURCE_FIELD_SETS,
+  type VisibilityResourceType,
+} from '@/lib/propertyKnowledgeVisibility';
 import type { ToolDefinition, ToolResult, ToolContext } from './types';
 
 // get_property_knowledge_for_guest — the Concierge's view of a property.
 //
 // Same dossier loader as get_property_knowledge, but filtered to the org's
-// UNLOCKED allowlist (public.property_knowledge_visibility). Locked by default:
-// with nothing unlocked this returns empty sections. There is NO field-level
-// filtering beyond the allowlist — if an item is unlocked, it is returned
-// verbatim (nested photo arrays aside, which are binary refs, not text). What's
-// safe to expose is entirely the operator's lock/unlock decision.
+// UNLOCKED allowlist (public.property_knowledge_visibility), PER FIELD. Locked
+// by default: with nothing unlocked this returns empty sections. Each row is
+// redacted to only the fields the operator unlocked; a row with no unlocked
+// fields is omitted entirely. The `photos` / `file` pseudo-fields gate the
+// nested binary arrays. What's safe to expose is entirely the operator's
+// lock/unlock decision.
 //
 // The property is bound through ToolContext (ctx.draft.propertyId) so the
 // Concierge can only ever read ITS conversation's property — never another's.
 
 const inputSchema = z.object({
-  // Optional + context-bound: the Concierge sets the property server-side, so
-  // the model normally calls this with no arguments.
   property_id: z
     .string()
     .uuid()
@@ -31,32 +35,21 @@ type Input = z.infer<typeof inputSchema>;
 export interface GuestPropertyKnowledge {
   access: Json | null;
   connectivity: Json | null;
-  notes: Json[];
   contacts: Json[];
   documents: Json[];
   tech_accounts: Json[];
   rooms: Json[];
-  cards: Json[];
+  attributes: Json[];
   /** True when the property has no unlocked knowledge at all. */
   empty: boolean;
 }
 
-const PHOTO_KEYS = [
-  'property_tech_account_photos',
-  'property_room_photos',
-  'property_cards',
-  'property_card_photos',
-];
-
-/** Strip nested photo/card arrays (binary refs / handled separately) from a row. */
-function stripNested(row: Json): Json {
-  const out: Json = {};
-  for (const [k, v] of Object.entries(row)) {
-    if (PHOTO_KEYS.includes(k)) continue;
-    out[k] = v;
-  }
-  return out;
-}
+// Which nested arrays correspond to a row's `photos` pseudo-field, per type.
+const PHOTO_ARRAY_KEY: Partial<Record<VisibilityResourceType, string>> = {
+  room_field: 'property_room_photos',
+  attribute_field: 'property_attribute_photos',
+  tech_account_field: 'property_tech_account_photos',
+};
 
 async function loadUnlockedKeys(propertyId: string): Promise<Set<string>> {
   const { data, error } = await getSupabaseServer()
@@ -74,7 +67,7 @@ async function loadUnlockedKeys(propertyId: string): Promise<Set<string>> {
 /** Keep only the unlocked fields of a singleton field-bag (access / connectivity). */
 function filterFields(
   row: Json | null,
-  type: VisibilityResourceType,
+  type: 'access_field' | 'connectivity_field',
   unlocked: Set<string>,
 ): Json | null {
   if (!row) return null;
@@ -85,11 +78,48 @@ function filterFields(
   return Object.keys(out).length > 0 ? out : null;
 }
 
-/** Keep only the rows whose id is unlocked for `type`. */
-function filterRows(rows: Json[], type: VisibilityResourceType, unlocked: Set<string>): Json[] {
+/**
+ * Redact a collection row to only its unlocked fields. Returns null when no
+ * field survived (so the row is dropped). `extra` lets callers attach context
+ * (e.g. an attribute's room_title) that isn't itself a lockable field.
+ */
+function redactRow(
+  row: Json,
+  type: VisibilityResourceType,
+  unlocked: Set<string>,
+  extra?: Json,
+): Json | null {
+  const id = typeof row.id === 'string' ? row.id : null;
+  if (!id) return null;
+  const fields = RESOURCE_FIELD_SETS[type];
+  const photoArrayKey = PHOTO_ARRAY_KEY[type];
+  const out: Json = {};
+  let kept = 0;
+  for (const field of fields) {
+    if (!unlocked.has(visibilityKey(type, encodeFieldResourceId(id, field)))) continue;
+    if (field === 'photos' || field === 'file') {
+      if (photoArrayKey && Array.isArray(row[photoArrayKey])) {
+        out[photoArrayKey] = row[photoArrayKey];
+        kept++;
+      }
+      continue;
+    }
+    out[field] = row[field] ?? null;
+    kept++;
+  }
+  if (kept === 0) return null;
+  out.id = id;
+  return { ...out, ...(extra ?? {}) };
+}
+
+function redactRows(
+  rows: Json[],
+  type: VisibilityResourceType,
+  unlocked: Set<string>,
+): Json[] {
   return rows
-    .filter((r) => typeof r.id === 'string' && unlocked.has(visibilityKey(type, r.id as string)))
-    .map(stripNested);
+    .map((r) => redactRow(r, type, unlocked))
+    .filter((r): r is Json => r !== null);
 }
 
 async function handler(input: Input, ctx: ToolContext): Promise<ToolResult<GuestPropertyKnowledge>> {
@@ -121,39 +151,40 @@ async function handler(input: Input, ctx: ToolContext): Promise<ToolResult<Guest
     return { ok: false, error: { code: 'db_error', message } };
   }
 
-  // Cards are unlocked per-item, independent of their room — flatten them out so
-  // a card can surface even if its room is locked. Tag each with its room title
-  // for context.
-  const cards: Json[] = [];
+  // Attributes are unlocked per-item, independent of their room — flatten them
+  // out so an attribute can surface even if its room is locked. Tag each with
+  // its room title for context.
+  const attributes: Json[] = [];
   for (const room of dossier.rooms) {
-    const roomCards = Array.isArray(room.property_cards) ? (room.property_cards as Json[]) : [];
-    for (const card of roomCards) {
-      if (typeof card.id === 'string' && unlocked.has(visibilityKey('card', card.id))) {
-        cards.push({ ...stripNested(card), room_title: room.title ?? null });
-      }
+    const roomAttributes = Array.isArray(room.property_attributes)
+      ? (room.property_attributes as Json[])
+      : [];
+    for (const attribute of roomAttributes) {
+      const redacted = redactRow(attribute, 'attribute_field', unlocked, {
+        room_title: (room.title as string | null) ?? null,
+      });
+      if (redacted) attributes.push(redacted);
     }
   }
 
   const data: GuestPropertyKnowledge = {
     access: filterFields(dossier.access, 'access_field', unlocked),
     connectivity: filterFields(dossier.connectivity, 'connectivity_field', unlocked),
-    notes: filterRows(dossier.notes, 'note', unlocked),
-    contacts: filterRows(dossier.contacts, 'contact', unlocked),
-    documents: filterRows(dossier.documents, 'document', unlocked),
-    tech_accounts: filterRows(dossier.tech_accounts, 'tech_account', unlocked),
-    rooms: filterRows(dossier.rooms, 'room', unlocked),
-    cards,
+    contacts: redactRows(dossier.contacts, 'contact_field', unlocked),
+    documents: redactRows(dossier.documents, 'document_field', unlocked),
+    tech_accounts: redactRows(dossier.tech_accounts, 'tech_account_field', unlocked),
+    rooms: redactRows(dossier.rooms, 'room_field', unlocked),
+    attributes,
     empty: false,
   };
   data.empty =
     !data.access &&
     !data.connectivity &&
-    data.notes.length === 0 &&
     data.contacts.length === 0 &&
     data.documents.length === 0 &&
     data.tech_accounts.length === 0 &&
     data.rooms.length === 0 &&
-    data.cards.length === 0;
+    data.attributes.length === 0;
 
   return { ok: true, data };
 }
@@ -161,7 +192,7 @@ async function handler(input: Input, ctx: ToolContext): Promise<ToolResult<Guest
 export const getPropertyKnowledgeForGuest: ToolDefinition<Input, GuestPropertyKnowledge> = {
   name: 'get_property_knowledge_for_guest',
   description:
-    "Look up the guest-shareable facts the operator has unlocked for THIS property (wifi, entry info, parking, amenities, house notes — whatever the org chose to make visible). Call it with no arguments when the guest asks something property-specific. Returns only unlocked items; if `empty` is true or a fact you need isn't present, it hasn't been shared — don't guess it, tell the guest you'll confirm with the team.",
+    "Look up the guest-shareable facts the operator has unlocked for THIS property (wifi, entry info, parking, amenities, house notes — whatever the org chose to make visible). Call it with no arguments when the guest asks something property-specific. Returns only unlocked fields; if `empty` is true or a fact you need isn't present, it hasn't been shared — don't guess it, tell the guest you'll confirm with the team.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,

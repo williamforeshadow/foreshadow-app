@@ -11,8 +11,6 @@ import {
   commitPropertyKnowledgeWrite,
   type PropertyKnowledgeWriteInput,
 } from '@/src/server/properties/propertyKnowledgeWrite';
-import { upsertPropertyNote } from '@/src/server/properties/upsertPropertyNote';
-import { deletePropertyNote } from '@/src/server/properties/deletePropertyNote';
 import { upsertPropertyContact } from '@/src/server/properties/upsertPropertyContact';
 import { deletePropertyContact } from '@/src/server/properties/deletePropertyContact';
 import {
@@ -35,8 +33,6 @@ export type PendingActionKind =
   | 'create_bin'
   | 'add_comment'
   | 'property_knowledge_write'
-  | 'property_note_upsert'
-  | 'property_note_delete'
   | 'property_contact_upsert'
   | 'property_contact_delete'
   | 'slack_file_attachment';
@@ -518,12 +514,6 @@ async function executePendingAction(
   if (row.action_kind === 'property_knowledge_write') {
     return executePropertyKnowledgeWrite(row);
   }
-  if (row.action_kind === 'property_note_upsert') {
-    return executePropertyNoteUpsert(row);
-  }
-  if (row.action_kind === 'property_note_delete') {
-    return executePropertyNoteDelete(row);
-  }
   if (row.action_kind === 'property_contact_upsert') {
     return executePropertyContactUpsert(row);
   }
@@ -788,60 +778,6 @@ async function executePropertyKnowledgeWrite(
   };
 }
 
-async function executePropertyNoteUpsert(
-  row: PendingActionRow,
-): Promise<PendingExecutionResult> {
-  const stored = row.canonical_input as GenericPendingInput;
-  const result = await upsertPropertyNote(stored.input);
-  if (!result.ok) {
-    return {
-      ok: false,
-      status: 'failed',
-      text: `I could not save the property note: ${result.error.message}`,
-      error: result.error.message,
-      result,
-    };
-  }
-
-  const label = result.note.title?.trim() || `${result.note.scope} note`;
-  const changeText =
-    result.mode === 'update' && result.changes?.length === 0
-      ? 'was already up to date'
-      : result.mode === 'create'
-        ? 'created'
-        : 'updated';
-  return {
-    ok: true,
-    status: 'committed',
-    text: `Done - ${changeText} "${label}".`,
-    result,
-  };
-}
-
-async function executePropertyNoteDelete(
-  row: PendingActionRow,
-): Promise<PendingExecutionResult> {
-  const stored = row.canonical_input as GenericPendingInput;
-  const result = await deletePropertyNote(stored.input);
-  if (!result.ok) {
-    return {
-      ok: false,
-      status: 'failed',
-      text: `I could not delete the property note: ${result.error.message}`,
-      error: result.error.message,
-      result,
-    };
-  }
-
-  const label = result.snapshot.title?.trim() || `${result.snapshot.scope} note`;
-  return {
-    ok: true,
-    status: 'committed',
-    text: `Done - deleted "${label}".`,
-    result,
-  };
-}
-
 async function executePropertyContactUpsert(
   row: PendingActionRow,
 ): Promise<PendingExecutionResult> {
@@ -924,11 +860,11 @@ async function attachPropertyKnowledgeFiles(
   const ids = stored.attachment_inbound_file_ids ?? [];
   if (ids.length === 0) return [];
 
-  if (input.action !== 'upsert_card' && input.action !== 'upsert_room') {
+  if (input.action !== 'upsert_attribute' && input.action !== 'upsert_room') {
     return ids.map((inboundFileId) => ({
       inbound_file_id: inboundFileId,
       ok: false as const,
-      error: 'Attachments are only supported for room or card writes.',
+      error: 'Attachments are only supported for room or attribute writes.',
     }));
   }
 
@@ -938,7 +874,7 @@ async function attachPropertyKnowledgeFiles(
       : '';
   const targetId =
     rowId ||
-    (input.action === 'upsert_card' ? input.card_id : input.room_id) ||
+    (input.action === 'upsert_attribute' ? input.attribute_id : input.room_id) ||
     '';
   if (!targetId) {
     return ids.map((inboundFileId) => ({
@@ -949,12 +885,12 @@ async function attachPropertyKnowledgeFiles(
   }
 
   return attachFiles(ids, (inboundFileId) =>
-    input.action === 'upsert_card'
+    input.action === 'upsert_attribute'
       ? {
-          destination: 'property_card_photo',
+          destination: 'property_attribute_photo',
           inbound_file_id: inboundFileId,
           property_id: input.property_id,
-          card_id: targetId,
+          attribute_id: targetId,
           caption: stored.attachment_caption ?? null,
         }
       : {

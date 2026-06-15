@@ -2,7 +2,7 @@ import type { TextBlock } from '@anthropic-ai/sdk/resources/messages';
 import { getAnthropic, MODEL } from '@/src/agent/anthropic';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { loadPropertyKnowledge } from '@/src/server/properties/propertyKnowledge';
-import { ROOM_TYPES, CARD_TAGS, type RoomType, type CardTag } from '@/lib/propertyCards';
+import { ATTRIBUTE_TAGS, normalizeTags, type AttributeTag } from '@/lib/propertyAttributes';
 import {
   getConversationContext,
   type ConversationContext,
@@ -12,9 +12,9 @@ import type { GuestMessageRecord } from '@/lib/messages';
 // Knowledge-triage generator — the concierge's "did this conversation teach us
 // something durable about the PROPERTY worth saving for next time?" pass. The
 // operator-facing sibling of draftReply/draftTask. It reads the conversation AND
-// the property's current knowledge tree, and proposes additions (a room note, a
-// room card, or a property note) — rarely. The result compounds: an accepted,
-// guest-visible fact later informs the concierge's replies.
+// the property's current knowledge tree, and proposes additions (a room note or
+// a room attribute) — rarely. The result compounds: an accepted, guest-visible
+// fact later informs the concierge's replies.
 //
 // Single structured call, temp 0. Domain-agnostic; what qualifies is judged from
 // the conversation, not assumptions.
@@ -22,21 +22,18 @@ import type { GuestMessageRecord } from '@/lib/messages';
 const TRIAGE_MAX_TOKENS = 900;
 const MAX_THREAD_MESSAGES = 40;
 
-type NoteScope = 'known_issues' | 'owner_preferences';
 type RoomScope = 'interior' | 'exterior';
 
 export interface RoomRef {
   /** Existing room id to add under, or null to create a new room. */
   id: string | null;
   scope: RoomScope;
-  type: RoomType;
   title: string | null;
 }
 
 export type KnowledgeTarget =
   | { kind: 'room_note'; room: RoomRef; notes: string }
-  | { kind: 'card'; room: RoomRef; card: { tag: CardTag; title: string; body: string | null } }
-  | { kind: 'property_note'; scope: NoteScope; title: string | null; body: string };
+  | { kind: 'attribute'; room: RoomRef; attribute: { tags: AttributeTag[]; title: string; body: string | null } };
 
 export interface KnowledgeProposalDraft {
   target: KnowledgeTarget;
@@ -59,30 +56,27 @@ Save it when it's a discovered fix or quirk (e.g. the TV only works on a certain
 Ground every proposal ONLY in what the conversation actually established — never invent details, names, times, or numbers.
 
 WHERE to put each fact (choose the best target):
-- A discrete thing in a specific room/area — an appliance, amenity, safety item, utility, or a quirk about a particular object → a CARD under that room. Use an existing room when one fits (reference its id); if the relevant room clearly exists in the property but isn't in the list, create it (set room.id to null and give scope + type).
+- A discrete thing tied to a specific room/area — an appliance, amenity, safety item, utility, a quirk about a particular object, OR a known defect/issue → an ATTRIBUTE under that room. Tag it appropriately (you may apply multiple tags). Use an existing room when one fits (reference its id); if the relevant room clearly exists in the property but isn't in the list, create it (set room.id to null and give scope + title). For a property-wide fact not tied to a specific room, create or reuse a general/whole-property area (scope "interior") and attach the attribute there.
 - A general characteristic or recurring fact about a room or area AS A WHOLE (e.g. "basement tends to smell", "landscaper comes every other Friday" for the yard) → a ROOM NOTE on that room's notes.
-- A property-wide fact not tied to one room: a defect/issue → a property note with scope "known_issues"; an owner instruction or preference → scope "owner_preferences".
 
-Rooms have a scope ("interior" or "exterior") and a type. Valid room types: ${ROOM_TYPES.join(', ')}. Valid card tags: ${CARD_TAGS.join(', ')} (use "quirk" for a quirky behavior, "appliance" for a device, "amenity" for a guest amenity, "safety" for a hazard, "utility" for shutoffs/utilities, "access" for entry, "other" otherwise).
+Rooms have a scope ("interior" or "exterior") and a title. Valid attribute tags: ${ATTRIBUTE_TAGS.join(', ')} (use "quirk" for a quirky behavior, "appliance" for a device, "amenity" for a guest amenity, "safety" for a hazard, "utility" for shutoffs/utilities, "access" for entry, "known_issue" for a broken/defective/under-repair item, "other" otherwise). You may combine tags (e.g. an appliance that's broken = ["appliance","known_issue"]).
 
-VISIBILITY: set guest_visible true when this is something you'd happily share with any guest (how to use an amenity, a TV input, parking, wifi). Set it false when it's internal (a defect, an owner preference, anything you would not tell a guest).
+VISIBILITY: set guest_visible true when this is something you'd happily share with any guest (how to use an amenity, a TV input, parking, wifi). Set it false when it's internal (a defect/known issue, anything you would not tell a guest).
 
 Output: respond with ONLY a single JSON object, no prose, no code fences:
 {"proposals": [{"target": <Target>, "summary": string, "guest_visible": boolean, "reasoning": string}], "reasoning": string}
-"proposals" is an array of zero or more (usually zero or one). "summary" is a short human-readable line like "Living Room - quirk card: TV must be on HDMI 2".
+"proposals" is an array of zero or more (usually zero or one). "summary" is a short human-readable line like "Living Room - quirk: TV must be on HDMI 2".
 A <Target> is exactly one of:
-- {"kind":"room_note","room":{"id":string|null,"scope":"interior"|"exterior","type":string,"title":string|null},"notes":string}
-- {"kind":"card","room":{"id":string|null,"scope":"interior"|"exterior","type":string,"title":string|null},"card":{"tag":string,"title":string,"body":string|null}}
-- {"kind":"property_note","scope":"known_issues"|"owner_preferences","title":string|null,"body":string}
+- {"kind":"room_note","room":{"id":string|null,"scope":"interior"|"exterior","title":string|null},"notes":string}
+- {"kind":"attribute","room":{"id":string|null,"scope":"interior"|"exterior","title":string|null},"attribute":{"tags":string[],"title":string,"body":string|null}}
 Keep "reasoning" to one short sentence.`;
 
 interface KnowledgeRoom {
   id: string;
   scope: string;
-  type: string;
   title: string | null;
   notes: string | null;
-  cards: Array<{ tag: string; title: string }>;
+  attributes: Array<{ tags: AttributeTag[]; title: string }>;
 }
 
 /** Compact the property's current knowledge into prompt text for placement + dedup. */
@@ -90,26 +84,19 @@ async function loadKnowledgeContext(propertyId: string | null): Promise<{
   block: string;
   rooms: KnowledgeRoom[];
 }> {
-  if (!propertyId) return { block: '(no property linked — only property-wide notes are possible)', rooms: [] };
+  if (!propertyId) return { block: '(no property linked)', rooms: [] };
   const knowledge = await loadPropertyKnowledge(propertyId);
   if (!knowledge) return { block: '(property knowledge unavailable)', rooms: [] };
 
   const rooms: KnowledgeRoom[] = (knowledge.rooms as unknown as Array<Record<string, unknown>>).map((r) => ({
     id: r.id as string,
     scope: (r.scope as string) ?? 'interior',
-    type: (r.type as string) ?? 'other',
     title: (r.title as string | null) ?? null,
     notes: (r.notes as string | null) ?? null,
-    cards: ((r.property_cards as Array<Record<string, unknown>> | null) ?? []).map((c) => ({
-      tag: (c.tag as string) ?? 'other',
-      title: (c.title as string | null) ?? '',
+    attributes: ((r.property_attributes as Array<Record<string, unknown>> | null) ?? []).map((a) => ({
+      tags: normalizeTags(a.tags),
+      title: (a.title as string | null) ?? '',
     })),
-  }));
-
-  const notes = (knowledge.notes as unknown as Array<Record<string, unknown>>).map((n) => ({
-    scope: (n.scope as string) ?? '',
-    title: (n.title as string | null) ?? null,
-    body: (n.body as string | null) ?? '',
   }));
 
   const lines: string[] = [];
@@ -118,21 +105,12 @@ async function loadKnowledgeContext(propertyId: string | null): Promise<{
     lines.push('- (none yet)');
   } else {
     for (const room of rooms) {
-      const label = room.title || room.type;
+      const label = room.title || room.scope;
       const noteStr = room.notes ? ` | room note: "${room.notes.slice(0, 120)}"` : '';
-      const cardStr = room.cards.length
-        ? ` | cards: ${room.cards.map((c) => `${c.tag} "${c.title}"`).join(', ')}`
+      const attrStr = room.attributes.length
+        ? ` | attributes: ${room.attributes.map((a) => `${a.tags.join('/') || 'untagged'} "${a.title}"`).join(', ')}`
         : '';
-      lines.push(`- [id: ${room.id}] ${room.scope}/${room.type} "${label}"${noteStr}${cardStr}`);
-    }
-  }
-  lines.push('');
-  lines.push('Existing property notes:');
-  if (notes.length === 0) {
-    lines.push('- (none yet)');
-  } else {
-    for (const n of notes) {
-      lines.push(`- [${n.scope}] ${n.title ? `"${n.title}": ` : ''}${n.body.slice(0, 120)}`);
+      lines.push(`- [id: ${room.id}] ${room.scope} "${label}"${noteStr}${attrStr}`);
     }
   }
   return { block: lines.join('\n'), rooms };
@@ -155,17 +133,15 @@ function parseRoomRef(raw: unknown, rooms: KnowledgeRoom[]): RoomRef | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
   const scope = r.scope === 'exterior' ? 'exterior' : r.scope === 'interior' ? 'interior' : null;
-  const type = typeof r.type === 'string' && ROOM_TYPES.includes(r.type as RoomType) ? (r.type as RoomType) : null;
   let id = typeof r.id === 'string' && r.id.trim() ? r.id.trim() : null;
   // Only honor an id that actually exists; otherwise treat as a create.
   const existing = id ? rooms.find((room) => room.id === id) : undefined;
   if (id && !existing) id = null;
-  // Derive scope/type from the existing room when referenced; require them on create.
+  // Derive scope from the existing room when referenced; require it on create.
   const finalScope = existing ? (existing.scope === 'exterior' ? 'exterior' : 'interior') : scope;
-  const finalType = existing ? (ROOM_TYPES.includes(existing.type as RoomType) ? (existing.type as RoomType) : 'other') : type;
-  if (!finalScope || !finalType) return null;
+  if (!finalScope) return null;
   const title = typeof r.title === 'string' && r.title.trim() ? r.title.trim() : null;
-  return { id, scope: finalScope, type: finalType, title };
+  return { id, scope: finalScope, title };
 }
 
 function parseTarget(raw: unknown, rooms: KnowledgeRoom[]): KnowledgeTarget | null {
@@ -179,23 +155,16 @@ function parseTarget(raw: unknown, rooms: KnowledgeRoom[]): KnowledgeTarget | nu
     if (!room || !notes) return null;
     return { kind: 'room_note', room, notes };
   }
-  if (kind === 'card') {
+  if (kind === 'attribute') {
     const room = parseRoomRef(t.room, rooms);
-    const c = t.card;
-    if (!room || !c || typeof c !== 'object') return null;
-    const cc = c as Record<string, unknown>;
-    const tag = typeof cc.tag === 'string' && CARD_TAGS.includes(cc.tag as CardTag) ? (cc.tag as CardTag) : 'other';
-    const title = typeof cc.title === 'string' ? cc.title.trim() : '';
+    const a = t.attribute;
+    if (!room || !a || typeof a !== 'object') return null;
+    const aa = a as Record<string, unknown>;
+    const tags = normalizeTags(aa.tags);
+    const title = typeof aa.title === 'string' ? aa.title.trim() : '';
     if (!title) return null;
-    const body = typeof cc.body === 'string' && cc.body.trim() ? cc.body.trim() : null;
-    return { kind: 'card', room, card: { tag, title, body } };
-  }
-  if (kind === 'property_note') {
-    const scope: NoteScope = t.scope === 'owner_preferences' ? 'owner_preferences' : 'known_issues';
-    const body = typeof t.body === 'string' ? t.body.trim() : '';
-    if (!body) return null;
-    const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : null;
-    return { kind: 'property_note', scope, title, body };
+    const body = typeof aa.body === 'string' && aa.body.trim() ? aa.body.trim() : null;
+    return { kind: 'attribute', room, attribute: { tags, title, body } };
   }
   return null;
 }
@@ -235,13 +204,10 @@ function parseTriageJson(raw: string, rooms: KnowledgeRoom[]): KnowledgeTriageRe
 
 /** Fallback human-readable summary if the model omits one. */
 export function describeTarget(target: KnowledgeTarget): string {
-  if (target.kind === 'property_note') {
-    const scope = target.scope === 'owner_preferences' ? 'Owner preferences' : 'Known issues';
-    return `${scope} note: ${target.body.slice(0, 80)}`;
-  }
-  const where = `${target.room.scope === 'exterior' ? 'Exterior' : 'Interior'} → ${target.room.title || target.room.type}`;
+  const where = `${target.room.scope === 'exterior' ? 'Exterior' : 'Interior'} → ${target.room.title || 'room'}`;
   if (target.kind === 'room_note') return `${where} — note: ${target.notes.slice(0, 80)}`;
-  return `${where} — ${target.card.tag} card: ${target.card.title}`;
+  const tagLabel = target.attribute.tags.join('/') || 'attribute';
+  return `${where} — ${tagLabel}: ${target.attribute.title}`;
 }
 
 export async function generateProposedKnowledgeFromContext(

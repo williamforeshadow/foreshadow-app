@@ -2,13 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
 import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
-import {
-  CARD_SCOPES,
-  ROOM_TYPES,
-  defaultRoomTitle,
-  type CardScope,
-  type RoomType,
-} from '@/lib/propertyCards';
+import { ATTRIBUTE_SCOPES, type AttributeScope } from '@/lib/propertyAttributes';
+
+const DEFAULT_ROOM_TITLE = 'New room';
 
 // GET /api/properties/[id]/rooms[?scope=interior]
 // Returns rooms (optionally scope-filtered), each with nested
@@ -29,9 +25,9 @@ export async function GET(
       `
       *,
       property_room_photos (id, storage_path, caption, sort_order),
-      property_cards (
+      property_attributes (
         *,
-        property_card_photos (id, storage_path, caption, sort_order)
+        property_attribute_photos (id, storage_path, caption, sort_order)
       )
       `
     )
@@ -40,7 +36,7 @@ export async function GET(
     .order('created_at', { ascending: true });
 
   if (scope) {
-    if (!CARD_SCOPES.has(scope as CardScope)) {
+    if (!ATTRIBUTE_SCOPES.has(scope as AttributeScope)) {
       return NextResponse.json({ error: 'Invalid scope' }, { status: 400 });
     }
     query = query.eq('scope', scope);
@@ -54,8 +50,8 @@ export async function GET(
 }
 
 // POST /api/properties/[id]/rooms
-// Required: scope, type
-// Optional: title (defaults to the label for `type`), notes, sort_order
+// Required: scope
+// Optional: title (defaults to "New room"), notes, sort_order
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -64,15 +60,11 @@ export async function POST(
   const body = await req.json().catch(() => ({}));
 
   const scope = typeof body?.scope === 'string' ? body.scope : '';
-  if (!CARD_SCOPES.has(scope as CardScope)) {
+  if (!ATTRIBUTE_SCOPES.has(scope as AttributeScope)) {
     return NextResponse.json({ error: 'scope is required' }, { status: 400 });
   }
-  const type = typeof body?.type === 'string' ? body.type : '';
-  if (!ROOM_TYPES.includes(type as RoomType)) {
-    return NextResponse.json({ error: 'Invalid room type' }, { status: 400 });
-  }
   const titleRaw = typeof body?.title === 'string' ? body.title.trim() : '';
-  const title = titleRaw || defaultRoomTitle(type as RoomType);
+  const title = titleRaw || DEFAULT_ROOM_TITLE;
 
   // Optional notes blob attached at the room level. Empty/whitespace
   // becomes NULL so the column reads cleanly when nothing was set.
@@ -111,7 +103,6 @@ export async function POST(
   const payload = {
     property_id: id,
     scope,
-    type,
     title,
     notes,
     sort_order:
@@ -129,9 +120,9 @@ export async function POST(
       `
       *,
       property_room_photos (id, storage_path, caption, sort_order),
-      property_cards (
+      property_attributes (
         *,
-        property_card_photos (id, storage_path, caption, sort_order)
+        property_attribute_photos (id, storage_path, caption, sort_order)
       )
       `
     )
@@ -152,7 +143,6 @@ export async function POST(
         kind: 'snapshot',
         row: {
           scope: data.scope,
-          type: data.type,
           title: data.title,
           notes: data.notes,
         },

@@ -66,7 +66,7 @@ export const previewSlackFileAttachmentTool: ToolDefinition<
 > = {
   name: 'preview_slack_file_attachment',
   description:
-    'PREVIEW attaching a Slack-uploaded inbound file to the app. Use inbound_file_id values from the Slack uploaded-files context. Destinations: task_attachment, property_document, property_room_photo, property_card_photo, property_tech_account_photo. Always preview, present the plan, get explicit confirmation, then call commit_slack_file_attachment with the returned token.',
+    'PREVIEW attaching a Slack-uploaded inbound file to the app. Use inbound_file_id values from the Slack uploaded-files context. Destinations: task_attachment, property_document, property_room_photo, property_attribute_photo, property_tech_account_photo. Always preview, present the plan, get explicit confirmation, then call commit_slack_file_attachment with the returned token.',
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -77,11 +77,11 @@ export const previewSlackFileAttachmentTool: ToolDefinition<
           'task_attachment',
           'property_document',
           'property_room_photo',
-          'property_card_photo',
+          'property_attribute_photo',
           'property_tech_account_photo',
         ],
         description:
-          'Where to attach the Slack file: a task attachment, Property Knowledge document, room photo, card photo, or tech account photo.',
+          'Where to attach the Slack file: a task attachment, Property Knowledge document, room photo, attribute photo, or tech account photo.',
       },
       inbound_file_id: {
         type: 'string',
@@ -118,10 +118,10 @@ export const previewSlackFileAttachmentTool: ToolDefinition<
         description:
           'Required for destination=property_room_photo. Get ids from get_property_knowledge.',
       },
-      card_id: {
+      attribute_id: {
         type: 'string',
         description:
-          'Required for destination=property_card_photo. Get ids from get_property_knowledge.',
+          'Required for destination=property_attribute_photo. Get ids from get_property_knowledge.',
       },
       account_id: {
         type: 'string',
@@ -130,7 +130,7 @@ export const previewSlackFileAttachmentTool: ToolDefinition<
       },
       caption: {
         type: 'string',
-        description: 'Optional photo caption for room/card photo destinations.',
+        description: 'Optional photo caption for room/attribute photo destinations.',
       },
     },
     required: ['destination', 'inbound_file_id'],

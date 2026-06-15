@@ -3,81 +3,69 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/apiFetch';
 import {
-  ROOM_TYPE_LABELS,
-  TAG_LABELS,
-  TAG_SUB_FIELDS,
-  type CardScope,
-  type CardTag,
-  type RoomType,
-} from '@/lib/propertyCards';
+  normalizeTags,
+  type AttributeScope,
+  type AttributeTag,
+} from '@/lib/propertyAttributes';
 import {
   Field,
   FieldGroup,
   Input,
   SectionCaption,
   SectionHeader,
-  Select,
   Textarea,
   Toast,
   useToast,
 } from '@/components/properties/form/FormPrimitives';
 import { PhotoGrid, resolvePublicPhotoUrl, type Photo } from './PhotoGrid';
-import { TagChip } from './TagChip';
+import { TagChip, TagChips } from './TagChip';
 
-// Unified rooms + cards surface shared by both the Interior and Exterior
-// tabs. The parent passes scope + copy; everything else (CRUD, inline
-// editing, photos) is handled here.
+// Unified rooms + attributes surface shared by both the Interior and Exterior
+// tabs. The parent passes scope + copy; everything else (CRUD, inline editing,
+// photos) is handled here. "Attributes" are the tagged things inside a room
+// (formerly "cards").
 
-interface PropertyCard {
+interface PropertyAttribute {
   id: string;
   property_id: string;
   room_id: string;
-  scope: CardScope;
-  tag: CardTag;
+  scope: AttributeScope;
+  tags: AttributeTag[];
   title: string;
   body: string | null;
-  tag_data: Record<string, unknown> | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
-  property_card_photos?: Photo[];
+  property_attribute_photos?: Photo[];
 }
 
 interface PropertyRoom {
   id: string;
   property_id: string;
-  scope: CardScope;
-  type: RoomType;
+  scope: AttributeScope;
   title: string;
   notes: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
   property_room_photos?: Photo[];
-  property_cards?: PropertyCard[];
+  property_attributes?: PropertyAttribute[];
 }
 
 interface RoomsBoardProps {
   propertyId: string;
-  scope: CardScope;
+  scope: AttributeScope;
   sectionLabel: string;
   sectionCaption: string;
   // What users see in copy. Interior calls them "rooms"; Exterior calls
   // them "areas". Both use the same data model under the hood.
   noun: string; // "room" | "area"
   nounPlural: string; // "rooms" | "areas"
-  // Room types shown in the type dropdown. The scope decides whether
-  // interior- or exterior-flavored options are presented; the DB enum
-  // still accepts any value from the full union.
-  roomTypes: RoomType[];
 }
 
 const ROOM_PHOTO_CAP = 50;
-const CARD_PHOTO_CAP = 20;
-// Defaults used when a user hits "Add room/area" — type is generic and the
-// title is a placeholder-ish label the user is expected to overwrite.
-const DEFAULT_ROOM_TYPE: RoomType = 'other';
-const DEFAULT_ROOM_TITLE = 'Room name';
+const ATTRIBUTE_PHOTO_CAP = 20;
+const DEFAULT_ROOM_TITLE = 'New room';
 
 export function RoomsBoard({
   propertyId,
@@ -86,7 +74,6 @@ export function RoomsBoard({
   sectionCaption,
   noun,
   nounPlural,
-  roomTypes,
 }: RoomsBoardProps) {
   const [rooms, setRooms] = useState<PropertyRoom[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,7 +108,6 @@ export function RoomsBoard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scope,
-          type: DEFAULT_ROOM_TYPE,
           title: DEFAULT_ROOM_TITLE,
         }),
       });
@@ -135,10 +121,7 @@ export function RoomsBoard({
   }, [propertyId, scope, noun, showToast]);
 
   const handlePatchRoom = useCallback(
-    async (
-      roomId: string,
-      patch: { title?: string; type?: RoomType; notes?: string | null }
-    ) => {
+    async (roomId: string, patch: { title?: string; notes?: string | null }) => {
       setRooms((prev) =>
         prev.map((r) => (r.id === roomId ? { ...r, ...patch } : r))
       );
@@ -165,19 +148,19 @@ export function RoomsBoard({
 
   const handleDeleteRoom = useCallback(
     async (room: PropertyRoom) => {
-      const cardCount = room.property_cards?.length ?? 0;
+      const attrCount = room.property_attributes?.length ?? 0;
       const roomPhotoCount = room.property_room_photos?.length ?? 0;
-      const cardPhotoCount = (room.property_cards ?? []).reduce(
-        (acc, c) => acc + (c.property_card_photos?.length ?? 0),
+      const attrPhotoCount = (room.property_attributes ?? []).reduce(
+        (acc, a) => acc + (a.property_attribute_photos?.length ?? 0),
         0
       );
-      const totalPhotos = roomPhotoCount + cardPhotoCount;
+      const totalPhotos = roomPhotoCount + attrPhotoCount;
       const confirmLines = [
         `Delete "${room.title}"?`,
         '',
-        cardCount > 0
-          ? `This will also delete ${cardCount} card${cardCount === 1 ? '' : 's'}`
-          : `This ${noun} has no cards.`,
+        attrCount > 0
+          ? `This will also delete ${attrCount} attribute${attrCount === 1 ? '' : 's'}`
+          : `This ${noun} has no attributes.`,
         totalPhotos > 0
           ? `${totalPhotos} photo${totalPhotos === 1 ? '' : 's'} will be removed.`
           : '',
@@ -215,47 +198,44 @@ export function RoomsBoard({
     []
   );
 
-  const handleCreateCard = useCallback(
+  const handleCreateAttribute = useCallback(
     async (roomId: string) => {
       try {
-        const res = await apiFetch(`/api/properties/${propertyId}/cards`, {
+        const res = await apiFetch(`/api/properties/${propertyId}/attributes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             room_id: roomId,
-            tag: 'other',
             title: 'New item',
           }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to create card');
+        if (!res.ok) throw new Error(data.error || 'Failed to create attribute');
         setRooms((prev) =>
           prev.map((r) =>
             r.id === roomId
               ? {
                   ...r,
-                  property_cards: [
-                    ...(r.property_cards ?? []),
-                    data.card as PropertyCard,
+                  property_attributes: [
+                    ...(r.property_attributes ?? []),
+                    data.attribute as PropertyAttribute,
                   ],
                 }
               : r
           )
         );
       } catch (err: any) {
-        showToast('error', err.message || 'Failed to create card');
+        showToast('error', err.message || 'Failed to create attribute');
       }
     },
     [propertyId, showToast]
   );
 
-  const handlePatchCard = useCallback(
+  const handlePatchAttribute = useCallback(
     async (
       roomId: string,
-      cardId: string,
-      patch: Partial<
-        Pick<PropertyCard, 'title' | 'body' | 'tag' | 'tag_data'>
-      >
+      attributeId: string,
+      patch: Partial<Pick<PropertyAttribute, 'title' | 'body' | 'tags'>>
     ) => {
       setRooms((prev) =>
         prev.map((r) =>
@@ -263,15 +243,15 @@ export function RoomsBoard({
             ? r
             : {
                 ...r,
-                property_cards: (r.property_cards ?? []).map((c) =>
-                  c.id === cardId ? { ...c, ...patch } : c
+                property_attributes: (r.property_attributes ?? []).map((a) =>
+                  a.id === attributeId ? { ...a, ...patch } : a
                 ),
               }
         )
       );
       try {
         const res = await apiFetch(
-          `/api/properties/${propertyId}/cards/${cardId}`,
+          `/api/properties/${propertyId}/attributes/${attributeId}`,
           {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -286,8 +266,8 @@ export function RoomsBoard({
               ? r
               : {
                   ...r,
-                  property_cards: (r.property_cards ?? []).map((c) =>
-                    c.id === cardId ? (data.card as PropertyCard) : c
+                  property_attributes: (r.property_attributes ?? []).map((a) =>
+                    a.id === attributeId ? (data.attribute as PropertyAttribute) : a
                   ),
                 }
           )
@@ -299,8 +279,8 @@ export function RoomsBoard({
     [propertyId, showToast]
   );
 
-  const handleDeleteCard = useCallback(
-    async (roomId: string, cardId: string) => {
+  const handleDeleteAttribute = useCallback(
+    async (roomId: string, attributeId: string) => {
       const prev = rooms;
       setRooms((p) =>
         p.map((r) =>
@@ -308,15 +288,15 @@ export function RoomsBoard({
             ? r
             : {
                 ...r,
-                property_cards: (r.property_cards ?? []).filter(
-                  (c) => c.id !== cardId
+                property_attributes: (r.property_attributes ?? []).filter(
+                  (a) => a.id !== attributeId
                 ),
               }
         )
       );
       try {
         const res = await apiFetch(
-          `/api/properties/${propertyId}/cards/${cardId}`,
+          `/api/properties/${propertyId}/attributes/${attributeId}`,
           { method: 'DELETE' }
         );
         if (!res.ok) {
@@ -331,18 +311,18 @@ export function RoomsBoard({
     [rooms, propertyId, showToast]
   );
 
-  const handleCardPhotosChange = useCallback(
-    (roomId: string, cardId: string, photos: Photo[]) => {
+  const handleAttributePhotosChange = useCallback(
+    (roomId: string, attributeId: string, photos: Photo[]) => {
       setRooms((prev) =>
         prev.map((r) =>
           r.id !== roomId
             ? r
             : {
                 ...r,
-                property_cards: (r.property_cards ?? []).map((c) =>
-                  c.id === cardId
-                    ? { ...c, property_card_photos: photos }
-                    : c
+                property_attributes: (r.property_attributes ?? []).map((a) =>
+                  a.id === attributeId
+                    ? { ...a, property_attribute_photos: photos }
+                    : a
                 ),
               }
         )
@@ -413,19 +393,20 @@ export function RoomsBoard({
                 room={room}
                 propertyId={propertyId}
                 noun={noun}
-                roomTypes={roomTypes}
                 onPatchRoom={(patch) => handlePatchRoom(room.id, patch)}
                 onDeleteRoom={() => handleDeleteRoom(room)}
                 onRoomPhotosChange={(photos) =>
                   handleRoomPhotosChange(room.id, photos)
                 }
-                onCreateCard={() => handleCreateCard(room.id)}
-                onPatchCard={(cardId, patch) =>
-                  handlePatchCard(room.id, cardId, patch)
+                onCreateAttribute={() => handleCreateAttribute(room.id)}
+                onPatchAttribute={(attributeId, patch) =>
+                  handlePatchAttribute(room.id, attributeId, patch)
                 }
-                onDeleteCard={(cardId) => handleDeleteCard(room.id, cardId)}
-                onCardPhotosChange={(cardId, photos) =>
-                  handleCardPhotosChange(room.id, cardId, photos)
+                onDeleteAttribute={(attributeId) =>
+                  handleDeleteAttribute(room.id, attributeId)
+                }
+                onAttributePhotosChange={(attributeId, photos) =>
+                  handleAttributePhotosChange(room.id, attributeId, photos)
                 }
                 onError={(msg) => showToast('error', msg)}
               />
@@ -441,21 +422,15 @@ export function RoomsBoard({
 
 // --- Empty state ----------------------------------------------------------
 
-function EmptyRooms({
-  noun,
-  onAdd,
-}: {
-  noun: string;
-  onAdd: () => void;
-}) {
+function EmptyRooms({ noun, onAdd }: { noun: string; onAdd: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center text-center py-16 px-6 border border-dashed border-neutral-200 dark:border-[rgba(255,255,255,0.07)] rounded-lg">
       <div className="text-[14px] font-medium text-neutral-700 dark:text-[#a09e9a] mb-1">
         No {noun}s yet
       </div>
       <div className="text-[12px] text-neutral-500 dark:text-[#66645f] mb-4 max-w-[380px]">
-        Add a {noun} to start organizing photos, appliances, amenities, and
-        quirks.
+        Add a {noun} to start organizing notes, photos, and attributes
+        (appliances, amenities, quirks, known issues).
       </div>
       <button
         type="button"
@@ -474,37 +449,31 @@ function RoomSection({
   room,
   propertyId,
   noun,
-  roomTypes,
   onPatchRoom,
   onDeleteRoom,
   onRoomPhotosChange,
-  onCreateCard,
-  onPatchCard,
-  onDeleteCard,
-  onCardPhotosChange,
+  onCreateAttribute,
+  onPatchAttribute,
+  onDeleteAttribute,
+  onAttributePhotosChange,
   onError,
 }: {
   room: PropertyRoom;
   propertyId: string;
   noun: string;
-  roomTypes: RoomType[];
-  onPatchRoom: (patch: {
-    title?: string;
-    type?: RoomType;
-    notes?: string | null;
-  }) => void;
+  onPatchRoom: (patch: { title?: string; notes?: string | null }) => void;
   onDeleteRoom: () => void;
   onRoomPhotosChange: (photos: Photo[]) => void;
-  onCreateCard: () => void;
-  onPatchCard: (
-    cardId: string,
-    patch: Partial<Pick<PropertyCard, 'title' | 'body' | 'tag' | 'tag_data'>>
+  onCreateAttribute: () => void;
+  onPatchAttribute: (
+    attributeId: string,
+    patch: Partial<Pick<PropertyAttribute, 'title' | 'body' | 'tags'>>
   ) => void;
-  onDeleteCard: (cardId: string) => void;
-  onCardPhotosChange: (cardId: string, photos: Photo[]) => void;
+  onDeleteAttribute: (attributeId: string) => void;
+  onAttributePhotosChange: (attributeId: string, photos: Photo[]) => void;
   onError: (msg: string) => void;
 }) {
-  const cards = room.property_cards ?? [];
+  const attributes = room.property_attributes ?? [];
   const roomPhotos = room.property_room_photos ?? [];
 
   return (
@@ -512,10 +481,7 @@ function RoomSection({
       <div className="flex items-start justify-between gap-3 mb-4">
         <RoomTitle
           value={room.title}
-          type={room.type}
-          roomTypes={roomTypes}
           onChangeTitle={(next) => onPatchRoom({ title: next })}
-          onChangeType={(next) => onPatchRoom({ type: next })}
         />
         <button
           type="button"
@@ -540,6 +506,15 @@ function RoomSection({
         </button>
       </div>
 
+      {/* Notes first, then photos, then attributes. */}
+      <div className="mb-5">
+        <RoomNotes
+          value={room.notes ?? ''}
+          noun={noun}
+          onChange={(next) => onPatchRoom({ notes: next.trim() === '' ? null : next })}
+        />
+      </div>
+
       <div className="mb-5">
         <PhotoGrid
           photos={roomPhotos}
@@ -555,21 +530,13 @@ function RoomSection({
         />
       </div>
 
-      <div className="mb-5">
-        <RoomNotes
-          value={room.notes ?? ''}
-          noun={noun}
-          onChange={(next) => onPatchRoom({ notes: next.trim() === '' ? null : next })}
-        />
-      </div>
-
       <div className="flex items-center justify-between mb-2">
         <h4 className="text-[11px] font-semibold text-neutral-700 dark:text-[#a09e9a] uppercase tracking-[0.08em]">
-          Cards
+          Attributes
         </h4>
         <button
           type="button"
-          onClick={onCreateCard}
+          onClick={onCreateAttribute}
           className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-neutral-500 dark:text-[#a09e9a] hover:text-[var(--accent-3)] dark:hover:text-[var(--accent-1)] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] rounded transition-colors"
         >
           <svg
@@ -585,24 +552,24 @@ function RoomSection({
               d="M12 4v16m8-8H4"
             />
           </svg>
-          Add card
+          Add attribute
         </button>
       </div>
 
-      {cards.length === 0 ? (
+      {attributes.length === 0 ? (
         <div className="py-4 px-3 text-[12px] text-neutral-400 dark:text-[#66645f] border border-dashed border-neutral-200 dark:border-[rgba(255,255,255,0.07)] rounded-md">
-          No cards in this {noun} yet.
+          No attributes in this {noun} yet.
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
-          {cards.map((c) => (
-            <CardEditor
-              key={c.id}
-              card={c}
+        <div className="flex flex-col gap-2">
+          {attributes.map((a) => (
+            <AttributeRow
+              key={a.id}
+              attribute={a}
               propertyId={propertyId}
-              onPatch={(patch) => onPatchCard(c.id, patch)}
-              onDelete={() => onDeleteCard(c.id)}
-              onPhotosChange={(photos) => onCardPhotosChange(c.id, photos)}
+              onPatch={(patch) => onPatchAttribute(a.id, patch)}
+              onDelete={() => onDeleteAttribute(a.id)}
+              onPhotosChange={(photos) => onAttributePhotosChange(a.id, photos)}
               onError={onError}
             />
           ))}
@@ -613,11 +580,6 @@ function RoomSection({
 }
 
 // --- RoomNotes (debounced, room-level free-text) --------------------------
-//
-// Mirrors the per-card editor but lives on the room itself. We treat
-// empty/whitespace as "clear it" — the API normalizes that to NULL on
-// save so reads stay clean. Saves are debounced ~650ms to keep typing
-// snappy without hammering the API.
 
 function RoomNotes({
   value,
@@ -635,10 +597,6 @@ function RoomNotes({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Re-sync if the parent comes back with new server state and we're
-  // not actively typing. Using a value-equality check is enough — the
-  // parent sets the same string, so React's setState short-circuit
-  // saves us from re-rendering needlessly.
   useEffect(() => {
     setDraft(value);
   }, [value]);
@@ -670,7 +628,7 @@ function RoomNotes({
       <Textarea
         value={draft}
         onChange={(e) => handleChange(e.target.value)}
-        placeholder={`Anything that's true of this whole ${noun} — quirks, layout notes, recurring issues. Card-specific details belong on the card.`}
+        placeholder={`Anything that's true of this whole ${noun} — quirks, layout notes, recurring issues. Attribute-specific details belong on the attribute.`}
         rows={2}
       />
       <div className="mt-1 h-4 text-[10px] font-medium text-neutral-400 dark:text-[#66645f] uppercase tracking-[0.04em]">
@@ -685,20 +643,14 @@ function RoomNotes({
   );
 }
 
-// --- RoomTitle (inline rename + type select) ------------------------------
+// --- RoomTitle (inline rename) --------------------------------------------
 
 function RoomTitle({
   value,
-  type,
-  roomTypes,
   onChangeTitle,
-  onChangeType,
 }: {
   value: string;
-  type: RoomType;
-  roomTypes: RoomType[];
   onChangeTitle: (next: string) => void;
-  onChangeType: (next: RoomType) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [buffer, setBuffer] = useState(value);
@@ -765,50 +717,40 @@ function RoomTitle({
           </svg>
         </button>
       )}
-      <select
-        value={type}
-        onChange={(e) => onChangeType(e.target.value as RoomType)}
-        className="shrink-0 text-[11px] font-medium uppercase tracking-[0.04em] text-neutral-500 dark:text-[#a09e9a] bg-transparent border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] rounded-full px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)] dark:focus:ring-[var(--accent-ring-dark)] transition-colors"
-        title="Change type"
-      >
-        {roomTypes.map((t) => (
-          <option key={t} value={t}>
-            {ROOM_TYPE_LABELS[t]}
-          </option>
-        ))}
-      </select>
     </div>
   );
 }
 
-// --- CardEditor -----------------------------------------------------------
+// --- AttributeRow (collapsible) -------------------------------------------
 
-interface CardEditorProps {
-  card: PropertyCard;
+interface AttributeRowProps {
+  attribute: PropertyAttribute;
   propertyId: string;
   onPatch: (
-    patch: Partial<Pick<PropertyCard, 'title' | 'body' | 'tag' | 'tag_data'>>
+    patch: Partial<Pick<PropertyAttribute, 'title' | 'body' | 'tags'>>
   ) => void;
   onDelete: () => void;
   onPhotosChange: (photos: Photo[]) => void;
   onError: (msg: string) => void;
 }
 
-function CardEditor({
-  card,
+function AttributeRow({
+  attribute,
   propertyId,
   onPatch,
   onDelete,
   onPhotosChange,
   onError,
-}: CardEditorProps) {
-  const [local, setLocal] = useState({
-    title: card.title ?? '',
-    body: card.body ?? '',
-  });
-  const [tagData, setTagData] = useState<Record<string, unknown>>(
-    card.tag_data ?? {}
+}: AttributeRowProps) {
+  // Freshly created attributes (still titled "New item") start expanded so the
+  // user can fill them in; existing ones start collapsed for a tidy list.
+  const [expanded, setExpanded] = useState(
+    () => !attribute.title || attribute.title === 'New item'
   );
+  const [local, setLocal] = useState({
+    title: attribute.title ?? '',
+    body: attribute.body ?? '',
+  });
   const [savedState, setSavedState] = useState<'idle' | 'saving' | 'saved'>(
     'idle'
   );
@@ -817,14 +759,13 @@ function CardEditor({
 
   useEffect(() => {
     setLocal({
-      title: card.title ?? '',
-      body: card.body ?? '',
+      title: attribute.title ?? '',
+      body: attribute.body ?? '',
     });
-    setTagData(card.tag_data ?? {});
-  }, [card.id, card.updated_at]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [attribute.id, attribute.updated_at]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const scheduleSave = useCallback(
-    (patch: Parameters<CardEditorProps['onPatch']>[0]) => {
+    (patch: Parameters<AttributeRowProps['onPatch']>[0]) => {
       setSavedState('saving');
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
@@ -852,44 +793,47 @@ function CardEditor({
       if (saveTimer.current) clearTimeout(saveTimer.current);
       return;
     }
-    scheduleSave({ [key]: value } as any);
+    scheduleSave({ [key]: value } as Partial<Pick<PropertyAttribute, 'title' | 'body'>>);
   };
 
-  const updateTag = (tag: CardTag) => {
-    // Preserve whatever sub-field keys are still valid for the new tag —
-    // the server drops the rest on write.
-    onPatch({ tag });
+  const updateTags = (tags: AttributeTag[]) => {
+    // Tag changes commit immediately (no debounce) — they're discrete clicks.
+    onPatch({ tags: normalizeTags(tags) });
   };
-
-  const updateSubField = (key: string, value: string) => {
-    const next = { ...tagData, [key]: value };
-    setTagData(next);
-    scheduleSave({ tag_data: next });
-  };
-
-  const subFields = TAG_SUB_FIELDS[card.tag] ?? [];
 
   return (
-    <div className="border border-neutral-200/80 dark:border-[rgba(255,255,255,0.07)] rounded-lg p-3">
-      <div className="flex items-start gap-2 mb-3">
-        <div className="flex-1 min-w-0">
-          <Input
-            value={local.title}
-            onChange={(e) => updateText('title', e.target.value)}
-            placeholder="Title (required)"
-            className="!py-1.5 !text-[14px] !font-medium"
-          />
-        </div>
-        <TagChip value={card.tag} onChange={updateTag} />
+    <div className="border border-neutral-200/80 dark:border-[rgba(255,255,255,0.07)] rounded-lg">
+      {/* Collapsed header — click to expand/collapse. */}
+      <div className="flex items-center gap-2 p-2.5">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex-1 min-w-0 flex items-center gap-2 text-left"
+          aria-expanded={expanded}
+        >
+          <svg
+            className={`w-3.5 h-3.5 shrink-0 text-neutral-400 dark:text-[#66645f] transition-transform ${expanded ? 'rotate-90' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+          <span className="text-[14px] font-medium text-neutral-900 dark:text-[#f0efed] truncate">
+            {local.title || 'Untitled attribute'}
+          </span>
+          <TagChips tags={attribute.tags ?? []} />
+        </button>
         <button
           type="button"
           onClick={() => {
-            if (window.confirm(`Delete "${local.title || 'this card'}"?`))
+            if (window.confirm(`Delete "${local.title || 'this attribute'}"?`))
               onDelete();
           }}
-          aria-label="Delete card"
+          aria-label="Delete attribute"
           className="shrink-0 p-1 rounded text-neutral-400 dark:text-[#66645f] hover:text-red-600 dark:hover:text-red-400 hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
-          title={`${TAG_LABELS[card.tag]} · delete card`}
+          title="Delete attribute"
         >
           <svg
             className="w-4 h-4"
@@ -907,97 +851,56 @@ function CardEditor({
         </button>
       </div>
 
-      <FieldGroup>
-        <Field label="Notes">
-          <Textarea
-            value={local.body}
-            onChange={(e) => updateText('body', e.target.value)}
-            placeholder="Free text — quirks, instructions, history"
-            rows={2}
-          />
-        </Field>
-
-        {subFields.length > 0 && (
-          <div className="mt-1 pt-3 border-t border-neutral-100 dark:border-[rgba(255,255,255,0.05)] space-y-3">
-            {subFields.map((field) => {
-              const raw = tagData?.[field.key];
-              const value =
-                typeof raw === 'string'
-                  ? raw
-                  : raw != null
-                    ? String(raw)
-                    : '';
-              return (
-                <Field key={field.key} label={field.label}>
-                  {field.kind === 'enum' && field.options ? (
-                    <Select
-                      value={value}
-                      onChange={(e) =>
-                        updateSubField(field.key, e.target.value)
-                      }
-                    >
-                      <option value="">—</option>
-                      {field.options.map((o) => (
-                        <option key={o} value={o}>
-                          {o}
-                        </option>
-                      ))}
-                    </Select>
-                  ) : field.multiline ? (
-                    <Textarea
-                      value={value}
-                      onChange={(e) =>
-                        updateSubField(field.key, e.target.value)
-                      }
-                      placeholder={field.placeholder}
-                      rows={2}
-                    />
-                  ) : (
-                    <Input
-                      value={value}
-                      onChange={(e) =>
-                        updateSubField(field.key, e.target.value)
-                      }
-                      placeholder={field.placeholder}
-                      type={
-                        field.kind === 'date'
-                          ? 'date'
-                          : field.kind === 'url'
-                            ? 'url'
-                            : 'text'
-                      }
-                    />
-                  )}
-                </Field>
-              );
-            })}
+      {expanded && (
+        <div className="px-3 pb-3 pt-1 border-t border-neutral-100 dark:border-[rgba(255,255,255,0.05)] space-y-3">
+          <div className="flex items-start gap-2 pt-3">
+            <div className="flex-1 min-w-0">
+              <Input
+                value={local.title}
+                onChange={(e) => updateText('title', e.target.value)}
+                placeholder="Title (required)"
+                className="!py-1.5 !text-[14px] !font-medium"
+              />
+            </div>
+            <TagChip value={attribute.tags ?? []} onChange={updateTags} />
           </div>
-        )}
 
-        <div className="mt-1 pt-3 border-t border-neutral-100 dark:border-[rgba(255,255,255,0.05)]">
-          <PhotoGrid
-            photos={card.property_card_photos ?? []}
-            maxPhotos={CARD_PHOTO_CAP}
-            noun="card"
-            uploadUrl={`/api/properties/${propertyId}/cards/${card.id}/photos`}
-            deleteUrl={(photoId) =>
-              `/api/properties/${propertyId}/cards/${card.id}/photos/${photoId}`
-            }
-            resolveUrl={resolvePublicPhotoUrl}
-            onPhotosChange={onPhotosChange}
-            onError={onError}
-          />
+          <FieldGroup>
+            <Field label="Notes">
+              <Textarea
+                value={local.body}
+                onChange={(e) => updateText('body', e.target.value)}
+                placeholder="Free text — quirks, instructions, history"
+                rows={2}
+              />
+            </Field>
+
+            <div className="mt-1 pt-3 border-t border-neutral-100 dark:border-[rgba(255,255,255,0.05)]">
+              <PhotoGrid
+                photos={attribute.property_attribute_photos ?? []}
+                maxPhotos={ATTRIBUTE_PHOTO_CAP}
+                noun="attribute"
+                uploadUrl={`/api/properties/${propertyId}/attributes/${attribute.id}/photos`}
+                deleteUrl={(photoId) =>
+                  `/api/properties/${propertyId}/attributes/${attribute.id}/photos/${photoId}`
+                }
+                resolveUrl={resolvePublicPhotoUrl}
+                onPhotosChange={onPhotosChange}
+                onError={onError}
+              />
+            </div>
+          </FieldGroup>
+
+          <div className="h-4 text-[10px] font-medium text-neutral-400 dark:text-[#66645f] uppercase tracking-[0.04em]">
+            {savedState === 'saving' && 'Saving…'}
+            {savedState === 'saved' && (
+              <span className="text-[var(--accent-2)] dark:text-[var(--accent-1)]">
+                Saved
+              </span>
+            )}
+          </div>
         </div>
-      </FieldGroup>
-
-      <div className="mt-1.5 h-4 text-[10px] font-medium text-neutral-400 dark:text-[#66645f] uppercase tracking-[0.04em]">
-        {savedState === 'saving' && 'Saving…'}
-        {savedState === 'saved' && (
-          <span className="text-[var(--accent-2)] dark:text-[var(--accent-1)]">
-            Saved
-          </span>
-        )}
-      </div>
+      )}
     </div>
   );
 }

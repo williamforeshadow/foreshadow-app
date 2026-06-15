@@ -14,7 +14,8 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 //     id uuid PK,
 //     property_id uuid NOT NULL,
 //     user_id text NULL,                  -- nullable: unattributed
-//     resource_type text NOT NULL,        -- 'note' | 'contact' | 'room' | 'card' | 'access' | 'connectivity' | 'tech_account' | 'document'
+//     resource_type text NOT NULL,        -- 'contact' | 'room' | 'attribute' | 'access' | 'connectivity' | 'tech_account' | 'document'
+//                                          -- (historical rows may also carry the retired 'note' | 'card' values)
 //     resource_id uuid NULL,              -- nullable on hard-delete
 //     action text NOT NULL,               -- 'create' | 'update' | 'delete'
 //     changes jsonb NULL,
@@ -24,10 +25,9 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 //   )
 
 export type KnowledgeResourceType =
-  | 'note'
   | 'contact'
   | 'room'
-  | 'card'
+  | 'attribute'
   | 'access'
   | 'connectivity'
   | 'tech_account'

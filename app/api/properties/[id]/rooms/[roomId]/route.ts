@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
 import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
-import { ROOM_TYPES, type RoomType } from '@/lib/propertyCards';
 
 // PATCH /api/properties/[id]/rooms/[roomId]
-// Editable: title, type, notes, sort_order. scope is immutable — moving
+// Editable: title, notes, sort_order. scope is immutable — moving
 // a room from interior to exterior doesn't make sense semantically, and
 // if it ever does the caller can delete + recreate.
 export async function PATCH(
@@ -27,16 +26,8 @@ export async function PATCH(
     patch.title = v.trim();
   }
 
-  if ('type' in body) {
-    const v = body.type;
-    if (typeof v !== 'string' || !ROOM_TYPES.includes(v as RoomType)) {
-      return NextResponse.json({ error: 'Invalid room type' }, { status: 400 });
-    }
-    patch.type = v;
-  }
-
   // Notes is a free-text blob describing the whole room (separate from
-  // per-card body text). Empty/whitespace clears the field.
+  // per-attribute body text). Empty/whitespace clears the field.
   if ('notes' in body) {
     const v = body.notes;
     if (v === null || v === undefined) {
@@ -80,7 +71,7 @@ export async function PATCH(
 
   const { data: before } = await supabase
     .from('property_rooms')
-    .select('id, title, type, notes, sort_order')
+    .select('id, title, notes, sort_order')
     .eq('id', roomId)
     .eq('property_id', id)
     .maybeSingle();
@@ -94,9 +85,9 @@ export async function PATCH(
       `
       *,
       property_room_photos (id, storage_path, caption, sort_order),
-      property_cards (
+      property_attributes (
         *,
-        property_card_photos (id, storage_path, caption, sort_order)
+        property_attribute_photos (id, storage_path, caption, sort_order)
       )
       `
     )
@@ -111,7 +102,7 @@ export async function PATCH(
 
   if (before) {
     const entries: Array<{ field: string; before: unknown; after: unknown }> = [];
-    for (const f of ['title', 'type', 'notes', 'sort_order'] as const) {
+    for (const f of ['title', 'notes', 'sort_order'] as const) {
       const b = (before as Record<string, unknown>)[f];
       const a = (data as Record<string, unknown>)[f];
       if (b !== a) entries.push({ field: f, before: b, after: a });
@@ -133,7 +124,7 @@ export async function PATCH(
   return NextResponse.json({ room: data });
 }
 
-// DELETE cascades through property_cards, property_card_photos, and
+// DELETE cascades through property_attributes, property_attribute_photos, and
 // property_room_photos via FK ON DELETE CASCADE. We still have to clean
 // up bucket objects manually because Postgres cascades don't reach
 // Supabase Storage.
@@ -145,11 +136,11 @@ export async function DELETE(
   const supabase = getSupabaseServer();
 
   // Verify the room belongs to this property before we start listing
-  // storage objects. We pull title/type/notes here for the ledger
-  // snapshot — one extra column read is cheap.
+  // storage objects. We pull title/notes here for the ledger snapshot —
+  // one extra column read is cheap.
   const { data: room, error: roomErr } = await supabase
     .from('property_rooms')
-    .select('id, scope, type, title, notes')
+    .select('id, scope, title, notes')
     .eq('id', roomId)
     .eq('property_id', id)
     .maybeSingle();
@@ -169,20 +160,20 @@ export async function DELETE(
   const roomPhotos: Array<{ storage_path: string | null }> =
     (roomPhotosRes.data as Array<{ storage_path: string | null }> | null) ?? [];
 
-  const { data: cardRows } = await supabase
-    .from('property_cards')
+  const { data: attributeRows } = await supabase
+    .from('property_attributes')
     .select('id')
     .eq('room_id', roomId);
-  const cardIds = (cardRows || []).map((c: { id: string }) => c.id);
+  const attributeIds = (attributeRows || []).map((a: { id: string }) => a.id);
 
-  let cardPhotos: Array<{ storage_path: string | null }> = [];
-  if (cardIds.length > 0) {
-    const cardPhotosRes = await supabase
-      .from('property_card_photos')
+  let attributePhotos: Array<{ storage_path: string | null }> = [];
+  if (attributeIds.length > 0) {
+    const attributePhotosRes = await supabase
+      .from('property_attribute_photos')
       .select('storage_path')
-      .in('card_id', cardIds);
-    cardPhotos =
-      (cardPhotosRes.data as Array<{ storage_path: string | null }> | null) ?? [];
+      .in('attribute_id', attributeIds);
+    attributePhotos =
+      (attributePhotosRes.data as Array<{ storage_path: string | null }> | null) ?? [];
   }
 
   const { error: delErr } = await supabase
@@ -194,7 +185,7 @@ export async function DELETE(
     return NextResponse.json({ error: delErr.message }, { status: 500 });
   }
 
-  const paths = [...roomPhotos, ...cardPhotos]
+  const paths = [...roomPhotos, ...attributePhotos]
     .map((p) => p.storage_path)
     .filter((p): p is string => typeof p === 'string' && p.length > 0);
   if (paths.length > 0) {
@@ -212,7 +203,6 @@ export async function DELETE(
       kind: 'snapshot',
       row: {
         scope: room.scope,
-        type: room.type,
         title: room.title,
         notes: room.notes,
       },

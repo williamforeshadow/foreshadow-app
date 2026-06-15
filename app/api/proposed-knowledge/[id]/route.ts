@@ -2,17 +2,20 @@ import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getCurrentAppUser } from '@/src/server/users/currentUser';
 import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
-import { upsertPropertyNote } from '@/src/server/properties/upsertPropertyNote';
-import { normalizeTagData, defaultRoomTitle, type CardTag, type RoomType } from '@/lib/propertyCards';
+import { normalizeTags } from '@/lib/propertyAttributes';
+import {
+  encodeFieldResourceId,
+  type VisibilityResourceType,
+} from '@/lib/propertyKnowledgeVisibility';
 import type { KnowledgeTarget } from '@/src/server/messages/draftKnowledge';
 
 // Accept / dismiss a concierge-proposed knowledge addition.
 //
 // A proposed_knowledge row carries a structured `target`. Accepting (the human
-// click is the confirmation) replays it through the SAME non-token property write
-// path the Knowledge UI uses — create a room if needed, then a room note / card,
-// or a property note — and, when the reviewer chose guest-visible, unlocks the
-// new item via property_knowledge_visibility.
+// click is the confirmation) replays it through the SAME non-token property
+// write path the Knowledge UI uses — create a room if needed, then a room note
+// or an attribute — and, when the reviewer chose guest-visible, unlocks the new
+// item's default fields via property_knowledge_visibility (per-field model).
 
 export const maxDuration = 60;
 
@@ -50,7 +53,7 @@ async function requireUser() {
 async function ensureRoom(
   supabase: Supabase,
   propertyId: string,
-  room: Extract<KnowledgeTarget, { kind: 'room_note' | 'card' }>['room'],
+  room: Extract<KnowledgeTarget, { kind: 'room_note' | 'attribute' }>['room'],
   actorId: string,
 ): Promise<{ id: string; scope: string; notes: string | null }> {
   if (room.id) {
@@ -69,13 +72,12 @@ async function ensureRoom(
     }
     // Fall through to create when the referenced room no longer exists.
   }
-  const title = room.title?.trim() || defaultRoomTitle(room.type as RoomType);
+  const title = room.title?.trim() || 'New room';
   const { data, error } = await supabase
     .from('property_rooms')
     .insert({
       property_id: propertyId,
       scope: room.scope,
-      type: room.type,
       title,
       notes: null,
       sort_order: 0,
@@ -88,22 +90,23 @@ async function ensureRoom(
   return { id: data.id as string, scope: data.scope as string, notes: null };
 }
 
-async function setVisible(
+/** Unlock a set of per-field visibility entries (best-effort idempotent upsert). */
+async function unlockFields(
   supabase: Supabase,
   propertyId: string,
-  resourceType: string,
-  resourceId: string,
+  entries: Array<{ type: VisibilityResourceType; resourceId: string }>,
   actorId: string,
 ): Promise<void> {
+  if (entries.length === 0) return;
   await supabase
     .from('property_knowledge_visibility')
     .upsert(
-      {
+      entries.map((e) => ({
         property_id: propertyId,
-        resource_type: resourceType,
-        resource_id: resourceId,
+        resource_type: e.type,
+        resource_id: e.resourceId,
         created_by_user_id: actorId,
-      },
+      })),
       { onConflict: 'property_id,resource_type,resource_id', ignoreDuplicates: true },
     );
 }
@@ -139,38 +142,21 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const guestVisible =
     typeof body.guest_visible === 'boolean' ? body.guest_visible : proposal.guest_visible;
 
-  // Property notes are the only target that can be property-less; room note/card
-  // need a property to attach to.
-  if (!proposal.property_id && target.kind !== 'property_note') {
+  if (!proposal.property_id) {
     return NextResponse.json(
-      { error: 'This conversation has no linked property, so it can only become a property note.' },
+      { error: 'This conversation has no linked property, so the proposal cannot be saved.' },
       { status: 400 },
     );
   }
+  const propertyId = proposal.property_id;
 
   let resourceType: string;
   let resourceId: string;
+  // The per-field visibility entries to unlock when guest_visible is chosen.
+  let visibilityEntries: Array<{ type: VisibilityResourceType; resourceId: string }> = [];
 
   try {
-    if (target.kind === 'property_note') {
-      if (!proposal.property_id) {
-        return NextResponse.json({ error: 'No linked property' }, { status: 400 });
-      }
-      const result = await upsertPropertyNote({
-        property_id: proposal.property_id,
-        scope: target.scope,
-        title: target.title,
-        body: target.body,
-        actor_user_id: actorId,
-        source: 'web',
-      });
-      if (!result.ok) {
-        return NextResponse.json({ error: result.error.message }, { status: 400 });
-      }
-      resourceType = 'note';
-      resourceId = result.note.id;
-    } else if (target.kind === 'room_note') {
-      const propertyId = proposal.property_id as string;
+    if (target.kind === 'room_note') {
       const room = await ensureRoom(supabase, propertyId, target.room, actorId);
       // Append to any existing room notes rather than overwrite.
       const nextNotes = room.notes ? `${room.notes}\n${target.notes}` : target.notes;
@@ -181,39 +167,44 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       resourceType = 'room';
       resourceId = room.id;
+      visibilityEntries = [
+        { type: 'room_field', resourceId: encodeFieldResourceId(room.id, 'notes') },
+      ];
     } else {
-      // card
-      const propertyId = proposal.property_id as string;
+      // attribute
       const room = await ensureRoom(supabase, propertyId, target.room, actorId);
-      const { data: card, error } = await supabase
-        .from('property_cards')
+      const { data: attribute, error } = await supabase
+        .from('property_attributes')
         .insert({
           property_id: propertyId,
           room_id: room.id,
           scope: room.scope,
-          tag: target.card.tag,
-          title: target.card.title,
-          body: target.card.body,
-          tag_data: normalizeTagData(target.card.tag as CardTag, undefined),
+          tags: normalizeTags(target.attribute.tags),
+          title: target.attribute.title,
+          body: target.attribute.body,
           sort_order: 0,
           created_by_user_id: actorId,
           updated_by_user_id: actorId,
         })
         .select('id')
         .single();
-      if (error || !card) {
-        return NextResponse.json({ error: error?.message ?? 'failed to create card' }, { status: 500 });
+      if (error || !attribute) {
+        return NextResponse.json({ error: error?.message ?? 'failed to create attribute' }, { status: 500 });
       }
-      resourceType = 'card';
-      resourceId = card.id as string;
+      resourceType = 'attribute';
+      resourceId = attribute.id as string;
+      visibilityEntries = [
+        { type: 'attribute_field', resourceId: encodeFieldResourceId(resourceId, 'title') },
+        { type: 'attribute_field', resourceId: encodeFieldResourceId(resourceId, 'body') },
+      ];
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to write knowledge';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 
-  if (guestVisible && proposal.property_id) {
-    await setVisible(supabase, proposal.property_id, resourceType, resourceId, actorId);
+  if (guestVisible) {
+    await unlockFields(supabase, propertyId, visibilityEntries, actorId);
   }
 
   await supabase

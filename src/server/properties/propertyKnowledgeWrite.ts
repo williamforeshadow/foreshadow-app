@@ -5,15 +5,12 @@ import {
   type KnowledgeSource,
 } from '@/lib/logPropertyKnowledgeActivity';
 import {
-  CARD_SCOPES,
-  CARD_TAGS,
-  ROOM_TYPES,
-  defaultRoomTitle,
-  normalizeTagData,
-  type CardScope,
-  type CardTag,
-  type RoomType,
-} from '@/lib/propertyCards';
+  ATTRIBUTE_SCOPES,
+  ATTRIBUTE_TAGS,
+  normalizeTags,
+  type AttributeScope,
+  type AttributeTag,
+} from '@/lib/propertyAttributes';
 
 const ACCESS_FIELDS = [
   'guest_code',
@@ -40,6 +37,8 @@ const CONNECTIVITY_FIELDS = [
 const DOCUMENT_TAGS = ['lease', 'appliance_manual', 'inspection', 'insurance', 'other'] as const;
 const PARKING_TYPES = ['assigned', 'street', 'garage', 'other'] as const;
 
+const DEFAULT_ROOM_TITLE = 'New room';
+
 const nullableString = z.union([z.string(), z.null()]);
 const sourceSchema = z.enum(['web', 'agent_slack', 'agent_web', 'system']).optional();
 
@@ -56,20 +55,18 @@ const connectivityFieldsSchema = z
 const roomFieldsSchema = z
   .object({
     scope: z.enum(['interior', 'exterior']).optional(),
-    type: z.enum(ROOM_TYPES as [RoomType, ...RoomType[]]).optional(),
     title: nullableString.optional(),
     notes: nullableString.optional(),
     sort_order: z.number().finite().optional(),
   })
   .strict();
 
-const cardFieldsSchema = z
+const attributeFieldsSchema = z
   .object({
     room_id: z.string().uuid().optional(),
-    tag: z.enum(CARD_TAGS as [CardTag, ...CardTag[]]).optional(),
+    tags: z.array(z.enum(ATTRIBUTE_TAGS as [AttributeTag, ...AttributeTag[]])).optional(),
     title: nullableString.optional(),
     body: nullableString.optional(),
-    tag_data: z.record(z.string(), z.unknown()).optional(),
     sort_order: z.number().finite().optional(),
   })
   .strict();
@@ -114,17 +111,17 @@ export const propertyKnowledgeWriteInputSchema = z.discriminatedUnion('action', 
     source: sourceSchema,
   }),
   z.object({
-    action: z.literal('upsert_card'),
+    action: z.literal('upsert_attribute'),
     property_id: z.string().uuid(),
-    card_id: z.string().uuid().optional(),
-    fields: cardFieldsSchema,
+    attribute_id: z.string().uuid().optional(),
+    fields: attributeFieldsSchema,
     actor_user_id: z.string().nullable().optional(),
     source: sourceSchema,
   }),
   z.object({
-    action: z.literal('delete_card'),
+    action: z.literal('delete_attribute'),
     property_id: z.string().uuid(),
-    card_id: z.string().uuid(),
+    attribute_id: z.string().uuid(),
     actor_user_id: z.string().nullable().optional(),
     source: sourceSchema,
   }),
@@ -333,7 +330,7 @@ async function planRoom(
   if (input.action === 'delete_room') {
     const { data, error } = await supabase
       .from('property_rooms')
-      .select('id, scope, type, title, notes')
+      .select('id, scope, title, notes')
       .eq('id', input.room_id)
       .eq('property_id', input.property_id)
       .maybeSingle();
@@ -348,36 +345,35 @@ async function planRoom(
         property: { property_id: property.id, name: property.name },
         subject: { type: 'room', id: input.room_id, label: (row.title as string | null) || `${row.scope} room` },
         changes: [{ field: 'delete', before: row, after: null }],
-        summary: `Delete room "${(row.title as string | null) || row.type}" from ${property.name}`,
+        summary: `Delete room "${(row.title as string | null) || (row.scope as string)}" from ${property.name}`,
       },
       canonicalInput: input,
     };
   }
 
   const fields = input.fields;
-  if (!input.room_id && (!fields.scope || !fields.type)) {
-    return { ok: false, error: { code: 'invalid_input', message: 'scope and type are required when creating a room.', field: 'fields.scope' } };
+  if (!input.room_id && !fields.scope) {
+    return { ok: false, error: { code: 'invalid_input', message: 'scope is required when creating a room.', field: 'fields.scope' } };
   }
-  if (fields.scope && !CARD_SCOPES.has(fields.scope as CardScope)) {
+  if (fields.scope && !ATTRIBUTE_SCOPES.has(fields.scope as AttributeScope)) {
     return { ok: false, error: { code: 'invalid_input', message: 'Invalid room scope.', field: 'fields.scope' } };
   }
   const before = input.room_id
-    ? await supabase.from('property_rooms').select('id, scope, type, title, notes, sort_order').eq('id', input.room_id).eq('property_id', input.property_id).maybeSingle()
+    ? await supabase.from('property_rooms').select('id, scope, title, notes, sort_order').eq('id', input.room_id).eq('property_id', input.property_id).maybeSingle()
     : null;
   if (before?.error) return { ok: false, error: { code: 'db_error', message: before.error.message } };
   if (input.room_id && !before?.data) return { ok: false, error: { code: 'not_found', message: 'Room not found.', field: 'room_id' } };
   const prev = (before?.data as Record<string, unknown> | null) ?? null;
-  const title = normalizeNullable(fields.title) || (fields.type ? defaultRoomTitle(fields.type) : (prev?.title as string));
+  const title = normalizeNullable(fields.title) || (prev?.title as string) || DEFAULT_ROOM_TITLE;
   const after: Record<string, unknown> = {
     ...(prev ?? {}),
     property_id: input.property_id,
     ...(fields.scope ? { scope: fields.scope } : {}),
-    ...(fields.type ? { type: fields.type } : {}),
-    ...(title ? { title } : {}),
+    title,
     ...('notes' in fields ? { notes: normalizeNullable(fields.notes) } : {}),
     ...(fields.sort_order !== undefined ? { sort_order: Math.trunc(fields.sort_order) } : {}),
   };
-  const changes = diffFields(prev, after, ['scope', 'type', 'title', 'notes', 'sort_order']);
+  const changes = diffFields(prev, after, ['scope', 'title', 'notes', 'sort_order']);
   return {
     ok: true,
     plan: {
@@ -398,21 +394,21 @@ async function commitRoom(
   plan: PropertyKnowledgeWritePlan,
 ): Promise<PropertyKnowledgeWriteResult> {
   if (input.action === 'delete_room') {
-    const { data: room } = await supabase.from('property_rooms').select('id, scope, type, title, notes').eq('id', input.room_id).eq('property_id', input.property_id).maybeSingle();
+    const { data: room } = await supabase.from('property_rooms').select('id, scope, title, notes').eq('id', input.room_id).eq('property_id', input.property_id).maybeSingle();
     if (!room) return { ok: false, error: { code: 'not_found', message: 'Room not found.', field: 'room_id' } };
-    const [{ data: roomPhotos }, { data: cards }] = await Promise.all([
+    const [{ data: roomPhotos }, { data: attributes }] = await Promise.all([
       supabase.from('property_room_photos').select('storage_path').eq('room_id', input.room_id),
-      supabase.from('property_cards').select('id').eq('room_id', input.room_id),
+      supabase.from('property_attributes').select('id').eq('room_id', input.room_id),
     ]);
-    const cardIds = ((cards ?? []) as Array<{ id: string }>).map((c) => c.id);
-    let cardPhotos: Array<{ storage_path: string | null }> = [];
-    if (cardIds.length > 0) {
-      const res = await supabase.from('property_card_photos').select('storage_path').in('card_id', cardIds);
-      cardPhotos = (res.data ?? []) as Array<{ storage_path: string | null }>;
+    const attributeIds = ((attributes ?? []) as Array<{ id: string }>).map((a) => a.id);
+    let attributePhotos: Array<{ storage_path: string | null }> = [];
+    if (attributeIds.length > 0) {
+      const res = await supabase.from('property_attribute_photos').select('storage_path').in('attribute_id', attributeIds);
+      attributePhotos = (res.data ?? []) as Array<{ storage_path: string | null }>;
     }
     const { error } = await supabase.from('property_rooms').delete().eq('id', input.room_id).eq('property_id', input.property_id);
     if (error) return { ok: false, error: { code: 'db_error', message: error.message } };
-    const paths = [...((roomPhotos ?? []) as Array<{ storage_path: string | null }>), ...cardPhotos].map((p) => p.storage_path).filter((p): p is string => !!p);
+    const paths = [...((roomPhotos ?? []) as Array<{ storage_path: string | null }>), ...attributePhotos].map((p) => p.storage_path).filter((p): p is string => !!p);
     if (paths.length > 0) await supabase.storage.from('property-photos').remove(paths);
     const row = room as Record<string, unknown>;
     await logPropertyKnowledgeActivity({
@@ -421,7 +417,7 @@ async function commitRoom(
       resource_type: 'room',
       resource_id: null,
       action: 'delete',
-      changes: { kind: 'snapshot', row: { scope: row.scope, type: row.type, title: row.title, notes: row.notes } },
+      changes: { kind: 'snapshot', row: { scope: row.scope, title: row.title, notes: row.notes } },
       subject_label: (row.title as string | null) || `${row.scope} room`,
       source: source(input),
     });
@@ -433,13 +429,16 @@ async function commitRoom(
     updated_at: new Date().toISOString(),
     updated_by_user_id: input.actor_user_id ?? null,
   };
-  if (fields.type) payload.type = fields.type;
-  if (fields.title !== undefined || fields.type) payload.title = normalizeNullable(fields.title) || (fields.type ? defaultRoomTitle(fields.type) : undefined);
+  if (fields.title !== undefined) {
+    const t = normalizeNullable(fields.title);
+    if (t) payload.title = t;
+  }
   if (fields.notes !== undefined) payload.notes = normalizeNullable(fields.notes);
   if (fields.sort_order !== undefined) payload.sort_order = Math.trunc(fields.sort_order);
   if (!input.room_id) {
     payload.property_id = input.property_id;
     payload.scope = fields.scope;
+    payload.title = normalizeNullable(fields.title) || DEFAULT_ROOM_TITLE;
     payload.created_by_user_id = input.actor_user_id ?? null;
     if (payload.sort_order === undefined) payload.sort_order = 0;
     const { data, error } = await supabase.from('property_rooms').insert(payload).select('*').maybeSingle();
@@ -450,16 +449,16 @@ async function commitRoom(
       resource_type: 'room',
       resource_id: (data as { id: string }).id,
       action: 'create',
-      changes: { kind: 'snapshot', row: { scope: data.scope, type: data.type, title: data.title, notes: data.notes } },
+      changes: { kind: 'snapshot', row: { scope: data.scope, title: data.title, notes: data.notes } },
       subject_label: data.title || `${data.scope} room`,
       source: source(input),
     });
     return { ok: true, plan, row: data };
   }
-  const { data: before } = await supabase.from('property_rooms').select('id, title, type, notes, sort_order').eq('id', input.room_id).eq('property_id', input.property_id).maybeSingle();
+  const { data: before } = await supabase.from('property_rooms').select('id, title, notes, sort_order').eq('id', input.room_id).eq('property_id', input.property_id).maybeSingle();
   const { data, error } = await supabase.from('property_rooms').update(payload).eq('id', input.room_id).eq('property_id', input.property_id).select('*').maybeSingle();
   if (error || !data) return { ok: false, error: { code: error ? 'db_error' : 'not_found', message: error?.message ?? 'Room not found.', field: 'room_id' } };
-  const changes = diffFields((before as Record<string, unknown> | null) ?? null, data as Record<string, unknown>, ['title', 'type', 'notes', 'sort_order']);
+  const changes = diffFields((before as Record<string, unknown> | null) ?? null, data as Record<string, unknown>, ['title', 'notes', 'sort_order']);
   if (changes.length > 0) {
     await logPropertyKnowledgeActivity({
       property_id: input.property_id,
@@ -475,25 +474,25 @@ async function commitRoom(
   return { ok: true, plan: { ...plan, changes }, row: data };
 }
 
-async function planCard(
+async function planAttribute(
   supabase: Supabase,
-  input: Extract<PropertyKnowledgeWriteInput, { action: 'upsert_card' | 'delete_card' }>,
+  input: Extract<PropertyKnowledgeWriteInput, { action: 'upsert_attribute' | 'delete_attribute' }>,
   property: { id: string; name: string },
 ): Promise<PreviewPropertyKnowledgeWriteResult> {
-  if (input.action === 'delete_card') {
-    const { data, error } = await supabase.from('property_cards').select('id, room_id, tag, title, body').eq('id', input.card_id).eq('property_id', input.property_id).maybeSingle();
+  if (input.action === 'delete_attribute') {
+    const { data, error } = await supabase.from('property_attributes').select('id, room_id, tags, title, body').eq('id', input.attribute_id).eq('property_id', input.property_id).maybeSingle();
     if (error) return { ok: false, error: { code: 'db_error', message: error.message } };
-    if (!data) return { ok: false, error: { code: 'not_found', message: 'Card not found.', field: 'card_id' } };
+    if (!data) return { ok: false, error: { code: 'not_found', message: 'Attribute not found.', field: 'attribute_id' } };
     const row = data as Record<string, unknown>;
-    return { ok: true, plan: { action: input.action, mode: 'delete', property: { property_id: property.id, name: property.name }, subject: { type: 'card', id: input.card_id, label: (row.title as string) || `${row.tag} card` }, changes: [{ field: 'delete', before: row, after: null }], summary: `Delete card "${(row.title as string) || row.tag}" from ${property.name}` }, canonicalInput: input };
+    return { ok: true, plan: { action: input.action, mode: 'delete', property: { property_id: property.id, name: property.name }, subject: { type: 'attribute', id: input.attribute_id, label: (row.title as string) || 'attribute' }, changes: [{ field: 'delete', before: row, after: null }], summary: `Delete attribute "${(row.title as string) || ''}" from ${property.name}` }, canonicalInput: input };
   }
   const fields = input.fields;
-  if (!input.card_id && (!fields.room_id || !fields.tag || !fields.title)) {
-    return { ok: false, error: { code: 'invalid_input', message: 'room_id, tag, and title are required when creating a card.', field: 'fields.room_id' } };
+  if (!input.attribute_id && (!fields.room_id || !fields.title)) {
+    return { ok: false, error: { code: 'invalid_input', message: 'room_id and title are required when creating an attribute.', field: 'fields.room_id' } };
   }
-  const prevRes = input.card_id ? await supabase.from('property_cards').select('id, room_id, tag, title, body, tag_data, sort_order').eq('id', input.card_id).eq('property_id', input.property_id).maybeSingle() : null;
+  const prevRes = input.attribute_id ? await supabase.from('property_attributes').select('id, room_id, tags, title, body, sort_order').eq('id', input.attribute_id).eq('property_id', input.property_id).maybeSingle() : null;
   if (prevRes?.error) return { ok: false, error: { code: 'db_error', message: prevRes.error.message } };
-  if (input.card_id && !prevRes?.data) return { ok: false, error: { code: 'not_found', message: 'Card not found.', field: 'card_id' } };
+  if (input.attribute_id && !prevRes?.data) return { ok: false, error: { code: 'not_found', message: 'Attribute not found.', field: 'attribute_id' } };
   const roomId = fields.room_id ?? ((prevRes?.data as { room_id?: string } | null)?.room_id);
   if (roomId) {
     const { data: room, error } = await supabase.from('property_rooms').select('id, scope').eq('id', roomId).eq('property_id', input.property_id).maybeSingle();
@@ -501,77 +500,70 @@ async function planCard(
     if (!room) return { ok: false, error: { code: 'not_found', message: 'Room not found.', field: 'fields.room_id' } };
   }
   const prev = (prevRes?.data as Record<string, unknown> | null) ?? null;
-  const tag = fields.tag ?? (prev?.tag as CardTag);
   const after: Record<string, unknown> = {
     ...(prev ?? {}),
     room_id: roomId,
-    tag,
+    ...(fields.tags !== undefined ? { tags: normalizeTags(fields.tags) } : {}),
     ...(fields.title !== undefined ? { title: normalizeNullable(fields.title) } : {}),
     ...(fields.body !== undefined ? { body: normalizeNullable(fields.body) } : {}),
-    ...(fields.tag_data !== undefined ? { tag_data: normalizeTagData(tag, fields.tag_data) } : {}),
     ...(fields.sort_order !== undefined ? { sort_order: Math.trunc(fields.sort_order) } : {}),
   };
   if (!after.title) return { ok: false, error: { code: 'invalid_input', message: 'title cannot be empty.', field: 'fields.title' } };
-  const changes = ['room_id', 'tag', 'title', 'body', 'tag_data', 'sort_order']
+  const changes = ['room_id', 'tags', 'title', 'body', 'sort_order']
     .map((field) => ({ field, before: prev ? prev[field] ?? null : null, after: (after as Record<string, unknown>)[field] ?? null }))
-    .filter((c) => c.field === 'tag_data' ? jsonChanged(c.before, c.after) : c.before !== c.after);
-  return { ok: true, plan: { action: input.action, mode: input.card_id ? 'update' : 'create', property: { property_id: property.id, name: property.name }, subject: { type: 'card', id: input.card_id ?? null, label: after.title as string }, changes, summary: `${input.card_id ? 'Update' : 'Create'} card "${after.title as string}" for ${property.name}` }, canonicalInput: input };
+    .filter((c) => c.field === 'tags' ? jsonChanged(c.before, c.after) : c.before !== c.after);
+  return { ok: true, plan: { action: input.action, mode: input.attribute_id ? 'update' : 'create', property: { property_id: property.id, name: property.name }, subject: { type: 'attribute', id: input.attribute_id ?? null, label: after.title as string }, changes, summary: `${input.attribute_id ? 'Update' : 'Create'} attribute "${after.title as string}" for ${property.name}` }, canonicalInput: input };
 }
 
-async function commitCard(
+async function commitAttribute(
   supabase: Supabase,
-  input: Extract<PropertyKnowledgeWriteInput, { action: 'upsert_card' | 'delete_card' }>,
+  input: Extract<PropertyKnowledgeWriteInput, { action: 'upsert_attribute' | 'delete_attribute' }>,
   plan: PropertyKnowledgeWritePlan,
 ): Promise<PropertyKnowledgeWriteResult> {
-  if (input.action === 'delete_card') {
+  if (input.action === 'delete_attribute') {
     const [beforeRes, photosRes] = await Promise.all([
-      supabase.from('property_cards').select('id, room_id, tag, title, body').eq('id', input.card_id).eq('property_id', input.property_id).maybeSingle(),
-      supabase.from('property_card_photos').select('storage_path').eq('card_id', input.card_id),
+      supabase.from('property_attributes').select('id, room_id, tags, title, body').eq('id', input.attribute_id).eq('property_id', input.property_id).maybeSingle(),
+      supabase.from('property_attribute_photos').select('storage_path').eq('attribute_id', input.attribute_id),
     ]);
-    if (!beforeRes.data) return { ok: false, error: { code: 'not_found', message: 'Card not found.', field: 'card_id' } };
-    const { error } = await supabase.from('property_cards').delete().eq('id', input.card_id).eq('property_id', input.property_id);
+    if (!beforeRes.data) return { ok: false, error: { code: 'not_found', message: 'Attribute not found.', field: 'attribute_id' } };
+    const { error } = await supabase.from('property_attributes').delete().eq('id', input.attribute_id).eq('property_id', input.property_id);
     if (error) return { ok: false, error: { code: 'db_error', message: error.message } };
     const paths = ((photosRes.data ?? []) as Array<{ storage_path: string | null }>).map((p) => p.storage_path).filter((p): p is string => !!p);
     if (paths.length > 0) await supabase.storage.from('property-photos').remove(paths);
     const row = beforeRes.data as Record<string, unknown>;
-    await logPropertyKnowledgeActivity({ property_id: input.property_id, user_id: input.actor_user_id ?? null, resource_type: 'card', resource_id: null, action: 'delete', changes: { kind: 'snapshot', row: { room_id: row.room_id, tag: row.tag, title: row.title, body: row.body } }, subject_label: (row.title as string | null) || `${row.tag} card`, source: source(input) });
+    await logPropertyKnowledgeActivity({ property_id: input.property_id, user_id: input.actor_user_id ?? null, resource_type: 'attribute', resource_id: null, action: 'delete', changes: { kind: 'snapshot', row: { room_id: row.room_id, tags: row.tags, title: row.title, body: row.body } }, subject_label: (row.title as string | null) || 'attribute', source: source(input) });
     return { ok: true, plan, row };
   }
   const fields = input.fields;
-  const tag = fields.tag;
   const payload: Record<string, unknown> = { updated_at: new Date().toISOString(), updated_by_user_id: input.actor_user_id ?? null };
   if (fields.title !== undefined) payload.title = normalizeNullable(fields.title);
   if (fields.body !== undefined) payload.body = normalizeNullable(fields.body);
-  if (fields.tag) payload.tag = fields.tag;
+  if (fields.tags !== undefined) payload.tags = normalizeTags(fields.tags);
   if (fields.sort_order !== undefined) payload.sort_order = Math.trunc(fields.sort_order);
-  if (fields.tag_data !== undefined) {
-    const effectiveTag = tag ?? (await supabase.from('property_cards').select('tag').eq('id', input.card_id ?? '').eq('property_id', input.property_id).maybeSingle()).data?.tag;
-    payload.tag_data = normalizeTagData(effectiveTag as CardTag, fields.tag_data);
-  }
   if (fields.room_id) {
     const { data: room } = await supabase.from('property_rooms').select('id, scope').eq('id', fields.room_id).eq('property_id', input.property_id).maybeSingle();
     if (!room) return { ok: false, error: { code: 'not_found', message: 'Room not found.', field: 'fields.room_id' } };
     payload.room_id = fields.room_id;
-    payload.scope = room.scope as CardScope;
+    payload.scope = room.scope as AttributeScope;
   }
-  if (!input.card_id) {
-    if (!fields.room_id || !fields.tag || !fields.title) return { ok: false, error: { code: 'invalid_input', message: 'room_id, tag, and title are required when creating a card.' } };
+  if (!input.attribute_id) {
+    if (!fields.room_id || !fields.title) return { ok: false, error: { code: 'invalid_input', message: 'room_id and title are required when creating an attribute.' } };
     payload.property_id = input.property_id;
     payload.created_by_user_id = input.actor_user_id ?? null;
     if (payload.sort_order === undefined) payload.sort_order = 0;
-    if (payload.tag_data === undefined) payload.tag_data = normalizeTagData(fields.tag, fields.tag_data);
-    const { data, error } = await supabase.from('property_cards').insert(payload).select('*').maybeSingle();
+    if (payload.tags === undefined) payload.tags = normalizeTags(fields.tags);
+    const { data, error } = await supabase.from('property_attributes').insert(payload).select('*').maybeSingle();
     if (error || !data) return { ok: false, error: { code: 'db_error', message: error?.message ?? 'insert returned no row' } };
-    await logPropertyKnowledgeActivity({ property_id: input.property_id, user_id: input.actor_user_id ?? null, resource_type: 'card', resource_id: data.id, action: 'create', changes: { kind: 'snapshot', row: { room_id: data.room_id, tag: data.tag, title: data.title, body: data.body } }, subject_label: data.title || `${data.tag} card`, source: source(input) });
+    await logPropertyKnowledgeActivity({ property_id: input.property_id, user_id: input.actor_user_id ?? null, resource_type: 'attribute', resource_id: data.id, action: 'create', changes: { kind: 'snapshot', row: { room_id: data.room_id, tags: data.tags, title: data.title, body: data.body } }, subject_label: data.title || 'attribute', source: source(input) });
     return { ok: true, plan, row: data };
   }
-  const { data: before } = await supabase.from('property_cards').select('id, room_id, tag, title, body, tag_data, sort_order').eq('id', input.card_id).eq('property_id', input.property_id).maybeSingle();
-  const { data, error } = await supabase.from('property_cards').update(payload).eq('id', input.card_id).eq('property_id', input.property_id).select('*').maybeSingle();
-  if (error || !data) return { ok: false, error: { code: error ? 'db_error' : 'not_found', message: error?.message ?? 'Card not found.', field: 'card_id' } };
-  const changes = ['room_id', 'tag', 'title', 'body', 'tag_data', 'sort_order']
+  const { data: before } = await supabase.from('property_attributes').select('id, room_id, tags, title, body, sort_order').eq('id', input.attribute_id).eq('property_id', input.property_id).maybeSingle();
+  const { data, error } = await supabase.from('property_attributes').update(payload).eq('id', input.attribute_id).eq('property_id', input.property_id).select('*').maybeSingle();
+  if (error || !data) return { ok: false, error: { code: error ? 'db_error' : 'not_found', message: error?.message ?? 'Attribute not found.', field: 'attribute_id' } };
+  const changes = ['room_id', 'tags', 'title', 'body', 'sort_order']
     .map((field) => ({ field, before: before ? (before as Record<string, unknown>)[field] ?? null : null, after: (data as Record<string, unknown>)[field] ?? null }))
-    .filter((c) => c.field === 'tag_data' ? jsonChanged(c.before, c.after) : c.before !== c.after);
-  if (changes.length > 0) await logPropertyKnowledgeActivity({ property_id: input.property_id, user_id: input.actor_user_id ?? null, resource_type: 'card', resource_id: data.id, action: 'update', changes: { kind: 'diff', entries: changes }, subject_label: data.title || `${data.tag} card`, source: source(input) });
+    .filter((c) => c.field === 'tags' ? jsonChanged(c.before, c.after) : c.before !== c.after);
+  if (changes.length > 0) await logPropertyKnowledgeActivity({ property_id: input.property_id, user_id: input.actor_user_id ?? null, resource_type: 'attribute', resource_id: data.id, action: 'update', changes: { kind: 'diff', entries: changes }, subject_label: data.title || 'attribute', source: source(input) });
   return { ok: true, plan: { ...plan, changes }, row: data };
 }
 
@@ -643,7 +635,7 @@ export async function previewPropertyKnowledgeWrite(
   if (!prop.ok) return { ok: false, error: prop.error };
   if (input.action === 'upsert_access' || input.action === 'upsert_connectivity') return planSingleton(supabase, input, prop.property);
   if (input.action === 'upsert_room' || input.action === 'delete_room') return planRoom(supabase, input, prop.property);
-  if (input.action === 'upsert_card' || input.action === 'delete_card') return planCard(supabase, input, prop.property);
+  if (input.action === 'upsert_attribute' || input.action === 'delete_attribute') return planAttribute(supabase, input, prop.property);
   return planDocument(supabase, input, prop.property);
 }
 
@@ -656,6 +648,6 @@ export async function commitPropertyKnowledgeWrite(
   const supabase = getSupabaseServer();
   if (input.action === 'upsert_access' || input.action === 'upsert_connectivity') return commitSingleton(supabase, input, preview.plan);
   if (input.action === 'upsert_room' || input.action === 'delete_room') return commitRoom(supabase, input, preview.plan);
-  if (input.action === 'upsert_card' || input.action === 'delete_card') return commitCard(supabase, input, preview.plan);
+  if (input.action === 'upsert_attribute' || input.action === 'delete_attribute') return commitAttribute(supabase, input, preview.plan);
   return commitDocument(supabase, input, preview.plan);
 }

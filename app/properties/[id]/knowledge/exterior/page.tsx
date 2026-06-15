@@ -2,7 +2,6 @@
 
 import { useParams } from 'next/navigation';
 import { RoomsBoard } from '@/components/properties/cards/RoomsBoard';
-import { EXTERIOR_ROOM_TYPES } from '@/lib/propertyCards';
 
 export default function PropertyExteriorTab() {
   const params = useParams<{ id: string }>();
@@ -14,10 +13,9 @@ export default function PropertyExteriorTab() {
       propertyId={propertyId}
       scope="exterior"
       sectionLabel="Exterior & Building Systems"
-      sectionCaption="Outside-the-unit areas: garage, driveway, backyard, utilities, trash, HVAC, mail. Each area can hold photos and tagged cards."
+      sectionCaption="Outside-the-unit areas: garage, driveway, backyard, utilities, trash, HVAC, mail. Each area can hold notes, photos, and tagged attributes."
       noun="area"
       nounPlural="areas"
-      roomTypes={EXTERIOR_ROOM_TYPES}
     />
   );
 }

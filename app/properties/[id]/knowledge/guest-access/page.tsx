@@ -8,23 +8,25 @@ import {
   LOCKABLE_ACCESS_FIELDS,
   LOCKABLE_CONNECTIVITY_FIELDS,
   visibilityKey,
+  encodeFieldResourceId,
   type VisibilityResourceType,
 } from '@/lib/propertyKnowledgeVisibility';
+import { TAG_LABELS, type AttributeTag } from '@/lib/propertyAttributes';
 
-// Guest Visibility tab — the single per-item control for what the Concierge
-// (the guest-facing sub-agent) is allowed to see for this property, and may
-// therefore relay to a guest. Everything is LOCKED by default; unlock only what
-// the team is comfortable sharing. The operator-facing ops agent is unaffected —
-// it always sees everything.
+// Guest Visibility tab — PER-FIELD control over what the Concierge (the
+// guest-facing sub-agent) may see for this property. Everything is LOCKED by
+// default; unlock only individual fields the team is comfortable sharing. The
+// operator-facing ops agent is unaffected — it always sees everything.
+
+type Rec = Record<string, unknown>;
 
 interface Brief {
-  access: Record<string, unknown> | null;
-  connectivity: Record<string, unknown> | null;
-  tech_accounts: Array<Record<string, unknown>>;
-  notes: Array<Record<string, unknown>>;
-  contacts: Array<Record<string, unknown>>;
-  rooms: Array<Record<string, unknown>>;
-  documents: Array<Record<string, unknown>>;
+  access: Rec | null;
+  connectivity: Rec | null;
+  tech_accounts: Rec[];
+  contacts: Rec[];
+  rooms: Rec[];
+  documents: Rec[];
 }
 
 const ACCESS_LABELS: Record<string, string> = {
@@ -53,6 +55,48 @@ function preview(value: unknown): string {
   if (value == null) return '';
   const s = String(value).trim();
   return s.length > 80 ? `${s.slice(0, 80)}…` : s;
+}
+
+interface FieldRow {
+  type: VisibilityResourceType;
+  resourceId: string;
+  label: string;
+  sub?: string;
+}
+
+interface Item {
+  key: string;
+  header?: string;
+  subtitle?: string;
+  rows: FieldRow[];
+}
+
+interface Group {
+  key: string;
+  title: string;
+  items: Item[];
+}
+
+// Build per-field rows for a collection item from a field spec. A field is
+// shown only when it has content (so empty fields aren't togglable noise).
+function buildRows(
+  type: VisibilityResourceType,
+  id: string,
+  specs: Array<{ field: string; label: string; value: unknown; count?: number }>,
+): FieldRow[] {
+  const rows: FieldRow[] = [];
+  for (const s of specs) {
+    const hasValue =
+      s.count != null ? s.count > 0 : s.value != null && String(s.value).trim() !== '';
+    if (!hasValue) continue;
+    rows.push({
+      type,
+      resourceId: encodeFieldResourceId(id, s.field),
+      label: s.label,
+      sub: s.count != null ? `${s.count} photo${s.count === 1 ? '' : 's'}` : preview(s.value),
+    });
+  }
+  return rows;
 }
 
 export default function GuestAccessTab() {
@@ -97,7 +141,6 @@ export default function GuestAccessTab() {
   const toggle = useCallback(
     async (resourceType: VisibilityResourceType, resourceId: string, nextVisible: boolean) => {
       const key = visibilityKey(resourceType, resourceId);
-      // Optimistic.
       setUnlocked((prev) => {
         const next = new Set(prev);
         if (nextVisible) next.add(key);
@@ -115,7 +158,6 @@ export default function GuestAccessTab() {
           throw new Error(data.error || 'Failed to update');
         }
       } catch (err) {
-        // Revert.
         setUnlocked((prev) => {
           const next = new Set(prev);
           if (nextVisible) next.delete(key);
@@ -128,94 +170,122 @@ export default function GuestAccessTab() {
     [propertyId],
   );
 
-  const items = useMemo(() => {
+  const groups = useMemo<Group[]>(() => {
     if (!brief) return [];
-    type Row = { type: VisibilityResourceType; id: string; label: string; sub?: string };
-    type Group = { key: string; title: string; rows: Row[] };
-    const groups: Group[] = [];
+    const out: Group[] = [];
 
-    // Access fields
-    const accessRows: Row[] = [];
+    // Access (singleton, bare column names)
     if (brief.access) {
+      const rows: FieldRow[] = [];
       for (const f of LOCKABLE_ACCESS_FIELDS) {
         const v = brief.access[f];
         if (v != null && String(v).trim() !== '') {
-          accessRows.push({ type: 'access_field', id: f, label: ACCESS_LABELS[f] ?? f, sub: preview(v) });
+          rows.push({ type: 'access_field', resourceId: f, label: ACCESS_LABELS[f] ?? f, sub: preview(v) });
         }
       }
+      if (rows.length) out.push({ key: 'access', title: 'Access', items: [{ key: 'access', rows }] });
     }
-    if (accessRows.length) groups.push({ key: 'access', title: 'Access', rows: accessRows });
 
-    // Connectivity fields
-    const connRows: Row[] = [];
+    // Connectivity (singleton)
     if (brief.connectivity) {
+      const rows: FieldRow[] = [];
       for (const f of LOCKABLE_CONNECTIVITY_FIELDS) {
         const v = brief.connectivity[f];
         if (v != null && String(v).trim() !== '') {
-          connRows.push({ type: 'connectivity_field', id: f, label: CONNECTIVITY_LABELS[f] ?? f, sub: preview(v) });
+          rows.push({ type: 'connectivity_field', resourceId: f, label: CONNECTIVITY_LABELS[f] ?? f, sub: preview(v) });
+        }
+      }
+      if (rows.length) out.push({ key: 'connectivity', title: 'Connectivity', items: [{ key: 'connectivity', rows }] });
+    }
+
+    // Tech accounts
+    const techItems: Item[] = [];
+    for (const t of brief.tech_accounts) {
+      const id = String(t.id);
+      const rows = buildRows('tech_account_field', id, [
+        { field: 'service_name', label: 'Service', value: t.service_name },
+        { field: 'username', label: 'Username', value: t.username },
+        { field: 'password', label: 'Password', value: t.password },
+        { field: 'notes', label: 'Notes', value: t.notes },
+        { field: 'photos', label: 'Photos', value: null, count: Array.isArray(t.property_tech_account_photos) ? t.property_tech_account_photos.length : 0 },
+      ]);
+      if (rows.length) {
+        techItems.push({ key: id, header: (t.service_name as string) || (t.kind as string) || 'Tech account', rows });
+      }
+    }
+    if (techItems.length) out.push({ key: 'tech', title: 'Tech accounts', items: techItems });
+
+    // Contacts
+    const contactItems: Item[] = [];
+    for (const c of brief.contacts) {
+      const id = String(c.id);
+      const rows = buildRows('contact_field', id, [
+        { field: 'name', label: 'Name', value: c.name },
+        { field: 'role', label: 'Role', value: c.role },
+        { field: 'phone', label: 'Phone', value: c.phone },
+        { field: 'email', label: 'Email', value: c.email },
+        { field: 'schedule', label: 'Schedule', value: c.schedule },
+        { field: 'preferences', label: 'Preferences', value: c.preferences },
+        { field: 'notes', label: 'Notes', value: c.notes },
+      ]);
+      if (rows.length) contactItems.push({ key: id, header: (c.name as string) || 'Contact', rows });
+    }
+    if (contactItems.length) out.push({ key: 'contacts', title: 'Vendors & contacts', items: contactItems });
+
+    // Rooms
+    const roomItems: Item[] = [];
+    for (const room of brief.rooms) {
+      const id = String(room.id);
+      const rows = buildRows('room_field', id, [
+        { field: 'title', label: 'Title', value: room.title },
+        { field: 'notes', label: 'Notes', value: room.notes },
+        { field: 'photos', label: 'Photos', value: null, count: Array.isArray(room.property_room_photos) ? room.property_room_photos.length : 0 },
+      ]);
+      if (rows.length) roomItems.push({ key: id, header: (room.title as string) || 'Room', subtitle: (room.scope as string) || undefined, rows });
+    }
+    if (roomItems.length) out.push({ key: 'rooms', title: 'Rooms & areas', items: roomItems });
+
+    // Attributes (flattened out of rooms, tagged with room title)
+    const attrItems: Item[] = [];
+    for (const room of brief.rooms) {
+      const attrs = Array.isArray(room.property_attributes)
+        ? (room.property_attributes as Rec[])
+        : [];
+      for (const a of attrs) {
+        const id = String(a.id);
+        const tags = Array.isArray(a.tags) ? (a.tags as AttributeTag[]) : [];
+        const rows = buildRows('attribute_field', id, [
+          { field: 'title', label: 'Title', value: a.title },
+          { field: 'body', label: 'Notes', value: a.body },
+          { field: 'tags', label: 'Tags', value: tags.map((t) => TAG_LABELS[t] ?? t).join(', ') },
+          { field: 'photos', label: 'Photos', value: null, count: Array.isArray(a.property_attribute_photos) ? a.property_attribute_photos.length : 0 },
+        ]);
+        if (rows.length) {
+          attrItems.push({
+            key: id,
+            header: (a.title as string) || 'Attribute',
+            subtitle: (room.title as string) || undefined,
+            rows,
+          });
         }
       }
     }
-    if (connRows.length) groups.push({ key: 'connectivity', title: 'Connectivity', rows: connRows });
-
-    // Tech accounts
-    const techRows: Row[] = brief.tech_accounts.map((t) => ({
-      type: 'tech_account' as const,
-      id: String(t.id),
-      label: (t.service_name as string) || (t.kind as string) || 'Tech account',
-      sub: (t.username as string) || undefined,
-    }));
-    if (techRows.length) groups.push({ key: 'tech', title: 'Tech accounts', rows: techRows });
-
-    // Notes
-    const noteRows: Row[] = brief.notes.map((n) => ({
-      type: 'note' as const,
-      id: String(n.id),
-      label: (n.title as string) || preview(n.body) || 'Note',
-      sub: n.title ? preview(n.body) : (n.scope as string) || undefined,
-    }));
-    if (noteRows.length) groups.push({ key: 'notes', title: 'Notes', rows: noteRows });
-
-    // Contacts
-    const contactRows: Row[] = brief.contacts.map((c) => ({
-      type: 'contact' as const,
-      id: String(c.id),
-      label: (c.name as string) || 'Contact',
-      sub: [c.role, c.category].filter(Boolean).join(' · ') || undefined,
-    }));
-    if (contactRows.length) groups.push({ key: 'contacts', title: 'Vendors & contacts', rows: contactRows });
-
-    // Rooms + nested cards
-    const roomRows: Row[] = [];
-    for (const room of brief.rooms) {
-      roomRows.push({
-        type: 'room',
-        id: String(room.id),
-        label: (room.title as string) || (room.type as string) || 'Room',
-        sub: (room.scope as string) || undefined,
-      });
-      const cards = Array.isArray(room.property_cards) ? (room.property_cards as Array<Record<string, unknown>>) : [];
-      for (const card of cards) {
-        roomRows.push({
-          type: 'card',
-          id: String(card.id),
-          label: `   ↳ ${(card.title as string) || (card.tag as string) || 'Card'}`,
-          sub: preview(card.body),
-        });
-      }
-    }
-    if (roomRows.length) groups.push({ key: 'rooms', title: 'Rooms & cards', rows: roomRows });
+    if (attrItems.length) out.push({ key: 'attributes', title: 'Attributes', items: attrItems });
 
     // Documents
-    const docRows: Row[] = brief.documents.map((d) => ({
-      type: 'document' as const,
-      id: String(d.id),
-      label: (d.title as string) || (d.original_filename as string) || 'Document',
-      sub: (d.tag as string) || undefined,
-    }));
-    if (docRows.length) groups.push({ key: 'documents', title: 'Documents', rows: docRows });
+    const docItems: Item[] = [];
+    for (const d of brief.documents) {
+      const id = String(d.id);
+      const rows = buildRows('document_field', id, [
+        { field: 'title', label: 'Title', value: (d.title as string) || (d.original_filename as string) },
+        { field: 'notes', label: 'Notes', value: d.notes },
+        { field: 'file', label: 'File', value: (d.original_filename as string) || 'file' },
+      ]);
+      if (rows.length) docItems.push({ key: id, header: (d.title as string) || (d.original_filename as string) || 'Document', subtitle: (d.tag as string) || undefined, rows });
+    }
+    if (docItems.length) out.push({ key: 'documents', title: 'Documents', items: docItems });
 
-    return groups;
+    return out;
   }, [brief]);
 
   if (loading) {
@@ -235,9 +305,9 @@ export default function GuestAccessTab() {
           <div className="flex items-start gap-2.5">
             <Lock className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent-3)] dark:text-[var(--accent-1)]" aria-hidden />
             <p className="text-[13px] leading-relaxed text-neutral-700 dark:text-[#cbc9c4]">
-              Everything is <span className="font-medium">hidden from the Concierge by default</span>. Unlock only what
-              you’re comfortable the guest-facing AI relaying to guests. The operator-facing assistant still sees
-              everything regardless. <span className="font-medium">{unlockedCount}</span> item{unlockedCount === 1 ? '' : 's'} unlocked.
+              Every field is <span className="font-medium">hidden from the Concierge by default</span>. Unlock only the
+              individual fields you’re comfortable the guest-facing AI relaying to guests. The operator-facing assistant
+              still sees everything regardless. <span className="font-medium">{unlockedCount}</span> field{unlockedCount === 1 ? '' : 's'} unlocked.
             </p>
           </div>
         </div>
@@ -249,52 +319,69 @@ export default function GuestAccessTab() {
           </div>
         )}
 
-        {items.length === 0 ? (
+        {groups.length === 0 ? (
           <div className="py-10 text-center text-[13px] text-neutral-400 dark:text-[#66645f]">
-            No property knowledge has been added yet. Add access, wifi, notes, rooms, or documents in the other tabs,
-            then unlock items here.
+            No property knowledge has been added yet. Add access, wifi, rooms, attributes, or documents in the other tabs,
+            then unlock fields here.
           </div>
         ) : (
-          items.map((group) => (
+          groups.map((group) => (
             <section key={group.key} className="mb-8">
               <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-neutral-500 dark:text-[#66645f]">
                 {group.title}
               </h2>
-              <div className="flex flex-col divide-y divide-neutral-100 dark:divide-[rgba(255,255,255,0.05)] rounded-lg border border-neutral-200/80 dark:border-[rgba(255,255,255,0.07)]">
-                {group.rows.map((row) => {
-                  const key = visibilityKey(row.type, row.id);
-                  const isUnlocked = unlocked.has(key);
-                  return (
-                    <div key={key} className="flex items-center gap-3 px-3.5 py-2.5">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] font-medium text-neutral-800 dark:text-[#f0efed]">{row.label}</p>
-                        {row.sub && (
-                          <p className="truncate text-[12px] text-neutral-400 dark:text-[#66645f]">{row.sub}</p>
+              <div className="flex flex-col gap-3">
+                {group.items.map((item) => (
+                  <div
+                    key={item.key}
+                    className="rounded-lg border border-neutral-200/80 dark:border-[rgba(255,255,255,0.07)] overflow-hidden"
+                  >
+                    {item.header && (
+                      <div className="flex items-baseline gap-2 px-3.5 py-2 bg-[rgba(30,25,20,0.02)] dark:bg-[rgba(255,255,255,0.02)] border-b border-neutral-100 dark:border-[rgba(255,255,255,0.05)]">
+                        <span className="text-[12px] font-semibold text-neutral-800 dark:text-[#f0efed] truncate">{item.header}</span>
+                        {item.subtitle && (
+                          <span className="text-[11px] text-neutral-400 dark:text-[#66645f] truncate">{item.subtitle}</span>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => toggle(row.type, row.id, !isUnlocked)}
-                        aria-pressed={isUnlocked}
-                        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                          isUnlocked
-                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20'
-                            : 'bg-neutral-100 dark:bg-[rgba(255,255,255,0.05)] text-neutral-500 dark:text-[#a09e9a] hover:bg-neutral-200 dark:hover:bg-[rgba(255,255,255,0.08)]'
-                        }`}
-                      >
-                        {isUnlocked ? (
-                          <>
-                            <Eye className="h-3 w-3" aria-hidden /> Visible to guests
-                          </>
-                        ) : (
-                          <>
-                            <EyeOff className="h-3 w-3" aria-hidden /> Hidden
-                          </>
-                        )}
-                      </button>
+                    )}
+                    <div className="flex flex-col divide-y divide-neutral-100 dark:divide-[rgba(255,255,255,0.05)]">
+                      {item.rows.map((row) => {
+                        const key = visibilityKey(row.type, row.resourceId);
+                        const isUnlocked = unlocked.has(key);
+                        return (
+                          <div key={key} className="flex items-center gap-3 px-3.5 py-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[12.5px] font-medium text-neutral-700 dark:text-[#cbc9c4]">{row.label}</p>
+                              {row.sub && (
+                                <p className="truncate text-[11.5px] text-neutral-400 dark:text-[#66645f]">{row.sub}</p>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => toggle(row.type, row.resourceId, !isUnlocked)}
+                              aria-pressed={isUnlocked}
+                              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                                isUnlocked
+                                  ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20'
+                                  : 'bg-neutral-100 dark:bg-[rgba(255,255,255,0.05)] text-neutral-500 dark:text-[#a09e9a] hover:bg-neutral-200 dark:hover:bg-[rgba(255,255,255,0.08)]'
+                              }`}
+                            >
+                              {isUnlocked ? (
+                                <>
+                                  <Eye className="h-3 w-3" aria-hidden /> Visible
+                                </>
+                              ) : (
+                                <>
+                                  <EyeOff className="h-3 w-3" aria-hidden /> Hidden
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             </section>
           ))

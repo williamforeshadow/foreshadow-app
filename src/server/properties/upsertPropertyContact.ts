@@ -4,39 +4,36 @@ import {
   logPropertyKnowledgeActivity,
   type KnowledgeSource,
 } from '@/lib/logPropertyKnowledgeActivity';
+import { normalizeContactTags, type ContactTag } from '@/lib/propertyAttributes';
 
 // Service: create OR update a property contact in one shape.
 //
-// Same upsert pattern as upsertPropertyNote — disambiguation is by
-// contact_id presence:
-//   - contact_id absent  → INSERT (category + name required)
+// Disambiguation is by contact_id presence:
+//   - contact_id absent  → INSERT (name required)
 //   - contact_id present → UPDATE (only the fields you pass change)
 //
 // Constraints mirror /api/properties/[id]/contacts:
 //   - name cannot be empty (on create or when patching the name field)
-//   - phone, email, role, notes are optional; empty/whitespace becomes NULL
-//   - category IS editable on update (the HTTP route accepts it)
-
-const CATEGORIES = [
-  'cleaning',
-  'maintenance',
-  'stakeholder',
-  'emergency',
-] as const;
-export type ContactCategory = (typeof CATEGORIES)[number];
+//   - tags is a multi-select (cleaning / maintenance / contractors / owners /
+//     stakeholders / emergency / other); unknown values are dropped
+//   - role, phone, email, schedule, preferences, notes are optional; empty/
+//     whitespace becomes NULL. `preferences` is surfaced in the UI for the
+//     `owners` tag (it replaced the old owner-preferences notes).
 
 const inputSchema = z
   .object({
     property_id: z.string().uuid(),
     contact_id: z.string().uuid().optional(),
-    category: z.enum(CATEGORIES).optional(),
+    tags: z.array(z.string()).optional(),
     name: z.string().optional(),
     role: z.string().nullable().optional(),
     phone: z.string().nullable().optional(),
     email: z.string().nullable().optional(),
+    schedule: z.string().nullable().optional(),
+    preferences: z.string().nullable().optional(),
     notes: z.string().nullable().optional(),
     sort_order: z.number().finite().optional(),
-    // Activity-ledger bookkeeping. See upsertPropertyNote.ts.
+    // Activity-ledger bookkeeping. See upsertPropertyContact callers.
     actor_user_id: z.string().nullable().optional(),
     source: z
       .enum(['web', 'agent_slack', 'agent_web', 'system'])
@@ -58,11 +55,13 @@ export interface UpsertContactError {
 export interface PropertyContactRow {
   id: string;
   property_id: string;
-  category: ContactCategory;
+  tags: ContactTag[];
   name: string;
   role: string | null;
   phone: string | null;
   email: string | null;
+  schedule: string | null;
+  preferences: string | null;
   notes: string | null;
   sort_order: number;
   created_at: string;
@@ -79,6 +78,16 @@ export type UpsertContactResult =
   | { ok: false; error: UpsertContactError };
 
 type Supabase = ReturnType<typeof getSupabaseServer>;
+
+const CONTACT_COLUMNS =
+  'id, property_id, tags, name, role, phone, email, schedule, preferences, notes, sort_order, created_at, updated_at';
+
+function normalizeRow(raw: Record<string, unknown>): PropertyContactRow {
+  return {
+    ...(raw as unknown as PropertyContactRow),
+    tags: normalizeContactTags(raw.tags),
+  };
+}
 
 async function loadProperty(
   supabase: Supabase,
@@ -118,9 +127,7 @@ async function loadContact(
 > {
   const { data, error } = await supabase
     .from('property_contacts')
-    .select(
-      'id, property_id, category, name, role, phone, email, notes, sort_order, created_at, updated_at',
-    )
+    .select(CONTACT_COLUMNS)
     .eq('id', contactId)
     .eq('property_id', propertyId)
     .maybeSingle();
@@ -140,7 +147,7 @@ async function loadContact(
       },
     };
   }
-  return { ok: true, contact: data as PropertyContactRow };
+  return { ok: true, contact: normalizeRow(data as Record<string, unknown>) };
 }
 
 function nullable(raw: string | null | undefined): string | null {
@@ -172,16 +179,6 @@ export async function upsertPropertyContact(
 
   // ----- CREATE path ------------------------------------------------
   if (!input.contact_id) {
-    if (!input.category) {
-      return {
-        ok: false,
-        error: {
-          code: 'invalid_input',
-          message: 'category is required when creating a new contact.',
-          field: 'category',
-        },
-      };
-    }
     const name = (input.name ?? '').trim();
     if (!name) {
       return {
@@ -195,11 +192,13 @@ export async function upsertPropertyContact(
     }
     const payload = {
       property_id: input.property_id,
-      category: input.category,
+      tags: normalizeContactTags(input.tags),
       name,
       role: nullable(input.role),
       phone: nullable(input.phone),
       email: nullable(input.email),
+      schedule: nullable(input.schedule),
+      preferences: nullable(input.preferences),
       notes: nullable(input.notes),
       sort_order:
         typeof input.sort_order === 'number' ? Math.trunc(input.sort_order) : 0,
@@ -209,9 +208,7 @@ export async function upsertPropertyContact(
     const { data, error } = await supabase
       .from('property_contacts')
       .insert(payload)
-      .select(
-        'id, property_id, category, name, role, phone, email, notes, sort_order, created_at, updated_at',
-      )
+      .select(CONTACT_COLUMNS)
       .maybeSingle();
     if (error || !data) {
       return {
@@ -222,7 +219,7 @@ export async function upsertPropertyContact(
         },
       };
     }
-    const created = data as PropertyContactRow;
+    const created = normalizeRow(data as Record<string, unknown>);
     await logPropertyKnowledgeActivity({
       property_id: input.property_id,
       user_id: input.actor_user_id ?? null,
@@ -232,11 +229,12 @@ export async function upsertPropertyContact(
       changes: {
         kind: 'snapshot',
         row: {
-          category: created.category,
+          tags: created.tags,
           name: created.name,
           role: created.role,
           phone: created.phone,
           email: created.email,
+          schedule: created.schedule,
         },
       },
       subject_label: contactSubjectLabel(created),
@@ -257,13 +255,12 @@ export async function upsertPropertyContact(
   const patch: Record<string, unknown> = {};
   const changes: Array<{ field: string; before: unknown; after: unknown }> = [];
 
-  if (input.category !== undefined && input.category !== existing.category) {
-    patch.category = input.category;
-    changes.push({
-      field: 'category',
-      before: existing.category,
-      after: input.category,
-    });
+  if (input.tags !== undefined) {
+    const next = normalizeContactTags(input.tags);
+    if (JSON.stringify(next) !== JSON.stringify(existing.tags)) {
+      patch.tags = next;
+      changes.push({ field: 'tags', before: existing.tags, after: next });
+    }
   }
 
   if (input.name !== undefined) {
@@ -284,7 +281,7 @@ export async function upsertPropertyContact(
     }
   }
 
-  for (const field of ['role', 'phone', 'email', 'notes'] as const) {
+  for (const field of ['role', 'phone', 'email', 'schedule', 'preferences', 'notes'] as const) {
     if (!(field in input)) continue;
     const next = nullable(input[field] ?? null);
     if (next !== existing[field]) {
@@ -319,9 +316,7 @@ export async function upsertPropertyContact(
     .update(patch)
     .eq('id', input.contact_id)
     .eq('property_id', input.property_id)
-    .select(
-      'id, property_id, category, name, role, phone, email, notes, sort_order, created_at, updated_at',
-    )
+    .select(CONTACT_COLUMNS)
     .maybeSingle();
   if (error || !data) {
     return {
@@ -332,7 +327,7 @@ export async function upsertPropertyContact(
       },
     };
   }
-  const updated = data as PropertyContactRow;
+  const updated = normalizeRow(data as Record<string, unknown>);
   await logPropertyKnowledgeActivity({
     property_id: input.property_id,
     user_id: input.actor_user_id ?? null,
@@ -369,12 +364,14 @@ function contactSubjectLabel(row: { name: string; role: string | null }): string
 export interface UpsertContactPlan {
   mode: 'create' | 'update';
   property: { property_id: string; name: string };
-  category: ContactCategory;
+  tags: ContactTag[];
   contact_summary: {
     name: string;
     role: string | null;
     phone: string | null;
     email: string | null;
+    schedule: string | null;
+    preferences: string | null;
     notes: string | null;
   };
   changes?: Array<{ field: string; before: unknown; after: unknown }>;
@@ -408,16 +405,6 @@ export async function previewUpsertPropertyContact(
   const propertyName = propLookup.name;
 
   if (!input.contact_id) {
-    if (!input.category) {
-      return {
-        ok: false,
-        error: {
-          code: 'invalid_input',
-          message: 'category is required when creating a new contact.',
-          field: 'category',
-        },
-      };
-    }
     const name = (input.name ?? '').trim();
     if (!name) {
       return {
@@ -434,12 +421,14 @@ export async function previewUpsertPropertyContact(
       plan: {
         mode: 'create',
         property: { property_id: input.property_id, name: propertyName },
-        category: input.category,
+        tags: normalizeContactTags(input.tags),
         contact_summary: {
           name,
           role: nullable(input.role),
           phone: nullable(input.phone),
           email: nullable(input.email),
+          schedule: nullable(input.schedule),
+          preferences: nullable(input.preferences),
           notes: nullable(input.notes),
         },
       },
@@ -457,12 +446,11 @@ export async function previewUpsertPropertyContact(
 
   const changes: Array<{ field: string; before: unknown; after: unknown }> = [];
 
-  if (input.category !== undefined && input.category !== existing.category) {
-    changes.push({
-      field: 'category',
-      before: existing.category,
-      after: input.category,
-    });
+  if (input.tags !== undefined) {
+    const next = normalizeContactTags(input.tags);
+    if (JSON.stringify(next) !== JSON.stringify(existing.tags)) {
+      changes.push({ field: 'tags', before: existing.tags, after: next });
+    }
   }
   if (input.name !== undefined) {
     const next = input.name.trim();
@@ -480,7 +468,7 @@ export async function previewUpsertPropertyContact(
       changes.push({ field: 'name', before: existing.name, after: next });
     }
   }
-  for (const field of ['role', 'phone', 'email', 'notes'] as const) {
+  for (const field of ['role', 'phone', 'email', 'schedule', 'preferences', 'notes'] as const) {
     if (!(field in input)) continue;
     const next = nullable(input[field] ?? null);
     if (next !== existing[field]) {
@@ -504,14 +492,14 @@ export async function previewUpsertPropertyContact(
       input.name !== undefined && input.name.trim() !== ''
         ? input.name.trim()
         : existing.name,
-    role:
-      'role' in input ? nullable(input.role ?? null) : existing.role,
-    phone:
-      'phone' in input ? nullable(input.phone ?? null) : existing.phone,
-    email:
-      'email' in input ? nullable(input.email ?? null) : existing.email,
-    notes:
-      'notes' in input ? nullable(input.notes ?? null) : existing.notes,
+    role: 'role' in input ? nullable(input.role ?? null) : existing.role,
+    phone: 'phone' in input ? nullable(input.phone ?? null) : existing.phone,
+    email: 'email' in input ? nullable(input.email ?? null) : existing.email,
+    schedule:
+      'schedule' in input ? nullable(input.schedule ?? null) : existing.schedule,
+    preferences:
+      'preferences' in input ? nullable(input.preferences ?? null) : existing.preferences,
+    notes: 'notes' in input ? nullable(input.notes ?? null) : existing.notes,
   };
 
   return {
@@ -519,7 +507,7 @@ export async function previewUpsertPropertyContact(
     plan: {
       mode: 'update',
       property: { property_id: input.property_id, name: propertyName },
-      category: input.category ?? existing.category,
+      tags: input.tags !== undefined ? normalizeContactTags(input.tags) : existing.tags,
       contact_summary: summary,
       changes,
       contact_id: existing.id,

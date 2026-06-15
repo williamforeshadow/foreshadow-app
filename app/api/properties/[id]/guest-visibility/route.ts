@@ -3,6 +3,9 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getCurrentAppUser } from '@/src/server/users/currentUser';
 import {
   isVisibilityResourceType,
+  isSingletonFieldType,
+  isLockableField,
+  decodeFieldResourceId,
   type VisibilityRow,
 } from '@/lib/propertyKnowledgeVisibility';
 
@@ -62,6 +65,18 @@ export async function PUT(
     }
     if (!resourceId) {
       return NextResponse.json({ error: 'resource_id is required' }, { status: 400 });
+    }
+    // Validate the field. Singletons key by bare column name; collection items
+    // key by `${rowId}:${field}`.
+    if (isSingletonFieldType(resourceType)) {
+      if (!isLockableField(resourceType, resourceId)) {
+        return NextResponse.json({ error: 'Invalid field for resource_type' }, { status: 400 });
+      }
+    } else {
+      const { rowId, field } = decodeFieldResourceId(resourceId);
+      if (!rowId || !isLockableField(resourceType, field)) {
+        return NextResponse.json({ error: 'Invalid resource_id for resource_type' }, { status: 400 });
+      }
     }
 
     const supabase = getSupabaseServer();

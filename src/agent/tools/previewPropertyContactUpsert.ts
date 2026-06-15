@@ -17,11 +17,11 @@ const inputSchema = z
       .describe(
         "OMIT to create a new contact. PASS the existing contact's UUID to update.",
       ),
-    category: z
-      .enum(['cleaning', 'maintenance', 'stakeholder', 'emergency'])
+    tags: z
+      .array(z.enum(['cleaning', 'maintenance', 'contractors', 'owners', 'stakeholders', 'emergency', 'other']))
       .optional()
       .describe(
-        "Required when creating. Optional on update (category IS editable). 'cleaning' = housekeeping. 'maintenance' = repairs/handymen. 'stakeholder' = owner/co-host/PM. 'emergency' = police/fire/locksmith etc.",
+        "Multi-select tags. Any of: cleaning, maintenance, contractors, owners, stakeholders, emergency, other. Pass the full desired set (replaces existing).",
       ),
     name: z
       .string()
@@ -44,6 +44,16 @@ const inputSchema = z
       .nullable()
       .optional()
       .describe('Optional email. null/empty clears.'),
+    schedule: z
+      .string()
+      .nullable()
+      .optional()
+      .describe('Optional schedule/availability (e.g. "Every other Friday"). null/empty clears.'),
+    preferences: z
+      .string()
+      .nullable()
+      .optional()
+      .describe('Optional preferences, mainly for owners (e.g. approval thresholds). null/empty clears.'),
     notes: z
       .string()
       .nullable()
@@ -53,7 +63,7 @@ const inputSchema = z
       .number()
       .int()
       .optional()
-      .describe('Display order within the category.'),
+      .describe('Display order.'),
   })
   .strict();
 
@@ -115,7 +125,7 @@ async function handler(
 export const previewPropertyContactUpsert: ToolDefinition<Input, PreviewUpsertContactData> = {
   name: 'preview_property_contact_upsert',
   description:
-    "PREVIEW creating or updating a property contact (cleaning / maintenance / stakeholder / emergency). Single tool covers both: omit contact_id to create, pass contact_id to update. Returns a plan with mode='create' or mode='update' and a confirmation_token. On update, returns a precise field-by-field changes diff — present those before/after values to the user. If the diff is EMPTY on update, tell the user nothing would change and skip the commit. Unlike notes, category IS editable on update — moving a contact across categories is allowed in one call. Required workflow: preview → present plan → user confirms → commit_property_contact_upsert with token. Tokens are single-use, 5-minute TTL.",
+    "PREVIEW creating or updating a property/vendor contact. Single tool covers both: omit contact_id to create, pass contact_id to update. Contacts carry multi-select tags (cleaning, maintenance, contractors, owners, stakeholders, emergency, other), an optional schedule, and — mainly for owner contacts — a preferences field. Returns a plan with mode='create' or mode='update' and a confirmation_token. On update, returns a precise field-by-field changes diff — present those before/after values to the user. If the diff is EMPTY on update, skip the commit. Required workflow: preview → present plan → user confirms → commit_property_contact_upsert with token. Tokens are single-use, 5-minute TTL.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -125,10 +135,13 @@ export const previewPropertyContactUpsert: ToolDefinition<Input, PreviewUpsertCo
         type: 'string',
         description: "Omit to create. Pass an existing contact's UUID to update.",
       },
-      category: {
-        type: 'string',
-        enum: ['cleaning', 'maintenance', 'stakeholder', 'emergency'],
-        description: 'Required on create; optional and editable on update.',
+      tags: {
+        type: 'array',
+        items: {
+          type: 'string',
+          enum: ['cleaning', 'maintenance', 'contractors', 'owners', 'stakeholders', 'emergency', 'other'],
+        },
+        description: 'Multi-select tags. Pass the full desired set (replaces existing).',
       },
       name: {
         type: 'string',
@@ -142,8 +155,10 @@ export const previewPropertyContactUpsert: ToolDefinition<Input, PreviewUpsertCo
       },
       phone: { type: ['string', 'null'], description: 'Optional. null or empty clears.' },
       email: { type: ['string', 'null'], description: 'Optional. null or empty clears.' },
+      schedule: { type: ['string', 'null'], description: 'Optional schedule/availability. null or empty clears.' },
+      preferences: { type: ['string', 'null'], description: 'Optional preferences (mainly owners). null or empty clears.' },
       notes: { type: ['string', 'null'], description: 'Optional. null or empty clears.' },
-      sort_order: { type: 'integer', description: 'Display order in the category.' },
+      sort_order: { type: 'integer', description: 'Display order.' },
     },
     required: ['property_id'],
     additionalProperties: false,

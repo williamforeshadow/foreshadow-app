@@ -3,17 +3,18 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
 import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 import {
-  CARD_TAGS,
-  normalizeTagData,
-  type CardScope,
-  type CardTag,
-} from '@/lib/propertyCards';
+  ATTRIBUTE_TAGS,
+  normalizeTags,
+  type AttributeScope,
+  type AttributeTag,
+} from '@/lib/propertyAttributes';
 
-// GET /api/properties/[id]/cards[?room_id=…&scope=interior&tag=appliance]
-// A flat cards list. Most callers should prefer GET
-// /api/properties/[id]/rooms which already nests cards inside rooms in
-// a single trip; this endpoint stays for agent/analytics use cases that
-// want to scan cards across all rooms.
+// GET /api/properties/[id]/attributes[?room_id=…&scope=interior&tag=appliance]
+// A flat attributes list. Most callers should prefer GET
+// /api/properties/[id]/rooms which already nests attributes inside rooms in
+// a single trip; this endpoint stays for agent/analytics use cases that want
+// to scan attributes across all rooms. `tag` filters by membership in the
+// multi-tag array.
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -25,8 +26,8 @@ export async function GET(
 
   const supabase = getSupabaseServer();
   let query = supabase
-    .from('property_cards')
-    .select('*, property_card_photos(id, storage_path, caption, sort_order)')
+    .from('property_attributes')
+    .select('*, property_attribute_photos(id, storage_path, caption, sort_order)')
     .eq('property_id', id)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true });
@@ -41,27 +42,25 @@ export async function GET(
     query = query.eq('scope', scope);
   }
   if (tag) {
-    if (!CARD_TAGS.includes(tag as CardTag)) {
+    if (!ATTRIBUTE_TAGS.includes(tag as AttributeTag)) {
       return NextResponse.json({ error: 'Invalid tag' }, { status: 400 });
     }
-    query = query.eq('tag', tag);
+    query = query.contains('tags', [tag]);
   }
 
   const { data, error } = await query;
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ cards: data || [] });
+  return NextResponse.json({ attributes: data || [] });
 }
 
-// POST /api/properties/[id]/cards
-// Required: room_id, tag, title
-// Optional: body, tag_data (keyed by tag), sort_order
+// POST /api/properties/[id]/attributes
+// Required: room_id, title
+// Optional: tags (array), body, sort_order
 //
-// The room's `scope` is copied onto the card server-side so we can
-// still filter cards by scope without a join. `room_id` implies which
-// property the card belongs to, but we still verify it matches [id]
-// in the URL for defense-in-depth.
+// The room's `scope` is copied onto the attribute server-side so we can
+// still filter by scope without a join.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -72,10 +71,6 @@ export async function POST(
   const roomId = typeof body?.room_id === 'string' ? body.room_id : '';
   if (!roomId) {
     return NextResponse.json({ error: 'room_id is required' }, { status: 400 });
-  }
-  const tag = typeof body?.tag === 'string' ? body.tag : '';
-  if (!CARD_TAGS.includes(tag as CardTag)) {
-    return NextResponse.json({ error: 'tag is required' }, { status: 400 });
   }
   const title = typeof body?.title === 'string' ? body.title.trim() : '';
   if (!title) {
@@ -88,7 +83,7 @@ export async function POST(
   const supabase = getSupabaseServer();
 
   // Validate the room belongs to this property and grab its scope for
-  // denormalization onto the card row.
+  // denormalization onto the attribute row.
   const { data: room, error: roomErr } = await supabase
     .from('property_rooms')
     .select('id, scope, property_id')
@@ -107,11 +102,10 @@ export async function POST(
   const payload = {
     property_id: id,
     room_id: roomId,
-    scope: room.scope as CardScope,
-    tag,
+    scope: room.scope as AttributeScope,
+    tags: normalizeTags(body?.tags),
     title,
     body: pickString(body?.body),
-    tag_data: normalizeTagData(tag as CardTag, body?.tag_data),
     sort_order:
       typeof body?.sort_order === 'number' && Number.isFinite(body.sort_order)
         ? Math.trunc(body.sort_order)
@@ -121,9 +115,9 @@ export async function POST(
   };
 
   const { data, error } = await supabase
-    .from('property_cards')
+    .from('property_attributes')
     .insert(payload)
-    .select('*, property_card_photos(id, storage_path, caption, sort_order)')
+    .select('*, property_attribute_photos(id, storage_path, caption, sort_order)')
     .maybeSingle();
 
   if (error) {
@@ -134,22 +128,22 @@ export async function POST(
     await logPropertyKnowledgeActivity({
       property_id: id,
       user_id: actorUserId,
-      resource_type: 'card',
+      resource_type: 'attribute',
       resource_id: data.id,
       action: 'create',
       changes: {
         kind: 'snapshot',
         row: {
           room_id: data.room_id,
-          tag: data.tag,
+          tags: data.tags,
           title: data.title,
           body: data.body,
         },
       },
-      subject_label: data.title || `${data.tag} card`,
+      subject_label: data.title || 'attribute',
       source: 'web',
     });
   }
 
-  return NextResponse.json({ card: data }, { status: 201 });
+  return NextResponse.json({ attribute: data }, { status: 201 });
 }
