@@ -153,7 +153,7 @@ export async function POST() {
         (r.status || '').toLowerCase() === 'ownerstay' ? 'owner_stay' : 'guest_booking';
       const guestName =
         [r.guestFirstName, r.guestLastName].filter(Boolean).join(' ') ||
-        (kind === 'owner_stay' ? 'Owner stay' : 'Unknown Guest');
+        (kind === 'owner_stay' ? 'Owner Stay' : 'Unknown Guest');
 
       const existing = existingMap.get(r.id);
 

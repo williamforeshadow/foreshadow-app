@@ -567,8 +567,11 @@ export default function MobileTimelineView({
                         // bar are occluded instead of bleeding through. The
                         // top:6/height:24 inset keeps it off the horizontal
                         // borders, so those stay visible.
-                        const bgClass =
-                          'bg-[#d9d7d6] border-[rgba(120,113,108,0.55)] dark:bg-[#343234] dark:border-[rgba(168,158,150,0.45)]';
+                        const isOwnerStay = startingRes.kind === 'owner_stay';
+                        const resLabel = isOwnerStay ? 'Owner Stay' : (startingRes.guest_name || 'No guest');
+                        const bgClass = isOwnerStay
+                          ? 'bg-[#e9d5a8] border-[rgba(180,130,60,0.55)] dark:bg-[#43391f] dark:border-[rgba(214,158,74,0.45)]'
+                          : 'bg-[#d9d7d6] border-[rgba(120,113,108,0.55)] dark:bg-[#343234] dark:border-[rgba(168,158,150,0.45)]';
 
                         return (
                           <div
@@ -585,14 +588,14 @@ export default function MobileTimelineView({
                               clipPath,
                               borderRadius,
                             }}
-                            title={startingRes.guest_name || 'No guest'}
+                            title={resLabel}
                           >
                             {!startsBeforeRange && (
                               <span
                                 className="truncate whitespace-nowrap"
                                 style={{ paddingLeft: `${diagonalPx + 3}px`, paddingRight: `${diagonalPx + 3}px` }}
                               >
-                                {startingRes.guest_name || 'No guest'}
+                                {resLabel}
                               </span>
                             )}
                           </div>

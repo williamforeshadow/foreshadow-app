@@ -155,7 +155,7 @@ function ReservationHoverBar({
     if (openTimer.current) window.clearTimeout(openTimer.current);
   }, []);
 
-  const guestLabel = reservation.guest_name || 'No guest';
+  const guestLabel = reservation.kind === 'owner_stay' ? 'Owner Stay' : (reservation.guest_name || 'No guest');
   const checkInMs = new Date(reservation.check_in).getTime();
   const checkOutMs = new Date(reservation.check_out).getTime();
   const nights = Math.max(1, Math.round((checkOutMs - checkInMs) / (1000 * 60 * 60 * 24)));
@@ -240,6 +240,69 @@ function ReservationHoverBar({
               )}
             </div>
           </div>
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
+// A blocked day's marker: a small centered ✕ inside the (already darkened)
+// cell, with a cursor-following hover card showing the block note — mirrors
+// the reservation hover card. Only the ✕ captures pointer events so the rest
+// of the cell stays droppable.
+function BlockedDayMarker({ note, propertyName }: { note: string | null; propertyName: string }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [portalReady, setPortalReady] = useState(false);
+  useEffect(() => setPortalReady(true), []);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [popPos, setPopPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
+
+  const onEnter = (e: React.MouseEvent) => { setPos({ x: e.clientX, y: e.clientY }); setOpen(true); };
+  const onMove = (e: React.MouseEvent) => setPos({ x: e.clientX, y: e.clientY });
+  const onLeave = () => setOpen(false);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const margin = 8;
+    const el = popoverRef.current;
+    const w = el?.offsetWidth ?? 224;
+    const h = el?.offsetHeight ?? 0;
+    let left = pos.x + 14;
+    let top = pos.y + 18;
+    if (left + w + margin > window.innerWidth) left = pos.x - 14 - w;
+    if (left < margin) left = margin;
+    if (top + h + margin > window.innerHeight) top = pos.y - 18 - h;
+    if (top < margin) top = margin;
+    setPopPos({ left, top });
+  }, [open, pos]);
+
+  return (
+    <>
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <span
+          className="pointer-events-auto cursor-default select-none leading-none text-[rgba(70,72,84,0.32)] dark:text-[rgba(176,178,192,0.32)]"
+          style={{ fontSize: 10 }}
+          onMouseEnter={onEnter}
+          onMouseMove={onMove}
+          onMouseLeave={onLeave}
+          onClick={(e) => e.stopPropagation()}
+        >
+          ✕
+        </span>
+      </div>
+      {open && portalReady && createPortal(
+        <div
+          ref={popoverRef}
+          className="fixed pointer-events-none w-56 p-3 bg-white dark:bg-[var(--timeline-surface-4)] border border-[rgba(30,25,20,0.08)] dark:border-[var(--timeline-border-strong)] shadow-lg rounded-md"
+          style={{ left: popPos.left, top: popPos.top, zIndex: 9999 }}
+        >
+          <div className="text-sm font-semibold text-[#1a1a18] dark:text-[#e8e7e3]">Blocked</div>
+          <div className="text-[11px] text-[#6b6963] dark:text-[#9a9893] truncate">{propertyName}</div>
+          {note && (
+            <div className="mt-1.5 text-[12px] text-[#1a1a18] dark:text-[#e8e7e3] whitespace-pre-wrap">{note}</div>
+          )}
         </div>,
         document.body,
       )}
@@ -1958,13 +2021,21 @@ export default function TimelineWindow({
                       const { start } = getBlockPosition(res.check_in, res.check_out);
                       return start === idx;
                     });
+                    // A manual/maintenance block covering THIS day (inclusive
+                    // range) → darkened cell + center ✕ + hover card, instead
+                    // of a reservation-style bar.
+                    const blockForCell = propertyBlocks.find((b) => {
+                      const ci = b.check_in.slice(0, 10);
+                      const co = b.check_out.slice(0, 10);
+                      return cellDateStr >= ci && cellDateStr <= co;
+                    });
 
                     return (
                       <DroppableDateCell
                         key={idx}
                         property={property}
                         dateStr={cellDateStr}
-                        className={`group border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] h-[44px] relative overflow-visible ${isTodayDate ? 'today-tint' : 'bg-white dark:bg-[var(--timeline-surface-2)]'}`}
+                        className={`group border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] h-[44px] relative overflow-visible ${blockForCell ? 'bg-[#f0eff2] dark:bg-[#212126]' : isTodayDate ? 'today-tint' : 'bg-white dark:bg-[var(--timeline-surface-2)]'}`}
                         onClick={() => {
                           const res = propertyReservations.find(r => {
                             const pos = getBlockPosition(r.check_in, r.check_out);
@@ -2025,8 +2096,10 @@ export default function TimelineWindow({
                           // than bleeding through. The bar's top:8/height:28
                           // inset keeps it off the horizontal borders, so those
                           // stay visible as before.
-                          const barColorClass =
-                            'bg-[#d9d7d6] border-[rgba(120,113,108,0.55)] dark:bg-[#343234] dark:border-[rgba(168,158,150,0.45)]';
+                          const isOwnerStay = startingReservation.kind === 'owner_stay';
+                          const barColorClass = isOwnerStay
+                            ? 'bg-[#e9d5a8] border-[rgba(180,130,60,0.55)] dark:bg-[#43391f] dark:border-[rgba(214,158,74,0.45)]'
+                            : 'bg-[#d9d7d6] border-[rgba(120,113,108,0.55)] dark:bg-[#343234] dark:border-[rgba(168,158,150,0.45)]';
 
                           const barClassName =`absolute cursor-pointer transition-all duration-150 text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium flex items-center overflow-hidden border-t ${barColorClass} ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-[rgba(120,113,108,0.6)] dark:ring-[rgba(168,158,150,0.6)] shadow-lg z-30' : ''}`;
                           const barStyle: React.CSSProperties = {
@@ -2059,35 +2132,12 @@ export default function TimelineWindow({
                           );
                         })()}
                         
-                        {/* Calendar block bar (manual/maintenance — not a
-                            reservation). Blocks occupy FULL days, so they render
-                            as solid full-cell rectangles (no half-day parallelogram)
-                            — visually distinct from reservations and never
-                            collapsing to a sliver for single-day blocks.
-                            Non-interactive. */}
-                        {(() => {
-                          const startingBlock = propertyBlocks.find((b) => {
-                            const { start } = getBlockPosition(b.check_in, b.check_out);
-                            return start === idx;
-                          });
-                          if (!startingBlock) return null;
-                          const { span } = getBlockPosition(startingBlock.check_in, startingBlock.check_out);
-                          const cw = colWidth;
-                          const widthStyle = cw > 0 ? `${span * cw}px` : `${span * 100}%`;
-                          const label = startingBlock.note || 'Blocked';
-                          return (
-                            <div
-                              className="absolute flex items-center overflow-hidden cursor-default text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium border bg-[#c7c8d2] border-[rgba(88,90,102,0.45)] dark:bg-[#3a3b44] dark:border-[rgba(138,140,152,0.40)]"
-                              style={{ left: 0, top: '8px', height: '28px', width: widthStyle, zIndex: 14, borderRadius: '6px' }}
-                              title={label}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <span className="truncate" style={{ paddingLeft: '8px', paddingRight: '8px' }}>
-                                {label}
-                              </span>
-                            </div>
-                          );
-                        })()}
+                        {/* Manual/maintenance block: the cell is darkened
+                            (above); this adds the small center ✕ + a hover card
+                            showing the note. No reservation-style bar. */}
+                        {blockForCell && (
+                          <BlockedDayMarker note={blockForCell.note ?? null} propertyName={property} />
+                        )}
 
                         {/* Scheduled tasks icons */}
                         <ScheduledItemsCell

@@ -587,7 +587,7 @@ export function MonthGrid({
                             paddingRight: `${BAR_DIAGONAL_PX + 6}px`,
                           }}
                         >
-                          {r.guest_name || (isBlock ? 'Blocked' : isOwnerStay ? 'Owner stay' : 'No guest')}
+                          {isOwnerStay ? 'Owner Stay' : (r.guest_name || (isBlock ? 'Blocked' : 'No guest'))}
                         </span>
                       )}
                     </button>

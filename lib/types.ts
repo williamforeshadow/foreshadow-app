@@ -102,6 +102,8 @@ export interface Turnover {
   id: string;
   property_id?: string | null;
   property_name: string;
+  /** 'guest_booking' | 'owner_stay' — owner stays render amber as "Owner Stay". */
+  kind?: string;
   guest_name?: string;
   check_in?: string;
   check_out?: string;

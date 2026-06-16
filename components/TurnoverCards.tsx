@@ -234,8 +234,8 @@ export default function TurnoverCards({ data, filters, onCardClick, compact = fa
 
         {/* 1) Guest name + occupancy badge inline */}
         <div className="flex items-center gap-2">
-          <p className="line-clamp-1 text-sm font-medium flex-1 min-w-0">
-            {item.guest_name || 'No Guest'}
+          <p className={`line-clamp-1 text-sm font-medium flex-1 min-w-0 ${item.kind === 'owner_stay' ? 'text-amber-700 dark:text-amber-400' : ''}`}>
+            {item.kind === 'owner_stay' ? 'Owner Stay' : (item.guest_name || 'No Guest')}
           </p>
           {isInPlay && (
             <Badge
