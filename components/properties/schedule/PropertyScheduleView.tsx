@@ -5,7 +5,12 @@ import { addMonths, format, subMonths } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useProperty } from '../PropertyContext';
-import { MonthGrid, type ScheduleReservation, type ScheduleTask } from './MonthGrid';
+import {
+  MonthGrid,
+  type ScheduleReservation,
+  type ScheduleBlock,
+  type ScheduleTask,
+} from './MonthGrid';
 import { ReservationDetailPanel } from './ReservationDetailPanel';
 import {
   PropertyTaskDetailOverlay,
@@ -29,6 +34,7 @@ interface ScheduleApiResponse {
   property: { id: string; name: string };
   window: { start: string; end: string; year: number; month: number };
   reservations: ScheduleReservation[];
+  blocks: ScheduleBlock[];
   tasks: ScheduleTask[];
 }
 
@@ -42,6 +48,7 @@ export default function PropertyScheduleView() {
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [reservations, setReservations] = useState<ScheduleReservation[]>([]);
+  const [blocks, setBlocks] = useState<ScheduleBlock[]>([]);
   const [tasks, setTasks] = useState<ScheduleTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,10 +89,12 @@ export default function PropertyScheduleView() {
       }
       const payload = data as ScheduleApiResponse;
       setReservations(payload.reservations || []);
+      setBlocks(payload.blocks || []);
       setTasks(payload.tasks || []);
     } catch (err: any) {
       setError(err?.message || 'Failed to load schedule');
       setReservations([]);
+      setBlocks([]);
       setTasks([]);
     } finally {
       setLoading(false);
@@ -220,17 +229,21 @@ export default function PropertyScheduleView() {
     // The day panel doesn't list reservations any more — the calendar bars
     // already show them. Just compute a single occupancy flag for the
     // header pill.
-    const occupied = reservations.some((r) => {
-      const ci = r.check_in.slice(0, 10);
-      const co = r.check_out.slice(0, 10);
-      return dayKey >= ci && dayKey <= co;
-    });
+    const occupied =
+      reservations.some((r) => {
+        const ci = r.check_in.slice(0, 10);
+        const co = r.check_out.slice(0, 10);
+        return dayKey >= ci && dayKey <= co;
+      }) ||
+      blocks.some(
+        (b) => dayKey >= b.start_date.slice(0, 10) && dayKey <= b.end_date.slice(0, 10),
+      );
     return {
       dayKey,
       dayTasks,
       occupancy: (occupied ? 'occupied' : 'vacant') as 'occupied' | 'vacant',
     };
-  }, [selectedDay, tasks, reservations, property.name]);
+  }, [selectedDay, tasks, reservations, blocks, property.name]);
 
   const selectedDayKey = dayPanelData?.dayKey ?? null;
 
@@ -309,6 +322,7 @@ export default function PropertyScheduleView() {
           <MonthGrid
             monthDate={monthDate}
             reservations={reservations}
+            blocks={blocks}
             tasks={tasks}
             selectedReservationId={selectedReservation?.id ?? null}
             selectedDayKey={selectedDayKey}

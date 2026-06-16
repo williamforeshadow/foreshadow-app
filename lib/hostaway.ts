@@ -101,6 +101,28 @@ export async function fetchReservations(departureDateStart: string) {
 }
 
 /**
+ * Fetch a listing's calendar for a date window. Each entry is one day with
+ * `date` (YYYY-MM-DD), `status` ('available' | 'reserved' | 'blocked'),
+ * `isAvailable` (0/1), `note`, and (with includeResources=1) a `reservations`
+ * array. Used to surface manual/maintenance BLOCKS (status 'blocked', no
+ * reservation) — reserved days are already covered by the reservation sync.
+ */
+export async function fetchListingCalendar(
+  listingId: number,
+  startDate: string,
+  endDate: string,
+): Promise<Array<Record<string, any>>> {
+  const token = await getToken();
+  const url = `https://api.hostaway.com/v1/listings/${listingId}/calendar?startDate=${startDate}&endDate=${endDate}&includeResources=1`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    throw new Error(`Calendar fetch failed (${res.status}) for listing ${listingId}`);
+  }
+  const { result = [] } = await res.json();
+  return result as Array<Record<string, any>>;
+}
+
+/**
  * Fetch a single conversation object. Carries the guest's name
  * (`recipientName`) and `listingMapId` independent of any reservation — this is
  * how inquiry threads (no booked reservation) get a name + property.

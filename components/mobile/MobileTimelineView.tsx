@@ -79,6 +79,7 @@ export default function MobileTimelineView({
     formatDate,
     isToday,
     getReservationsForProperty,
+    getBlocksForProperty,
     getBlockPosition,
     reservations,
     recurringTasks,
@@ -475,6 +476,7 @@ export default function MobileTimelineView({
           {/* Property rows */}
           {displayedProperties.map((property) => {
             const propReservations = getReservationsForProperty(property);
+            const propBlocks = getBlocksForProperty(property);
 
             return (
               <div key={property}>
@@ -593,6 +595,27 @@ export default function MobileTimelineView({
                                 {startingRes.guest_name || 'No guest'}
                               </span>
                             )}
+                          </div>
+                        );
+                      })()}
+
+                      {(() => {
+                        const startingBlock = propBlocks.find((b) => {
+                          const { start } = getBlockPosition(b.check_in, b.check_out);
+                          return start === idx;
+                        });
+                        if (!startingBlock) return null;
+                        const { span } = getBlockPosition(startingBlock.check_in, startingBlock.check_out);
+                        const label = startingBlock.note || 'Blocked';
+                        return (
+                          <div
+                            className="absolute pointer-events-none flex items-center overflow-hidden border text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium bg-[#c7c8d2] border-[rgba(88,90,102,0.45)] dark:bg-[#3a3b44] dark:border-[rgba(138,140,152,0.40)]"
+                            style={{ left: 0, top: 6, height: 24, width: span * cellWidth, zIndex: 14, borderRadius: 6 }}
+                            title={label}
+                          >
+                            <span className="truncate whitespace-nowrap" style={{ paddingLeft: 6, paddingRight: 6 }}>
+                              {label}
+                            </span>
                           </div>
                         );
                       })()}

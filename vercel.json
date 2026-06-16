@@ -5,6 +5,10 @@
       "schedule": "0 */3 * * *"
     },
     {
+      "path": "/api/hostaway/calendar-sync",
+      "schedule": "30 */3 * * *"
+    },
+    {
       "path": "/api/hostaway/messages/backfill",
       "schedule": "*/30 * * * *"
     },

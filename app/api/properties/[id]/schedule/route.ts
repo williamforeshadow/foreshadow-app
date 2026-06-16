@@ -129,6 +129,20 @@ export async function GET(
     return NextResponse.json({ error: tasksError.message }, { status: 500 });
   }
 
+  // Calendar blocks (manual/maintenance unavailability — not reservations)
+  // overlapping the window. Same overlap predicate as reservations.
+  const { data: blocks, error: blocksError } = await supabase
+    .from('calendar_blocks')
+    .select('id, property_id, start_date, end_date, note')
+    .eq('property_id', propertyId)
+    .lte('start_date', windowEnd)
+    .gte('end_date', windowStart)
+    .order('start_date', { ascending: true });
+
+  if (blocksError) {
+    return NextResponse.json({ error: blocksError.message }, { status: 500 });
+  }
+
   const transformedTasks = (tasks || []).map((task: any) => {
     const template = task.templates as any;
     const department = task.departments as any;
@@ -170,6 +184,7 @@ export async function GET(
     property: { id: property.id, name: property.name },
     window: { start: windowStart, end: windowEnd, year, month },
     reservations: reservations || [],
+    blocks: blocks || [],
     tasks: transformedTasks,
   });
 }

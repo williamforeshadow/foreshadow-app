@@ -353,6 +353,7 @@ export default function TimelineWindow({
     formatDate,
     isToday,
     getReservationsForProperty,
+    getBlocksForProperty,
     getBlockPosition,
     reservations,
     setReservations,
@@ -1854,6 +1855,7 @@ export default function TimelineWindow({
             {/* Property Rows */}
             {displayedProperties.map((property) => {
               const propertyReservations = getReservationsForProperty(property);
+              const propertyBlocks = getBlocksForProperty(property);
               const activeTurnover = getActiveTurnoverForProperty(propertyReservations);
 
               const propertyCellBg = 'bg-white dark:bg-[var(--timeline-surface-2)]';
@@ -2057,6 +2059,36 @@ export default function TimelineWindow({
                           );
                         })()}
                         
+                        {/* Calendar block bar (manual/maintenance — not a
+                            reservation). Blocks occupy FULL days, so they render
+                            as solid full-cell rectangles (no half-day parallelogram)
+                            — visually distinct from reservations and never
+                            collapsing to a sliver for single-day blocks.
+                            Non-interactive. */}
+                        {(() => {
+                          const startingBlock = propertyBlocks.find((b) => {
+                            const { start } = getBlockPosition(b.check_in, b.check_out);
+                            return start === idx;
+                          });
+                          if (!startingBlock) return null;
+                          const { span } = getBlockPosition(startingBlock.check_in, startingBlock.check_out);
+                          const cw = colWidth;
+                          const widthStyle = cw > 0 ? `${span * cw}px` : `${span * 100}%`;
+                          const label = startingBlock.note || 'Blocked';
+                          return (
+                            <div
+                              className="absolute flex items-center overflow-hidden cursor-default text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium border bg-[#c7c8d2] border-[rgba(88,90,102,0.45)] dark:bg-[#3a3b44] dark:border-[rgba(138,140,152,0.40)]"
+                              style={{ left: 0, top: '8px', height: '28px', width: widthStyle, zIndex: 14, borderRadius: '6px' }}
+                              title={label}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <span className="truncate" style={{ paddingLeft: '8px', paddingRight: '8px' }}>
+                                {label}
+                              </span>
+                            </div>
+                          );
+                        })()}
+
                         {/* Scheduled tasks icons */}
                         <ScheduledItemsCell
                           propertyName={property}

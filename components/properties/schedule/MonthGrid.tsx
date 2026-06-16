@@ -25,9 +25,19 @@ export interface ScheduleReservation {
   check_in: string; // YYYY-MM-DD or ISO
   check_out: string;
   next_check_in?: string | null;
-  // 'owner_stay' = dates the property owner reserved for themselves (synced
-  // from Hostaway). Rendered with a distinct amber tint vs guest bookings.
-  kind?: 'guest_booking' | 'owner_stay';
+  // 'owner_stay' = dates the property owner reserved for themselves (amber).
+  // 'block' = a manual/maintenance calendar block (slate, non-interactive) —
+  // synthesized from a ScheduleBlock so it shares the bar lane-packing.
+  kind?: 'guest_booking' | 'owner_stay' | 'block';
+}
+
+// A manual/maintenance calendar block (not a reservation). Rendered as a bar
+// alongside reservations but visually distinct and non-clickable.
+export interface ScheduleBlock {
+  id: string;
+  start_date: string; // YYYY-MM-DD
+  end_date: string; // YYYY-MM-DD (inclusive last blocked day)
+  note?: string | null;
 }
 
 export interface ScheduleTaskAssignee {
@@ -68,6 +78,7 @@ export interface ScheduleTask {
 interface MonthGridProps {
   monthDate: Date; // any date within the month to render
   reservations: ScheduleReservation[];
+  blocks?: ScheduleBlock[];
   tasks: ScheduleTask[];
   selectedReservationId?: string | null;
   selectedDayKey?: string | null; // YYYY-MM-DD of the currently-open day panel
@@ -189,6 +200,7 @@ const TASK_CARD_HEIGHT = 22; // px — matches tighter calendar task card
 export function MonthGrid({
   monthDate,
   reservations,
+  blocks = [],
   tasks,
   selectedReservationId,
   selectedDayKey,
@@ -243,9 +255,23 @@ export function MonthGrid({
 
   // Pre-compute bars + required lane count for each week so we can size
   // each week row to accommodate its bars.
+  // Blocks share the reservation bar machinery (lane-packing, week-splitting)
+  // by being synthesized into bar items with kind='block'. Inclusive end_date
+  // → check_out so the bar spans every blocked day cell.
+  const barItems = useMemo<ScheduleReservation[]>(() => {
+    const blockBars: ScheduleReservation[] = blocks.map((b) => ({
+      id: `block-${b.id}`,
+      guest_name: b.note?.trim() || 'Blocked',
+      check_in: b.start_date,
+      check_out: b.end_date,
+      kind: 'block',
+    }));
+    return [...reservations, ...blockBars];
+  }, [reservations, blocks]);
+
   const weekLayouts = useMemo(
-    () => weeks.map((w) => computeWeekBars(w, reservations)),
-    [weeks, reservations]
+    () => weeks.map((w) => computeWeekBars(w, barItems)),
+    [weeks, barItems]
   );
 
   const today = new Date();
@@ -483,12 +509,15 @@ export function MonthGrid({
                     BAR_TRACK_OFFSET + bar.lane * (BAR_HEIGHT + BAR_GAP);
                   const isSelected = selectedReservationId === r.id;
                   const isOwnerStay = r.kind === 'owner_stay';
+                  const isBlock = r.kind === 'block';
 
-                  // Owner stays get an amber tint so operators can tell them
-                  // apart from guest bookings (neutral stone) at a glance.
-                  const barColor = isOwnerStay
-                    ? 'bg-[rgba(180,130,60,0.26)] border-[rgba(180,130,60,0.55)] dark:bg-[rgba(214,158,74,0.20)] dark:border-[rgba(214,158,74,0.45)]'
-                    : 'bg-[rgba(120,113,108,0.28)] border-[rgba(120,113,108,0.55)] dark:bg-[rgba(168,158,150,0.18)] dark:border-[rgba(168,158,150,0.45)]';
+                  // Color by kind: guest = neutral stone, owner stay = amber,
+                  // manual/maintenance block = slate (and non-interactive).
+                  const barColor = isBlock
+                    ? 'bg-[rgba(88,90,102,0.30)] border-[rgba(88,90,102,0.55)] dark:bg-[rgba(138,140,152,0.20)] dark:border-[rgba(138,140,152,0.42)]'
+                    : isOwnerStay
+                      ? 'bg-[rgba(180,130,60,0.26)] border-[rgba(180,130,60,0.55)] dark:bg-[rgba(214,158,74,0.20)] dark:border-[rgba(214,158,74,0.45)]'
+                      : 'bg-[rgba(120,113,108,0.28)] border-[rgba(120,113,108,0.55)] dark:bg-[rgba(168,158,150,0.18)] dark:border-[rgba(168,158,150,0.45)]';
                   const barRing = isOwnerStay
                     ? 'ring-2 ring-[rgba(180,130,60,0.65)] dark:ring-[rgba(214,158,74,0.6)] shadow-lg z-10'
                     : 'ring-2 ring-[rgba(120,113,108,0.6)] dark:ring-[rgba(168,158,150,0.6)] shadow-lg z-10';
@@ -500,13 +529,16 @@ export function MonthGrid({
                   const leftPct = (bar.startCol / 7) * 100;
                   const spanPct =
                     ((bar.endCol - bar.startCol + 1) / 7) * 100;
-                  const leftOffsetPct = bar.startsBefore ? 0 : halfDayPct;
-                  const rightOffsetPct = bar.endsAfter ? 0 : halfDayPct;
+                  // Blocks fill full cells (no half-day inset) so a single-day
+                  // block is a solid cell, not a collapsed sliver; reservations
+                  // keep the half-day check-in/check-out parallelogram.
+                  const leftOffsetPct = isBlock ? 0 : bar.startsBefore ? 0 : halfDayPct;
+                  const rightOffsetPct = isBlock ? 0 : bar.endsAfter ? 0 : halfDayPct;
 
-                  const leftDiag = bar.startsBefore
+                  const leftDiag = isBlock || bar.startsBefore
                     ? '0px'
                     : `${BAR_DIAGONAL_PX}px`;
-                  const rightDiag = bar.endsAfter
+                  const rightDiag = isBlock || bar.endsAfter
                     ? '0px'
                     : `${BAR_DIAGONAL_PX}px`;
                   const clipPath = `polygon(${leftDiag} 0%, 100% 0%, calc(100% - ${rightDiag}) 100%, 0% 100%)`;
@@ -523,10 +555,10 @@ export function MonthGrid({
                   return (
                     <button
                       key={`${weekIdx}-${r.id}`}
-                      onClick={() => onReservationClick?.(r)}
+                      onClick={() => { if (!isBlock) onReservationClick?.(r); }}
                       className={`pointer-events-auto absolute text-left transition-all flex items-center overflow-hidden border-t text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium ${barColor} ${
-                        isSelected ? barRing : ''
-                      }`}
+                        isBlock ? 'cursor-default' : ''
+                      } ${isSelected ? barRing : ''}`}
                       style={{
                         left: `calc(${leftPct + leftOffsetPct}%)`,
                         width: `calc(${spanPct - leftOffsetPct - rightOffsetPct}%)`,
@@ -555,7 +587,7 @@ export function MonthGrid({
                             paddingRight: `${BAR_DIAGONAL_PX + 6}px`,
                           }}
                         >
-                          {r.guest_name || (isOwnerStay ? 'Owner stay' : 'No guest')}
+                          {r.guest_name || (isBlock ? 'Blocked' : isOwnerStay ? 'Owner stay' : 'No guest')}
                         </span>
                       )}
                     </button>

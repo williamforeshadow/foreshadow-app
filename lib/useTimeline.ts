@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { apiFetch } from '@/lib/apiFetch';
 
 export function useTimeline() {
   const [reservations, setReservations] = useState<any[]>([]);
+  const [blocks, setBlocks] = useState<any[]>([]);
   const [recurringTasks, setRecurringTasks] = useState<any[]>([]);
   const [properties, setProperties] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,7 +42,7 @@ export function useTimeline() {
     setLoading(true);
     try {
       // Fetch reservations (turnovers) and recurring tasks in parallel
-      const [turnoversResult, recurringResult] = await Promise.all([
+      const [turnoversResult, recurringResult, blocksResult] = await Promise.all([
         supabase.rpc('get_property_turnovers'),
         supabase
           .from('turnover_tasks')
@@ -67,6 +69,7 @@ export function useTimeline() {
           `)
           .is('reservation_id', null)
           .order('scheduled_date', { ascending: true, nullsFirst: false }),
+        apiFetch('/api/calendar-blocks'),
       ]);
 
       if (turnoversResult.error) throw turnoversResult.error;
@@ -102,10 +105,40 @@ export function useTimeline() {
       }));
       setRecurringTasks(recurringData);
 
-      // Get unique properties from both turnovers AND recurring tasks, sorted alphabetically
+      // Calendar blocks (manual/maintenance unavailability — not reservations),
+      // fetched via the service-role API route since calendar_blocks is locked
+      // down. Shaped like reservations (check_in/check_out) so the timeline's bar
+      // positioning works unchanged; noon-local timestamps avoid the UTC-midnight
+      // day-shift when getBlockPosition reads local date parts.
+      let blocksRows: any[] = [];
+      try {
+        if (blocksResult.ok) {
+          const json = await blocksResult.json();
+          blocksRows = json.blocks || [];
+        } else {
+          console.error('Error fetching calendar blocks:', blocksResult.status);
+        }
+      } catch (e) {
+        console.error('Error parsing calendar blocks:', e);
+      }
+      const blocksData = blocksRows
+        .map((b: any) => ({
+          id: b.id,
+          property_name: b.property_name || null,
+          check_in: `${b.start_date}T12:00:00`,
+          check_out: `${b.end_date}T12:00:00`,
+          note: b.note || null,
+          kind: 'block' as const,
+        }))
+        .filter((b: any) => b.property_name);
+      setBlocks(blocksData);
+
+      // Unique properties from turnovers, recurring tasks, AND blocks — so a
+      // property with only a block (no turnovers) still gets a timeline row.
       const turnoverProps = turnoversData.map((r: any) => r.property_name);
       const recurringProps = recurringData.map((t: any) => t.property_name);
-      const uniqueProps = Array.from(new Set([...turnoverProps, ...recurringProps]))
+      const blockProps = blocksData.map((b: any) => b.property_name);
+      const uniqueProps = Array.from(new Set([...turnoverProps, ...recurringProps, ...blockProps]))
         .filter(Boolean)
         .sort();
       setProperties(uniqueProps as string[]);
@@ -154,6 +187,10 @@ export function useTimeline() {
   const getReservationsForProperty = useCallback((propertyName: string) => {
     return reservations.filter(r => r.property_name === propertyName);
   }, [reservations]);
+
+  const getBlocksForProperty = useCallback((propertyName: string) => {
+    return blocks.filter(b => b.property_name === propertyName);
+  }, [blocks]);
 
   const getBlockPosition = useCallback((checkIn: string, checkOut: string) => {
     const checkInDate = new Date(checkIn);
@@ -237,6 +274,7 @@ export function useTimeline() {
     // State
     reservations,
     setReservations,
+    blocks,
     recurringTasks,
     setRecurringTasks,
     properties,
@@ -258,6 +296,7 @@ export function useTimeline() {
     formatDate,
     isToday,
     getReservationsForProperty,
+    getBlocksForProperty,
     getBlockPosition,
     getStatusColor,
   };
