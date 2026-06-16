@@ -75,7 +75,9 @@ export async function fetchReservations(departureDateStart: string) {
   const token = await getToken();
   const all: any[] = [];
   let offset = 0;
-  const allow = new Set(['new', 'confirmed', 'modified']);
+  // 'ownerstay' is included so owner-reserved dates flow into the app (tagged
+  // kind='owner_stay' by the sync). Cancelled/declined statuses stay excluded.
+  const allow = new Set(['new', 'confirmed', 'modified', 'ownerstay']);
 
   while (true) {
     const url = `https://api.hostaway.com/v1/reservations?departureDateStart=${departureDateStart}&limit=100&offset=${offset}&sortOrder=arrivalDateAsc`;

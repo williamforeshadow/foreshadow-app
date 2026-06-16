@@ -109,6 +109,12 @@ const inputSchema = z
       .describe(
         "'hostaway' → reservations synced from Hostaway. 'manual' → reservations created directly in Foreshadow. Maps to hostaway_reservation_id IS/IS NOT NULL.",
       ),
+    kind: z
+      .enum(['guest_booking', 'owner_stay'])
+      .optional()
+      .describe(
+        "Filter by occupancy type. 'guest_booking' = a paying guest stay; 'owner_stay' = dates the property owner reserved for themselves (synced from Hostaway, no guest revenue). Omit to return both.",
+      ),
     has_next_check_in: z
       .boolean()
       .optional()
@@ -180,12 +186,14 @@ export interface ReservationRow {
   is_back_to_back: boolean;
   source: 'hostaway' | 'manual';
   hostaway_reservation_id: number | null;
+  /** 'guest_booking' = paying guest stay; 'owner_stay' = owner-reserved dates. */
+  kind: 'guest_booking' | 'owner_stay';
   created_at: string;
   updated_at: string;
 }
 
 const SELECT =
-  'id, property_id, property_name, guest_name, check_in, check_out, next_check_in, hostaway_reservation_id, created_at, updated_at';
+  'id, property_id, property_name, guest_name, check_in, check_out, next_check_in, hostaway_reservation_id, kind, created_at, updated_at';
 
 const DEFAULT_LIMIT = 25;
 
@@ -342,6 +350,10 @@ async function handler(input: Input): Promise<ToolResult<ReservationRow[]>> {
       q = q.is('hostaway_reservation_id', null);
     }
 
+    if (input.kind) {
+      q = q.eq('kind', input.kind);
+    }
+
     if (input.has_next_check_in === true) {
       q = q.not('next_check_in', 'is', null);
     } else if (input.has_next_check_in === false) {
@@ -408,6 +420,7 @@ async function handler(input: Input): Promise<ToolResult<ReservationRow[]>> {
       is_back_to_back: Boolean(checkOut && nextCheckIn && checkOut === nextCheckIn),
       source: hostawayId != null ? 'hostaway' : 'manual',
       hostaway_reservation_id: hostawayId ?? null,
+      kind: (r.kind as 'guest_booking' | 'owner_stay' | null) ?? 'guest_booking',
       created_at: r.created_at as string,
       updated_at: r.updated_at as string,
     };
@@ -445,7 +458,7 @@ async function handler(input: Input): Promise<ToolResult<ReservationRow[]>> {
 export const findReservations: ToolDefinition<Input, ReservationRow[]> = {
   name: 'find_reservations',
   description:
-    "Find guest reservations (stays) by property, guest name, Hostaway id, or date range. Use convenience flags current_only/upcoming/past for relative-time questions ('who's there now', 'this week's arrivals'); pass reference_date in the user's local timezone so 'today' aligns with their clock. Property filtering: use property_id for one property; use property_ids for multiple (e.g. 'check-ins this week at these N properties') — always prefer the batched call + a date range over looping property_id one ID at a time. Resolve names with find_properties first. ORDERING: `sort` controls direction — 'most_recent' = latest stays first (by check_out), 'earliest' = oldest stays first (by check_in); it defaults to 'most_recent' when past=true and 'earliest' otherwise. The resolved order is returned in meta.sort. Returns slim rows with computed nights and is_back_to_back fields. There is no status column — cancellations are deletions, so you cannot ask for cancelled stays.",
+    "Find guest reservations (stays) by property, guest name, Hostaway id, or date range. Use convenience flags current_only/upcoming/past for relative-time questions ('who's there now', 'this week's arrivals'); pass reference_date in the user's local timezone so 'today' aligns with their clock. Property filtering: use property_id for one property; use property_ids for multiple (e.g. 'check-ins this week at these N properties') — always prefer the batched call + a date range over looping property_id one ID at a time. Resolve names with find_properties first. ORDERING: `sort` controls direction — 'most_recent' = latest stays first (by check_out), 'earliest' = oldest stays first (by check_in); it defaults to 'most_recent' when past=true and 'earliest' otherwise. The resolved order is returned in meta.sort. Returns slim rows with computed nights and is_back_to_back fields. Each row has a `kind`: 'guest_booking' (a paying guest) or 'owner_stay' (dates the owner reserved for themselves, no guest revenue) — pass `kind` to filter to one, or omit to get both. There is no status column — cancellations are deletions, so you cannot ask for cancelled stays.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -532,6 +545,12 @@ export const findReservations: ToolDefinition<Input, ReservationRow[]> = {
         enum: ['hostaway', 'manual'],
         description:
           "'hostaway' → reservations synced from Hostaway (hostaway_reservation_id is set). 'manual' → reservations created directly in Foreshadow.",
+      },
+      kind: {
+        type: 'string',
+        enum: ['guest_booking', 'owner_stay'],
+        description:
+          "Filter by occupancy type. 'guest_booking' = a paying guest stay; 'owner_stay' = owner-reserved dates (no guest revenue). Omit to return both.",
       },
       has_next_check_in: {
         type: 'boolean',

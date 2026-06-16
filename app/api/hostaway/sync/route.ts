@@ -105,7 +105,7 @@ export async function POST() {
     //    (property_id included so we can gate inactive properties below)
     const { data: existingRows } = await supabase
       .from('reservations')
-      .select('id, hostaway_reservation_id, check_in, check_out, guest_name, property_id')
+      .select('id, hostaway_reservation_id, check_in, check_out, guest_name, property_id, kind')
       .not('hostaway_reservation_id', 'is', null);
 
     const existingMap = new Map<number, {
@@ -114,6 +114,7 @@ export async function POST() {
       check_out: string;
       guest_name: string;
       property_id: string | null;
+      kind: string;
     }>();
     for (const row of existingRows || []) {
       existingMap.set(row.hostaway_reservation_id, {
@@ -122,6 +123,7 @@ export async function POST() {
         check_out: row.check_out,
         guest_name: row.guest_name,
         property_id: row.property_id ?? null,
+        kind: row.kind ?? 'guest_booking',
       });
     }
 
@@ -144,9 +146,14 @@ export async function POST() {
         r.listingName ||
         listingsMap.get(r.listingMapId) ||
         `Listing ${r.listingMapId}`;
+      // Owner stays come through the same reservations feed with status
+      // 'ownerStay'; tag them so they're distinguishable everywhere while
+      // still inheriting reservation automations by default.
+      const kind: 'guest_booking' | 'owner_stay' =
+        (r.status || '').toLowerCase() === 'ownerstay' ? 'owner_stay' : 'guest_booking';
       const guestName =
         [r.guestFirstName, r.guestLastName].filter(Boolean).join(' ') ||
-        'Unknown Guest';
+        (kind === 'owner_stay' ? 'Owner stay' : 'Unknown Guest');
 
       const existing = existingMap.get(r.id);
 
@@ -171,6 +178,7 @@ export async function POST() {
           check_in: r.arrivalDate,
           check_out: r.departureDate,
           channel: r.channelName ?? null,
+          kind,
           updated_at: new Date().toISOString(),
         });
       } else {
@@ -181,7 +189,8 @@ export async function POST() {
         const haChanges =
           existCheckIn !== r.arrivalDate ||
           existCheckOut !== r.departureDate ||
-          existing.guest_name !== guestName;
+          existing.guest_name !== guestName ||
+          existing.kind !== kind;
 
         if (haChanges) {
           updateRows.push({
@@ -189,6 +198,7 @@ export async function POST() {
             guest_name: guestName,
             check_in: r.arrivalDate,
             check_out: r.departureDate,
+            kind,
           });
         }
       }
@@ -252,6 +262,7 @@ export async function POST() {
           guest_name: row.guest_name,
           check_in: row.check_in,
           check_out: row.check_out,
+          kind: row.kind,
           updated_at: new Date().toISOString(),
         })
         .eq('id', row.supabaseId);

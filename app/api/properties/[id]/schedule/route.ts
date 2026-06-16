@@ -76,7 +76,8 @@ export async function GET(
       check_in,
       check_out,
       next_check_in,
-      hostaway_reservation_id
+      hostaway_reservation_id,
+      kind
     `
     )
     .eq('property_id', propertyId)

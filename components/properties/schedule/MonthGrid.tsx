@@ -25,6 +25,9 @@ export interface ScheduleReservation {
   check_in: string; // YYYY-MM-DD or ISO
   check_out: string;
   next_check_in?: string | null;
+  // 'owner_stay' = dates the property owner reserved for themselves (synced
+  // from Hostaway). Rendered with a distinct amber tint vs guest bookings.
+  kind?: 'guest_booking' | 'owner_stay';
 }
 
 export interface ScheduleTaskAssignee {
@@ -479,6 +482,16 @@ export function MonthGrid({
                   const top =
                     BAR_TRACK_OFFSET + bar.lane * (BAR_HEIGHT + BAR_GAP);
                   const isSelected = selectedReservationId === r.id;
+                  const isOwnerStay = r.kind === 'owner_stay';
+
+                  // Owner stays get an amber tint so operators can tell them
+                  // apart from guest bookings (neutral stone) at a glance.
+                  const barColor = isOwnerStay
+                    ? 'bg-[rgba(180,130,60,0.26)] border-[rgba(180,130,60,0.55)] dark:bg-[rgba(214,158,74,0.20)] dark:border-[rgba(214,158,74,0.45)]'
+                    : 'bg-[rgba(120,113,108,0.28)] border-[rgba(120,113,108,0.55)] dark:bg-[rgba(168,158,150,0.18)] dark:border-[rgba(168,158,150,0.45)]';
+                  const barRing = isOwnerStay
+                    ? 'ring-2 ring-[rgba(180,130,60,0.65)] dark:ring-[rgba(214,158,74,0.6)] shadow-lg z-10'
+                    : 'ring-2 ring-[rgba(120,113,108,0.6)] dark:ring-[rgba(168,158,150,0.6)] shadow-lg z-10';
 
                   // Half-day offsets (as % of the week row). One day column
                   // = 100/7 %, so half a day = 50/7 %.
@@ -511,10 +524,8 @@ export function MonthGrid({
                     <button
                       key={`${weekIdx}-${r.id}`}
                       onClick={() => onReservationClick?.(r)}
-                      className={`pointer-events-auto absolute text-left transition-all flex items-center overflow-hidden border-t text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium bg-[rgba(120,113,108,0.28)] border-[rgba(120,113,108,0.55)] dark:bg-[rgba(168,158,150,0.18)] dark:border-[rgba(168,158,150,0.45)] ${
-                        isSelected
-                          ? 'ring-2 ring-[rgba(120,113,108,0.6)] dark:ring-[rgba(168,158,150,0.6)] shadow-lg z-10'
-                          : ''
+                      className={`pointer-events-auto absolute text-left transition-all flex items-center overflow-hidden border-t text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium ${barColor} ${
+                        isSelected ? barRing : ''
                       }`}
                       style={{
                         left: `calc(${leftPct + leftOffsetPct}%)`,
@@ -544,7 +555,7 @@ export function MonthGrid({
                             paddingRight: `${BAR_DIAGONAL_PX + 6}px`,
                           }}
                         >
-                          {r.guest_name || 'No guest'}
+                          {r.guest_name || (isOwnerStay ? 'Owner stay' : 'No guest')}
                         </span>
                       )}
                     </button>
