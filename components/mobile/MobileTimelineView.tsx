@@ -514,13 +514,19 @@ export default function MobileTimelineView({
 
                   const cellTasks = getCellTasks(property, date);
                   const hasItems = cellTasks.length > 0;
+                  const cellDateStr = toDateString(date);
+                  const blockForCell = propBlocks.find((b) => {
+                    const ci = b.check_in.slice(0, 10);
+                    const co = b.check_out.slice(0, 10);
+                    return cellDateStr >= ci && cellDateStr <= co;
+                  });
 
                   return (
                     <div
                       key={idx}
                       className={cn(
                         'border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] relative overflow-visible cursor-pointer',
-                        todayDate ? 'today-tint' : 'bg-white dark:bg-card'
+                        blockForCell ? 'bg-[#f0eff2] dark:bg-[#212126]' : todayDate ? 'today-tint' : 'bg-white dark:bg-card'
                       )}
                       style={{ width: cellWidth, minWidth: cellWidth, height: rowHeight }}
                       onClick={() => {
@@ -602,26 +608,19 @@ export default function MobileTimelineView({
                         );
                       })()}
 
-                      {(() => {
-                        const startingBlock = propBlocks.find((b) => {
-                          const { start } = getBlockPosition(b.check_in, b.check_out);
-                          return start === idx;
-                        });
-                        if (!startingBlock) return null;
-                        const { span } = getBlockPosition(startingBlock.check_in, startingBlock.check_out);
-                        const label = startingBlock.note || 'Blocked';
-                        return (
-                          <div
-                            className="absolute pointer-events-none flex items-center overflow-hidden border text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium bg-[#c7c8d2] border-[rgba(88,90,102,0.45)] dark:bg-[#3a3b44] dark:border-[rgba(138,140,152,0.40)]"
-                            style={{ left: 0, top: 6, height: 24, width: span * cellWidth, zIndex: 14, borderRadius: 6 }}
-                            title={label}
+                      {/* Manual/maintenance block: darkened cell (above) + a
+                          faint center ✕, matching the desktop timeline. No
+                          hover card on touch. */}
+                      {blockForCell && (
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <span
+                            className="select-none leading-none text-[rgba(70,72,84,0.32)] dark:text-[rgba(176,178,192,0.32)]"
+                            style={{ fontSize: 10 }}
                           >
-                            <span className="truncate whitespace-nowrap" style={{ paddingLeft: 6, paddingRight: 6 }}>
-                              {label}
-                            </span>
-                          </div>
-                        );
-                      })()}
+                            ✕
+                          </span>
+                        </div>
+                      )}
 
                       {hasItems && view === 'month' && (
                         // Month: status dots (all tasks, wrap). No hover on
