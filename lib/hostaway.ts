@@ -70,6 +70,64 @@ export async function fetchListings(): Promise<Map<number, string>> {
   return map;
 }
 
+/**
+ * Per-listing detail used to backfill property attributes + OTA listing URLs.
+ * `name` is Hostaway's listing label (often an operator address-code, not a
+ * clean public title). The *ListingUrl fields are the public OTA pages.
+ */
+export interface ListingDetail {
+  name: string | null;
+  city: string | null;
+  state: string | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  /** Minimum / maximum nights per stay — the listing's booking rule. */
+  minNights: number | null;
+  maxNights: number | null;
+  airbnbListingUrl: string | null;
+  vrboListingUrl: string | null;
+  googleVrListingUrl: string | null;
+}
+
+/**
+ * Fetch all listings with the fields we backfill: location, bed/bath counts,
+ * and the per-OTA public listing URLs. Same paginated endpoint as
+ * fetchListings — this just keeps the whole object instead of only the name.
+ */
+export async function fetchListingsDetailed(): Promise<Map<number, ListingDetail>> {
+  const token = await getToken();
+  const map = new Map<number, ListingDetail>();
+  let offset = 0;
+
+  while (true) {
+    const res = await fetch(
+      `https://api.hostaway.com/v1/listings?limit=100&offset=${offset}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!res.ok) throw new Error(`Listings fetch failed (${res.status})`);
+
+    const { result = [] } = await res.json();
+    for (const l of result) {
+      map.set(l.id, {
+        name: l.name ?? null,
+        city: l.city ?? null,
+        state: l.state ?? null,
+        bedrooms: typeof l.bedroomsNumber === 'number' ? l.bedroomsNumber : null,
+        bathrooms: typeof l.bathroomsNumber === 'number' ? l.bathroomsNumber : null,
+        minNights: typeof l.minNights === 'number' ? l.minNights : null,
+        maxNights: typeof l.maxNights === 'number' ? l.maxNights : null,
+        airbnbListingUrl: l.airbnbListingUrl || null,
+        vrboListingUrl: l.vrboListingUrl || null,
+        googleVrListingUrl: l.googleVrListingUrl || null,
+      });
+    }
+    if (result.length < 100) break;
+    offset += 100;
+  }
+
+  return map;
+}
+
 /** Fetch current + future reservations (excluding cancelled/declined) */
 export async function fetchReservations(departureDateStart: string) {
   const token = await getToken();
@@ -95,6 +153,43 @@ export async function fetchReservations(departureDateStart: string) {
     if (result.length < 100) break;
     offset += 100;
     await new Promise((r) => setTimeout(r, 700)); // rate-limit friendly
+  }
+
+  return all;
+}
+
+/**
+ * Fetch current+future reservations for a SINGLE listing, for the on-demand
+ * availability refresh (one property, not the whole portfolio). Same status
+ * allowlist and date floor as fetchReservations, scoped server-side via the
+ * listingId filter so it's one cheap call instead of paginating everything.
+ * Returns the raw Hostaway reservation objects.
+ */
+export async function fetchReservationsForListing(
+  listingId: number,
+  departureDateStart: string,
+): Promise<any[]> {
+  const token = await getToken();
+  const all: any[] = [];
+  let offset = 0;
+  const allow = new Set(['new', 'confirmed', 'modified', 'ownerstay']);
+
+  while (true) {
+    const url = `https://api.hostaway.com/v1/reservations?listingId=${listingId}&departureDateStart=${departureDateStart}&limit=100&offset=${offset}&sortOrder=arrivalDateAsc`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`Reservations fetch failed (${res.status}) for listing ${listingId}`);
+
+    const { result = [] } = await res.json();
+    for (const r of result) {
+      if (allow.has((r.status || '').toLowerCase()) && r.departureDate >= departureDateStart) {
+        all.push(r);
+      }
+    }
+    if (result.length < 100) break;
+    offset += 100;
+    await new Promise((r) => setTimeout(r, 700));
   }
 
   return all;

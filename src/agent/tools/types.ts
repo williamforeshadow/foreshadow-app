@@ -103,6 +103,13 @@ export interface ToolContext {
    */
   draft?: {
     propertyId: string | null;
+    /**
+     * The canonical channel the guest is messaging on (airbnb / vrbo /
+     * bookingcom / direct / …), from the conversation. Lets channel-aware
+     * tools (find_available_properties) link a guest only to listings on
+     * THEIR own OTA — never cross-channel. Null when unknown.
+     */
+    channel?: string | null;
   };
 }
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
-import { fetchListings, fetchReservations } from '@/lib/hostaway';
+import { fetchListingsDetailed, fetchReservations, type ListingDetail } from '@/lib/hostaway';
 import { runAutomationsForRowChange } from '@/src/server/automations/run';
 
 // Columns selected back from the reservation insert, fed into the
@@ -31,7 +31,12 @@ export async function POST() {
     // (the "property code") is never touched. Listings that aren't yet
     // bound to an app property are counted in `skippedUnlinked` and
     // otherwise ignored — users import them on demand via the UI.
-    const listingsMap = await fetchListings();
+    const listingsDetail = await fetchListingsDetailed();
+    // Backward-compatible id → name map the rest of the sync already relies on.
+    const listingsMap = new Map<number, string>();
+    for (const [id, d] of listingsDetail.entries()) {
+      listingsMap.set(id, d.name ?? `Listing ${id}`);
+    }
     console.log(`[Hostaway Sync] Fetched ${listingsMap.size} listings`);
 
     const { data: existingPropsRaw } = await supabase
@@ -88,6 +93,67 @@ export async function POST() {
         console.error('[Hostaway Sync] property update error:', updatePropErr.message);
       }
     }
+
+    // 1b. Backfill property attributes (city / state / bed / bath) + per-OTA
+    // listing URLs from the Hostaway listing object. Attributes feed the
+    // Concierge's similarity ranking; listing URLs let it link a guest to an
+    // alternative property on THEIR channel. Active, linked properties only.
+    const channelUrlFields: Array<{ channel: string; key: keyof ListingDetail }> = [
+      { channel: 'airbnb', key: 'airbnbListingUrl' },
+      { channel: 'vrbo', key: 'vrboListingUrl' },
+      { channel: 'google_vr', key: 'googleVrListingUrl' },
+    ];
+    const listingRowsToUpsert: Array<{
+      property_id: string;
+      channel: string;
+      url: string;
+      source: string;
+      updated_at: string;
+    }> = [];
+    for (const [listingId, detail] of listingsDetail.entries()) {
+      const uuid = existingPropIdMap.get(listingId);
+      if (!uuid || inactivePropIds.has(uuid)) continue;
+
+      // Only set columns we actually received — never null out a value the
+      // operator may have filled in just because this listing omitted it.
+      const attrUpdate: Record<string, unknown> = {};
+      if (detail.city != null) attrUpdate.address_city = detail.city;
+      if (detail.state != null) attrUpdate.address_state = detail.state;
+      if (detail.bedrooms != null) attrUpdate.bedrooms = detail.bedrooms;
+      if (detail.bathrooms != null) attrUpdate.bathrooms = detail.bathrooms;
+      if (detail.minNights != null) attrUpdate.min_nights = detail.minNights;
+      if (detail.maxNights != null) attrUpdate.max_nights = detail.maxNights;
+      if (Object.keys(attrUpdate).length > 0) {
+        attrUpdate.updated_at = nowIso;
+        const { error: attrErr } = await supabase
+          .from('properties')
+          .update(attrUpdate)
+          .eq('id', uuid);
+        if (attrErr) console.error('[Hostaway Sync] attribute backfill error:', attrErr.message);
+      }
+
+      for (const { channel, key } of channelUrlFields) {
+        const url = detail[key] as string | null;
+        if (url) {
+          listingRowsToUpsert.push({
+            property_id: uuid,
+            channel,
+            url,
+            source: 'hostaway',
+            updated_at: nowIso,
+          });
+        }
+      }
+    }
+    if (listingRowsToUpsert.length > 0) {
+      // Upsert on (property_id, channel): refresh the URL in place. display_title
+      // is absent from the payload, so a future manual title is preserved.
+      const { error: listingErr } = await supabase
+        .from('property_listings')
+        .upsert(listingRowsToUpsert, { onConflict: 'property_id,channel' });
+      if (listingErr) console.error('[Hostaway Sync] listing url upsert error:', listingErr.message);
+    }
+    console.log(`[Hostaway Sync] Upserted ${listingRowsToUpsert.length} listing URLs`);
 
     // Build the hostaway_listing_id → property uuid lookup from current state.
     // (No newly-inserted rows to account for anymore.)

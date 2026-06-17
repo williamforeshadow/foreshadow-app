@@ -4,9 +4,12 @@ import type {
   ToolUseBlock,
   ToolResultBlockParam,
 } from '@anthropic-ai/sdk/resources/messages';
+import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getAnthropic, MODEL } from '@/src/agent/anthropic';
 import { dispatchTool, type ToolCallTrace } from '@/src/agent/dispatchTool';
 import { getPropertyKnowledgeForGuest } from '@/src/agent/tools/getPropertyKnowledgeForGuest';
+import { checkPropertyAvailability } from '@/src/agent/tools/checkPropertyAvailability';
+import { findAvailableProperties } from '@/src/agent/tools/findAvailableProperties';
 import type { ToolContext, ToolDefinition } from '@/src/agent/tools/types';
 import {
   getConversationContext,
@@ -25,9 +28,11 @@ import type { GuestMessageRecord } from '@/lib/messages';
 // concierge → draftReply); the Concierge holds its tools directly.
 const CONCIERGE_TOOLS: ReadonlyArray<ToolDefinition<unknown, unknown>> = [
   getPropertyKnowledgeForGuest as unknown as ToolDefinition<unknown, unknown>,
+  checkPropertyAvailability as unknown as ToolDefinition<unknown, unknown>,
+  findAvailableProperties as unknown as ToolDefinition<unknown, unknown>,
 ];
 const CONCIERGE_TOOLS_BY_NAME = new Map(CONCIERGE_TOOLS.map((t) => [t.name, t]));
-const MAX_DRAFT_ITERATIONS = 4;
+const MAX_DRAFT_ITERATIONS = 5;
 
 // Guest-reply draft generator — the single source of truth for AI message
 // creation. Reused by the concierge agent tool (chat / Slack) and the
@@ -64,6 +69,16 @@ Grounding (critical — this text may be sent to a real customer):
 Looking things up:
 - When the guest asks something property-specific (wifi, check-in/access, parking, an amenity, a house rule) that you don't already have, call get_property_knowledge_for_guest — with no arguments; it already knows which property. Do this BEFORE replying so your answer is grounded.
 - It returns only what the host's team has made available for guests. If it comes back empty, or doesn't include the specific fact the guest needs, that information hasn't been shared — do NOT guess it. Warmly tell the guest you'll confirm with the team and follow up.
+
+Availability (critical):
+- When the guest asks whether the property is free, open, or bookable for any dates (e.g. "are you available the 18th–22nd?", "can I add a night?", "is next weekend open?"), call check_property_availability BEFORE answering. Pass check_in + check_out for a specific requested stay, or from + to to scan a flexible range. It already knows the property — no property argument.
+- For flexible / open-ended date questions ("sometime in July", "any weekends next month"), use the window mode and quote available_windows EXACTLY as returned — each is a real check_in→check_out opening. NEVER read off the busy spans and work out the gaps yourself: the open window starts on the previous guest's checkout day, and computing that by hand produces a wrong (one-day-early) start. If available_windows is empty, tell the guest nothing of a workable length is open in that range.
+- Quoting a window: present check_in as the arrival date and check_out as the DEPARTURE date, both exactly as given. Do NOT subtract a day, do NOT describe the end as the "last night", and do NOT shorten a window to "leave room" for another booking. A check_out that lands on another reservation's check-in date is a normal same-day turnover and is fully bookable — the openings already account for this. Example: an opening {check_in 2026-06-22, check_out 2026-06-30} is "open June 22 to June 30" (arrive the 22nd, check out the 30th) — NOT "to June 29".
+- It tells you only WHETHER dates are free, never why a taken date is taken. NEVER speculate about or reveal a reason for unavailability — do not say or imply the owner is staying, that it's blocked, booked, or being cleaned. A taken date is simply "not available."
+- Minimum-night rule: the result is not available whenever the stay is shorter than the property's minimum (or longer than its maximum), even if the calendar is wide open — check meets_stay_rules / min_nights. Unlike a date conflict, the night minimum is a normal public booking rule you MAY tell the guest (e.g. "those dates are open, but this place has a 31-night minimum"). Offer alternatives if their stay can't meet it.
+- If the dates are available, you may say so warmly (e.g. "those dates look open"), while leaving the actual booking to the team. If they're taken, say they're not available and offer to check alternatives or pass it to the team — never invent which dates ARE free beyond what the tool returned.
+- Never state availability from memory or assumption; it changes constantly. Always ground it in a fresh tool call.
+- Offering alternatives: when this property is NOT available for the dates the guest wants (or they ask what else you have), you may call find_available_properties to find OTHER properties free for those dates AND bookable on the guest's own channel. Each result includes its bedroom/bathroom counts; if the guest wants more space, simply favor options with more bedrooms than this property (its size is in the facts above) — no special parameter needed. For a flexible request ("sometime in July"), call it in window mode (from + to) — each result then carries available_windows (that property's bookable check_in→check_out openings). When the guest asks "what dates is that alternative available?", answer from its available_windows (call the tool again with the window if needed) and quote them verbatim — do NOT say you can't check the alternative, and never compute the dates yourself. Each result includes a listing url on that channel — share the url so the guest can view/book it. IMPORTANT: paste the raw url as plain text (the guest's channel turns a bare link into a clickable one); do NOT wrap it in markdown link syntax like [text](url) — guests see that literally. Describe each option briefly from its city and bedroom/bathroom counts (e.g. "a similar 2-bedroom in San Diego — ") then give the url; use the display_title as the name if it is set. Only ever share a url the tool returned (it is already on the guest's own channel) — never another channel's link, never invent a property, url, or its availability. If the tool returns nothing, say nothing else is open for those dates and offer to have the team follow up. Still never reveal why the guest's original choice is unavailable.
 
 Operator instruction:
 - You may be given an "instruction" describing what the operator wants accomplished or conveyed (e.g. "let them know checkout is 11am"). Treat it as INTENT, not a script. Express it naturally in your own guest-facing voice, grounded only in facts you have or retrieve. Never copy the instruction verbatim, never repeat internal or operator phrasing or notes to the guest, and never relay anything in it that isn't meant for the guest's eyes. If the instruction references a specific fact (a time, price, code), only state it if it's actually provided — otherwise say you'll confirm.
@@ -201,12 +216,34 @@ export async function generateGuestReplyDraftFromContext(
   const propertyName =
     ctx.reservation?.property_name ?? ctx.conversation.property_name ?? null;
 
+  // The inquiry property's size — so the Concierge has a baseline to reason
+  // about "do you have something bigger?" and favor larger options. Bed/bath
+  // counts are public listing facts, safe to use/share.
+  let propBedrooms: number | null = null;
+  let propBathrooms: number | null = null;
+  if (ctx.conversation.property_id) {
+    const { data: propRow } = await getSupabaseServer()
+      .from('properties')
+      .select('bedrooms, bathrooms')
+      .eq('id', ctx.conversation.property_id)
+      .maybeSingle();
+    propBedrooms = (propRow?.bedrooms as number | null) ?? null;
+    propBathrooms = (propRow?.bathrooms as number | null) ?? null;
+  }
+
   const today = opts.today ?? new Date().toISOString().slice(0, 10);
   const { stay } = ctx;
   const inLabel = stay.booked ? 'Check-in' : 'Requested check-in';
   const outLabel = stay.booked ? 'Check-out' : 'Requested check-out';
   const facts: string[] = [`Today's date: ${today}`, `Guest name: ${guestName}`];
   if (propertyName) facts.push(`Property: ${propertyName}`);
+  if (propBedrooms != null) {
+    facts.push(
+      `This property's size: ${propBedrooms} bedroom${propBedrooms === 1 ? '' : 's'}${
+        propBathrooms != null ? `, ${propBathrooms} bathroom${propBathrooms === 1 ? '' : 's'}` : ''
+      }.`,
+    );
+  }
   if (stay.check_in) facts.push(`${inLabel}: ${stay.check_in}`);
   if (stay.check_out) facts.push(`${outLabel}: ${stay.check_out}`);
   if (stay.nights != null) facts.push(`Nights: ${stay.nights}`);
@@ -260,7 +297,12 @@ export async function generateGuestReplyDraftFromContext(
   }));
   // Bind the one property this draft is for so the guest tool can't be steered
   // to another property — it reads the id from context, not from the model.
-  const toolCtx: ToolContext = { draft: { propertyId: ctx.conversation.property_id } };
+  const toolCtx: ToolContext = {
+    draft: {
+      propertyId: ctx.conversation.property_id,
+      channel: ctx.conversation.channel ?? null,
+    },
+  };
   const conversation: MessageParam[] = [{ role: 'user', content: userParts.join('\n') }];
   const trace: ToolCallTrace[] = [];
 

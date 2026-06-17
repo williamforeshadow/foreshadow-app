@@ -10,7 +10,7 @@ import {
   loadReplyProposalSensitivity,
 } from './conciergeCapabilities';
 import type { ConversationContext, StayWindow } from './conversationContext';
-import type { ConversationRow, BookingState } from '@/lib/conversations';
+import type { ConversationRow, BookingState, CanonicalChannel } from '@/lib/conversations';
 import type { GuestMessageRecord } from '@/lib/messages';
 
 // Concierge test harness. Builds a SYNTHETIC conversation context from an
@@ -37,6 +37,13 @@ export interface RunConciergeTestInput {
   guestName: string;
   scenario: TestScenario;
   messages: TestMessage[];
+  /**
+   * The OTA the simulated guest is messaging on. Drives channel-aware tools —
+   * find_available_properties only recommends (and links) properties listed on
+   * this channel. Null = unknown (real default for some sources); alternatives
+   * can't be linked then, matching production.
+   */
+  channel?: CanonicalChannel | null;
 }
 
 /** A dummy proposed task, shaped to match the inbox's ProposedTaskData. */
@@ -212,7 +219,7 @@ export async function runConciergeTest(
     guest_name: guestName,
     property_id: input.propertyId,
     property_name: propertyName,
-    channel: null,
+    channel: input.channel ?? null,
     reservation_id: null,
     booking_state: bookingState,
     reservation_status: input.scenario === 'inquiry' ? 'inquiry' : 'current',

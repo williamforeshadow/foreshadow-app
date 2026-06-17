@@ -5,8 +5,18 @@ import {
   type TestMessage,
   type TestScenario,
 } from '@/src/server/messages/testDraft';
+import type { CanonicalChannel } from '@/lib/conversations';
 
 const SCENARIOS: TestScenario[] = ['checked_in', 'upcoming', 'past', 'inquiry'];
+const CHANNELS: CanonicalChannel[] = [
+  'airbnb',
+  'vrbo',
+  'bookingcom',
+  'expedia',
+  'direct',
+  'manual',
+  'other',
+];
 
 export const maxDuration = 60;
 
@@ -40,6 +50,10 @@ export async function POST(request: NextRequest) {
       ? body.scenario
       : 'checked_in';
 
+    const channel: CanonicalChannel | null = CHANNELS.includes(body.channel)
+      ? body.channel
+      : null;
+
     const messages: TestMessage[] = rawMessages
       .filter((m: unknown): m is { role: unknown; text: unknown } => !!m && typeof m === 'object')
       .map((m: { role: unknown; text: unknown }) => ({
@@ -47,7 +61,7 @@ export async function POST(request: NextRequest) {
         text: typeof m.text === 'string' ? m.text : '',
       }));
 
-    const result = await runConciergeTest({ propertyId, guestName, scenario, messages });
+    const result = await runConciergeTest({ propertyId, guestName, scenario, messages, channel });
     return NextResponse.json(result);
   } catch (err) {
     console.error('[concierge test] generation failed:', err);

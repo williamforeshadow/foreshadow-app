@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Home,
   CalendarClock,
+  Globe,
 } from 'lucide-react';
 import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
@@ -56,6 +57,20 @@ const SCENARIO_OPTIONS: { value: TestScenario; label: string; short: string }[] 
   { value: 'upcoming', label: 'Upcoming reservation', short: 'Upcoming' },
   { value: 'past', label: 'Past stay (checked out)', short: 'Past stay' },
   { value: 'inquiry', label: 'Inquiry (not booked)', short: 'Inquiry' },
+];
+
+// The OTA the simulated guest is on. Drives channel-aware tools: the concierge
+// only recommends/links alternative properties listed on this channel. 'unknown'
+// mirrors a source with no channel — alternatives can't be linked then.
+type TestChannel = 'airbnb' | 'vrbo' | 'bookingcom' | 'expedia' | 'direct' | 'unknown';
+
+const CHANNEL_OPTIONS: { value: TestChannel; label: string; short: string }[] = [
+  { value: 'airbnb', label: 'Airbnb', short: 'Airbnb' },
+  { value: 'vrbo', label: 'Vrbo', short: 'Vrbo' },
+  { value: 'bookingcom', label: 'Booking.com', short: 'Booking' },
+  { value: 'expedia', label: 'Expedia', short: 'Expedia' },
+  { value: 'direct', label: 'Direct booking', short: 'Direct' },
+  { value: 'unknown', label: 'Unknown channel', short: 'No channel' },
 ];
 
 export default function ConciergeTestingPage() {
@@ -118,6 +133,7 @@ function TestConsole({
   const [propertyId, setPropertyId] = useState<string>('');
   const [guestName, setGuestName] = useState<string>('');
   const [scenario, setScenario] = useState<TestScenario>('checked_in');
+  const [channel, setChannel] = useState<TestChannel>('airbnb');
   const [items, setItems] = useState<TranscriptItem[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -132,6 +148,7 @@ function TestConsole({
   const started = items.length > 0;
   const propertyName = properties.find((p) => p.id === propertyId)?.name ?? null;
   const scenarioShort = SCENARIO_OPTIONS.find((o) => o.value === scenario)?.short ?? '';
+  const channelShort = CHANNEL_OPTIONS.find((o) => o.value === channel)?.short ?? '';
 
   // Changing the property or scenario changes the test identity mid-thread,
   // which would make an in-progress conversation incoherent — so reset it.
@@ -142,6 +159,11 @@ function TestConsole({
   };
   const changeScenario = (v: TestScenario) => {
     setScenario(v);
+    setItems([]);
+    setError(null);
+  };
+  const changeChannel = (v: TestChannel) => {
+    setChannel(v);
     setItems([]);
     setError(null);
   };
@@ -225,6 +247,7 @@ function TestConsole({
           property_id: propertyId,
           guest_name: guestName.trim(),
           scenario,
+          channel: channel === 'unknown' ? null : channel,
           messages: turns,
         }),
       });
@@ -274,7 +297,7 @@ function TestConsole({
     } finally {
       setSending(false);
     }
-  }, [input, ready, sending, items, propertyId, guestName, scenario]);
+  }, [input, ready, sending, items, propertyId, guestName, scenario, channel]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -335,6 +358,21 @@ function TestConsole({
           </SelectTrigger>
           <SelectContent align="start">
             {SCENARIO_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Channel (which OTA the guest is messaging on) */}
+        <Select value={channel} onValueChange={(v) => changeChannel(v as TestChannel)}>
+          <SelectTrigger size="sm" aria-label="Guest channel" className={TRIGGER_CLASS}>
+            <Globe className="size-3.5" />
+            <span>{channelShort}</span>
+          </SelectTrigger>
+          <SelectContent align="start">
+            {CHANNEL_OPTIONS.map((o) => (
               <SelectItem key={o.value} value={o.value}>
                 {o.label}
               </SelectItem>
