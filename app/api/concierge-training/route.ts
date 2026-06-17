@@ -92,6 +92,7 @@ export async function POST(request: NextRequest) {
     const instructions = typeof body.instructions === 'string' ? body.instructions.trim() : '';
     const category = normalizeCategory(body.category);
     const appliesToAll = Boolean(body.applies_to_all);
+    const isActive = typeof body.is_active === 'boolean' ? body.is_active : true;
     const propertyIds: string[] = Array.isArray(body.property_ids)
       ? body.property_ids.filter((p: unknown): p is string => typeof p === 'string')
       : [];
@@ -108,6 +109,7 @@ export async function POST(request: NextRequest) {
         instructions,
         category,
         applies_to_all: appliesToAll,
+        is_active: isActive,
         created_by_user_id: user?.id ?? null,
         updated_by_user_id: user?.id ?? null,
       })

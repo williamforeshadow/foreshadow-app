@@ -9,7 +9,7 @@ import {
   useState,
   type CSSProperties,
 } from 'react';
-import { ArrowRightToLine, FlaskConical, GraduationCap, PanelLeft, Sparkles } from 'lucide-react';
+import { ArrowRightToLine, FlaskConical, GraduationCap, PanelLeft, Settings, Sparkles } from 'lucide-react';
 import { ModeToggle } from '@/components/mode-toggle';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { UserAvatar } from '@/components/ui/user-avatar';
@@ -233,11 +233,18 @@ export default function Sidebar({
   // Messages + its concierge sub-pages live under Workspace. The inbox owns
   // /messages and conversation detail routes; the concierge pages are explicit
   // sub-paths, so the parent row stays inactive while one of them is open.
-  const onConciergeTraining = pathname?.startsWith('/messages/concierge-training') ?? false;
+  // Settings is a sub-path of concierge-training, so detect it first and exclude
+  // it from the Training match — otherwise both rows would highlight together.
+  const onConciergeSettings = pathname?.startsWith('/messages/concierge-training/settings') ?? false;
+  const onConciergeTraining =
+    (pathname?.startsWith('/messages/concierge-training') ?? false) && !onConciergeSettings;
   const onConciergeTesting = pathname?.startsWith('/messages/concierge-testing') ?? false;
   const onMessagesInbox =
     pathname === '/messages' ||
-    ((pathname?.startsWith('/messages/') ?? false) && !onConciergeTraining && !onConciergeTesting);
+    ((pathname?.startsWith('/messages/') ?? false) &&
+      !onConciergeTraining &&
+      !onConciergeTesting &&
+      !onConciergeSettings);
   const messagesSubItems = [
     {
       name: 'Concierge Training',
@@ -250,6 +257,12 @@ export default function Sidebar({
       path: '/messages/concierge-testing',
       active: onConciergeTesting,
       icon: <FlaskConical className="h-4 w-4" />,
+    },
+    {
+      name: 'Concierge Settings',
+      path: '/messages/concierge-training/settings',
+      active: onConciergeSettings,
+      icon: <Settings className="h-4 w-4" />,
     },
   ];
   const sidebarVars = {

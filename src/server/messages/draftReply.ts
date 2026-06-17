@@ -20,6 +20,7 @@ import {
   getConciergeTrainingForProperty,
   formatTrainingForPrompt,
 } from './conciergeTraining';
+import { loadConciergeToolFlags } from './conciergeCapabilities';
 import type { GuestMessageRecord } from '@/lib/messages';
 
 // The Concierge's curated, read-only toolset. One tool for now — it can look up
@@ -290,7 +291,16 @@ export async function generateGuestReplyDraftFromContext(
   const system = gateActive ? SYSTEM_PROMPT + buildReplyGateClause(opts.replySensitivity!) : SYSTEM_PROMPT;
 
   const client = getAnthropic();
-  const tools = CONCIERGE_TOOLS.map((t) => ({
+  // Per-tool master switches (operations_settings). A disabled tool is simply
+  // never offered to the model, so it can't call it; the unknown-tool guard in
+  // the loop covers any stray call. Errors degrade to the full toolset.
+  let toolFlags: Record<string, boolean>;
+  try {
+    toolFlags = await loadConciergeToolFlags();
+  } catch {
+    toolFlags = {};
+  }
+  const tools = CONCIERGE_TOOLS.filter((t) => toolFlags[t.name] !== false).map((t) => ({
     name: t.name,
     description: t.description,
     input_schema: t.jsonSchema,

@@ -48,6 +48,54 @@ export async function loadReplyProposalSensitivity(): Promise<number> {
   return FALLBACK_REPLY_SENSITIVITY;
 }
 
+// The guest-facing concierge's read-only toolset, by tool name. The single
+// source of truth for "which tools exist" — the settings UI and the per-tool
+// master switches key off this list. Keep in sync with CONCIERGE_TOOLS in
+// draftReply.ts.
+export const CONCIERGE_TOOL_NAMES = [
+  'get_property_knowledge_for_guest',
+  'check_property_availability',
+  'find_available_properties',
+] as const;
+export type ConciergeToolName = (typeof CONCIERGE_TOOL_NAMES)[number];
+
+export type ConciergeToolFlags = Record<ConciergeToolName, boolean>;
+
+const ALL_TOOLS_ENABLED: ConciergeToolFlags = {
+  get_property_knowledge_for_guest: true,
+  check_property_availability: true,
+  find_available_properties: true,
+};
+
+/**
+ * Per-tool master switches for the concierge's toolset, read off the
+ * `concierge_tool_settings` jsonb on operations_settings (id=1). A tool is
+ * enabled unless its key is explicitly false, so an absent column/row, an empty
+ * map, or any read error all degrade to "every tool on" (matches the prior
+ * behavior where the full toolset was always available). Read on every draft
+ * path (autonomous, manual, and the test harness) so the toolset is consistent.
+ */
+export async function loadConciergeToolFlags(): Promise<ConciergeToolFlags> {
+  try {
+    const { data } = await getSupabaseServer()
+      .from('operations_settings')
+      .select('concierge_tool_settings')
+      .eq('id', 1)
+      .maybeSingle();
+    const raw = (data as { concierge_tool_settings?: unknown } | null)?.concierge_tool_settings;
+    if (!raw || typeof raw !== 'object') return { ...ALL_TOOLS_ENABLED };
+    const map = raw as Record<string, unknown>;
+    const flags = { ...ALL_TOOLS_ENABLED };
+    for (const name of CONCIERGE_TOOL_NAMES) {
+      if (map[name] === false) flags[name] = false;
+    }
+    return flags;
+  } catch {
+    // Column/table may be missing in older environments — fall back to all-on.
+    return { ...ALL_TOOLS_ENABLED };
+  }
+}
+
 export async function loadConciergeProposalFlags(): Promise<ConciergeProposalFlags> {
   try {
     const { data } = await getSupabaseServer()

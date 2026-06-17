@@ -79,6 +79,42 @@ function normalizeBool(value: unknown): boolean | null {
   return null;
 }
 
+// Concierge per-tool master switches — a jsonb map { tool_name: boolean } on the
+// singleton. The keys the settings UI controls today; unknown keys are dropped
+// on write so the column never accumulates junk.
+const CONCIERGE_TOOL_KEYS = [
+  'get_property_knowledge_for_guest',
+  'check_property_availability',
+  'find_available_properties',
+] as const;
+
+// Read the tool-settings map off a row, keeping only known keys with boolean
+// values. Absent column / non-object value reads as {} (all tools enabled).
+function readToolSettings(value: unknown): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return out;
+  const map = value as Record<string, unknown>;
+  for (const key of CONCIERGE_TOOL_KEYS) {
+    if (typeof map[key] === 'boolean') out[key] = map[key] as boolean;
+  }
+  return out;
+}
+
+// Validate an incoming tool-settings map. Returns a sanitized { key: boolean }
+// object (known keys only) or null when the shape is wrong or a value isn't a
+// boolean. The client sends the full map on each toggle, so this replaces.
+function normalizeToolSettings(value: unknown): Record<string, boolean> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const map = value as Record<string, unknown>;
+  const out: Record<string, boolean> = {};
+  for (const [key, v] of Object.entries(map)) {
+    if (!(CONCIERGE_TOOL_KEYS as readonly string[]).includes(key)) continue;
+    if (typeof v !== 'boolean') return null;
+    out[key] = v;
+  }
+  return out;
+}
+
 // Postgres TIME comes back from PostgREST as 'HH:MM:SS'. The UI only ever
 // cares about HH:MM, so trim consistently here.
 function trimTime(value: unknown): string {
@@ -120,6 +156,7 @@ function isMissingColumnError(error: unknown): boolean {
   return (
     e.message.includes('task_proposal_sensitivity') ||
     e.message.includes('reply_proposal_sensitivity') ||
+    e.message.includes('concierge_tool_settings') ||
     CAPABILITY_FLAG_KEYS.some((k) => e.message!.includes(k))
   );
 }
@@ -151,6 +188,7 @@ export async function GET() {
             reply_proposal_enabled: true,
             task_proposal_enabled: true,
             knowledge_proposal_enabled: true,
+            concierge_tool_settings: {},
             updated_at: null,
           },
           migration_pending: true,
@@ -173,6 +211,7 @@ export async function GET() {
           reply_proposal_enabled: true,
           task_proposal_enabled: true,
           knowledge_proposal_enabled: true,
+          concierge_tool_settings: {},
           updated_at: null,
         },
       });
@@ -188,6 +227,7 @@ export async function GET() {
         reply_proposal_enabled: readBool(data.reply_proposal_enabled, true),
         task_proposal_enabled: readBool(data.task_proposal_enabled, true),
         knowledge_proposal_enabled: readBool(data.knowledge_proposal_enabled, true),
+        concierge_tool_settings: readToolSettings(data.concierge_tool_settings),
         updated_at: data.updated_at,
       },
     });
@@ -334,6 +374,17 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: `${key} must be a boolean` }, { status: 400 });
       }
       patch[key] = flag;
+    }
+
+    if (body?.concierge_tool_settings !== undefined) {
+      const toolSettings = normalizeToolSettings(body.concierge_tool_settings);
+      if (toolSettings === null) {
+        return NextResponse.json(
+          { error: 'concierge_tool_settings must be an object of { tool_name: boolean }' },
+          { status: 400 },
+        );
+      }
+      patch.concierge_tool_settings = toolSettings;
     }
 
     if (Object.keys(patch).length === 0) {

@@ -1,16 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import {
-  ArrowLeft,
-  Plus,
-  Pencil,
-  Trash2,
-  GraduationCap,
-  FlaskConical,
-  SlidersHorizontal,
-} from 'lucide-react';
+import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, Check } from 'lucide-react';
 import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -24,16 +16,13 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { MultiSelect, type FilterOption } from '@/components/tasks/TaskFilterBar';
 import { cn } from '@/lib/utils';
 
-// CRUD-backed training lives under two categories; the third tab (property
-// knowledge) is on/off only for now and has no rules list.
+// CRUD-backed training lives under two categories (reply / task). Property
+// knowledge is on/off only and lives entirely on the Settings page now.
 type TrainingCategory = 'reply' | 'task';
-type TrainingTab = TrainingCategory | 'knowledge';
 
 interface TrainingRule {
   id: string;
@@ -64,47 +53,13 @@ const CATEGORY_META: Record<
   },
 };
 
-// Tab chrome for all three sections (the knowledge tab has no CRUD meta).
-const TAB_META: Record<TrainingTab, { label: string; blurb: string }> = {
+// Tab chrome for the two CRUD categories.
+const TAB_META: Record<TrainingCategory, { label: string; blurb: string }> = {
   reply: { label: 'Replies', blurb: CATEGORY_META.reply.blurb },
   task: { label: 'Tasks', blurb: CATEGORY_META.task.blurb },
-  knowledge: {
-    label: 'Property Knowledge',
-    blurb: 'Durable facts about a property the AI saves from conversations to reuse next time.',
-  },
 };
 
-const TAB_ORDER: TrainingTab[] = ['reply', 'task', 'knowledge'];
-
-// Concierge capability master switches mirror the operations_settings flags.
-type CapabilityKey = 'reply' | 'task' | 'knowledge';
-interface CapabilityFlags {
-  reply: boolean;
-  task: boolean;
-  knowledge: boolean;
-}
-const CAPABILITY_FLAG_FIELD: Record<CapabilityKey, string> = {
-  reply: 'reply_proposal_enabled',
-  task: 'task_proposal_enabled',
-  knowledge: 'knowledge_proposal_enabled',
-};
-const CAPABILITY_COPY: Record<CapabilityKey, { title: string; on: string; off: string }> = {
-  reply: {
-    title: 'Autonomous reply drafting',
-    on: 'The concierge drafts a reply to each new guest message so it’s waiting in the inbox.',
-    off: 'The concierge won’t auto-draft replies. You can still draft manually in the inbox.',
-  },
-  task: {
-    title: 'Autonomous task proposing',
-    on: 'The concierge proposes operational tasks from guest messages for you to review.',
-    off: 'The concierge won’t propose tasks from guest messages.',
-  },
-  knowledge: {
-    title: 'Autonomous knowledge capture',
-    on: 'The concierge proposes durable property facts worth saving when a conversation reveals one.',
-    off: 'The concierge won’t propose new property knowledge to save.',
-  },
-};
+const TAB_ORDER: TrainingCategory[] = ['reply', 'task'];
 
 interface PropertyOption {
   id: string;
@@ -118,28 +73,16 @@ type EditorState =
 
 export default function ConciergeTrainingPage() {
   const isMobile = useIsMobile();
-  const [activeTab, setActiveTab] = useState<TrainingTab>('reply');
+  const [activeTab, setActiveTab] = useState<TrainingCategory>('reply');
   const [rules, setRules] = useState<TrainingRule[]>([]);
   const [properties, setProperties] = useState<PropertyOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [editor, setEditor] = useState<EditorState>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Capability master switches (operations_settings). null while loading.
-  const [flags, setFlags] = useState<CapabilityFlags | null>(null);
-  const [flagSaving, setFlagSaving] = useState<CapabilityKey | null>(null);
-
-  const propertyName = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const p of properties) m.set(p.id, p.name);
-    return m;
-  }, [properties]);
-
-  // Only reply/task have a rules list; knowledge is on/off only.
   const visibleRules = useMemo(
-    () => (activeTab === 'knowledge' ? [] : rules.filter((r) => r.category === activeTab)),
+    () => rules.filter((r) => r.category === activeTab),
     [rules, activeTab],
   );
 
@@ -156,10 +99,9 @@ export default function ConciergeTrainingPage() {
       setLoading(true);
       setError(null);
       try {
-        const [, propsRes, settingsRes] = await Promise.all([
+        const [, propsRes] = await Promise.all([
           loadRules(),
           fetch('/api/properties').then((r) => r.json()),
-          fetch('/api/operations-settings', { cache: 'no-store' }).then((r) => r.json()),
         ]);
         if (!active) return;
         setProperties(
@@ -167,12 +109,6 @@ export default function ConciergeTrainingPage() {
             ? propsRes.properties.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name }))
             : [],
         );
-        const s = settingsRes?.settings ?? {};
-        setFlags({
-          reply: s.reply_proposal_enabled !== false,
-          task: s.task_proposal_enabled !== false,
-          knowledge: s.knowledge_proposal_enabled !== false,
-        });
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : 'Failed to load');
       } finally {
@@ -184,99 +120,13 @@ export default function ConciergeTrainingPage() {
     };
   }, [loadRules]);
 
-  // Flip a capability master switch optimistically; roll back on failure.
-  const setCapability = useCallback(
-    async (key: CapabilityKey, next: boolean) => {
-      setFlags((prev) => (prev ? { ...prev, [key]: next } : prev));
-      setFlagSaving(key);
-      setError(null);
-      try {
-        const res = await fetch('/api/operations-settings', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ [CAPABILITY_FLAG_FIELD[key]]: next }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(typeof data?.error === 'string' ? data.error : 'Failed to save');
-        }
-      } catch (err) {
-        setFlags((prev) => (prev ? { ...prev, [key]: !next } : prev));
-        setError(err instanceof Error ? err.message : 'Failed to save');
-      } finally {
-        setFlagSaving(null);
-      }
-    },
-    [],
-  );
-
-  const handleToggleActive = async (rule: TrainingRule) => {
-    setError(null);
-    try {
-      const res = await fetch(`/api/concierge-training/${rule.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_active: !rule.is_active }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Failed to update');
-      await loadRules();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update');
-    }
-  };
-
-  const handleDelete = async (rule: TrainingRule) => {
-    if (!confirm(`Delete "${rule.title}"? This cannot be undone.`)) return;
-    setDeletingId(rule.id);
-    setError(null);
-    try {
-      const res = await fetch(`/api/concierge-training/${rule.id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Failed to delete');
-      await loadRules();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete');
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
   const trainingPanel = (
     <>
-      <CategoryTabs active={activeTab} onChange={setActiveTab} />
-      <p className="-mt-1 text-xs text-muted-foreground">{TAB_META[activeTab].blurb}</p>
-
-      <CapabilityToggle
-        capability={activeTab}
-        enabled={flags ? flags[activeTab] : null}
-        saving={flagSaving === activeTab}
-        onChange={(next) => setCapability(activeTab, next)}
-      />
-
-      {activeTab === 'knowledge' ? (
-        <div className="rounded-xl border border-dashed border-black/[0.12] p-5 text-sm text-muted-foreground dark:border-white/[0.12]">
-          <p>
-            When a guest conversation reveals a lasting fact about a property — a quirk, an access
-            detail, a recurring service — the concierge can propose saving it to that property’s
-            knowledge so it informs future replies. Use the switch above to turn that on or off.
-          </p>
-          <p className="mt-2 text-xs">
-            Property-specific knowledge training (rules guiding what to save) is coming later.
-          </p>
-        </div>
-      ) : (
-      <>
-      {activeTab === 'reply' ? <ReplySensitivityControl /> : null}
-      {activeTab === 'task' ? <SensitivityControl /> : null}
-
-      <div className="flex items-center justify-between">
-        <span className="msg-well rounded-full px-2.5 py-1 text-xs font-medium tabular-nums text-muted-foreground">
-          {visibleRules.length} {visibleRules.length === 1 ? 'entry' : 'entries'}
-        </span>
+      <div className="flex items-center justify-between gap-3">
+        <CategoryTabs active={activeTab} onChange={setActiveTab} />
         <Button className="rounded-full" onClick={() => setEditor({ mode: 'create', category: activeTab })}>
           <Plus className="mr-2 h-4 w-4" />
-          New training
+          Training block
         </Button>
       </div>
 
@@ -285,7 +135,7 @@ export default function ConciergeTrainingPage() {
       ) : visibleRules.length === 0 ? (
         <div className="rounded-xl border border-dashed border-black/[0.12] py-12 text-center dark:border-white/[0.12]">
           <p className="mb-4 text-sm text-muted-foreground">
-            No {CATEGORY_META[activeTab].label.toLowerCase()} yet. Add your first procedure — e.g.
+            No {CATEGORY_META[activeTab].label.toLowerCase()} blocks yet. Add your first — e.g.
             “{CATEGORY_META[activeTab].placeholderTitle}”.
           </p>
           <Button className="rounded-full" onClick={() => setEditor({ mode: 'create', category: activeTab })}>
@@ -294,91 +144,28 @@ export default function ConciergeTrainingPage() {
           </Button>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
-          {visibleRules.map((rule) => (
-            <div key={rule.id} className={cn('msg-well group rounded-xl p-4', !rule.is_active && 'opacity-60')}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-medium text-foreground">{rule.title}</h3>
-                      {rule.applies_to_all ? (
-                        <Badge variant="secondary" className="text-[10px]">All properties</Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-[10px]">
-                          {rule.property_ids.length} propert{rule.property_ids.length === 1 ? 'y' : 'ies'}
-                        </Badge>
-                      )}
-                      {!rule.is_active && (
-                        <Badge variant="outline" className="text-[10px] text-muted-foreground">Inactive</Badge>
-                      )}
-                    </div>
-                    <p className="mt-1.5 line-clamp-3 whitespace-pre-wrap text-sm text-muted-foreground">
-                      {rule.instructions || 'No instructions yet.'}
-                    </p>
-                    {!rule.applies_to_all && rule.property_ids.length > 0 && (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        {rule.property_ids.map((id) => propertyName.get(id) ?? '…').join(', ')}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      onClick={() => handleToggleActive(rule)}
-                      title={rule.is_active ? 'Deactivate' : 'Activate'}
-                      className={cn(
-                        'rounded-md px-2 py-1 text-xs font-medium transition-colors',
-                        rule.is_active
-                          ? 'text-emerald-600 hover:bg-emerald-500/[0.08] dark:text-emerald-400'
-                          : 'text-muted-foreground hover:bg-black/[0.05] dark:hover:bg-white/[0.06]',
-                      )}
-                    >
-                      {rule.is_active ? 'Active' : 'Off'}
-                    </button>
-                    <button
-                      onClick={() => setEditor({ mode: 'edit', rule })}
-                      title="Edit"
-                      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-black/[0.05] hover:text-foreground dark:hover:bg-white/[0.06]"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(rule)}
-                      disabled={deletingId === rule.id}
-                      title="Delete"
-                      className="rounded-md p-1.5 text-red-400 transition-colors hover:bg-red-500/[0.08] disabled:opacity-50"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-            </div>
+        <div className="msg-well overflow-hidden rounded-xl">
+          {visibleRules.map((rule, idx) => (
+            <TrainingBlockRow
+              key={rule.id}
+              rule={rule}
+              isLast={idx === visibleRules.length - 1}
+              onEdit={() => setEditor({ mode: 'edit', rule })}
+            />
           ))}
         </div>
-      )}
-      </>
       )}
     </>
   );
 
   const content = (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-6">
-      <header className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-bg-soft)] text-[var(--accent-3)]">
-          <GraduationCap className="h-5 w-5" aria-hidden />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-lg font-semibold tracking-tight text-foreground">Concierge Training</h1>
-          <p className="text-sm text-muted-foreground">
-            Teach the AI how to handle guest situations and what to turn into tasks.
-          </p>
-        </div>
-        <Link
-          href="/messages/concierge-testing"
-          className="msg-well inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <FlaskConical className="h-3.5 w-3.5" aria-hidden />
-          Test replies
-        </Link>
+    <div className="flex w-full flex-col gap-4 p-6 sm:px-8">
+      <header>
+        <h1 className="text-lg font-semibold tracking-tight text-foreground">Concierge Training</h1>
+        <p className="mt-3 text-sm text-muted-foreground">
+          Teach the Concierge Agent how to reply to guests, handle situations, and execute task
+          generation.
+        </p>
       </header>
 
       {error && (
@@ -427,6 +214,10 @@ export default function ConciergeTrainingPage() {
             setEditor(null);
             await loadRules();
           }}
+          onDeleted={async () => {
+            setEditor(null);
+            await loadRules();
+          }}
         />
       )}
     </>
@@ -437,11 +228,11 @@ function CategoryTabs({
   active,
   onChange,
 }: {
-  active: TrainingTab;
-  onChange: (c: TrainingTab) => void;
+  active: TrainingCategory;
+  onChange: (c: TrainingCategory) => void;
 }) {
   return (
-    <div className="msg-well inline-flex gap-1 self-start rounded-lg p-1">
+    <div className="msg-well inline-flex shrink-0 gap-1 rounded-lg p-1">
       {TAB_ORDER.map((key) => {
         const isActive = active === key;
         return (
@@ -465,319 +256,61 @@ function CategoryTabs({
   );
 }
 
-// Master on/off switch for a concierge capability (operations_settings flag).
-// `enabled` is null while the flag is still loading.
-function CapabilityToggle({
-  capability,
-  enabled,
-  saving,
-  onChange,
+// Compact training-block row — title + property scope + edit pencil. The whole
+// row opens the editor (where instructions, active state, and delete live);
+// nothing else is shown inline. Styled to echo the My Assignments task rows.
+function TrainingBlockRow({
+  rule,
+  isLast,
+  onEdit,
 }: {
-  capability: CapabilityKey;
-  enabled: boolean | null;
-  saving: boolean;
-  onChange: (next: boolean) => void;
+  rule: TrainingRule;
+  isLast: boolean;
+  onEdit: () => void;
 }) {
-  const copy = CAPABILITY_COPY[capability];
-  const isOn = enabled !== false; // treat the loading/unknown state as on
+  const scope = rule.applies_to_all
+    ? 'All properties'
+    : rule.property_ids.length === 0
+      ? 'No properties'
+      : `${rule.property_ids.length} ${rule.property_ids.length === 1 ? 'property' : 'properties'}`;
   return (
-    <div className="msg-well flex items-start justify-between gap-4 rounded-xl p-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-medium text-foreground">{copy.title}</p>
-            <Badge
-              variant={enabled === false ? 'outline' : 'secondary'}
-              className={cn('text-[10px]', enabled === false && 'text-muted-foreground')}
-            >
-              {enabled === null ? '…' : enabled ? 'On' : 'Off'}
-            </Badge>
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {enabled === null ? 'Loading…' : isOn ? copy.on : copy.off}
-          </p>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={enabled === true}
-          aria-label={`${copy.title}: ${isOn ? 'on' : 'off'}`}
-          disabled={enabled === null || saving}
-          onClick={() => onChange(!isOn)}
-          className={cn(
-            'relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50',
-            isOn ? 'bg-[var(--accent-3)]' : 'bg-black/[0.15] dark:bg-white/[0.18]',
-          )}
-        >
-          <span
-            className={cn(
-              'inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform',
-              isOn ? 'translate-x-[22px]' : 'translate-x-0.5',
-            )}
-          />
-        </button>
-    </div>
-  );
-}
-
-const SENSITIVITY_LEVELS: { level: number; name: string; blurb: string }[] = [
-  { level: 1, name: 'Critical only', blurb: 'Only urgent or safety issues, or anything making the space unusable.' },
-  { level: 2, name: 'Clear operational work', blurb: 'Repairs, maintenance, supplies, and explicit “please do X” requests. (Default)' },
-  { level: 3, name: 'Operational + administrative', blurb: 'Also booking/stay changes, special arrangements, and follow-ups that need an action — not just an answer.' },
-  { level: 4, name: 'Proactive', blurb: 'Most actionable requests, plus notable feedback or preferences that likely need follow-up.' },
-  { level: 5, name: 'Track everything', blurb: 'Almost any feedback, request, or issue worth tracking — skip only pure pleasantries.' },
-];
-
-function clampLevel(value: unknown): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  if (Number.isFinite(n) && n >= 1 && n <= 5) return Math.round(n);
-  return 2;
-}
-
-// Reply-draft sensitivity (1-4). Mirrors the server ladder in draftReply.ts.
-const REPLY_SENSITIVITY_LEVELS: { level: number; name: string; blurb: string }[] = [
-  { level: 1, name: 'Urgent only', blurb: 'Only when the guest has a time-sensitive problem or question that needs a prompt answer.' },
-  { level: 2, name: 'Questions & issues', blurb: 'Also any genuine question, problem, or feedback that wants a response — urgent or not.' },
-  { level: 3, name: 'Anything substantive', blurb: 'Also comments, plans, and requests that merit a reply. Skips pure “thanks”-style acknowledgments. (Default)' },
-  { level: 4, name: 'Every message', blurb: 'Draft a reply to every inbound message, including simple acknowledgments.' },
-];
-
-function clampReplyLevel(value: unknown): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  if (Number.isFinite(n) && n >= 1 && n <= 4) return Math.round(n);
-  return 3;
-}
-
-/**
- * Org-level "how eager is the concierge to draft tasks" dial (1-5). Lives on the
- * Task rules tab because it's the other half of "what becomes a task." Persists
- * to operations_settings via PATCH /api/operations-settings.
- */
-function SensitivityControl() {
-  const [level, setLevel] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const res = await fetch('/api/operations-settings', { cache: 'no-store' });
-        const data = await res.json();
-        if (active && res.ok) setLevel(clampLevel(data?.settings?.task_proposal_sensitivity));
-        else if (active) setLevel(2);
-      } catch {
-        if (active) setLevel(2);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const update = async (next: number) => {
-    const prev = level;
-    setLevel(next);
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/operations-settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ task_proposal_sensitivity: next }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(typeof data?.error === 'string' ? data.error : 'Failed to save');
-        setLevel(prev);
-      }
-    } catch {
-      setError('Failed to save');
-      setLevel(prev);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const current = SENSITIVITY_LEVELS.find((l) => l.level === level);
-
-  return (
-    <div className="msg-well space-y-3 rounded-xl p-4">
-        <div className="flex items-center gap-2">
-          <SlidersHorizontal className="h-4 w-4 text-[var(--accent-3)]" aria-hidden />
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground">Task proposal sensitivity</p>
-            <p className="text-xs text-muted-foreground">
-              How eager the concierge is to draft a task from a guest message. Applies everywhere; task rules below add specifics on top.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="inline-flex gap-1 rounded-lg bg-black/[0.05] p-1 dark:bg-white/[0.06]">
-            {SENSITIVITY_LEVELS.map((l) => {
-              const active = level === l.level;
-              return (
-                <button
-                  key={l.level}
-                  type="button"
-                  onClick={() => update(l.level)}
-                  disabled={saving || level === null}
-                  aria-pressed={active}
-                  className={cn(
-                    'h-8 w-9 rounded-md text-sm font-semibold transition-colors duration-150 disabled:opacity-50',
-                    active
-                      ? 'bg-[var(--accent-3)] text-white shadow-sm'
-                      : 'text-muted-foreground hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.05]',
-                  )}
-                >
-                  {l.level}
-                </button>
-              );
-            })}
-          </div>
-          {current ? (
-            <div className="min-w-0">
-              <span className="text-sm font-medium text-foreground">{current.name}</span>
-              <span className="ml-2 text-xs text-muted-foreground">· {current.blurb}</span>
-            </div>
-          ) : (
-            <span className="text-xs text-muted-foreground">Loading…</span>
-          )}
-        </div>
-
-        {error ? <p className="text-xs text-red-600 dark:text-red-400">{error}</p> : null}
-
-        <details className="text-xs text-muted-foreground">
-          <summary className="cursor-pointer select-none font-medium text-foreground/80">
-            What the levels mean
-          </summary>
-          <ul className="mt-2 space-y-1">
-            {SENSITIVITY_LEVELS.map((l) => (
-              <li key={l.level}>
-                <span className="font-medium text-foreground">{l.level} · {l.name}</span> — {l.blurb}
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 italic">Levels are cumulative — each includes everything below it.</p>
-        </details>
-    </div>
-  );
-}
-
-/**
- * Org-level "how readily does the concierge draft a reply at all" dial (1-4).
- * Lives on the Replies tab beneath the capability switch. Gates the autonomous
- * draft path only; manual "Regenerate" always drafts. Persists to
- * operations_settings via PATCH /api/operations-settings.
- */
-function ReplySensitivityControl() {
-  const [level, setLevel] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const res = await fetch('/api/operations-settings', { cache: 'no-store' });
-        const data = await res.json();
-        if (active && res.ok) setLevel(clampReplyLevel(data?.settings?.reply_proposal_sensitivity));
-        else if (active) setLevel(3);
-      } catch {
-        if (active) setLevel(3);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const update = async (next: number) => {
-    const prev = level;
-    setLevel(next);
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/operations-settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reply_proposal_sensitivity: next }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(typeof data?.error === 'string' ? data.error : 'Failed to save');
-        setLevel(prev);
-      }
-    } catch {
-      setError('Failed to save');
-      setLevel(prev);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const current = REPLY_SENSITIVITY_LEVELS.find((l) => l.level === level);
-
-  return (
-    <div className="msg-well space-y-3 rounded-xl p-4">
-        <div className="flex items-center gap-2">
-          <SlidersHorizontal className="h-4 w-4 text-[var(--accent-3)]" aria-hidden />
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground">Reply sensitivity</p>
-            <p className="text-xs text-muted-foreground">
-              How readily the concierge drafts a reply to an inbound message. Applies to autonomous drafts only — you can always draft manually in the inbox.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="inline-flex gap-1 rounded-lg bg-black/[0.05] p-1 dark:bg-white/[0.06]">
-            {REPLY_SENSITIVITY_LEVELS.map((l) => {
-              const active = level === l.level;
-              return (
-                <button
-                  key={l.level}
-                  type="button"
-                  onClick={() => update(l.level)}
-                  disabled={saving || level === null}
-                  aria-pressed={active}
-                  className={cn(
-                    'h-8 w-9 rounded-md text-sm font-semibold transition-colors duration-150 disabled:opacity-50',
-                    active
-                      ? 'bg-[var(--accent-3)] text-white shadow-sm'
-                      : 'text-muted-foreground hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.05]',
-                  )}
-                >
-                  {l.level}
-                </button>
-              );
-            })}
-          </div>
-          {current ? (
-            <div className="min-w-0">
-              <span className="text-sm font-medium text-foreground">{current.name}</span>
-              <span className="ml-2 text-xs text-muted-foreground">· {current.blurb}</span>
-            </div>
-          ) : (
-            <span className="text-xs text-muted-foreground">Loading…</span>
-          )}
-        </div>
-
-        {error ? <p className="text-xs text-red-600 dark:text-red-400">{error}</p> : null}
-
-        <details className="text-xs text-muted-foreground">
-          <summary className="cursor-pointer select-none font-medium text-foreground/80">
-            What the levels mean
-          </summary>
-          <ul className="mt-2 space-y-1">
-            {REPLY_SENSITIVITY_LEVELS.map((l) => (
-              <li key={l.level}>
-                <span className="font-medium text-foreground">{l.level} · {l.name}</span> — {l.blurb}
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 italic">Levels are cumulative — each includes everything below it.</p>
-        </details>
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onEdit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onEdit();
+        }
+      }}
+      className={cn(
+        'group flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.04]',
+        !isLast && 'border-b border-black/[0.06] dark:border-white/[0.06]',
+        !rule.is_active && 'opacity-55',
+      )}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <span className="truncate text-sm font-medium text-foreground">{rule.title}</span>
+        {!rule.is_active && (
+          <Badge variant="outline" className="shrink-0 text-[10px] text-muted-foreground">
+            Off
+          </Badge>
+        )}
+      </div>
+      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{scope}</span>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onEdit();
+        }}
+        title="Edit"
+        aria-label={`Edit ${rule.title}`}
+        className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.08]"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }
@@ -787,31 +320,33 @@ function RuleEditorDialog({
   properties,
   onClose,
   onSaved,
+  onDeleted,
 }: {
   state: Exclude<EditorState, null>;
   properties: PropertyOption[];
   onClose: () => void;
   onSaved: () => void | Promise<void>;
+  onDeleted: () => void | Promise<void>;
 }) {
   const existing = state.mode === 'edit' ? state.rule : null;
+  // Category is implicit — it follows the tab the user was on (create) or the
+  // block being edited. No in-dialog type switch.
+  const category: TrainingCategory =
+    existing?.category ?? (state.mode === 'create' ? state.category : 'reply');
   const [title, setTitle] = useState(existing?.title ?? '');
   const [instructions, setInstructions] = useState(existing?.instructions ?? '');
-  const [category, setCategory] = useState<TrainingCategory>(
-    existing?.category ?? (state.mode === 'create' ? state.category : 'reply'),
-  );
-  const [appliesToAll, setAppliesToAll] = useState(existing?.applies_to_all ?? false);
+  const [isActive, setIsActive] = useState(existing?.is_active ?? true);
+  // applies_to_all is folded into the property picker: every property selected
+  // == "all properties". Seed an applies-to-all block with everything checked.
   const [selected, setSelected] = useState<Set<string>>(
-    new Set(existing?.property_ids ?? []),
+    () => new Set(existing?.applies_to_all ? properties.map((p) => p.id) : existing?.property_ids ?? []),
   );
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const propertyOptions = useMemo<FilterOption[]>(
-    () => properties.map((p) => ({ value: p.id, label: p.name })),
-    [properties],
-  );
-
-  const canSave = title.trim().length > 0 && (appliesToAll || selected.size > 0);
+  const allSelected = properties.length > 0 && selected.size === properties.length;
+  const canSave = title.trim().length > 0 && selected.size > 0;
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -821,8 +356,9 @@ function RuleEditorDialog({
       title: title.trim(),
       instructions: instructions.trim(),
       category,
-      applies_to_all: appliesToAll,
-      property_ids: appliesToAll ? [] : [...selected],
+      applies_to_all: allSelected,
+      is_active: isActive,
+      property_ids: allSelected ? [] : [...selected],
     };
     try {
       const res = await fetch(
@@ -834,116 +370,110 @@ function RuleEditorDialog({
         },
       );
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Failed to save training');
+      if (!res.ok) throw new Error(data?.error || 'Failed to save training block');
       await onSaved();
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Failed to save training');
+      setFormError(err instanceof Error ? err.message : 'Failed to save training block');
     } finally {
       setSaving(false);
     }
   };
 
+  const handleDelete = async () => {
+    if (!existing) return;
+    if (!confirm(`Delete “${existing.title}”? This cannot be undone.`)) return;
+    setDeleting(true);
+    setFormError(null);
+    try {
+      const res = await fetch(`/api/concierge-training/${existing.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to delete training block');
+      await onDeleted();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Failed to delete training block');
+      setDeleting(false);
+    }
+  };
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{existing ? 'Edit training' : 'New training'}</DialogTitle>
-          <DialogDescription>
-            {category === 'task'
-              ? 'Guides when and how the AI drafts operational tasks from guest messages.'
-              : 'A named procedure the AI follows when drafting guest replies for the selected properties.'}
-          </DialogDescription>
+      <DialogContent aria-describedby={undefined} className="gap-5 p-7 sm:max-w-2xl">
+        <DialogHeader className="sr-only">
+          <DialogTitle>{existing ? 'Edit training block' : 'New training block'}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          <div className="space-y-2">
-            <Label>Training type</Label>
-            <div className="flex items-center gap-2">
-              {(['reply', 'task'] as TrainingCategory[]).map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setCategory(c)}
-                  className={cn(
-                    'rounded-full border px-3 py-1.5 text-sm transition-colors',
-                    category === c
-                      ? 'border-[var(--accent-3)] bg-[var(--accent-bg-soft)] text-[var(--accent-3)]'
-                      : 'border-border text-muted-foreground hover:bg-accent',
-                  )}
-                >
-                  {CATEGORY_META[c].label}
-                </button>
-              ))}
+        <div className="space-y-6">
+          {/* Active / inactive — first control in the dialog. */}
+          <div className="flex items-center justify-between rounded-xl border border-border p-4">
+            <div className="min-w-0">
+              <p className="text-base font-medium text-foreground">
+                {isActive ? 'Active' : 'Inactive'}
+              </p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                {isActive
+                  ? 'The Concierge Agent follows this training block.'
+                  : 'Turned off — the Concierge Agent ignores this block.'}
+              </p>
             </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isActive}
+              aria-label={`Active: ${isActive ? 'on' : 'off'}`}
+              onClick={() => setIsActive((v) => !v)}
+              className={cn(
+                'relative inline-flex h-7 w-[52px] shrink-0 items-center rounded-full transition-colors',
+                isActive ? 'bg-[var(--accent-3)]' : 'bg-black/[0.15] dark:bg-white/[0.18]',
+              )}
+            >
+              <span
+                className={cn(
+                  'inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform',
+                  isActive ? 'translate-x-[23px]' : 'translate-x-0.5',
+                )}
+              />
+            </button>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="rule-title">Title</Label>
+          {/* Title */}
+          <div className="space-y-2">
+            <Label htmlFor="rule-title" className="text-sm font-medium">Title</Label>
             <Input
               id="rule-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={`e.g. ${CATEGORY_META[category].placeholderTitle}`}
               autoFocus
+              className="h-11 text-base"
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="rule-instructions">Instructions</Label>
+          {/* Properties */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Properties</Label>
+            <PropertyPicker properties={properties} selected={selected} onChange={setSelected} />
+            {selected.size === 0 && (
+              <p className="text-xs text-muted-foreground">
+                Select at least one property, or use “Select all”.
+              </p>
+            )}
+          </div>
+
+          {/* Instructions */}
+          <div className="space-y-2">
+            <Label htmlFor="rule-instructions" className="text-sm font-medium">Instructions</Label>
             <Textarea
               id="rule-instructions"
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
-              placeholder="Step-by-step guidance the AI should follow when this situation comes up…"
-              rows={8}
-              className="resize-y"
+              placeholder={
+                category === 'task'
+                  ? 'When should the Concierge Agent create a task from a guest message, and what should it contain?…'
+                  : 'Step-by-step guidance the Concierge Agent should follow when this situation comes up…'
+              }
+              rows={10}
+              className="resize-y text-base leading-relaxed"
             />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Applies to</Label>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setAppliesToAll(true)}
-                className={cn(
-                  'rounded-full border px-3 py-1.5 text-sm transition-colors',
-                  appliesToAll
-                    ? 'border-[var(--accent-3)] bg-[var(--accent-bg-soft)] text-[var(--accent-3)]'
-                    : 'border-border text-muted-foreground hover:bg-accent',
-                )}
-              >
-                All properties
-              </button>
-              <button
-                type="button"
-                onClick={() => setAppliesToAll(false)}
-                className={cn(
-                  'rounded-full border px-3 py-1.5 text-sm transition-colors',
-                  !appliesToAll
-                    ? 'border-[var(--accent-3)] bg-[var(--accent-bg-soft)] text-[var(--accent-3)]'
-                    : 'border-border text-muted-foreground hover:bg-accent',
-                )}
-              >
-                Specific properties
-              </button>
-            </div>
-            {!appliesToAll && (
-              <div className="pt-1">
-                <MultiSelect
-                  label="Properties"
-                  options={propertyOptions}
-                  selected={selected}
-                  onChange={setSelected}
-                  searchable
-                />
-                {selected.size === 0 && (
-                  <p className="mt-1.5 text-xs text-muted-foreground">
-                    Select at least one property, or switch to “All properties”.
-                  </p>
-                )}
-              </div>
-            )}
           </div>
 
           {formError && (
@@ -951,13 +481,166 @@ function RuleEditorDialog({
           )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" className="rounded-full" onClick={onClose}>Cancel</Button>
-          <Button className="rounded-full" onClick={handleSave} disabled={saving || !canSave}>
-            {saving ? 'Saving…' : existing ? 'Save changes' : 'Create training'}
-          </Button>
+        <DialogFooter className="sm:justify-between">
+          {existing ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="rounded-full text-red-500 hover:bg-red-500/[0.08] hover:text-red-600 dark:hover:bg-red-500/[0.12]"
+              onClick={handleDelete}
+              disabled={deleting || saving}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {deleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          ) : (
+            <span />
+          )}
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="rounded-full" onClick={onClose}>Cancel</Button>
+            <Button className="rounded-full" onClick={handleSave} disabled={saving || deleting || !canSave}>
+              {saving ? 'Saving…' : existing ? 'Save changes' : 'Create training block'}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// Multi-select properties field for the editor dialog. Anchored inline (no fixed
+// portal) so it stays within the dialog and never runs off-screen. "Select all"
+// checks every property — the parent reads "all selected" as applies-to-all.
+function PropertyPicker({
+  properties,
+  selected,
+  onChange,
+}: {
+  properties: PropertyOption[];
+  selected: Set<string>;
+  onChange: (next: Set<string>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  const close = useCallback(() => {
+    setOpen(false);
+    setQuery('');
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) close();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, close]);
+
+  const total = properties.length;
+  const allSelected = total > 0 && selected.size === total;
+  const summary = allSelected
+    ? 'All properties'
+    : selected.size === 0
+      ? 'Select properties'
+      : `${selected.size} ${selected.size === 1 ? 'property' : 'properties'} selected`;
+
+  const filtered = query
+    ? properties.filter((p) => p.name.toLowerCase().includes(query.toLowerCase()))
+    : properties;
+
+  const toggle = (id: string) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onChange(next);
+  };
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <button
+        type="button"
+        onClick={() => (open ? close() : setOpen(true))}
+        aria-expanded={open}
+        className={cn(
+          'flex h-11 w-full items-center justify-between gap-2 rounded-lg border border-border bg-transparent px-3.5 text-base transition-colors hover:bg-accent',
+          selected.size === 0 ? 'text-muted-foreground' : 'text-foreground',
+        )}
+      >
+        <span className="truncate">{summary}</span>
+        <ChevronDown
+          className={cn('h-4 w-4 shrink-0 opacity-60 transition-transform', open && 'rotate-180')}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
+          <div className="border-b border-border p-2">
+            <Input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search properties…"
+              className="h-9"
+            />
+          </div>
+          <div className="flex items-center justify-between border-b border-border px-3 py-2 text-xs">
+            <button
+              type="button"
+              onClick={() => onChange(new Set(properties.map((p) => p.id)))}
+              className="font-medium text-[var(--accent-3)] hover:underline"
+            >
+              Select all
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange(new Set())}
+              className="font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Clear
+            </button>
+          </div>
+          <div className="max-h-60 overflow-y-auto py-1 overlay-scrollbar">
+            {filtered.length === 0 ? (
+              <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                {total === 0 ? 'No properties yet.' : 'No matches.'}
+              </p>
+            ) : (
+              filtered.map((p) => {
+                const checked = selected.has(p.id);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => toggle(p.id)}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
+                  >
+                    <span
+                      className={cn(
+                        'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
+                        checked
+                          ? 'border-[var(--accent-3)] bg-[var(--accent-3)] text-white'
+                          : 'border-muted-foreground/40',
+                      )}
+                    >
+                      {checked && <Check className="h-3 w-3" strokeWidth={3} />}
+                    </span>
+                    <span className="truncate text-foreground">{p.name}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
