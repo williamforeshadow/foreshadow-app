@@ -8,11 +8,19 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 //   - the find_concierge_training agent tool, for operator Q&A.
 // Voice/grounding stays in draftReply.ts; this module only fetches + formats.
 
+export type TrainingTier = 'always' | 'situational';
+
 export interface TrainingRule {
   id: string;
   title: string;
   instructions: string;
   applies_to_all: boolean;
+  /**
+   * 'always' → pinned into every draft. 'situational' → indexed by title and
+   * loaded on demand via get_concierge_procedure. Defaults to 'always' for any
+   * row missing the column.
+   */
+  tier: TrainingTier;
   /** Properties this rule is scoped to. Empty when applies_to_all. */
   property_ids: string[];
 }
@@ -22,6 +30,7 @@ interface TrainingRow {
   title: string | null;
   instructions: string | null;
   applies_to_all: boolean | null;
+  tier: string | null;
   is_active: boolean | null;
   sort_order: number | null;
   created_at: string | null;
@@ -58,7 +67,7 @@ export async function getConciergeTrainingForProperty(
 
   let q = supabase
     .from('concierge_training')
-    .select('id, title, instructions, applies_to_all, is_active, sort_order, created_at')
+    .select('id, title, instructions, applies_to_all, tier, is_active, sort_order, created_at')
     .eq('is_active', true)
     .eq('category', category);
 
@@ -81,6 +90,7 @@ export async function getConciergeTrainingForProperty(
     title: (r.title ?? '').trim(),
     instructions: (r.instructions ?? '').trim(),
     applies_to_all: Boolean(r.applies_to_all),
+    tier: r.tier === 'situational' ? 'situational' : 'always',
     property_ids: r.applies_to_all
       ? []
       : propertyId && linkedSet.has(r.id)
@@ -103,4 +113,15 @@ export function formatTrainingForPrompt(rules: TrainingRule[]): string {
       return `### ${title}\n${body}`;
     })
     .join('\n\n');
+}
+
+/**
+ * Render situational rules as a compact INDEX (title + id only). The body is
+ * deliberately omitted — it's loaded on demand via get_concierge_procedure when
+ * the guest's message matches a listed title. Returns '' when there are none.
+ */
+export function formatTrainingIndexForPrompt(rules: TrainingRule[]): string {
+  const usable = rules.filter((r) => r.title);
+  if (usable.length === 0) return '';
+  return usable.map((r) => `- ${r.title} [id: ${r.id}]`).join('\n');
 }

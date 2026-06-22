@@ -40,6 +40,12 @@ export interface GuestPropertyKnowledge {
   tech_accounts: Json[];
   rooms: Json[];
   attributes: Json[];
+  /**
+   * This property's public booking URL on the guest's own channel (the listing
+   * page) — share it when the guest asks for the link or how to book. null when
+   * no listing exists on their channel. Independent of the lock/unlock sections.
+   */
+  listing_link: string | null;
   /** True when the property has no unlocked knowledge at all. */
   empty: boolean;
 }
@@ -175,6 +181,7 @@ async function handler(input: Input, ctx: ToolContext): Promise<ToolResult<Guest
     tech_accounts: redactRows(dossier.tech_accounts, 'tech_account_field', unlocked),
     rooms: redactRows(dossier.rooms, 'room_field', unlocked),
     attributes,
+    listing_link: null,
     empty: false,
   };
   data.empty =
@@ -186,13 +193,26 @@ async function handler(input: Input, ctx: ToolContext): Promise<ToolResult<Guest
     data.rooms.length === 0 &&
     data.attributes.length === 0;
 
+  // The property's booking link on the guest's OWN channel (never cross-channel).
+  // Independent of the unlock allowlist — listing pages are public.
+  const channel = ctx.draft?.channel ?? null;
+  if (channel) {
+    const { data: listingRow } = await getSupabaseServer()
+      .from('property_listings')
+      .select('url')
+      .eq('property_id', propertyId)
+      .eq('channel', channel)
+      .maybeSingle();
+    data.listing_link = (listingRow?.url as string | null) ?? null;
+  }
+
   return { ok: true, data };
 }
 
 export const getPropertyKnowledgeForGuest: ToolDefinition<Input, GuestPropertyKnowledge> = {
   name: 'get_property_knowledge_for_guest',
   description:
-    "Look up the guest-shareable facts the operator has unlocked for THIS property (wifi, entry info, parking, amenities, house notes — whatever the org chose to make visible). Call it with no arguments when the guest asks something property-specific. Returns only unlocked fields; if `empty` is true or a fact you need isn't present, it hasn't been shared — don't guess it, tell the guest you'll confirm with the team.",
+    "Look up the guest-shareable facts the operator has unlocked for THIS property (wifi, entry info, parking, amenities, house notes — whatever the org chose to make visible), PLUS the property's booking `listing_link` on the guest's channel. Call it with no arguments when the guest asks something property-specific OR asks for the link / how to book this property (share the returned listing_link as a raw url). Returns only unlocked fields; if `empty` is true or a fact you need isn't present, it hasn't been shared — don't guess it, tell the guest you'll confirm with the team. A null listing_link means there's no listing on their channel.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,

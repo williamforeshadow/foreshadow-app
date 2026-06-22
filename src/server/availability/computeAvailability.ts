@@ -49,6 +49,14 @@ export interface AvailableWindow {
   check_out: string;
   /** Whole nights bookable in this opening (check_out − check_in). */
   nights: number;
+  /**
+   * True when this opening runs to the EDGE of the queried window rather than
+   * ending at a real next booking — i.e. the property is free at least this long
+   * and possibly longer; we just didn't look further. `check_out` is then the
+   * search boundary, NOT a departure the guest is forced into. Callers should
+   * phrase it as "from check_in onward", not "through check_out".
+   */
+  open_ended: boolean;
 }
 
 export interface AvailabilityResult {
@@ -227,28 +235,27 @@ export async function computeAvailability(
   const free: AvailableWindow[] = [];
   let runStart: number | null = null;
   let runEnd: number | null = null;
+  const pushRun = (startMs: number, endMs: number) => {
+    const checkoutMs = endMs + 86_400_000;
+    free.push({
+      check_in: msToDateKey(startMs),
+      check_out: msToDateKey(checkoutMs),
+      nights: Math.round((checkoutMs - startMs) / 86_400_000),
+      // Open-ended only when the run reaches the window edge — an in-loop run is
+      // always terminated by a busy day (a real next booking/block).
+      open_ended: endMs === windowEndMs,
+    });
+  };
   for (let d = windowStartMs; d <= windowEndMs; d += 86_400_000) {
     if (!busyDays.has(d)) {
       if (runStart === null) runStart = d;
       runEnd = d;
     } else if (runStart !== null) {
-      const checkoutMs = runEnd! + 86_400_000;
-      free.push({
-        check_in: msToDateKey(runStart),
-        check_out: msToDateKey(checkoutMs),
-        nights: Math.round((checkoutMs - runStart) / 86_400_000),
-      });
+      pushRun(runStart, runEnd!);
       runStart = null;
     }
   }
-  if (runStart !== null) {
-    const checkoutMs = runEnd! + 86_400_000;
-    free.push({
-      check_in: msToDateKey(runStart),
-      check_out: msToDateKey(checkoutMs),
-      nights: Math.round((checkoutMs - runStart) / 86_400_000),
-    });
-  }
+  if (runStart !== null) pushRun(runStart, runEnd!);
 
   return {
     property_id: propertyId,

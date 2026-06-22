@@ -3,7 +3,6 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 import {
   computeAvailability,
   isStayAvailable,
-  type BusySpan,
   type AvailableWindow,
 } from '@/src/server/availability/computeAvailability';
 import type { ToolDefinition, ToolResult, ToolContext } from './types';
@@ -71,13 +70,10 @@ export interface AvailabilityToolResult {
   window: { from: string; to: string };
   /** Overall bookable: nothing occupied AND the stay length meets the night rules. */
   available: boolean;
-  /** Unavailable date spans within scope. Opaque — no guest, no reason. */
-  busy: BusySpan[];
   /**
    * Window mode only: bookable openings as ready-to-quote check_in→check_out
    * ranges (turnover-correct, already filtered to the min-night rule). Quote
-   * these verbatim — never compute openings yourself from `busy`. Empty in stay
-   * mode.
+   * these verbatim — never compute openings yourself. Empty in stay mode.
    */
   available_windows: AvailableWindow[];
   /** Whole nights the request implies (for evaluating the night rules). */
@@ -128,7 +124,7 @@ async function handler(input: Input, ctx: ToolContext): Promise<ToolResult<Avail
       (minNights == null || nights >= minNights) && (maxNights == null || nights <= maxNights);
 
     if (input.check_in && input.check_out) {
-      const { available, conflicts, fresh } = await isStayAvailable(
+      const { available, fresh } = await isStayAvailable(
         propertyId,
         input.check_in,
         input.check_out,
@@ -139,7 +135,6 @@ async function handler(input: Input, ctx: ToolContext): Promise<ToolResult<Avail
           mode: 'stay',
           window: { from: input.check_in, to: input.check_out },
           available: available && meetsRules,
-          busy: conflicts,
           available_windows: [],
           requested_nights: nights,
           min_nights: minNights,
@@ -166,7 +161,6 @@ async function handler(input: Input, ctx: ToolContext): Promise<ToolResult<Avail
         mode: 'window',
         window: result.window,
         available: result.fully_available,
-        busy: result.busy,
         available_windows: availableWindows,
         requested_nights: nights,
         min_nights: minNights,
@@ -184,7 +178,7 @@ async function handler(input: Input, ctx: ToolContext): Promise<ToolResult<Avail
 export const checkPropertyAvailability: ToolDefinition<Input, AvailabilityToolResult> = {
   name: 'check_property_availability',
   description:
-    "Check whether THIS property is bookable for given dates. Call it with no property argument (the property is known from the conversation). Two modes: (1) SPECIFIC STAY — pass check_in + check_out; `available` is true ONLY when the calendar is open AND the length satisfies the property's min/max-night rule. If `available` is false but `busy` is empty, the calendar is open but the length breaks the rule — check meets_stay_rules / min_nights / requested_nights (e.g. a one-week request at a 31-night-minimum place is NOT bookable). (2) FLEXIBLE WINDOW — pass from + to (e.g. all of July); read `available_windows`: a list of bookable openings as exact check_in→check_out ranges, already turnover-correct and already filtered to the minimum-night rule. QUOTE available_windows VERBATIM — do NOT compute openings yourself from `busy` (the start of each opening is a prior guest's CHECKOUT day, and deriving that by hand is a reliable off-by-one). If available_windows is empty, there are no bookable openings of sufficient length in that range. The night minimum is a normal booking rule you MAY share with the guest. But for date conflicts, never reveal WHO is staying or WHY a date is taken — owner stay, guest booking, and maintenance block are all just 'unavailable'. Reflects bookings made since the last sync (it refreshes live).",
+    "Check whether THIS property is bookable for given dates. Call it with no property argument (the property is known from the conversation). Two modes: (1) SPECIFIC STAY — pass check_in + check_out; `available` is true ONLY when the calendar is open AND the length satisfies the property's min/max-night rule. If `available` is false, check meets_stay_rules — when that's false the calendar may be open but the stay length breaks the min/max-night rule (e.g. a one-week request at a 31-night-minimum place is NOT bookable; see min_nights / requested_nights). (2) FLEXIBLE WINDOW — pass from + to (e.g. all of July); read `available_windows`: a list of bookable openings as exact check_in→check_out ranges, already turnover-correct and already filtered to the minimum-night rule. QUOTE available_windows VERBATIM — do NOT compute or adjust the openings yourself. An opening with open_ended=true runs to the edge of the searched range, not a real next booking — present it as 'from check_in onward', not a fixed checkout. If available_windows is empty, there are no bookable openings of sufficient length in that range. The night minimum is a normal booking rule you MAY share with the guest. But for date conflicts, never reveal WHO is staying or WHY a date is taken — owner stay, guest booking, and maintenance block are all just 'unavailable'. Reflects bookings made since the last sync (it refreshes live).",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,

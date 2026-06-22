@@ -1,8 +1,10 @@
 import type {
   MessageParam,
   TextBlock,
+  TextBlockParam,
   ToolUseBlock,
   ToolResultBlockParam,
+  Tool,
 } from '@anthropic-ai/sdk/resources/messages';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getAnthropic, MODEL } from '@/src/agent/anthropic';
@@ -10,6 +12,7 @@ import { dispatchTool, type ToolCallTrace } from '@/src/agent/dispatchTool';
 import { getPropertyKnowledgeForGuest } from '@/src/agent/tools/getPropertyKnowledgeForGuest';
 import { checkPropertyAvailability } from '@/src/agent/tools/checkPropertyAvailability';
 import { findAvailableProperties } from '@/src/agent/tools/findAvailableProperties';
+import { getConciergeProcedure } from '@/src/agent/tools/getConciergeProcedure';
 import type { ToolContext, ToolDefinition } from '@/src/agent/tools/types';
 import {
   getConversationContext,
@@ -19,6 +22,7 @@ import {
 import {
   getConciergeTrainingForProperty,
   formatTrainingForPrompt,
+  formatTrainingIndexForPrompt,
 } from './conciergeTraining';
 import { loadConciergeToolFlags } from './conciergeCapabilities';
 import type { GuestMessageRecord } from '@/lib/messages';
@@ -31,9 +35,16 @@ const CONCIERGE_TOOLS: ReadonlyArray<ToolDefinition<unknown, unknown>> = [
   getPropertyKnowledgeForGuest as unknown as ToolDefinition<unknown, unknown>,
   checkPropertyAvailability as unknown as ToolDefinition<unknown, unknown>,
   findAvailableProperties as unknown as ToolDefinition<unknown, unknown>,
+  getConciergeProcedure as unknown as ToolDefinition<unknown, unknown>,
 ];
+
+// Tools that are core infrastructure and must never be removed by the per-tool
+// operator master switches. get_concierge_procedure loads situational training
+// the system prompt only indexes by title — disabling it would advertise
+// procedures the model can't open.
+const ALWAYS_ON_CONCIERGE_TOOLS: ReadonlySet<string> = new Set(['get_concierge_procedure']);
 const CONCIERGE_TOOLS_BY_NAME = new Map(CONCIERGE_TOOLS.map((t) => [t.name, t]));
-const MAX_DRAFT_ITERATIONS = 5;
+const MAX_DRAFT_ITERATIONS = 6;
 
 // Guest-reply draft generator — the single source of truth for AI message
 // creation. Reused by the concierge agent tool (chat / Slack) and the
@@ -73,12 +84,14 @@ Looking things up:
 
 Availability (critical):
 - When the guest asks whether the property is free, open, or bookable for any dates (e.g. "are you available the 18th–22nd?", "can I add a night?", "is next weekend open?"), call check_property_availability BEFORE answering. Pass check_in + check_out for a specific requested stay, or from + to to scan a flexible range. It already knows the property — no property argument.
-- For flexible / open-ended date questions ("sometime in July", "any weekends next month"), use the window mode and quote available_windows EXACTLY as returned — each is a real check_in→check_out opening. NEVER read off the busy spans and work out the gaps yourself: the open window starts on the previous guest's checkout day, and computing that by hand produces a wrong (one-day-early) start. If available_windows is empty, tell the guest nothing of a workable length is open in that range.
+- For flexible / open-ended date questions ("sometime in July", "any weekends next month"), use the window mode and quote available_windows EXACTLY as returned — each is a real check_in→check_out opening. Never compute or adjust the dates yourself (the tool already accounts for same-day turnovers). If available_windows is empty, tell the guest nothing of a workable length is open in that range.
+- open_ended openings: when an opening has open_ended=true, its check_out is just the edge of the dates you searched — NOT a real checkout and NOT a booking starting then. Say it's available "from [check_in] onward" (mention the minimum-night requirement if there is one), and do not quote that check_out date as a hard end. Only state a specific check_out when open_ended is false (a real booking bounds it).
 - Quoting a window: present check_in as the arrival date and check_out as the DEPARTURE date, both exactly as given. Do NOT subtract a day, do NOT describe the end as the "last night", and do NOT shorten a window to "leave room" for another booking. A check_out that lands on another reservation's check-in date is a normal same-day turnover and is fully bookable — the openings already account for this. Example: an opening {check_in 2026-06-22, check_out 2026-06-30} is "open June 22 to June 30" (arrive the 22nd, check out the 30th) — NOT "to June 29".
 - It tells you only WHETHER dates are free, never why a taken date is taken. NEVER speculate about or reveal a reason for unavailability — do not say or imply the owner is staying, that it's blocked, booked, or being cleaned. A taken date is simply "not available."
 - Minimum-night rule: the result is not available whenever the stay is shorter than the property's minimum (or longer than its maximum), even if the calendar is wide open — check meets_stay_rules / min_nights. Unlike a date conflict, the night minimum is a normal public booking rule you MAY tell the guest (e.g. "those dates are open, but this place has a 31-night minimum"). Offer alternatives if their stay can't meet it.
 - If the dates are available, you may say so warmly (e.g. "those dates look open"), while leaving the actual booking to the team. If they're taken, say they're not available and offer to check alternatives or pass it to the team — never invent which dates ARE free beyond what the tool returned.
 - Never state availability from memory or assumption; it changes constantly. Always ground it in a fresh tool call.
+- Sharing this property's link: if the guest asks for the link, the listing, or how to book THIS property, call get_property_knowledge_for_guest and share the listing_link it returns (paste the raw url). Do NOT offer other properties' links in place of it — only reach for find_available_properties when the guest actually wants alternatives. If it returns no link (none on their channel), say you'll get it from the team.
 - Offering alternatives: when this property is NOT available for the dates the guest wants (or they ask what else you have), you may call find_available_properties to find OTHER properties free for those dates AND bookable on the guest's own channel. Each result includes its bedroom/bathroom counts; if the guest wants more space, simply favor options with more bedrooms than this property (its size is in the facts above) — no special parameter needed. For a flexible request ("sometime in July"), call it in window mode (from + to) — each result then carries available_windows (that property's bookable check_in→check_out openings). When the guest asks "what dates is that alternative available?", answer from its available_windows (call the tool again with the window if needed) and quote them verbatim — do NOT say you can't check the alternative, and never compute the dates yourself. Each result includes a listing url on that channel — share the url so the guest can view/book it. IMPORTANT: paste the raw url as plain text (the guest's channel turns a bare link into a clickable one); do NOT wrap it in markdown link syntax like [text](url) — guests see that literally. Describe each option briefly from its city and bedroom/bathroom counts (e.g. "a similar 2-bedroom in San Diego — ") then give the url; use the display_title as the name if it is set. Only ever share a url the tool returned (it is already on the guest's own channel) — never another channel's link, never invent a property, url, or its availability. If the tool returns nothing, say nothing else is open for those dates and offer to have the team follow up. Still never reveal why the guest's original choice is unavailable.
 
 Operator instruction:
@@ -188,16 +201,24 @@ export async function generateGuestReplyDraftFromContext(
   ctx: ConversationContext,
   opts: GenerateDraftFromContextOptions = {},
 ): Promise<GuestReplyDraftResult> {
-  // Concierge training: the property's configured operating procedures. Loaded
-  // here so the inbox draft path, the concierge tool, and the test
-  // harness all honor it identically.
-  let trainingBlock = '';
+  // Concierge training, split by tier:
+  //  - 'always' rules are pinned into the (cached) system prefix — they govern
+  //    every reply (voice, privacy, emergencies, …).
+  //  - 'situational' rules are listed by title only in an index; the model loads
+  //    the full body on demand via get_concierge_procedure when the message
+  //    matches. This keeps the standing payload small and undiluted.
+  let alwaysTrainingBlock = '';
+  let situationalIndexBlock = '';
   try {
     const rules = await getConciergeTrainingForProperty(ctx.conversation.property_id);
-    trainingBlock = formatTrainingForPrompt(rules);
+    alwaysTrainingBlock = formatTrainingForPrompt(rules.filter((r) => r.tier !== 'situational'));
+    situationalIndexBlock = formatTrainingIndexForPrompt(
+      rules.filter((r) => r.tier === 'situational'),
+    );
   } catch {
     // Training is enhancement, not a hard dependency — never block a draft on it.
-    trainingBlock = '';
+    alwaysTrainingBlock = '';
+    situationalIndexBlock = '';
   }
 
   const nowMs = Date.now();
@@ -217,9 +238,9 @@ export async function generateGuestReplyDraftFromContext(
   const propertyName =
     ctx.reservation?.property_name ?? ctx.conversation.property_name ?? null;
 
-  // The inquiry property's size — so the Concierge has a baseline to reason
-  // about "do you have something bigger?" and favor larger options. Bed/bath
-  // counts are public listing facts, safe to use/share.
+  // Inquiry-property size — a cheap baseline so the Concierge can reason about
+  // "do you have something bigger?". (The property's booking LINK is no longer
+  // injected here; it's fetched on demand via get_property_knowledge_for_guest.)
   let propBedrooms: number | null = null;
   let propBathrooms: number | null = null;
   if (ctx.conversation.property_id) {
@@ -260,13 +281,6 @@ export async function generateGuestReplyDraftFromContext(
     'Reservation details:',
     facts.map((f) => `- ${f}`).join('\n'),
   ];
-  if (trainingBlock) {
-    userParts.push(
-      '',
-      'Concierge training — operating procedures to follow when the situation matches:',
-      trainingBlock,
-    );
-  }
   userParts.push('', 'Conversation so far (oldest to newest):', transcript);
   if (opts.instruction?.trim()) {
     userParts.push(
@@ -288,23 +302,56 @@ export async function generateGuestReplyDraftFromContext(
     typeof opts.replySensitivity === 'number' &&
     opts.replySensitivity >= 1 &&
     opts.replySensitivity <= 3;
-  const system = gateActive ? SYSTEM_PROMPT + buildReplyGateClause(opts.replySensitivity!) : SYSTEM_PROMPT;
+  // Stable, per-property system prefix — cached so the loop's repeated passes
+  // (and repeated drafts for the same property within the cache TTL) reuse it.
+  // Order: base rules → always-on training → the situational index + how to load
+  // it. Everything here is constant across this draft's tool loop.
+  const cachedSystemText = [
+    SYSTEM_PROMPT,
+    alwaysTrainingBlock
+      ? `Concierge training — rules that ALWAYS apply; follow them on every reply:\n${alwaysTrainingBlock}`
+      : '',
+    situationalIndexBlock
+      ? `Situational procedures available on demand — listed by title only, NOT shown in full. When the guest's latest message matches one of these topics, call get_concierge_procedure with the matching id(s) BEFORE replying, then follow the loaded steps (load several if more than one applies). The always-applies training above — including emergencies — is always in effect and never needs loading.\n${situationalIndexBlock}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  // The reply-warrant gate depends on the per-call sensitivity, so it rides in a
+  // trailing UNCACHED block — gated and ungated drafts then share one cache entry.
+  const systemBlocks: TextBlockParam[] = [
+    { type: 'text', text: cachedSystemText, cache_control: { type: 'ephemeral' } },
+  ];
+  if (gateActive) {
+    systemBlocks.push({ type: 'text', text: buildReplyGateClause(opts.replySensitivity!) });
+  }
 
   const client = getAnthropic();
   // Per-tool master switches (operations_settings). A disabled tool is simply
-  // never offered to the model, so it can't call it; the unknown-tool guard in
-  // the loop covers any stray call. Errors degrade to the full toolset.
+  // never offered to the model; core-infra tools (ALWAYS_ON_CONCIERGE_TOOLS) are
+  // exempt so the indexed procedures stay loadable. Errors degrade to the full set.
   let toolFlags: Record<string, boolean>;
   try {
     toolFlags = await loadConciergeToolFlags();
   } catch {
     toolFlags = {};
   }
-  const tools = CONCIERGE_TOOLS.filter((t) => toolFlags[t.name] !== false).map((t) => ({
+  const tools: Tool[] = CONCIERGE_TOOLS.filter(
+    (t) => ALWAYS_ON_CONCIERGE_TOOLS.has(t.name) || toolFlags[t.name] !== false,
+  ).map((t) => ({
     name: t.name,
     description: t.description,
     input_schema: t.jsonSchema,
   }));
+  // Cache the tools too — mark the last so tools + system form one contiguous
+  // cached prefix (canonical order: tools → system → messages).
+  if (tools.length > 0) {
+    tools[tools.length - 1] = {
+      ...tools[tools.length - 1],
+      cache_control: { type: 'ephemeral' },
+    };
+  }
   // Bind the one property this draft is for so the guest tool can't be steered
   // to another property — it reads the id from context, not from the model.
   const toolCtx: ToolContext = {
@@ -321,10 +368,17 @@ export async function generateGuestReplyDraftFromContext(
       model: MODEL,
       max_tokens: DRAFT_MAX_TOKENS,
       temperature: 0,
-      system,
+      system: systemBlocks,
       tools,
       messages: conversation,
     });
+
+    // Prompt-cache observability: a creation on the first pass, reads on later
+    // passes / repeat drafts for the same property within the cache TTL.
+    const u = response.usage;
+    console.log(
+      `[concierge draft] pass ${i} cache: created=${u.cache_creation_input_tokens ?? 0} read=${u.cache_read_input_tokens ?? 0} input=${u.input_tokens}`,
+    );
 
     conversation.push({ role: 'assistant', content: response.content });
 
