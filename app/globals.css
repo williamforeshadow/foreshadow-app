@@ -111,6 +111,20 @@
   --turnover-purple-bg:       rgba(167, 139, 250, 0.30);
   --turnover-purple-bg-hover: rgba(167, 139, 250, 0.40);
   --turnover-purple-border:   rgba(167, 139, 250, 0.55);
+
+  /* Concierge proposal bubbles (Reply / Knowledge / Task). Same frosted-glass
+     recipe as the turnover cards (low-alpha tint over .glass-card blur), but the
+     three hues are intentionally DESATURATED versions of the vivid amber / cyan /
+     accent-purple the bubbles used to wear as solid borders — the chroma now
+     reads as a soft wash, not a loud outline. Light-mode alphas run heavier than
+     dark so the tint reads with equal presence on a near-white vs near-black
+     canvas (mirrors the --turnover-purple-* rationale). */
+  --proposal-reply-bg:        rgba(206, 170, 92, 0.24);  /* muted gold */
+  --proposal-reply-border:    rgba(206, 170, 92, 0.50);
+  --proposal-knowledge-bg:    rgba(92, 168, 176, 0.22);  /* muted teal */
+  --proposal-knowledge-border:rgba(92, 168, 176, 0.48);
+  --proposal-task-bg:         rgba(160, 145, 224, 0.24); /* muted lavender */
+  --proposal-task-border:     rgba(160, 145, 224, 0.50);
 }
 
 .dark {
@@ -166,6 +180,14 @@
   --turnover-purple-bg:       rgba(167, 139, 250, 0.18);
   --turnover-purple-bg-hover: rgba(167, 139, 250, 0.28);
   --turnover-purple-border:   rgba(167, 139, 250, 0.45);
+
+  /* Dark-mode proposal tints — lighter alphas than light mode (see :root note). */
+  --proposal-reply-bg:        rgba(206, 170, 92, 0.15);
+  --proposal-reply-border:    rgba(206, 170, 92, 0.40);
+  --proposal-knowledge-bg:    rgba(110, 184, 192, 0.14);
+  --proposal-knowledge-border:rgba(110, 184, 192, 0.38);
+  --proposal-task-bg:         rgba(170, 156, 232, 0.15);
+  --proposal-task-border:     rgba(170, 156, 232, 0.40);
 }
 
 @theme inline {

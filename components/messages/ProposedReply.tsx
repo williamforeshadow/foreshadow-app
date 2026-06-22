@@ -86,7 +86,7 @@ export function ProposedReply({
 
   return (
     <div className="mt-4 flex justify-end">
-      <div className="msg-in w-full max-w-[88%] overflow-hidden rounded-2xl border border-amber-500/35 dark:border-amber-400/30">
+      <div className="msg-in glass-card glass-sheen relative w-full max-w-[88%] overflow-hidden rounded-2xl border bg-[var(--proposal-reply-bg)] border-[var(--proposal-reply-border)]">
         <div className="flex items-center gap-1.5 px-3.5 pt-2.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
           <Sparkles className="h-3 w-3" aria-hidden />
           <span>Proposed Reply</span>

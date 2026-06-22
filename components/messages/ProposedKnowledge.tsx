@@ -249,7 +249,7 @@ export function ProposedKnowledge({
   // ---- Pending: adaptive, inline-editable preview ------------------------
   return (
     <div className={`mt-4 flex ${justify}`}>
-      <div className="msg-in flex w-full max-w-[20rem] flex-col gap-2 rounded-2xl border border-cyan-500/30 p-2.5 dark:border-cyan-400/25">
+      <div className="msg-in glass-card glass-sheen relative flex w-full max-w-[20rem] flex-col gap-2 rounded-2xl border bg-[var(--proposal-knowledge-bg)] border-[var(--proposal-knowledge-border)] p-2.5">
         {/* Provenance (left) + collapsed tags (right) */}
         <div className="flex items-center justify-between gap-2 px-0.5">
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-cyan-600 dark:text-cyan-400">

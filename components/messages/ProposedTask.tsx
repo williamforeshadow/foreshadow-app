@@ -189,7 +189,7 @@ export function ProposedTask({
 
   return (
     <div className={`mt-4 flex ${justify}`}>
-      <div className="msg-in flex w-full max-w-[20rem] flex-col gap-2 rounded-2xl border border-[var(--accent-3)]/30 p-2.5 dark:border-[var(--accent-1)]/25">
+      <div className="msg-in glass-card glass-sheen relative flex w-full max-w-[20rem] flex-col gap-2 rounded-2xl border bg-[var(--proposal-task-bg)] border-[var(--proposal-task-border)] p-2.5">
         {/* Provenance label — marks this as a concierge draft, not a live task.
             Uses the same Tasks icon as the app sidebar for consistency. */}
         <div className="flex items-center gap-1.5 px-0.5 text-[11px] font-medium text-[var(--accent-3)] dark:text-[var(--accent-1)]">
