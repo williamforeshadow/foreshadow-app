@@ -1,12 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, GraduationCap, SlidersHorizontal, Wrench, Zap } from 'lucide-react';
+import { ArrowLeft, Check, GraduationCap, SlidersHorizontal, Wrench, Zap } from 'lucide-react';
 import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 // Concierge Settings — the single home for "how the concierge behaves" config.
@@ -75,19 +74,19 @@ const TOOL_COPY: Record<ToolKey, { title: string; on: string; off: string }> = {
 
 // Reply-draft sensitivity (1-4). Mirrors the server ladder in draftReply.ts.
 const REPLY_SENSITIVITY_LEVELS: { level: number; name: string; blurb: string }[] = [
-  { level: 1, name: 'Urgent only', blurb: 'Only when the guest has a time-sensitive problem or question that needs a prompt answer.' },
-  { level: 2, name: 'Questions & issues', blurb: 'Also any genuine question, problem, or feedback that wants a response — urgent or not.' },
-  { level: 3, name: 'Anything substantive', blurb: 'Also comments, plans, and requests that merit a reply. Skips pure “thanks”-style acknowledgments. (Default)' },
-  { level: 4, name: 'Every message', blurb: 'Draft a reply to every inbound message, including simple acknowledgments.' },
+  { level: 1, name: 'Urgent only', blurb: 'Only a time-sensitive problem or question that needs a prompt answer.' },
+  { level: 2, name: 'Questions & issues', blurb: 'Level 1, plus any genuine question, problem, or feedback that wants a response — urgent or not.' },
+  { level: 3, name: 'Anything substantive', blurb: 'Levels 1 and 2, plus comments, plans, and requests that merit a reply. Skips pure “thanks”-style acknowledgments. (Default)' },
+  { level: 4, name: 'Every message', blurb: 'Every inbound message, including simple acknowledgments.' },
 ];
 
 // Task-proposal sensitivity (1-5).
 const TASK_SENSITIVITY_LEVELS: { level: number; name: string; blurb: string }[] = [
   { level: 1, name: 'Critical only', blurb: 'Only urgent or safety issues, or anything making the space unusable.' },
-  { level: 2, name: 'Clear operational work', blurb: 'Repairs, maintenance, supplies, and explicit “please do X” requests. (Default)' },
-  { level: 3, name: 'Operational + administrative', blurb: 'Also booking/stay changes, special arrangements, and follow-ups that need an action — not just an answer.' },
-  { level: 4, name: 'Proactive', blurb: 'Most actionable requests, plus notable feedback or preferences that likely need follow-up.' },
-  { level: 5, name: 'Track everything', blurb: 'Almost any feedback, request, or issue worth tracking — skip only pure pleasantries.' },
+  { level: 2, name: 'Clear operational work', blurb: 'Level 1, plus repairs, maintenance, supplies, and explicit “please do X” requests. (Default)' },
+  { level: 3, name: 'Operational + administrative', blurb: 'Levels 1 and 2, plus booking/stay changes, special arrangements, and follow-ups that need an action — not just an answer.' },
+  { level: 4, name: 'Proactive', blurb: 'Levels 1–3, plus most actionable requests and notable feedback or preferences that likely need follow-up.' },
+  { level: 5, name: 'Track everything', blurb: 'Levels 1–4, plus almost any feedback, request, or issue worth tracking — skip only pure pleasantries.' },
 ];
 
 function clampLevel(value: unknown, min: number, max: number, fallback: number): number {
@@ -215,7 +214,7 @@ export default function ConciergeSettingsPage() {
     );
 
   const content = (
-    <div className="flex w-full flex-col gap-6 p-6 sm:px-8">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6 sm:px-8">
       <header className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-bg-soft)] text-[var(--accent-3)]">
           <GraduationCap className="h-5 w-5" aria-hidden />
@@ -239,43 +238,18 @@ export default function ConciergeSettingsPage() {
       <Section
         icon={<Zap className="h-4 w-4 text-[var(--accent-3)]" aria-hidden />}
         title="Autonomous actions"
-        blurb="What the concierge does on its own when a new guest message arrives. Turning one off never blocks the manual path — you can still draft or capture by hand."
       >
-        {CAPABILITY_ORDER.map((cap) => (
-          <ToggleRow
-            key={cap}
-            title={CAPABILITY_COPY[cap].title}
-            on={CAPABILITY_COPY[cap].on}
-            off={CAPABILITY_COPY[cap].off}
-            enabled={state ? state.flags[cap] : null}
-            saving={savingKey === `cap:${cap}`}
-            onChange={(next) => setCapability(cap, next)}
-          />
-        ))}
-      </Section>
-
-      {/* Sensitivity dials */}
-      <Section
-        icon={<SlidersHorizontal className="h-4 w-4 text-[var(--accent-3)]" aria-hidden />}
-        title="Sensitivity"
-        blurb="How eager the concierge is — how readily it drafts a reply, and how much it turns into a task."
-      >
-        <SensitivityRow
-          title="Reply sensitivity"
-          subtitle="How readily the concierge drafts a reply to an inbound message. Autonomous drafts only — you can always draft manually."
-          levels={REPLY_SENSITIVITY_LEVELS}
-          value={state?.replySensitivity ?? null}
-          saving={savingKey === 'reply-sensitivity'}
-          onChange={setReplySensitivity}
-        />
-        <SensitivityRow
-          title="Task proposal sensitivity"
-          subtitle="How eager the concierge is to draft a task from a guest message. Applies everywhere; task rules add specifics on top."
-          levels={TASK_SENSITIVITY_LEVELS}
-          value={state?.taskSensitivity ?? null}
-          saving={savingKey === 'task-sensitivity'}
-          onChange={setTaskSensitivity}
-        />
+        <div className="flex flex-col items-start gap-2">
+          {CAPABILITY_ORDER.map((cap) => (
+            <SelectCard
+              key={cap}
+              title={CAPABILITY_COPY[cap].title}
+              enabled={state ? state.flags[cap] : null}
+              saving={savingKey === `cap:${cap}`}
+              onChange={(next) => setCapability(cap, next)}
+            />
+          ))}
+        </div>
       </Section>
 
       {/* Tools */}
@@ -284,17 +258,46 @@ export default function ConciergeSettingsPage() {
         title="Tools"
         blurb="The read-only abilities the concierge can reach for while drafting a guest reply. Turn one off and the concierge simply won’t use it."
       >
-        {TOOL_ORDER.map((tool) => (
-          <ToggleRow
-            key={tool}
-            title={TOOL_COPY[tool].title}
-            on={TOOL_COPY[tool].on}
-            off={TOOL_COPY[tool].off}
-            enabled={state ? state.tools[tool] : null}
-            saving={savingKey === `tool:${tool}`}
-            onChange={(next) => setTool(tool, next)}
-          />
-        ))}
+        <div className="grid grid-cols-1 items-stretch gap-x-4 gap-y-2 sm:grid-cols-[max-content_1fr]">
+          {TOOL_ORDER.map((tool) => {
+            const enabled = state ? state.tools[tool] : null;
+            const isOn = enabled !== false;
+            return (
+              <Fragment key={tool}>
+                <SelectCard
+                  title={TOOL_COPY[tool].title}
+                  enabled={enabled}
+                  saving={savingKey === `tool:${tool}`}
+                  onChange={(next) => setTool(tool, next)}
+                />
+                <p className="flex items-center pb-2 text-sm leading-relaxed text-muted-foreground sm:pb-0">
+                  {enabled === null ? 'Loading…' : isOn ? TOOL_COPY[tool].on : TOOL_COPY[tool].off}
+                </p>
+              </Fragment>
+            );
+          })}
+        </div>
+      </Section>
+
+      {/* Sensitivity dials */}
+      <Section
+        icon={<SlidersHorizontal className="h-4 w-4 text-[var(--accent-3)]" aria-hidden />}
+        title="Sensitivity"
+      >
+        <SensitivityRow
+          title="Reply sensitivity"
+          levels={REPLY_SENSITIVITY_LEVELS}
+          value={state?.replySensitivity ?? null}
+          saving={savingKey === 'reply-sensitivity'}
+          onChange={setReplySensitivity}
+        />
+        <SensitivityRow
+          title="Task proposal sensitivity"
+          levels={TASK_SENSITIVITY_LEVELS}
+          value={state?.taskSensitivity ?? null}
+          saving={savingKey === 'task-sensitivity'}
+          onChange={setTaskSensitivity}
+        />
       </Section>
 
       {loading && !state && (
@@ -335,7 +338,7 @@ function Section({
 }: {
   icon: ReactNode;
   title: string;
-  blurb: string;
+  blurb?: string;
   children: ReactNode;
 }) {
   return (
@@ -344,138 +347,113 @@ function Section({
         {icon}
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
       </div>
-      <p className="-mt-1 text-xs text-muted-foreground">{blurb}</p>
+      {blurb && <p className="-mt-1 text-xs text-muted-foreground">{blurb}</p>}
       <div className="flex flex-col gap-3">{children}</div>
     </section>
   );
 }
 
-// One on/off row. `enabled` is null while settings are still loading.
-function ToggleRow({
+// A selectable (multi-select) capability/tool card: a checkbox + title that
+// toggles on click. Content-width so a row of them never spans the full panel.
+// `enabled` is null while settings load.
+function SelectCard({
   title,
-  on,
-  off,
   enabled,
   saving,
   onChange,
 }: {
   title: string;
-  on: string;
-  off: string;
   enabled: boolean | null;
   saving: boolean;
   onChange: (next: boolean) => void;
 }) {
   const isOn = enabled !== false; // treat the loading/unknown state as on
   return (
-    <div className="msg-well flex items-start justify-between gap-4 rounded-xl p-4">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-medium text-foreground">{title}</p>
-          <Badge
-            variant={enabled === false ? 'outline' : 'secondary'}
-            className={cn('text-[10px]', enabled === false && 'text-muted-foreground')}
-          >
-            {enabled === null ? '…' : enabled ? 'On' : 'Off'}
-          </Badge>
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {enabled === null ? 'Loading…' : isOn ? on : off}
-        </p>
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={enabled === true}
-        aria-label={`${title}: ${isOn ? 'on' : 'off'}`}
-        disabled={enabled === null || saving}
-        onClick={() => onChange(!isOn)}
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={enabled === true}
+      aria-label={title}
+      disabled={enabled === null || saving}
+      onClick={() => onChange(!isOn)}
+      className={cn(
+        'flex items-center gap-2.5 rounded-lg border border-border p-3 text-left text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent-3)]/40 disabled:opacity-50',
+        isOn
+          ? 'bg-[var(--accent-3)]/[0.08] text-foreground'
+          : 'text-muted-foreground hover:bg-black/[0.03] hover:text-foreground dark:hover:bg-white/[0.04]',
+      )}
+    >
+      <span
         className={cn(
-          'relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50',
-          isOn ? 'bg-[var(--accent-3)]' : 'bg-black/[0.15] dark:bg-white/[0.18]',
+          'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
+          isOn
+            ? 'border-[var(--accent-3)] bg-[var(--accent-3)] text-white'
+            : 'border-muted-foreground/50',
         )}
       >
-        <span
-          className={cn(
-            'inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform',
-            isOn ? 'translate-x-[22px]' : 'translate-x-0.5',
-          )}
-        />
-      </button>
-    </div>
+        {isOn && <Check className="h-3 w-3" strokeWidth={3} />}
+      </span>
+      <span className="min-w-0">{title}</span>
+    </button>
   );
 }
 
-// Segmented 1..N sensitivity dial. `value` is null while loading.
+// 1..N sensitivity as a vertical multiple-choice list: each level shows its key,
+// name, and description inline. `value` is null while loading.
 function SensitivityRow({
   title,
-  subtitle,
   levels,
   value,
   saving,
   onChange,
 }: {
   title: string;
-  subtitle: string;
   levels: { level: number; name: string; blurb: string }[];
   value: number | null;
   saving: boolean;
   onChange: (next: number) => void;
 }) {
-  const current = useMemo(() => levels.find((l) => l.level === value), [levels, value]);
   return (
     <div className="msg-well space-y-3 rounded-xl p-4">
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <p className="text-xs text-muted-foreground">{subtitle}</p>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <div className="inline-flex gap-1 rounded-lg bg-black/[0.05] p-1 dark:bg-white/[0.06]">
-          {levels.map((l) => {
-            const active = value === l.level;
-            return (
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      {/* Two columns: the selectable level titles on the left, their descriptions
+          aligned to the right (row-synced via one grid, so neither runs full width). */}
+      <div className="grid grid-cols-1 items-stretch gap-x-4 gap-y-2 sm:grid-cols-[max-content_1fr]">
+        {levels.map((l) => {
+          const active = value === l.level;
+          return (
+            <Fragment key={l.level}>
               <button
-                key={l.level}
                 type="button"
                 onClick={() => onChange(l.level)}
                 disabled={saving || value === null}
                 aria-pressed={active}
                 className={cn(
-                  'h-8 w-9 rounded-md text-sm font-semibold transition-colors duration-150 disabled:opacity-50',
+                  'flex items-center gap-2.5 rounded-lg border border-border p-3 text-left text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent-3)]/40 disabled:opacity-50',
                   active
-                    ? 'bg-[var(--accent-3)] text-white shadow-sm'
-                    : 'text-muted-foreground hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.05]',
+                    ? 'bg-[var(--accent-3)]/[0.08] text-foreground'
+                    : 'text-muted-foreground hover:bg-black/[0.03] hover:text-foreground dark:hover:bg-white/[0.04]',
                 )}
               >
-                {l.level}
+                <span
+                  className={cn(
+                    'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors',
+                    active ? 'border-[var(--accent-3)]' : 'border-muted-foreground/50',
+                  )}
+                >
+                  {active && <span className="h-2 w-2 rounded-full bg-[var(--accent-3)]" />}
+                </span>
+                <span className="min-w-0">
+                  {l.level} · {l.name}
+                </span>
               </button>
-            );
-          })}
-        </div>
-        {current ? (
-          <div className="min-w-0">
-            <span className="text-sm font-medium text-foreground">{current.name}</span>
-            <span className="ml-2 text-xs text-muted-foreground">· {current.blurb}</span>
-          </div>
-        ) : (
-          <span className="text-xs text-muted-foreground">Loading…</span>
-        )}
+              <p className="flex items-center pb-2 text-sm leading-relaxed text-muted-foreground sm:pb-0">
+                {l.blurb}
+              </p>
+            </Fragment>
+          );
+        })}
       </div>
-
-      <details className="text-xs text-muted-foreground">
-        <summary className="cursor-pointer select-none font-medium text-foreground/80">
-          What the levels mean
-        </summary>
-        <ul className="mt-2 space-y-1">
-          {levels.map((l) => (
-            <li key={l.level}>
-              <span className="font-medium text-foreground">{l.level} · {l.name}</span> — {l.blurb}
-            </li>
-          ))}
-        </ul>
-        <p className="mt-2 italic">Levels are cumulative — each includes everything below it.</p>
-      </details>
     </div>
   );
 }

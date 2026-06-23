@@ -8,6 +8,7 @@ import { getCurrentAppUser } from '@/src/server/users/currentUser';
 // departments route conventions ({ error } JSON, 23505 -> 409).
 
 export type ConciergeTrainingCategory = 'reply' | 'task';
+export type ConciergeTrainingTier = 'always' | 'situational';
 
 export interface ConciergeTrainingRule {
   id: string;
@@ -15,6 +16,12 @@ export interface ConciergeTrainingRule {
   instructions: string;
   /** Which drafting path the rule feeds: guest replies or task triage. */
   category: ConciergeTrainingCategory;
+  /**
+   * 'always' → pinned into every reply draft. 'situational' → listed by title
+   * only and loaded on demand when the guest's message matches. (Reply rules
+   * only; task drafting injects all rules regardless.)
+   */
+  tier: ConciergeTrainingTier;
   applies_to_all: boolean;
   is_active: boolean;
   sort_order: number;
@@ -25,6 +32,10 @@ export interface ConciergeTrainingRule {
 
 function normalizeCategory(value: unknown): ConciergeTrainingCategory {
   return value === 'task' ? 'task' : 'reply';
+}
+
+function normalizeTier(value: unknown): ConciergeTrainingTier {
+  return value === 'situational' ? 'situational' : 'always';
 }
 
 // GET /api/concierge-training — all rules with their associated property ids.
@@ -38,7 +49,7 @@ export async function GET() {
     const supabase = getSupabaseServer();
     const { data: rows, error } = await supabase
       .from('concierge_training')
-      .select('id, title, instructions, category, applies_to_all, is_active, sort_order, created_at, updated_at')
+      .select('id, title, instructions, category, tier, applies_to_all, is_active, sort_order, created_at, updated_at')
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true });
     if (error) {
@@ -64,6 +75,7 @@ export async function GET() {
       title: (r.title as string | null) ?? '',
       instructions: (r.instructions as string | null) ?? '',
       category: normalizeCategory(r.category),
+      tier: normalizeTier(r.tier),
       applies_to_all: Boolean(r.applies_to_all),
       is_active: Boolean(r.is_active),
       sort_order: (r.sort_order as number | null) ?? 0,
@@ -91,6 +103,7 @@ export async function POST(request: NextRequest) {
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     const instructions = typeof body.instructions === 'string' ? body.instructions.trim() : '';
     const category = normalizeCategory(body.category);
+    const tier = normalizeTier(body.tier);
     const appliesToAll = Boolean(body.applies_to_all);
     const isActive = typeof body.is_active === 'boolean' ? body.is_active : true;
     const propertyIds: string[] = Array.isArray(body.property_ids)
@@ -108,12 +121,13 @@ export async function POST(request: NextRequest) {
         title,
         instructions,
         category,
+        tier,
         applies_to_all: appliesToAll,
         is_active: isActive,
         created_by_user_id: user?.id ?? null,
         updated_by_user_id: user?.id ?? null,
       })
-      .select('id, title, instructions, category, applies_to_all, is_active, sort_order, created_at, updated_at')
+      .select('id, title, instructions, category, tier, applies_to_all, is_active, sort_order, created_at, updated_at')
       .single();
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

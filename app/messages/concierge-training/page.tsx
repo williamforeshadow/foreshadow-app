@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, Check } from 'lucide-react';
 import DesktopSidebarShell from '@/components/DesktopSidebarShell';
@@ -18,17 +18,22 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 
 // CRUD-backed training lives under two categories (reply / task). Property
 // knowledge is on/off only and lives entirely on the Settings page now.
 type TrainingCategory = 'reply' | 'task';
+// 'always' = pinned into every reply. 'situational' = loaded on demand when the
+// guest's message matches (keeps replies focused as the rule set grows).
+type TrainingTier = 'always' | 'situational';
 
 interface TrainingRule {
   id: string;
   title: string;
   instructions: string;
   category: TrainingCategory;
+  tier: TrainingTier;
   applies_to_all: boolean;
   is_active: boolean;
   sort_order: number;
@@ -52,6 +57,26 @@ const CATEGORY_META: Record<
     placeholderTitle: 'Create a maintenance task for AC issues',
   },
 };
+
+// Classification choices for reply rules — the two ways a block reaches the agent.
+const TIER_OPTIONS: { value: TrainingTier; title: string; points: string[] }[] = [
+  {
+    value: 'always',
+    title: 'Automatically in the context window',
+    points: [
+      'Kept in the agent’s context on every message, so it’s always in play.',
+      'Best for general rules like tone, privacy, or policy.',
+    ],
+  },
+  {
+    value: 'situational',
+    title: 'Available for the agent to reference on demand',
+    points: [
+      'Left out of context by default; the agent pulls it in itself (via a tool) only when the guest’s message is about this topic.',
+      'Keeps every reply lean and focused as your rules grow.',
+    ],
+  },
+];
 
 // Tab chrome for the two CRUD categories.
 const TAB_META: Record<TrainingCategory, { label: string; blurb: string }> = {
@@ -159,7 +184,7 @@ export default function ConciergeTrainingPage() {
   );
 
   const content = (
-    <div className="flex w-full flex-col gap-4 p-6 sm:px-8">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-6 sm:px-8">
       <header>
         <h1 className="text-lg font-semibold tracking-tight text-foreground">Concierge Training</h1>
         <p className="mt-3 text-sm text-muted-foreground">
@@ -292,6 +317,11 @@ function TrainingBlockRow({
     >
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <span className="truncate text-sm font-medium text-foreground">{rule.title}</span>
+        {rule.category === 'reply' && rule.tier === 'situational' && (
+          <Badge variant="outline" className="shrink-0 text-[10px] text-muted-foreground">
+            On demand
+          </Badge>
+        )}
         {!rule.is_active && (
           <Badge variant="outline" className="shrink-0 text-[10px] text-muted-foreground">
             Off
@@ -335,7 +365,10 @@ function RuleEditorDialog({
     existing?.category ?? (state.mode === 'create' ? state.category : 'reply');
   const [title, setTitle] = useState(existing?.title ?? '');
   const [instructions, setInstructions] = useState(existing?.instructions ?? '');
-  const [isActive, setIsActive] = useState(existing?.is_active ?? true);
+  // New blocks start inactive — the operator turns them on deliberately.
+  const [isActive, setIsActive] = useState(existing?.is_active ?? false);
+  // Reply rules only: always-on vs loaded-on-demand. Defaults to 'always'.
+  const [tier, setTier] = useState<TrainingTier>(existing?.tier ?? 'always');
   // applies_to_all is folded into the property picker: every property selected
   // == "all properties". Seed an applies-to-all block with everything checked.
   const [selected, setSelected] = useState<Set<string>>(
@@ -356,6 +389,8 @@ function RuleEditorDialog({
       title: title.trim(),
       instructions: instructions.trim(),
       category,
+      // Tier only governs reply drafting; task rules are always injected.
+      tier: category === 'reply' ? tier : 'always',
       applies_to_all: allSelected,
       is_active: isActive,
       property_ids: allSelected ? [] : [...selected],
@@ -397,91 +432,151 @@ function RuleEditorDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent aria-describedby={undefined} className="gap-5 p-7 sm:max-w-2xl">
+      <DialogContent
+        aria-describedby={undefined}
+        className="flex h-[min(90svh,640px)] flex-col gap-0 overflow-hidden border-[var(--surface-elevated-line)] bg-[var(--surface-elevated)] p-0 shadow-[var(--glass-shadow)] sm:max-w-4xl"
+      >
+        {/* Frosted grey-blue sheen over the solid surface. On a NON-transformed
+            layer (Radix transforms the content, which would drop the blur); the
+            solid bg-popover under it keeps the dialog opaque, not see-through. */}
+        <div
+          className="liquid-glass-surface pointer-events-none absolute inset-0 -z-10 rounded-[inherit]"
+          aria-hidden
+        />
         <DialogHeader className="sr-only">
           <DialogTitle>{existing ? 'Edit training block' : 'New training block'}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* Active / inactive — first control in the dialog. */}
-          <div className="flex items-center justify-between rounded-xl border border-border p-4">
-            <div className="min-w-0">
-              <p className="text-base font-medium text-foreground">
-                {isActive ? 'Active' : 'Inactive'}
-              </p>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                {isActive
-                  ? 'The Concierge Agent follows this training block.'
-                  : 'Turned off — the Concierge Agent ignores this block.'}
-              </p>
-            </div>
+        {/* Fixed footprint; the body fills it and only scrolls if the viewport is short. */}
+        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-7 pt-6 pb-5 overlay-scrollbar">
+          {/* Title fills the row; the active toggle sits at the right. The toggle
+              stays live even when off; everything else is muted and locked. */}
+          <div className="flex items-center gap-3">
+            <Input
+              id="rule-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Title"
+              autoFocus={isActive}
+              disabled={!isActive}
+              className="h-11 flex-1 text-base"
+            />
             <button
               type="button"
               role="switch"
               aria-checked={isActive}
               aria-label={`Active: ${isActive ? 'on' : 'off'}`}
+              title={isActive ? 'Active' : 'Inactive'}
               onClick={() => setIsActive((v) => !v)}
               className={cn(
-                'relative inline-flex h-7 w-[52px] shrink-0 items-center rounded-full transition-colors',
-                isActive ? 'bg-[var(--accent-3)]' : 'bg-black/[0.15] dark:bg-white/[0.18]',
+                'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors',
+                isActive ? 'bg-[var(--accent-3)]' : 'bg-black/[0.18] dark:bg-white/[0.22]',
               )}
             >
               <span
                 className={cn(
-                  'inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform',
-                  isActive ? 'translate-x-[23px]' : 'translate-x-0.5',
+                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                  isActive ? 'translate-x-[18px]' : 'translate-x-0.5',
                 )}
               />
             </button>
           </div>
 
-          {/* Title */}
-          <div className="space-y-2">
-            <Label htmlFor="rule-title" className="text-sm font-medium">Title</Label>
-            <Input
-              id="rule-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={`e.g. ${CATEGORY_META[category].placeholderTitle}`}
-              autoFocus
-              className="h-11 text-base"
-            />
-          </div>
-
-          {/* Properties */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Properties</Label>
-            <PropertyPicker properties={properties} selected={selected} onChange={setSelected} />
-            {selected.size === 0 && (
-              <p className="text-xs text-muted-foreground">
-                Select at least one property, or use “Select all”.
-              </p>
+          {/* Settings on the left, instructions on the right. Muted + locked when inactive. */}
+          <div
+            className={cn(
+              'grid min-h-0 flex-1 gap-x-8 gap-y-6 sm:grid-cols-2',
+              !isActive && 'pointer-events-none select-none opacity-50',
             )}
-          </div>
+            aria-disabled={!isActive}
+          >
+            <div className="flex min-h-0 flex-col gap-6">
+              {category === 'reply' && (
+                <div>
+                  <p className="text-sm font-medium text-foreground">Classification</p>
+                  <div className="mt-2.5 space-y-2">
+                    {TIER_OPTIONS.map((opt) => {
+                      const isOn = tier === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setTier(opt.value)}
+                          disabled={!isActive}
+                          aria-pressed={isOn}
+                          className={cn(
+                            'flex w-full items-center gap-2.5 rounded-lg border p-3 text-left text-sm font-medium transition-colors',
+                            isOn
+                              ? 'border-[var(--accent-3)] bg-[var(--accent-3)]/[0.08] text-foreground'
+                              : 'border-border text-muted-foreground hover:bg-black/[0.03] hover:text-foreground dark:hover:bg-white/[0.04]',
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors',
+                              isOn ? 'border-[var(--accent-3)]' : 'border-muted-foreground/50',
+                            )}
+                          >
+                            {isOn && <span className="h-2 w-2 rounded-full bg-[var(--accent-3)]" />}
+                          </span>
+                          <span className="min-w-0">{opt.title}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <ul className="mt-3 space-y-1.5">
+                    {TIER_OPTIONS.find((o) => o.value === tier)?.points.map((pt) => (
+                      <li key={pt} className="flex gap-2 text-sm leading-relaxed text-foreground">
+                        <span aria-hidden className="mt-2 h-1 w-1 shrink-0 rounded-full bg-foreground/70" />
+                        <span>{pt}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
-          {/* Instructions */}
-          <div className="space-y-2">
-            <Label htmlFor="rule-instructions" className="text-sm font-medium">Instructions</Label>
-            <Textarea
-              id="rule-instructions"
-              value={instructions}
-              onChange={(e) => setInstructions(e.target.value)}
-              placeholder={
-                category === 'task'
-                  ? 'When should the Concierge Agent create a task from a guest message, and what should it contain?…'
-                  : 'Step-by-step guidance the Concierge Agent should follow when this situation comes up…'
-              }
-              rows={10}
-              className="resize-y text-base leading-relaxed"
-            />
-          </div>
+              {/* Properties — no label; the trigger reads "All properties" / a count. */}
+              <div className="space-y-1.5">
+                <PropertyPicker
+                  properties={properties}
+                  selected={selected}
+                  onChange={setSelected}
+                  disabled={!isActive}
+                />
+                {selected.size === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Select at least one property, or use “Select all”.
+                  </p>
+                )}
+              </div>
+            </div>
 
-          {formError && (
-            <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>
-          )}
+            {/* Instructions — fills the column height, scrolls internally. */}
+            <div className="flex min-h-0 flex-col">
+              <Label htmlFor="rule-instructions" className="mb-2 text-sm font-medium">
+                Instructions
+              </Label>
+              <Textarea
+                id="rule-instructions"
+                value={instructions}
+                onChange={(e) => setInstructions(e.target.value)}
+                disabled={!isActive}
+                placeholder={
+                  category === 'task'
+                    ? 'When should the Concierge Agent create a task from a guest message, and what should it contain?…'
+                    : 'Step-by-step guidance the Concierge Agent should follow when this situation comes up…'
+                }
+                className="field-sizing-fixed min-h-[12rem] flex-1 resize-none overflow-y-auto text-base leading-relaxed overlay-scrollbar"
+              />
+            </div>
+          </div>
         </div>
 
-        <DialogFooter className="sm:justify-between">
+        {formError && (
+          <p className="px-7 pt-3 text-sm text-red-600 dark:text-red-400">{formError}</p>
+        )}
+
+        <DialogFooter className="border-t border-border px-7 py-4 sm:justify-between">
           {existing ? (
             <Button
               type="button"
@@ -508,42 +603,24 @@ function RuleEditorDialog({
   );
 }
 
-// Multi-select properties field for the editor dialog. Anchored inline (no fixed
-// portal) so it stays within the dialog and never runs off-screen. "Select all"
-// checks every property — the parent reads "all selected" as applies-to-all.
+// Multi-select properties field. Built on Radix Popover so the menu portals out
+// of the dialog (escaping its overflow, no dialog scrollbar), stays on-screen via
+// collision handling, and coordinates focus/dismiss with the parent dialog.
+// "Select all" checks every property — the parent reads "all selected" as
+// applies-to-all.
 function PropertyPicker({
   properties,
   selected,
   onChange,
+  disabled = false,
 }: {
   properties: PropertyOption[];
   selected: Set<string>;
   onChange: (next: Set<string>) => void;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-
-  const close = useCallback(() => {
-    setOpen(false);
-    setQuery('');
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) close();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open, close]);
 
   const total = properties.length;
   const allSelected = total > 0 && selected.size === total;
@@ -565,82 +642,95 @@ function PropertyPicker({
   };
 
   return (
-    <div className="relative" ref={wrapRef}>
-      <button
-        type="button"
-        onClick={() => (open ? close() : setOpen(true))}
-        aria-expanded={open}
-        className={cn(
-          'flex h-11 w-full items-center justify-between gap-2 rounded-lg border border-border bg-transparent px-3.5 text-base transition-colors hover:bg-accent',
-          selected.size === 0 ? 'text-muted-foreground' : 'text-foreground',
-        )}
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setQuery('');
+      }}
+      modal
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-expanded={open}
+          disabled={disabled}
+          className={cn(
+            'flex h-11 w-full items-center justify-between gap-2 rounded-lg border border-border bg-transparent px-3.5 text-base transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-60',
+            selected.size === 0 ? 'text-muted-foreground' : 'text-foreground',
+          )}
+        >
+          <span className="truncate">{summary}</span>
+          <ChevronDown
+            className={cn('h-4 w-4 shrink-0 opacity-60 transition-transform', open && 'rotate-180')}
+          />
+        </button>
+      </PopoverTrigger>
+      {/* Portals over the dialog; width matches the trigger, height capped to the
+          space available so it never runs off-screen. */}
+      <PopoverContent
+        align="start"
+        sideOffset={6}
+        collisionPadding={12}
+        className="flex max-h-[min(340px,var(--radix-popover-content-available-height))] w-[var(--radix-popover-trigger-width)] flex-col overflow-hidden rounded-lg border border-border p-0 shadow-lg"
       >
-        <span className="truncate">{summary}</span>
-        <ChevronDown
-          className={cn('h-4 w-4 shrink-0 opacity-60 transition-transform', open && 'rotate-180')}
-        />
-      </button>
-
-      {open && (
-        <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
-          <div className="border-b border-border p-2">
-            <Input
-              autoFocus
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search properties…"
-              className="h-9"
-            />
-          </div>
-          <div className="flex items-center justify-between border-b border-border px-3 py-2 text-xs">
-            <button
-              type="button"
-              onClick={() => onChange(new Set(properties.map((p) => p.id)))}
-              className="font-medium text-[var(--accent-3)] hover:underline"
-            >
-              Select all
-            </button>
-            <button
-              type="button"
-              onClick={() => onChange(new Set())}
-              className="font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Clear
-            </button>
-          </div>
-          <div className="max-h-60 overflow-y-auto py-1 overlay-scrollbar">
-            {filtered.length === 0 ? (
-              <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-                {total === 0 ? 'No properties yet.' : 'No matches.'}
-              </p>
-            ) : (
-              filtered.map((p) => {
-                const checked = selected.has(p.id);
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => toggle(p.id)}
-                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
-                  >
-                    <span
-                      className={cn(
-                        'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
-                        checked
-                          ? 'border-[var(--accent-3)] bg-[var(--accent-3)] text-white'
-                          : 'border-muted-foreground/40',
-                      )}
-                    >
-                      {checked && <Check className="h-3 w-3" strokeWidth={3} />}
-                    </span>
-                    <span className="truncate text-foreground">{p.name}</span>
-                  </button>
-                );
-              })
-            )}
-          </div>
+        <div className="shrink-0 border-b border-border p-2">
+          <Input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search properties…"
+            className="h-9"
+          />
         </div>
-      )}
-    </div>
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2 text-xs">
+          <button
+            type="button"
+            onClick={() => onChange(new Set(properties.map((p) => p.id)))}
+            className="font-medium text-[var(--accent-3)] hover:underline"
+          >
+            Select all
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange(new Set())}
+            className="font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Clear
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto py-1 overlay-scrollbar">
+          {filtered.length === 0 ? (
+            <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+              {total === 0 ? 'No properties yet.' : 'No matches.'}
+            </p>
+          ) : (
+            filtered.map((p) => {
+              const checked = selected.has(p.id);
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => toggle(p.id)}
+                  className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
+                >
+                  <span
+                    className={cn(
+                      'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
+                      checked
+                        ? 'border-[var(--accent-3)] bg-[var(--accent-3)] text-white'
+                        : 'border-muted-foreground/40',
+                    )}
+                  >
+                    {checked && <Check className="h-3 w-3" strokeWidth={3} />}
+                  </span>
+                  <span className="truncate text-foreground">{p.name}</span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

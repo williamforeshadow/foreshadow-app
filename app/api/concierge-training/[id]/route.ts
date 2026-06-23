@@ -32,6 +32,7 @@ export async function PATCH(
     }
     if (typeof body.instructions === 'string') update.instructions = body.instructions.trim();
     if (body.category === 'reply' || body.category === 'task') update.category = body.category;
+    if (body.tier === 'always' || body.tier === 'situational') update.tier = body.tier;
     if (typeof body.is_active === 'boolean') update.is_active = body.is_active;
     if (typeof body.applies_to_all === 'boolean') update.applies_to_all = body.applies_to_all;
     if (typeof body.sort_order === 'number') update.sort_order = body.sort_order;
@@ -41,7 +42,7 @@ export async function PATCH(
       .from('concierge_training')
       .update(update)
       .eq('id', id)
-      .select('id, title, instructions, category, applies_to_all, is_active, sort_order, created_at, updated_at')
+      .select('id, title, instructions, category, tier, applies_to_all, is_active, sort_order, created_at, updated_at')
       .single();
     if (error) {
       const status = error.code === 'PGRST116' ? 404 : 500;
