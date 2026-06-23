@@ -46,10 +46,11 @@ export interface ConciergeProcedure {
 
 async function handler(input: Input, ctx: ToolContext): Promise<ToolResult<ConciergeProcedure[]>> {
   const propertyId = ctx.draft?.propertyId ?? null;
+  const category = ctx.draft?.category ?? 'reply';
 
   try {
     // Same scoping as the draft's training fetch; then restrict to situational.
-    const rules = await getConciergeTrainingForProperty(propertyId);
+    const rules = await getConciergeTrainingForProperty(propertyId, category);
     const situational = rules.filter((r) => r.tier === 'situational');
 
     const idSet = new Set(input.ids ?? []);

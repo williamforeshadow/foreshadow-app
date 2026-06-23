@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, Check } from 'lucide-react';
+import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, Check, Home, Layers } from 'lucide-react';
 import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
@@ -58,25 +57,51 @@ const CATEGORY_META: Record<
   },
 };
 
-// Classification choices for reply rules — the two ways a block reaches the agent.
-const TIER_OPTIONS: { value: TrainingTier; title: string; points: string[] }[] = [
+// Agent-exposure choices — the two ways a block reaches the agent. The dialog
+// shows just the titles; the full descriptions are surfaced on the page (see
+// ExposureLegend). The guiding question is FREQUENCY: how often is it relevant?
+const TIER_OPTIONS: { value: TrainingTier; title: string; description: string }[] = [
   {
     value: 'always',
-    title: 'Automatically in the context window',
-    points: [
-      'Kept in the agent’s context on every message, so it’s always in play.',
-      'Best for general rules like tone, privacy, or policy.',
-    ],
+    title: 'Always in context',
+    description:
+      "Best for rules that are relevant to almost every AI-generated message — tone, personality, privacy, or safety. If the instructions aren't fundamental to the Concierge Agent's behavior, selecting Tool is likely the optimal choice.",
   },
   {
     value: 'situational',
-    title: 'Available for the agent to reference on demand',
-    points: [
-      'Left out of context by default; the agent pulls it in itself (via a tool) only when the guest’s message is about this topic.',
-      'Keeps every reply lean and focused as your rules grow.',
-    ],
+    title: 'Tools',
+    description:
+      "Best for procedures that only come up occasionally — prevents bloating the Agent's memory and context.",
   },
 ];
+
+// Shared compact pill trigger (Active / Properties / Agent exposure controls).
+const PILL_CLASS =
+  'inline-flex h-9 items-center gap-2 rounded-full border border-border bg-transparent px-3.5 text-sm font-medium text-foreground outline-none transition-colors hover:bg-black/[0.04] focus-visible:ring-2 focus-visible:ring-[var(--accent-3)]/40 disabled:pointer-events-none disabled:opacity-50 dark:hover:bg-white/[0.06]';
+
+// Rough, tunable context-load estimate for one category's active rules. An
+// injected (always) block costs its full token weight on EVERY message; an
+// on-demand (situational/Tool) block costs little — a menu entry plus a small
+// "one more thing to choose between" tax. Quiet guardrail + reassurance, not a
+// precise budget; the ceiling and bands are heuristics, kept here to retune.
+// Both categories load situational rules on demand (replies via draftReply, tasks
+// via draftTask), so the same tier split applies to each.
+const LOAD_CEILING = 8000; // effective tokens where standing instruction turns heavy
+const TOOL_EFFECTIVE_TOKENS = 50; // per on-demand block: menu line + selection tax
+
+function estimateContextLoad(rules: TrainingRule[]) {
+  const active = rules.filter((r) => r.is_active);
+  const injected = active.filter((r) => r.tier !== 'situational');
+  const toolCount = active.filter((r) => r.tier === 'situational').length;
+  const injectedTokens = injected.reduce(
+    (sum, r) => sum + Math.ceil((r.instructions.length + r.title.length) / 4),
+    0,
+  );
+  const effective = injectedTokens + toolCount * TOOL_EFFECTIVE_TOKENS;
+  const pct = Math.min(100, Math.round((effective / LOAD_CEILING) * 100));
+  const level: 'light' | 'moderate' | 'heavy' = pct < 55 ? 'light' : pct < 85 ? 'moderate' : 'heavy';
+  return { injectedTokens, toolCount, pct, level };
+}
 
 // Tab chrome for the two CRUD categories.
 const TAB_META: Record<TrainingCategory, { label: string; blurb: string }> = {
@@ -169,16 +194,19 @@ export default function ConciergeTrainingPage() {
           </Button>
         </div>
       ) : (
-        <div className="msg-well overflow-hidden rounded-xl">
-          {visibleRules.map((rule, idx) => (
-            <TrainingBlockRow
-              key={rule.id}
-              rule={rule}
-              isLast={idx === visibleRules.length - 1}
-              onEdit={() => setEditor({ mode: 'edit', rule })}
+        <>
+          <ContextLoadBar rules={visibleRules} />
+          {TIER_OPTIONS.map((opt) => (
+            <ExposureGroup
+              key={opt.value}
+              option={opt}
+              rules={visibleRules.filter((r) =>
+                opt.value === 'situational' ? r.tier === 'situational' : r.tier !== 'situational',
+              )}
+              onEdit={(rule) => setEditor({ mode: 'edit', rule })}
             />
           ))}
-        </div>
+        </>
       )}
     </>
   );
@@ -223,7 +251,7 @@ export default function ConciergeTrainingPage() {
                   Back to Messages
                 </Link>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar">{content}</div>
+              <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar [scrollbar-gutter:stable]">{content}</div>
             </div>
           </div>
         </DesktopSidebarShell>
@@ -281,6 +309,85 @@ function CategoryTabs({
   );
 }
 
+// Quiet context-load gauge for the active tab's blocks. Reassurance most of the
+// time (light); only speaks up with advice once it's getting full. It's a
+// ceiling guardrail, NOT a per-block recommendation — which block to inject vs.
+// keep on demand is a frequency/criticality call the operator makes per block.
+function ContextLoadBar({ rules }: { rules: TrainingRule[] }) {
+  const { injectedTokens, toolCount, pct, level } = useMemo(
+    () => estimateContextLoad(rules),
+    [rules],
+  );
+  const META = {
+    light: { label: 'Light', bar: 'bg-emerald-500', advice: '' },
+    moderate: {
+      label: 'Moderate',
+      bar: 'bg-amber-500',
+      advice: 'Getting fuller — consider moving rarely-used blocks to “on demand”.',
+    },
+    heavy: {
+      label: 'Heavy',
+      bar: 'bg-[var(--destructive)]',
+      advice:
+        'A lot of standing instruction. Audit for overlap, trim, or move rarely-used blocks to “on demand”.',
+    },
+  } as const;
+  const meta = META[level];
+  return (
+    <div className="msg-well space-y-2 rounded-xl p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium text-foreground">Context load · {meta.label}</p>
+        <span className="text-xs tabular-nums text-muted-foreground">
+          ~{injectedTokens.toLocaleString()} always-on tokens
+          {toolCount > 0 ? ` · ${toolCount} on demand` : ''}
+        </span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/[0.08] dark:bg-white/[0.1]">
+        <div
+          className={cn('h-full rounded-full transition-all duration-300', meta.bar)}
+          style={{ width: `${Math.max(3, pct)}%` }}
+        />
+      </div>
+      {meta.advice && <p className="text-xs text-muted-foreground">{meta.advice}</p>}
+    </div>
+  );
+}
+
+// A tier section on the page: the exposure blip (label + description) followed by
+// the blocks of that tier. The descriptions live here, not in the dialog.
+function ExposureGroup({
+  option,
+  rules,
+  onEdit,
+}: {
+  option: (typeof TIER_OPTIONS)[number];
+  rules: TrainingRule[];
+  onEdit: (rule: TrainingRule) => void;
+}) {
+  return (
+    <section className="space-y-2">
+      <div>
+        <p className="text-sm font-semibold text-foreground">{option.title}</p>
+        <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">{option.description}</p>
+      </div>
+      {rules.length === 0 ? (
+        <p className="px-1 text-xs text-muted-foreground">No blocks here yet.</p>
+      ) : (
+        <div className="msg-well overflow-hidden rounded-xl">
+          {rules.map((rule, idx) => (
+            <TrainingBlockRow
+              key={rule.id}
+              rule={rule}
+              isLast={idx === rules.length - 1}
+              onEdit={() => onEdit(rule)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // Compact training-block row — title + property scope + edit pencil. The whole
 // row opens the editor (where instructions, active state, and delete live);
 // nothing else is shown inline. Styled to echo the My Assignments task rows.
@@ -317,11 +424,6 @@ function TrainingBlockRow({
     >
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <span className="truncate text-sm font-medium text-foreground">{rule.title}</span>
-        {rule.category === 'reply' && rule.tier === 'situational' && (
-          <Badge variant="outline" className="shrink-0 text-[10px] text-muted-foreground">
-            On demand
-          </Badge>
-        )}
         {!rule.is_active && (
           <Badge variant="outline" className="shrink-0 text-[10px] text-muted-foreground">
             Off
@@ -365,8 +467,8 @@ function RuleEditorDialog({
     existing?.category ?? (state.mode === 'create' ? state.category : 'reply');
   const [title, setTitle] = useState(existing?.title ?? '');
   const [instructions, setInstructions] = useState(existing?.instructions ?? '');
-  // New blocks start inactive — the operator turns them on deliberately.
-  const [isActive, setIsActive] = useState(existing?.is_active ?? false);
+  // New blocks default to active.
+  const [isActive, setIsActive] = useState(existing?.is_active ?? true);
   // Reply rules only: always-on vs loaded-on-demand. Defaults to 'always'.
   const [tier, setTier] = useState<TrainingTier>(existing?.tier ?? 'always');
   // applies_to_all is folded into the property picker: every property selected
@@ -389,8 +491,7 @@ function RuleEditorDialog({
       title: title.trim(),
       instructions: instructions.trim(),
       category,
-      // Tier only governs reply drafting; task rules are always injected.
-      tier: category === 'reply' ? tier : 'always',
+      tier,
       applies_to_all: allSelected,
       is_active: isActive,
       property_ids: allSelected ? [] : [...selected],
@@ -434,6 +535,7 @@ function RuleEditorDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         aria-describedby={undefined}
+        showCloseButton={false}
         className="flex h-[min(90svh,640px)] flex-col gap-0 overflow-hidden border-[var(--surface-elevated-line)] bg-[var(--surface-elevated)] p-0 shadow-[var(--glass-shadow)] sm:max-w-4xl"
       >
         {/* Frosted grey-blue sheen over the solid surface. On a NON-transformed
@@ -447,129 +549,67 @@ function RuleEditorDialog({
           <DialogTitle>{existing ? 'Edit training block' : 'New training block'}</DialogTitle>
         </DialogHeader>
 
-        {/* Fixed footprint; the body fills it and only scrolls if the viewport is short. */}
-        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-7 pt-6 pb-5 overlay-scrollbar">
-          {/* Title fills the row; the active toggle sits at the right. The toggle
-              stays live even when off; everything else is muted and locked. */}
-          <div className="flex items-center gap-3">
-            <Input
-              id="rule-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Title"
-              autoFocus={isActive}
-              disabled={!isActive}
-              className="h-11 flex-1 text-base"
-            />
+        {/* Doc-editor layout: title + a wide instructions field, with the
+            settings as compact pills at the bottom. */}
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-7 pt-6 pb-4 overlay-scrollbar">
+          {/* Title — full width */}
+          <Input
+            id="rule-title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Title"
+            autoFocus={isActive}
+            disabled={!isActive}
+            className="h-11 w-full text-base"
+          />
+
+          {/* Instructions — fills the remaining height, scrolls internally */}
+          <Textarea
+            id="rule-instructions"
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            disabled={!isActive}
+            placeholder={
+              category === 'task'
+                ? 'When should the Concierge Agent create a task from a guest message, and what should it contain?…'
+                : 'Step-by-step guidance the Concierge Agent should follow when this situation comes up…'
+            }
+            className="field-sizing-fixed min-h-[10rem] flex-1 resize-none overflow-y-auto text-base leading-relaxed overlay-scrollbar"
+          />
+
+          {/* Settings pills, below the instructions. Active stays live; the rest
+              lock when the block is off. Properties + exposure open popovers. */}
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               role="switch"
               aria-checked={isActive}
               aria-label={`Active: ${isActive ? 'on' : 'off'}`}
-              title={isActive ? 'Active' : 'Inactive'}
               onClick={() => setIsActive((v) => !v)}
-              className={cn(
-                'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors',
-                isActive ? 'bg-[var(--accent-3)]' : 'bg-black/[0.18] dark:bg-white/[0.22]',
-              )}
+              className={cn(PILL_CLASS, !isActive && 'text-muted-foreground')}
             >
               <span
                 className={cn(
-                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
-                  isActive ? 'translate-x-[18px]' : 'translate-x-0.5',
+                  'h-2 w-2 rounded-full',
+                  isActive ? 'bg-emerald-500' : 'bg-muted-foreground/40',
                 )}
               />
+              {isActive ? 'Active' : 'Inactive'}
             </button>
+
+            <PropertyPicker
+              properties={properties}
+              selected={selected}
+              onChange={setSelected}
+              disabled={!isActive}
+            />
+
+            <ExposurePill tier={tier} onChange={setTier} disabled={!isActive} />
           </div>
 
-          {/* Settings on the left, instructions on the right. Muted + locked when inactive. */}
-          <div
-            className={cn(
-              'grid min-h-0 flex-1 gap-x-8 gap-y-6 sm:grid-cols-2',
-              !isActive && 'pointer-events-none select-none opacity-50',
-            )}
-            aria-disabled={!isActive}
-          >
-            <div className="flex min-h-0 flex-col gap-6">
-              {category === 'reply' && (
-                <div>
-                  <p className="text-sm font-medium text-foreground">Classification</p>
-                  <div className="mt-2.5 space-y-2">
-                    {TIER_OPTIONS.map((opt) => {
-                      const isOn = tier === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => setTier(opt.value)}
-                          disabled={!isActive}
-                          aria-pressed={isOn}
-                          className={cn(
-                            'flex w-full items-center gap-2.5 rounded-lg border p-3 text-left text-sm font-medium transition-colors',
-                            isOn
-                              ? 'border-[var(--accent-3)] bg-[var(--accent-3)]/[0.08] text-foreground'
-                              : 'border-border text-muted-foreground hover:bg-black/[0.03] hover:text-foreground dark:hover:bg-white/[0.04]',
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors',
-                              isOn ? 'border-[var(--accent-3)]' : 'border-muted-foreground/50',
-                            )}
-                          >
-                            {isOn && <span className="h-2 w-2 rounded-full bg-[var(--accent-3)]" />}
-                          </span>
-                          <span className="min-w-0">{opt.title}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <ul className="mt-3 space-y-1.5">
-                    {TIER_OPTIONS.find((o) => o.value === tier)?.points.map((pt) => (
-                      <li key={pt} className="flex gap-2 text-sm leading-relaxed text-foreground">
-                        <span aria-hidden className="mt-2 h-1 w-1 shrink-0 rounded-full bg-foreground/70" />
-                        <span>{pt}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Properties — no label; the trigger reads "All properties" / a count. */}
-              <div className="space-y-1.5">
-                <PropertyPicker
-                  properties={properties}
-                  selected={selected}
-                  onChange={setSelected}
-                  disabled={!isActive}
-                />
-                {selected.size === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    Select at least one property, or use “Select all”.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Instructions — fills the column height, scrolls internally. */}
-            <div className="flex min-h-0 flex-col">
-              <Label htmlFor="rule-instructions" className="mb-2 text-sm font-medium">
-                Instructions
-              </Label>
-              <Textarea
-                id="rule-instructions"
-                value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
-                disabled={!isActive}
-                placeholder={
-                  category === 'task'
-                    ? 'When should the Concierge Agent create a task from a guest message, and what should it contain?…'
-                    : 'Step-by-step guidance the Concierge Agent should follow when this situation comes up…'
-                }
-                className="field-sizing-fixed min-h-[12rem] flex-1 resize-none overflow-y-auto text-base leading-relaxed overlay-scrollbar"
-              />
-            </div>
-          </div>
+          {isActive && selected.size === 0 && (
+            <p className="text-xs text-muted-foreground">Select at least one property to save.</p>
+          )}
         </div>
 
         {formError && (
@@ -655,24 +695,22 @@ function PropertyPicker({
           type="button"
           aria-expanded={open}
           disabled={disabled}
-          className={cn(
-            'flex h-11 w-full items-center justify-between gap-2 rounded-lg border border-border bg-transparent px-3.5 text-base transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-60',
-            selected.size === 0 ? 'text-muted-foreground' : 'text-foreground',
-          )}
+          className={cn(PILL_CLASS, selected.size === 0 && 'text-muted-foreground')}
         >
-          <span className="truncate">{summary}</span>
+          <Home className="h-3.5 w-3.5 opacity-70" />
+          <span className="max-w-[12rem] truncate">{summary}</span>
           <ChevronDown
-            className={cn('h-4 w-4 shrink-0 opacity-60 transition-transform', open && 'rotate-180')}
+            className={cn('h-3.5 w-3.5 shrink-0 opacity-50 transition-transform', open && 'rotate-180')}
           />
         </button>
       </PopoverTrigger>
-      {/* Portals over the dialog; width matches the trigger, height capped to the
-          space available so it never runs off-screen. */}
+      {/* Portals over the dialog; fixed width (the pill trigger is small), height
+          capped to the space available so it never runs off-screen. */}
       <PopoverContent
         align="start"
         sideOffset={6}
         collisionPadding={12}
-        className="flex max-h-[min(340px,var(--radix-popover-content-available-height))] w-[var(--radix-popover-trigger-width)] flex-col overflow-hidden rounded-lg border border-border p-0 shadow-lg"
+        className="flex max-h-[min(340px,var(--radix-popover-content-available-height))] w-72 flex-col overflow-hidden rounded-lg border border-border p-0 shadow-lg"
       >
         <div className="shrink-0 border-b border-border p-2">
           <Input
@@ -730,6 +768,66 @@ function PropertyPicker({
             })
           )}
         </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Agent-exposure pill: a popover with just the two option labels (Always in
+// context / Tools). The full descriptions live on the page (ExposureLegend), so
+// the dialog stays lean.
+function ExposurePill({
+  tier,
+  onChange,
+  disabled = false,
+}: {
+  tier: TrainingTier;
+  onChange: (next: TrainingTier) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const label = TIER_OPTIONS.find((o) => o.value === tier)?.title ?? 'Always in context';
+  return (
+    <Popover open={open} onOpenChange={setOpen} modal>
+      <PopoverTrigger asChild>
+        <button type="button" aria-expanded={open} disabled={disabled} className={PILL_CLASS}>
+          <Layers className="h-3.5 w-3.5 opacity-70" />
+          <span className="truncate">{label}</span>
+          <ChevronDown
+            className={cn('h-3.5 w-3.5 shrink-0 opacity-50 transition-transform', open && 'rotate-180')}
+          />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" sideOffset={6} collisionPadding={12} className="w-64 p-1.5">
+        {TIER_OPTIONS.map((opt) => {
+          const on = tier === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => {
+                onChange(opt.value);
+                setOpen(false);
+              }}
+              className={cn(
+                'flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors',
+                on
+                  ? 'bg-[var(--accent-3)]/[0.10] font-medium text-foreground'
+                  : 'text-muted-foreground hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.05]',
+              )}
+            >
+              <span
+                className={cn(
+                  'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors',
+                  on ? 'border-[var(--accent-3)]' : 'border-muted-foreground/50',
+                )}
+              >
+                {on && <span className="h-2 w-2 rounded-full bg-[var(--accent-3)]" />}
+              </span>
+              {opt.title}
+            </button>
+          );
+        })}
       </PopoverContent>
     </Popover>
   );

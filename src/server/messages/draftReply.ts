@@ -358,6 +358,7 @@ export async function generateGuestReplyDraftFromContext(
     draft: {
       propertyId: ctx.conversation.property_id,
       channel: ctx.conversation.channel ?? null,
+      category: 'reply',
     },
   };
   const conversation: MessageParam[] = [{ role: 'user', content: userParts.join('\n') }];

@@ -110,6 +110,12 @@ export interface ToolContext {
      * THEIR own OTA — never cross-channel. Null when unknown.
      */
     channel?: string | null;
+    /**
+     * Which training category this draft is — 'reply' for the guest-reply
+     * draft, 'task' for task triage. get_concierge_procedure uses it to load
+     * the matching situational rules. Defaults to 'reply' when unset.
+     */
+    category?: 'reply' | 'task';
   };
 }
 

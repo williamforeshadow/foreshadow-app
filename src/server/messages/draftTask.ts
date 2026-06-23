@@ -1,6 +1,16 @@
-import type { TextBlock } from '@anthropic-ai/sdk/resources/messages';
+import type {
+  MessageParam,
+  TextBlock,
+  TextBlockParam,
+  ToolUseBlock,
+  ToolResultBlockParam,
+  Tool,
+} from '@anthropic-ai/sdk/resources/messages';
 import { getAnthropic, MODEL } from '@/src/agent/anthropic';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { dispatchTool, type ToolCallTrace } from '@/src/agent/dispatchTool';
+import { getConciergeProcedure } from '@/src/agent/tools/getConciergeProcedure';
+import type { ToolContext, ToolDefinition } from '@/src/agent/tools/types';
 import {
   getConversationContext,
   type ConversationContext,
@@ -8,6 +18,7 @@ import {
 import {
   getConciergeTrainingForProperty,
   formatTrainingForPrompt,
+  formatTrainingIndexForPrompt,
 } from './conciergeTraining';
 import type { GuestMessageRecord } from '@/lib/messages';
 
@@ -17,15 +28,28 @@ import type { GuestMessageRecord } from '@/lib/messages';
 // become a task, and if so drafts that task for human review.
 //
 // Two deliberate differences from draftReply:
-//   - Single structured call (no tool loop). The output is a JSON decision, not
-//     guest prose, so determinism and a hard gate matter more than tool use.
+//   - The output is a JSON decision, not guest prose, so determinism and a hard
+//     sensitivity gate matter more than free-form tool use. The model may make
+//     one detour — loading a situational task rule via get_concierge_procedure —
+//     before emitting that JSON; otherwise it answers in a single pass.
 //   - It carries OPS context (the property's department list) the guest-facing
 //     Concierge intentionally lacks, so it can tag a real department_id.
 //
 // Temperature stays 0: we want a conservative, repeatable gate, not creativity.
 
-const TRIAGE_MAX_TOKENS = 600;
+const TRIAGE_MAX_TOKENS = 900; // per-turn headroom so the final JSON isn't truncated
 const MAX_THREAD_MESSAGES = 30;
+const MAX_TRIAGE_ITERATIONS = 4; // one grounding tool detour + the JSON turn, with slack
+
+// The triage loop's single tool: load a situational task rule's full text on
+// demand. Mirrors the reply path — 'always' task rules are pinned into the
+// (cached) system prefix; 'situational' ones are indexed by title and pulled in
+// only when the conversation matches. It's core infra, so (unlike the reply
+// toolset) it isn't gated by the per-tool operator master switches.
+const TRIAGE_TOOLS: ReadonlyArray<ToolDefinition<unknown, unknown>> = [
+  getConciergeProcedure as unknown as ToolDefinition<unknown, unknown>,
+];
+const TRIAGE_TOOLS_BY_NAME = new Map(TRIAGE_TOOLS.map((t) => [t.name, t]));
 
 const PRIORITIES = ['urgent', 'high', 'medium', 'low'] as const;
 type Priority = (typeof PRIORITIES)[number];
@@ -196,15 +220,26 @@ export async function generateProposedTaskDraftFromContext(
   ctx: ConversationContext,
   opts: { today?: string } = {},
 ): Promise<TriageResult> {
-  let trainingBlock = '';
+  // Task training, split by tier (mirrors draftReply):
+  //  - 'always' rules are pinned into the (cached) system prefix — they govern
+  //    every triage (what always counts as work for this team).
+  //  - 'situational' rules are listed by title only; the model loads the full
+  //    body on demand via get_concierge_procedure when the conversation matches.
+  let alwaysTrainingBlock = '';
+  let situationalIndexBlock = '';
   try {
     const rules = await getConciergeTrainingForProperty(
       ctx.conversation.property_id,
       'task',
     );
-    trainingBlock = formatTrainingForPrompt(rules);
+    alwaysTrainingBlock = formatTrainingForPrompt(rules.filter((r) => r.tier !== 'situational'));
+    situationalIndexBlock = formatTrainingIndexForPrompt(
+      rules.filter((r) => r.tier === 'situational'),
+    );
   } catch {
-    trainingBlock = '';
+    // Training is enhancement, not a hard dependency — never block triage on it.
+    alwaysTrainingBlock = '';
+    situationalIndexBlock = '';
   }
 
   const [departments, sensitivity, existingTitles] = await Promise.all([
@@ -254,13 +289,6 @@ export async function generateProposedTaskDraftFromContext(
     'Departments you may assign (use the exact id, or omit):',
     departmentBlock,
   ];
-  if (trainingBlock) {
-    userParts.push(
-      '',
-      'Task rules — when and how to create tasks for this team/property:',
-      trainingBlock,
-    );
-  }
   if (existingTitles.length) {
     userParts.push(
       '',
@@ -276,20 +304,120 @@ export async function generateProposedTaskDraftFromContext(
     'Identify every distinct task the latest guest message warrants under the sensitivity calibration above (one per distinct issue, excluding anything already raised), and respond with the JSON object only.',
   );
 
-  const client = getAnthropic();
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: TRIAGE_MAX_TOKENS,
-    temperature: 0,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userParts.join('\n') }],
-  });
+  // Stable, per-property system prefix — cached so the loop's passes (and repeat
+  // triages for the same property within the cache TTL) reuse it. Order: base
+  // rules → always-on training → the situational index + how to load it. Unlike
+  // the reply path there's no per-call gate clause, so the whole block is cacheable.
+  const cachedSystemText = [
+    SYSTEM_PROMPT,
+    alwaysTrainingBlock
+      ? `Task rules that ALWAYS apply — follow them on every triage:\n${alwaysTrainingBlock}`
+      : '',
+    situationalIndexBlock
+      ? `Situational task rules available on demand — listed by title only, NOT shown in full. When the latest guest message matches one of these topics, call get_concierge_procedure with the matching id(s) to load the full rule BEFORE deciding tasks, then apply it. After loading what you need, output the final JSON object exactly as instructed. The always-applies rules above are always in effect and never need loading.\n${situationalIndexBlock}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 
-  const raw = response.content
-    .filter((b): b is TextBlock => b.type === 'text')
-    .map((b) => b.text)
-    .join('')
-    .trim();
+  const systemBlocks: TextBlockParam[] = [
+    { type: 'text', text: cachedSystemText, cache_control: { type: 'ephemeral' } },
+  ];
+
+  // Offer the on-demand loader (always — even with an empty index it's a harmless
+  // no-op and keeps the cached prefix contiguous). It's core infra, so it isn't
+  // subject to the per-tool operator master switches.
+  const tools: Tool[] = TRIAGE_TOOLS.map((t) => ({
+    name: t.name,
+    description: t.description,
+    input_schema: t.jsonSchema,
+  }));
+  if (tools.length > 0) {
+    tools[tools.length - 1] = {
+      ...tools[tools.length - 1],
+      cache_control: { type: 'ephemeral' },
+    };
+  }
+
+  // Bind the property + category so get_concierge_procedure loads THIS property's
+  // situational TASK rules (not reply rules, not another property's).
+  const toolCtx: ToolContext = {
+    draft: {
+      propertyId: ctx.conversation.property_id,
+      channel: ctx.conversation.channel ?? null,
+      category: 'task',
+    },
+  };
+
+  const client = getAnthropic();
+  const conversation: MessageParam[] = [{ role: 'user', content: userParts.join('\n') }];
+  const trace: ToolCallTrace[] = [];
+
+  // The triage loop. The model may load a situational task rule before deciding;
+  // when it stops calling tools, its text is the JSON decision. With no tool call
+  // this is identical to the old single-shot path.
+  let raw = '';
+  let gotFinal = false;
+  for (let i = 0; i < MAX_TRIAGE_ITERATIONS; i++) {
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: TRIAGE_MAX_TOKENS,
+      temperature: 0,
+      system: systemBlocks,
+      tools,
+      messages: conversation,
+    });
+
+    // Prompt-cache observability: a creation on the first pass, reads on later
+    // passes / repeat triages for the same property within the cache TTL.
+    const u = response.usage;
+    console.log(
+      `[task triage] pass ${i} cache: created=${u.cache_creation_input_tokens ?? 0} read=${u.cache_read_input_tokens ?? 0} input=${u.input_tokens}`,
+    );
+
+    conversation.push({ role: 'assistant', content: response.content });
+
+    if (response.stop_reason !== 'tool_use') {
+      // Only the final, non-tool turn carries the JSON decision; interim tool
+      // turns are never parsed.
+      raw = response.content
+        .filter((b): b is TextBlock => b.type === 'text')
+        .map((b) => b.text)
+        .join('')
+        .trim();
+      gotFinal = true;
+      break;
+    }
+
+    const toolUses = response.content.filter(
+      (b): b is ToolUseBlock => b.type === 'tool_use',
+    );
+    const toolResults: ToolResultBlockParam[] = await Promise.all(
+      toolUses.map((use) => {
+        const tool = TRIAGE_TOOLS_BY_NAME.get(use.name);
+        if (!tool) {
+          return Promise.resolve<ToolResultBlockParam>({
+            type: 'tool_result',
+            tool_use_id: use.id,
+            is_error: true,
+            content: JSON.stringify({
+              ok: false,
+              error: { code: 'unknown_tool', message: `Tool "${use.name}" is not available here.` },
+            }),
+          });
+        }
+        return dispatchTool(tool, use, trace, toolCtx);
+      }),
+    );
+    conversation.push({ role: 'user', content: toolResults });
+  }
+
+  if (!gotFinal) {
+    // The model kept calling tools past the cap without emitting JSON — treat as
+    // "no tasks" (best-effort), matching the unparseable handling below. Never throw.
+    console.warn('[task triage] loop exhausted without a JSON turn');
+    return { tasks: [], reasoning: 'Triage did not converge.' };
+  }
 
   const parsed = parseTriageJson(raw);
   if (!parsed) {
