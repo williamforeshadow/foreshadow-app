@@ -26,6 +26,9 @@ export interface ProposedTaskData {
   /** AI-suggested team-member assignee ids (validated against the roster). May be
    *  empty — the model leaves it blank when unsure or when it's vendor work. */
   suggested_assignee_ids?: string[];
+  /** AI-suggested schedule (canonical task formats), or null when unscheduled. */
+  scheduled_date?: string | null; // 'YYYY-MM-DD'
+  scheduled_time?: string | null; // 'HH:MM' (24h)
   /** 'pending' (editable card) or 'accepted' (approved tombstone). */
   status?: 'pending' | 'accepted';
   /** Who approved it + when, for the accepted tombstone. */
@@ -62,6 +65,8 @@ function proposedTaskToCardItem(
       department_id: p.department_id,
       department_name: p.department_name,
       project_assignments,
+      scheduled_date: p.scheduled_date ?? null,
+      scheduled_time: p.scheduled_time ?? null,
       created_at: '',
       updated_at: '',
     },

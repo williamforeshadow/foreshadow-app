@@ -20,6 +20,7 @@ import {
   formatTrainingForPrompt,
   formatTrainingIndexForPrompt,
 } from './conciergeTraining';
+import { resolveOpsToday } from './opsToday';
 import type { GuestMessageRecord } from '@/lib/messages';
 
 // Task-triage generator — the operator-facing sibling of draftReply.ts. Where
@@ -76,9 +77,10 @@ For each task:
 - priority: one of urgent | high | medium | low. Reserve "urgent" for safety issues or anything making the space unusable during an active stay.
 - department_id: choose from the provided department list if one clearly fits; otherwise omit it. Use ONLY an id from that list — never invent one.
 - suggested_assignee_ids: the team member(s) best suited to this task, but ONLY when the team's Task rules make it reasonably clear who should handle it (who-does-what guidance, availability outlines, etc.). Use ONLY ids from the provided "Team members" list. Usually one person; include more only when the work clearly needs several. Return an empty array [] when no rule points to a specific person, when you are unsure, or when it's work for an outside vendor — a human will assign those. Never invent an id or a name, and never guess from names alone.
+- scheduled_date / scheduled_time: an optional suggested schedule. scheduled_date is "YYYY-MM-DD"; scheduled_time is "HH:MM" on a 24-hour clock. Today's date is given in the facts below — use it to resolve any relative reference (e.g. "tomorrow", "this Friday") to an absolute date. Leave EITHER as null unless a specific date/time is grounded in the conversation or called for by the team's Task rules; you may set a date without a time. Never fabricate a schedule that nothing in the conversation or the rules supports.
 
 Output: respond with ONLY a single JSON object, no prose, no code fences. Shape:
-{"tasks": [{"title": string, "description": string, "priority": "urgent"|"high"|"medium"|"low", "department_id": string|null, "suggested_assignee_ids": string[]}], "reasoning": string}
+{"tasks": [{"title": string, "description": string, "priority": "urgent"|"high"|"medium"|"low", "department_id": string|null, "suggested_assignee_ids": string[], "scheduled_date": string|null, "scheduled_time": string|null}], "reasoning": string}
 "tasks" is an array of zero or more tasks (empty when nothing qualifies). Keep "reasoning" to one short sentence.`;
 
 // The sensitivity ladder. Cumulative: each level includes everything below it.
@@ -113,6 +115,10 @@ export interface ProposedTaskDraft {
    * a human assigns those. Applied as the default on accept.
    */
   suggested_assignee_ids: string[];
+  /** Suggested schedule, in canonical task formats. Null unless the conversation
+   *  or the team's Task rules call for a specific date/time. */
+  scheduled_date: string | null; // 'YYYY-MM-DD'
+  scheduled_time: string | null; // 'HH:MM' (24h)
 }
 
 export interface TriageResult {
@@ -275,12 +281,24 @@ function parseTriageJson(raw: string): TriageResult | null {
           (v): v is string => typeof v === 'string' && v.trim().length > 0,
         )
       : [];
+    // Accept only the canonical formats createTask validates (YYYY-MM-DD / HH:MM);
+    // anything malformed is dropped to null rather than stored as garbage.
+    const scheduledDate =
+      typeof tt.scheduled_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(tt.scheduled_date.trim())
+        ? tt.scheduled_date.trim()
+        : null;
+    const scheduledTime =
+      typeof tt.scheduled_time === 'string' && /^\d{2}:\d{2}$/.test(tt.scheduled_time.trim())
+        ? tt.scheduled_time.trim()
+        : null;
     tasks.push({
       title,
       description,
       priority,
       department_id: departmentId,
       suggested_assignee_ids: suggestedAssigneeIds,
+      scheduled_date: scheduledDate,
+      scheduled_time: scheduledTime,
     });
   }
 
@@ -335,7 +353,9 @@ export async function generateProposedTaskDraftFromContext(
     ctx.reservation?.guest_name ?? ctx.conversation.guest_name ?? 'the guest';
   const propertyName =
     ctx.reservation?.property_name ?? ctx.conversation.property_name ?? null;
-  const today = opts.today ?? new Date().toISOString().slice(0, 10);
+  // Resolve "today" in the property's (or org default) timezone, not UTC — a
+  // late-evening US "tomorrow" must not roll a day forward against UTC.
+  const today = opts.today ?? (await resolveOpsToday(ctx.conversation.property_id));
 
   const facts: string[] = [`Today's date: ${today}`, `Guest name: ${guestName}`];
   if (propertyName) facts.push(`Property: ${propertyName}`);

@@ -52,6 +52,8 @@ interface ProposedTaskRow {
   property_id: string | null;
   department_id: string | null;
   suggested_assignee_ids: string[] | null;
+  scheduled_date: string | null;
+  scheduled_time: string | null;
 }
 
 async function requireUser() {
@@ -78,7 +80,7 @@ async function loadProposal(id: string): Promise<ProposedTaskRow | null> {
   const { data, error } = await getSupabaseServer()
     .from('proposed_tasks')
     .select(
-      'id, conversation_id, status, resulting_task_id, title, description, priority, property_id, department_id, suggested_assignee_ids',
+      'id, conversation_id, status, resulting_task_id, title, description, priority, property_id, department_id, suggested_assignee_ids, scheduled_date, scheduled_time',
     )
     .eq('id', id)
     .maybeSingle();
@@ -161,8 +163,14 @@ export async function POST(
           ? blankToNull(edits.department_id)
           : proposal.department_id,
       template_id: blankToNull(edits.template_id),
-      scheduled_date: blankToNull(edits.scheduled_date),
-      scheduled_time: blankToNull(edits.scheduled_time),
+      scheduled_date:
+        edits.scheduled_date !== undefined
+          ? blankToNull(edits.scheduled_date)
+          : proposal.scheduled_date,
+      scheduled_time:
+        edits.scheduled_time !== undefined
+          ? blankToNull(edits.scheduled_time)
+          : proposal.scheduled_time,
       assigned_user_ids: edits.assigned_user_ids ?? proposal.suggested_assignee_ids ?? [],
     },
     { actor: { user_id: actorId, name: user.name } },

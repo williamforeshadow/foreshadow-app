@@ -83,8 +83,8 @@ export function ProposedTaskEditorOverlay({
     priority: proposal.priority,
     department_id: proposal.department_id,
     department_name: proposal.department_name,
-    scheduled_date: null,
-    scheduled_time: null,
+    scheduled_date: proposal.scheduled_date ?? null,
+    scheduled_time: proposal.scheduled_time ?? null,
     project_assignments: [],
     created_at: '',
     updated_at: '',
@@ -97,8 +97,8 @@ export function ProposedTaskEditorOverlay({
     priority: proposal.priority,
     assigned_staff: proposal.suggested_assignee_ids ?? [],
     department_id: proposal.department_id || '',
-    scheduled_date: '',
-    scheduled_time: '',
+    scheduled_date: proposal.scheduled_date ?? '',
+    scheduled_time: proposal.scheduled_time ?? '',
   }));
   const editingFieldsRef = useRef<ProjectFormFields | null>(editingFields);
   useEffect(() => {

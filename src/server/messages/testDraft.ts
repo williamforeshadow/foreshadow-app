@@ -1,6 +1,8 @@
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { todayInTz } from '@/src/lib/dates';
 import { generateGuestReplyDraftFromContext } from './draftReply';
 import { generateProposedTaskDraftFromContext } from './draftTask';
+import { opsDefaultTimezone } from './opsToday';
 import {
   generateProposedKnowledgeFromContext,
   type KnowledgeTarget,
@@ -54,6 +56,9 @@ export interface TestProposedTask {
   priority: 'urgent' | 'high' | 'medium' | 'low';
   department_id: string | null;
   department_name: string | null;
+  suggested_assignee_ids: string[];
+  scheduled_date: string | null;
+  scheduled_time: string | null;
 }
 
 /** A dummy proposed-knowledge addition, shaped to match ProposedKnowledgeData. */
@@ -95,20 +100,6 @@ async function getPropertyMeta(propertyId: string): Promise<PropertyMeta> {
   return { name: row.name ?? null, timezone: row.timezone ?? null };
 }
 
-/** Today's date (YYYY-MM-DD) in the property's timezone, so "checked in" etc. resolve correctly. */
-function todayInTimezone(timezone: string | null): string {
-  try {
-    // en-CA formats as YYYY-MM-DD.
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone || 'UTC',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date());
-  } catch {
-    return new Date().toISOString().slice(0, 10);
-  }
-}
 
 /** Add a day offset to a YYYY-MM-DD date (anchored at UTC noon to dodge DST edges). */
 function addDays(ymd: string, days: number): string {
@@ -190,7 +181,9 @@ export async function runConciergeTest(
   }
 
   const { name: propertyName, timezone } = await getPropertyMeta(input.propertyId);
-  const today = todayInTimezone(timezone);
+  // Property timezone first, then the org default, then UTC (todayInTz handles the
+  // undefined → UTC fallback). Matches the real task path's resolution.
+  const today = todayInTz(timezone ?? (await opsDefaultTimezone())).date;
   const { stay, bookingState } = buildScenario(input.scenario, today);
 
   // Synthetic thread. sent_at is left null (treated as already-sent, never
@@ -284,6 +277,9 @@ export async function runConciergeTest(
           priority: t.priority,
           department_id: t.department_id,
           department_name: t.department_id ? deptNames.get(t.department_id) ?? null : null,
+          suggested_assignee_ids: t.suggested_assignee_ids,
+          scheduled_date: t.scheduled_date,
+          scheduled_time: t.scheduled_time,
         }));
       } catch (err) {
         console.error('[concierge test] task triage failed:', err);

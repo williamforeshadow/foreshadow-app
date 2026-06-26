@@ -607,9 +607,6 @@ function RuleEditorDialog({
             <ExposurePill tier={tier} onChange={setTier} disabled={!isActive} />
           </div>
 
-          {isActive && selected.size === 0 && (
-            <p className="text-xs text-muted-foreground">Select at least one property to save.</p>
-          )}
         </div>
 
         {formError && (
