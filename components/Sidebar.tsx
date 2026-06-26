@@ -223,6 +223,7 @@ export default function Sidebar({
     superadmin: 'bg-purple-500',
     manager: 'bg-blue-500',
     staff: 'bg-emerald-500',
+    vendor: 'bg-amber-500',
   };
 
   const filteredRouteItems = routeItems.filter((item) => {

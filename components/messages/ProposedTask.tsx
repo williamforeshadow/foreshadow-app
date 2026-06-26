@@ -10,8 +10,9 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import { apiFetch } from '@/lib/apiFetch';
+import { useAuth } from '@/lib/authContext';
 import { ProjectCard, type DraggableProjectItem } from '@/components/windows/projects/ProjectCard';
-import type { ProjectStatus, ProjectPriority } from '@/lib/types';
+import type { ProjectStatus, ProjectPriority, User } from '@/lib/types';
 
 export interface ProposedTaskData {
   id: string;
@@ -22,6 +23,9 @@ export interface ProposedTaskData {
   triggering_message_id: string | null;
   department_id: string | null;
   department_name: string | null;
+  /** AI-suggested team-member assignee ids (validated against the roster). May be
+   *  empty — the model leaves it blank when unsure or when it's vendor work. */
+  suggested_assignee_ids?: string[];
   /** 'pending' (editable card) or 'accepted' (approved tombstone). */
   status?: 'pending' | 'accepted';
   /** Who approved it + when, for the accepted tombstone. */
@@ -33,12 +37,19 @@ export interface ProposedTaskData {
 
 // Adapt a proposed-task draft into the shape the kanban/chat ProjectCard renders,
 // so a proposal previews exactly like a real task (title, dept icon, priority,
-// status). A draft has no assignee or schedule yet and hasn't started, so those
-// fields are empty / not_started — the card renders them honestly (no avatars).
+// status). A draft has no schedule yet and hasn't started (those stay empty /
+// not_started); AI-suggested assignees, when present, resolve to avatars.
 function proposedTaskToCardItem(
   p: ProposedTaskData,
   propertyName: string | null,
+  usersById: Map<string, User>,
 ): DraggableProjectItem {
+  const project_assignments = (p.suggested_assignee_ids ?? [])
+    .map((uid) => {
+      const user = usersById.get(uid);
+      return user ? { user_id: uid, user } : null;
+    })
+    .filter((a): a is { user_id: string; user: User } => a !== null);
   return {
     id: p.id,
     columnId: 'proposed',
@@ -50,7 +61,7 @@ function proposedTaskToCardItem(
       priority: p.priority as ProjectPriority,
       department_id: p.department_id,
       department_name: p.department_name,
-      project_assignments: [],
+      project_assignments,
       created_at: '',
       updated_at: '',
     },
@@ -109,6 +120,13 @@ export function ProposedTask({
   const [busy, setBusy] = useState<'accept' | 'dismiss' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const justify = align === 'start' ? 'justify-start' : 'justify-end';
+
+  // Resolve suggested assignee ids → users for the card avatars. allUsers is
+  // already app-wide via auth; empty/unmatched ids simply render no avatar.
+  const { allUsers } = useAuth();
+  const usersById = new Map<string, User>(
+    (allUsers as unknown as User[]).map((u) => [u.id, u]),
+  );
 
   // Quick-create: accept the proposal as-is (no edits). The body is omitted so
   // the endpoint creates straight from the stored proposal.
@@ -208,7 +226,7 @@ export function ProposedTask({
           title="Open to review and edit before creating"
         >
           <ProjectCard
-            item={proposedTaskToCardItem(proposal, propertyName)}
+            item={proposedTaskToCardItem(proposal, propertyName, usersById)}
             viewMode="status"
           />
         </button>

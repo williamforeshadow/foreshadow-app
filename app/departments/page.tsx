@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -26,6 +27,7 @@ import { useDepartments } from '@/lib/departmentsContext';
 import type { Department } from '@/lib/types';
 
 export default function DepartmentsPage() {
+  const router = useRouter();
   const { departments, loading, refreshDepartments } = useDepartments();
   const [error, setError] = useState<string | null>(null);
 
@@ -282,8 +284,19 @@ export default function DepartmentsPage() {
                           </div>
                         </div>
                       ) : (
-                        /* Display mode */
-                        <div className="flex items-center gap-3">
+                        /* Display mode — clicking the card opens the detail page */
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => router.push(`/departments/${dept.id}`)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              router.push(`/departments/${dept.id}`);
+                            }
+                          }}
+                          className="flex items-center gap-3 cursor-pointer"
+                        >
                           <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex-shrink-0">
                             <IconComp className="w-5 h-5 text-neutral-700 dark:text-neutral-300" />
                           </div>
@@ -295,7 +308,10 @@ export default function DepartmentsPage() {
                           {/* Action buttons - show on hover */}
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
-                              onClick={() => startEdit(dept)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startEdit(dept);
+                              }}
                               className="p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
                               title="Edit department"
                             >
@@ -303,7 +319,8 @@ export default function DepartmentsPage() {
                             </button>
                             <button
                               disabled={deletingId === dept.id}
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 if (confirm(`Delete "${dept.name}"? This cannot be undone.`)) {
                                   handleDelete(dept.id);
                                 }

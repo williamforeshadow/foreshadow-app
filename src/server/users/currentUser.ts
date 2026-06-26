@@ -2,7 +2,7 @@ import type { User } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '@/lib/supabaseSession';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 
-export type AppRole = 'superadmin' | 'manager' | 'staff';
+export type AppRole = 'superadmin' | 'manager' | 'staff' | 'vendor';
 
 export interface CurrentAppUser {
   id: string;

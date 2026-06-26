@@ -239,7 +239,7 @@ export interface AgentActor {
   /** Display name. Used in the prompt for natural-sounding grounding. */
   name: string;
   /** Permission tier; informs the model about what writes are appropriate. */
-  role: 'superadmin' | 'manager' | 'staff';
+  role: 'superadmin' | 'manager' | 'staff' | 'vendor';
 }
 
 export interface RunAgentInput {

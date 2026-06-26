@@ -39,6 +39,22 @@ export interface Department {
   updated_at: string;
 }
 
+// A user associated with a department (via the user_departments join table).
+// Sourced from the users table, so it mirrors the User shape.
+export interface DepartmentMember {
+  id: string;
+  name: string;
+  email?: string;
+  avatar?: string;
+  role?: string; // 'superadmin' | 'manager' | 'staff' | 'vendor'
+}
+
+// Response shape of GET /api/departments/[id].
+export interface DepartmentDetail {
+  department: Department;
+  members: DepartmentMember[];
+}
+
 export interface Task {
   task_id: string;
   template_id?: string;

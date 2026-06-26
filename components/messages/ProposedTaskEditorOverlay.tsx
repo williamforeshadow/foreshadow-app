@@ -95,7 +95,7 @@ export function ProposedTaskEditorOverlay({
     description: descriptionDoc,
     status: 'not_started',
     priority: proposal.priority,
-    assigned_staff: [],
+    assigned_staff: proposal.suggested_assignee_ids ?? [],
     department_id: proposal.department_id || '',
     scheduled_date: '',
     scheduled_time: '',

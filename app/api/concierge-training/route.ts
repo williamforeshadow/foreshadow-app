@@ -17,9 +17,8 @@ export interface ConciergeTrainingRule {
   /** Which drafting path the rule feeds: guest replies or task triage. */
   category: ConciergeTrainingCategory;
   /**
-   * 'always' → pinned into every reply draft. 'situational' → listed by title
-   * only and loaded on demand when the guest's message matches. (Reply rules
-   * only; task drafting injects all rules regardless.)
+   * 'always' → pinned into every reply/task draft. 'situational' → listed by
+   * title only and loaded on demand when the guest's message matches.
    */
   tier: ConciergeTrainingTier;
   applies_to_all: boolean;

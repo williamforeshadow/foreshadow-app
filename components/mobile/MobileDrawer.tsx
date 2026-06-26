@@ -17,6 +17,7 @@ const roleColors: Record<string, string> = {
   superadmin: 'bg-purple-500',
   manager: 'bg-blue-500',
   staff: 'bg-emerald-500',
+  vendor: 'bg-amber-500',
 };
 
 // Tab params drive the in-/ view switcher. Drawer items navigate cross-route

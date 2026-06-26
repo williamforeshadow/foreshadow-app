@@ -53,7 +53,7 @@ export async function GET(
   const { data: proposedTaskRows } = await supabase
     .from('proposed_tasks')
     .select(
-      'id, title, description, priority, triggering_message_id, department_id, departments(name), status, decided_by, decided_at, resulting_task_id',
+      'id, title, description, priority, triggering_message_id, department_id, departments(name), suggested_assignee_ids, status, decided_by, decided_at, resulting_task_id',
     )
     .eq('conversation_id', conversationId)
     .in('status', ['pending', 'accepted'])
@@ -92,6 +92,7 @@ export async function GET(
       triggering_message_id: (r.triggering_message_id as string | null) ?? null,
       department_id: (r.department_id as string | null) ?? null,
       department_name: ((r.departments as { name: string | null } | null)?.name) ?? null,
+      suggested_assignee_ids: (r.suggested_assignee_ids as string[] | null) ?? [],
       status: (r.status as string | null) ?? 'pending',
       decided_by_name: decidedBy ? deciderNames.get(decidedBy) ?? null : null,
       decided_at: (r.decided_at as string | null) ?? null,

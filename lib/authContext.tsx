@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, R
 import { createSupabaseClient } from '@/lib/supabaseAuth';
 import { setActorUserId } from '@/lib/apiFetch';
 
-export type Role = 'superadmin' | 'manager' | 'staff';
+export type Role = 'superadmin' | 'manager' | 'staff' | 'vendor';
 
 export interface AppUser {
   id: string;

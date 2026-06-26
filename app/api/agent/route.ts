@@ -93,7 +93,8 @@ export async function POST(req: NextRequest) {
       const role =
         userRow.role === 'superadmin' ||
         userRow.role === 'manager' ||
-        userRow.role === 'staff'
+        userRow.role === 'staff' ||
+        userRow.role === 'vendor'
           ? userRow.role
           : 'staff';
       actor = {

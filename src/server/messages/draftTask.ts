@@ -75,9 +75,10 @@ For each task:
 - description: 1-3 sentences of context drawn ONLY from the conversation (what the guest said, any specifics). Never invent details, names, times, or numbers.
 - priority: one of urgent | high | medium | low. Reserve "urgent" for safety issues or anything making the space unusable during an active stay.
 - department_id: choose from the provided department list if one clearly fits; otherwise omit it. Use ONLY an id from that list — never invent one.
+- suggested_assignee_ids: the team member(s) best suited to this task, but ONLY when the team's Task rules make it reasonably clear who should handle it (who-does-what guidance, availability outlines, etc.). Use ONLY ids from the provided "Team members" list. Usually one person; include more only when the work clearly needs several. Return an empty array [] when no rule points to a specific person, when you are unsure, or when it's work for an outside vendor — a human will assign those. Never invent an id or a name, and never guess from names alone.
 
 Output: respond with ONLY a single JSON object, no prose, no code fences. Shape:
-{"tasks": [{"title": string, "description": string, "priority": "urgent"|"high"|"medium"|"low", "department_id": string|null}], "reasoning": string}
+{"tasks": [{"title": string, "description": string, "priority": "urgent"|"high"|"medium"|"low", "department_id": string|null, "suggested_assignee_ids": string[]}], "reasoning": string}
 "tasks" is an array of zero or more tasks (empty when nothing qualifies). Keep "reasoning" to one short sentence.`;
 
 // The sensitivity ladder. Cumulative: each level includes everything below it.
@@ -106,6 +107,12 @@ export interface ProposedTaskDraft {
   description: string | null;
   priority: Priority;
   department_id: string | null;
+  /**
+   * Suggested team-member assignee ids (validated against the roster). Empty
+   * when the rules don't make an assignee clear or the work is vendor-shaped —
+   * a human assigns those. Applied as the default on accept.
+   */
+  suggested_assignee_ids: string[];
 }
 
 export interface TriageResult {
@@ -129,6 +136,63 @@ async function loadDepartments(): Promise<DepartmentRow[]> {
     return [];
   }
   return (data ?? []) as DepartmentRow[];
+}
+
+interface TeamMemberRow {
+  id: string;
+  name: string | null;
+  /** Department name(s) the member belongs to — soft context for the model, not a filter. */
+  departments: string[];
+}
+
+/**
+ * Non-vendor users the triage may suggest as assignees, each with their
+ * department name(s) (via the user_departments join). Vendors are excluded — the
+ * AI never assigns a vendor; vendor work is offered manually. Departments ride
+ * along as CONTEXT only; candidates are never filtered by department.
+ */
+async function loadTeamMembers(): Promise<TeamMemberRow[]> {
+  const supabase = getSupabaseServer();
+  const { data: users, error } = await supabase
+    .from('users')
+    .select('id, name, role')
+    .order('name', { ascending: true });
+  if (error) {
+    console.warn('[task triage] team member lookup failed', { error });
+    return [];
+  }
+  // Exclude vendors only. Filter in JS (not .neq) so null/unset roles — which the
+  // app treats as staff — stay in the roster instead of being dropped by SQL's
+  // `NULL <> 'vendor'` (which is not true).
+  const rows = ((users ?? []) as Array<{ id: string; name: string | null; role: string | null }>)
+    .filter((u) => u.role !== 'vendor')
+    .map((u) => ({ id: u.id, name: u.name }));
+  if (rows.length === 0) return [];
+
+  const { data: links, error: linkErr } = await supabase
+    .from('user_departments')
+    .select('user_id, departments(name)')
+    .in(
+      'user_id',
+      rows.map((u) => u.id),
+    );
+  if (linkErr) {
+    // Departments are enhancement only — fall back to the roster without them.
+    console.warn('[task triage] team department lookup failed', { error: linkErr });
+    return rows.map((u) => ({ id: u.id, name: u.name, departments: [] }));
+  }
+
+  const byUser = new Map<string, string[]>();
+  for (const l of (links ?? []) as Array<{
+    user_id: string;
+    departments: { name: string | null } | null;
+  }>) {
+    const name = l.departments?.name;
+    if (!name) continue;
+    byUser.set(l.user_id, [...(byUser.get(l.user_id) ?? []), name]);
+  }
+
+  return rows.map((u) => ({ id: u.id, name: u.name, departments: byUser.get(u.id) ?? [] }));
 }
 
 /** Org-level task-proposal sensitivity (1-5). Falls back to 2 when unset. */
@@ -206,7 +270,18 @@ function parseTriageJson(raw: string): TriageResult | null {
       typeof tt.department_id === 'string' && tt.department_id.trim()
         ? tt.department_id.trim()
         : null;
-    tasks.push({ title, description, priority, department_id: departmentId });
+    const suggestedAssigneeIds = Array.isArray(tt.suggested_assignee_ids)
+      ? (tt.suggested_assignee_ids as unknown[]).filter(
+          (v): v is string => typeof v === 'string' && v.trim().length > 0,
+        )
+      : [];
+    tasks.push({
+      title,
+      description,
+      priority,
+      department_id: departmentId,
+      suggested_assignee_ids: suggestedAssigneeIds,
+    });
   }
 
   return { tasks, reasoning };
@@ -242,10 +317,11 @@ export async function generateProposedTaskDraftFromContext(
     situationalIndexBlock = '';
   }
 
-  const [departments, sensitivity, existingTitles] = await Promise.all([
+  const [departments, sensitivity, existingTitles, teamMembers] = await Promise.all([
     loadDepartments(),
     loadTaskProposalSensitivity(),
     loadExistingProposalTitles(ctx.conversation.id),
+    loadTeamMembers(),
   ]);
 
   const nowMs = Date.now();
@@ -272,6 +348,13 @@ export async function generateProposedTaskDraftFromContext(
         .join('\n')
     : '(no departments configured — omit department_id)';
 
+  const teamBlock = teamMembers
+    .map((m) => {
+      const depts = m.departments.length ? ` — ${m.departments.join(', ')}` : '';
+      return `- ${m.name ?? 'Unnamed'} (id: ${m.id})${depts}`;
+    })
+    .join('\n');
+
   const transcript = recent
     .map(
       (m) =>
@@ -289,6 +372,14 @@ export async function generateProposedTaskDraftFromContext(
     'Departments you may assign (use the exact id, or omit):',
     departmentBlock,
   ];
+  if (teamMembers.length) {
+    userParts.push(
+      '',
+      'Team members you may suggest as assignees (use the exact id, or leave suggested_assignee_ids empty).',
+      'The department after each name is context, NOT a restriction — suggest whoever the rules point to:',
+      teamBlock,
+    );
+  }
   if (existingTitles.length) {
     userParts.push(
       '',
@@ -432,6 +523,15 @@ export async function generateProposedTaskDraftFromContext(
     if (task.department_id && !departments.some((d) => d.id === task.department_id)) {
       task.department_id = null;
     }
+  }
+
+  // Guard against hallucinated assignee ids: keep only ids that exist in the
+  // roster we offered the model (drops invented ids or names it echoed back).
+  const teamMemberIds = new Set(teamMembers.map((m) => m.id));
+  for (const task of parsed.tasks) {
+    task.suggested_assignee_ids = task.suggested_assignee_ids.filter((id) =>
+      teamMemberIds.has(id),
+    );
   }
 
   return parsed;

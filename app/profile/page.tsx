@@ -140,7 +140,8 @@ export default function ProfilePage() {
   const roleColors = {
     superadmin: 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300',
     manager: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
-    staff: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'
+    staff: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
+    vendor: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
   };
 
   return (

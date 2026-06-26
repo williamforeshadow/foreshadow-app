@@ -74,7 +74,7 @@ export interface ToolContext {
   actor?: {
     appUserId: string;
     name: string;
-    role: 'superadmin' | 'manager' | 'staff';
+    role: 'superadmin' | 'manager' | 'staff' | 'vendor';
   };
   /**
    * Surface this run originates on. Tools that write to audit/activity

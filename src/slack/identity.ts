@@ -32,7 +32,7 @@ export interface ResolvedIdentity {
    */
   appUserName: string;
   /** users.role — drives permission-related agent prompt hints. */
-  role: 'superadmin' | 'manager' | 'staff';
+  role: 'superadmin' | 'manager' | 'staff' | 'vendor';
 }
 
 interface CacheEntry {
@@ -91,7 +91,8 @@ export async function resolveSlackUser(
         const role =
           data.role === 'superadmin' ||
           data.role === 'manager' ||
-          data.role === 'staff'
+          data.role === 'staff' ||
+          data.role === 'vendor'
             ? data.role
             : 'staff';
         identity = {

@@ -1,5 +1,61 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { getCurrentAppUser } from '@/src/server/users/currentUser';
+
+// GET - a single department plus its member users (via user_departments).
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { error: authError } = await getCurrentAppUser();
+  if (authError === 'unauthenticated') {
+    return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
+  }
+
+  try {
+    const { id } = await params;
+    const supabase = getSupabaseServer();
+
+    const { data: department, error: deptErr } = await supabase
+      .from('departments')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (deptErr) {
+      const status = deptErr.code === 'PGRST116' ? 404 : 500;
+      return NextResponse.json({ error: deptErr.message }, { status });
+    }
+
+    const { data: links, error: linkErr } = await supabase
+      .from('user_departments')
+      .select('user_id')
+      .eq('department_id', id);
+    if (linkErr) {
+      return NextResponse.json({ error: linkErr.message }, { status: 500 });
+    }
+
+    const memberIds = ((links ?? []) as Array<{ user_id: string }>).map((l) => l.user_id);
+    let members: unknown[] = [];
+    if (memberIds.length > 0) {
+      const { data: users, error: usersErr } = await supabase
+        .from('users')
+        .select('id, name, email, role, avatar')
+        .in('id', memberIds)
+        .order('name');
+      if (usersErr) {
+        return NextResponse.json({ error: usersErr.message }, { status: 500 });
+      }
+      members = users ?? [];
+    }
+
+    return NextResponse.json({ department, members });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err.message || 'Failed to load department' },
+      { status: 500 }
+    );
+  }
+}
 
 // PUT - update a department
 export async function PUT(

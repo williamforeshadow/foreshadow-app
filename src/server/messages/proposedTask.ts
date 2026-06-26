@@ -41,6 +41,7 @@ export async function generateAndStoreProposedTask(
     description: task.description,
     priority: task.priority,
     department_id: task.department_id,
+    suggested_assignee_ids: task.suggested_assignee_ids,
     status: 'pending',
     source: 'auto',
     reasoning: result.reasoning || null,

@@ -6,7 +6,7 @@ export interface AppUser {
   id: string;
   name: string;
   email: string;
-  role: 'superadmin' | 'manager' | 'staff';
+  role: 'superadmin' | 'manager' | 'staff' | 'vendor';
   avatar?: string;
 }
 
