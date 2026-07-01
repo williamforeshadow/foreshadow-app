@@ -38,10 +38,17 @@ const inputSchema = z
 
 type Input = z.infer<typeof inputSchema>;
 
+export interface ConciergeProcedureExample {
+  label: string | null;
+  transcript: string;
+}
+
 export interface ConciergeProcedure {
   id: string;
   title: string;
   instructions: string;
+  /** Worked examples to imitate — reference for tone & judgment, not to quote. */
+  examples: ConciergeProcedureExample[];
 }
 
 async function handler(input: Input, ctx: ToolContext): Promise<ToolResult<ConciergeProcedure[]>> {
@@ -72,7 +79,12 @@ async function handler(input: Input, ctx: ToolContext): Promise<ToolResult<Conci
     };
     return {
       ok: true,
-      data: matched.map((r) => ({ id: r.id, title: r.title, instructions: r.instructions })),
+      data: matched.map((r) => ({
+        id: r.id,
+        title: r.title,
+        instructions: r.instructions,
+        examples: r.examples.map((e) => ({ label: e.label, transcript: e.transcript })),
+      })),
       meta,
     };
   } catch (err) {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { CheckCircle2, RotateCcw, Mail } from 'lucide-react';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -92,16 +93,34 @@ export default function ConversationPage() {
   const actions = conversation ? (
     <>
       {conversation.app_status === 'complete' ? (
-        <Button variant="outline" size="sm" onClick={() => patchStatus({ app_status: 'active' })}>
-          Reopen
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          title="Reopen"
+          aria-label="Reopen"
+          onClick={() => patchStatus({ app_status: 'active' })}
+        >
+          <RotateCcw className="h-4 w-4" />
         </Button>
       ) : (
-        <Button variant="default" size="sm" onClick={() => patchStatus({ app_status: 'complete' })}>
-          Mark complete
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          title="Mark complete"
+          aria-label="Mark complete"
+          onClick={() => patchStatus({ app_status: 'complete' })}
+        >
+          <CheckCircle2 className="h-4 w-4" />
         </Button>
       )}
-      <Button variant="ghost" size="sm" onClick={() => patchStatus({ unread: true })}>
-        Mark unread
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        title="Mark unread"
+        aria-label="Mark unread"
+        onClick={() => patchStatus({ unread: true })}
+      >
+        <Mail className="h-4 w-4" />
       </Button>
     </>
   ) : null;

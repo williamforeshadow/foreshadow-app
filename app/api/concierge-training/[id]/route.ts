@@ -87,7 +87,19 @@ export async function PATCH(
       property_ids = ((links ?? []) as Array<{ property_id: string }>).map((l) => l.property_id);
     }
 
-    return NextResponse.json({ rule: { ...rule, property_ids } });
+    // Examples are managed via the dedicated sub-routes; echo the current set so
+    // the returned rule has the same shape the list endpoint produces.
+    const { data: exRows } = await supabase
+      .from('concierge_training_examples')
+      .select('id, label, transcript')
+      .eq('training_id', id)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+    const examples = ((exRows ?? []) as Array<{ id: string; label: string | null; transcript: string | null }>)
+      .filter((e) => (e.transcript ?? '').trim())
+      .map((e) => ({ id: e.id, label: e.label?.trim() || null, transcript: (e.transcript ?? '').trim() }));
+
+    return NextResponse.json({ rule: { ...rule, property_ids, examples } });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to update rule';
     return NextResponse.json({ error: message }, { status: 500 });

@@ -1,12 +1,14 @@
 'use client';
 
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { MessagesSquare, AlertCircle, Clock } from 'lucide-react';
+import { MessagesSquare, AlertCircle, Clock, GraduationCap, Check, X } from 'lucide-react';
 import { UserAvatar } from '@/components/ui/user-avatar';
+import { Button } from '@/components/ui/button';
 import { MessageComposer } from '@/components/messages/MessageComposer';
 import { ProposedReply } from '@/components/messages/ProposedReply';
 import { ProposedTask, type ProposedTaskData } from '@/components/messages/ProposedTask';
 import { ProposedKnowledge, type ProposedKnowledgeData } from '@/components/messages/ProposedKnowledge';
+import { TurnIntoTrainingDialog } from '@/components/messages/TurnIntoTrainingDialog';
 import { canonicalChannelLabel } from '@/lib/bookingChannel';
 import type { GuestMessageRecord } from '@/lib/messages';
 
@@ -107,11 +109,33 @@ export function ConversationThread({
   const [prevConvId, setPrevConvId] = useState(conversationId);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
+  // "Turn into training": pick one or more messages, then promote them into a
+  // concierge training block via TurnIntoTrainingDialog.
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [turnIntoOpen, setTurnIntoOpen] = useState(false);
+
+  const exitSelection = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   // Reset per-conversation UI when the open conversation changes (render-time
   // reset — React's recommended pattern, avoids a setState-in-effect).
   if (conversationId !== prevConvId) {
     setPrevConvId(conversationId);
     setComposerText('');
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+    setTurnIntoOpen(false);
   }
 
   // The latest actually-sent message (future-dated host automations don't count).
@@ -168,6 +192,59 @@ export function ConversationThread({
     if (el) el.scrollTop = el.scrollHeight;
   }, [conversationId, messages.length, lastInboundId, proposedReply, proposedTasks.length, proposedKnowledge.length]);
 
+  // "Turn into training" now lives as a header icon (next to the status actions).
+  // Clicking it enters selection mode; while selecting, it becomes a compact
+  // confirm + cancel. Hidden when there's nothing to select (failed/empty thread).
+  const canSelect = !!conversationId && messages.length > 0 && !(error && messages.length === 0);
+  // Guardrail: a training example must include at least one HOST message — you
+  // can't teach the Agent how to reply from guest messages alone.
+  const selectedHasHost = messages.some(
+    (m) => m.direction === 'outbound' && selectedIds.has(m.id),
+  );
+  const canConfirmSelection = selectedIds.size > 0 && selectedHasHost;
+  const selectionControls = canSelect ? (
+    selectionMode ? (
+      <div className="flex items-center gap-1.5">
+        <span
+          title={
+            selectedIds.size > 0 && !selectedHasHost
+              ? 'Select at least one host message to train on'
+              : undefined
+          }
+        >
+          <Button
+            size="sm"
+            className="rounded-full"
+            disabled={!canConfirmSelection}
+            onClick={() => setTurnIntoOpen(true)}
+          >
+            <GraduationCap className="mr-1.5 h-3.5 w-3.5" />
+            Turn into training{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
+          </Button>
+        </span>
+        <button
+          type="button"
+          onClick={exitSelection}
+          aria-label="Cancel selection"
+          title="Cancel"
+          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.08]"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    ) : (
+      <button
+        type="button"
+        onClick={() => setSelectionMode(true)}
+        aria-label="Turn into training"
+        title="Turn into training"
+        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.08]"
+      >
+        <GraduationCap className="h-4 w-4" />
+      </button>
+    )
+  ) : null;
+
   const header = showHeader ? (
     <div className="msg-divider flex shrink-0 items-center gap-3 border-b px-4 py-3">
       <UserAvatar name={guestName ?? 'Guest'} size="md" />
@@ -183,11 +260,17 @@ export function ConversationThread({
           </div>
         ) : null}
       </div>
-      {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+      {actions || selectionControls ? (
+        <div className="flex shrink-0 items-center gap-2">
+          {actions}
+          {selectionControls}
+        </div>
+      ) : null}
     </div>
-  ) : actions ? (
+  ) : actions || selectionControls ? (
     <div className="msg-divider flex shrink-0 items-center justify-end gap-2 border-b px-4 py-2">
       {actions}
+      {selectionControls}
     </div>
   ) : null;
 
@@ -232,6 +315,7 @@ export function ConversationThread({
           const prev = messages[i - 1];
           const next = messages[i + 1];
           const outbound = m.direction === 'outbound';
+          const isSelected = selectedIds.has(m.id);
           const ts = whenOf(m);
           // Only an OUTBOUND message with a future send time is scheduled (a
           // Hostaway automation). A guest's inbound message is always already
@@ -267,10 +351,24 @@ export function ConversationThread({
               ) : null}
 
               <div
+                onClick={selectionMode ? () => toggleSelect(m.id) : undefined}
                 className={`flex items-end gap-2 ${outbound ? 'justify-end' : 'justify-start'} ${
                   prevHadProposal ? 'mt-4' : firstOfRun ? 'mt-2' : 'mt-0.5'
-                }`}
+                } ${selectionMode ? 'cursor-pointer' : ''}`}
               >
+                {selectionMode ? (
+                  <span
+                    className={`order-last flex h-4 w-4 shrink-0 items-center justify-center self-center rounded-full border transition-colors ${
+                      isSelected
+                        ? 'border-[var(--accent-3)] bg-[var(--accent-3)] text-white'
+                        : 'border-muted-foreground/40'
+                    } ${!outbound ? 'ml-auto' : ''}`}
+                    aria-hidden
+                  >
+                    {isSelected ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+                  </span>
+                ) : null}
+
                 {!outbound ? (
                   <span className="w-7 shrink-0">
                     {lastOfRun ? (
@@ -283,6 +381,8 @@ export function ConversationThread({
                   <div
                     style={{ borderRadius: roundedFor(outbound, firstOfRun, lastOfRun) }}
                     className={`px-3.5 py-2 text-sm leading-relaxed ${
+                      isSelected ? 'ring-2 ring-[var(--accent-3)] ring-offset-1 ring-offset-[var(--surface)]' : ''
+                    } ${
                       scheduled
                         ? 'border border-dashed border-[var(--accent-3)]/50 bg-[var(--accent-bg-soft)] text-foreground dark:border-[var(--accent-1)]/50 dark:bg-[var(--accent-bg-soft-dark)]'
                         : outbound
@@ -399,6 +499,19 @@ export function ConversationThread({
           value={composerText}
           onChange={setComposerText}
           focusSignal={focusSignal}
+        />
+      ) : null}
+      {turnIntoOpen && conversationId ? (
+        <TurnIntoTrainingDialog
+          conversationId={conversationId}
+          messageIds={[...selectedIds]}
+          propertyId={propertyId}
+          propertyName={propertyName}
+          onClose={() => setTurnIntoOpen(false)}
+          onCreated={() => {
+            setTurnIntoOpen(false);
+            exitSelection();
+          }}
         />
       ) : null}
     </div>

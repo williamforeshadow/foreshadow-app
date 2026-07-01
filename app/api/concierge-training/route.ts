@@ -10,6 +10,12 @@ import { getCurrentAppUser } from '@/src/server/users/currentUser';
 export type ConciergeTrainingCategory = 'reply' | 'task';
 export type ConciergeTrainingTier = 'always' | 'situational';
 
+export interface ConciergeTrainingExample {
+  id: string;
+  label: string | null;
+  transcript: string;
+}
+
 export interface ConciergeTrainingRule {
   id: string;
   title: string;
@@ -25,6 +31,8 @@ export interface ConciergeTrainingRule {
   is_active: boolean;
   sort_order: number;
   property_ids: string[];
+  /** Worked example transcripts attached to this block. */
+  examples: ConciergeTrainingExample[];
   created_at: string;
   updated_at: string;
 }
@@ -35,6 +43,32 @@ function normalizeCategory(value: unknown): ConciergeTrainingCategory {
 
 function normalizeTier(value: unknown): ConciergeTrainingTier {
   return value === 'situational' ? 'situational' : 'always';
+}
+
+/** Shape of an example as accepted from the client on create. */
+export interface ConciergeTrainingExampleInput {
+  label: string | null;
+  transcript: string;
+  source_conversation_id: string | null;
+}
+
+/** Normalize a client-supplied examples array, dropping blanks. */
+export function normalizeExamples(value: unknown): ConciergeTrainingExampleInput[] {
+  if (!Array.isArray(value)) return [];
+  const out: ConciergeTrainingExampleInput[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object') continue;
+    const r = raw as Record<string, unknown>;
+    const transcript = typeof r.transcript === 'string' ? r.transcript.trim() : '';
+    if (!transcript) continue;
+    const label = typeof r.label === 'string' && r.label.trim() ? r.label.trim() : null;
+    const sourceConversationId =
+      typeof r.source_conversation_id === 'string' && r.source_conversation_id.trim()
+        ? r.source_conversation_id.trim()
+        : null;
+    out.push({ label, transcript, source_conversation_id: sourceConversationId });
+  }
+  return out;
 }
 
 // GET /api/concierge-training — all rules with their associated property ids.
@@ -69,6 +103,32 @@ export async function GET() {
       byRule.set(l.training_id, list);
     }
 
+    // Examples are supplementary — never fail the whole rule list on them. If the
+    // table is missing (migration not yet applied) or the query errors, degrade
+    // to "no examples" so the page still renders, matching the draft path's
+    // "training is enhancement, not a hard dependency" posture.
+    const { data: exampleRows, error: exErr } = await supabase
+      .from('concierge_training_examples')
+      .select('id, training_id, label, transcript')
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (exErr) {
+      console.warn('[concierge-training] example hydration skipped:', exErr.message);
+    }
+    const examplesByRule = new Map<string, ConciergeTrainingExample[]>();
+    for (const e of (exampleRows ?? []) as Array<{
+      id: string;
+      training_id: string;
+      label: string | null;
+      transcript: string | null;
+    }>) {
+      const transcript = (e.transcript ?? '').trim();
+      if (!transcript) continue;
+      const list = examplesByRule.get(e.training_id) ?? [];
+      list.push({ id: e.id, label: e.label?.trim() || null, transcript });
+      examplesByRule.set(e.training_id, list);
+    }
+
     const rules: ConciergeTrainingRule[] = ((rows ?? []) as Array<Record<string, unknown>>).map((r) => ({
       id: r.id as string,
       title: (r.title as string | null) ?? '',
@@ -79,6 +139,7 @@ export async function GET() {
       is_active: Boolean(r.is_active),
       sort_order: (r.sort_order as number | null) ?? 0,
       property_ids: byRule.get(r.id as string) ?? [],
+      examples: examplesByRule.get(r.id as string) ?? [],
       created_at: r.created_at as string,
       updated_at: r.updated_at as string,
     }));
@@ -108,6 +169,7 @@ export async function POST(request: NextRequest) {
     const propertyIds: string[] = Array.isArray(body.property_ids)
       ? body.property_ids.filter((p: unknown): p is string => typeof p === 'string')
       : [];
+    const examples = normalizeExamples(body.examples);
 
     if (!title) {
       return NextResponse.json({ error: 'A title is required' }, { status: 400 });
@@ -143,7 +205,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ rule: { ...rule, property_ids } }, { status: 201 });
+    let createdExamples: ConciergeTrainingExample[] = [];
+    if (examples.length > 0) {
+      const { data: exRows, error: exErr } = await supabase
+        .from('concierge_training_examples')
+        .insert(
+          examples.map((e, i) => ({
+            training_id: rule.id,
+            label: e.label,
+            transcript: e.transcript,
+            source_conversation_id: e.source_conversation_id,
+            sort_order: i,
+            created_by_user_id: user?.id ?? null,
+          })),
+        )
+        .select('id, label, transcript');
+      if (exErr) {
+        return NextResponse.json({ error: exErr.message }, { status: 500 });
+      }
+      createdExamples = ((exRows ?? []) as Array<{ id: string; label: string | null; transcript: string }>).map(
+        (e) => ({ id: e.id, label: e.label?.trim() || null, transcript: e.transcript }),
+      );
+    }
+
+    return NextResponse.json(
+      { rule: { ...rule, property_ids, examples: createdExamples } },
+      { status: 201 },
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to create rule';
     return NextResponse.json({ error: message }, { status: 500 });
