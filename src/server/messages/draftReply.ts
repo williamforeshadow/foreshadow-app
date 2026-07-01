@@ -25,6 +25,7 @@ import {
   formatTrainingIndexForPrompt,
 } from './conciergeTraining';
 import { loadConciergeToolFlags } from './conciergeCapabilities';
+import { resolveOpsToday } from './opsToday';
 import type { GuestMessageRecord } from '@/lib/messages';
 
 // The Concierge's curated, read-only toolset. One tool for now — it can look up
@@ -253,7 +254,9 @@ export async function generateGuestReplyDraftFromContext(
     propBathrooms = (propRow?.bathrooms as number | null) ?? null;
   }
 
-  const today = opts.today ?? new Date().toISOString().slice(0, 10);
+  // Resolve "today" in the property's (or org default) timezone, not UTC — so a
+  // late-evening US time doesn't push the guest's stay relationship a day forward.
+  const today = opts.today ?? (await resolveOpsToday(ctx.conversation.property_id));
   const { stay } = ctx;
   const inLabel = stay.booked ? 'Check-in' : 'Requested check-in';
   const outLabel = stay.booked ? 'Check-out' : 'Requested check-out';
