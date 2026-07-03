@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import {
   notifyTaskAssigned,
   notifyTaskBinChanged,
@@ -62,6 +61,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId, appUser } = ctx;
+
     const { id } = await params;
     const body = await request.json();
     const {
@@ -84,7 +87,7 @@ export async function PUT(
       updated_at: new Date().toISOString(),
     };
     let previousAssigneeIds: string[] = [];
-    const actor = { user_id: getActorUserIdFromRequest(request) };
+    const actor = { user_id: appUser.id };
     let previousTask: PreviousTaskState | null = null;
 
     if (title !== undefined) updateData.title = title;
@@ -113,7 +116,7 @@ export async function PUT(
       property_id !== undefined ||
       template_id !== undefined
     ) {
-      const { data: existing } = await getSupabaseServer()
+      const { data: existing } = await supabase
         .from('turnover_tasks')
         .select('property_name, property_id, template_id')
         .eq('id', id)
@@ -139,7 +142,7 @@ export async function PUT(
       scheduled_date !== undefined ||
       scheduled_time !== undefined
     ) {
-      const { data: existingTask } = await getSupabaseServer()
+      const { data: existingTask } = await supabase
         .from('turnover_tasks')
         .select('title, description, priority, bin_id, is_binned, status, scheduled_date, scheduled_time')
         .eq('id', id)
@@ -147,7 +150,7 @@ export async function PUT(
       previousTask = (existingTask as PreviousTaskState | null) ?? null;
     }
 
-    const { error: updateError } = await getSupabaseServer()
+    const { error: updateError } = await supabase
       .from('turnover_tasks')
       .update(updateData)
       .eq('id', id);
@@ -163,14 +166,14 @@ export async function PUT(
         ? [assigned_user_ids]
         : [];
 
-      const { data: previousAssignments } = await getSupabaseServer()
+      const { data: previousAssignments } = await supabase
         .from('task_assignments')
         .select('user_id')
         .eq('task_id', id);
       previousAssigneeIds =
         previousAssignments?.map((row: { user_id: string }) => row.user_id) ?? [];
 
-      await getSupabaseServer()
+      await supabase
         .from('task_assignments')
         .delete()
         .eq('task_id', id);
@@ -179,9 +182,10 @@ export async function PUT(
         const assignments = userIds.map((userId) => ({
           task_id: id,
           user_id: userId,
+          org_id: orgId,
         }));
 
-        await getSupabaseServer().from('task_assignments').insert(assignments);
+        await supabase.from('task_assignments').insert(assignments);
       }
 
       await notifyTaskAssigned({
@@ -198,7 +202,7 @@ export async function PUT(
       });
     }
 
-    const { data, error: fetchError } = await getSupabaseServer()
+    const { data, error: fetchError } = await supabase
       .from('turnover_tasks')
       .select(`
         id,
@@ -342,9 +346,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { id } = await params;
 
-    const { error } = await getSupabaseServer()
+    const { error } = await supabase
       .from('turnover_tasks')
       .delete()
       .eq('id', id);

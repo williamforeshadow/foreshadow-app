@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 import { ATTRIBUTE_SCOPES, type AttributeScope } from '@/lib/propertyAttributes';
 
@@ -15,10 +14,13 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
+
   const { id } = await params;
   const scope = req.nextUrl.searchParams.get('scope');
 
-  const supabase = getSupabaseServer();
   let query = supabase
     .from('property_rooms')
     .select(
@@ -56,6 +58,10 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId, appUser } = ctx;
+
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
 
@@ -84,8 +90,6 @@ export async function POST(
     }
   }
 
-  const supabase = getSupabaseServer();
-
   const { data: prop, error: propErr } = await supabase
     .from('properties')
     .select('id')
@@ -98,7 +102,7 @@ export async function POST(
     return NextResponse.json({ error: 'Property not found' }, { status: 404 });
   }
 
-  const actorUserId = getActorUserIdFromRequest(req);
+  const actorUserId = appUser.id;
 
   const payload = {
     property_id: id,
@@ -111,6 +115,7 @@ export async function POST(
         : 0,
     created_by_user_id: actorUserId,
     updated_by_user_id: actorUserId,
+    org_id: orgId,
   };
 
   const { data, error } = await supabase

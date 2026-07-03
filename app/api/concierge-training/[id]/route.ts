@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getCurrentAppUser } from '@/src/server/users/currentUser';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // Concierge Training CRUD — update + delete a single rule. Property
 // associations are replaced wholesale (delete-all-then-insert) when
@@ -11,17 +10,16 @@ export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { user, error: authError } = await getCurrentAppUser();
-  if (authError === 'unauthenticated') {
-    return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
-  }
-
   const { id } = await context.params;
 
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId, appUser } = ctx;
+
     const body = await request.json();
     const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (user?.id) update.updated_by_user_id = user.id;
+    update.updated_by_user_id = appUser.id;
 
     if (typeof body.title === 'string') {
       const title = body.title.trim();
@@ -37,7 +35,6 @@ export async function PATCH(
     if (typeof body.applies_to_all === 'boolean') update.applies_to_all = body.applies_to_all;
     if (typeof body.sort_order === 'number') update.sort_order = body.sort_order;
 
-    const supabase = getSupabaseServer();
     const { data: rule, error } = await supabase
       .from('concierge_training')
       .update(update)
@@ -73,7 +70,7 @@ export async function PATCH(
       if (property_ids.length > 0) {
         const { error: insErr } = await supabase
           .from('concierge_training_properties')
-          .insert(property_ids.map((property_id) => ({ training_id: id, property_id })));
+          .insert(property_ids.map((property_id) => ({ training_id: id, property_id, org_id: orgId })));
         if (insErr) {
           return NextResponse.json({ error: insErr.message }, { status: 500 });
         }
@@ -111,15 +108,14 @@ export async function DELETE(
   _request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { error: authError } = await getCurrentAppUser();
-  if (authError === 'unauthenticated') {
-    return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
-  }
-
   const { id } = await context.params;
 
   try {
-    const { error } = await getSupabaseServer()
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
+    const { error } = await supabase
       .from('concierge_training')
       .delete()
       .eq('id', id);

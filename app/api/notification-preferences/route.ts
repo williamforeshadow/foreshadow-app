@@ -1,22 +1,22 @@
 import { NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   defaultNotificationPreference,
   NOTIFICATION_TYPES,
   type NotificationPreference,
   type NotificationType,
 } from '@/lib/notifications';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getCurrentAppUser } from '@/src/server/users/currentUser';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { DEFAULT_TIMEZONE } from '@/src/lib/dates';
 
 const DUE_TODAY_TIME_PATTERN = /^[0-2][0-9]:[0-5][0-9]$/;
 
-async function getOrgTimezone(): Promise<string> {
+async function getOrgTimezone(supabase: SupabaseClient, orgId: string): Promise<string> {
   try {
-    const { data } = await getSupabaseServer()
+    const { data } = await supabase
       .from('operations_settings')
       .select('default_timezone')
-      .eq('id', 1)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (typeof data?.default_timezone === 'string' && data.default_timezone) {
       return data.default_timezone;
@@ -34,36 +34,17 @@ function isNotificationType(value: unknown): value is NotificationType {
   );
 }
 
-async function requireUser() {
-  const { user, error } = await getCurrentAppUser();
-  if (error === 'unauthenticated') {
-    return {
-      response: NextResponse.json({ error: 'Not signed in' }, { status: 401 }),
-      user: null,
-    };
-  }
-  if (error === 'unlinked' || !user) {
-    return {
-      response: NextResponse.json(
-        { error: 'No Foreshadow profile is linked to this account' },
-        { status: 403 },
-      ),
-      user: null,
-    };
-  }
-  return { response: null, user };
-}
-
 export async function GET() {
-  const { response, user } = await requireUser();
-  if (response || !user) return response;
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, appUser, orgId } = ctx;
 
   const [{ data, error }, orgTimezone] = await Promise.all([
-    getSupabaseServer()
+    supabase
       .from('notification_preferences')
       .select('type, native_enabled, slack_enabled, push_enabled, due_today_time')
-      .eq('user_id', user.id),
-    getOrgTimezone(),
+      .eq('user_id', appUser.id),
+    getOrgTimezone(supabase, orgId),
   ]);
 
   if (error) {
@@ -95,8 +76,9 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  const { response, user } = await requireUser();
-  if (response || !user) return response;
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, appUser, orgId } = ctx;
 
   const body = await request.json().catch(() => ({}));
   const incoming = Array.isArray(body?.preferences)
@@ -117,9 +99,10 @@ export async function PATCH(request: Request) {
         slack_enabled: boolean;
         push_enabled: boolean;
         updated_at: string;
+        org_id: string;
         due_today_time?: string | null;
       } = {
-        user_id: user.id,
+        user_id: appUser.id,
         type,
         native_enabled:
           typeof pref.native_enabled === 'boolean' ? pref.native_enabled : true,
@@ -128,6 +111,7 @@ export async function PATCH(request: Request) {
         push_enabled:
           typeof pref.push_enabled === 'boolean' ? pref.push_enabled : true,
         updated_at: now,
+        org_id: orgId,
       };
       if (type === 'task_due_today') {
         const t = pref.due_today_time;
@@ -147,7 +131,7 @@ export async function PATCH(request: Request) {
     );
   }
 
-  const { error } = await getSupabaseServer()
+  const { error } = await supabase
     .from('notification_preferences')
     .upsert(rows, { onConflict: 'user_id,type' });
 

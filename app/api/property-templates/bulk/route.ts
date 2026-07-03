@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // POST bulk update property assignments for a template
 //
@@ -10,6 +10,10 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 // migration. When both are provided, `property_ids` wins.
 export async function POST(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
+
     const body = await request.json();
     const { template_id, property_names, property_ids, automation_config } = body;
 
@@ -29,8 +33,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    const supabase = getSupabaseServer();
 
     // Resolve to { id, name } pairs by whichever side the caller provided.
     let pairs: Array<{ property_id: string; property_name: string }> = [];
@@ -93,6 +95,7 @@ export async function POST(request: Request) {
         property_name: pair.property_name,
         template_id,
         enabled: true,
+        org_id: orgId,
         // Include automation_config if provided (applies to all properties in bulk)
         ...(automation_config !== undefined && { automation_config }),
       }));

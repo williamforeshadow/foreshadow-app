@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // GET all templates
 export async function GET() {
   try {
-    const { data, error } = await getSupabaseServer()
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
+    const { data, error } = await supabase
       .from('templates')
       .select('*, departments(id, name)')
       .order('created_at', { ascending: false });
@@ -35,6 +39,10 @@ export async function GET() {
 // POST create new template
 export async function POST(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
+
     const body = await request.json();
     const { name, description, fields, department_id } = body;
 
@@ -45,13 +53,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('templates')
       .insert({
         name,
         description,
         fields,
         department_id: department_id || null,
+        org_id: orgId,
       })
       .select()
       .single();

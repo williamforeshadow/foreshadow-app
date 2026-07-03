@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import {
   notifyTaskAssigned,
   notifyTaskUnassigned,
@@ -9,6 +8,10 @@ import {
 // POST - Update task assignments (replaces all existing assignments)
 export async function POST(request: NextRequest) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId, appUser } = ctx;
+
     const { taskId, userIds } = await request.json();
 
     if (!taskId) {
@@ -17,7 +20,7 @@ export async function POST(request: NextRequest) {
 
     // Ensure userIds is an array
     const assigneeIds: string[] = Array.isArray(userIds) ? userIds : (userIds ? [userIds] : []);
-    const previousAssignments = await getSupabaseServer()
+    const previousAssignments = await supabase
       .from('task_assignments')
       .select('user_id')
       .eq('task_id', taskId);
@@ -26,7 +29,7 @@ export async function POST(request: NextRequest) {
         ?.map((row) => row.user_id) ?? [];
 
     // Delete existing assignments for this task
-    const { error: deleteError } = await getSupabaseServer()
+    const { error: deleteError } = await supabase
       .from('task_assignments')
       .delete()
       .eq('task_id', taskId);
@@ -40,10 +43,11 @@ export async function POST(request: NextRequest) {
     if (assigneeIds.length > 0) {
       const assignments = assigneeIds.map(userId => ({
         task_id: taskId,
-        user_id: userId
+        user_id: userId,
+        org_id: orgId
       }));
 
-      const { error: insertError } = await getSupabaseServer()
+      const { error: insertError } = await supabase
         .from('task_assignments')
         .insert(assignments);
 
@@ -54,7 +58,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch the updated task with assignments
-    const { data: task, error: fetchError } = await getSupabaseServer()
+    const { data: task, error: fetchError } = await supabase
       .from('turnover_tasks')
       .select(`
         *,
@@ -71,7 +75,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: fetchError.message }, { status: 500 });
     }
 
-    const actor = { user_id: getActorUserIdFromRequest(request) };
+    const actor = { user_id: appUser.id };
     await notifyTaskAssigned({
       taskId,
       previousAssigneeIds,
@@ -96,6 +100,10 @@ export async function POST(request: NextRequest) {
 // GET - Get assignments for a specific task
 export async function GET(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get('task_id');
 
@@ -103,7 +111,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'task_id is required' }, { status: 400 });
     }
 
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('task_assignments')
       .select(`
         user_id,

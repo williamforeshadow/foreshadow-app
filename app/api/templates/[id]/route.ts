@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { mergeTemplateFields } from '@/lib/templateUtils';
 
 // GET single template
@@ -11,9 +11,13 @@ export async function GET(
   const { id } = await params;
   const { searchParams } = new URL(request.url);
   const propertyName = searchParams.get('property_name');
-  
+
   try {
-    const { data: rawData, error } = await getSupabaseServer()
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
+    const { data: rawData, error } = await supabase
       .from('templates')
       .select('*, departments(id, name)')
       .eq('id', id)
@@ -42,7 +46,7 @@ export async function GET(
 
     // If a property_name is supplied, look up field_overrides and merge
     if (propertyName) {
-      const { data: ptRow } = await getSupabaseServer()
+      const { data: ptRow } = await supabase
         .from('property_templates')
         .select('field_overrides')
         .eq('template_id', id)
@@ -69,8 +73,12 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  
+
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const body = await request.json();
     const { name, description, fields, department_id } = body;
 
@@ -81,7 +89,7 @@ export async function PUT(
       );
     }
 
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('templates')
       .update({
         name,
@@ -116,9 +124,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  
+
   try {
-    const { error } = await getSupabaseServer()
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
+    const { error } = await supabase
       .from('templates')
       .delete()
       .eq('id', id);

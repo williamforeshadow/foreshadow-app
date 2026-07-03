@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 export async function POST(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const cleaningId = formData.get('cleaningId') as string;
@@ -42,7 +46,7 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(arrayBuffer);
 
     // Upload to getSupabaseServer() Storage
-    const { data, error } = await getSupabaseServer().storage
+    const { data, error } = await supabase.storage
       .from('cleaning-photos')
       .upload(fileName, buffer, {
         contentType: file.type,
@@ -58,7 +62,7 @@ export async function POST(request: Request) {
     }
 
     // Get public URL
-    const { data: { publicUrl } } = getSupabaseServer().storage
+    const { data: { publicUrl } } = supabase.storage
       .from('cleaning-photos')
       .getPublicUrl(fileName);
 
@@ -79,6 +83,10 @@ export async function POST(request: Request) {
 // DELETE endpoint to remove photos
 export async function DELETE(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { searchParams } = new URL(request.url);
     const fileName = searchParams.get('fileName');
 
@@ -89,7 +97,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const { error } = await getSupabaseServer().storage
+    const { error } = await supabase.storage
       .from('cleaning-photos')
       .remove([fileName]);
 

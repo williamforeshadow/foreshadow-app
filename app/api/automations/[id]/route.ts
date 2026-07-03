@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import {
   parseAutomationInput,
   summarizeAutomationFromRow,
@@ -9,8 +9,10 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
   const { id } = await params;
-  const supabase = getSupabaseServer();
   const { data, error } = await supabase
     .from('automations')
     .select('*')
@@ -27,6 +29,9 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
   const { id } = await params;
   const body = await req.json();
   const parsed = parseAutomationInput(body);
@@ -35,7 +40,6 @@ export async function PUT(
   }
   const { name, enabled, trigger, conditions, actions, property_ids } = parsed.value;
 
-  const supabase = getSupabaseServer();
   const { data, error } = await supabase
     .from('automations')
     .update({
@@ -63,8 +67,10 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
   const { id } = await params;
-  const supabase = getSupabaseServer();
   const { error } = await supabase
     .from('automations')
     .delete()

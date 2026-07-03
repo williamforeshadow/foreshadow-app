@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // GET /api/reservations/[id]/with-window-tasks
 //
@@ -32,12 +32,14 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
+
   const { id } = await context.params;
   if (!id) {
     return NextResponse.json({ error: 'id is required' }, { status: 400 });
   }
-
-  const supabase = getSupabaseServer();
 
   const { data: reservation, error: resError } = await supabase
     .from('reservations')

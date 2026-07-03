@@ -1,29 +1,19 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getCurrentAppUser } from '@/src/server/users/currentUser';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { deriveReservationStatus, type ConversationTab } from '@/lib/conversations';
 import { todayInTz, DEFAULT_TIMEZONE } from '@/src/lib/dates';
 
 // Conversation inbox list. Workspace-global (any authed manager). Server-side
 // tab + sort; the 6 filters are applied client-side over the loaded tab.
 export async function GET(request: Request) {
-  const { user, error } = await getCurrentAppUser();
-  if (error === 'unauthenticated') {
-    return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
-  }
-  if (error === 'unlinked' || !user) {
-    return NextResponse.json(
-      { error: 'No Foreshadow profile is linked to this account' },
-      { status: 403 },
-    );
-  }
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
 
   const { searchParams } = new URL(request.url);
   const tab: ConversationTab =
     searchParams.get('tab') === 'complete' ? 'complete' : 'active';
   const ascending = searchParams.get('sort') === 'oldest';
-
-  const supabase = getSupabaseServer();
 
   const [{ data, error: listError }, activeCount, completeCount, unreadCount] =
     await Promise.all([

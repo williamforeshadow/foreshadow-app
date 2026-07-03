@@ -1,20 +1,17 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getCurrentAppUser } from '@/src/server/users/currentUser';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // GET - a single department plus its member users (via user_departments).
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { error: authError } = await getCurrentAppUser();
-  if (authError === 'unauthenticated') {
-    return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
-  }
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
 
   try {
     const { id } = await params;
-    const supabase = getSupabaseServer();
 
     const { data: department, error: deptErr } = await supabase
       .from('departments')
@@ -63,6 +60,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { id } = await params;
     const body = await request.json();
     const { name, icon } = body;
@@ -78,7 +79,7 @@ export async function PUT(
       );
     }
 
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('departments')
       .update(updateData)
       .eq('id', id)
@@ -113,20 +114,24 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { id } = await params;
 
     // Check if department is in use by templates or tasks
-    const { count: templateCount } = await getSupabaseServer()
+    const { count: templateCount } = await supabase
       .from('templates')
       .select('id', { count: 'exact', head: true })
       .eq('department_id', id);
 
-    const { count: taskCount } = await getSupabaseServer()
+    const { count: taskCount } = await supabase
       .from('turnover_tasks')
       .select('id', { count: 'exact', head: true })
       .eq('department_id', id);
 
-    const { count: projectCount } = await getSupabaseServer()
+    const { count: projectCount } = await supabase
       .from('property_projects')
       .select('id', { count: 'exact', head: true })
       .eq('department_id', id);
@@ -142,7 +147,7 @@ export async function DELETE(
       );
     }
 
-    const { error } = await getSupabaseServer()
+    const { error } = await supabase
       .from('departments')
       .delete()
       .eq('id', id);

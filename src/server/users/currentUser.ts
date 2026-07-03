@@ -10,6 +10,7 @@ export interface CurrentAppUser {
   email: string;
   role: AppRole;
   avatar?: string | null;
+  org_id: string | null;
 }
 
 interface UserRow extends CurrentAppUser {
@@ -23,7 +24,7 @@ export async function findCurrentAppUserFromAuth(
 
   const byAuthId = await service
     .from('users')
-    .select('id, name, email, role, avatar, auth_user_id')
+    .select('id, name, email, role, avatar, auth_user_id, org_id')
     .eq('auth_user_id', authUser.id)
     .maybeSingle();
 
@@ -36,7 +37,7 @@ export async function findCurrentAppUserFromAuth(
 
   const byEmail = await service
     .from('users')
-    .select('id, name, email, role, avatar, auth_user_id')
+    .select('id, name, email, role, avatar, auth_user_id, org_id')
     .ilike('email', email)
     .maybeSingle();
 
@@ -47,7 +48,7 @@ export async function findCurrentAppUserFromAuth(
         .from('users')
         .update({ auth_user_id: authUser.id, updated_at: new Date().toISOString() })
         .eq('id', appUser.id)
-        .select('id, name, email, role, avatar, auth_user_id')
+        .select('id, name, email, role, avatar, auth_user_id, org_id')
         .single();
       return (data as UserRow | null) ?? appUser;
     }

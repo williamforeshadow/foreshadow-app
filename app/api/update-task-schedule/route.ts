@@ -1,23 +1,26 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { notifyTaskScheduleChanged } from '@/src/server/notifications/notify';
 
 export async function POST(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, appUser } = ctx;
+
     const { taskId, scheduledDate, scheduledTime } = await request.json();
 
     if (!taskId) {
       return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
     }
 
-    const { data: existing } = await getSupabaseServer()
+    const { data: existing } = await supabase
       .from('turnover_tasks')
       .select('scheduled_date, scheduled_time')
       .eq('id', taskId)
       .maybeSingle();
 
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('turnover_tasks')
       .update({ 
         scheduled_date: scheduledDate ?? null,
@@ -48,7 +51,7 @@ export async function POST(request: Request) {
           scheduled_date: data.scheduled_date ?? null,
           scheduled_time: data.scheduled_time ?? null,
         },
-        actor: { user_id: getActorUserIdFromRequest(request) },
+        actor: { user_id: appUser.id },
       });
     }
 

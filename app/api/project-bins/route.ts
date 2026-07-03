@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { createBin } from '@/src/server/bins/createBin';
 
 // GET - List all bins with project counts
 export async function GET() {
   try {
-    const supabase = getSupabaseServer();
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
 
     const { data: bins, error } = await supabase
       .from('project_bins')

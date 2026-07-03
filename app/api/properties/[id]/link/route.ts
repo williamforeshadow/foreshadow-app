@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { fetchListings } from '@/lib/hostaway';
 
 // POST /api/properties/:id/link
@@ -27,6 +27,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
     const rawHostawayId = body?.hostaway_listing_id;
@@ -41,8 +45,6 @@ export async function POST(
         { status: 400 }
       );
     }
-
-    const supabase = getSupabaseServer();
 
     const { data: survivor, error: survivorErr } = await supabase
       .from('properties')

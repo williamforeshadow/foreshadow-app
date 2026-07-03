@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 
 // Singleton-style, one row per property in `property_connectivity`.
@@ -23,8 +22,11 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
+
   const { id } = await params;
-  const supabase = getSupabaseServer();
 
   const { data, error } = await supabase
     .from('property_connectivity')
@@ -43,6 +45,10 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId, appUser } = ctx;
+
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
 
@@ -64,8 +70,6 @@ export async function PUT(
     payload[field] = trimmed === '' ? null : trimmed;
   }
 
-  const supabase = getSupabaseServer();
-
   const { data: prop, error: propErr } = await supabase
     .from('properties')
     .select('id')
@@ -78,7 +82,7 @@ export async function PUT(
     return NextResponse.json({ error: 'Property not found' }, { status: 404 });
   }
 
-  const actorUserId = getActorUserIdFromRequest(req);
+  const actorUserId = appUser.id;
 
   // Pre-read for create/update disambiguation + per-field diff. See
   // /access route for the same pattern.
@@ -90,6 +94,7 @@ export async function PUT(
 
   const upsertPayload: Record<string, unknown> = {
     ...payload,
+    org_id: orgId,
     updated_at: new Date().toISOString(),
     updated_by_user_id: actorUserId,
   };

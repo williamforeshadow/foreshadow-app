@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // POST multipart/form-data { file: File }
 // Uploads to the `property-photos` public bucket under an unguessable
@@ -18,6 +18,10 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; accountId: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
+
   const { id, accountId } = await params;
 
   const formData = await req.formData().catch(() => null);
@@ -40,8 +44,6 @@ export async function POST(
       { status: 400 }
     );
   }
-
-  const supabase = getSupabaseServer();
 
   const { data: account, error: accountErr } = await supabase
     .from('property_tech_accounts')
@@ -92,6 +94,7 @@ export async function POST(
       account_id: accountId,
       storage_path: storagePath,
       sort_order: count ?? 0,
+      org_id: orgId,
     })
     .select('id, storage_path, sort_order')
     .maybeSingle();

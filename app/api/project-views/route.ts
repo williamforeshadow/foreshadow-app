@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // GET - Fetch all project views for a user (to determine which have unread activity)
 export async function GET(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('user_id');
 
@@ -11,7 +15,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'user_id is required' }, { status: 400 });
     }
 
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('project_views')
       .select('project_id, last_viewed_at')
       .eq('user_id', userId);
@@ -37,6 +41,10 @@ export async function GET(request: Request) {
 // POST - Record that a user viewed a project (upsert)
 export async function POST(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
+
     const body = await request.json();
     const { project_id, user_id } = body;
 
@@ -48,13 +56,14 @@ export async function POST(request: Request) {
     }
 
     // Upsert: insert if not exists, update timestamp if exists
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('project_views')
       .upsert(
         {
           project_id,
           user_id,
-          last_viewed_at: new Date().toISOString()
+          last_viewed_at: new Date().toISOString(),
+          org_id: orgId
         },
         {
           onConflict: 'project_id,user_id'

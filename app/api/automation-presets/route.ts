@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // GET all automation presets
 export async function GET() {
   try {
-    const { data, error } = await getSupabaseServer()
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
+    const { data, error } = await supabase
       .from('automation_presets')
       .select('*')
       .order('created_at', { ascending: false });
@@ -28,6 +32,10 @@ export async function GET() {
 // POST create new automation preset
 export async function POST(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
+
     const body = await request.json();
     const { name, description, trigger_type, config } = body;
 
@@ -47,13 +55,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('automation_presets')
       .insert({
         name,
         description: description || null,
         trigger_type,
-        config
+        config,
+        org_id: orgId
       })
       .select()
       .single();

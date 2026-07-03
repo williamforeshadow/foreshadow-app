@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getCurrentAppUser } from '@/src/server/users/currentUser';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // POST /api/concierge-training/[id]/examples — append one worked example to an
 // existing training block. Used by "Add to existing block" (promote a
@@ -11,14 +10,13 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { user, error: authError } = await getCurrentAppUser();
-  if (authError === 'unauthenticated') {
-    return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
-  }
-
   const { id } = await context.params;
 
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId, appUser } = ctx;
+
     const body = await request.json();
     const transcript = typeof body.transcript === 'string' ? body.transcript.trim() : '';
     if (!transcript) {
@@ -29,8 +27,6 @@ export async function POST(
       typeof body.source_conversation_id === 'string' && body.source_conversation_id.trim()
         ? body.source_conversation_id.trim()
         : null;
-
-    const supabase = getSupabaseServer();
 
     // Confirm the parent exists so we return 404 (not a silent orphan insert).
     const { data: parent, error: parentErr } = await supabase
@@ -59,7 +55,8 @@ export async function POST(
         transcript,
         source_conversation_id: sourceConversationId,
         sort_order: count ?? 0,
-        created_by_user_id: user?.id ?? null,
+        created_by_user_id: appUser.id,
+        org_id: orgId,
       })
       .select('id, label, transcript')
       .single();

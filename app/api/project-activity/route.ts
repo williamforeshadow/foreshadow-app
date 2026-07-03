@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 
 // GET - Fetch activity log for a project
 export async function GET(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get('project_id');
     const limit = parseInt(searchParams.get('limit') || '50');
@@ -13,7 +18,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'project_id is required' }, { status: 400 });
     }
 
-    const { data, error, count } = await getSupabaseServer()
+    const { data, error, count } = await supabase
       .from('project_activity_log')
       .select(`
         *,
@@ -49,6 +54,10 @@ export async function GET(request: Request) {
 // POST - Log a new activity
 export async function POST(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
+
     const body = await request.json();
     const { project_id, user_id, action_type, description, old_value, new_value } = body;
 
@@ -59,7 +68,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('project_activity_log')
       .insert({
         project_id,
@@ -67,7 +76,8 @@ export async function POST(request: Request) {
         action_type,
         description,
         old_value: old_value || null,
-        new_value: new_value || null
+        new_value: new_value || null,
+        org_id: orgId
       })
       .select(`
         *,

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 import { CONTACT_TAG_SET, normalizeContactTags, type ContactTag } from '@/lib/propertyAttributes';
 
@@ -9,10 +8,13 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
+
   const { id } = await params;
   const tag = req.nextUrl.searchParams.get('tag');
 
-  const supabase = getSupabaseServer();
   let query = supabase
     .from('property_contacts')
     .select('*')
@@ -39,6 +41,10 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId, appUser } = ctx;
+
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
 
@@ -50,7 +56,7 @@ export async function POST(
   const pickString = (v: unknown) =>
     typeof v === 'string' && v.trim() !== '' ? v.trim() : null;
 
-  const actorUserId = getActorUserIdFromRequest(req);
+  const actorUserId = appUser.id;
 
   const payload = {
     property_id: id,
@@ -68,9 +74,8 @@ export async function POST(
         : 0,
     created_by_user_id: actorUserId,
     updated_by_user_id: actorUserId,
+    org_id: orgId,
   };
-
-  const supabase = getSupabaseServer();
 
   const { data: prop, error: propErr } = await supabase
     .from('properties')

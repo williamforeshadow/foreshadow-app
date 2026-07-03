@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getCurrentAppUser } from '@/src/server/users/currentUser';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import {
   isVisibilityResourceType,
   isSingletonFieldType,
@@ -20,15 +19,14 @@ export async function GET(
   _request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { error: authError } = await getCurrentAppUser();
-  if (authError === 'unauthenticated') {
-    return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
-  }
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
 
   const { id: propertyId } = await context.params;
 
   try {
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('property_knowledge_visibility')
       .select('resource_type, resource_id')
       .eq('property_id', propertyId);
@@ -47,10 +45,9 @@ export async function PUT(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { user, error: authError } = await getCurrentAppUser();
-  if (authError === 'unauthenticated') {
-    return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
-  }
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId, appUser } = ctx;
 
   const { id: propertyId } = await context.params;
 
@@ -79,8 +76,6 @@ export async function PUT(
       }
     }
 
-    const supabase = getSupabaseServer();
-
     if (visible) {
       const { error } = await supabase
         .from('property_knowledge_visibility')
@@ -89,7 +84,8 @@ export async function PUT(
             property_id: propertyId,
             resource_type: resourceType,
             resource_id: resourceId,
-            created_by_user_id: user?.id ?? null,
+            created_by_user_id: appUser.id,
+            org_id: orgId,
           },
           { onConflict: 'property_id,resource_type,resource_id', ignoreDuplicates: true },
         );

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 
 const DOCUMENT_TAGS = new Set([
@@ -23,10 +22,13 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
+
   const { id } = await params;
   const tag = req.nextUrl.searchParams.get('tag');
 
-  const supabase = getSupabaseServer();
   let query = supabase
     .from('property_documents')
     .select('*')
@@ -52,6 +54,10 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId, appUser } = ctx;
+
   const { id } = await params;
 
   const formData = await req.formData().catch(() => null);
@@ -87,8 +93,6 @@ export async function POST(
       ? notesRaw.trim()
       : null;
 
-  const supabase = getSupabaseServer();
-
   const { data: prop, error: propErr } = await supabase
     .from('properties')
     .select('id')
@@ -117,7 +121,7 @@ export async function POST(
     return NextResponse.json({ error: uploadErr.message }, { status: 500 });
   }
 
-  const actorUserId = getActorUserIdFromRequest(req);
+  const actorUserId = appUser.id;
 
   const { data: row, error: insertErr } = await supabase
     .from('property_documents')
@@ -132,6 +136,7 @@ export async function POST(
       original_filename: file.name,
       created_by_user_id: actorUserId,
       updated_by_user_id: actorUserId,
+      org_id: orgId,
     })
     .select('*')
     .maybeSingle();

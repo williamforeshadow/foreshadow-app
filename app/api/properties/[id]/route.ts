@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // GET /api/properties/:id — fetch a single property's full profile.
 //
@@ -18,8 +18,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { id } = await params;
-    const supabase = getSupabaseServer();
 
     const { data, error } = await supabase
       .from('properties')
@@ -71,9 +74,12 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { id } = await params;
     const body = await req.json();
-    const supabase = getSupabaseServer();
 
     // Partition incoming body into name (special) vs direct column updates.
     const directUpdates: Record<string, unknown> = {};

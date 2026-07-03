@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 250;
@@ -23,11 +23,15 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
+
   const { id } = await params;
   const limit = clampLimit(req.nextUrl.searchParams.get('limit'));
   const offset = parseOffset(req.nextUrl.searchParams.get('offset'));
 
-  const { data, error, count } = await getSupabaseServer()
+  const { data, error, count } = await supabase
     .from('property_knowledge_activity_log')
     .select(
       `

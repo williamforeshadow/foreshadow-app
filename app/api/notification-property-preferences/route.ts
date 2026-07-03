@@ -3,8 +3,7 @@ import {
   PROPERTY_NOTIFICATION_TYPES,
   type PropertyNotificationType,
 } from '@/lib/notifications';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getCurrentAppUser } from '@/src/server/users/currentUser';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // Per-property opt-in preferences for the two conversation-scoped proposal
 // notifications. Opt-IN: a row means the user wants that (property, type); its
@@ -18,34 +17,15 @@ function isPropertyType(value: unknown): value is PropertyNotificationType {
   );
 }
 
-async function requireUser() {
-  const { user, error } = await getCurrentAppUser();
-  if (error === 'unauthenticated') {
-    return {
-      response: NextResponse.json({ error: 'Not signed in' }, { status: 401 }),
-      user: null,
-    };
-  }
-  if (error === 'unlinked' || !user) {
-    return {
-      response: NextResponse.json(
-        { error: 'No Foreshadow profile is linked to this account' },
-        { status: 403 },
-      ),
-      user: null,
-    };
-  }
-  return { response: null, user };
-}
-
 export async function GET() {
-  const { response, user } = await requireUser();
-  if (response || !user) return response;
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, appUser } = ctx;
 
-  const { data, error } = await getSupabaseServer()
+  const { data, error } = await supabase
     .from('notification_property_preferences')
     .select('property_id, type, native_enabled, slack_enabled, push_enabled')
-    .eq('user_id', user.id);
+    .eq('user_id', appUser.id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -55,8 +35,9 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  const { response, user } = await requireUser();
-  if (response || !user) return response;
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, appUser, orgId } = ctx;
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   if (!isPropertyType(body.type)) {
@@ -71,14 +52,12 @@ export async function PATCH(request: Request) {
   const slack = typeof body.slack_enabled === 'boolean' ? body.slack_enabled : false;
   const push = typeof body.push_enabled === 'boolean' ? body.push_enabled : true;
 
-  const supabase = getSupabaseServer();
-
   // All channels off → opt OUT entirely (delete the row).
   if (!native && !slack && !push) {
     const { error } = await supabase
       .from('notification_property_preferences')
       .delete()
-      .eq('user_id', user.id)
+      .eq('user_id', appUser.id)
       .eq('property_id', propertyId)
       .eq('type', body.type);
     if (error) {
@@ -91,13 +70,14 @@ export async function PATCH(request: Request) {
     .from('notification_property_preferences')
     .upsert(
       {
-        user_id: user.id,
+        user_id: appUser.id,
         property_id: propertyId,
         type: body.type,
         native_enabled: native,
         slack_enabled: slack,
         push_enabled: push,
         updated_at: new Date().toISOString(),
+        org_id: orgId,
       },
       { onConflict: 'user_id,property_id,type' },
     );

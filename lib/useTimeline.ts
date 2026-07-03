@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase } from '@/lib/supabaseClient';
 import { apiFetch } from '@/lib/apiFetch';
 
 export function useTimeline() {
@@ -42,43 +41,21 @@ export function useTimeline() {
     setLoading(true);
     try {
       // Fetch reservations (turnovers) and recurring tasks in parallel
-      const [turnoversResult, recurringResult, blocksResult] = await Promise.all([
-        supabase.rpc('get_property_turnovers'),
-        supabase
-          .from('turnover_tasks')
-          .select(`
-            id,
-            property_name,
-            template_id,
-            title,
-            description,
-            priority,
-            bin_id,
-            is_binned,
-            department_id,
-            status,
-            scheduled_date,
-            scheduled_time,
-            form_metadata,
-            completed_at,
-            created_at,
-            updated_at,
-            templates(id, name, department_id),
-            departments(id, name),
-            task_assignments(user_id, users(id, name, avatar, role))
-          `)
-          .is('reservation_id', null)
-          .order('scheduled_date', { ascending: true, nullsFirst: false }),
+      const [turnoversRes, recurringRes, blocksResult] = await Promise.all([
+        apiFetch('/api/turnovers'),
+        apiFetch('/api/recurring-tasks'),
         apiFetch('/api/calendar-blocks'),
       ]);
 
-      if (turnoversResult.error) throw turnoversResult.error;
+      const turnoversJson = await turnoversRes.json();
+      if (!turnoversRes.ok) throw new Error(turnoversJson.error || 'Failed to fetch turnovers');
+      const recurringJson = recurringRes.ok ? await recurringRes.json() : { data: [] };
 
-      const turnoversData = turnoversResult.data || [];
+      const turnoversData = turnoversJson.data || [];
       setReservations(turnoversData);
 
       // Transform recurring tasks to match the Task shape
-      const recurringData = (recurringResult.data || []).map((t: any) => ({
+      const recurringData = (recurringJson.data || []).map((t: any) => ({
         task_id: t.id,
         template_id: t.template_id,
         template_name: t.templates?.name || 'Unnamed Task',

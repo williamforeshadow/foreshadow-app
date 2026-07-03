@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // DELETE - Remove a task from a turnover card
 export async function DELETE(
@@ -7,6 +7,10 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { id } = await params;
 
     if (!id) {
@@ -17,7 +21,7 @@ export async function DELETE(
     }
 
     // Delete the task
-    const { error } = await getSupabaseServer()
+    const { error } = await supabase
       .from('turnover_tasks')
       .delete()
       .eq('id', id);

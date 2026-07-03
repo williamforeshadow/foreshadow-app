@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // PUT - Update a bin
 export async function PUT(
@@ -7,6 +7,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { id } = await params;
     const body = await request.json();
     const {
@@ -16,8 +20,6 @@ export async function PUT(
       auto_dismiss_enabled,
       auto_dismiss_days,
     } = body;
-
-    const supabase = getSupabaseServer();
 
     // Look up the target row so we can enforce system-bin guardrails.
     const { data: existing, error: fetchErr } = await supabase
@@ -85,8 +87,11 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { id } = await params;
-    const supabase = getSupabaseServer();
 
     // Reject attempts to delete a protected system bin.
     const { data: existing, error: fetchErr } = await supabase

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 
 // Whitelist of editable fields for property_access. Kept narrow so a
@@ -36,8 +35,11 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
+
   const { id } = await params;
-  const supabase = getSupabaseServer();
 
   const { data, error } = await supabase
     .from('property_access')
@@ -58,6 +60,10 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId, appUser } = ctx;
+
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
 
@@ -89,8 +95,6 @@ export async function PUT(
     payload[field] = trimmed;
   }
 
-  const supabase = getSupabaseServer();
-
   // Ensure the parent property exists to give a clean 404 instead of a
   // confusing FK violation from Postgres.
   const { data: prop, error: propErr } = await supabase
@@ -105,7 +109,7 @@ export async function PUT(
     return NextResponse.json({ error: 'Property not found' }, { status: 404 });
   }
 
-  const actorUserId = getActorUserIdFromRequest(req);
+  const actorUserId = appUser.id;
 
   // Pre-read so we can tell create vs update apart (PUT is upsert) and
   // produce a precise per-field diff for the activity ledger.
@@ -117,6 +121,7 @@ export async function PUT(
 
   const upsertPayload: Record<string, unknown> = {
     ...payload,
+    org_id: orgId,
     updated_at: new Date().toISOString(),
     updated_by_user_id: actorUserId,
   };

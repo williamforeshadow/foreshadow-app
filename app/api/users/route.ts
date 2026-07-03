@@ -1,21 +1,14 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabaseSession';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // GET - Fetch all users
 export async function GET() {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
 
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
-    }
-
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('users')
       .select('id, name, email, role, avatar')
       .order('name');
@@ -32,4 +25,3 @@ export async function GET() {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

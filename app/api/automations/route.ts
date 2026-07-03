@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import {
   parseAutomationInput,
   summarizeAutomationFromRow,
@@ -12,7 +12,9 @@ import {
 // must be applied before these routes work.
 
 export async function GET() {
-  const supabase = getSupabaseServer();
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
   const { data, error } = await supabase
     .from('automations')
     .select('*')
@@ -29,6 +31,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
+
   const body = await req.json();
   const parsed = parseAutomationInput(body);
   if (!parsed.ok) {
@@ -36,10 +42,9 @@ export async function POST(req: NextRequest) {
   }
   const { name, enabled, trigger, conditions, actions, property_ids } = parsed.value;
 
-  const supabase = getSupabaseServer();
   const { data, error } = await supabase
     .from('automations')
-    .insert({ name, enabled, trigger, conditions, actions, property_ids })
+    .insert({ name, enabled, trigger, conditions, actions, property_ids, org_id: orgId })
     .select()
     .single();
 

@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getCurrentAppUser } from '@/src/server/users/currentUser';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // PATCH + DELETE /api/concierge-training/[id]/examples/[exampleId] — edit or
 // remove one worked example from a training block. Scoped by training_id so an
@@ -11,14 +10,13 @@ export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string; exampleId: string }> },
 ) {
-  const { error: authError } = await getCurrentAppUser();
-  if (authError === 'unauthenticated') {
-    return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
-  }
-
   const { id, exampleId } = await context.params;
 
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const body = await request.json();
     const update: Record<string, unknown> = {};
     if (typeof body.label === 'string') update.label = body.label.trim() || null;
@@ -34,7 +32,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
     }
 
-    const { data: row, error } = await getSupabaseServer()
+    const { data: row, error } = await supabase
       .from('concierge_training_examples')
       .update(update)
       .eq('id', exampleId)
@@ -59,15 +57,14 @@ export async function DELETE(
   _request: NextRequest,
   context: { params: Promise<{ id: string; exampleId: string }> },
 ) {
-  const { error: authError } = await getCurrentAppUser();
-  if (authError === 'unauthenticated') {
-    return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
-  }
-
   const { id, exampleId } = await context.params;
 
   try {
-    const { error } = await getSupabaseServer()
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
+    const { error } = await supabase
       .from('concierge_training_examples')
       .delete()
       .eq('id', exampleId)

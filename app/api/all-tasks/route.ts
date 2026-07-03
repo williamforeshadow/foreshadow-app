@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // GET /api/all-tasks
 //
@@ -15,11 +15,15 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 // list row itself.
 export async function GET(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const propertyName = searchParams.get('property_name');
 
-    let query = getSupabaseServer()
+    let query = supabase
       .from('turnover_tasks')
       .select(`
         id,

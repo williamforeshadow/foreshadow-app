@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 
 // PATCH /api/properties/[id]/rooms/[roomId]
@@ -11,6 +10,10 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; roomId: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, appUser } = ctx;
+
   const { id, roomId } = await params;
   const body = await req.json().catch(() => ({}));
   const patch: Record<string, unknown> = {};
@@ -62,12 +65,10 @@ export async function PATCH(
   }
 
   patch.updated_at = new Date().toISOString();
-  const actorUserId = getActorUserIdFromRequest(req);
+  const actorUserId = appUser.id;
   if (actorUserId) {
     patch.updated_by_user_id = actorUserId;
   }
-
-  const supabase = getSupabaseServer();
 
   const { data: before } = await supabase
     .from('property_rooms')
@@ -132,8 +133,11 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; roomId: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, appUser } = ctx;
+
   const { id, roomId } = await params;
-  const supabase = getSupabaseServer();
 
   // Verify the room belongs to this property before we start listing
   // storage objects. We pull title/notes here for the ledger snapshot —
@@ -192,7 +196,7 @@ export async function DELETE(
     await supabase.storage.from('property-photos').remove(paths);
   }
 
-  const actorUserId = getActorUserIdFromRequest(req);
+  const actorUserId = appUser.id;
   await logPropertyKnowledgeActivity({
     property_id: id,
     user_id: actorUserId,

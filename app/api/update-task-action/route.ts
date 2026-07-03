@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { notifyTaskStatusChanged } from '@/src/server/notifications/notify';
 
 export async function POST(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, appUser } = ctx;
+
     const { taskId, action } = await request.json();
 
     if (!taskId || !action) {
@@ -16,7 +19,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid action provided' }, { status: 400 });
     }
 
-    const { data: existing } = await getSupabaseServer()
+    const { data: existing } = await supabase
       .from('turnover_tasks')
       .select('status')
       .eq('id', taskId)
@@ -26,7 +29,7 @@ export async function POST(request: Request) {
     // surfaces (bins auto-dismiss countdown, sweeps, reporting) work
     // regardless of which surface the user completed the task from. Mirrors
     // the same logic in PUT /api/tasks-for-bin/[id].
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('turnover_tasks')
       .update({
         status: action,
@@ -51,7 +54,7 @@ export async function POST(request: Request) {
         taskId,
         beforeStatus: existing.status ?? null,
         afterStatus: data.status ?? null,
-        actor: { user_id: getActorUserIdFromRequest(request) },
+        actor: { user_id: appUser.id },
       });
     }
 

@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { createTask, type CreatedTask } from '@/src/server/tasks/createTask';
 
 export async function GET(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { searchParams } = new URL(request.url);
     const binId = searchParams.get('bin_id');
     const viewerUserId = searchParams.get('viewer_user_id');
@@ -52,26 +55,26 @@ export async function GET(request: Request) {
     let query;
 
     if (binId === '__all__') {
-      query = getSupabaseServer()
+      query = supabase
         .from('turnover_tasks')
         .select(selectFields)
         .is('reservation_id', null)
         .order('created_at', { ascending: false });
     } else if (binId === '__every__') {
-      query = getSupabaseServer()
+      query = supabase
         .from('turnover_tasks')
         .select(selectFields)
         .eq('is_binned', true)
         .order('created_at', { ascending: false });
     } else if (binId) {
-      query = getSupabaseServer()
+      query = supabase
         .from('turnover_tasks')
         .select(selectFields)
         .eq('bin_id', binId)
         .order('created_at', { ascending: false });
     } else {
       // Task Bin: orphan binned tasks only (binned but no specific sub-bin).
-      query = getSupabaseServer()
+      query = supabase
         .from('turnover_tasks')
         .select(selectFields)
         .eq('is_binned', true)
@@ -87,7 +90,7 @@ export async function GET(request: Request) {
 
     let unreadCounts: Record<string, number> = {};
     if (viewerUserId) {
-      const { data: viewsData } = await getSupabaseServer()
+      const { data: viewsData } = await supabase
         .from('project_views')
         .select('project_id, last_viewed_at')
         .eq('user_id', viewerUserId);
@@ -99,7 +102,7 @@ export async function GET(request: Request) {
 
       const taskIds = data?.map((t: any) => t.id) || [];
       if (taskIds.length > 0) {
-        const { data: allComments } = await getSupabaseServer()
+        const { data: allComments } = await supabase
           .from('project_comments')
           .select('task_id, user_id, created_at')
           .in('task_id', taskIds);
@@ -175,6 +178,10 @@ export async function GET(request: Request) {
 // binned tasks (Task Bin) — a case the bin_id-only contract can't express.
 export async function POST(request: NextRequest) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, appUser } = ctx;
+
     const body = await request.json();
 
     // Backward-compat: resolve property_name → property_id when the caller
@@ -186,7 +193,7 @@ export async function POST(request: NextRequest) {
       typeof body?.property_name === 'string' &&
       body.property_name.length > 0
     ) {
-      const { data: prop } = await getSupabaseServer()
+      const { data: prop } = await supabase
         .from('properties')
         .select('id')
         .eq('name', body.property_name)
@@ -210,7 +217,7 @@ export async function POST(request: NextRequest) {
       department_id: body?.department_id,
       template_id: body?.template_id,
       assigned_user_ids: body?.assigned_user_ids,
-    }, { actor: { user_id: getActorUserIdFromRequest(request) } });
+    }, { actor: { user_id: appUser.id } });
 
     if (!result.ok) {
       const status =

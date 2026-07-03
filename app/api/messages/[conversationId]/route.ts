@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getCurrentAppUser } from '@/src/server/users/currentUser';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { taskUrl } from '@/src/lib/links';
 
 // Thread for one conversation: the conversation header + its messages (oldest
@@ -9,19 +8,11 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ conversationId: string }> },
 ) {
-  const { user, error } = await getCurrentAppUser();
-  if (error === 'unauthenticated') {
-    return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
-  }
-  if (error === 'unlinked' || !user) {
-    return NextResponse.json(
-      { error: 'No Foreshadow profile is linked to this account' },
-      { status: 403 },
-    );
-  }
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
 
   const { conversationId } = await context.params;
-  const supabase = getSupabaseServer();
 
   const { data: conversation, error: convError } = await supabase
     .from('conversations')

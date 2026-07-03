@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 
 const DOCUMENT_TAGS = new Set([
@@ -17,6 +16,10 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; docId: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, appUser } = ctx;
+
   const { id, docId } = await params;
   const body = await req.json().catch(() => ({}));
   const patch: Record<string, unknown> = {};
@@ -44,12 +47,10 @@ export async function PATCH(
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
   }
   patch.updated_at = new Date().toISOString();
-  const actorUserId = getActorUserIdFromRequest(req);
+  const actorUserId = appUser.id;
   if (actorUserId) {
     patch.updated_by_user_id = actorUserId;
   }
-
-  const supabase = getSupabaseServer();
 
   const { data: before } = await supabase
     .from('property_documents')
@@ -101,8 +102,11 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; docId: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, appUser } = ctx;
+
   const { id, docId } = await params;
-  const supabase = getSupabaseServer();
 
   const { data: doc, error: fetchErr } = await supabase
     .from('property_documents')
@@ -132,7 +136,7 @@ export async function DELETE(
       .remove([doc.storage_path]);
   }
 
-  const actorUserId = getActorUserIdFromRequest(req);
+  const actorUserId = appUser.id;
   await logPropertyKnowledgeActivity({
     property_id: id,
     user_id: actorUserId,

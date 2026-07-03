@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { logProjectActivity } from '@/lib/logProjectActivity';
 
 // Helper to format seconds to HH:MM:SS
@@ -13,13 +13,17 @@ function formatDuration(seconds: number): string {
 // GET - Fetch time entries for a project/task or check for active timer
 export async function GET(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get('project_id');
     const taskId = searchParams.get('task_id');
     const userId = searchParams.get('user_id');
     const activeOnly = searchParams.get('active') === 'true';
 
-    let query = getSupabaseServer()
+    let query = supabase
       .from('project_time_entries')
       .select(`
         *,
@@ -80,6 +84,10 @@ export async function GET(request: Request) {
 // POST - Start a new timer
 export async function POST(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
+
     const body = await request.json();
     const { project_id, task_id, user_id, notes } = body;
 
@@ -91,7 +99,7 @@ export async function POST(request: Request) {
     }
 
     // Close any orphan entries (no end_time) for this user on this entity before starting
-    let orphanQuery = getSupabaseServer()
+    let orphanQuery = supabase
       .from('project_time_entries')
       .select('id, start_time')
       .eq('user_id', user_id)
@@ -107,7 +115,7 @@ export async function POST(request: Request) {
 
     if (orphans && orphans.length > 0) {
       for (const orphan of orphans) {
-        await getSupabaseServer()
+        await supabase
           .from('project_time_entries')
           .update({ end_time: new Date().toISOString() })
           .eq('id', orphan.id)
@@ -120,11 +128,12 @@ export async function POST(request: Request) {
       user_id,
       notes: notes || null,
       start_time: new Date().toISOString(),
+      org_id: orgId,
     };
     if (task_id) insertData.task_id = task_id;
     if (project_id) insertData.project_id = project_id;
 
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('project_time_entries')
       .insert(insertData)
       .select(`
@@ -153,12 +162,16 @@ export async function POST(request: Request) {
 // PUT - Stop a timer (set end_time)
 export async function PUT(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const body = await request.json();
     const { entry_id, project_id, user_id } = body;
 
     // If entry_id provided, stop that specific entry
     if (entry_id) {
-      const { data, error } = await getSupabaseServer()
+      const { data, error } = await supabase
         .from('project_time_entries')
         .update({ end_time: new Date().toISOString() })
         .eq('id', entry_id)
@@ -199,7 +212,7 @@ export async function PUT(request: Request) {
       );
     }
 
-    let stopQuery = getSupabaseServer()
+    let stopQuery = supabase
       .from('project_time_entries')
       .update({ end_time: new Date().toISOString() })
       .eq('user_id', user_id)
@@ -246,6 +259,10 @@ export async function PUT(request: Request) {
 // DELETE - Remove a time entry
 export async function DELETE(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { searchParams } = new URL(request.url);
     const entryId = searchParams.get('entry_id');
 
@@ -253,7 +270,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'entry_id is required' }, { status: 400 });
     }
 
-    const { error } = await getSupabaseServer()
+    const { error } = await supabase
       .from('project_time_entries')
       .delete()
       .eq('id', entryId);

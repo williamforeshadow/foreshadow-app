@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 export async function POST(request: NextRequest) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { cleaningId, staffName } = await request.json();
 
     if (!cleaningId) {
@@ -14,7 +18,7 @@ export async function POST(request: NextRequest) {
 
     // Update the assigned_staff field in cleanings table
     // staffName can be null to unassign
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('cleanings')
       .update({ assigned_staff: staffName })
       .eq('id', cleaningId)

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { testFireAutomation } from '@/src/server/automations/run';
 
 // POST /api/automations/[id]/test
@@ -19,6 +19,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
   const { id } = await params;
   let body: { sample_row?: Record<string, unknown> } = {};
   try {
@@ -29,7 +32,6 @@ export async function POST(
 
   let sampleRow = body.sample_row;
   if (!sampleRow) {
-    const supabase = getSupabaseServer();
     const { data, error } = await supabase
       .from('reservations')
       .select('*')

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 import {
   TECH_ACCOUNT_KINDS,
@@ -17,8 +16,11 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
+
   const { id } = await params;
-  const supabase = getSupabaseServer();
 
   const { data, error } = await supabase
     .from('property_tech_accounts')
@@ -43,6 +45,10 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId, appUser } = ctx;
+
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
 
@@ -69,8 +75,6 @@ export async function POST(
     if (trimmed !== '') service_name = trimmed;
   }
 
-  const supabase = getSupabaseServer();
-
   const { data: prop, error: propErr } = await supabase
     .from('properties')
     .select('id')
@@ -90,7 +94,7 @@ export async function POST(
     .select('*', { count: 'exact', head: true })
     .eq('property_id', id);
 
-  const actorUserId = getActorUserIdFromRequest(req);
+  const actorUserId = appUser.id;
 
   const { data, error } = await supabase
     .from('property_tech_accounts')
@@ -101,6 +105,7 @@ export async function POST(
       sort_order: count ?? 0,
       created_by_user_id: actorUserId,
       updated_by_user_id: actorUserId,
+      org_id: orgId,
     })
     .select(
       `

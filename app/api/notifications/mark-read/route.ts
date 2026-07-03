@@ -1,25 +1,17 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getCurrentAppUser } from '@/src/server/users/currentUser';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 export async function POST(request: Request) {
-  const { user, error } = await getCurrentAppUser();
-  if (error === 'unauthenticated') {
-    return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
-  }
-  if (error === 'unlinked' || !user) {
-    return NextResponse.json(
-      { error: 'No Foreshadow profile is linked to this account' },
-      { status: 403 },
-    );
-  }
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, appUser } = ctx;
 
   const body = await request.json().catch(() => ({}));
   const now = new Date().toISOString();
-  let query = getSupabaseServer()
+  let query = supabase
     .from('notifications')
     .update({ read_at: now, updated_at: now })
-    .eq('user_id', user.id)
+    .eq('user_id', appUser.id)
     .eq('native_visible', true)
     .is('read_at', null);
 

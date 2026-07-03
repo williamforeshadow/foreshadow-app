@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { apiFetch } from '@/lib/apiFetch';
 import { Button } from '@/components/ui/button';
 
 interface TimelineProps {
@@ -65,11 +65,12 @@ export default function Timeline({ onCardClick }: TimelineProps) {
   const fetchReservations = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .rpc('get_property_turnovers');
+      const res = await apiFetch('/api/turnovers');
+      const json = await res.json();
 
-      if (error) throw error;
+      if (!res.ok) throw new Error(json.error || 'Failed to fetch turnovers');
 
+      const data = json.data;
       setReservations(data || []);
       
       // Get unique properties, sorted alphabetically

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // Read-only calendar-blocks feed for the multi-property Timeline. calendar_blocks
 // is service-role-only (RLS on, no policies), so the browser can't read it
@@ -12,7 +12,9 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 // — falling back to properties.name only when the property has no reservations —
 // so a block lands on the same row as its property's bookings.
 export async function GET() {
-  const supabase = getSupabaseServer();
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
   const today = new Date().toISOString().slice(0, 10);
 
   const [blocksRes, resNamesRes, propNamesRes] = await Promise.all([

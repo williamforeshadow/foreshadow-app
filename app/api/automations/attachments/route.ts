@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // POST /api/automations/attachments
 //
@@ -26,6 +26,10 @@ function randomSegment(len = 16) {
 }
 
 export async function POST(req: NextRequest) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
+
   const formData = await req.formData().catch(() => null);
   if (!formData) {
     return NextResponse.json({ error: 'Invalid form data' }, { status: 400 });
@@ -44,8 +48,6 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-
-  const supabase = getSupabaseServer();
 
   const ext = (file.name.match(/\.([a-zA-Z0-9]+)$/)?.[1] || 'bin').toLowerCase();
   const token = randomSegment(16);

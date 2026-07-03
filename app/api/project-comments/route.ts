@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { logProjectActivity } from '@/lib/logProjectActivity';
 import { notifyTaskCommented } from '@/src/server/notifications/notify';
 
 // GET - List comments for a specific project or task with user details
 export async function GET(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get('project_id');
     const taskId = searchParams.get('task_id');
@@ -17,7 +21,7 @@ export async function GET(request: Request) {
       );
     }
 
-    let query = getSupabaseServer()
+    let query = supabase
       .from('project_comments')
       .select(`
         *,
@@ -59,6 +63,10 @@ export async function GET(request: Request) {
 // POST - Create a new comment
 export async function POST(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
+
     const body = await request.json();
     const { project_id, task_id, user_id, comment_content } = body;
 
@@ -72,11 +80,12 @@ export async function POST(request: Request) {
     const insertData: Record<string, unknown> = {
       user_id,
       comment_content,
+      org_id: orgId,
     };
     if (task_id) insertData.task_id = task_id;
     if (project_id) insertData.project_id = project_id;
 
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('project_comments')
       .insert(insertData)
       .select(`

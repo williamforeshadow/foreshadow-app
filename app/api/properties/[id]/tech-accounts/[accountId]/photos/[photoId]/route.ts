@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 export async function DELETE(
   _req: NextRequest,
@@ -9,8 +9,11 @@ export async function DELETE(
     params: Promise<{ id: string; accountId: string; photoId: string }>;
   }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
+
   const { id, accountId, photoId } = await params;
-  const supabase = getSupabaseServer();
 
   // Verify the ownership chain before we touch anything.
   const { data: photo, error: fetchErr } = await supabase

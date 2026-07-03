@@ -2,7 +2,6 @@
 
 import { apiFetch } from '@/lib/apiFetch';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '@/lib/supabaseClient';
 import type { CleaningFilters } from '@/lib/cleaningFilters';
 import type { Turnover, Task, TurnoverStatus } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
@@ -55,12 +54,13 @@ export function useTurnovers() {
     setResponse(null);
 
     try {
-      const { data, error: rpcError } = await supabase.rpc('get_property_turnovers', {});
+      const res = await apiFetch('/api/turnovers');
+      const json = await res.json();
 
-      if (rpcError) {
-        setError(rpcError.message);
+      if (!res.ok) {
+        setError(json.error || 'Failed to fetch turnovers');
       } else {
-        setResponse(data);
+        setResponse(json.data);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch turnovers');

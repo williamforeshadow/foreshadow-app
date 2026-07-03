@@ -1,22 +1,20 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getCurrentAppUser } from '@/src/server/users/currentUser';
+import { requireAuthContext, type AuthContext } from '@/lib/requireAuthContext';
 
 // Department membership writes (user_departments join table). Add/remove are
 // immediate single-row actions, so this is a dedicated nested route rather than
 // a full-list replace. Both handlers are gated to superadmin/manager; reads of
 // membership live on the parent GET /api/departments/[id].
 
-// Resolve the signed-in user and confirm they may manage members.
-async function requireManager() {
-  const { user, error } = await getCurrentAppUser();
-  if (error === 'unauthenticated') {
-    return { error: NextResponse.json({ error: 'Not signed in' }, { status: 401 }) };
-  }
-  if (user?.role !== 'superadmin' && user?.role !== 'manager') {
+// Resolve the signed-in user + confirm they may manage members. Returns the
+// full auth context (user-scoped client + org) on success.
+async function requireManager(): Promise<{ error: NextResponse } | { ctx: AuthContext }> {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return { error: ctx };
+  if (ctx.appUser.role !== 'superadmin' && ctx.appUser.role !== 'manager') {
     return { error: NextResponse.json({ error: 'Not allowed' }, { status: 403 }) };
   }
-  return { user };
+  return { ctx };
 }
 
 // POST /api/departments/[id]/members  { user_id } — add a member (idempotent).
@@ -25,7 +23,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const gate = await requireManager();
-  if (gate.error) return gate.error;
+  if ('error' in gate) return gate.error;
+  const { supabase, orgId } = gate.ctx;
 
   try {
     const { id } = await params;
@@ -36,9 +35,9 @@ export async function POST(
     }
 
     // upsert so re-adding an existing member is a no-op, not a 23505 error.
-    const { error } = await getSupabaseServer()
+    const { error } = await supabase
       .from('user_departments')
-      .upsert({ user_id: userId, department_id: id }, { onConflict: 'user_id,department_id' });
+      .upsert({ user_id: userId, department_id: id, org_id: orgId }, { onConflict: 'user_id,department_id' });
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
@@ -57,7 +56,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const gate = await requireManager();
-  if (gate.error) return gate.error;
+  if ('error' in gate) return gate.error;
+  const { supabase } = gate.ctx;
 
   try {
     const { id } = await params;
@@ -66,7 +66,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'A user_id is required' }, { status: 400 });
     }
 
-    const { error } = await getSupabaseServer()
+    const { error } = await supabase
       .from('user_departments')
       .delete()
       .eq('department_id', id)

@@ -1,10 +1,14 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // GET all departments
 export async function GET() {
   try {
-    const { data, error } = await getSupabaseServer()
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
+    const { data, error } = await supabase
       .from('departments')
       .select('*')
       .order('name', { ascending: true });
@@ -28,6 +32,10 @@ export async function GET() {
 // POST - create a new department
 export async function POST(request: NextRequest) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
+
     const body = await request.json();
     const { name, icon } = body;
 
@@ -38,11 +46,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('departments')
       .insert({
         name: name.trim(),
         icon: icon || 'folder',
+        org_id: orgId,
       })
       .select()
       .single();

@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // /api/operations-settings
 //
@@ -163,14 +163,16 @@ function isMissingColumnError(error: unknown): boolean {
 
 export async function GET() {
   try {
-    const supabase = getSupabaseServer();
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
 
     // select('*') so a not-yet-applied `task_proposal_sensitivity` column
     // doesn't error the whole query — it's simply absent and we fall back.
     const { data, error } = await supabase
       .from('operations_settings')
       .select('*')
-      .eq('id', 1)
+      .eq('org_id', orgId)
       .maybeSingle();
 
     if (error) {
@@ -284,10 +286,12 @@ export async function PUT(request: NextRequest) {
       timezone = tz;
     }
 
-    const supabase = getSupabaseServer();
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
 
     const upsertPayload: Record<string, unknown> = {
-      id: 1,
+      org_id: orgId,
       default_check_in_time: checkIn,
       default_check_out_time: checkOut,
       updated_at: new Date().toISOString(),
@@ -298,7 +302,7 @@ export async function PUT(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('operations_settings')
-      .upsert(upsertPayload, { onConflict: 'id' })
+      .upsert(upsertPayload, { onConflict: 'org_id' })
       .select('default_check_in_time, default_check_out_time, default_timezone, updated_at')
       .single();
 
@@ -391,13 +395,15 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'No supported fields to update' }, { status: 400 });
     }
 
-    const supabase = getSupabaseServer();
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
     const now = new Date().toISOString();
 
     const { data: existing, error: readErr } = await supabase
       .from('operations_settings')
       .select('id')
-      .eq('id', 1)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (readErr && isMissingTableError(readErr)) {
       return NextResponse.json(
@@ -418,7 +424,7 @@ export async function PATCH(request: NextRequest) {
         ).error
       : (
           await supabase.from('operations_settings').insert({
-            id: 1,
+            org_id: orgId,
             default_check_in_time: FALLBACK_CHECK_IN,
             default_check_out_time: FALLBACK_CHECK_OUT,
             default_timezone: DEFAULT_TIMEZONE,

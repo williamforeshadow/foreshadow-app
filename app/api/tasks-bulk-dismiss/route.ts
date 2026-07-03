@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // Dismiss one or more tasks from their bins by setting is_binned=false and
 // bin_id=null. Works for any status (complete or not) — the caller decides
@@ -7,6 +7,10 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 // client can reconcile local state.
 export async function POST(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const body = await request.json();
     const { taskIds } = body as { taskIds?: unknown };
 
@@ -36,7 +40,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('turnover_tasks')
       .update({
         is_binned: false,

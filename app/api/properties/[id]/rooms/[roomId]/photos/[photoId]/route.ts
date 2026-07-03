@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // DELETE removes the DB row + the underlying storage object so the
 // bucket doesn't grow with orphans.
@@ -10,8 +10,11 @@ export async function DELETE(
     params,
   }: { params: Promise<{ id: string; roomId: string; photoId: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
+
   const { id, roomId, photoId } = await params;
-  const supabase = getSupabaseServer();
 
   const { data: photo, error: fetchErr } = await supabase
     .from('property_room_photos')

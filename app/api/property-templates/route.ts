@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // GET all property-template assignments
 export async function GET() {
   try {
-    const { data, error } = await getSupabaseServer()
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
+    const { data, error } = await supabase
       .from('property_templates')
       .select('*');
 
@@ -32,6 +36,10 @@ export async function GET() {
 // either column during the property_name → property_id migration.
 export async function POST(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
+
     const body = await request.json();
     const {
       property_name: inputPropertyName,
@@ -55,8 +63,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    const supabase = getSupabaseServer();
 
     // Resolve the missing half of (property_name, property_id)
     let resolvedName: string | null = inputPropertyName || null;
@@ -95,6 +101,7 @@ export async function POST(request: Request) {
       property_id: string;
       template_id: string;
       enabled: boolean;
+      org_id: string;
       automation_config?: object | null;
       field_overrides?: object | null;
     } = {
@@ -102,6 +109,7 @@ export async function POST(request: Request) {
       property_id: resolvedId!,
       template_id,
       enabled,
+      org_id: orgId,
     };
 
     if (automation_config !== undefined) {
@@ -143,6 +151,10 @@ export async function POST(request: Request) {
 // property_id is preferred when both are supplied.
 export async function DELETE(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { searchParams } = new URL(request.url);
     const property_name = searchParams.get('property_name');
     const property_id = searchParams.get('property_id');
@@ -155,7 +167,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    let query = getSupabaseServer()
+    let query = supabase
       .from('property_templates')
       .delete();
 

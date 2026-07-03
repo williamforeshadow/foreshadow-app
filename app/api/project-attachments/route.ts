@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { logProjectActivity } from '@/lib/logProjectActivity';
 import { notifyTaskAttachmentAdded } from '@/src/server/notifications/notify';
 
@@ -93,6 +93,10 @@ function errorMessage(err: unknown, fallback: string) {
 // GET - List all attachments for a project or task
 export async function GET(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get('project_id');
     const taskId = searchParams.get('task_id');
@@ -104,7 +108,7 @@ export async function GET(request: Request) {
       );
     }
 
-    let query = getSupabaseServer()
+    let query = supabase
       .from('project_attachments')
       .select(`
         *,
@@ -139,6 +143,10 @@ export async function GET(request: Request) {
 // POST - Upload a new attachment
 export async function POST(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const projectId = formData.get('project_id') as string | null;
@@ -174,7 +182,7 @@ export async function POST(request: Request) {
     }
 
     // Check attachment count for this entity (max 30)
-    let countQuery = getSupabaseServer()
+    let countQuery = supabase
       .from('project_attachments')
       .select('*', { count: 'exact', head: true });
     if (taskId) {
@@ -207,7 +215,7 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(arrayBuffer);
 
     // Upload to getSupabaseServer() Storage
-    const { error: uploadError } = await getSupabaseServer().storage
+    const { error: uploadError } = await supabase.storage
       .from('project-attachments')
       .upload(fileName, buffer, {
         contentType: file.type || 'application/octet-stream',
@@ -223,7 +231,7 @@ export async function POST(request: Request) {
     }
 
     // Get public URL
-    const { data: { publicUrl } } = getSupabaseServer().storage
+    const { data: { publicUrl } } = supabase.storage
       .from('project-attachments')
       .getPublicUrl(fileName);
 
@@ -235,11 +243,12 @@ export async function POST(request: Request) {
       mime_type: file.type || null,
       file_size: file.size,
       uploaded_by: uploadedBy || null,
+      org_id: orgId,
     };
     if (taskId) insertData.task_id = taskId;
     if (projectId) insertData.project_id = projectId;
 
-    const firstInsert = await getSupabaseServer()
+    const firstInsert = await supabase
       .from('project_attachments')
       .insert(insertData)
       .select(`
@@ -255,7 +264,7 @@ export async function POST(request: Request) {
       attachmentKind === 'document' &&
       dbError.message.includes('project_attachments_file_type_check')
     ) {
-      const fallbackInsert = await getSupabaseServer()
+      const fallbackInsert = await supabase
         .from('project_attachments')
         .insert({ ...insertData, file_type: 'image' })
         .select(`
@@ -270,7 +279,7 @@ export async function POST(request: Request) {
     if (dbError) {
       console.error('Database error:', dbError);
       // Try to clean up the uploaded file
-      await getSupabaseServer().storage.from('project-attachments').remove([fileName]);
+      await supabase.storage.from('project-attachments').remove([fileName]);
       return NextResponse.json(
         { error: dbError.message || 'Failed to save attachment record' },
         { status: 500 }
@@ -314,6 +323,10 @@ export async function POST(request: Request) {
 // DELETE - Remove an attachment
 export async function DELETE(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { searchParams } = new URL(request.url);
     const attachmentId = searchParams.get('id');
 
@@ -325,7 +338,7 @@ export async function DELETE(request: Request) {
     }
 
     // Get the attachment record first to get the file path
-    const { data: attachment, error: fetchError } = await getSupabaseServer()
+    const { data: attachment, error: fetchError } = await supabase
       .from('project_attachments')
       .select('*')
       .eq('id', attachmentId)
@@ -345,7 +358,7 @@ export async function DELETE(request: Request) {
 
     // Delete from storage
     if (filePath) {
-      const { error: storageError } = await getSupabaseServer().storage
+      const { error: storageError } = await supabase.storage
         .from('project-attachments')
         .remove([filePath]);
 
@@ -356,7 +369,7 @@ export async function DELETE(request: Request) {
     }
 
     // Delete from database
-    const { error: dbError } = await getSupabaseServer()
+    const { error: dbError } = await supabase
       .from('project_attachments')
       .delete()
       .eq('id', attachmentId);

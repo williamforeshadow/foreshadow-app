@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getCurrentAppUser } from '@/src/server/users/currentUser';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { normalizeTags } from '@/lib/propertyAttributes';
 import {
   encodeFieldResourceId,
@@ -19,7 +18,7 @@ import type { KnowledgeTarget } from '@/src/server/messages/draftKnowledge';
 
 export const maxDuration = 60;
 
-type Supabase = ReturnType<typeof getSupabaseServer>;
+type Supabase = SupabaseClient;
 
 interface ProposedKnowledgeRow {
   id: string;
@@ -32,29 +31,13 @@ interface ProposedKnowledgeRow {
   resulting_resource_id: string | null;
 }
 
-async function requireUser() {
-  const { user, error } = await getCurrentAppUser();
-  if (error === 'unauthenticated') {
-    return { response: NextResponse.json({ error: 'Not signed in' }, { status: 401 }), user: null };
-  }
-  if (error === 'unlinked' || !user) {
-    return {
-      response: NextResponse.json(
-        { error: 'No Foreshadow profile is linked to this account' },
-        { status: 403 },
-      ),
-      user: null,
-    };
-  }
-  return { response: null, user };
-}
-
 /** Resolve the target room: reuse an existing one (by id), else create it. */
 async function ensureRoom(
   supabase: Supabase,
   propertyId: string,
   room: Extract<KnowledgeTarget, { kind: 'room_note' | 'attribute' }>['room'],
   actorId: string,
+  orgId: string,
 ): Promise<{ id: string; scope: string; notes: string | null }> {
   if (room.id) {
     const { data } = await supabase
@@ -83,6 +66,7 @@ async function ensureRoom(
       sort_order: 0,
       created_by_user_id: actorId,
       updated_by_user_id: actorId,
+      org_id: orgId,
     })
     .select('id, scope, notes')
     .single();
@@ -96,6 +80,7 @@ async function unlockFields(
   propertyId: string,
   entries: Array<{ type: VisibilityResourceType; resourceId: string }>,
   actorId: string,
+  orgId: string,
 ): Promise<void> {
   if (entries.length === 0) return;
   await supabase
@@ -106,6 +91,7 @@ async function unlockFields(
         resource_type: e.type,
         resource_id: e.resourceId,
         created_by_user_id: actorId,
+        org_id: orgId,
       })),
       { onConflict: 'property_id,resource_type,resource_id', ignoreDuplicates: true },
     );
@@ -113,14 +99,14 @@ async function unlockFields(
 
 // POST — accept: write the knowledge, optionally unlock it, mark accepted.
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
-  const { response, user } = await requireUser();
-  if (response || !user) return response;
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, appUser, orgId } = ctx;
 
   const { id } = await context.params;
-  const actorId = getActorUserIdFromRequest(request) ?? user.id;
+  const actorId = appUser.id;
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
 
-  const supabase = getSupabaseServer();
   const { data: row, error: loadErr } = await supabase
     .from('proposed_knowledge')
     .select('id, conversation_id, property_id, target, guest_visible, status, resulting_resource_type, resulting_resource_id')
@@ -164,7 +150,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
   try {
     if (target.kind === 'room_note') {
-      const room = await ensureRoom(supabase, propertyId, target.room, actorId);
+      const room = await ensureRoom(supabase, propertyId, target.room, actorId, orgId);
       const notesText =
         editNotes != null && editNotes.trim() !== '' ? editNotes.trim() : target.notes;
       // Append to any existing room notes rather than overwrite.
@@ -181,7 +167,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       ];
     } else {
       // attribute
-      const room = await ensureRoom(supabase, propertyId, target.room, actorId);
+      const room = await ensureRoom(supabase, propertyId, target.room, actorId, orgId);
       const attrTitle = editTitle && editTitle !== '' ? editTitle : target.attribute.title;
       const attrBody =
         editBody !== undefined
@@ -202,6 +188,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           sort_order: 0,
           created_by_user_id: actorId,
           updated_by_user_id: actorId,
+          org_id: orgId,
         })
         .select('id')
         .single();
@@ -221,7 +208,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   if (guestVisible) {
-    await unlockFields(supabase, propertyId, visibilityEntries, actorId);
+    await unlockFields(supabase, propertyId, visibilityEntries, actorId, orgId);
   }
 
   await supabase
@@ -247,13 +234,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
 // DELETE — dismiss.
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
-  const { response, user } = await requireUser();
-  if (response || !user) return response;
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, appUser } = ctx;
 
   const { id } = await context.params;
-  const actorId = getActorUserIdFromRequest(request) ?? user.id;
+  const actorId = appUser.id;
 
-  const { data, error } = await getSupabaseServer()
+  const { data, error } = await supabase
     .from('proposed_knowledge')
     .update({
       status: 'dismissed',

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { notifyTaskCreatedAssigned } from '@/src/server/notifications/notify';
 
 interface AutomationScheduleConfig {
@@ -86,6 +85,10 @@ function isSameDayTurnover(checkOut: string | null, nextCheckIn: string | null):
 // POST - Add a new task to a turnover card
 export async function POST(request: NextRequest) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId, appUser } = ctx;
+
     const body = await request.json();
     const { reservation_id, template_id } = body;
 
@@ -95,8 +98,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    const supabase = getSupabaseServer();
 
     // Get template details
     const { data: template, error: templateError } = await supabase
@@ -208,7 +209,8 @@ export async function POST(request: NextRequest) {
         department_id: template.department_id || null,
         status: 'not_started',
         scheduled_date: scheduledDate,
-        scheduled_time: scheduledTime
+        scheduled_time: scheduledTime,
+        org_id: orgId
       })
       .select('*, templates(name, department_id)')
       .single();
@@ -224,7 +226,8 @@ export async function POST(request: NextRequest) {
     if (assignUserIds.length > 0) {
       const taskAssignments = assignUserIds.map(userId => ({
         task_id: newTask.id,
-        user_id: userId
+        user_id: userId,
+        org_id: orgId
       }));
 
       await supabase
@@ -252,7 +255,7 @@ export async function POST(request: NextRequest) {
       await notifyTaskCreatedAssigned({
         taskId: newTask.id,
         assigneeIds: assignedUserIds,
-        actor: { user_id: getActorUserIdFromRequest(request) },
+        actor: { user_id: appUser.id },
       });
     }
 
@@ -285,7 +288,11 @@ export async function POST(request: NextRequest) {
 // GET - Get all templates for adding tasks
 export async function GET() {
   try {
-    const { data: templates, error } = await getSupabaseServer()
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
+    const { data: templates, error } = await supabase
       .from('templates')
       .select('id, name, department_id, departments(id, name)')
       .order('name', { ascending: true });

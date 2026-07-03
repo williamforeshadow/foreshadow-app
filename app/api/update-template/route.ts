@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 export async function POST(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const body = await request.json();
     const { cleaningId, templateId } = body;
 
@@ -13,7 +17,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('cleanings')
       .update({ template_id: templateId })
       .eq('id', cleaningId)

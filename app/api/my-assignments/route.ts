@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // GET - Fetch all tasks assigned to a specific user
 export async function GET(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('user_id');
 
@@ -15,7 +19,7 @@ export async function GET(request: Request) {
     }
 
     // Fetch task assignments for this user
-    const { data: taskAssignments, error: tasksError } = await getSupabaseServer()
+    const { data: taskAssignments, error: tasksError } = await supabase
       .from('task_assignments')
       .select('task_id, assigned_at')
       .eq('user_id', userId);
@@ -33,7 +37,7 @@ export async function GET(request: Request) {
     let tasks: any[] = [];
     
     if (taskIds.length > 0) {
-      const { data: taskData, error: taskDataError } = await getSupabaseServer()
+      const { data: taskData, error: taskDataError } = await supabase
         .from('turnover_tasks')
         .select(`
           id,
@@ -73,7 +77,7 @@ export async function GET(request: Request) {
       // Fetch reservation info
       let reservationsMap: { [key: string]: any } = {};
       if (reservationIds.length > 0) {
-        const { data: reservations, error: reservationsError } = await getSupabaseServer()
+        const { data: reservations, error: reservationsError } = await supabase
           .from('reservations')
           .select('id, property_id, property_name, guest_name, check_in, check_out')
           .in('id', reservationIds);
@@ -95,7 +99,7 @@ export async function GET(request: Request) {
       // Fetch ALL assignees for these tasks (not just current user)
       let allAssigneesMap: Record<string, { user_id: string; name: string; avatar: string | null }[]> = {};
       if (taskIds.length > 0) {
-        const { data: allAssignments } = await getSupabaseServer()
+        const { data: allAssignments } = await supabase
           .from('task_assignments')
           .select('task_id, user_id, users(id, name, avatar)')
           .in('task_id', taskIds);

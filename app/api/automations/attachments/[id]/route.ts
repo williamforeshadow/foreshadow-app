@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // DELETE /api/automations/attachments/[id]
 //
@@ -20,13 +20,14 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
   const { id } = await params;
 
   if (!ID_RE.test(id)) {
     return NextResponse.json({ error: 'Invalid attachment id' }, { status: 400 });
   }
-
-  const supabase = getSupabaseServer();
 
   const { data: files, error: listErr } = await supabase.storage
     .from(BUCKET)

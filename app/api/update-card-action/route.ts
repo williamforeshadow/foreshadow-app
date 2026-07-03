@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 export async function POST(request: NextRequest) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { cleaningId, action } = await request.json();
 
     if (!cleaningId || !action) {
@@ -22,7 +26,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update the card_actions field in cleanings table
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('cleanings')
       .update({ card_actions: action })
       .eq('id', cleaningId)
@@ -43,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch the complete card data with recalculated property_clean_status
-    const { data: cardData, error: cardError } = await getSupabaseServer()
+    const { data: cardData, error: cardError } = await supabase
       .rpc('get_property_turnovers')
       .eq('id', cleaningId)
       .single();

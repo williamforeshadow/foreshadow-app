@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { logPropertyKnowledgeActivity } from '@/lib/logPropertyKnowledgeActivity';
 import { normalizeTags, type AttributeScope } from '@/lib/propertyAttributes';
 
@@ -12,10 +11,13 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; attributeId: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, appUser } = ctx;
+
   const { id, attributeId } = await params;
   const body = await req.json().catch(() => ({}));
   const patch: Record<string, unknown> = {};
-  const supabase = getSupabaseServer();
 
   if ('title' in body) {
     const v = body.title;
@@ -83,7 +85,7 @@ export async function PATCH(
   }
 
   patch.updated_at = new Date().toISOString();
-  const actorUserId = getActorUserIdFromRequest(req);
+  const actorUserId = appUser.id;
   if (actorUserId) {
     patch.updated_by_user_id = actorUserId;
   }
@@ -140,8 +142,11 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; attributeId: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, appUser } = ctx;
+
   const { id, attributeId } = await params;
-  const supabase = getSupabaseServer();
 
   // Snapshot the row + grab storage paths before the cascade fires.
   const [beforeRes, photosRes] = await Promise.all([
@@ -180,7 +185,7 @@ export async function DELETE(
   }
 
   if (before) {
-    const actorUserId = getActorUserIdFromRequest(req);
+    const actorUserId = appUser.id;
     await logPropertyKnowledgeActivity({
       property_id: id,
       user_id: actorUserId,

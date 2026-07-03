@@ -1,15 +1,19 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 export async function POST(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { taskId, formData } = await request.json();
 
     if (!taskId) {
       return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
     }
 
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('turnover_tasks')
       .update({ 
         form_metadata: formData,

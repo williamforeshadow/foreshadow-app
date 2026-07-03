@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getCurrentAppUser } from '@/src/server/users/currentUser';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // Concierge Training CRUD — list + create. Per-property operating-procedure
 // rules the guest-messaging agent references when drafting replies. All access
@@ -73,13 +72,11 @@ export function normalizeExamples(value: unknown): ConciergeTrainingExampleInput
 
 // GET /api/concierge-training — all rules with their associated property ids.
 export async function GET() {
-  const { error: authError } = await getCurrentAppUser();
-  if (authError === 'unauthenticated') {
-    return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
-  }
-
   try {
-    const supabase = getSupabaseServer();
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const { data: rows, error } = await supabase
       .from('concierge_training')
       .select('id, title, instructions, category, tier, applies_to_all, is_active, sort_order, created_at, updated_at')
@@ -153,12 +150,11 @@ export async function GET() {
 
 // POST /api/concierge-training — create a rule (+ property associations).
 export async function POST(request: NextRequest) {
-  const { user, error: authError } = await getCurrentAppUser();
-  if (authError === 'unauthenticated') {
-    return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
-  }
-
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId, appUser } = ctx;
+
     const body = await request.json();
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     const instructions = typeof body.instructions === 'string' ? body.instructions.trim() : '';
@@ -175,7 +171,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'A title is required' }, { status: 400 });
     }
 
-    const supabase = getSupabaseServer();
     const { data: rule, error } = await supabase
       .from('concierge_training')
       .insert({
@@ -185,8 +180,9 @@ export async function POST(request: NextRequest) {
         tier,
         applies_to_all: appliesToAll,
         is_active: isActive,
-        created_by_user_id: user?.id ?? null,
-        updated_by_user_id: user?.id ?? null,
+        created_by_user_id: appUser.id,
+        updated_by_user_id: appUser.id,
+        org_id: orgId,
       })
       .select('id, title, instructions, category, tier, applies_to_all, is_active, sort_order, created_at, updated_at')
       .single();
@@ -199,7 +195,7 @@ export async function POST(request: NextRequest) {
       property_ids = [...new Set(propertyIds)];
       const { error: linkErr } = await supabase
         .from('concierge_training_properties')
-        .insert(property_ids.map((property_id) => ({ training_id: rule.id, property_id })));
+        .insert(property_ids.map((property_id) => ({ training_id: rule.id, property_id, org_id: orgId })));
       if (linkErr) {
         return NextResponse.json({ error: linkErr.message }, { status: 500 });
       }
@@ -216,7 +212,8 @@ export async function POST(request: NextRequest) {
             transcript: e.transcript,
             source_conversation_id: e.source_conversation_id,
             sort_order: i,
-            created_by_user_id: user?.id ?? null,
+            created_by_user_id: appUser.id,
+            org_id: orgId,
           })),
         )
         .select('id, label, transcript');

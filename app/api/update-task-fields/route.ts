@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import {
   notifyTaskBinChanged,
   notifyTaskDescriptionChanged,
@@ -22,8 +21,12 @@ function errorMessage(err: unknown, fallback: string) {
 
 export async function POST(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, appUser } = ctx;
+
     const { taskId, fields } = await request.json();
-    const actor = { user_id: getActorUserIdFromRequest(request) };
+    const actor = { user_id: appUser.id };
 
     if (!taskId || !fields || typeof fields !== 'object') {
       return NextResponse.json({ error: 'taskId and fields object are required' }, { status: 400 });
@@ -54,7 +57,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
     }
 
-    const { data: previous } = await getSupabaseServer()
+    const { data: previous } = await supabase
       .from('turnover_tasks')
       .select('title, description, priority, bin_id, is_binned, property_name, property_id, template_id')
       .eq('id', taskId)
@@ -79,7 +82,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const { data, error } = await getSupabaseServer()
+    const { data, error } = await supabase
       .from('turnover_tasks')
       .update(updateData)
       .eq('id', taskId)

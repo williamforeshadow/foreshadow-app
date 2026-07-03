@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // DELETE removes the DB row + the underlying storage object so the bucket
 // doesn't grow with orphans.
@@ -8,8 +8,11 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; attributeId: string; photoId: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
+
   const { id, attributeId, photoId } = await params;
-  const supabase = getSupabaseServer();
 
   // Verify ownership chain before deleting. Fetching via `attribute_id` + a
   // join on `property_attributes` keeps one round-trip enough to validate.

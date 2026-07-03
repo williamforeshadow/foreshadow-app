@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // GET /api/properties/[id]/tasks
 //
@@ -12,12 +12,14 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
+
   const { id: propertyId } = await context.params;
   if (!propertyId) {
     return NextResponse.json({ error: 'Property id is required' }, { status: 400 });
   }
-
-  const supabase = getSupabaseServer();
 
   // Confirm the property exists so we can return a clean 404 (and surface
   // the canonical name in the response). All scoping below is by property_id;

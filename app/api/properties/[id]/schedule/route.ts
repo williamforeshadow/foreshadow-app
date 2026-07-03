@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // GET /api/properties/[id]/schedule?year=YYYY&month=MM
 //
@@ -14,6 +14,10 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
+
   const { id: propertyId } = await context.params;
   if (!propertyId) {
     return NextResponse.json({ error: 'Property id is required' }, { status: 400 });
@@ -29,8 +33,6 @@ export async function GET(
     Number.isFinite(monthParam) && monthParam >= 1 && monthParam <= 12
       ? monthParam
       : now.getMonth() + 1;
-
-  const supabase = getSupabaseServer();
 
   const { data: property, error: propertyError } = await supabase
     .from('properties')

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getCurrentAppUser } from '@/src/server/users/currentUser';
-import { getActorUserIdFromRequest } from '@/lib/getActorFromRequest';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { createTask as createTaskService } from '@/src/server/tasks/createTask';
 import { taskUrl } from '@/src/lib/links';
 
@@ -56,28 +55,11 @@ interface ProposedTaskRow {
   scheduled_time: string | null;
 }
 
-async function requireUser() {
-  const { user, error } = await getCurrentAppUser();
-  if (error === 'unauthenticated') {
-    return {
-      response: NextResponse.json({ error: 'Not signed in' }, { status: 401 }),
-      user: null,
-    };
-  }
-  if (error === 'unlinked' || !user) {
-    return {
-      response: NextResponse.json(
-        { error: 'No Foreshadow profile is linked to this account' },
-        { status: 403 },
-      ),
-      user: null,
-    };
-  }
-  return { response: null, user };
-}
-
-async function loadProposal(id: string): Promise<ProposedTaskRow | null> {
-  const { data, error } = await getSupabaseServer()
+async function loadProposal(
+  supabase: SupabaseClient,
+  id: string,
+): Promise<ProposedTaskRow | null> {
+  const { data, error } = await supabase
     .from('proposed_tasks')
     .select(
       'id, conversation_id, status, resulting_task_id, title, description, priority, property_id, department_id, suggested_assignee_ids, scheduled_date, scheduled_time',
@@ -93,11 +75,12 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { response, user } = await requireUser();
-  if (response || !user) return response;
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, appUser } = ctx;
 
   const { id } = await context.params;
-  const actorId = getActorUserIdFromRequest(request) ?? user.id;
+  const actorId = appUser.id;
 
   // Optional edited fields from the inbox task editor. No body → quick-create.
   let edits: AcceptEdits = {};
@@ -110,7 +93,7 @@ export async function POST(
 
   let proposal: ProposedTaskRow | null;
   try {
-    proposal = await loadProposal(id);
+    proposal = await loadProposal(supabase, id);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Lookup failed';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -173,7 +156,7 @@ export async function POST(
           : proposal.scheduled_time,
       assigned_user_ids: edits.assigned_user_ids ?? proposal.suggested_assignee_ids ?? [],
     },
-    { actor: { user_id: actorId, name: user.name } },
+    { actor: { user_id: actorId, name: appUser.name } },
   );
 
   if (!result.ok) {
@@ -186,7 +169,7 @@ export async function POST(
     return NextResponse.json({ error: result.error.message }, { status });
   }
 
-  const { error: updateError } = await getSupabaseServer()
+  const { error: updateError } = await supabase
     .from('proposed_tasks')
     .update({
       status: 'accepted',
@@ -214,13 +197,14 @@ export async function DELETE(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { response, user } = await requireUser();
-  if (response || !user) return response;
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, appUser } = ctx;
 
   const { id } = await context.params;
-  const actorId = getActorUserIdFromRequest(request) ?? user.id;
+  const actorId = appUser.id;
 
-  const { data, error } = await getSupabaseServer()
+  const { data, error } = await supabase
     .from('proposed_tasks')
     .update({
       status: 'dismissed',

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 type PropertyRow = {
   id: string;
@@ -38,7 +38,10 @@ type PropertyRow = {
 // Sorted alphabetically by `name`.
 export async function GET(req: NextRequest) {
   try {
-    const supabase = getSupabaseServer();
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
+
     const includeInactive = req.nextUrl.searchParams.get('include_inactive') === 'true';
     // linked=true returns only Hostaway-linked rows (hostaway_listing_id IS NOT NULL).
     // Used by the "Link to Hostaway" picker so we can offer only rows that are
@@ -104,6 +107,10 @@ export async function GET(req: NextRequest) {
 //   409 → case-insensitive name collision, or listing already linked
 export async function POST(req: NextRequest) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
+
     const body = await req.json().catch(() => ({}));
     const rawHostawayId = body?.hostaway_listing_id;
     const hostawayListingId =
@@ -111,8 +118,6 @@ export async function POST(req: NextRequest) {
         ? Math.trunc(rawHostawayId)
         : null;
     const rawName = typeof body?.name === 'string' ? body.name.trim() : '';
-
-    const supabase = getSupabaseServer();
 
     if (hostawayListingId != null) {
       // --- Import-from-Hostaway mode ---
@@ -156,6 +161,7 @@ export async function POST(req: NextRequest) {
           name: displayName,
           hostaway_listing_id: hostawayListingId,
           hostaway_name: hostawayName,
+          org_id: orgId,
         })
         .select(
           'id, name, hostaway_name, hostaway_listing_id, is_active, created_at, updated_at'
@@ -189,7 +195,7 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await supabase
       .from('properties')
-      .insert({ name: rawName })
+      .insert({ name: rawName, org_id: orgId })
       .select('id, name, hostaway_name, hostaway_listing_id, is_active, created_at, updated_at')
       .maybeSingle();
 
