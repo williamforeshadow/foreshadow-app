@@ -25,6 +25,12 @@ export interface HostawayCreds {
   clientSecret: string;
 }
 
+// Hospitable auth is a single Personal Access Token (Bearer). No env fallback —
+// Hospitable integrations store their token in the DB from day one.
+export interface HospitableCreds {
+  token: string;
+}
+
 /** Active integrations for a provider (service-role). */
 export async function listActiveIntegrations(provider: PmsProvider): Promise<PmsIntegration[]> {
   const { data, error } = await getSupabaseServer()
@@ -101,4 +107,50 @@ export function hostawayCredsFor(integ: PmsIntegration): HostawayCreds {
     throw new Error(`Missing Hostaway credentials for integration ${integ.id} (org ${integ.org_id})`);
   }
   return { accountId, clientSecret };
+}
+
+// --- Hospitable -----------------------------------------------------------
+
+/** The single active Hospitable integration (cron fan-out point). */
+export async function getPrimaryHospitableIntegration(): Promise<PmsIntegration | null> {
+  const active = await listActiveIntegrations('hospitable');
+  return active[0] ?? null;
+}
+
+/** Hospitable Personal Access Token for an integration. */
+export function hospitableCredsFor(integ: PmsIntegration): HospitableCreds {
+  const token = (integ.credentials ?? {}).token as string | undefined;
+  if (!token) {
+    throw new Error(`Missing Hospitable token for integration ${integ.id} (org ${integ.org_id})`);
+  }
+  return { token };
+}
+
+/** Resolve Hospitable creds for a specific org's integration. */
+export async function getHospitableCredsForOrg(orgId: string): Promise<HospitableCreds> {
+  const { data } = await getSupabaseServer()
+    .from('pms_integrations')
+    .select('id, org_id, provider, external_account_id, credentials, webhook_secret, status')
+    .eq('org_id', orgId)
+    .eq('provider', 'hospitable')
+    .eq('status', 'active')
+    .maybeSingle();
+  if (!data) throw new Error(`No active Hospitable integration for org ${orgId}`);
+  return hospitableCredsFor(data as PmsIntegration);
+}
+
+/** Find the Hospitable integration whose webhook_secret matches (tenant routing).
+ *  Hospitable webhooks carry no signature, so the per-integration URL secret is
+ *  the tenant selector. */
+export async function resolveHospitableIntegrationByWebhookSecret(
+  secret: string,
+): Promise<PmsIntegration | null> {
+  const { data } = await getSupabaseServer()
+    .from('pms_integrations')
+    .select('id, org_id, provider, external_account_id, credentials, webhook_secret, status')
+    .eq('provider', 'hospitable')
+    .eq('webhook_secret', secret)
+    .eq('status', 'active')
+    .maybeSingle();
+  return (data as PmsIntegration | null) ?? null;
 }
