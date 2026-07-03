@@ -25,8 +25,10 @@ export interface HostawayCreds {
   clientSecret: string;
 }
 
-// Hospitable auth is a single Personal Access Token (Bearer). No env fallback —
-// Hospitable integrations store their token in the DB from day one.
+// Hospitable auth is a single Personal Access Token (Bearer). Stored per-org in
+// pms_integrations.credentials.token; falls back to the HOSPITABLE_PAT env var
+// (local .env.local / Vercel env) during the trial before the token is moved
+// into the DB.
 export interface HospitableCreds {
   token: string;
 }
@@ -117,9 +119,10 @@ export async function getPrimaryHospitableIntegration(): Promise<PmsIntegration 
   return active[0] ?? null;
 }
 
-/** Hospitable Personal Access Token for an integration. */
+/** Hospitable Personal Access Token for an integration (DB token, else env). */
 export function hospitableCredsFor(integ: PmsIntegration): HospitableCreds {
-  const token = (integ.credentials ?? {}).token as string | undefined;
+  const token =
+    ((integ.credentials ?? {}).token as string | undefined) ?? process.env.HOSPITABLE_PAT;
   if (!token) {
     throw new Error(`Missing Hospitable token for integration ${integ.id} (org ${integ.org_id})`);
   }

@@ -12,7 +12,7 @@
  */
 import type { HospitableCreds } from '@/lib/pmsIntegrations';
 
-const BASE_URL = 'https://api.hospitable.com/v2';
+const BASE_URL = 'https://public.api.hospitable.com/v2';
 
 type Params = Record<string, string | number | boolean | undefined>;
 
@@ -66,13 +66,36 @@ export async function fetchHospitableProperties(creds: HospitableCreds): Promise
   return fetchAllPages(creds, '/properties');
 }
 
-/** Reservations, optionally filtered (e.g. { start_date, end_date, properties }).
- *  Filter param names are confirmed against real responses before wiring the sync. */
+/** Reservations for the given properties (the API REQUIRES a `properties[]`
+ *  filter). `include=guest` pulls the guest object (first/last name, contact). */
 export async function fetchHospitableReservations(
   creds: HospitableCreds,
-  params: Params = {},
+  propertyUuids: string[],
+  extra: Params = {},
 ): Promise<any[]> {
-  return fetchAllPages(creds, '/reservations', params);
+  if (propertyUuids.length === 0) return [];
+  const all: any[] = [];
+  let page = 1;
+  for (let guard = 0; guard < 500; guard++) {
+    const url = new URL(`${BASE_URL}/reservations`);
+    for (const uuid of propertyUuids) url.searchParams.append('properties[]', uuid);
+    url.searchParams.set('include', 'guest');
+    url.searchParams.set('page', String(page));
+    for (const [k, v] of Object.entries(extra)) if (v != null) url.searchParams.set(k, String(v));
+
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${creds.token}`, Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Hospitable /reservations failed (${res.status}): ${await res.text()}`);
+    const json: any = await res.json();
+    const rows: any[] = Array.isArray(json?.data) ? json.data : [];
+    all.push(...rows);
+    const lastPage = Number(json?.meta?.last_page);
+    if (!Number.isFinite(lastPage) || page >= lastPage || rows.length === 0) break;
+    page += 1;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  return all;
 }
 
 /** Full message thread for a reservation (both directions). */
