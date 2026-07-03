@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
 import { fetchListings } from '@/lib/hostaway';
+import { requireAuthContext } from '@/lib/requireAuthContext';
+import { getHostawayCredsForOrg } from '@/lib/pmsIntegrations';
 
 // GET /api/hostaway/listings
 //
@@ -28,14 +29,23 @@ import { fetchListings } from '@/lib/hostaway';
 //   }
 export async function GET(req: NextRequest) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
+
     const onlyAvailable = req.nextUrl.searchParams.get('available') === 'true';
 
-    const supabase = getSupabaseServer();
-    const [listingsMap, propsRes] = await Promise.all([
-      fetchListings(),
-      supabase.from('properties').select('id, name, hostaway_listing_id'),
-    ]);
+    let listingsMap: Map<number, string>;
+    try {
+      listingsMap = await fetchListings(await getHostawayCredsForOrg(orgId));
+    } catch {
+      // No Hostaway integration for this org → nothing to import.
+      return NextResponse.json({ listings: [] });
+    }
 
+    const propsRes = await supabase
+      .from('properties')
+      .select('id, name, hostaway_listing_id');
     if (propsRes.error) {
       return NextResponse.json(
         { error: propsRes.error.message },

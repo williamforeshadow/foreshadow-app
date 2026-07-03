@@ -6,11 +6,19 @@ import {
 } from '@/lib/hostaway';
 import { mapHostawayMessagePayload, type RawGuestMessage } from '@/lib/messages';
 import { getMapper } from '@/src/server/messages/pms';
+import type { HostawayCreds } from '@/lib/pmsIntegrations';
 
 // Shared guest-message ingestion. Upserts a canonical `conversations` row (the
 // PMS-agnostic anchor for tabs/filters) plus the conversation's full message
 // thread (both directions). The webhook only delivers inbound guest messages, so
 // host/outbound replies + conversation metadata come from the PMS API here.
+
+// Per-org context (P3): which org's Hostaway integration this ingest runs for.
+// creds authenticate the API calls; orgId scopes every DB read/write.
+export interface IngestContext {
+  creds: HostawayCreds;
+  orgId: string;
+}
 
 const SOURCE = 'hostaway';
 
@@ -103,15 +111,16 @@ async function recomputeSentRollup(
  * `opts.realtime` (webhook) makes a brand-new conversation start unread.
  */
 export async function ingestConversation(
+  ctx: IngestContext,
   conversationId: string | number,
   convObj?: Record<string, unknown> | null,
   opts?: { realtime?: boolean },
 ): Promise<number> {
   const externalId = String(conversationId);
-  const conv = convObj ?? (await fetchConversation(conversationId));
+  const conv = convObj ?? (await fetchConversation(ctx.creds, conversationId));
   const reservation = asObj(conv?.Reservation);
 
-  const raw = await fetchConversationMessages(conversationId);
+  const raw = await fetchConversationMessages(ctx.creds, conversationId);
   const mapped = raw
     .map(mapHostawayMessagePayload)
     .filter((m): m is RawGuestMessage => m !== null);
@@ -138,6 +147,7 @@ export async function ingestConversation(
     const { data } = await supabase
       .from('properties')
       .select('id, name, hostaway_name')
+      .eq('org_id', ctx.orgId)
       .eq('hostaway_listing_id', listingMapId)
       .maybeSingle();
     if (data) {
@@ -150,6 +160,7 @@ export async function ingestConversation(
     const { data } = await supabase
       .from('reservations')
       .select('id, property_name')
+      .eq('org_id', ctx.orgId)
       .eq('hostaway_reservation_id', reservationHostawayId)
       .maybeSingle();
     if (data) {
@@ -162,6 +173,7 @@ export async function ingestConversation(
   const { data: existingRaw } = await supabase
     .from('conversations')
     .select('id, app_status, unread, message_count')
+    .eq('org_id', ctx.orgId)
     .eq('source', SOURCE)
     .eq('external_conversation_id', externalId)
     .maybeSingle();
@@ -188,6 +200,7 @@ export async function ingestConversation(
     .from('conversations')
     .upsert(
       {
+        org_id: ctx.orgId,
         source: SOURCE,
         external_conversation_id: externalId,
         guest_name: guestName,
@@ -216,6 +229,7 @@ export async function ingestConversation(
 
   // Upsert all messages, linked to the conversation.
   const msgRows = mapped.map((m) => ({
+    org_id: ctx.orgId,
     reservation_id: reservationId,
     conversation_id: convId,
     hostaway_conversation_id: m.hostawayConversationId,
@@ -243,11 +257,12 @@ export async function ingestConversation(
  * from messages already stored locally. booking_state unknown -> inquiry,
  * historical -> read.
  */
-async function upsertConversationFromStored(externalId: string): Promise<number> {
+async function upsertConversationFromStored(orgId: string, externalId: string): Promise<number> {
   const supabase = getSupabaseServer();
   const { data } = await supabase
     .from('guest_messages')
     .select('id, hostaway_message_id, guest_name, property_name, reservation_id, direction, body, sent_at, created_at')
+    .eq('org_id', orgId)
     .eq('hostaway_conversation_id', externalId);
   const rows = (data ?? []) as Array<{
     id: string;
@@ -271,6 +286,7 @@ async function upsertConversationFromStored(externalId: string): Promise<number>
     .from('conversations')
     .upsert(
       {
+        org_id: orgId,
         source: SOURCE,
         external_conversation_id: externalId,
         guest_name: ordered.find((m) => m.guest_name)?.guest_name ?? null,
@@ -295,6 +311,7 @@ async function upsertConversationFromStored(externalId: string): Promise<number>
   await supabase
     .from('guest_messages')
     .update({ conversation_id: convId })
+    .eq('org_id', orgId)
     .eq('hostaway_conversation_id', externalId);
 
   // Exclude future (scheduled) messages from the inbox rollup.
@@ -309,11 +326,12 @@ async function upsertConversationFromStored(externalId: string): Promise<number>
  * the cron (capped) and the one-time backfill route (large cap).
  */
 export async function backfillRecentConversations(
+  ctx: IngestContext,
   max = 80,
 ): Promise<{ conversations: number; messages: number }> {
   const supabase = getSupabaseServer();
 
-  const summaries = await fetchConversationsList(100);
+  const summaries = await fetchConversationsList(ctx.creds, 100);
   const targets = new Map<string, Record<string, unknown> | null>();
   for (const c of summaries) {
     const id = str(c.id);
@@ -323,6 +341,7 @@ export async function backfillRecentConversations(
   const { data } = await supabase
     .from('guest_messages')
     .select('hostaway_conversation_id')
+    .eq('org_id', ctx.orgId)
     .not('hostaway_conversation_id', 'is', null);
   const known = (data ?? []) as { hostaway_conversation_id: string }[];
   for (const r of known) {
@@ -337,11 +356,11 @@ export async function backfillRecentConversations(
     if (count >= max) break;
     count += 1;
     try {
-      messages += await ingestConversation(id, convObj, { realtime: false });
+      messages += await ingestConversation(ctx, id, convObj, { realtime: false });
     } catch {
       // Hostaway may no longer return this conversation — build from stored msgs.
       try {
-        messages += await upsertConversationFromStored(id);
+        messages += await upsertConversationFromStored(ctx.orgId, id);
       } catch (err) {
         console.error('[messages backfill] conversation failed', { id, err });
       }

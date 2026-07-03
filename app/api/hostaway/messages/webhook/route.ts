@@ -5,6 +5,7 @@ import { ingestConversation } from '@/src/server/messages/ingest';
 import { maybeGenerateProposedReplyForExternal } from '@/src/server/messages/proposedReply';
 import { maybeGenerateProposedTaskForExternal } from '@/src/server/messages/proposedTask';
 import { maybeGenerateProposedKnowledgeForExternal } from '@/src/server/messages/proposedKnowledge';
+import { resolveHostawayIntegrationByWebhookSecret, hostawayCredsFor } from '@/lib/pmsIntegrations';
 
 // Hostaway guest-message webhook receiver.
 //
@@ -16,35 +17,39 @@ import { maybeGenerateProposedKnowledgeForExternal } from '@/src/server/messages
 
 export const maxDuration = 60;
 
-function isAuthorized(request: Request): boolean {
-  const secret = process.env.HOSTAWAY_WEBHOOK_SECRET;
-  // If no secret is configured, fail closed — we never want an open ingest URL.
-  if (!secret) return false;
-
+// Extract the webhook secret the caller presented (query param or bearer/basic
+// header). The secret selects the tenant: it's looked up against
+// pms_integrations.webhook_secret (with an env fallback for the org-1 row).
+function extractProvidedSecret(request: Request): string | null {
   const url = new URL(request.url);
   const fromQuery = url.searchParams.get('secret');
-  if (fromQuery && fromQuery === secret) return true;
+  if (fromQuery) return fromQuery;
 
-  // Also accept it via a bearer/basic Authorization header.
   const auth = request.headers.get('authorization') ?? '';
-  if (auth === `Bearer ${secret}`) return true;
+  if (auth.startsWith('Bearer ')) return auth.slice(7);
   if (auth.startsWith('Basic ')) {
     try {
       const decoded = Buffer.from(auth.slice(6), 'base64').toString('utf8');
       // "user:pass" — accept the secret in either field.
       const [user, pass] = decoded.split(':');
-      if (pass === secret || user === secret) return true;
+      return pass || user || null;
     } catch {
-      /* fall through */
+      return null;
     }
   }
-  return false;
+  return null;
 }
 
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) {
+  // Resolve the tenant from the presented webhook secret. Fails closed.
+  const providedSecret = extractProvidedSecret(request);
+  const integration = providedSecret
+    ? await resolveHostawayIntegrationByWebhookSecret(providedSecret)
+    : null;
+  if (!integration) {
     return new Response('unauthorized', { status: 401 });
   }
+  const orgId = integration.org_id;
 
   let payload: Record<string, unknown>;
   try {
@@ -76,6 +81,7 @@ export async function POST(request: Request) {
       const { data: resRow } = await supabase
         .from('reservations')
         .select('id, guest_name, property_name')
+        .eq('org_id', orgId)
         .eq('hostaway_reservation_id', msg.hostawayReservationId)
         .maybeSingle();
       if (resRow) {
@@ -86,6 +92,7 @@ export async function POST(request: Request) {
     }
 
     const row = {
+      org_id: orgId,
       reservation_id: reservationId,
       hostaway_conversation_id: msg.hostawayConversationId,
       hostaway_message_id: msg.hostawayMessageId,
@@ -112,7 +119,7 @@ export async function POST(request: Request) {
     // but don't fail the ack.
     after(async () => {
       try {
-        await ingestConversation(msg.hostawayConversationId, null, {
+        await ingestConversation({ creds: hostawayCredsFor(integration), orgId }, msg.hostawayConversationId, null, {
           realtime: true,
         });
       } catch (err) {

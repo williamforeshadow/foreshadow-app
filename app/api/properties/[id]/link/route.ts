@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthContext } from '@/lib/requireAuthContext';
+import { getHostawayCredsForOrg } from '@/lib/pmsIntegrations';
 import { fetchListings } from '@/lib/hostaway';
 
 // POST /api/properties/:id/link
@@ -29,7 +30,7 @@ export async function POST(
   try {
     const ctx = await requireAuthContext();
     if (ctx instanceof NextResponse) return ctx;
-    const { supabase } = ctx;
+    const { supabase, orgId } = ctx;
 
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
@@ -81,7 +82,7 @@ export async function POST(
       );
     }
 
-    const listingsMap = await fetchListings();
+    const listingsMap = await fetchListings(await getHostawayCredsForOrg(orgId));
     const hostawayName = listingsMap.get(hostawayListingId);
     if (!hostawayName) {
       return NextResponse.json(

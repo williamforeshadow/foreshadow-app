@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { fetchListingCalendar } from '@/lib/hostaway';
+import { getPrimaryHostawayIntegration, hostawayCredsFor } from '@/lib/pmsIntegrations';
 
 // Calendar sync — pulls manual/maintenance BLOCKS (not reservations) from each
 // listing's Hostaway calendar into `calendar_blocks` so they show on the ops
@@ -65,11 +66,20 @@ export async function POST() {
     console.log('[Calendar Sync] Starting…');
     const supabase = getSupabaseServer();
 
+    const integration = await getPrimaryHostawayIntegration();
+    if (!integration) {
+      console.log('[Calendar Sync] no active Hostaway integration; skipping');
+      return NextResponse.json({ success: true, skipped: 'no_integration' });
+    }
+    const creds = hostawayCredsFor(integration);
+    const orgId = integration.org_id;
+
     // Active, Hostaway-linked properties only. Inactive properties are frozen
     // (same rule as the reservation sync); unlinked listings never materialize.
     const { data: props, error: propsErr } = await supabase
       .from('properties')
-      .select('id, hostaway_listing_id, is_active');
+      .select('id, hostaway_listing_id, is_active')
+      .eq('org_id', orgId);
     if (propsErr) {
       return NextResponse.json({ error: propsErr.message }, { status: 500 });
     }
@@ -90,6 +100,7 @@ export async function POST() {
     for (const p of targets) {
       try {
         const days = await fetchListingCalendar(
+          creds,
           p.hostaway_listing_id as number,
           today,
           windowEnd,
@@ -121,6 +132,7 @@ export async function POST() {
             end_date: r.end_date,
             note: r.note,
             updated_at: new Date().toISOString(),
+            org_id: orgId,
           }));
           const { error: insErr } = await supabase.from('calendar_blocks').insert(rows);
           if (insErr) {

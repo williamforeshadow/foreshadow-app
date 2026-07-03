@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { backfillRecentConversations } from '@/src/server/messages/ingest';
+import { getPrimaryHostawayIntegration, hostawayCredsFor } from '@/lib/pmsIntegrations';
 
 // Discover + re-sync recent conversations (incl. inquiry threads with no booked
 // reservation) and every known thread. Catches host replies that arrive with no
@@ -15,7 +16,12 @@ export async function POST() {
     // ~1.5s/thread (the Hostaway rate-limit sleep dominates), so 150 stays well
     // within maxDuration (300s). Revisit — paginate or refresh incrementally —
     // before the inbox approaches ~180 threads.
-    const result = await backfillRecentConversations(150);
+    const integration = await getPrimaryHostawayIntegration();
+    if (!integration) {
+      return NextResponse.json({ success: true, skipped: 'no_integration' });
+    }
+    const ctx = { creds: hostawayCredsFor(integration), orgId: integration.org_id };
+    const result = await backfillRecentConversations(ctx, 150);
     return NextResponse.json({ success: true, ...result });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';

@@ -1,5 +1,6 @@
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { fetchReservationsForListing, fetchListingCalendar } from '@/lib/hostaway';
+import { getHostawayCredsForOrg } from '@/lib/pmsIntegrations';
 
 // refreshPropertyAvailability — on-demand, SINGLE-PROPERTY freshness for the
 // availability path. The scheduled portfolio crons (app/api/hostaway/sync +
@@ -28,6 +29,7 @@ const HORIZON_DAYS = 365;
 
 export interface RefreshableProperty {
   id: string;
+  org_id: string;
   hostaway_listing_id: number | null;
   is_active: boolean | null;
 }
@@ -100,6 +102,7 @@ export async function refreshPropertyAvailability(
     return { refreshed: false, skipped_reason: 'no_pms_link' };
   }
   const listingId = property.hostaway_listing_id;
+  const creds = await getHostawayCredsForOrg(property.org_id);
 
   const today = new Date().toISOString().slice(0, 10);
   const windowEnd = new Date(Date.now() + HORIZON_DAYS * 86_400_000)
@@ -107,7 +110,7 @@ export async function refreshPropertyAvailability(
     .slice(0, 10);
 
   // --- Reservations: insert new / update changed, NO deletes, NO automations.
-  const fresh = await fetchReservationsForListing(listingId, today);
+  const fresh = await fetchReservationsForListing(creds, listingId, today);
 
   const { data: existingRows, error: exErr } = await supabase
     .from('reservations')
@@ -158,6 +161,7 @@ export async function refreshPropertyAvailability(
         channel: r.channelName ?? null,
         kind,
         updated_at: nowIso,
+        org_id: property.org_id,
       });
     } else {
       const existCheckIn = existing.check_in?.slice(0, 10) || '';
@@ -190,7 +194,7 @@ export async function refreshPropertyAvailability(
 
   // --- Blocks: reconcile this property's hostaway blocks in the forward window
   // (delete + replace), same scope as the calendar-sync cron.
-  const days = await fetchListingCalendar(listingId, today, windowEnd);
+  const days = await fetchListingCalendar(creds, listingId, today, windowEnd);
   const ranges = deriveBlockRanges(days);
 
   const { error: delErr } = await supabase
@@ -210,6 +214,7 @@ export async function refreshPropertyAvailability(
       end_date: r.end_date,
       note: r.note,
       updated_at: nowIso,
+      org_id: property.org_id,
     }));
     const { error: blkInsErr } = await supabase.from('calendar_blocks').insert(blockRows);
     if (blkInsErr) throw new Error(`availability refresh (blocks insert): ${blkInsErr.message}`);

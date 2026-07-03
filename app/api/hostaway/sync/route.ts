@@ -3,6 +3,7 @@ import { after } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { fetchListingsDetailed, fetchReservations, type ListingDetail } from '@/lib/hostaway';
 import { runAutomationsForRowChange } from '@/src/server/automations/run';
+import { getPrimaryHostawayIntegration, hostawayCredsFor } from '@/lib/pmsIntegrations';
 
 // Columns selected back from the reservation insert, fed into the
 // automations engine's row-change hook.
@@ -23,6 +24,14 @@ export async function POST() {
     console.log('[Hostaway Sync] Starting…');
     const supabase = getSupabaseServer();
 
+    const integration = await getPrimaryHostawayIntegration();
+    if (!integration) {
+      console.log('[Hostaway Sync] no active Hostaway integration; skipping');
+      return NextResponse.json({ success: true, skipped: 'no_integration' });
+    }
+    const creds = hostawayCredsFor(integration);
+    const orgId = integration.org_id;
+
     // 1. Sync listings → properties
     //
     // Explicit-import model: sync NEVER creates property rows. It only
@@ -31,7 +40,7 @@ export async function POST() {
     // (the "property code") is never touched. Listings that aren't yet
     // bound to an app property are counted in `skippedUnlinked` and
     // otherwise ignored — users import them on demand via the UI.
-    const listingsDetail = await fetchListingsDetailed();
+    const listingsDetail = await fetchListingsDetailed(creds);
     // Backward-compatible id → name map the rest of the sync already relies on.
     const listingsMap = new Map<number, string>();
     for (const [id, d] of listingsDetail.entries()) {
@@ -41,7 +50,8 @@ export async function POST() {
 
     const { data: existingPropsRaw } = await supabase
       .from('properties')
-      .select('id, hostaway_listing_id, is_active');
+      .select('id, hostaway_listing_id, is_active')
+      .eq('org_id', orgId);
 
     // hostaway_listing_id → property uuid, for ALL existing properties.
     const existingPropIdMap = new Map<number, string>();
@@ -88,6 +98,7 @@ export async function POST() {
       const { error: updatePropErr } = await supabase
         .from('properties')
         .update({ hostaway_name: row.hostaway_name, updated_at: nowIso })
+        .eq('org_id', orgId)
         .eq('hostaway_listing_id', row.hostaway_listing_id);
       if (updatePropErr) {
         console.error('[Hostaway Sync] property update error:', updatePropErr.message);
@@ -109,6 +120,7 @@ export async function POST() {
       url: string;
       source: string;
       updated_at: string;
+      org_id: string;
     }> = [];
     for (const [listingId, detail] of listingsDetail.entries()) {
       const uuid = existingPropIdMap.get(listingId);
@@ -141,6 +153,7 @@ export async function POST() {
             url,
             source: 'hostaway',
             updated_at: nowIso,
+            org_id: orgId,
           });
         }
       }
@@ -164,7 +177,7 @@ export async function POST() {
 
     // 2. Fetch current + future reservations from Hostaway
     const today = new Date().toISOString().split('T')[0];
-    const reservations = await fetchReservations(today);
+    const reservations = await fetchReservations(creds, today);
     console.log(`[Hostaway Sync] Fetched ${reservations.length} reservations from Hostaway`);
 
     // 3. Load existing Hostaway reservation IDs from Supabase so we know what's new
@@ -172,6 +185,7 @@ export async function POST() {
     const { data: existingRows } = await supabase
       .from('reservations')
       .select('id, hostaway_reservation_id, check_in, check_out, guest_name, property_id, kind')
+      .eq('org_id', orgId)
       .not('hostaway_reservation_id', 'is', null);
 
     const existingMap = new Map<number, {
@@ -246,6 +260,7 @@ export async function POST() {
           channel: r.channelName ?? null,
           kind,
           updated_at: new Date().toISOString(),
+          org_id: orgId,
         });
       } else {
         // Already exists — only update if dates or guest actually changed

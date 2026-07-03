@@ -1,23 +1,17 @@
 /**
  * Hostaway API client — server-side only.
+ *
+ * Per-org (P3): every fetcher takes the integration's HostawayCreds so multiple
+ * orgs' Hostaway accounts can coexist. Tokens are cached per account id.
  */
+import type { HostawayCreds } from '@/lib/pmsIntegrations';
 
-let cachedToken: { token: string; expiresAt: number } | null = null;
+const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
-async function getToken(): Promise<string> {
-  if (cachedToken && Date.now() < cachedToken.expiresAt - 5 * 60 * 1000) {
-    return cachedToken.token;
-  }
-
-  const accountId = process.env.HOSTAWAY_ACCOUNT_ID;
-  const clientSecret = process.env.HOSTAWAY_CLIENT_SECRET;
-
-  console.log('[Hostaway] Auth attempt — ACCOUNT_ID present:', !!accountId, '| SECRET present:', !!clientSecret);
-
-  if (!accountId || !clientSecret) {
-    throw new Error(
-      `Missing Hostaway credentials: ACCOUNT_ID=${!!accountId}, SECRET=${!!clientSecret}`
-    );
+async function getToken(creds: HostawayCreds): Promise<string> {
+  const cached = tokenCache.get(creds.accountId);
+  if (cached && Date.now() < cached.expiresAt - 5 * 60 * 1000) {
+    return cached.token;
   }
 
   const res = await fetch('https://api.hostaway.com/v1/accessTokens', {
@@ -25,8 +19,8 @@ async function getToken(): Promise<string> {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type: 'client_credentials',
-      client_id: accountId,
-      client_secret: clientSecret,
+      client_id: creds.accountId,
+      client_secret: creds.clientSecret,
       scope: 'general',
     }),
   });
@@ -38,19 +32,20 @@ async function getToken(): Promise<string> {
   }
 
   const data = await res.json();
-  cachedToken = {
-    token: data.access_token,
+  const entry = {
+    token: data.access_token as string,
     expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
   };
+  tokenCache.set(creds.accountId, entry);
 
   // Hostaway docs: wait 1s after token generation before making calls
   await new Promise((r) => setTimeout(r, 1000));
-  return cachedToken.token;
+  return entry.token;
 }
 
 /** Fetch all listings → Map of listingId → property name */
-export async function fetchListings(): Promise<Map<number, string>> {
-  const token = await getToken();
+export async function fetchListings(creds: HostawayCreds): Promise<Map<number, string>> {
+  const token = await getToken(creds);
   const map = new Map<number, string>();
   let offset = 0;
 
@@ -94,8 +89,8 @@ export interface ListingDetail {
  * and the per-OTA public listing URLs. Same paginated endpoint as
  * fetchListings — this just keeps the whole object instead of only the name.
  */
-export async function fetchListingsDetailed(): Promise<Map<number, ListingDetail>> {
-  const token = await getToken();
+export async function fetchListingsDetailed(creds: HostawayCreds): Promise<Map<number, ListingDetail>> {
+  const token = await getToken(creds);
   const map = new Map<number, ListingDetail>();
   let offset = 0;
 
@@ -129,8 +124,8 @@ export async function fetchListingsDetailed(): Promise<Map<number, ListingDetail
 }
 
 /** Fetch current + future reservations (excluding cancelled/declined) */
-export async function fetchReservations(departureDateStart: string) {
-  const token = await getToken();
+export async function fetchReservations(creds: HostawayCreds, departureDateStart: string) {
+  const token = await getToken(creds);
   const all: any[] = [];
   let offset = 0;
   // 'ownerstay' is included so owner-reserved dates flow into the app (tagged
@@ -166,10 +161,11 @@ export async function fetchReservations(departureDateStart: string) {
  * Returns the raw Hostaway reservation objects.
  */
 export async function fetchReservationsForListing(
+  creds: HostawayCreds,
   listingId: number,
   departureDateStart: string,
 ): Promise<any[]> {
-  const token = await getToken();
+  const token = await getToken(creds);
   const all: any[] = [];
   let offset = 0;
   const allow = new Set(['new', 'confirmed', 'modified', 'ownerstay']);
@@ -203,11 +199,12 @@ export async function fetchReservationsForListing(
  * reservation) — reserved days are already covered by the reservation sync.
  */
 export async function fetchListingCalendar(
+  creds: HostawayCreds,
   listingId: number,
   startDate: string,
   endDate: string,
 ): Promise<Array<Record<string, any>>> {
-  const token = await getToken();
+  const token = await getToken(creds);
   const url = `https://api.hostaway.com/v1/listings/${listingId}/calendar?startDate=${startDate}&endDate=${endDate}&includeResources=1`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
@@ -223,9 +220,10 @@ export async function fetchListingCalendar(
  * how inquiry threads (no booked reservation) get a name + property.
  */
 export async function fetchConversation(
+  creds: HostawayCreds,
   conversationId: string | number,
 ): Promise<Record<string, unknown> | null> {
-  const token = await getToken();
+  const token = await getToken(creds);
   // includeResources=1 embeds the Reservation (status, channelName, dates) — the
   // conversation object alone doesn't carry those.
   const res = await fetch(
@@ -243,9 +241,10 @@ export async function fetchConversation(
  * surface via reservation sync. Returns raw conversation objects.
  */
 export async function fetchConversationsList(
+  creds: HostawayCreds,
   limit = 100,
 ): Promise<Record<string, unknown>[]> {
-  const token = await getToken();
+  const token = await getToken(creds);
   // includeResources=1 embeds each conversation's Reservation (status, channel,
   // dates) so the backfill can set booking_state/channel without a second call.
   const res = await fetch(
@@ -263,9 +262,10 @@ export async function fetchConversationsList(
  * host replies must be pulled from here. Returns raw Hostaway message objects.
  */
 export async function fetchConversationMessages(
+  creds: HostawayCreds,
   conversationId: string | number,
 ): Promise<Record<string, unknown>[]> {
-  const token = await getToken();
+  const token = await getToken(creds);
   const all: Record<string, unknown>[] = [];
   let offset = 0;
 

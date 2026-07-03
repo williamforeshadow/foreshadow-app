@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { backfillRecentConversations } from '@/src/server/messages/ingest';
+import { getPrimaryHostawayIntegration, hostawayCredsFor } from '@/lib/pmsIntegrations';
 
 // One-time backfill: build canonical `conversations` rows for every existing
 // thread (recent Hostaway conversations + all known). Large cap to cover all.
@@ -8,7 +9,12 @@ export const maxDuration = 300;
 
 export async function POST() {
   try {
-    const result = await backfillRecentConversations(10000);
+    const integration = await getPrimaryHostawayIntegration();
+    if (!integration) {
+      return NextResponse.json({ success: true, skipped: 'no_integration' });
+    }
+    const ctx = { creds: hostawayCredsFor(integration), orgId: integration.org_id };
+    const result = await backfillRecentConversations(ctx, 10000);
     return NextResponse.json({ success: true, ...result });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';

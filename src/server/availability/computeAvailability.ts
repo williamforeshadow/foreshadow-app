@@ -132,7 +132,7 @@ export async function computeAvailability(
     if (Date.now() - last >= REFRESH_TTL_MS) {
       const { data: propRow } = await supabase
         .from('properties')
-        .select('id, hostaway_listing_id, is_active')
+        .select('id, org_id, hostaway_listing_id, is_active')
         .eq('id', propertyId)
         .maybeSingle();
       if (propRow) {

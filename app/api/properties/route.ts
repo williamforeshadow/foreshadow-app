@@ -144,7 +144,8 @@ export async function POST(req: NextRequest) {
       }
 
       const { fetchListings } = await import('@/lib/hostaway');
-      const listingsMap = await fetchListings();
+      const { getHostawayCredsForOrg } = await import('@/lib/pmsIntegrations');
+      const listingsMap = await fetchListings(await getHostawayCredsForOrg(orgId));
       const hostawayName = listingsMap.get(hostawayListingId);
       if (!hostawayName) {
         return NextResponse.json(
