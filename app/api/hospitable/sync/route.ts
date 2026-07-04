@@ -3,6 +3,7 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getPrimaryHospitableIntegration, hospitableCredsFor } from '@/lib/pmsIntegrations';
 import { fetchHospitableProperties, fetchHospitableReservations } from '@/lib/hospitable';
 import { getMapper } from '@/src/server/messages/pms';
+import { ingestHospitableThread } from '@/src/server/messages/ingestHospitable';
 
 // Hospitable reservation + property sync (P4).
 //
@@ -75,6 +76,7 @@ export async function POST() {
 
     // 2. Reservations, per property (so each maps to its property unambiguously).
     let reservationsUpserted = 0;
+    let messagesIngested = 0;
     for (const [hospId, prop] of propByHospId) {
       let reservations: any[];
       try {
@@ -111,6 +113,20 @@ export async function POST() {
       if (error) errors.push(`reservations upsert (${hospId}): ${error.message}`);
       else reservationsUpserted += resRows.length;
 
+      // Pull each reservation's message thread into conversations/guest_messages.
+      for (const r of reservations) {
+        try {
+          messagesIngested += await ingestHospitableThread(
+            { creds, orgId },
+            String(r.id),
+            { realtime: false },
+          );
+        } catch (err) {
+          errors.push(`messages (${r.id}): ${err instanceof Error ? err.message : 'failed'}`);
+        }
+        await new Promise((res) => setTimeout(res, 200));
+      }
+
       await new Promise((r) => setTimeout(r, 200)); // rate-limit friendly
     }
 
@@ -118,6 +134,7 @@ export async function POST() {
       success: true,
       properties_upserted: propertiesUpserted,
       reservations_upserted: reservationsUpserted,
+      messages_ingested: messagesIngested,
       errors: errors.length ? errors : undefined,
     };
     console.log('[Hospitable Sync] Complete:', JSON.stringify(result));
