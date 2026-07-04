@@ -13,6 +13,10 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/hospitable/sync",
+      "schedule": "15 */3 * * *"
+    },
+    {
       "path": "/api/cron/notifications",
       "schedule": "0 * * * *"
     },
