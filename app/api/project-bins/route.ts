@@ -64,12 +64,18 @@ export async function GET() {
 // without drift. See src/server/bins/createBin.ts.
 export async function POST(request: Request) {
   try {
+    const ctx = await requireAuthContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { appUser } = ctx;
+
     const body = await request.json();
 
+    // created_by is the verified acting user — it's how project_bins derives its
+    // org_id (the derive_org_id trigger reads created_by -> user's org).
     const result = await createBin({
       name: body?.name,
       description: body?.description ?? null,
-      created_by: body?.created_by ?? null,
+      created_by: appUser.id,
     });
 
     if (!result.ok) {
