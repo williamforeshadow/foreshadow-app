@@ -75,8 +75,14 @@ export async function POST() {
     }
 
     // 2. Reservations, per property (so each maps to its property unambiguously).
+    //    Import ACCEPTED/confirmed only — Hospitable also returns inquiries,
+    //    expired requests, and cancellations, which must never show as bookings.
+    const isAccepted = (r: any) =>
+      (r.reservation_status?.current?.category ?? r.status) === 'accepted';
+
     let reservationsUpserted = 0;
     let messagesIngested = 0;
+    const nonAcceptedIds: string[] = [];
     for (const [hospId, prop] of propByHospId) {
       let reservations: any[];
       try {
@@ -85,13 +91,16 @@ export async function POST() {
         errors.push(`reservations (${hospId}): ${err instanceof Error ? err.message : 'failed'}`);
         continue;
       }
-      if (reservations.length === 0) continue;
+      const accepted = reservations.filter(isAccepted);
+      // Track the ones Hospitable EXPLICITLY returned as non-accepted so we can
+      // remove any we previously imported (see cleanup below).
+      for (const r of reservations) if (!isAccepted(r)) nonAcceptedIds.push(String(r.id));
+      if (accepted.length === 0) continue;
 
-      const resRows = reservations.map((r: any) => {
+      const resRows = accepted.map((r: any) => {
         const guest = r.guest ?? {};
         const guestName =
           [guest.first_name, guest.last_name].filter(Boolean).join(' ') || null;
-        const statusCategory = r.reservation_status?.current?.category ?? r.status ?? null;
         const isOwner = r.stay_type === 'owner_stay' || r.owner_stay != null;
         return {
           org_id: orgId,
@@ -113,8 +122,8 @@ export async function POST() {
       if (error) errors.push(`reservations upsert (${hospId}): ${error.message}`);
       else reservationsUpserted += resRows.length;
 
-      // Pull each reservation's message thread into conversations/guest_messages.
-      for (const r of reservations) {
+      // Pull each accepted reservation's message thread.
+      for (const r of accepted) {
         try {
           messagesIngested += await ingestHospitableThread(
             { creds, orgId },
@@ -130,10 +139,45 @@ export async function POST() {
       await new Promise((r) => setTimeout(r, 200)); // rate-limit friendly
     }
 
+    // Remove previously-imported reservations that Hospitable now reports as
+    // non-accepted (expired inquiries, cancellations) + their conversation/
+    // messages, so they stop showing as phantom bookings. Keyed ONLY on ids the
+    // fetch explicitly returned as non-accepted — never on "absent from fetch",
+    // so a transient per-property fetch failure can't wipe real reservations.
+    let reservationsRemoved = 0;
+    if (nonAcceptedIds.length > 0) {
+      const { data: stale } = await supabase
+        .from('reservations')
+        .select('id')
+        .eq('org_id', orgId)
+        .in('hospitable_reservation_id', nonAcceptedIds);
+      const staleIds = (stale ?? []).map((r: any) => r.id as string);
+      if (staleIds.length > 0) {
+        const { data: staleConvs } = await supabase
+          .from('conversations')
+          .select('id')
+          .eq('org_id', orgId)
+          .in('reservation_id', staleIds);
+        const convIds = (staleConvs ?? []).map((c: any) => c.id as string);
+        if (convIds.length > 0) {
+          await supabase.from('guest_messages').delete().eq('org_id', orgId).in('conversation_id', convIds);
+          await supabase.from('conversations').delete().eq('org_id', orgId).in('id', convIds);
+        }
+        const { data: removed } = await supabase
+          .from('reservations')
+          .delete()
+          .eq('org_id', orgId)
+          .in('id', staleIds)
+          .select('id');
+        reservationsRemoved = removed?.length ?? 0;
+      }
+    }
+
     const result = {
       success: true,
       properties_upserted: propertiesUpserted,
       reservations_upserted: reservationsUpserted,
+      reservations_removed: reservationsRemoved,
       messages_ingested: messagesIngested,
       errors: errors.length ? errors : undefined,
     };
