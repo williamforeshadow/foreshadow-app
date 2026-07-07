@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getPrimaryHospitableIntegration, hospitableCredsFor } from '@/lib/pmsIntegrations';
 import { fetchHospitableProperties, fetchHospitableReservations } from '@/lib/hospitable';
-import { getMapper } from '@/src/server/messages/pms';
 import { ingestHospitableThread } from '@/src/server/messages/ingestHospitable';
 
 // Hospitable reservation + property sync (P4).
@@ -31,8 +30,19 @@ export async function POST() {
     }
     const creds = hospitableCredsFor(integration);
     const orgId = integration.org_id;
-    const mapper = getMapper('hospitable');
     const now = new Date().toISOString();
+
+    // Hospitable's /reservations endpoint defaults to a narrow ~2-week window;
+    // without an explicit start_date/end_date it silently omits everything
+    // further out. Request the full operational range so org-2 mirrors the PMS.
+    const nowMs = Date.now();
+    const DAY = 86_400_000;
+    const startDate = new Date(nowMs - 90 * DAY).toISOString().slice(0, 10);
+    const endDate = new Date(nowMs + 730 * DAY).toISOString().slice(0, 10);
+    // Backfill message threads only for active/near-term stays — future bookings
+    // rarely have threads yet, and fetching one per reservation across the full
+    // window would blow the function's time budget. Real-time arrives by webhook.
+    const msgWindowEnd = nowMs + 30 * DAY;
 
     // 1. Properties → upsert.
     const properties = await fetchHospitableProperties(creds);
@@ -86,7 +96,10 @@ export async function POST() {
     for (const [hospId, prop] of propByHospId) {
       let reservations: any[];
       try {
-        reservations = await fetchHospitableReservations(creds, [hospId]);
+        reservations = await fetchHospitableReservations(creds, [hospId], {
+          start_date: startDate,
+          end_date: endDate,
+        });
       } catch (err) {
         errors.push(`reservations (${hospId}): ${err instanceof Error ? err.message : 'failed'}`);
         continue;
@@ -110,7 +123,11 @@ export async function POST() {
           guest_name: guestName ?? (isOwner ? 'Owner Stay' : 'Guest'),
           check_in: r.check_in ?? r.arrival_date ?? null,
           check_out: r.check_out ?? r.departure_date ?? null,
-          channel: mapper.mapChannel(r.platform),
+          // Store the raw PMS channel (matching the Hostaway sync's raw
+          // channelName); normalize at read time via canonicalChannelKey /
+          // channelLabel so both orgs share one vocabulary.
+          channel: r.platform ?? null,
+          channel_source: r.source ?? null,
           kind: isOwner ? 'owner_stay' : 'guest_booking',
           updated_at: now,
         };
@@ -122,8 +139,15 @@ export async function POST() {
       if (error) errors.push(`reservations upsert (${hospId}): ${error.message}`);
       else reservationsUpserted += resRows.length;
 
-      // Pull each accepted reservation's message thread.
-      for (const r of accepted) {
+      // Pull message threads only for active/near-term stays (see msgWindowEnd).
+      const nearTerm = accepted.filter((r: any) => {
+        const co = Date.parse(r.check_out ?? r.departure_date ?? '');
+        const ci = Date.parse(r.check_in ?? r.arrival_date ?? '');
+        return Number.isFinite(co) && Number.isFinite(ci)
+          ? co >= nowMs && ci <= msgWindowEnd
+          : true; // undated → don't silently skip
+      });
+      for (const r of nearTerm) {
         try {
           messagesIngested += await ingestHospitableThread(
             { creds, orgId },

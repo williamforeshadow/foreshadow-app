@@ -210,6 +210,7 @@ export async function POST() {
     const BATCH = 20;
     let inserted = 0;
     let updated = 0;
+    let skippedUnlinkedReservations = 0;
     const errors: string[] = [];
 
     // Collect all Hostaway reservation IDs from the fresh pull (for cancellation detection)
@@ -248,6 +249,19 @@ export async function POST() {
         continue;
       }
 
+      // Explicit-import model: a reservation whose Hostaway listing isn't linked
+      // to an app property has a null property_id. property_id is NOT NULL, and
+      // because inserts are batched, ONE such row previously failed the ENTIRE
+      // batch — silently dropping valid reservations on linked listings as
+      // collateral (this is how Ben Roseberry's booking went missing while an
+      // unlinked "Sunny San Diego Retreat" reservation shared its batch). Skip
+      // + count unlinked-listing reservations here so they never enter a batch;
+      // the listing is imported on demand via "Add Property → From Hostaway".
+      if (!existing && !resolvedPropertyId) {
+        skippedUnlinkedReservations += 1;
+        continue;
+      }
+
       if (!existing) {
         // Brand new reservation → INSERT (will trigger automations correctly)
         newRows.push({
@@ -258,6 +272,9 @@ export async function POST() {
           check_in: r.arrivalDate,
           check_out: r.departureDate,
           channel: r.channelName ?? null,
+          // Finer origin behind Hostaway's catch-all channels (e.g. the real
+          // OTA name for channel='partner', like 'whimstay_...').
+          channel_source: r.source ?? null,
           kind,
           updated_at: new Date().toISOString(),
           org_id: orgId,
@@ -425,6 +442,7 @@ export async function POST() {
       reservations_fetched: reservations.length,
       reservations_inserted: inserted,
       reservations_updated: updated,
+      reservations_skipped_unlinked: skippedUnlinkedReservations,
       reservations_removed: removed,
       errors: errors.length ? errors : undefined,
     };
