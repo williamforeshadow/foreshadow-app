@@ -350,7 +350,7 @@ export function RoomsBoard({
   return (
     <>
       <div className="flex-1 overflow-auto">
-        <div className="max-w-[760px] px-5 sm:px-8 pt-5 sm:pt-6 pb-32">
+        <div className="max-w-[1080px] mx-auto px-5 sm:px-8 pt-5 sm:pt-6 pb-32">
           <section className="mb-6">
             <SectionHeader
               label={sectionLabel}
@@ -386,7 +386,7 @@ export function RoomsBoard({
             <EmptyRooms noun={noun} onAdd={handleCreateRoom} />
           )}
 
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col divide-y divide-neutral-200/70 dark:divide-[rgba(255,255,255,0.06)]">
             {rooms.map((room) => (
               <RoomSection
                 key={room.id}
@@ -477,45 +477,47 @@ function RoomSection({
   const roomPhotos = room.property_room_photos ?? [];
 
   return (
-    <section className="border border-neutral-200/80 dark:border-[rgba(255,255,255,0.07)] rounded-lg p-4 sm:p-5 bg-white/40 dark:bg-[rgba(255,255,255,0.01)]">
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <RoomTitle
-          value={room.title}
-          onChangeTitle={(next) => onPatchRoom({ title: next })}
-        />
-        <button
-          type="button"
-          onClick={onDeleteRoom}
-          aria-label={`Delete ${noun}`}
-          className="shrink-0 p-1.5 rounded text-neutral-400 dark:text-[#66645f] hover:text-red-600 dark:hover:text-red-400 hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
-          title={`Delete ${noun}`}
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            viewBox="0 0 24 24"
+    <section className="flex flex-col md:flex-row md:items-start gap-4 md:gap-6 py-6 first:pt-0">
+      {/* LEFT: the room/area card — title, notes, photos. Attributes are
+          decoupled out of this card into their own column on the right. */}
+      <div className="md:w-[300px] md:shrink-0 border border-neutral-200/80 dark:border-[rgba(255,255,255,0.07)] rounded-lg p-4 bg-white/40 dark:bg-[rgba(255,255,255,0.01)]">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <RoomTitle
+            value={room.title}
+            onChangeTitle={(next) => onPatchRoom({ title: next })}
+          />
+          <button
+            type="button"
+            onClick={onDeleteRoom}
+            aria-label={`Delete ${noun}`}
+            className="shrink-0 p-1.5 rounded text-neutral-400 dark:text-[#66645f] hover:text-red-600 dark:hover:text-red-400 hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+            title={`Delete ${noun}`}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M10 7V4a1 1 0 011-1h2a1 1 0 011 1v3"
-            />
-          </svg>
-        </button>
-      </div>
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M10 7V4a1 1 0 011-1h2a1 1 0 011 1v3"
+              />
+            </svg>
+          </button>
+        </div>
 
-      {/* Notes first, then photos, then attributes. */}
-      <div className="mb-5">
-        <RoomNotes
-          value={room.notes ?? ''}
-          noun={noun}
-          onChange={(next) => onPatchRoom({ notes: next.trim() === '' ? null : next })}
-        />
-      </div>
+        {/* Notes, then photos — both remain room-level, in the left card. */}
+        <div className="mb-4">
+          <RoomNotes
+            value={room.notes ?? ''}
+            noun={noun}
+            onChange={(next) => onPatchRoom({ notes: next.trim() === '' ? null : next })}
+          />
+        </div>
 
-      <div className="mb-5">
         <PhotoGrid
           photos={roomPhotos}
           maxPhotos={ROOM_PHOTO_CAP}
@@ -530,51 +532,55 @@ function RoomSection({
         />
       </div>
 
-      <div className="flex items-center justify-between mb-2">
-        <h4 className="text-[11px] font-semibold text-neutral-700 dark:text-[#a09e9a] uppercase tracking-[0.08em]">
-          Attributes
-        </h4>
-        <button
-          type="button"
-          onClick={onCreateAttribute}
-          className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-neutral-500 dark:text-[#a09e9a] hover:text-[var(--accent-3)] dark:hover:text-[var(--accent-1)] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] rounded transition-colors"
-        >
-          <svg
-            className="w-3 h-3"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2.5}
-            viewBox="0 0 24 24"
+      {/* RIGHT: this room's attributes, each an expandable row with the same
+          fields as before — just lifted out of the room card. */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between mb-2 min-h-[26px]">
+          <h4 className="text-[11px] font-semibold text-neutral-700 dark:text-[#a09e9a] uppercase tracking-[0.08em]">
+            Attributes
+          </h4>
+          <button
+            type="button"
+            onClick={onCreateAttribute}
+            className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-neutral-500 dark:text-[#a09e9a] hover:text-[var(--accent-3)] dark:hover:text-[var(--accent-1)] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] rounded transition-colors"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
-          Add attribute
-        </button>
-      </div>
+            <svg
+              className="w-3 h-3"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.5}
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+            Add attribute
+          </button>
+        </div>
 
-      {attributes.length === 0 ? (
-        <div className="py-4 px-3 text-[12px] text-neutral-400 dark:text-[#66645f] border border-dashed border-neutral-200 dark:border-[rgba(255,255,255,0.07)] rounded-md">
-          No attributes in this {noun} yet.
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {attributes.map((a) => (
-            <AttributeRow
-              key={a.id}
-              attribute={a}
-              propertyId={propertyId}
-              onPatch={(patch) => onPatchAttribute(a.id, patch)}
-              onDelete={() => onDeleteAttribute(a.id)}
-              onPhotosChange={(photos) => onAttributePhotosChange(a.id, photos)}
-              onError={onError}
-            />
-          ))}
-        </div>
-      )}
+        {attributes.length === 0 ? (
+          <div className="py-4 px-3 text-[12px] text-neutral-400 dark:text-[#66645f] border border-dashed border-neutral-200 dark:border-[rgba(255,255,255,0.07)] rounded-md">
+            No attributes in this {noun} yet.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {attributes.map((a) => (
+              <AttributeRow
+                key={a.id}
+                attribute={a}
+                propertyId={propertyId}
+                onPatch={(patch) => onPatchAttribute(a.id, patch)}
+                onDelete={() => onDeleteAttribute(a.id)}
+                onPhotosChange={(photos) => onAttributePhotosChange(a.id, photos)}
+                onError={onError}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </section>
   );
 }
