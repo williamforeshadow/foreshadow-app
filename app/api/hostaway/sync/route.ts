@@ -223,10 +223,11 @@ export async function POST() {
     for (const r of reservations) {
       freshHostawayIds.add(r.id);
 
-      const propertyName =
-        r.listingName ||
-        listingsMap.get(r.listingMapId) ||
-        `Listing ${r.listingMapId}`;
+      // property_name is no longer computed here: it's a denormalized mirror of
+      // properties.name, enforced by the derive_property_name() BEFORE-INSERT
+      // trigger (keyed on property_id). Stamping the PMS's per-reservation
+      // listingName here is exactly what used to drift a single property into
+      // multiple schedule rows.
       // Owner stays come through the same reservations feed with status
       // 'ownerStay'; tag them so they're distinguishable everywhere while
       // still inheriting reservation automations by default.
@@ -267,7 +268,8 @@ export async function POST() {
         newRows.push({
           hostaway_reservation_id: r.id,
           property_id: resolvedPropertyId,
-          property_name: propertyName,
+          // property_name intentionally omitted — the derive_property_name()
+          // trigger fills it from properties.name before the NOT NULL check.
           guest_name: guestName,
           check_in: r.arrivalDate,
           check_out: r.departureDate,
