@@ -164,7 +164,7 @@ export const previewPropertyKnowledgeWriteTool: ToolDefinition<
       fields: {
         type: 'object',
         description:
-          "Fields for the selected action. Access fields include guest_code, cleaner_code, backup_code, code_rotation_notes, outer_door_code, gate_code, elevator_notes, unit_door_code, key_location, lockbox_code, parking_spot_number, parking_type, parking_instructions. Connectivity fields: wifi_ssid, wifi_password, wifi_router_location. Room fields: scope ('interior'|'exterior'), title, notes, sort_order. Attribute fields: room_id, tags (array of: appliance, amenity, safety, quirk, utility, access, known_issue, other), title, body, sort_order. Document fields: title, notes, tag. Pass null to clear nullable text fields.",
+          "Fields for the selected action. Access fields include guest_code, cleaner_code, backup_code, code_rotation_notes, outer_door_code, gate_code, elevator_notes, unit_door_code, key_location, lockbox_code, parking_spot_number, parking_type, parking_instructions. Connectivity fields: wifi_ssid, wifi_password, wifi_router_location. Room fields: scope ('interior'|'exterior'), title, notes, sort_order. Attribute fields: room_id, tags (array of: appliance, amenity, safety, quirk, utility, access, other), title, body, sort_order. Document fields: title, notes, tag. Pass null to clear nullable text fields.",
       },
       attachment_inbound_file_ids: {
         type: 'array',

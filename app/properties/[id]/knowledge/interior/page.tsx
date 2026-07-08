@@ -13,7 +13,7 @@ export default function PropertyInteriorTab() {
       propertyId={propertyId}
       scope="interior"
       sectionLabel="Interior"
-      sectionCaption="Add rooms like bedrooms, bathrooms, kitchen, or anything else. Each room can hold notes, photos, and tagged attributes (appliances, amenities, safety items, quirks, known issues)."
+      sectionCaption="Add rooms like bedrooms, bathrooms, kitchen, or anything else. Each room can hold notes, photos, and tagged attributes (appliances, amenities, safety items, quirks)."
       noun="room"
       nounPlural="rooms"
     />

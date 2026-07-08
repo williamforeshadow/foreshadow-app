@@ -430,7 +430,7 @@ function EmptyRooms({ noun, onAdd }: { noun: string; onAdd: () => void }) {
       </div>
       <div className="text-[12px] text-neutral-500 dark:text-[#66645f] mb-4 max-w-[380px]">
         Add a {noun} to start organizing notes, photos, and attributes
-        (appliances, amenities, quirks, known issues).
+        (appliances, amenities, quirks).
       </div>
       <button
         type="button"

@@ -16,8 +16,8 @@ export const ATTRIBUTE_SCOPES: ReadonlySet<AttributeScope> = new Set<AttributeSc
 
 // ---------------------------------------------------------------------------
 // Attribute tags (multi-select). Replaces the old single `tag` enum + the
-// per-tag structured sub-fields. `known_issue` replaces the former Notes
-// "known issues" scope — any attribute can be flagged as a known issue.
+// per-tag structured sub-fields. Tags describe durable facts about the house;
+// defects/needs-repair items are operational work (tasks), not knowledge.
 // ---------------------------------------------------------------------------
 
 export type AttributeTag =
@@ -27,8 +27,7 @@ export type AttributeTag =
   | 'quirk'
   | 'utility'
   | 'access'
-  | 'other'
-  | 'known_issue';
+  | 'other';
 
 export const ATTRIBUTE_TAGS: AttributeTag[] = [
   'appliance',
@@ -37,7 +36,6 @@ export const ATTRIBUTE_TAGS: AttributeTag[] = [
   'quirk',
   'utility',
   'access',
-  'known_issue',
   'other',
 ];
 
@@ -50,12 +48,10 @@ export const TAG_LABELS: Record<AttributeTag, string> = {
   quirk: 'Quirk',
   utility: 'Utility',
   access: 'Access',
-  known_issue: 'Known issue',
   other: 'Other',
 };
 
-// Pill colors for the inline tag chip (light + dark). `known_issue` gets a
-// strong red so it reads as a flag, kept distinct from `safety` (rose).
+// Pill colors for the inline tag chip (light + dark).
 export const TAG_CHIP_CLASSES: Record<AttributeTag, string> = {
   appliance:
     'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-500/30',
@@ -69,8 +65,6 @@ export const TAG_CHIP_CLASSES: Record<AttributeTag, string> = {
     'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:border-sky-500/30',
   access:
     'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-500/15 dark:text-violet-300 dark:border-violet-500/30',
-  known_issue:
-    'bg-red-100 text-red-700 border-red-300 dark:bg-red-500/20 dark:text-red-300 dark:border-red-500/40',
   other:
     'bg-neutral-100 text-neutral-600 border-neutral-200 dark:bg-white/5 dark:text-[#a09e9a] dark:border-white/10',
 };
