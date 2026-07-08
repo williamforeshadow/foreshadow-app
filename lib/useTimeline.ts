@@ -40,18 +40,41 @@ export function useTimeline() {
   const fetchReservations = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch reservations (turnovers) and recurring tasks in parallel
-      const [turnoversRes, recurringRes, blocksResult] = await Promise.all([
+      // Fetch reservations (turnovers), recurring tasks, blocks, and the active
+      // property list in parallel.
+      const [turnoversRes, recurringRes, blocksResult, propertiesRes] = await Promise.all([
         apiFetch('/api/turnovers'),
         apiFetch('/api/recurring-tasks'),
         apiFetch('/api/calendar-blocks'),
+        // Default excludes inactive. An inactive ("frozen") property shouldn't
+        // appear on the schedule even if it still carries recurring tasks,
+        // manual blocks, or lingering future reservations.
+        apiFetch('/api/properties'),
       ]);
 
       const turnoversJson = await turnoversRes.json();
       if (!turnoversRes.ok) throw new Error(turnoversJson.error || 'Failed to fetch turnovers');
       const recurringJson = recurringRes.ok ? await recurringRes.json() : { data: [] };
 
-      const turnoversData = turnoversJson.data || [];
+      // Set of active property names. property_name is a DB-enforced mirror of
+      // properties.name, so name matching is exact. If the fetch fails we leave
+      // this null and fall back to showing everything (prior behavior). Rows
+      // with no property (general recurring tasks) are always kept.
+      let activeNames: Set<string> | null = null;
+      if (propertiesRes.ok) {
+        try {
+          const pj = await propertiesRes.json();
+          activeNames = new Set<string>((pj.properties || []).map((p: any) => p.name));
+        } catch {
+          /* leave null → unfiltered */
+        }
+      }
+      const isActiveProp = (name: string | null | undefined) =>
+        !activeNames || !name || activeNames.has(name);
+
+      const turnoversData = (turnoversJson.data || []).filter((r: any) =>
+        isActiveProp(r.property_name)
+      );
       setReservations(turnoversData);
 
       // Transform recurring tasks to match the Task shape
@@ -79,7 +102,7 @@ export function useTimeline() {
           avatar: a.users?.avatar || '',
           role: a.users?.role || '',
         })),
-      }));
+      })).filter((t: any) => isActiveProp(t.property_name));
       setRecurringTasks(recurringData);
 
       // Calendar blocks (manual/maintenance unavailability — not reservations),
@@ -107,7 +130,7 @@ export function useTimeline() {
           note: b.note || null,
           kind: 'block' as const,
         }))
-        .filter((b: any) => b.property_name);
+        .filter((b: any) => b.property_name && isActiveProp(b.property_name));
       setBlocks(blocksData);
 
       // Unique properties from turnovers, recurring tasks, AND blocks — so a
