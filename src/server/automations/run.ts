@@ -81,9 +81,24 @@ export async function runAutomationsForRowChange(
   row: Record<string, unknown>,
 ): Promise<RunResult[]> {
   const supabase = getSupabaseServer();
+
+  // Multi-tenant guard: only THIS row's org's automations may fire. Without
+  // this, an "all properties" automation in org B would match org A's row and
+  // deliver org A's data into org B's Slack channels. Fail closed when the
+  // caller didn't supply the row's org.
+  const orgId = typeof row.org_id === 'string' ? row.org_id : null;
+  if (!orgId) {
+    console.warn('[automations] row change without org_id — skipping automations', {
+      entity,
+      op,
+    });
+    return [];
+  }
+
   const { data, error } = await supabase
     .from('automations')
     .select('*')
+    .eq('org_id', orgId)
     .eq('enabled', true)
     .eq('trigger->>kind', 'row_change')
     .eq('trigger->>entity', entity)
@@ -446,12 +461,17 @@ function todayYmd(): string {
 export async function testFireAutomation(
   automationId: string,
   sampleRow: Record<string, unknown>,
+  orgId: string,
 ): Promise<RunResult> {
   const supabase = getSupabaseServer();
+  // Org guard: the caller may only test-fire THEIR org's automations. Without
+  // this, any authed user could fire another tenant's automation (posting a
+  // [TEST] message into that tenant's Slack channels).
   const { data, error } = await supabase
     .from('automations')
     .select('*')
     .eq('id', automationId)
+    .eq('org_id', orgId)
     .single();
   if (error || !data) {
     return {

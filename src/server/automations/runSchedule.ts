@@ -58,14 +58,31 @@ export async function runScheduleTick(now: Date = new Date()): Promise<ScheduleR
     console.error('[automations:schedule] failed to load automations', error);
     return [];
   }
-  const automations = (data ?? []).map(summarizeAutomationFromRow);
+  // Keep each automation paired with its org: the cron legitimately processes
+  // every org's automations, but each one must only ever read ITS org's rows
+  // and settings. summarizeAutomationFromRow drops org_id, so zip it here.
+  const automations = ((data ?? []) as Array<Parameters<typeof summarizeAutomationFromRow>[0] & { org_id?: string | null }>).map((r) => ({
+    automation: summarizeAutomationFromRow(r),
+    orgId: r.org_id ?? null,
+  }));
   if (automations.length === 0) return [];
 
-  const companyTz = await loadCompanyTimezone();
+  // operations_settings is per-org — resolve each org's default timezone once.
+  const tzByOrg = new Map<string, string>();
   const results: ScheduleRunResult[] = [];
-  for (const automation of automations) {
+  for (const { automation, orgId } of automations) {
+    // Fail closed: an automation without an org can't be scoped, so it can't run.
+    if (!orgId) {
+      results.push({ automation_id: automation.id, ok: true, skipped: 'missing org_id' });
+      continue;
+    }
+    let companyTz = tzByOrg.get(orgId);
+    if (!companyTz) {
+      companyTz = await loadOrgTimezone(orgId);
+      tzByOrg.set(orgId, companyTz);
+    }
     try {
-      results.push(await runOneSchedule(automation, now, companyTz));
+      results.push(await runOneSchedule(automation, orgId, now, companyTz));
     } catch (err) {
       console.error('[automations:schedule] automation crashed', {
         id: automation.id,
@@ -83,6 +100,7 @@ export async function runScheduleTick(now: Date = new Date()): Promise<ScheduleR
 
 async function runOneSchedule(
   automation: Automation,
+  orgId: string,
   now: Date,
   companyTz: string,
 ): Promise<ScheduleRunResult> {
@@ -129,7 +147,9 @@ async function runOneSchedule(
   }
 
   const supabase = getSupabaseServer();
-  let query = supabase.from('reservations').select('*');
+  // Org scope is mandatory: with property_ids empty ("all properties") this
+  // previously read EVERY org's reservations into this org's Slack messages.
+  let query = supabase.from('reservations').select('*').eq('org_id', orgId);
   if (automation.property_ids.length > 0) {
     query = query.in('property_id', automation.property_ids);
   }
@@ -492,13 +512,15 @@ async function hydrateRelations(
   return out;
 }
 
-async function loadCompanyTimezone(): Promise<string> {
+async function loadOrgTimezone(orgId: string): Promise<string> {
   try {
     const supabase = getSupabaseServer();
+    // operations_settings is per-org (org_id column); the old `.eq('id', 1)`
+    // singleton read applied one org's timezone to every tenant.
     const { data } = await supabase
       .from('operations_settings')
       .select('default_timezone')
-      .eq('id', 1)
+      .eq('org_id', orgId)
       .maybeSingle();
     return (data?.default_timezone as string | undefined) || DEFAULT_TIMEZONE;
   } catch {

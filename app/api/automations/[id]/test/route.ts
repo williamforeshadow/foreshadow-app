@@ -21,7 +21,7 @@ export async function POST(
 ) {
   const ctx = await requireAuthContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase } = ctx;
+  const { supabase, orgId } = ctx;
   const { id } = await params;
   let body: { sample_row?: Record<string, unknown> } = {};
   try {
@@ -53,6 +53,6 @@ export async function POST(
     sampleRow = data as Record<string, unknown>;
   }
 
-  const result = await testFireAutomation(id, sampleRow);
+  const result = await testFireAutomation(id, sampleRow, orgId);
   return NextResponse.json({ result });
 }

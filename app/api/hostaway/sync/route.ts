@@ -14,6 +14,8 @@ type InsertedReservation = {
   guest_name: string;
   check_in: string;
   check_out: string;
+  /** Required by runAutomationsForRowChange to scope automations to this org. */
+  org_id: string;
 };
 
 // Allow enough time for paginated Hostaway fetches + batched inserts
@@ -315,7 +317,7 @@ export async function POST() {
       const { data: returnedRows, error } = await supabase
         .from('reservations')
         .insert(batch)
-        .select('id, property_id, property_name, guest_name, check_in, check_out');
+        .select('id, property_id, property_name, guest_name, check_in, check_out, org_id');
 
       if (error) {
         errors.push(`Insert batch error: ${error.message}`);
