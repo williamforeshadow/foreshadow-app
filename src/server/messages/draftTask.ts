@@ -132,10 +132,15 @@ interface DepartmentRow {
   name: string | null;
 }
 
-async function loadDepartments(): Promise<DepartmentRow[]> {
+async function loadDepartments(orgId: string | null): Promise<DepartmentRow[]> {
+  // Service client bypasses RLS — scope to the conversation's org so another
+  // tenant's departments never enter the triage prompt (or a proposed task's
+  // department_id). No org → no roster.
+  if (!orgId) return [];
   const { data, error } = await getSupabaseServer()
     .from('departments')
     .select('id, name')
+    .eq('org_id', orgId)
     .order('name', { ascending: true });
   if (error) {
     console.warn('[task triage] department lookup failed', { error });
@@ -157,11 +162,16 @@ interface TeamMemberRow {
  * AI never assigns a vendor; vendor work is offered manually. Departments ride
  * along as CONTEXT only; candidates are never filtered by department.
  */
-async function loadTeamMembers(): Promise<TeamMemberRow[]> {
+async function loadTeamMembers(orgId: string | null): Promise<TeamMemberRow[]> {
+  // Org-scope the assignee roster — otherwise every tenant's users become
+  // candidate assignees and a cross-org user_id can be persisted onto a
+  // proposed task. No org → no roster.
+  if (!orgId) return [];
   const supabase = getSupabaseServer();
   const { data: users, error } = await supabase
     .from('users')
     .select('id, name, role')
+    .eq('org_id', orgId)
     .order('name', { ascending: true });
   if (error) {
     console.warn('[task triage] team member lookup failed', { error });
@@ -336,11 +346,12 @@ export async function generateProposedTaskDraftFromContext(
     situationalIndexBlock = '';
   }
 
+  const convOrgId = (ctx.conversation as { org_id?: string | null }).org_id ?? null;
   const [departments, sensitivity, existingTitles, teamMembers] = await Promise.all([
-    loadDepartments(),
+    loadDepartments(convOrgId),
     loadTaskProposalSensitivity(),
     loadExistingProposalTitles(ctx.conversation.id),
-    loadTeamMembers(),
+    loadTeamMembers(convOrgId),
   ]);
 
   const nowMs = Date.now();

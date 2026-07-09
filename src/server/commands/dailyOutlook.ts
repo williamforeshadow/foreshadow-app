@@ -38,32 +38,49 @@ export async function getDailyOutlookData(
 ): Promise<DailyOutlookData> {
   const supabase = getSupabaseServer();
 
+  // Resolve the acting user's org. The service client bypasses RLS, so the
+  // reservations + settings reads below MUST filter by org_id — otherwise a
+  // slash command would surface every tenant's check-ins/outs (guest names +
+  // properties). No org → empty outlook, never all-orgs.
+  const { data: userRow } = await supabase
+    .from('users')
+    .select('org_id')
+    .eq('id', appUserId)
+    .maybeSingle();
+  const orgId = (userRow?.org_id as string | null) ?? null;
+
   let orgTimezone = DEFAULT_TIMEZONE;
-  try {
-    const { data: settings } = await supabase
-      .from('operations_settings')
-      .select('default_timezone')
-      .eq('id', 1)
-      .maybeSingle();
-    if (settings?.default_timezone) orgTimezone = settings.default_timezone;
-  } catch {
-    // Table may not exist yet — use the constant default.
+  if (orgId) {
+    try {
+      const { data: settings } = await supabase
+        .from('operations_settings')
+        .select('default_timezone')
+        .eq('org_id', orgId)
+        .maybeSingle();
+      if (settings?.default_timezone) orgTimezone = settings.default_timezone;
+    } catch {
+      // Settings row may be absent — use the constant default.
+    }
   }
   const { date: today } = todayInTz(orgTimezone);
   const targetDate = offsetDays === 0 ? today : addDays(today, offsetDays);
 
-  const [checkOutRes, checkInRes] = await Promise.all([
-    supabase
-      .from('reservations')
-      .select('property_name, guest_name')
-      .eq('check_out', targetDate)
-      .order('property_name', { ascending: true }),
-    supabase
-      .from('reservations')
-      .select('property_name, guest_name')
-      .eq('check_in', targetDate)
-      .order('property_name', { ascending: true }),
-  ]);
+  const [checkOutRes, checkInRes] = orgId
+    ? await Promise.all([
+        supabase
+          .from('reservations')
+          .select('property_name, guest_name')
+          .eq('org_id', orgId)
+          .eq('check_out', targetDate)
+          .order('property_name', { ascending: true }),
+        supabase
+          .from('reservations')
+          .select('property_name, guest_name')
+          .eq('org_id', orgId)
+          .eq('check_in', targetDate)
+          .order('property_name', { ascending: true }),
+      ])
+    : [{ data: [] }, { data: [] }];
 
   const toSummary = (rows: unknown): ReservationSummary[] =>
     (

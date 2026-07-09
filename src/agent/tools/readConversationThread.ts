@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getConversationContext } from '@/src/server/messages/conversationContext';
-import type { ToolDefinition, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
 // read_conversation_thread — the full message history for one guest conversation
 // plus its linked reservation, so the agent can understand what a guest asked
@@ -45,17 +46,46 @@ export interface ConversationThreadView {
   messages: ThreadMessage[];
 }
 
-async function handler(input: Input): Promise<ToolResult<ConversationThreadView>> {
-  let ctx;
+async function handler(
+  input: Input,
+  toolCtx: ToolContext,
+): Promise<ToolResult<ConversationThreadView>> {
+  const org = requireOrgId(toolCtx);
+  if (typeof org !== 'string') return org;
+
+  // Validate the conversation belongs to the caller's org BEFORE reading the
+  // thread (full guest message history + linked reservation). getConversationContext
+  // is org-blind, and conversation_id here is model-supplied — reject cross-org.
+  const { data: convRow, error: convErr } = await getSupabaseServer()
+    .from('conversations')
+    .select('id')
+    .eq('id', input.conversation_id)
+    .eq('org_id', org)
+    .maybeSingle();
+  if (convErr) {
+    return { ok: false, error: { code: 'db_error', message: convErr.message } };
+  }
+  if (!convRow) {
+    return {
+      ok: false,
+      error: {
+        code: 'not_found',
+        message: `No conversation with id ${input.conversation_id}.`,
+        hint: 'Call find_conversations to resolve a guest name or property to a conversation id.',
+      },
+    };
+  }
+
+  let convo;
   try {
-    ctx = await getConversationContext(input.conversation_id);
+    convo = await getConversationContext(input.conversation_id);
   } catch (err) {
     return {
       ok: false,
       error: { code: 'db_error', message: err instanceof Error ? err.message : 'Failed to read conversation' },
     };
   }
-  if (!ctx) {
+  if (!convo) {
     return {
       ok: false,
       error: {
@@ -67,7 +97,7 @@ async function handler(input: Input): Promise<ToolResult<ConversationThreadView>
   }
 
   const nowMs = Date.now();
-  const messages: ThreadMessage[] = ctx.messages.map((m) => ({
+  const messages: ThreadMessage[] = convo.messages.map((m) => ({
     direction: m.direction,
     body: (m.body ?? '').trim(),
     sent_at: m.sent_at,
@@ -75,17 +105,17 @@ async function handler(input: Input): Promise<ToolResult<ConversationThreadView>
   }));
 
   const view: ConversationThreadView = {
-    conversation_id: ctx.conversation.id,
-    guest_name: ctx.reservation?.guest_name ?? ctx.conversation.guest_name,
-    property_name: ctx.reservation?.property_name ?? ctx.conversation.property_name,
-    channel: ctx.conversation.channel,
-    app_status: ctx.conversation.app_status,
-    booking_state: ctx.conversation.booking_state,
+    conversation_id: convo.conversation.id,
+    guest_name: convo.reservation?.guest_name ?? convo.conversation.guest_name,
+    property_name: convo.reservation?.property_name ?? convo.conversation.property_name,
+    channel: convo.conversation.channel,
+    app_status: convo.conversation.app_status,
+    booking_state: convo.conversation.booking_state,
     stay: {
-      check_in: ctx.stay.check_in,
-      check_out: ctx.stay.check_out,
-      nights: ctx.stay.nights,
-      booked: ctx.stay.booked,
+      check_in: convo.stay.check_in,
+      check_out: convo.stay.check_out,
+      nights: convo.stay.nights,
+      booked: convo.stay.booked,
     },
     messages,
   };

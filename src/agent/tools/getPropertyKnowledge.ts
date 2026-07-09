@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { getSupabaseServer } from '@/lib/supabaseServer';
 import { loadPropertyKnowledge, type PropertyKnowledge } from '@/src/server/properties/propertyKnowledge';
-import type { ToolDefinition, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
 // get_property_knowledge — full per-property dossier (ops-facing).
 //
@@ -24,7 +25,37 @@ type Input = z.infer<typeof inputSchema>;
 
 export type { PropertyKnowledge };
 
-async function handler(input: Input): Promise<ToolResult<PropertyKnowledge>> {
+async function handler(
+  input: Input,
+  ctx: ToolContext,
+): Promise<ToolResult<PropertyKnowledge>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
+  // Validate the property belongs to the caller's org BEFORE loading its full
+  // dossier (access codes, wifi/tech credentials, contacts). loadPropertyKnowledge
+  // is org-blind, and property_id here is model-supplied — so a cross-org id
+  // (incl. one injected via guest-message text) must be rejected here.
+  const { data: prop, error: propErr } = await getSupabaseServer()
+    .from('properties')
+    .select('id')
+    .eq('id', input.property_id)
+    .eq('org_id', org)
+    .maybeSingle();
+  if (propErr) {
+    return { ok: false, error: { code: 'db_error', message: propErr.message } };
+  }
+  if (!prop) {
+    return {
+      ok: false,
+      error: {
+        code: 'not_found',
+        message: `No property found with id ${input.property_id}`,
+        hint: 'Use find_properties to look up a valid property id by name.',
+      },
+    };
+  }
+
   let data: PropertyKnowledge | null;
   try {
     data = await loadPropertyKnowledge(input.property_id);
