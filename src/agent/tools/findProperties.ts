@@ -11,13 +11,14 @@ import type { ToolDefinition, ToolResult } from './types';
 //
 // Naming rules the agent should follow (encoded in `description` below so the
 // model sees them):
-//   - `name` is the canonical user-facing display name. ALWAYS use it when
-//     referring to a property in responses to the user.
-//   - `hostaway_name` is a passive identifier for matching against Hostaway's
-//     listing label (which can be verbose, e.g. "Fun Tropical Casita: kid
-//     room, 3 blocks to beach"). It is searched here so the agent can resolve
-//     a property the user mentions by its Hostaway name, but it should not be
-//     surfaced back to the user unless they explicitly ask for it.
+//   - `name` is the canonical user-facing display name — the ONLY name field
+//     returned. Each result object is exactly one property.
+//   - `hostaway_name` (the upstream Hostaway listing label, often verbose e.g.
+//     "2650 Broadway 211 Golden Hill Condo") is still searched server-side so a
+//     user can refer to a property by its Hostaway name — but it is deliberately
+//     NOT returned. Surfacing it made the model treat a single property's two
+//     name fields as two separate properties (e.g. "Golden Hill" vs "Golden
+//     Hill Condo"), so it stays match-only.
 
 const inputSchema = z.object({
   query: z
@@ -47,7 +48,6 @@ type Input = z.infer<typeof inputSchema>;
 export interface PropertyRow {
   id: string;
   name: string;
-  hostaway_name: string | null;
   is_active: boolean;
   address_city: string | null;
   address_state: string | null;
@@ -56,8 +56,11 @@ export interface PropertyRow {
   timezone: string | null;
 }
 
+// hostaway_name is intentionally absent — it's filtered against (below) but
+// never returned, so the model can't mistake a property's Hostaway label for a
+// separate property.
 const SELECT =
-  'id, name, hostaway_name, is_active, address_city, address_state, bedrooms, bathrooms, timezone';
+  'id, name, is_active, address_city, address_state, bedrooms, bathrooms, timezone';
 
 const DEFAULT_LIMIT = 25;
 
@@ -116,7 +119,7 @@ async function handler(input: Input): Promise<ToolResult<PropertyRow[]>> {
 export const findProperties: ToolDefinition<Input, PropertyRow[]> = {
   name: 'find_properties',
   description:
-    "Find vacation rental properties by name or active status. Use this to resolve property names mentioned by the user into canonical property IDs that other tools accept. Each property has two name fields: `name` is the canonical user-facing display name (always use this when referring to a property in responses) and `hostaway_name` is a passive identifier for the upstream Hostaway listing label. Both are searched so users can mention a property by either, but only `name` should be surfaced in your replies unless the user explicitly asks for the Hostaway name.",
+    "Find vacation rental properties by name or active status. Use this to resolve property names mentioned by the user into canonical property IDs that other tools accept. Each object in the result is exactly ONE property; `name` is its canonical display name — always refer to a property by `name`. The search also matches the upstream Hostaway listing label internally (so a user can mention a property by that label), but that label is NOT returned and must never be treated as, or split into, a separate property.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
