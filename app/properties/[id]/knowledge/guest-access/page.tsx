@@ -14,6 +14,7 @@ import {
 } from '@/lib/propertyKnowledgeVisibility';
 import { type AttributeTag } from '@/lib/propertyAttributes';
 import { TagChips } from '@/components/properties/cards/TagChip';
+import { resolvePublicPhotoUrl } from '@/components/properties/cards/PhotoGrid';
 
 // Guest Visibility tab — control over what the Concierge (the guest-facing
 // sub-agent) may see for this property. Everything is LOCKED by default; unlock
@@ -63,14 +64,24 @@ function hasContent(value: unknown): boolean {
   return value != null && String(value).trim() !== '';
 }
 
-function photoCount(value: unknown): number {
-  return Array.isArray(value) ? value.length : 0;
-}
-
 function preview(value: unknown): string {
   if (value == null) return '';
   const s = String(value).trim();
   return s.length > 80 ? `${s.slice(0, 80)}…` : s;
+}
+
+interface PhotoLike {
+  id: string;
+  storage_path: string;
+  sort_order?: number;
+}
+
+// Pull a record's nested photo array into a sorted, thumbnail-ready list.
+function photosOf(value: unknown): PhotoLike[] {
+  if (!Array.isArray(value)) return [];
+  return (value as PhotoLike[])
+    .filter((p) => p && typeof p.storage_path === 'string')
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
 }
 
 // --- Field-level sections (access / connectivity / tech / contacts / docs) --
@@ -80,6 +91,7 @@ interface FieldRow {
   resourceId: string;
   label: string;
   sub?: string;
+  photos?: PhotoLike[];
 }
 
 interface FieldItem {
@@ -101,17 +113,18 @@ interface FieldsGroup {
 function buildRows(
   type: VisibilityResourceType,
   id: string,
-  specs: Array<{ field: string; label: string; value: unknown; count?: number }>,
+  specs: Array<{ field: string; label: string; value: unknown; photos?: PhotoLike[] }>,
 ): FieldRow[] {
   const rows: FieldRow[] = [];
   for (const s of specs) {
-    const present = s.count != null ? s.count > 0 : hasContent(s.value);
+    const present = s.photos ? s.photos.length > 0 : hasContent(s.value);
     if (!present) continue;
     rows.push({
       type,
       resourceId: encodeFieldResourceId(id, s.field),
       label: s.label,
-      sub: s.count != null ? `${s.count} photo${s.count === 1 ? '' : 's'}` : preview(s.value),
+      sub: s.photos ? undefined : preview(s.value),
+      photos: s.photos,
     });
   }
   return rows;
@@ -130,7 +143,7 @@ interface Package {
   label: string;
   notesPreview?: string; // room notes / attribute body preview
   tags: AttributeTag[]; // attribute tags (empty for rooms)
-  photoCount: number;
+  photos: PhotoLike[];
 }
 
 interface RoomBlock {
@@ -158,7 +171,7 @@ function roomPackage(room: Rec): Package {
     label: (room.title as string) || 'Room',
     notesPreview: hasContent(room.notes) ? preview(room.notes) : undefined,
     tags: [],
-    photoCount: photoCount(room.property_room_photos),
+    photos: photosOf(room.property_room_photos),
   };
 }
 
@@ -171,7 +184,7 @@ function attributePackage(attr: Rec): Package {
     label: (attr.title as string) || 'Attribute',
     notesPreview: hasContent(attr.body) ? preview(attr.body) : undefined,
     tags: Array.isArray(attr.tags) ? (attr.tags as AttributeTag[]) : [],
-    photoCount: photoCount(attr.property_attribute_photos),
+    photos: photosOf(attr.property_attribute_photos),
   };
 }
 
@@ -295,7 +308,7 @@ export default function GuestAccessTab() {
         { field: 'username', label: 'Username', value: t.username },
         { field: 'password', label: 'Password', value: t.password },
         { field: 'notes', label: 'Notes', value: t.notes },
-        { field: 'photos', label: 'Photos', value: null, count: photoCount(t.property_tech_account_photos) },
+        { field: 'photos', label: 'Photos', value: null, photos: photosOf(t.property_tech_account_photos) },
       ]);
       if (rows.length) {
         techItems.push({ key: id, header: (t.service_name as string) || (t.kind as string) || 'Tech account', rows });
@@ -465,11 +478,17 @@ export default function GuestAccessTab() {
                           const key = visibilityKey(row.type, row.resourceId);
                           const isUnlocked = unlocked.has(key);
                           return (
-                            <div key={key} className="flex items-center gap-3 px-3.5 py-2">
+                            <div key={key} className="flex items-start gap-3 px-3.5 py-2">
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-[12.5px] font-medium text-neutral-700 dark:text-[#cbc9c4]">{row.label}</p>
-                                {row.sub && (
-                                  <p className="truncate text-[11.5px] text-neutral-400 dark:text-[#66645f]">{row.sub}</p>
+                                {row.photos && row.photos.length > 0 ? (
+                                  <div className="mt-1">
+                                    <PhotoThumbs photos={row.photos} />
+                                  </div>
+                                ) : (
+                                  row.sub && (
+                                    <p className="truncate text-[11.5px] text-neutral-400 dark:text-[#66645f]">{row.sub}</p>
+                                  )
                                 )}
                               </div>
                               <VisibilityToggle
@@ -492,10 +511,37 @@ export default function GuestAccessTab() {
   );
 }
 
+// A compact strip of photo thumbnails (with a "+N" overflow chip) so the
+// operator can see the actual images a toggle would share.
+function PhotoThumbs({ photos, max = 6 }: { photos: PhotoLike[]; max?: number }) {
+  if (photos.length === 0) return null;
+  const shown = photos.slice(0, max);
+  const extra = photos.length - shown.length;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {shown.map((p) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={p.id}
+          src={resolvePublicPhotoUrl(p.storage_path)}
+          alt=""
+          loading="lazy"
+          className="h-11 w-11 rounded-md border border-neutral-200/80 object-cover dark:border-[rgba(255,255,255,0.08)] bg-neutral-100 dark:bg-[#1a1918]"
+        />
+      ))}
+      {extra > 0 && (
+        <span className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-neutral-200/80 text-[11px] font-medium text-neutral-500 dark:border-[rgba(255,255,255,0.08)] dark:text-[#a09e9a]">
+          +{extra}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // Context under a room/attribute label — a notes/body preview, tag chips, and
-// photo count — so the operator sees exactly what flipping the toggle shares.
+// photo thumbnails — so the operator sees exactly what flipping the toggle shares.
 function PackageMeta({ pkg }: { pkg: Package }) {
-  const hasMeta = !!pkg.notesPreview || pkg.tags.length > 0 || pkg.photoCount > 0;
+  const hasMeta = !!pkg.notesPreview || pkg.tags.length > 0 || pkg.photos.length > 0;
   if (!hasMeta) return null;
   return (
     <div className="mt-1 flex flex-col gap-1.5">
@@ -504,16 +550,8 @@ function PackageMeta({ pkg }: { pkg: Package }) {
           {pkg.notesPreview}
         </p>
       )}
-      {(pkg.tags.length > 0 || pkg.photoCount > 0) && (
-        <div className="flex items-center gap-2 flex-wrap">
-          {pkg.tags.length > 0 && <TagChips tags={pkg.tags} />}
-          {pkg.photoCount > 0 && (
-            <span className="text-[11px] text-neutral-400 dark:text-[#66645f]">
-              {pkg.photoCount} photo{pkg.photoCount === 1 ? '' : 's'}
-            </span>
-          )}
-        </div>
-      )}
+      {pkg.tags.length > 0 && <TagChips tags={pkg.tags} />}
+      {pkg.photos.length > 0 && <PhotoThumbs photos={pkg.photos} />}
     </div>
   );
 }

@@ -163,13 +163,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       resourceType = 'room';
       resourceId = room.id;
-      // Unlock the note plus the room title so the note has room context. Room
-      // photos are left to a manual Guest Visibility toggle rather than being
-      // auto-exposed by accepting a text note.
-      visibilityEntries = [
-        { type: 'room_field', resourceId: encodeFieldResourceId(room.id, 'title') },
-        { type: 'room_field', resourceId: encodeFieldResourceId(room.id, 'notes') },
-      ];
+      // A guest-visible room is all-or-nothing: unlock its whole field set
+      // (title/notes/photos) so it matches the Guest Visibility toggle.
+      visibilityEntries = RESOURCE_FIELD_SETS.room_field.map((field) => ({
+        type: 'room_field' as const,
+        resourceId: encodeFieldResourceId(room.id, field),
+      }));
     } else {
       // attribute
       const room = await ensureRoom(supabase, propertyId, target.room, actorId, orgId);
