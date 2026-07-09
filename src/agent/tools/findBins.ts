@@ -70,7 +70,7 @@ async function handler(
   if (typeof org !== 'string') return org;
 
   const limit = input.limit ?? DEFAULT_LIMIT;
-  const supabase = getSupabaseServer();
+  const supabase = ctx.db;
 
   // Match the UI's natural order: sort_order asc, then name asc, so the
   // agent and the bins picker enumerate bins in the same sequence.

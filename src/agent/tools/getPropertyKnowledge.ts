@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { getSupabaseServer } from '@/lib/supabaseServer';
 import { loadPropertyKnowledge, type PropertyKnowledge } from '@/src/server/properties/propertyKnowledge';
 import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
@@ -36,7 +35,7 @@ async function handler(
   // dossier (access codes, wifi/tech credentials, contacts). loadPropertyKnowledge
   // is org-blind, and property_id here is model-supplied — so a cross-org id
   // (incl. one injected via guest-message text) must be rejected here.
-  const { data: prop, error: propErr } = await getSupabaseServer()
+  const { data: prop, error: propErr } = await ctx.db
     .from('properties')
     .select('id')
     .eq('id', input.property_id)

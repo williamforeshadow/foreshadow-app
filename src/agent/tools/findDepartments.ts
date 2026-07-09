@@ -57,7 +57,7 @@ async function handler(
   if (typeof org !== 'string') return org;
 
   const limit = input.limit ?? DEFAULT_LIMIT;
-  const supabase = getSupabaseServer();
+  const supabase = ctx.db;
 
   let query = supabase
     .from('departments')

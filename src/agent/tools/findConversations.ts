@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { getSupabaseServer } from '@/lib/supabaseServer';
 import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult, type ToolMeta } from './types';
 
 // find_conversations — resolve a guest conversation (the messaging inbox row) by
@@ -65,7 +64,7 @@ async function handler(
   if (typeof org !== 'string') return org;
 
   const limit = input.limit ?? DEFAULT_LIMIT;
-  const supabase = getSupabaseServer();
+  const supabase = ctx.db;
 
   let q = supabase
     .from('conversations')

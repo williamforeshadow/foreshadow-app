@@ -1,4 +1,5 @@
 import type { ZodType } from 'zod';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
 
 // Shared shapes used by every tool.
@@ -72,10 +73,21 @@ export type ToolResult<T> =
  */
 export interface ToolContext {
   /**
+   * Database client for tool queries. On authenticated surfaces this is
+   * RLS-GOVERNED (the web session client, or a minted user client for Slack) —
+   * the database itself scopes every query to the acting user's org, so a
+   * forgotten filter cannot cross tenants. On session-less paths (concierge
+   * webhook drafts) it falls back to the service-role client, where the
+   * context-bound draft tools + explicit org filters remain the guard.
+   * Tools keep their explicit `.eq('org_id', …)` filters as defense-in-depth
+   * either way.
+   */
+  db: SupabaseClient;
+  /**
    * The organization the agent is acting for — resolved server-side from the
    * talking-to user's `users.org_id`. EVERY org-scoped tool query MUST filter
-   * by this: the tools use the service-role client, which BYPASSES RLS, so
-   * without an explicit `.eq('org_id', …)` a query reads across all tenants.
+   * by this: even with an RLS-governed `db`, the explicit filter is the
+   * defense-in-depth floor (and the only guard on service-role fallbacks).
    * Null only when the caller couldn't resolve an org; org-scoped tools must
    * then refuse (via requireOrgId) rather than leak another org's data.
    */

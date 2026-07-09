@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getConversationContext } from '@/src/server/messages/conversationContext';
 import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
@@ -56,7 +55,7 @@ async function handler(
   // Validate the conversation belongs to the caller's org BEFORE reading the
   // thread (full guest message history + linked reservation). getConversationContext
   // is org-blind, and conversation_id here is model-supplied — reject cross-org.
-  const { data: convRow, error: convErr } = await getSupabaseServer()
+  const { data: convRow, error: convErr } = await toolCtx.db
     .from('conversations')
     .select('id')
     .eq('id', input.conversation_id)

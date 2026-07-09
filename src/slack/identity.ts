@@ -35,6 +35,12 @@ export interface ResolvedIdentity {
   role: 'superadmin' | 'manager' | 'staff' | 'vendor';
   /** users.org_id — the org the agent acts for; scopes every tool query. */
   orgId: string | null;
+  /**
+   * users.auth_user_id — lets the Slack surface mint an RLS-governed client
+   * acting as this user (createSupabaseAsUser), so agent tool queries are
+   * org-scoped by the database itself. Null for legacy rows not yet linked.
+   */
+  authUserId: string | null;
 }
 
 interface CacheEntry {
@@ -86,7 +92,7 @@ export async function resolveSlackUser(
       // need a second round-trip just to render "you are <name>".
       const { data, error } = await getSupabaseServer()
         .from('users')
-        .select('id, name, role, org_id')
+        .select('id, name, role, org_id, auth_user_id')
         .ilike('email', email)
         .maybeSingle();
       if (!error && data?.id) {
@@ -108,6 +114,7 @@ export async function resolveSlackUser(
             'Unknown user',
           role,
           orgId: (data.org_id as string | null) ?? null,
+          authUserId: (data.auth_user_id as string | null) ?? null,
         };
       }
     }

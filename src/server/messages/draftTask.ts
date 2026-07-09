@@ -465,6 +465,9 @@ export async function generateProposedTaskDraftFromContext(
   // Bind the property + category so get_concierge_procedure loads THIS property's
   // situational TASK rules (not reply rules, not another property's).
   const toolCtx: ToolContext = {
+    // Session-less webhook path: no user to run as — service client + the
+    // context-bound draft tools / explicit org filters are the guard.
+    db: getSupabaseServer(),
     orgId: (ctx.conversation as { org_id?: string | null }).org_id ?? null,
     draft: {
       propertyId: ctx.conversation.property_id,

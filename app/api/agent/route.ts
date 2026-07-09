@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { runAgent, type AgentActor, WRITE_TOOL_NAMES } from '@/src/agent/runAgent';
 import { applyBackstops } from '@/src/agent/backstops';
 import { extractPendingActionIds } from '@/src/server/agent/slackConfirmationBlocks';
@@ -31,12 +32,14 @@ export async function POST(req: NextRequest) {
   }
 
   let prompt: string;
-  let userId: string | undefined;
   let clientTz: string | undefined;
   try {
     const body = await req.json();
     prompt = body?.prompt;
-    userId = body?.user_id;
+    // NOTE: body.user_id is intentionally IGNORED. The acting user comes from
+    // the verified Supabase session below — trusting a client-supplied id let
+    // any caller impersonate any user (and thereby scope the agent to any
+    // org). Fail closed instead.
     // Browser-supplied IANA tz string (e.g. "America/Los_Angeles"). Optional;
     // runAgent falls back to UTC when missing or invalid. Keep this tolerant —
     // we don't want a malformed tz to fail the whole request.
@@ -53,73 +56,53 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
+  // Verified session identity + org + RLS-scoped client. 401/403 when there is
+  // no signed-in, org-linked user — the agent never runs unauthenticated.
+  const authCtx = await requireAuthContext();
+  if (authCtx instanceof NextResponse) return authCtx;
+  const { supabase: userDb, appUser, orgId } = authCtx;
+  const userId = appUser.id;
+
   const supabase = getSupabaseServer();
 
   // Pull recent conversation history. We persist only final assistant text
   // (no tool_use / tool_result blocks) so the history we replay is plain
   // text on both sides — the agent will re-invoke tools as needed.
+  // Memory stays on the service client but is keyed by the VERIFIED user id.
   let history: MessageParam[] = [];
-  // Resolve the in-app actor when we have a userId. Today this reflects
-  // whoever is selected in the AuthProvider dropdown (no real auth yet),
-  // but it still grounds "me"/"my" correctly in the system prompt — same
-  // shape as the Slack actor so runAgent doesn't care which surface set
-  // it. If the lookup fails we fall back to no actor; the prompt has a
-  // fallback line that asks the model to disambiguate.
-  let actor: AgentActor | undefined;
-  // Org the agent acts for — resolved from the talking-to user's users.org_id.
-  // Threaded into runAgent so every tool scopes to it; without it, org-scoped
-  // tools refuse rather than read across tenants.
-  let orgId: string | null = null;
-  if (userId) {
-    const { data, error } = await supabase
-      .from('ai_chat_messages')
-      .select('role, content')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(MEMORY_WINDOW * 2);
+  const { data, error } = await supabase
+    .from('ai_chat_messages')
+    .select('role, content')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(MEMORY_WINDOW * 2);
 
-    if (!error && data) {
-      history = (data as ChatMessageRow[])
-        .reverse()
-        .filter((m) => m.role === 'user' || m.role === 'assistant')
-        .map((m) => ({
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
-        }));
-    }
-
-    const { data: userRow } = await supabase
-      .from('users')
-      .select('id, name, role, org_id')
-      .eq('id', userId)
-      .maybeSingle();
-    if (userRow?.id) {
-      const role =
-        userRow.role === 'superadmin' ||
-        userRow.role === 'manager' ||
-        userRow.role === 'staff' ||
-        userRow.role === 'vendor'
-          ? userRow.role
-          : 'staff';
-      actor = {
-        appUserId: userRow.id as string,
-        name:
-          (typeof userRow.name === 'string' && userRow.name.trim()) ||
-          'Unknown user',
-        role,
-      };
-      orgId = (userRow.org_id as string | null) ?? null;
-    }
-
-    await supabase.from('ai_chat_messages').insert({
-      user_id: userId,
-      role: 'user',
-      content: prompt,
-    });
+  if (!error && data) {
+    history = (data as ChatMessageRow[])
+      .reverse()
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
   }
 
+  const actor: AgentActor = {
+    appUserId: appUser.id,
+    name: appUser.name || 'Unknown user',
+    role: appUser.role,
+  };
+
+  await supabase.from('ai_chat_messages').insert({
+    user_id: userId,
+    role: 'user',
+    content: prompt,
+  });
+
   try {
-    const result = await runAgent({ history, prompt, clientTz, actor, orgId });
+    // db: the user's session-bound client — RLS enforces org isolation on
+    // every tool query at the database layer.
+    const result = await runAgent({ history, prompt, clientTz, actor, orgId, db: userDb });
 
     // Write-claim backstop: if the model claimed a side-effect happened
     // but no write tool succeeded, swap in a safe message before the user

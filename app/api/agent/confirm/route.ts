@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import {
   confirmPendingAction,
   cancelPendingAction,
@@ -88,7 +89,6 @@ function aggregate(
 export async function POST(req: NextRequest) {
   let actionIds: string[];
   let action: 'confirm' | 'cancel';
-  let userId: string;
   try {
     const body = await req.json();
     // Accept the new array shape OR the legacy singular field.
@@ -104,7 +104,9 @@ export async function POST(req: NextRequest) {
       actionIds = [];
     }
     action = body?.action;
-    userId = body?.user_id;
+    // NOTE: body.user_id is intentionally IGNORED — the actor comes from the
+    // verified session. A client-supplied id let a caller confirm/cancel
+    // another user's pending writes.
     if (actionIds.length === 0) {
       return NextResponse.json(
         { error: 'Missing or invalid pending_action_ids' },
@@ -117,28 +119,17 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    if (!userId || typeof userId !== 'string') {
-      return NextResponse.json(
-        { error: 'Missing or invalid user_id' },
-        { status: 400 },
-      );
-    }
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const supabase = getSupabaseServer();
+  // Verified session identity — confirmPendingAction additionally enforces
+  // that this user owns each pending action.
+  const authCtx = await requireAuthContext();
+  if (authCtx instanceof NextResponse) return authCtx;
+  const userId = authCtx.appUser.id;
 
-  // Resolve the actor — the same identity the in-app chat runs the agent as.
-  // confirmPendingAction enforces that this user owns each pending action.
-  const { data: userRow } = await supabase
-    .from('users')
-    .select('id')
-    .eq('id', userId)
-    .maybeSingle();
-  if (!userRow?.id) {
-    return NextResponse.json({ error: 'Unknown user' }, { status: 401 });
-  }
+  const supabase = getSupabaseServer();
 
   // Loop through the actions in the order the previews were registered.
   // Continue past failures so a single bad apple doesn't strand the rest

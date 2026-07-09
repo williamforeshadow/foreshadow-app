@@ -205,7 +205,7 @@ async function handler(
   if (typeof org !== 'string') return org;
 
   const limit = input.limit ?? DEFAULT_LIMIT;
-  const supabase = getSupabaseServer();
+  const supabase = ctx.db;
 
   // FK pre-validation — same rationale as find_reservations: a fabricated but
   // syntactically-valid UUID would otherwise return ok:true,data:[] and read as

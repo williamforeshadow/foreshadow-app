@@ -71,7 +71,7 @@ async function handler(
   if (typeof org !== 'string') return org;
 
   const limit = input.limit ?? DEFAULT_LIMIT;
-  const supabase = getSupabaseServer();
+  const supabase = ctx.db;
 
   // Optional FK pre-validation for department_id so the agent gets a
   // structured not_found instead of a silent empty result when it passed
@@ -128,7 +128,9 @@ async function handler(
     return { ok: false, error: { code: 'db_error', message: error.message } };
   }
 
-  const raw = (data ?? []) as Array<{
+  // Cast via unknown: the generic SupabaseClient types to-one embeds as arrays,
+  // but PostgREST returns objects for them at runtime (shape unchanged).
+  const raw = (data ?? []) as unknown as Array<{
     id: string;
     name: string;
     description: string | null;

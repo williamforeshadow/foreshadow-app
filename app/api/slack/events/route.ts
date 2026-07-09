@@ -4,6 +4,7 @@ import { WebClient } from '@slack/web-api';
 import type { Block } from '@slack/types';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { createSupabaseAsUser } from '@/lib/supabaseAsUser';
 import { runAgent } from '@/src/agent/runAgent';
 import { applyBackstops } from '@/src/agent/backstops';
 import { verifySlackSignature } from '@/src/slack/verify';
@@ -576,12 +577,26 @@ async function handleSlackMessage(
   // resolved actor (we know exactly who's typing because email matched a
   // users row; in-app chat doesn't have real auth yet so it can't pass
   // an actor with the same confidence).
+  // RLS-governed client acting as the resolved Slack user — the database
+  // scopes every tool query to their org. Falls back to the service client
+  // (tools' explicit org filters still apply) if minting isn't possible.
+  let slackUserDb;
+  try {
+    slackUserDb = identity.authUserId
+      ? createSupabaseAsUser(identity.authUserId)
+      : undefined;
+  } catch (err) {
+    console.warn('[slack] could not mint user-scoped client; falling back to service', { err });
+    slackUserDb = undefined;
+  }
+
   const result = await runAgent({
     history,
     prompt,
     clientTz: identity.tz ?? undefined,
     surface: 'slack',
     orgId: identity.orgId,
+    db: slackUserDb,
     actor: {
       appUserId: identity.appUserId,
       name: identity.appUserName,

@@ -472,7 +472,7 @@ async function handler(
   if (typeof org !== 'string') return org;
 
   const limit = input.limit ?? DEFAULT_LIMIT;
-  const supabase = getSupabaseServer();
+  const supabase = ctx.db;
 
   // Validate every foreign-key id the model handed us before doing any other
   // work. Skipped when `ids` is set since that path overrides other filters
@@ -809,7 +809,9 @@ async function handler(
     return { ok: false, error: { code: 'db_error', message: error.message } };
   }
 
-  const rows = (data ?? []) as TaskQueryRow[];
+  // Cast via unknown: the generic SupabaseClient types to-one embeds as arrays,
+  // but PostgREST returns objects for them at runtime (shape unchanged).
+  const rows = (data ?? []) as unknown as TaskQueryRow[];
   const truncated = rows.length > limit;
   const trimmed = truncated ? rows.slice(0, limit) : rows;
 

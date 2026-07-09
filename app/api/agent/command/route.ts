@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 import { isAgentCommand } from '@/src/lib/agentCommands';
 import {
   getMyAssignmentsData,
@@ -75,23 +75,18 @@ function assignmentTaskToCardRow(at: AssignmentTask): TaskRow {
 
 export async function POST(req: NextRequest) {
   let command: string;
-  let userId: string;
   try {
     const body = await req.json();
     command =
       typeof body?.command === 'string'
         ? body.command.trim().toLowerCase()
         : '';
-    userId = body?.user_id;
+    // NOTE: body.user_id is intentionally IGNORED — the acting user comes from
+    // the verified session (a client-supplied id allowed impersonating any
+    // user, and thereby reading any org's outlook).
     if (!isAgentCommand(command)) {
       return NextResponse.json(
         { error: `Unknown command: ${command || '(none)'}` },
-        { status: 400 },
-      );
-    }
-    if (!userId || typeof userId !== 'string') {
-      return NextResponse.json(
-        { error: 'Missing or invalid user_id' },
         { status: 400 },
       );
     }
@@ -99,17 +94,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const supabase = getSupabaseServer();
-  const { data: userRow } = await supabase
-    .from('users')
-    .select('id, name')
-    .eq('id', userId)
-    .maybeSingle();
-  if (!userRow?.id) {
-    return NextResponse.json({ error: 'Unknown user' }, { status: 401 });
-  }
-  const displayName =
-    (typeof userRow.name === 'string' && userRow.name.trim()) || 'there';
+  const authCtx = await requireAuthContext();
+  if (authCtx instanceof NextResponse) return authCtx;
+  const { appUser } = authCtx;
+  const userId = appUser.id;
+  const displayName = (appUser.name && appUser.name.trim()) || 'there';
 
   let answer: string;
   let tasks: TaskRow[];

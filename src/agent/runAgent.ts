@@ -4,6 +4,8 @@ import type {
   ToolResultBlockParam,
   TextBlock,
 } from '@anthropic-ai/sdk/resources/messages';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { getSupabaseServer } from '@/lib/supabaseServer';
 import { toAnthropicTools } from './tools';
 import type { ToolContext } from './tools/types';
 import { dispatchToolUse, type ToolCallTrace } from './dispatch';
@@ -277,6 +279,14 @@ export interface RunAgentInput {
    */
   orgId?: string | null;
   /**
+   * RLS-governed database client for tool queries, acting as the talking-to
+   * user (web: the session client; Slack: a minted user client). When set,
+   * the DATABASE enforces org isolation on every tool query — tools' explicit
+   * org filters become defense-in-depth instead of the only guard. Falls back
+   * to the service-role client when omitted.
+   */
+  db?: SupabaseClient;
+  /**
    * Slack metadata for button-confirmable write previews. Only set by the
    * Slack Events API route; web chat keeps using the in-memory token flow.
    */
@@ -314,6 +324,7 @@ export async function runAgent({
   surface = 'web',
   actor,
   orgId,
+  db,
   slack,
   contextBlocks,
 }: RunAgentInput): Promise<RunAgentOutput> {
@@ -345,7 +356,13 @@ export async function runAgent({
   // side instead of trusting the model to pass a user_id. Tools that
   // write to the property knowledge activity ledger read `surface` to
   // tag the source column. Read-only tools simply ignore the arg.
-  const ctx: ToolContext = { actor, surface, slack, orgId: orgId ?? null };
+  const ctx: ToolContext = {
+    actor,
+    surface,
+    slack,
+    orgId: orgId ?? null,
+    db: db ?? getSupabaseServer(),
+  };
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     const response = await anthropic.messages.create({

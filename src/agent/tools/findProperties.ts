@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { getSupabaseServer } from '@/lib/supabaseServer';
 import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
 // find_properties — discover/lookup vacation rental properties.
@@ -77,7 +76,9 @@ async function handler(
   if (typeof org !== 'string') return org;
 
   const limit = input.limit ?? DEFAULT_LIMIT;
-  const supabase = getSupabaseServer();
+  // ctx.db is RLS-governed on authenticated surfaces — the DB enforces org
+  // isolation; the explicit org filter below is defense-in-depth.
+  const supabase = ctx.db;
 
   // Pull `limit + 1` so we can detect truncation without a separate count.
   // org_id filter applies even for id-based lookups so a cross-org id can't be

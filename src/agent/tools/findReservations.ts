@@ -258,7 +258,7 @@ async function handler(
   if (typeof org !== 'string') return org;
 
   const limit = input.limit ?? DEFAULT_LIMIT;
-  const supabase = getSupabaseServer();
+  const supabase = ctx.db;
 
   // FK pre-validation. Same rationale as find_tasks: the model loves
   // fabricating syntactically-valid UUIDs that match no row, which would
