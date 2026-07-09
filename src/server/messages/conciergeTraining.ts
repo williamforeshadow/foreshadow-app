@@ -59,8 +59,12 @@ export type TrainingCategory = 'reply' | 'task';
  */
 export async function getConciergeTrainingForProperty(
   propertyId: string | null,
+  orgId: string | null,
   category: TrainingCategory = 'reply',
 ): Promise<TrainingRule[]> {
+  // Fail safe: without an org, return no rules rather than reading every org's
+  // global training (this runs on the RLS-bypassing service-role client).
+  if (!orgId) return [];
   const supabase = getSupabaseServer();
 
   // Collect candidate rule ids: global rules + rules linked to this property.
@@ -77,6 +81,7 @@ export async function getConciergeTrainingForProperty(
   let q = supabase
     .from('concierge_training')
     .select('id, title, instructions, applies_to_all, tier, is_active, sort_order, created_at')
+    .eq('org_id', orgId)
     .eq('is_active', true)
     .eq('category', category);
 

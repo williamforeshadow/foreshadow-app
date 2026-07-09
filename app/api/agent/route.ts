@@ -66,6 +66,10 @@ export async function POST(req: NextRequest) {
   // it. If the lookup fails we fall back to no actor; the prompt has a
   // fallback line that asks the model to disambiguate.
   let actor: AgentActor | undefined;
+  // Org the agent acts for — resolved from the talking-to user's users.org_id.
+  // Threaded into runAgent so every tool scopes to it; without it, org-scoped
+  // tools refuse rather than read across tenants.
+  let orgId: string | null = null;
   if (userId) {
     const { data, error } = await supabase
       .from('ai_chat_messages')
@@ -86,7 +90,7 @@ export async function POST(req: NextRequest) {
 
     const { data: userRow } = await supabase
       .from('users')
-      .select('id, name, role')
+      .select('id, name, role, org_id')
       .eq('id', userId)
       .maybeSingle();
     if (userRow?.id) {
@@ -104,6 +108,7 @@ export async function POST(req: NextRequest) {
           'Unknown user',
         role,
       };
+      orgId = (userRow.org_id as string | null) ?? null;
     }
 
     await supabase.from('ai_chat_messages').insert({
@@ -114,7 +119,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await runAgent({ history, prompt, clientTz, actor });
+    const result = await runAgent({ history, prompt, clientTz, actor, orgId });
 
     // Write-claim backstop: if the model claimed a side-effect happened
     // but no write tool succeeded, swap in a safe message before the user

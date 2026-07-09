@@ -269,6 +269,14 @@ export interface RunAgentInput {
    */
   actor?: AgentActor;
   /**
+   * The organization the run is scoped to — the talking-to user's org_id.
+   * Threaded into ToolContext so every tool filters by it (the tools use the
+   * RLS-bypassing service-role client). Both surfaces resolve it before the
+   * run; when it can't be resolved, org-scoped tools refuse rather than read
+   * across tenants.
+   */
+  orgId?: string | null;
+  /**
    * Slack metadata for button-confirmable write previews. Only set by the
    * Slack Events API route; web chat keeps using the in-memory token flow.
    */
@@ -305,6 +313,7 @@ export async function runAgent({
   clientTz,
   surface = 'web',
   actor,
+  orgId,
   slack,
   contextBlocks,
 }: RunAgentInput): Promise<RunAgentOutput> {
@@ -336,7 +345,7 @@ export async function runAgent({
   // side instead of trusting the model to pass a user_id. Tools that
   // write to the property knowledge activity ledger read `surface` to
   // tag the source column. Read-only tools simply ignore the arg.
-  const ctx: ToolContext = { actor, surface, slack };
+  const ctx: ToolContext = { actor, surface, slack, orgId: orgId ?? null };
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     const response = await anthropic.messages.create({

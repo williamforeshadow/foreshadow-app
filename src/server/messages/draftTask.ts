@@ -323,6 +323,7 @@ export async function generateProposedTaskDraftFromContext(
   try {
     const rules = await getConciergeTrainingForProperty(
       ctx.conversation.property_id,
+      (ctx.conversation as { org_id?: string | null }).org_id ?? null,
       'task',
     );
     alwaysTrainingBlock = formatTrainingForPrompt(rules.filter((r) => r.tier !== 'situational'));
@@ -453,6 +454,7 @@ export async function generateProposedTaskDraftFromContext(
   // Bind the property + category so get_concierge_procedure loads THIS property's
   // situational TASK rules (not reply rules, not another property's).
   const toolCtx: ToolContext = {
+    orgId: (ctx.conversation as { org_id?: string | null }).org_id ?? null,
     draft: {
       propertyId: ctx.conversation.property_id,
       channel: ctx.conversation.channel ?? null,

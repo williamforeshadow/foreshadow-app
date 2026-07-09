@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { getSupabaseServer } from '@/lib/supabaseServer';
-import type { ToolDefinition, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
 // find_templates — resolve task templates (e.g. "Turnover Cleaning - Pet")
 // into template_id values.
@@ -63,18 +63,26 @@ function sanitizeSearchTerm(raw: string): string {
   return raw.replace(/[%_,()\\]/g, ' ').trim();
 }
 
-async function handler(input: Input): Promise<ToolResult<TemplateRow[]>> {
+async function handler(
+  input: Input,
+  ctx: ToolContext,
+): Promise<ToolResult<TemplateRow[]>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
   const limit = input.limit ?? DEFAULT_LIMIT;
   const supabase = getSupabaseServer();
 
   // Optional FK pre-validation for department_id so the agent gets a
   // structured not_found instead of a silent empty result when it passed
-  // a stale or invented id.
+  // a stale or invented id. Scoped to the org so a cross-org department id
+  // doesn't validate.
   if (input.department_id) {
     const { data: dept, error: deptErr } = await supabase
       .from('departments')
       .select('id')
       .eq('id', input.department_id)
+      .eq('org_id', org)
       .maybeSingle();
     if (deptErr) {
       return {
@@ -97,6 +105,7 @@ async function handler(input: Input): Promise<ToolResult<TemplateRow[]>> {
   let query = supabase
     .from('templates')
     .select(SELECT)
+    .eq('org_id', org)
     .order('name', { ascending: true })
     .limit(limit + 1);
 

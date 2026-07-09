@@ -128,9 +128,11 @@ function redactRows(
     .filter((r): r is Json => r !== null);
 }
 
-async function handler(input: Input, ctx: ToolContext): Promise<ToolResult<GuestPropertyKnowledge>> {
-  // Context binding wins; never trust a model-supplied id inside the Concierge.
-  const propertyId = ctx.draft?.propertyId ?? input.property_id ?? null;
+async function handler(_input: Input, ctx: ToolContext): Promise<ToolResult<GuestPropertyKnowledge>> {
+  // Strictly context-bound: the property comes from the conversation, never from
+  // a model-supplied id. This tool is only ever used inside the property-bound
+  // Concierge, so a model-supplied property_id is intentionally ignored.
+  const propertyId = ctx.draft?.propertyId ?? null;
   if (!propertyId) {
     return {
       ok: false,

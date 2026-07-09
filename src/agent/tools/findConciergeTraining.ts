@@ -4,7 +4,7 @@ import {
   getConciergeTrainingForProperty,
   type TrainingRule,
 } from '@/src/server/messages/conciergeTraining';
-import type { ToolDefinition, ToolResult, ToolMeta } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult, type ToolMeta } from './types';
 
 // find_concierge_training — read the configured operating procedures ("agent
 // intelligence") for a property: named playbooks the host's team follows for
@@ -46,13 +46,25 @@ type Input = z.infer<typeof inputSchema>;
 
 const DEFAULT_LIMIT = 20;
 
-async function resolvePropertyId(input: Input): Promise<string | null> {
-  if (input.property_id) return input.property_id;
+async function resolvePropertyId(input: Input, org: string): Promise<string | null> {
+  if (input.property_id) {
+    // Only honor a property_id that belongs to this org; a cross-org id resolves
+    // to null (→ global rules for this org), never another tenant's training.
+    const { data, error } = await getSupabaseServer()
+      .from('properties')
+      .select('id')
+      .eq('id', input.property_id)
+      .eq('org_id', org)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return (data as { id: string } | null)?.id ?? null;
+  }
   if (input.conversation_id) {
     const { data, error } = await getSupabaseServer()
       .from('conversations')
       .select('property_id')
       .eq('id', input.conversation_id)
+      .eq('org_id', org)
       .maybeSingle();
     if (error) throw new Error(error.message);
     return (data as { property_id: string | null } | null)?.property_id ?? null;
@@ -60,11 +72,14 @@ async function resolvePropertyId(input: Input): Promise<string | null> {
   return null;
 }
 
-async function handler(input: Input): Promise<ToolResult<TrainingRule[]>> {
+async function handler(input: Input, ctx: ToolContext): Promise<ToolResult<TrainingRule[]>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
   const limit = input.limit ?? DEFAULT_LIMIT;
   try {
-    const propertyId = await resolvePropertyId(input);
-    let rules = await getConciergeTrainingForProperty(propertyId);
+    const propertyId = await resolvePropertyId(input, org);
+    let rules = await getConciergeTrainingForProperty(propertyId, org);
 
     if (input.query) {
       const term = input.query.toLowerCase();

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { getSupabaseServer } from '@/lib/supabaseServer';
-import type { ToolDefinition, ToolResult, ToolMeta } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult, type ToolMeta } from './types';
 
 // find_conversations — resolve a guest conversation (the messaging inbox row) by
 // guest name, property, status, or recency. The entry point for "draft a reply
@@ -57,7 +57,13 @@ function sanitize(raw: string): string {
   return raw.replace(/[%_,()\\]/g, ' ').trim();
 }
 
-async function handler(input: Input): Promise<ToolResult<ConversationMatch[]>> {
+async function handler(
+  input: Input,
+  ctx: ToolContext,
+): Promise<ToolResult<ConversationMatch[]>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
   const limit = input.limit ?? DEFAULT_LIMIT;
   const supabase = getSupabaseServer();
 
@@ -66,6 +72,7 @@ async function handler(input: Input): Promise<ToolResult<ConversationMatch[]>> {
     .select(
       'id, guest_name, property_name, channel, app_status, unread, last_message_at, last_direction, last_message_preview',
     )
+    .eq('org_id', org)
     .eq('archived', false)
     .order('last_message_at', { ascending: false, nullsFirst: false })
     .limit(limit + 1);

@@ -33,6 +33,8 @@ export interface ResolvedIdentity {
   appUserName: string;
   /** users.role — drives permission-related agent prompt hints. */
   role: 'superadmin' | 'manager' | 'staff' | 'vendor';
+  /** users.org_id — the org the agent acts for; scopes every tool query. */
+  orgId: string | null;
 }
 
 interface CacheEntry {
@@ -84,7 +86,7 @@ export async function resolveSlackUser(
       // need a second round-trip just to render "you are <name>".
       const { data, error } = await getSupabaseServer()
         .from('users')
-        .select('id, name, role')
+        .select('id, name, role, org_id')
         .ilike('email', email)
         .maybeSingle();
       if (!error && data?.id) {
@@ -105,6 +107,7 @@ export async function resolveSlackUser(
             displayName ||
             'Unknown user',
           role,
+          orgId: (data.org_id as string | null) ?? null,
         };
       }
     }

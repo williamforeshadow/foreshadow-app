@@ -1,7 +1,14 @@
 import { z } from 'zod';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { taskUrl } from '@/src/lib/links';
-import type { ToolDefinition, ToolError, ToolMeta, ToolResult } from './types';
+import {
+  requireOrgId,
+  type ToolContext,
+  type ToolDefinition,
+  type ToolError,
+  type ToolMeta,
+  type ToolResult,
+} from './types';
 
 // find_tasks — discover/list operational tasks.
 //
@@ -314,12 +321,14 @@ type Supabase = ReturnType<typeof getSupabaseServer>;
 async function resolveAssigneesByName(
   supabase: Supabase,
   rawTerm: string,
+  org: string,
 ): Promise<{ ok: true; users: ResolvedAssignee[] } | { ok: false; message: string }> {
   const term = sanitizeSearchTerm(rawTerm);
   if (term.length < 2) return { ok: true, users: [] };
   const { data, error } = await supabase
     .from('users')
     .select('id, name')
+    .eq('org_id', org)
     .ilike('name', `%${term}%`)
     .limit(50);
   if (error) return { ok: false, message: error.message };
@@ -337,6 +346,7 @@ async function resolveIdsByName(
   supabase: Supabase,
   table: 'departments' | 'templates',
   rawTerm: string,
+  org: string,
 ): Promise<
   { ok: true; rows: Array<{ id: string; name: string }> } | { ok: false; message: string }
 > {
@@ -345,6 +355,7 @@ async function resolveIdsByName(
   const { data, error } = await supabase
     .from(table)
     .select('id, name')
+    .eq('org_id', org)
     .ilike('name', `%${term}%`)
     .limit(50);
   if (error) return { ok: false, message: error.message };
@@ -354,11 +365,13 @@ async function resolveIdsByName(
 async function resolveTaskIdsForUsers(
   supabase: Supabase,
   userIds: string[],
+  org: string,
 ): Promise<{ ok: true; taskIds: string[] } | { ok: false; message: string }> {
   if (userIds.length === 0) return { ok: true, taskIds: [] };
   const { data, error } = await supabase
     .from('task_assignments')
     .select('task_id')
+    .eq('org_id', org)
     .in('user_id', userIds);
   if (error) return { ok: false, message: error.message };
   const rows = (data ?? []) as Array<{ task_id: string }>;
@@ -374,12 +387,14 @@ async function resolveTaskIdsForUsers(
 async function resolveTaskIdsForAllUsers(
   supabase: Supabase,
   userIds: string[],
+  org: string,
 ): Promise<{ ok: true; taskIds: string[] } | { ok: false; message: string }> {
   const uniqueUserIds = Array.from(new Set(userIds));
   if (uniqueUserIds.length === 0) return { ok: true, taskIds: [] };
   const { data, error } = await supabase
     .from('task_assignments')
     .select('task_id, user_id')
+    .eq('org_id', org)
     .in('user_id', uniqueUserIds);
   if (error) return { ok: false, message: error.message };
   const rows = (data ?? []) as Array<{ task_id: string; user_id: string }>;
@@ -415,6 +430,7 @@ interface FkCheck {
 async function validateForeignKeys(
   supabase: Supabase,
   checks: FkCheck[],
+  org: string,
 ): Promise<{ ok: false; error: ToolError } | null> {
   if (checks.length === 0) return null;
 
@@ -424,6 +440,7 @@ async function validateForeignKeys(
         .from(c.table)
         .select('id')
         .eq('id', c.value)
+        .eq('org_id', org)
         .maybeSingle();
       return { check: c, data, error };
     }),
@@ -447,7 +464,13 @@ async function validateForeignKeys(
   return null;
 }
 
-async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
+async function handler(
+  input: Input,
+  ctx: ToolContext,
+): Promise<ToolResult<TaskRow[]>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
   const limit = input.limit ?? DEFAULT_LIMIT;
   const supabase = getSupabaseServer();
 
@@ -507,7 +530,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
       });
     }
 
-    const fkError = await validateForeignKeys(supabase, checks);
+    const fkError = await validateForeignKeys(supabase, checks, org);
     if (fkError) return fkError;
 
     // Batch FK check for assigned_user_ids. validateForeignKeys is
@@ -520,6 +543,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
       const { data: foundRows, error: userErr } = await supabase
         .from('users')
         .select('id')
+        .eq('org_id', org)
         .in('id', unique);
       if (userErr) {
         return {
@@ -550,7 +574,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
   let resolvedAssignees: ResolvedAssignee[] | undefined;
   let assigneeTaskIds: string[] | undefined;
   if (input.assignee_name && !input.ids) {
-    const resolved = await resolveAssigneesByName(supabase, input.assignee_name);
+    const resolved = await resolveAssigneesByName(supabase, input.assignee_name, org);
     if (!resolved.ok) {
       return { ok: false, error: { code: 'db_error', message: resolved.message } };
     }
@@ -572,6 +596,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
     const taskRes = await resolveTaskIdsForUsers(
       supabase,
       resolved.users.map((u) => u.user_id),
+      org,
     );
     if (!taskRes.ok) {
       return { ok: false, error: { code: 'db_error', message: taskRes.message } };
@@ -600,6 +625,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
     const taskRes = await resolveTaskIdsForAllUsers(
       supabase,
       input.assigned_user_ids,
+      org,
     );
     if (!taskRes.ok) {
       return {
@@ -625,7 +651,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
   let resolvedDepartments: ResolvedDepartment[] | undefined;
   let departmentIdsFilter: string[] | undefined;
   if (input.department_name && !input.department_id && !input.ids) {
-    const r = await resolveIdsByName(supabase, 'departments', input.department_name);
+    const r = await resolveIdsByName(supabase, 'departments', input.department_name, org);
     if (!r.ok) {
       return { ok: false, error: { code: 'db_error', message: r.message } };
     }
@@ -652,7 +678,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
   let resolvedTemplates: ResolvedTemplate[] | undefined;
   let templateIdsFilter: string[] | undefined;
   if (input.template_name && !input.template_id && !input.ids) {
-    const r = await resolveIdsByName(supabase, 'templates', input.template_name);
+    const r = await resolveIdsByName(supabase, 'templates', input.template_name, org);
     if (!r.ok) {
       return { ok: false, error: { code: 'db_error', message: r.message } };
     }
@@ -682,7 +708,7 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
   // way of a `limit:1` "latest" lookup. The resolved order is echoed in
   // meta.sort. Pull `limit + 1` to detect truncation cheaply.
   const sort: 'soonest' | 'latest' = input.sort ?? 'soonest';
-  let q = supabase.from('turnover_tasks').select(SELECT);
+  let q = supabase.from('turnover_tasks').select(SELECT).eq('org_id', org);
   if (sort === 'latest') {
     q = q
       .order('scheduled_date', { ascending: false, nullsFirst: false })
@@ -756,8 +782,8 @@ async function handler(input: Input): Promise<ToolResult<TaskRow[]>> {
           `property_name.ilike.%${term}%`,
         ];
         const [tmpl, dept] = await Promise.all([
-          resolveIdsByName(supabase, 'templates', term),
-          resolveIdsByName(supabase, 'departments', term),
+          resolveIdsByName(supabase, 'templates', term, org),
+          resolveIdsByName(supabase, 'departments', term, org),
         ]);
         if (!tmpl.ok) {
           return { ok: false, error: { code: 'db_error', message: tmpl.message } };

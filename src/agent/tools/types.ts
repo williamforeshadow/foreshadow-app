@@ -71,6 +71,15 @@ export type ToolResult<T> =
  * than silently picking a stand-in.
  */
 export interface ToolContext {
+  /**
+   * The organization the agent is acting for — resolved server-side from the
+   * talking-to user's `users.org_id`. EVERY org-scoped tool query MUST filter
+   * by this: the tools use the service-role client, which BYPASSES RLS, so
+   * without an explicit `.eq('org_id', …)` a query reads across all tenants.
+   * Null only when the caller couldn't resolve an org; org-scoped tools must
+   * then refuse (via requireOrgId) rather than leak another org's data.
+   */
+  orgId: string | null;
   actor?: {
     appUserId: string;
     name: string;
@@ -117,6 +126,30 @@ export interface ToolContext {
      */
     category?: 'reply' | 'task';
   };
+}
+
+/**
+ * Guard for org-scoped tools. Returns the org id when present, or a ready-to-
+ * return ToolResult error envelope when the run has no org context. Usage:
+ *
+ *   const org = requireOrgId(ctx);
+ *   if (typeof org !== 'string') return org;   // no org → refuse, don't leak
+ *   ...query.eq('org_id', org)
+ */
+export function requireOrgId(
+  ctx: ToolContext,
+): string | { ok: false; error: ToolError } {
+  if (!ctx.orgId) {
+    return {
+      ok: false,
+      error: {
+        code: 'db_error',
+        message:
+          'No organization is set for this agent session, so org-scoped data cannot be read.',
+      },
+    };
+  }
+  return ctx.orgId;
 }
 
 export interface ToolDefinition<TInput, TOutput> {

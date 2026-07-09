@@ -211,7 +211,10 @@ export async function generateGuestReplyDraftFromContext(
   let alwaysTrainingBlock = '';
   let situationalIndexBlock = '';
   try {
-    const rules = await getConciergeTrainingForProperty(ctx.conversation.property_id);
+    const rules = await getConciergeTrainingForProperty(
+      ctx.conversation.property_id,
+      (ctx.conversation as { org_id?: string | null }).org_id ?? null,
+    );
     alwaysTrainingBlock = formatTrainingForPrompt(rules.filter((r) => r.tier !== 'situational'));
     situationalIndexBlock = formatTrainingIndexForPrompt(
       rules.filter((r) => r.tier === 'situational'),
@@ -358,6 +361,7 @@ export async function generateGuestReplyDraftFromContext(
   // Bind the one property this draft is for so the guest tool can't be steered
   // to another property — it reads the id from context, not from the model.
   const toolCtx: ToolContext = {
+    orgId: (ctx.conversation as { org_id?: string | null }).org_id ?? null,
     draft: {
       propertyId: ctx.conversation.property_id,
       channel: ctx.conversation.channel ?? null,

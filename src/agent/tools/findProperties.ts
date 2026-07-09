@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { getSupabaseServer } from '@/lib/supabaseServer';
-import type { ToolDefinition, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
 // find_properties — discover/lookup vacation rental properties.
 //
@@ -9,16 +9,16 @@ import type { ToolDefinition, ToolResult } from './types';
 // future tool will accept as input. Mirrors the query pattern in
 // app/api/properties/GET.
 //
-// Naming rules the agent should follow (encoded in `description` below so the
-// model sees them):
-//   - `name` is the canonical user-facing display name — the ONLY name field
-//     returned. Each result object is exactly one property.
-//   - `hostaway_name` (the upstream Hostaway listing label, often verbose e.g.
-//     "2650 Broadway 211 Golden Hill Condo") is still searched server-side so a
-//     user can refer to a property by its Hostaway name — but it is deliberately
-//     NOT returned. Surfacing it made the model treat a single property's two
-//     name fields as two separate properties (e.g. "Golden Hill" vs "Golden
-//     Hill Condo"), so it stays match-only.
+// Naming rules:
+//   - `name` is the canonical user-facing display name and the only name field
+//     returned. Always refer to a property by `name`.
+//   - `hostaway_name` (the upstream Hostaway listing label, often verbose) is
+//     searched server-side so a user can refer to a property by its Hostaway
+//     name, but it is a match-only identifier and is deliberately NOT returned.
+//
+// Org scoping: results are filtered to ctx.orgId. The tools run on the service-
+// role client (RLS-bypassing), so without this filter a query would return
+// every organization's properties.
 
 const inputSchema = z.object({
   query: z
@@ -56,9 +56,8 @@ export interface PropertyRow {
   timezone: string | null;
 }
 
-// hostaway_name is intentionally absent — it's filtered against (below) but
-// never returned, so the model can't mistake a property's Hostaway label for a
-// separate property.
+// hostaway_name is intentionally absent from the select — it's filtered against
+// (below) but is a match-only identifier, never returned to the model.
 const SELECT =
   'id, name, is_active, address_city, address_state, bedrooms, bathrooms, timezone';
 
@@ -70,14 +69,23 @@ function sanitizeSearchTerm(raw: string): string {
   return raw.replace(/[%_,()\\]/g, ' ').trim();
 }
 
-async function handler(input: Input): Promise<ToolResult<PropertyRow[]>> {
+async function handler(
+  input: Input,
+  ctx: ToolContext,
+): Promise<ToolResult<PropertyRow[]>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
   const limit = input.limit ?? DEFAULT_LIMIT;
   const supabase = getSupabaseServer();
 
   // Pull `limit + 1` so we can detect truncation without a separate count.
+  // org_id filter applies even for id-based lookups so a cross-org id can't be
+  // resolved.
   let query = supabase
     .from('properties')
     .select(SELECT)
+    .eq('org_id', org)
     .order('name', { ascending: true })
     .limit(limit + 1);
 
@@ -119,7 +127,7 @@ async function handler(input: Input): Promise<ToolResult<PropertyRow[]>> {
 export const findProperties: ToolDefinition<Input, PropertyRow[]> = {
   name: 'find_properties',
   description:
-    "Find vacation rental properties by name or active status. Use this to resolve property names mentioned by the user into canonical property IDs that other tools accept. Each object in the result is exactly ONE property; `name` is its canonical display name — always refer to a property by `name`. The search also matches the upstream Hostaway listing label internally (so a user can mention a property by that label), but that label is NOT returned and must never be treated as, or split into, a separate property.",
+    "Find vacation rental properties by name or active status. Use this to resolve property names mentioned by the user into canonical property IDs that other tools accept. `name` is a property's canonical display name — always refer to a property by `name`. The search also matches the upstream Hostaway listing label internally (so a user can mention a property by that label), but that label is not returned.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,

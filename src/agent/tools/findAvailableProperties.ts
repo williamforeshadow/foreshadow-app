@@ -5,7 +5,13 @@ import {
   type AvailabilityWindow,
   type AvailableWindow,
 } from '@/src/server/availability/computeAvailability';
-import type { ToolDefinition, ToolResult, ToolMeta, ToolContext } from './types';
+import {
+  requireOrgId,
+  type ToolDefinition,
+  type ToolResult,
+  type ToolMeta,
+  type ToolContext,
+} from './types';
 
 // find_available_properties — cross-portfolio availability recommender with
 // channel-matched listing links.
@@ -168,6 +174,9 @@ function similarityScore(source: PropRow | null, cand: PropRow): number {
 }
 
 async function handler(input: Input, ctx: ToolContext): Promise<ToolResult<AvailablePropertyRec[]>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
   const limit = input.limit ?? DEFAULT_LIMIT;
   const supabase = getSupabaseServer();
   const window = effectiveWindow(input);
@@ -191,11 +200,13 @@ async function handler(input: Input, ctx: ToolContext): Promise<ToolResult<Avail
           .from('properties')
           .select('id, address_city, address_state, bedrooms, bathrooms, min_nights, max_nights')
           .eq('id', excludePropertyId)
+          .eq('org_id', org)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
     supabase
       .from('properties')
       .select('id, address_city, address_state, bedrooms, bathrooms, min_nights, max_nights')
+      .eq('org_id', org)
       .eq('is_active', true),
   ]);
   if (candRes.error) {
@@ -228,6 +239,7 @@ async function handler(input: Input, ctx: ToolContext): Promise<ToolResult<Avail
   const { data: listingData, error: listingErr } = await supabase
     .from('property_listings')
     .select('property_id, url, display_title')
+    .eq('org_id', org)
     .eq('channel', channel)
     .in(
       'property_id',

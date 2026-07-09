@@ -6,7 +6,7 @@ import {
   type BusySpan,
   type AvailableWindow,
 } from '@/src/server/availability/computeAvailability';
-import type { ToolDefinition, ToolError, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolError, type ToolResult } from './types';
 
 // check_availability — the OPERATOR-facing availability tool.
 //
@@ -92,15 +92,23 @@ function requestedNights(input: Input): number {
   return Math.max(1, diff);
 }
 
-async function handler(input: Input): Promise<ToolResult<OpsAvailabilityResult>> {
+async function handler(
+  input: Input,
+  ctx: ToolContext,
+): Promise<ToolResult<OpsAvailabilityResult>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
   const supabase = getSupabaseServer();
 
-  // FK pre-validation — a fabricated-but-valid UUID would otherwise read as
-  // "definitively no availability." Surface a loud not_found instead.
+  // FK pre-validation — a fabricated-but-valid UUID (or a cross-org property)
+  // would otherwise read as "definitively no availability." Scope to the org
+  // and surface a loud not_found instead.
   const { data: prop, error: propErr } = await supabase
     .from('properties')
     .select('id, name, min_nights, max_nights')
     .eq('id', input.property_id)
+    .eq('org_id', org)
     .maybeSingle();
   if (propErr) {
     return { ok: false, error: { code: 'db_error', message: propErr.message } };

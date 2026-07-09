@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { getSupabaseServer } from '@/lib/supabaseServer';
-import type { ToolDefinition, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
 // find_users — resolve people by name (or role) into user IDs.
 //
@@ -54,13 +54,20 @@ function sanitizeSearchTerm(raw: string): string {
   return raw.replace(/[%_,()\\]/g, ' ').trim();
 }
 
-async function handler(input: Input): Promise<ToolResult<UserRow[]>> {
+async function handler(
+  input: Input,
+  ctx: ToolContext,
+): Promise<ToolResult<UserRow[]>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
   const limit = input.limit ?? DEFAULT_LIMIT;
   const supabase = getSupabaseServer();
 
   let query = supabase
     .from('users')
     .select(SELECT)
+    .eq('org_id', org)
     .order('name', { ascending: true })
     .limit(limit + 1);
 

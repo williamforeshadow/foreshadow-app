@@ -581,6 +581,7 @@ async function handleSlackMessage(
     prompt,
     clientTz: identity.tz ?? undefined,
     surface: 'slack',
+    orgId: identity.orgId,
     actor: {
       appUserId: identity.appUserId,
       name: identity.appUserName,

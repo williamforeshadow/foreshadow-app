@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { getSupabaseServer } from '@/lib/supabaseServer';
-import type { ToolDefinition, ToolError, ToolMeta, ToolResult } from './types';
+import {
+  requireOrgId,
+  type ToolContext,
+  type ToolDefinition,
+  type ToolError,
+  type ToolMeta,
+  type ToolResult,
+} from './types';
 
 // find_calendar_blocks — discover manual/maintenance unavailability that is NOT
 // a reservation.
@@ -178,17 +185,25 @@ interface ResolvedProperty {
 async function fetchProperty(
   supabase: Supabase,
   propertyId: string,
+  org: string,
 ): Promise<{ ok: true; row: ResolvedProperty | null } | { ok: false; message: string }> {
   const { data, error } = await supabase
     .from('properties')
     .select('id, name')
     .eq('id', propertyId)
+    .eq('org_id', org)
     .maybeSingle();
   if (error) return { ok: false, message: error.message };
   return { ok: true, row: (data as ResolvedProperty | null) ?? null };
 }
 
-async function handler(input: Input): Promise<ToolResult<CalendarBlockRow[]>> {
+async function handler(
+  input: Input,
+  ctx: ToolContext,
+): Promise<ToolResult<CalendarBlockRow[]>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
   const limit = input.limit ?? DEFAULT_LIMIT;
   const supabase = getSupabaseServer();
 
@@ -198,7 +213,7 @@ async function handler(input: Input): Promise<ToolResult<CalendarBlockRow[]>> {
   // the `ids` batch path (invalid block ids there simply return fewer rows).
   let resolvedProperty: ResolvedProperty | null = null;
   if (!input.ids && input.property_id) {
-    const r = await fetchProperty(supabase, input.property_id);
+    const r = await fetchProperty(supabase, input.property_id, org);
     if (!r.ok) {
       return { ok: false, error: { code: 'db_error', message: r.message } };
     }
@@ -221,6 +236,7 @@ async function handler(input: Input): Promise<ToolResult<CalendarBlockRow[]>> {
     const { data: foundRows, error: propsErr } = await supabase
       .from('properties')
       .select('id, name')
+      .eq('org_id', org)
       .in('id', unique);
     if (propsErr) {
       return { ok: false, error: { code: 'db_error', message: propsErr.message } };
@@ -247,7 +263,7 @@ async function handler(input: Input): Promise<ToolResult<CalendarBlockRow[]>> {
   const sort: 'most_recent' | 'earliest' =
     input.sort ?? (input.past === true ? 'most_recent' : 'earliest');
 
-  let q = supabase.from('calendar_blocks').select(SELECT);
+  let q = supabase.from('calendar_blocks').select(SELECT).eq('org_id', org);
   if (sort === 'most_recent') {
     q = q
       .order('start_date', { ascending: false, nullsFirst: false })
@@ -325,6 +341,7 @@ async function handler(input: Input): Promise<ToolResult<CalendarBlockRow[]>> {
     const { data: nameRows, error: nameErr } = await supabase
       .from('properties')
       .select('id, name')
+      .eq('org_id', org)
       .in('id', unresolvedIds);
     if (nameErr) {
       return { ok: false, error: { code: 'db_error', message: nameErr.message } };
