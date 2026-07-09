@@ -11,7 +11,6 @@ import {
   Field,
   FieldGroup,
   Input,
-  SectionCaption,
   SectionHeader,
   Textarea,
   Toast,
@@ -56,7 +55,6 @@ interface RoomsBoardProps {
   propertyId: string;
   scope: AttributeScope;
   sectionLabel: string;
-  sectionCaption: string;
   // What users see in copy. Interior calls them "rooms"; Exterior calls
   // them "areas". Both use the same data model under the hood.
   noun: string; // "room" | "area"
@@ -71,7 +69,6 @@ export function RoomsBoard({
   propertyId,
   scope,
   sectionLabel,
-  sectionCaption,
   noun,
   nounPlural,
 }: RoomsBoardProps) {
@@ -350,7 +347,7 @@ export function RoomsBoard({
   return (
     <>
       <div className="flex-1 overflow-auto">
-        <div className="max-w-[1080px] mx-auto px-5 sm:px-8 pt-5 sm:pt-6 pb-32">
+        <div className="px-5 sm:px-8 pt-5 sm:pt-6 pb-32">
           <section className="mb-6">
             <SectionHeader
               label={sectionLabel}
@@ -379,14 +376,13 @@ export function RoomsBoard({
                 ) : null
               }
             />
-            <SectionCaption>{sectionCaption}</SectionCaption>
           </section>
 
           {rooms.length === 0 && (
             <EmptyRooms noun={noun} onAdd={handleCreateRoom} />
           )}
 
-          <div className="flex flex-col divide-y divide-neutral-200/70 dark:divide-[rgba(255,255,255,0.06)]">
+          <div className="flex flex-col gap-4">
             {rooms.map((room) => (
               <RoomSection
                 key={room.id}
@@ -477,39 +473,18 @@ function RoomSection({
   const roomPhotos = room.property_room_photos ?? [];
 
   return (
-    <section className="flex flex-col md:flex-row md:items-start gap-4 md:gap-6 py-6 first:pt-0">
-      {/* LEFT: the room/area card — title, notes, photos. Attributes are
-          decoupled out of this card into their own column on the right. */}
-      <div className="md:w-[300px] md:shrink-0 border border-neutral-200/80 dark:border-[rgba(255,255,255,0.07)] rounded-lg p-4 bg-white/40 dark:bg-[rgba(255,255,255,0.01)]">
-        <div className="flex items-start justify-between gap-3 mb-4">
+    <section className="grid grid-cols-1 md:grid-cols-2 md:items-start gap-4 md:gap-6 border border-neutral-200/80 dark:border-[rgba(255,255,255,0.07)] rounded-xl p-4 sm:p-5 bg-white/40 dark:bg-[rgba(255,255,255,0.01)]">
+      {/* LEFT: the room/area — title, notes, photos. Borderless; the section
+          container wraps the whole room + attributes pair. */}
+      <div className="min-w-0">
+        <div className="mb-4">
           <RoomTitle
             value={room.title}
             onChangeTitle={(next) => onPatchRoom({ title: next })}
           />
-          <button
-            type="button"
-            onClick={onDeleteRoom}
-            aria-label={`Delete ${noun}`}
-            className="shrink-0 p-1.5 rounded text-neutral-400 dark:text-[#66645f] hover:text-red-600 dark:hover:text-red-400 hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
-            title={`Delete ${noun}`}
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M10 7V4a1 1 0 011-1h2a1 1 0 011 1v3"
-              />
-            </svg>
-          </button>
         </div>
 
-        {/* Notes, then photos — both remain room-level, in the left card. */}
+        {/* Notes, then photos — both remain room-level, on the left. */}
         <div className="mb-4">
           <RoomNotes
             value={room.notes ?? ''}
@@ -532,54 +507,73 @@ function RoomSection({
         />
       </div>
 
-      {/* RIGHT: this room's attributes, each an expandable row with the same
-          fields as before — just lifted out of the room card. */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between mb-2 min-h-[26px]">
-          <h4 className="text-[11px] font-semibold text-neutral-700 dark:text-[#a09e9a] uppercase tracking-[0.08em]">
-            Attributes
-          </h4>
+      {/* RIGHT: this room's attributes as expandable rows. When the room has
+          none, the Add button centers in the section; otherwise it sits
+          beneath the list. No "Attributes" header, so the first attribute
+          top-aligns with the room content on the left. */}
+      {attributes.length === 0 ? (
+        <div className="min-w-0 md:self-stretch flex items-center justify-center py-6">
           <button
             type="button"
             onClick={onCreateAttribute}
-            className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-neutral-500 dark:text-[#a09e9a] hover:text-[var(--accent-3)] dark:hover:text-[var(--accent-1)] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] rounded transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-[12px] font-medium text-neutral-500 dark:text-[#a09e9a] border border-dashed border-neutral-200 dark:border-[rgba(255,255,255,0.09)] rounded-lg hover:text-[var(--accent-3)] dark:hover:text-[var(--accent-1)] hover:border-[var(--accent-3)]/40 dark:hover:border-[var(--accent-1)]/40 hover:bg-[rgba(30,25,20,0.02)] dark:hover:bg-[rgba(255,255,255,0.02)] transition-colors"
           >
-            <svg
-              className="w-3 h-3"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2.5}
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 4v16m8-8H4"
-              />
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
             Add attribute
           </button>
         </div>
+      ) : (
+        <div className="min-w-0 space-y-2">
+          {attributes.map((a) => (
+            <AttributeRow
+              key={a.id}
+              attribute={a}
+              propertyId={propertyId}
+              onPatch={(patch) => onPatchAttribute(a.id, patch)}
+              onDelete={() => onDeleteAttribute(a.id)}
+              onPhotosChange={(photos) => onAttributePhotosChange(a.id, photos)}
+              onError={onError}
+            />
+          ))}
+          <button
+            type="button"
+            onClick={onCreateAttribute}
+            className="w-full inline-flex items-center justify-center gap-1.5 py-2 text-[12px] font-medium text-neutral-500 dark:text-[#a09e9a] border border-dashed border-neutral-200 dark:border-[rgba(255,255,255,0.09)] rounded-lg hover:text-[var(--accent-3)] dark:hover:text-[var(--accent-1)] hover:border-[var(--accent-3)]/40 dark:hover:border-[var(--accent-1)]/40 hover:bg-[rgba(30,25,20,0.02)] dark:hover:bg-[rgba(255,255,255,0.02)] transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Add attribute
+          </button>
+        </div>
+      )}
 
-        {attributes.length === 0 ? (
-          <div className="py-4 px-3 text-[12px] text-neutral-400 dark:text-[#66645f] border border-dashed border-neutral-200 dark:border-[rgba(255,255,255,0.07)] rounded-md">
-            No attributes in this {noun} yet.
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {attributes.map((a) => (
-              <AttributeRow
-                key={a.id}
-                attribute={a}
-                propertyId={propertyId}
-                onPatch={(patch) => onPatchAttribute(a.id, patch)}
-                onDelete={() => onDeleteAttribute(a.id)}
-                onPhotosChange={(photos) => onAttributePhotosChange(a.id, photos)}
-                onError={onError}
-              />
-            ))}
-          </div>
-        )}
+      {/* Whole-section delete (room + all its attributes), bottom-right. */}
+      <div className="md:col-span-2 flex justify-end">
+        <button
+          type="button"
+          onClick={onDeleteRoom}
+          aria-label={`Delete ${noun}`}
+          title={`Delete ${noun}`}
+          className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-neutral-400 dark:text-[#66645f] hover:text-red-600 dark:hover:text-red-400 hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M10 7V4a1 1 0 011-1h2a1 1 0 011 1v3"
+            />
+          </svg>
+          Delete {noun}
+        </button>
       </div>
     </section>
   );
@@ -809,57 +803,52 @@ function AttributeRow({
 
   return (
     <div className="border border-neutral-200/80 dark:border-[rgba(255,255,255,0.07)] rounded-lg">
-      {/* Collapsed header — click to expand/collapse. */}
-      <div className="flex items-center gap-2 p-2.5">
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="flex-1 min-w-0 flex items-center gap-2 text-left"
-          aria-expanded={expanded}
-        >
-          <svg
-            className={`w-3.5 h-3.5 shrink-0 text-neutral-400 dark:text-[#66645f] transition-transform ${expanded ? 'rotate-90' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            viewBox="0 0 24 24"
+      {!expanded ? (
+        /* Collapsed — click the row to expand. */
+        <div className="flex items-center gap-2 p-2.5">
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="flex-1 min-w-0 flex items-center gap-2 text-left"
+            aria-expanded={false}
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
-          <span className="text-[14px] font-medium text-neutral-900 dark:text-[#f0efed] truncate">
-            {local.title || 'Untitled attribute'}
-          </span>
-          <TagChips tags={attribute.tags ?? []} />
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (window.confirm(`Delete "${local.title || 'this attribute'}"?`))
-              onDelete();
-          }}
-          aria-label="Delete attribute"
-          className="shrink-0 p-1 rounded text-neutral-400 dark:text-[#66645f] hover:text-red-600 dark:hover:text-red-400 hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
-          title="Delete attribute"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M10 7V4a1 1 0 011-1h2a1 1 0 011 1v3"
-            />
-          </svg>
-        </button>
-      </div>
-
-      {expanded && (
-        <div className="px-3 pb-3 pt-1 border-t border-neutral-100 dark:border-[rgba(255,255,255,0.05)] space-y-3">
-          <div className="flex items-start gap-2 pt-3">
+            <svg
+              className="w-3.5 h-3.5 shrink-0 text-neutral-400 dark:text-[#66645f]"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+            <span className="text-[14px] font-medium text-neutral-900 dark:text-[#f0efed] truncate">
+              {local.title || 'Untitled attribute'}
+            </span>
+            <TagChips tags={attribute.tags ?? []} />
+          </button>
+        </div>
+      ) : (
+        /* Expanded — the title shows once (the input). The chevron collapses;
+           delete moves to the bottom-right. */
+        <div className="p-2.5 space-y-3">
+          <div className="flex items-start gap-2">
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              aria-expanded
+              aria-label="Collapse attribute"
+              className="shrink-0 mt-2 p-0.5 rounded text-neutral-400 dark:text-[#66645f] hover:text-neutral-700 dark:hover:text-[#a09e9a] transition-colors"
+            >
+              <svg
+                className="w-3.5 h-3.5 rotate-90"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
             <div className="flex-1 min-w-0">
               <Input
                 value={local.title}
@@ -897,13 +886,41 @@ function AttributeRow({
             </div>
           </FieldGroup>
 
-          <div className="h-4 text-[10px] font-medium text-neutral-400 dark:text-[#66645f] uppercase tracking-[0.04em]">
-            {savedState === 'saving' && 'Saving…'}
-            {savedState === 'saved' && (
-              <span className="text-[var(--accent-2)] dark:text-[var(--accent-1)]">
-                Saved
-              </span>
-            )}
+          {/* Footer: save status on the left, delete on the bottom-right. */}
+          <div className="flex items-center justify-between pt-1">
+            <div className="h-4 text-[10px] font-medium text-neutral-400 dark:text-[#66645f] uppercase tracking-[0.04em]">
+              {savedState === 'saving' && 'Saving…'}
+              {savedState === 'saved' && (
+                <span className="text-[var(--accent-2)] dark:text-[var(--accent-1)]">
+                  Saved
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm(`Delete "${local.title || 'this attribute'}"?`))
+                  onDelete();
+              }}
+              aria-label="Delete attribute"
+              className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-neutral-400 dark:text-[#66645f] hover:text-red-600 dark:hover:text-red-400 hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+              title="Delete attribute"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M10 7V4a1 1 0 011-1h2a1 1 0 011 1v3"
+                />
+              </svg>
+              Delete
+            </button>
           </div>
         </div>
       )}

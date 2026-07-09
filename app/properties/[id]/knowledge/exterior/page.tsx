@@ -13,7 +13,6 @@ export default function PropertyExteriorTab() {
       propertyId={propertyId}
       scope="exterior"
       sectionLabel="Exterior & Building Systems"
-      sectionCaption="Outside-the-unit areas: garage, driveway, backyard, utilities, trash, HVAC, mail. Each area can hold notes, photos, and tagged attributes."
       noun="area"
       nounPlural="areas"
     />
