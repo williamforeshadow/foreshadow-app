@@ -212,12 +212,14 @@ async function loadTeamMembers(orgId: string | null): Promise<TeamMemberRow[]> {
 }
 
 /** Org-level task-proposal sensitivity (1-5). Falls back to 2 when unset. */
-async function loadTaskProposalSensitivity(): Promise<number> {
+async function loadTaskProposalSensitivity(orgId: string | null): Promise<number> {
+  // operations_settings is per-org; no org → default sensitivity.
+  if (!orgId) return 2;
   try {
     const { data } = await getSupabaseServer()
       .from('operations_settings')
       .select('task_proposal_sensitivity')
-      .eq('id', 1)
+      .eq('org_id', orgId)
       .maybeSingle();
     const v = (data as { task_proposal_sensitivity?: number } | null)?.task_proposal_sensitivity;
     if (typeof v === 'number' && v >= 1 && v <= 5) return v;
@@ -349,7 +351,7 @@ export async function generateProposedTaskDraftFromContext(
   const convOrgId = (ctx.conversation as { org_id?: string | null }).org_id ?? null;
   const [departments, sensitivity, existingTitles, teamMembers] = await Promise.all([
     loadDepartments(convOrgId),
-    loadTaskProposalSensitivity(),
+    loadTaskProposalSensitivity(convOrgId),
     loadExistingProposalTitles(ctx.conversation.id),
     loadTeamMembers(convOrgId),
   ]);

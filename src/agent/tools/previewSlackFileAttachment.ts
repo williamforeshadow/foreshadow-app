@@ -6,7 +6,7 @@ import {
 } from '@/src/server/slack/attachInboundFile';
 import { mintSlackFileAttachmentToken } from '@/src/server/slack/attachInboundFileConfirmation';
 import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
-import type { ToolContext, ToolDefinition, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
 const inputSchema = slackFileAttachmentInputSchema;
 type Input = z.infer<typeof inputSchema>;
@@ -22,6 +22,55 @@ async function handler(
   input: Input,
   ctx: ToolContext,
 ): Promise<ToolResult<PreviewSlackFileAttachmentData>> {
+  // Org guard: the attachment service is org-blind and every target id is
+  // model-supplied — validate the top-level target (task or property) belongs
+  // to the caller's org BEFORE previewing. Child ids (room/attribute/account)
+  // are constrained to the validated property inside the service. The commit
+  // tool only accepts tokens minted here, so this covers commits too.
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+  if (input.destination === 'task_attachment') {
+    const { data: taskRow, error: taskErr } = await ctx.db
+      .from('turnover_tasks')
+      .select('id')
+      .eq('id', input.task_id)
+      .eq('org_id', org)
+      .maybeSingle();
+    if (taskErr) {
+      return { ok: false, error: { code: 'db_error', message: taskErr.message } };
+    }
+    if (!taskRow) {
+      return {
+        ok: false,
+        error: {
+          code: 'not_found',
+          message: `No task found with id ${input.task_id}.`,
+          hint: 'Call find_tasks to resolve the task first.',
+        },
+      };
+    }
+  } else {
+    const { data: propRow, error: propErr } = await ctx.db
+      .from('properties')
+      .select('id')
+      .eq('id', input.property_id)
+      .eq('org_id', org)
+      .maybeSingle();
+    if (propErr) {
+      return { ok: false, error: { code: 'db_error', message: propErr.message } };
+    }
+    if (!propRow) {
+      return {
+        ok: false,
+        error: {
+          code: 'not_found',
+          message: `No property found with id ${input.property_id}.`,
+          hint: 'Call find_properties to resolve a property name into a valid id.',
+        },
+      };
+    }
+  }
+
   const enriched = {
     ...input,
     actor_user_id: ctx.actor?.appUserId ?? null,

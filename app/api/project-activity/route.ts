@@ -107,7 +107,16 @@ export async function logProjectActivity(
   newValue?: string
 ) {
   try {
-    const { error } = await getSupabaseServer()
+    const supabase = getSupabaseServer();
+    // Service-role insert bypasses RLS — stamp org_id from the project row so
+    // ledger rows always land in the project's org.
+    const { data: project } = await supabase
+      .from('property_projects')
+      .select('org_id')
+      .eq('id', projectId)
+      .maybeSingle();
+
+    const { error } = await supabase
       .from('project_activity_log')
       .insert({
         project_id: projectId,
@@ -115,7 +124,8 @@ export async function logProjectActivity(
         action_type: actionType,
         description,
         old_value: oldValue || null,
-        new_value: newValue || null
+        new_value: newValue || null,
+        org_id: (project as { org_id?: string | null } | null)?.org_id ?? null,
       });
 
     if (error) {

@@ -33,6 +33,8 @@ export interface ConversationRow {
   source: string;
   external_conversation_id: string;
   guest_name: string | null;
+  /** Owning organization — scopes per-org settings and agent tool context. */
+  org_id?: string | null;
   property_id: string | null;
   property_name: string | null;
   channel: string | null;

@@ -79,10 +79,18 @@ export async function maybeGenerateProposedKnowledgeForConversation(
   opts: { requireHostMessage?: boolean } = {},
 ): Promise<void> {
   try {
-    // Master switch: when autonomous knowledge proposing is off, skip entirely.
-    // This is the single chokepoint for all autonomous knowledge generation
-    // (both the per-message eager hook and any on-complete caller).
-    if (!(await loadConciergeProposalFlags()).knowledge) return;
+    // Master switch (per the conversation's org): when autonomous knowledge
+    // proposing is off, skip entirely. This is the single chokepoint for all
+    // autonomous knowledge generation (both the per-message eager hook and any
+    // on-complete caller). operations_settings is per-org.
+    const { data: orgRow } = await getSupabaseServer()
+      .from('conversations')
+      .select('org_id')
+      .eq('id', conversationId)
+      .maybeSingle();
+    const convOrgId =
+      ((orgRow as { org_id?: string | null } | null)?.org_id as string | null) ?? null;
+    if (!(await loadConciergeProposalFlags(convOrgId)).knowledge) return;
 
     if (opts.requireHostMessage && !(await threadHasHostMessage(conversationId))) {
       return;

@@ -9,13 +9,14 @@ import { todayInTz } from '@/src/lib/dates';
 // land a day late. Resolution order, most specific first:
 //   property.timezone → operations_settings.default_timezone → UTC.
 
-/** The org-wide default IANA timezone (operations_settings.default_timezone), or undefined. */
-export async function opsDefaultTimezone(): Promise<string | undefined> {
+/** An org's default IANA timezone (operations_settings is per-org), or undefined. */
+export async function opsDefaultTimezone(orgId: string | null | undefined): Promise<string | undefined> {
+  if (!orgId) return undefined;
   try {
     const { data } = await getSupabaseServer()
       .from('operations_settings')
       .select('default_timezone')
-      .eq('id', 1)
+      .eq('org_id', orgId)
       .maybeSingle();
     return (data as { default_timezone: string | null } | null)?.default_timezone ?? undefined;
   } catch {
@@ -25,22 +26,25 @@ export async function opsDefaultTimezone(): Promise<string | undefined> {
 
 /**
  * Today's date (YYYY-MM-DD) for a property, resolved in its own timezone when
- * set, else the org default, else UTC. Never throws — degrades to UTC.
+ * set, else ITS org's default, else UTC. Never throws — degrades to UTC.
  */
 export async function resolveOpsToday(propertyId: string | null): Promise<string> {
   let tz: string | undefined;
+  let orgId: string | null = null;
   if (propertyId) {
     try {
       const { data } = await getSupabaseServer()
         .from('properties')
-        .select('timezone')
+        .select('timezone, org_id')
         .eq('id', propertyId)
         .maybeSingle();
-      tz = (data as { timezone: string | null } | null)?.timezone ?? undefined;
+      const row = data as { timezone: string | null; org_id: string | null } | null;
+      tz = row?.timezone ?? undefined;
+      orgId = row?.org_id ?? null;
     } catch {
       // Lookup failed — fall through to the org default.
     }
   }
-  if (!tz) tz = await opsDefaultTimezone();
+  if (!tz) tz = await opsDefaultTimezone(orgId);
   return todayInTz(tz).date;
 }

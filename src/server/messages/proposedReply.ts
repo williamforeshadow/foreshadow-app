@@ -68,8 +68,19 @@ export async function generateAndStoreProposedReply(
   const supabase = getSupabaseServer();
   const latest = await getLatestSentMessage(conversationId);
 
-  // On the autonomous path, gate drafting by the org reply-sensitivity level.
-  const replySensitivity = opts.gate ? await loadReplyProposalSensitivity() : undefined;
+  // On the autonomous path, gate drafting by THIS conversation's org's
+  // reply-sensitivity level (operations_settings is per-org).
+  let replySensitivity: number | undefined;
+  if (opts.gate) {
+    const { data: orgRow } = await supabase
+      .from('conversations')
+      .select('org_id')
+      .eq('id', conversationId)
+      .maybeSingle();
+    replySensitivity = await loadReplyProposalSensitivity(
+      ((orgRow as { org_id?: string | null } | null)?.org_id as string | null) ?? null,
+    );
+  }
   const { draft, warranted } = await generateGuestReplyDraft({
     conversationId,
     instruction: opts.instruction,
@@ -133,26 +144,27 @@ export async function maybeGenerateProposedReplyForExternal(
   source = 'hostaway',
 ): Promise<void> {
   try {
-    // Master switch: when autonomous reply drafting is off, skip entirely.
-    // Manual "Regenerate" and the ops-agent tool call generateAndStoreProposedReply
-    // directly and are unaffected.
-    if (!(await loadConciergeProposalFlags()).reply) return;
-
     const supabase = getSupabaseServer();
     const { data: conv } = await supabase
       .from('conversations')
-      .select('id, app_status, archived, proposed_reply_answers_message_id')
+      .select('id, org_id, app_status, archived, proposed_reply_answers_message_id')
       .eq('source', source)
       .eq('external_conversation_id', externalConversationId)
       .maybeSingle();
     if (!conv) return;
     const c = conv as {
       id: string;
+      org_id: string | null;
       app_status: 'active' | 'complete';
       archived: boolean;
       proposed_reply_answers_message_id: string | null;
     };
     if (c.archived || c.app_status !== 'active') return;
+
+    // Master switch (per THIS conversation's org): when autonomous reply
+    // drafting is off, skip entirely. Manual "Regenerate" and the ops-agent
+    // tool call generateAndStoreProposedReply directly and are unaffected.
+    if (!(await loadConciergeProposalFlags(c.org_id)).reply) return;
 
     const latest = await getLatestSentMessage(c.id);
     // Only draft when the guest is the one awaiting a reply.

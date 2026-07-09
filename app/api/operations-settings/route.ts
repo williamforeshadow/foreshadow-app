@@ -420,7 +420,10 @@ export async function PATCH(request: NextRequest) {
           await supabase
             .from('operations_settings')
             .update({ ...patch, updated_at: now })
-            .eq('id', 1)
+            // The org's OWN row — settings are per-org now; the old `.eq('id', 1)`
+            // targeted a row id that no longer exists (updates silently matched
+            // nothing).
+            .eq('id', (existing as { id: number | string }).id)
         ).error
       : (
           await supabase.from('operations_settings').insert({

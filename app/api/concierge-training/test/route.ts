@@ -25,13 +25,21 @@ export const maxDuration = 60;
 // fake guest name + typed messages) and returns the reply. No database writes;
 // the agent is not told it's a test. Operator-only (requires a linked profile).
 export async function POST(request: NextRequest) {
-  const { error: authError } = await getCurrentAppUser();
+  const { user, error: authError } = await getCurrentAppUser();
   if (authError === 'unauthenticated') {
     return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
   }
-  if (authError === 'unlinked') {
+  if (authError === 'unlinked' || !user) {
     return NextResponse.json(
       { error: 'No Foreshadow profile is linked to this account' },
+      { status: 403 },
+    );
+  }
+  // Org boundary: the test may only run against the operator's own org's
+  // properties/settings.
+  if (!user.org_id) {
+    return NextResponse.json(
+      { error: 'This account is not assigned to an organization' },
       { status: 403 },
     );
   }
@@ -61,7 +69,14 @@ export async function POST(request: NextRequest) {
         text: typeof m.text === 'string' ? m.text : '',
       }));
 
-    const result = await runConciergeTest({ propertyId, guestName, scenario, messages, channel });
+    const result = await runConciergeTest({
+      propertyId,
+      orgId: user.org_id,
+      guestName,
+      scenario,
+      messages,
+      channel,
+    });
     return NextResponse.json(result);
   } catch (err) {
     console.error('[concierge test] generation failed:', err);

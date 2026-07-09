@@ -36,6 +36,13 @@ export interface TestMessage {
 
 export interface RunConciergeTestInput {
   propertyId: string;
+  /**
+   * The operator's org — the property MUST belong to it (validated in
+   * getPropertyMeta), and the org's own concierge settings gate the test.
+   * Without this, an operator could run the concierge against another
+   * tenant's property.
+   */
+  orgId: string;
   guestName: string;
   scenario: TestScenario;
   messages: TestMessage[];
@@ -87,12 +94,18 @@ interface PropertyMeta {
   timezone: string | null;
 }
 
-/** Resolve a property's name + timezone; throws if the id doesn't exist. */
-async function getPropertyMeta(propertyId: string): Promise<PropertyMeta> {
+/**
+ * Resolve a property's name + timezone; throws if the id doesn't exist IN THE
+ * OPERATOR'S ORG. The org filter is the tenant boundary — without it a
+ * cross-org property id would run the concierge (incl. that property's
+ * knowledge/availability) against another tenant.
+ */
+async function getPropertyMeta(propertyId: string, orgId: string): Promise<PropertyMeta> {
   const { data, error } = await getSupabaseServer()
     .from('properties')
     .select('name, timezone')
     .eq('id', propertyId)
+    .eq('org_id', orgId)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error('Property not found');
@@ -180,10 +193,10 @@ export async function runConciergeTest(
     throw new Error('Type a guest message to test a reply.');
   }
 
-  const { name: propertyName, timezone } = await getPropertyMeta(input.propertyId);
+  const { name: propertyName, timezone } = await getPropertyMeta(input.propertyId, input.orgId);
   // Property timezone first, then the org default, then UTC (todayInTz handles the
   // undefined → UTC fallback). Matches the real task path's resolution.
-  const today = todayInTz(timezone ?? (await opsDefaultTimezone())).date;
+  const today = todayInTz(timezone ?? (await opsDefaultTimezone(input.orgId))).date;
   const { stay, bookingState } = buildScenario(input.scenario, today);
 
   // Synthetic thread. sent_at is left null (treated as already-sent, never
@@ -210,6 +223,9 @@ export async function runConciergeTest(
     source: 'test',
     external_conversation_id: 'concierge-test',
     guest_name: guestName,
+    // The draft paths read org_id off the conversation to scope tool context,
+    // rosters, and per-org settings — the synthetic row must carry it too.
+    org_id: input.orgId,
     property_id: input.propertyId,
     property_name: propertyName,
     channel: input.channel ?? null,
@@ -241,7 +257,7 @@ export async function runConciergeTest(
   // Mirror production gating: the same master switches + sensitivity dials that
   // govern the autonomous webhook path govern the test, so the operator sees
   // exactly what the concierge would do with the current configuration.
-  const flags = await loadConciergeProposalFlags();
+  const flags = await loadConciergeProposalFlags(input.orgId);
   // Knowledge, like the webhook path, only triages once the thread has a host
   // (concierge) message — i.e. after at least one reply has been drafted.
   const hasHostMessage = cleaned.some((m) => m.role === 'host');
@@ -255,7 +271,7 @@ export async function runConciergeTest(
       if (!flags.reply) return { reply: '', warranted: false };
       // Pass the property-local date so "currently checked in" etc. resolve the
       // same way the model would for a real guest at this property right now.
-      const replySensitivity = await loadReplyProposalSensitivity();
+      const replySensitivity = await loadReplyProposalSensitivity(input.orgId);
       const { draft, warranted } = await generateGuestReplyDraftFromContext(ctx, {
         today,
         replySensitivity,

@@ -1106,20 +1106,28 @@ export async function notifyTaskDescriptionChanged(args: {
   });
 }
 
-async function getOrgTimezone(supabase: Supabase): Promise<string> {
+/**
+ * Per-org default timezones. operations_settings is per-org — the old
+ * `.eq('id', 1)` singleton read applied one org's timezone to every tenant
+ * (and matches nothing since the per-org migration). Orgs without a settings
+ * row fall back to DEFAULT_TIMEZONE.
+ */
+async function getOrgTimezones(supabase: Supabase): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
   try {
     const { data } = await supabase
       .from('operations_settings')
-      .select('default_timezone')
-      .eq('id', 1)
-      .maybeSingle();
-    if (typeof data?.default_timezone === 'string' && data.default_timezone) {
-      return data.default_timezone;
+      .select('org_id, default_timezone');
+    for (const row of (data ?? []) as Array<{
+      org_id: string | null;
+      default_timezone: string | null;
+    }>) {
+      if (row.org_id && row.default_timezone) out.set(row.org_id, row.default_timezone);
     }
   } catch {
     // Operations settings may not exist in older environments.
   }
-  return DEFAULT_TIMEZONE;
+  return out;
 }
 
 /**
@@ -1294,72 +1302,116 @@ async function loadDueTodayTimes(
 
 export async function runDueTodayNotifications() {
   const supabase = getSupabaseServer();
-  const timezone = await getOrgTimezone(supabase);
-  const { date } = todayInTz(timezone);
-  const currentHour = currentHourInTz(timezone);
 
-  const { data, error } = await supabase
-    .from('turnover_tasks')
-    .select(
-      `
-      id,
-      title,
-      property_name,
-      status,
-      scheduled_date,
-      scheduled_time,
-      updated_at,
-      task_assignments(
-        user_id,
-        assigned_at,
-        users(id, name, email)
-      )
-    `,
-    )
-    .eq('scheduled_date', date)
-    .neq('status', 'complete');
+  // Per-org: "today" and the firing hour are computed in EACH org's own
+  // timezone, and each org's scan only reads its own tasks. One org's failure
+  // shouldn't sink the others' notifications.
+  const { data: orgRows, error: orgErr } = await supabase
+    .from('organizations')
+    .select('id');
+  if (orgErr) throw new Error(orgErr.message);
+  const orgIds = ((orgRows ?? []) as Array<{ id: string }>).map((r) => r.id);
+  const tzByOrg = await getOrgTimezones(supabase);
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  const tasks = (data ?? []) as TaskContextRow[];
-
-  // One query for all assignees' preferred firing times.
-  const allAssigneeIds = Array.from(
-    new Set(
-      tasks.flatMap((t) =>
-        (t.task_assignments ?? []).map((a) => a.user_id),
-      ),
-    ),
-  );
-  const dueTimes = await loadDueTodayTimes(supabase, allAssigneeIds);
-
+  let tasksScanned = 0;
   let emitted = 0;
-  for (const row of tasks) {
-    const recipients = (row.task_assignments ?? [])
-      .map((a) => a.user_id)
-      .filter((uid) => {
-        const desired = dueTimes.get(uid) ?? DEFAULT_DUE_TODAY_TIME;
-        return Number(desired.slice(0, 2)) === currentHour;
+  const perOrg: Array<{
+    org_id: string;
+    date: string;
+    timezone: string;
+    current_hour: number;
+    tasks_scanned: number;
+    recipients_emitted: number;
+    error?: string;
+  }> = [];
+
+  for (const orgId of orgIds) {
+    const timezone = tzByOrg.get(orgId) ?? DEFAULT_TIMEZONE;
+    const { date } = todayInTz(timezone);
+    const currentHour = currentHourInTz(timezone);
+
+    const { data, error } = await supabase
+      .from('turnover_tasks')
+      .select(
+        `
+        id,
+        title,
+        property_name,
+        status,
+        scheduled_date,
+        scheduled_time,
+        updated_at,
+        task_assignments(
+          user_id,
+          assigned_at,
+          users(id, name, email)
+        )
+      `,
+      )
+      .eq('org_id', orgId)
+      .eq('scheduled_date', date)
+      .neq('status', 'complete');
+
+    if (error) {
+      console.error('[notifications] due-today scan failed for org', { orgId, error });
+      perOrg.push({
+        org_id: orgId,
+        date,
+        timezone,
+        current_hour: currentHour,
+        tasks_scanned: 0,
+        recipients_emitted: 0,
+        error: error.message,
       });
-    if (recipients.length === 0) continue;
-    await deliverTaskNotification({
-      type: 'task_due_today',
-      taskId: row.id,
-      recipientIds: recipients,
-      metadata: { due_date: date, timezone },
-      dedupeKeyFor: (recipientId) =>
-        `task_due_today:${date}:${row.id}:${recipientId}`,
+      continue;
+    }
+
+    const tasks = (data ?? []) as TaskContextRow[];
+    tasksScanned += tasks.length;
+
+    // One query for this org's assignees' preferred firing times.
+    const allAssigneeIds = Array.from(
+      new Set(
+        tasks.flatMap((t) =>
+          (t.task_assignments ?? []).map((a) => a.user_id),
+        ),
+      ),
+    );
+    const dueTimes = await loadDueTodayTimes(supabase, allAssigneeIds);
+
+    let orgEmitted = 0;
+    for (const row of tasks) {
+      const recipients = (row.task_assignments ?? [])
+        .map((a) => a.user_id)
+        .filter((uid) => {
+          const desired = dueTimes.get(uid) ?? DEFAULT_DUE_TODAY_TIME;
+          return Number(desired.slice(0, 2)) === currentHour;
+        });
+      if (recipients.length === 0) continue;
+      await deliverTaskNotification({
+        type: 'task_due_today',
+        taskId: row.id,
+        recipientIds: recipients,
+        metadata: { due_date: date, timezone },
+        dedupeKeyFor: (recipientId) =>
+          `task_due_today:${date}:${row.id}:${recipientId}`,
+      });
+      orgEmitted += recipients.length;
+    }
+    emitted += orgEmitted;
+    perOrg.push({
+      org_id: orgId,
+      date,
+      timezone,
+      current_hour: currentHour,
+      tasks_scanned: tasks.length,
+      recipients_emitted: orgEmitted,
     });
-    emitted += recipients.length;
   }
 
   return {
-    date,
-    timezone,
-    current_hour: currentHour,
-    tasks_scanned: tasks.length,
+    orgs: perOrg,
+    tasks_scanned: tasksScanned,
     recipients_emitted: emitted,
   };
 }

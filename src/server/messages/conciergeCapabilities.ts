@@ -1,10 +1,11 @@
 import { getSupabaseServer } from '@/lib/supabaseServer';
 
 // Concierge capability master switches. Three org-level booleans on the
-// operations_settings singleton (id=1) that gate whether the concierge
+// PER-ORG operations_settings row that gate whether the concierge
 // AUTONOMOUSLY proposes replies, tasks, and property knowledge from incoming
 // guest messages. Read in the webhook eager-generation chokepoints
-// (proposedReply / proposedTask / proposedKnowledge).
+// (proposedReply / proposedTask / proposedKnowledge). Every loader takes the
+// org id — a null org degrades to defaults, never to another org's settings.
 //
 // "Autonomous only": these do NOT gate manual triggers — the inbox "Regenerate"
 // button and the ops-agent concierge tool call the persist functions directly.
@@ -33,12 +34,13 @@ const FALLBACK_REPLY_SENSITIVITY = 3;
  * to an inbound guest message. Default 3, tolerant of a missing table/column
  * (degrades to the default). Read on the autonomous draft path to gate drafting.
  */
-export async function loadReplyProposalSensitivity(): Promise<number> {
+export async function loadReplyProposalSensitivity(orgId: string | null): Promise<number> {
+  if (!orgId) return FALLBACK_REPLY_SENSITIVITY;
   try {
     const { data } = await getSupabaseServer()
       .from('operations_settings')
       .select('reply_proposal_sensitivity')
-      .eq('id', 1)
+      .eq('org_id', orgId)
       .maybeSingle();
     const v = (data as { reply_proposal_sensitivity?: number } | null)?.reply_proposal_sensitivity;
     if (typeof v === 'number' && v >= 1 && v <= 4) return Math.round(v);
@@ -75,12 +77,13 @@ const ALL_TOOLS_ENABLED: ConciergeToolFlags = {
  * behavior where the full toolset was always available). Read on every draft
  * path (autonomous, manual, and the test harness) so the toolset is consistent.
  */
-export async function loadConciergeToolFlags(): Promise<ConciergeToolFlags> {
+export async function loadConciergeToolFlags(orgId: string | null): Promise<ConciergeToolFlags> {
+  if (!orgId) return { ...ALL_TOOLS_ENABLED };
   try {
     const { data } = await getSupabaseServer()
       .from('operations_settings')
       .select('concierge_tool_settings')
-      .eq('id', 1)
+      .eq('org_id', orgId)
       .maybeSingle();
     const raw = (data as { concierge_tool_settings?: unknown } | null)?.concierge_tool_settings;
     if (!raw || typeof raw !== 'object') return { ...ALL_TOOLS_ENABLED };
@@ -96,12 +99,13 @@ export async function loadConciergeToolFlags(): Promise<ConciergeToolFlags> {
   }
 }
 
-export async function loadConciergeProposalFlags(): Promise<ConciergeProposalFlags> {
+export async function loadConciergeProposalFlags(orgId: string | null): Promise<ConciergeProposalFlags> {
+  if (!orgId) return ALL_ENABLED;
   try {
     const { data } = await getSupabaseServer()
       .from('operations_settings')
       .select('reply_proposal_enabled, task_proposal_enabled, knowledge_proposal_enabled')
-      .eq('id', 1)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (!data) return ALL_ENABLED;
     const row = data as Record<string, unknown>;

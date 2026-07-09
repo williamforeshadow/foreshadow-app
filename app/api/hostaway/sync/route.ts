@@ -392,6 +392,7 @@ export async function POST() {
       const { error: correctionErr } = await supabase
         .from('properties')
         .update({ hostaway_name: hostawayName, updated_at: nowIso })
+        .eq('org_id', orgId)
         .eq('hostaway_listing_id', listingId);
       if (correctionErr) {
         console.error('[Hostaway Sync] name correction error:', correctionErr.message);

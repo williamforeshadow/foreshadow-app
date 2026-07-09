@@ -6,7 +6,7 @@ import {
 } from '@/src/server/properties/propertyKnowledgeWrite';
 import { mintPropertyKnowledgeWriteToken } from '@/src/server/properties/propertyKnowledgeWriteConfirmation';
 import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
-import type { ToolContext, ToolDefinition, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
 const inputSchema = z
   .object({
@@ -71,6 +71,31 @@ async function handler(
         code: 'invalid_input',
         message: first?.message ?? 'invalid input',
         hint: first?.path.join('.') || undefined,
+      },
+    };
+  }
+
+  // Org guard: the write service is org-blind and property_id is model-supplied,
+  // so validate the property belongs to the caller's org BEFORE previewing.
+  // The commit tool only accepts tokens minted here, so this covers commits too.
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+  const { data: propRow, error: propErr } = await ctx.db
+    .from('properties')
+    .select('id')
+    .eq('id', parsedPrimary.data.property_id)
+    .eq('org_id', org)
+    .maybeSingle();
+  if (propErr) {
+    return { ok: false, error: { code: 'db_error', message: propErr.message } };
+  }
+  if (!propRow) {
+    return {
+      ok: false,
+      error: {
+        code: 'not_found',
+        message: `No property found with id ${parsedPrimary.data.property_id}.`,
+        hint: 'Call find_properties to resolve a property name into a valid id.',
       },
     };
   }

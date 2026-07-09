@@ -80,23 +80,25 @@ export async function maybeGenerateProposedTaskForExternal(
   source = 'hostaway',
 ): Promise<void> {
   try {
-    // Master switch: when autonomous task proposing is off, skip entirely.
-    if (!(await loadConciergeProposalFlags()).task) return;
-
     const supabase = getSupabaseServer();
     const { data: conv } = await supabase
       .from('conversations')
-      .select('id, app_status, archived')
+      .select('id, org_id, app_status, archived')
       .eq('source', source)
       .eq('external_conversation_id', externalConversationId)
       .maybeSingle();
     if (!conv) return;
     const c = conv as {
       id: string;
+      org_id: string | null;
       app_status: 'active' | 'complete';
       archived: boolean;
     };
     if (c.archived || c.app_status !== 'active') return;
+
+    // Master switch (per THIS conversation's org): when autonomous task
+    // proposing is off, skip entirely.
+    if (!(await loadConciergeProposalFlags(c.org_id)).task) return;
 
     const latest = await getLatestSentMessage(c.id);
     // Only triage when the guest is the one awaiting action.

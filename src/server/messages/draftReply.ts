@@ -339,7 +339,9 @@ export async function generateGuestReplyDraftFromContext(
   // exempt so the indexed procedures stay loadable. Errors degrade to the full set.
   let toolFlags: Record<string, boolean>;
   try {
-    toolFlags = await loadConciergeToolFlags();
+    toolFlags = await loadConciergeToolFlags(
+      (ctx.conversation as { org_id?: string | null }).org_id ?? null,
+    );
   } catch {
     toolFlags = {};
   }
