@@ -4,6 +4,7 @@ import { requireAuthContext } from '@/lib/requireAuthContext';
 import { normalizeTags } from '@/lib/propertyAttributes';
 import {
   encodeFieldResourceId,
+  RESOURCE_FIELD_SETS,
   type VisibilityResourceType,
 } from '@/lib/propertyKnowledgeVisibility';
 import type { KnowledgeTarget } from '@/src/server/messages/draftKnowledge';
@@ -162,7 +163,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       resourceType = 'room';
       resourceId = room.id;
+      // Unlock the note plus the room title so the note has room context. Room
+      // photos are left to a manual Guest Visibility toggle rather than being
+      // auto-exposed by accepting a text note.
       visibilityEntries = [
+        { type: 'room_field', resourceId: encodeFieldResourceId(room.id, 'title') },
         { type: 'room_field', resourceId: encodeFieldResourceId(room.id, 'notes') },
       ];
     } else {
@@ -197,10 +202,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       }
       resourceType = 'attribute';
       resourceId = attribute.id as string;
-      visibilityEntries = [
-        { type: 'attribute_field', resourceId: encodeFieldResourceId(resourceId, 'title') },
-        { type: 'attribute_field', resourceId: encodeFieldResourceId(resourceId, 'body') },
-      ];
+      // A guest-visible attribute is all-or-nothing: unlock its whole field set
+      // (title/body/tags/photos) so it matches the Guest Visibility toggle.
+      visibilityEntries = RESOURCE_FIELD_SETS.attribute_field.map((field) => ({
+        type: 'attribute_field' as const,
+        resourceId: encodeFieldResourceId(resourceId, field),
+      }));
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to write knowledge';

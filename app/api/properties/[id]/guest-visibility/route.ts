@@ -54,25 +54,39 @@ export async function PUT(
   try {
     const body = await request.json();
     const resourceType = body.resource_type;
-    const resourceId = typeof body.resource_id === 'string' ? body.resource_id : '';
     const visible = Boolean(body.visible);
 
     if (!isVisibilityResourceType(resourceType)) {
       return NextResponse.json({ error: 'Invalid resource_type' }, { status: 400 });
     }
-    if (!resourceId) {
+
+    // Accept a single `resource_id` (field-level toggle) or a batch of
+    // `resource_ids` (a "package" toggle that locks/unlocks all of one item's
+    // fields at once — e.g. a whole room or attribute). Storage stays per-field.
+    const rawIds: unknown[] = Array.isArray(body.resource_ids)
+      ? body.resource_ids
+      : typeof body.resource_id === 'string'
+        ? [body.resource_id]
+        : [];
+    const resourceIds = rawIds.filter(
+      (x): x is string => typeof x === 'string' && x.length > 0,
+    );
+    if (resourceIds.length === 0) {
       return NextResponse.json({ error: 'resource_id is required' }, { status: 400 });
     }
-    // Validate the field. Singletons key by bare column name; collection items
+
+    // Validate each id. Singletons key by bare column name; collection items
     // key by `${rowId}:${field}`.
-    if (isSingletonFieldType(resourceType)) {
-      if (!isLockableField(resourceType, resourceId)) {
-        return NextResponse.json({ error: 'Invalid field for resource_type' }, { status: 400 });
-      }
-    } else {
-      const { rowId, field } = decodeFieldResourceId(resourceId);
-      if (!rowId || !isLockableField(resourceType, field)) {
-        return NextResponse.json({ error: 'Invalid resource_id for resource_type' }, { status: 400 });
+    for (const rid of resourceIds) {
+      if (isSingletonFieldType(resourceType)) {
+        if (!isLockableField(resourceType, rid)) {
+          return NextResponse.json({ error: `Invalid field for resource_type: ${rid}` }, { status: 400 });
+        }
+      } else {
+        const { rowId, field } = decodeFieldResourceId(rid);
+        if (!rowId || !isLockableField(resourceType, field)) {
+          return NextResponse.json({ error: `Invalid resource_id for resource_type: ${rid}` }, { status: 400 });
+        }
       }
     }
 
@@ -80,13 +94,13 @@ export async function PUT(
       const { error } = await supabase
         .from('property_knowledge_visibility')
         .upsert(
-          {
+          resourceIds.map((rid) => ({
             property_id: propertyId,
             resource_type: resourceType,
-            resource_id: resourceId,
+            resource_id: rid,
             created_by_user_id: appUser.id,
             org_id: orgId,
-          },
+          })),
           { onConflict: 'property_id,resource_type,resource_id', ignoreDuplicates: true },
         );
       if (error) {
@@ -98,7 +112,7 @@ export async function PUT(
         .delete()
         .eq('property_id', propertyId)
         .eq('resource_type', resourceType)
-        .eq('resource_id', resourceId);
+        .in('resource_id', resourceIds);
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
