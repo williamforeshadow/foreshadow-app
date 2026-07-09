@@ -103,11 +103,11 @@ export async function POST(request: Request) {
       sent_at: msg.sentAt,
     };
 
-    // Idempotent insert — unique(hostaway_message_id) + ignoreDuplicates makes
-    // Hostaway's retries / out-of-order redelivery safe.
+    // Idempotent insert — unique(org_id, hostaway_message_id) + ignoreDuplicates
+    // makes Hostaway's retries / out-of-order redelivery safe (per-org scoped).
     const { error } = await supabase
       .from('guest_messages')
-      .upsert(row, { onConflict: 'hostaway_message_id', ignoreDuplicates: true });
+      .upsert(row, { onConflict: 'org_id,hostaway_message_id', ignoreDuplicates: true });
 
     if (error) {
       console.error('[Hostaway Messages] insert error:', error.message);

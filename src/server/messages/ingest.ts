@@ -220,7 +220,7 @@ export async function ingestConversation(
         source_status_raw: rawStatus,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: 'source,external_conversation_id' },
+      { onConflict: 'org_id,source,external_conversation_id' },
     )
     .select('id')
     .single();
@@ -242,7 +242,7 @@ export async function ingestConversation(
   }));
   const { error: msgErr } = await supabase
     .from('guest_messages')
-    .upsert(msgRows, { onConflict: 'hostaway_message_id' });
+    .upsert(msgRows, { onConflict: 'org_id,hostaway_message_id' });
   if (msgErr) throw new Error(msgErr.message);
 
   // The upsert above seeded last_* from the JS rollup, which can't tell future
@@ -301,7 +301,7 @@ async function upsertConversationFromStored(orgId: string, externalId: string): 
         unread: false,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: 'source,external_conversation_id' },
+      { onConflict: 'org_id,source,external_conversation_id' },
     )
     .select('id')
     .single();

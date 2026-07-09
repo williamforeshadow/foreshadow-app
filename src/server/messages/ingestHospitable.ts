@@ -110,7 +110,7 @@ export async function ingestHospitableThread(
         unread,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: 'source,external_conversation_id' },
+      { onConflict: 'org_id,source,external_conversation_id' },
     )
     .select('id')
     .single();
