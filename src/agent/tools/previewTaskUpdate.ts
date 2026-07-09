@@ -5,7 +5,7 @@ import {
 } from '@/src/server/tasks/updateTask';
 import { mintUpdateTaskToken } from '@/src/server/tasks/updateTaskConfirmation';
 import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
-import type { ToolContext, ToolDefinition, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
 // preview_task_update — first half of the two-step write protocol for
 // modifying an existing task. Mirrors preview_task in shape: validates
@@ -124,7 +124,10 @@ async function handler(
   input: Input,
   ctx: ToolContext,
 ): Promise<ToolResult<PreviewTaskUpdateResultData>> {
-  const result = await previewUpdateTask(input);
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
+  const result = await previewUpdateTask(input, org);
 
   if (!result.ok) {
     if (result.error.code === 'invalid_input') {

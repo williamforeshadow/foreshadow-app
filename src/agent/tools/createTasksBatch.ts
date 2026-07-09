@@ -6,7 +6,7 @@ import {
 import { consumeCreateTasksBatchToken } from '@/src/server/tasks/createTasksBatchConfirmation';
 import { taskUrl } from '@/src/lib/links';
 import { binsIndexUrl } from '@/src/lib/links';
-import type { ToolContext, ToolDefinition, ToolMeta, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolMeta, type ToolResult } from './types';
 
 // create_tasks_batch — second half of the batch task write protocol.
 //
@@ -99,6 +99,9 @@ async function handler(
   input: Input,
   ctx: ToolContext,
 ): Promise<ToolResult<CreateTasksBatchData>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
   const consumed = consumeCreateTasksBatchToken(input.confirmation_token);
   if (!consumed.ok) {
     const reason = consumed.reason;
@@ -120,6 +123,7 @@ async function handler(
     actor: ctx.actor
       ? { user_id: ctx.actor.appUserId, name: ctx.actor.name }
       : null,
+    orgId: org,
   });
   if (!result.ok) {
     if (result.error.code === 'invalid_input') {

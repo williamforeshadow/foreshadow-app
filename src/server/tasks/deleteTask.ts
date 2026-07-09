@@ -58,6 +58,7 @@ interface ExistingTask {
 async function loadExistingTask(
   supabase: Supabase,
   taskId: string,
+  org: string,
 ): Promise<ExistingTask | null> {
   const { data } = await supabase
     .from('turnover_tasks')
@@ -66,6 +67,7 @@ async function loadExistingTask(
        templates(name)`,
     )
     .eq('id', taskId)
+    .eq('org_id', org)
     .maybeSingle();
   if (!data) return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -91,6 +93,7 @@ async function loadExistingTask(
  */
 export async function deleteTask(
   rawInput: unknown,
+  orgId: string,
 ): Promise<DeleteTaskResult> {
   const parsed = inputSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -107,7 +110,7 @@ export async function deleteTask(
   const input = parsed.data;
   const supabase = getSupabaseServer();
 
-  const existing = await loadExistingTask(supabase, input.task_id);
+  const existing = await loadExistingTask(supabase, input.task_id, orgId);
   if (!existing) {
     return {
       ok: false,
@@ -122,7 +125,8 @@ export async function deleteTask(
   const { error } = await supabase
     .from('turnover_tasks')
     .delete()
-    .eq('id', input.task_id);
+    .eq('id', input.task_id)
+    .eq('org_id', orgId);
   if (error) {
     return {
       ok: false,
@@ -177,6 +181,7 @@ export type PreviewDeleteTaskResult =
  */
 export async function previewDeleteTask(
   rawInput: unknown,
+  orgId: string,
 ): Promise<PreviewDeleteTaskResult> {
   const parsed = inputSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -193,7 +198,7 @@ export async function previewDeleteTask(
   const input = parsed.data;
   const supabase = getSupabaseServer();
 
-  const existing = await loadExistingTask(supabase, input.task_id);
+  const existing = await loadExistingTask(supabase, input.task_id, orgId);
   if (!existing) {
     return {
       ok: false,

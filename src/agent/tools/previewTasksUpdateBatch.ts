@@ -5,7 +5,7 @@ import {
 } from '@/src/server/tasks/updateTasksBatch';
 import { mintUpdateTasksBatchToken } from '@/src/server/tasks/updateTasksBatchConfirmation';
 import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
-import type { ToolContext, ToolDefinition, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
 const STATUS_ENUM = z.enum([
   'contingent',
@@ -53,7 +53,10 @@ async function handler(
   input: Input,
   ctx: ToolContext,
 ): Promise<ToolResult<PreviewTasksUpdateBatchResultData>> {
-  const result = await previewUpdateTasksBatch(input);
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
+  const result = await previewUpdateTasksBatch(input, org);
   if (!result.ok) {
     const hint = result.error.field
       ? `Check task ${((result.error.task_index ?? 0) + 1).toString()}'s "${result.error.field}" field and call again.`

@@ -99,6 +99,7 @@ function normalizeError(
 
 export async function previewUpdateTasksBatch(
   rawInput: unknown,
+  orgId: string,
 ): Promise<PreviewUpdateTasksBatchResult> {
   const parsed = inputSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -115,7 +116,7 @@ export async function previewUpdateTasksBatch(
 
   const plans: UpdateTaskPlan[] = [];
   for (let i = 0; i < parsed.data.tasks.length; i++) {
-    const result = await previewUpdateTask(parsed.data.tasks[i]);
+    const result = await previewUpdateTask(parsed.data.tasks[i], orgId);
     if (!result.ok) {
       return { ok: false, error: normalizeError(result.error, i) };
     }
@@ -137,7 +138,7 @@ export async function previewUpdateTasksBatch(
 
 export async function updateTasksBatch(
   rawInput: unknown,
-  options: UpdateTaskOptions = {},
+  options: UpdateTaskOptions,
 ): Promise<UpdateTasksBatchOutcome> {
   const parsed = inputSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -158,7 +159,7 @@ export async function updateTasksBatch(
 
   for (let i = 0; i < parsed.data.tasks.length; i++) {
     const input: UpdateTaskInput = parsed.data.tasks[i];
-    const preview = await previewUpdateTask(input);
+    const preview = await previewUpdateTask(input, options.orgId);
     if (!preview.ok) {
       failures.push({
         task_index: i,

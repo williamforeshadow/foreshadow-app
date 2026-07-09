@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { updateTasksBatch as updateTasksBatchService } from '@/src/server/tasks/updateTasksBatch';
 import { consumeUpdateTasksBatchToken } from '@/src/server/tasks/updateTasksBatchConfirmation';
 import { taskUrl } from '@/src/lib/links';
-import type { ToolContext, ToolDefinition, ToolMeta, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolMeta, type ToolResult } from './types';
 import type { UpdatedTaskRow } from './updateTask';
 
 const inputSchema = z.object({
@@ -38,6 +38,9 @@ async function handler(
   input: Input,
   ctx: ToolContext,
 ): Promise<ToolResult<UpdateTasksBatchData>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
   const consumed = consumeUpdateTasksBatchToken(input.confirmation_token);
   if (!consumed.ok) {
     return {
@@ -58,6 +61,7 @@ async function handler(
     actor: ctx.actor
       ? { user_id: ctx.actor.appUserId, name: ctx.actor.name }
       : null,
+    orgId: org,
   });
   if (!result.ok) {
     return {

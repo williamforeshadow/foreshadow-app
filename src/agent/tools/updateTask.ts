@@ -5,7 +5,7 @@ import {
 } from '@/src/server/tasks/updateTask';
 import { consumeUpdateTaskToken } from '@/src/server/tasks/updateTaskConfirmation';
 import { taskUrl } from '@/src/lib/links';
-import type { ToolContext, ToolDefinition, ToolMeta, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolMeta, type ToolResult } from './types';
 
 // update_task — second half of the two-step write protocol for
 // modifying an existing task. Accepts ONLY a confirmation_token from
@@ -56,6 +56,9 @@ async function handler(
   input: Input,
   ctx: ToolContext,
 ): Promise<ToolResult<UpdateTaskData>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
   const consumed = consumeUpdateTaskToken(input.confirmation_token);
   if (!consumed.ok) {
     return {
@@ -76,6 +79,7 @@ async function handler(
     actor: ctx.actor
       ? { user_id: ctx.actor.appUserId, name: ctx.actor.name }
       : null,
+    orgId: org,
   });
   if (!result.ok) {
     if (result.error.code === 'invalid_input' || result.error.code === 'locked_field') {

@@ -66,17 +66,17 @@ export async function POST(request: Request) {
   try {
     const ctx = await requireAuthContext();
     if (ctx instanceof NextResponse) return ctx;
-    const { appUser } = ctx;
+    const { appUser, orgId } = ctx;
 
     const body = await request.json();
 
-    // created_by is the verified acting user — it's how project_bins derives its
-    // org_id (the derive_org_id trigger reads created_by -> user's org).
+    // orgId is stamped explicitly by the service; created_by is the verified
+    // acting user (both belong to the same org, resolved server-side).
     const result = await createBin({
       name: body?.name,
       description: body?.description ?? null,
       created_by: appUser.id,
-    });
+    }, orgId);
 
     if (!result.ok) {
       const status =

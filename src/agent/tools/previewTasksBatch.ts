@@ -5,7 +5,7 @@ import {
 } from '@/src/server/tasks/createTasksBatch';
 import { mintCreateTasksBatchToken } from '@/src/server/tasks/createTasksBatchConfirmation';
 import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
-import type { ToolContext, ToolDefinition, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
 // preview_tasks_batch — first half of the batch task write protocol.
 //
@@ -142,7 +142,10 @@ async function handler(
   input: Input,
   ctx: ToolContext,
 ): Promise<ToolResult<PreviewTasksBatchResultData>> {
-  const result = await previewCreateTasksBatch(input);
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
+  const result = await previewCreateTasksBatch(input, org);
 
   if (!result.ok) {
     if (result.error.code === 'invalid_input') {

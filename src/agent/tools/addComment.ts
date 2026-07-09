@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { addComment as addCommentService } from '@/src/server/comments/addComment';
 import { consumeAddCommentToken } from '@/src/server/comments/addCommentConfirmation';
-import type { ToolDefinition, ToolMeta, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolMeta, type ToolResult } from './types';
 
 // add_comment — second half of the two-step write protocol for task
 // comments. Accepts ONLY a confirmation_token from preview_comment.
@@ -30,7 +30,13 @@ export interface AddedCommentRow {
   created_at: string;
 }
 
-async function handler(input: Input): Promise<ToolResult<AddedCommentRow>> {
+async function handler(
+  input: Input,
+  ctx: ToolContext,
+): Promise<ToolResult<AddedCommentRow>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
   const consumed = consumeAddCommentToken(input.confirmation_token);
   if (!consumed.ok) {
     return {
@@ -47,7 +53,7 @@ async function handler(input: Input): Promise<ToolResult<AddedCommentRow>> {
     };
   }
 
-  const result = await addCommentService(consumed.input);
+  const result = await addCommentService(consumed.input, org);
   if (!result.ok) {
     if (result.error.code === 'invalid_input') {
       return {

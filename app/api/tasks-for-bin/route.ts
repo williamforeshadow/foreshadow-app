@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await requireAuthContext();
     if (ctx instanceof NextResponse) return ctx;
-    const { supabase, appUser } = ctx;
+    const { supabase, appUser, orgId } = ctx;
 
     const body = await request.json();
 
@@ -217,7 +217,7 @@ export async function POST(request: NextRequest) {
       department_id: body?.department_id,
       template_id: body?.template_id,
       assigned_user_ids: body?.assigned_user_ids,
-    }, { actor: { user_id: appUser.id } });
+    }, { actor: { user_id: appUser.id }, orgId });
 
     if (!result.ok) {
       const status =

@@ -5,7 +5,7 @@ import {
 } from '@/src/server/comments/addComment';
 import { mintAddCommentToken } from '@/src/server/comments/addCommentConfirmation';
 import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
-import type { ToolDefinition, ToolContext, ToolResult } from './types';
+import { requireOrgId, type ToolDefinition, type ToolContext, type ToolResult } from './types';
 
 // preview_comment — first half of the two-step write protocol for task
 // comments. Mirrors preview_task in shape: validates, resolves display
@@ -57,6 +57,9 @@ async function handler(
   input: Input,
   ctx: ToolContext,
 ): Promise<ToolResult<PreviewCommentResultData>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
   if (!ctx.actor) {
     return {
       ok: false,
@@ -74,7 +77,7 @@ async function handler(
     task_id: input.task_id,
     comment_content: input.comment_content,
     user_id: ctx.actor.appUserId,
-  });
+  }, org);
 
   if (!result.ok) {
     if (result.error.code === 'invalid_input') {

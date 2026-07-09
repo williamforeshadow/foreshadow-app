@@ -5,7 +5,7 @@ import {
 } from '@/src/server/tasks/createTask';
 import { mintCreateTaskToken } from '@/src/server/tasks/createTaskConfirmation';
 import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
-import type { ToolContext, ToolDefinition, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
 // preview_task — first half of the two-step write protocol for tasks.
 //
@@ -138,8 +138,11 @@ async function handler(
   input: Input,
   ctx: ToolContext,
 ): Promise<ToolResult<PreviewTaskResultData>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
   const { attachment_inbound_file_ids, ...taskInput } = input;
-  const result = await previewCreateTask(taskInput);
+  const result = await previewCreateTask(taskInput, org);
 
   if (!result.ok) {
     if (result.error.code === 'invalid_input') {

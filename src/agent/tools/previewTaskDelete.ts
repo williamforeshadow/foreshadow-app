@@ -5,7 +5,7 @@ import {
 } from '@/src/server/tasks/deleteTask';
 import { mintDeleteTaskToken } from '@/src/server/tasks/deleteTaskConfirmation';
 import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
-import type { ToolContext, ToolDefinition, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
 // preview_task_delete — first half of the two-step protocol for
 // deleting a task. Today the underlying delete is HARD (the row goes
@@ -39,7 +39,10 @@ async function handler(
   input: Input,
   ctx: ToolContext,
 ): Promise<ToolResult<PreviewTaskDeleteResultData>> {
-  const result = await previewDeleteTask(input);
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
+  const result = await previewDeleteTask(input, org);
 
   if (!result.ok) {
     if (result.error.code === 'invalid_input') {

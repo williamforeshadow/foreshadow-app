@@ -5,7 +5,7 @@ import {
 } from '@/src/server/bins/createBin';
 import { mintCreateBinToken } from '@/src/server/bins/createBinConfirmation';
 import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
-import type { ToolContext, ToolDefinition, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
 // preview_bin — first half of the two-step write protocol for sub-bins.
 //
@@ -56,7 +56,10 @@ async function handler(
   input: Input,
   ctx: ToolContext,
 ): Promise<ToolResult<PreviewBinResultData>> {
-  const result = await previewCreateBin(input);
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
+  const result = await previewCreateBin(input, org);
 
   if (!result.ok) {
     if (result.error.code === 'invalid_input') {

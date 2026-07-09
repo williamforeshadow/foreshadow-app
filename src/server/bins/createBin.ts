@@ -82,7 +82,10 @@ export type CreateBinResult =
  * and duplicate-name detection all happen here so the route and the
  * agent share identical behavior.
  */
-export async function createBin(rawInput: unknown): Promise<CreateBinResult> {
+export async function createBin(
+  rawInput: unknown,
+  orgId: string,
+): Promise<CreateBinResult> {
   const parsed = createBinInputSchema.safeParse(rawInput);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
@@ -104,6 +107,7 @@ export async function createBin(rawInput: unknown): Promise<CreateBinResult> {
       .from('users')
       .select('id')
       .eq('id', input.created_by)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (userErr) {
       return {
@@ -132,6 +136,7 @@ export async function createBin(rawInput: unknown): Promise<CreateBinResult> {
   const { data: existing, error: dupErr } = await supabase
     .from('project_bins')
     .select('id, name')
+    .eq('org_id', orgId)
     .ilike('name', input.name)
     .limit(1);
   if (dupErr) {
@@ -155,10 +160,12 @@ export async function createBin(rawInput: unknown): Promise<CreateBinResult> {
   // UI's drag-to-reorder model — new bins land at the bottom). Reads the
   // current max in a single round-trip; concurrent creates can race here
   // but the consequence is just two bins sharing a sort_order, which the
-  // UI tolerates (secondary sort by created_at handles ties).
+  // UI tolerates (secondary sort by created_at handles ties). Scoped to the
+  // org so a new bin's position is computed against this tenant's bins only.
   const { data: maxRow, error: maxErr } = await supabase
     .from('project_bins')
     .select('sort_order')
+    .eq('org_id', orgId)
     .order('sort_order', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -171,6 +178,11 @@ export async function createBin(rawInput: unknown): Promise<CreateBinResult> {
   const { data: inserted, error: insertErr } = await supabase
     .from('project_bins')
     .insert({
+      // Stamped explicitly: project_bins normally derives org_id from
+      // created_by via the derive_org_id trigger, but created_by is
+      // optional here (null-actor agent/API creates), so a bin with no
+      // created_by would violate the NOT NULL org_id constraint without this.
+      org_id: orgId,
       name: input.name,
       description: input.description ?? null,
       created_by: input.created_by ?? null,
@@ -230,6 +242,7 @@ export type PreviewBinResult =
  */
 export async function previewCreateBin(
   rawInput: unknown,
+  orgId: string,
 ): Promise<PreviewBinResult> {
   const parsed = createBinInputSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -253,6 +266,7 @@ export async function previewCreateBin(
       .from('users')
       .select('id, name')
       .eq('id', input.created_by)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (userErr) {
       return {
@@ -276,6 +290,7 @@ export async function previewCreateBin(
   const { data: existing, error: dupErr } = await supabase
     .from('project_bins')
     .select('id, name')
+    .eq('org_id', orgId)
     .ilike('name', input.name)
     .limit(1);
   if (dupErr) {

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { deleteTask as deleteTaskService } from '@/src/server/tasks/deleteTask';
 import { consumeDeleteTaskToken } from '@/src/server/tasks/deleteTaskConfirmation';
-import type { ToolDefinition, ToolMeta, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolMeta, type ToolResult } from './types';
 
 // delete_task — second half of the two-step delete protocol. Accepts
 // ONLY a confirmation_token from preview_task_delete. The task_id is
@@ -32,7 +32,13 @@ export interface DeletedTaskRow {
   status: string;
 }
 
-async function handler(input: Input): Promise<ToolResult<DeletedTaskRow>> {
+async function handler(
+  input: Input,
+  ctx: ToolContext,
+): Promise<ToolResult<DeletedTaskRow>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
   const consumed = consumeDeleteTaskToken(input.confirmation_token);
   if (!consumed.ok) {
     return {
@@ -49,7 +55,7 @@ async function handler(input: Input): Promise<ToolResult<DeletedTaskRow>> {
     };
   }
 
-  const result = await deleteTaskService(consumed.input);
+  const result = await deleteTaskService(consumed.input, org);
   if (!result.ok) {
     if (result.error.code === 'invalid_input') {
       return {

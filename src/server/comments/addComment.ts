@@ -82,11 +82,13 @@ interface FkMiss {
 async function loadTask(
   supabase: Supabase,
   taskId: string,
+  org: string,
 ): Promise<FkLookup<{ id: string; title: string | null; property_name: string | null }> | FkMiss> {
   const { data, error } = await supabase
     .from('turnover_tasks')
     .select('id, title, property_name')
     .eq('id', taskId)
+    .eq('org_id', org)
     .maybeSingle();
   if (error) {
     return {
@@ -113,11 +115,13 @@ async function loadTask(
 async function loadUser(
   supabase: Supabase,
   userId: string,
+  org: string,
 ): Promise<FkLookup<{ id: string; name: string }> | FkMiss> {
   const { data, error } = await supabase
     .from('users')
     .select('id, name')
     .eq('id', userId)
+    .eq('org_id', org)
     .maybeSingle();
   if (error) {
     return {
@@ -145,7 +149,10 @@ async function loadUser(
  * is FK-validated for the same reason — and to surface a friendly error
  * if the task was deleted between preview and commit.
  */
-export async function addComment(rawInput: unknown): Promise<AddCommentResult> {
+export async function addComment(
+  rawInput: unknown,
+  orgId: string,
+): Promise<AddCommentResult> {
   const parsed = inputSchema.safeParse(rawInput);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
@@ -162,10 +169,11 @@ export async function addComment(rawInput: unknown): Promise<AddCommentResult> {
   const supabase = getSupabaseServer();
 
   // FK pre-validation. Both lookups in parallel so the round-trip cost
-  // stays at one wall-clock query.
+  // stays at one wall-clock query. Both are org-scoped so a cross-org
+  // task_id / user_id resolves to not_found.
   const [taskLookup, userLookup] = await Promise.all([
-    loadTask(supabase, input.task_id),
-    loadUser(supabase, input.user_id),
+    loadTask(supabase, input.task_id, orgId),
+    loadUser(supabase, input.user_id, orgId),
   ]);
   if (!taskLookup.ok) return { ok: false, error: taskLookup.error };
   if (!userLookup.ok) return { ok: false, error: userLookup.error };
@@ -173,6 +181,10 @@ export async function addComment(rawInput: unknown): Promise<AddCommentResult> {
   const { data: inserted, error: insertError } = await supabase
     .from('project_comments')
     .insert({
+      // Stamped explicitly for parity with the other write services; the
+      // derive_org_id trigger would also fill it from task_id, but the
+      // task is already org-verified above so this is the same value.
+      org_id: orgId,
       task_id: input.task_id,
       user_id: input.user_id,
       comment_content: input.comment_content,
@@ -241,6 +253,7 @@ export type PreviewAddCommentResult =
  */
 export async function previewAddComment(
   rawInput: unknown,
+  orgId: string,
 ): Promise<PreviewAddCommentResult> {
   const parsed = inputSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -258,8 +271,8 @@ export async function previewAddComment(
   const supabase = getSupabaseServer();
 
   const [taskLookup, userLookup] = await Promise.all([
-    loadTask(supabase, input.task_id),
-    loadUser(supabase, input.user_id),
+    loadTask(supabase, input.task_id, orgId),
+    loadUser(supabase, input.user_id, orgId),
   ]);
   if (!taskLookup.ok) return { ok: false, error: taskLookup.error };
   if (!userLookup.ok) return { ok: false, error: userLookup.error };

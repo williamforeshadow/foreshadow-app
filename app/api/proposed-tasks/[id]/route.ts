@@ -77,7 +77,7 @@ export async function POST(
 ) {
   const ctx = await requireAuthContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, appUser } = ctx;
+  const { supabase, appUser, orgId } = ctx;
 
   const { id } = await context.params;
   const actorId = appUser.id;
@@ -156,7 +156,7 @@ export async function POST(
           : proposal.scheduled_time,
       assigned_user_ids: edits.assigned_user_ids ?? proposal.suggested_assignee_ids ?? [],
     },
-    { actor: { user_id: actorId, name: appUser.name } },
+    { actor: { user_id: actorId, name: appUser.name }, orgId },
   );
 
   if (!result.ok) {

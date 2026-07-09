@@ -263,6 +263,7 @@ function summarizePlan(plan: CreateTasksBatchPlan): string {
  */
 export async function previewCreateTasksBatch(
   rawInput: unknown,
+  orgId: string,
 ): Promise<PreviewCreateTasksBatchResult> {
   const parsed = createTasksBatchInputSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -291,7 +292,7 @@ export async function previewCreateTasksBatch(
       name: input.shared_bin.new_sub_bin.name,
       description: input.shared_bin.new_sub_bin.description ?? null,
       created_by: input.created_by ?? null,
-    });
+    }, orgId);
     if (!binPreview.ok) {
       const e = binPreview.error;
       // Pass through the bin's error code if it's one our batch type
@@ -335,7 +336,7 @@ export async function previewCreateTasksBatch(
         : input.shared_bin;
 
     const taskInput = applySharedBin(input.tasks[i], sharedBinForPreview, null);
-    const result = await previewCreateTask(taskInput);
+    const result = await previewCreateTask(taskInput, orgId);
     if (!result.ok) {
       return {
         ok: false,
@@ -439,7 +440,7 @@ export async function previewCreateTasksBatch(
  */
 export async function createTasksBatch(
   rawInput: unknown,
-  options: CreateTaskOptions = {},
+  options: CreateTaskOptions,
 ): Promise<CreateTasksBatchOutcome> {
   const parsed = createTasksBatchInputSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -463,7 +464,7 @@ export async function createTasksBatch(
       name: input.shared_bin.new_sub_bin.name,
       description: input.shared_bin.new_sub_bin.description ?? null,
       created_by: input.created_by ?? null,
-    });
+    }, options.orgId);
     if (!binResult.ok) {
       return {
         ok: false,

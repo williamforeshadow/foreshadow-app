@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createBin as createBinService } from '@/src/server/bins/createBin';
 import { consumeCreateBinToken } from '@/src/server/bins/createBinConfirmation';
 import { binsIndexUrl } from '@/src/lib/links';
-import type { ToolDefinition, ToolMeta, ToolResult } from './types';
+import { requireOrgId, type ToolContext, type ToolDefinition, type ToolMeta, type ToolResult } from './types';
 
 // create_bin — second half of the two-step write protocol for sub-bins.
 //
@@ -39,7 +39,13 @@ export interface CreatedBinRow {
   bins_url: string;
 }
 
-async function handler(input: Input): Promise<ToolResult<CreatedBinRow>> {
+async function handler(
+  input: Input,
+  ctx: ToolContext,
+): Promise<ToolResult<CreatedBinRow>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
   const consumed = consumeCreateBinToken(input.confirmation_token);
   if (!consumed.ok) {
     const reason = consumed.reason;
@@ -57,7 +63,7 @@ async function handler(input: Input): Promise<ToolResult<CreatedBinRow>> {
     };
   }
 
-  const result = await createBinService(consumed.input);
+  const result = await createBinService(consumed.input, org);
   if (!result.ok) {
     if (result.error.code === 'invalid_input') {
       return {

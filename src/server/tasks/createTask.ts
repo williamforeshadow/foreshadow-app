@@ -135,6 +135,13 @@ export type CreateTaskResult =
 export interface CreateTaskOptions {
   actor?: NotificationActor | null;
   notify?: boolean;
+  /**
+   * The org the task belongs to. REQUIRED and stamped onto the row: a manual
+   * task with no property/reservation has nothing for the derive_org_id trigger
+   * to key off, so without this the NOT NULL org_id constraint rejects it. Also
+   * scopes every FK pre-check so a cross-org id can't be referenced.
+   */
+  orgId: string;
 }
 
 // ---------- helpers ---------------------------------------------------------
@@ -178,11 +185,13 @@ interface FkCheck {
 async function validateForeignKey(
   supabase: Supabase,
   check: FkCheck,
+  org: string,
 ): Promise<CreateTaskError | null> {
   const { data, error } = await supabase
     .from(check.table)
     .select('id')
     .eq('id', check.value)
+    .eq('org_id', org)
     .maybeSingle();
   if (error) {
     return { code: 'db_error', message: error.message, field: check.field };
@@ -207,7 +216,7 @@ async function validateForeignKey(
  */
 export async function createTask(
   rawInput: unknown,
-  options: CreateTaskOptions = {},
+  options: CreateTaskOptions,
 ): Promise<CreateTaskResult> {
   const parsed = createTaskInputSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -222,12 +231,14 @@ export async function createTask(
     };
   }
   const input = parsed.data;
+  const org = options.orgId;
 
   const supabase = getSupabaseServer();
 
   // FK pre-validation. Cheap maybeSingle() checks up front so the caller
   // gets a structured "not_found" with the offending field, instead of an
-  // opaque Postgres FK violation surfacing on insert.
+  // opaque Postgres FK violation surfacing on insert. All checks are org-scoped
+  // so a cross-org id resolves to not_found.
   //
   // Property is special: we also need its `name` for the denormalized
   // `turnover_tasks.property_name` column the UI reads from. There is no
@@ -241,6 +252,7 @@ export async function createTask(
       .from('properties')
       .select('id, name')
       .eq('id', input.property_id)
+      .eq('org_id', org)
       .maybeSingle();
     if (propErr) {
       return {
@@ -280,7 +292,7 @@ export async function createTask(
   // Run all remaining FK checks in parallel; return on first failure
   // (sufficient signal for the caller to correct the input).
   const fkErrors = await Promise.all(
-    checks.map((c) => validateForeignKey(supabase, c)),
+    checks.map((c) => validateForeignKey(supabase, c, org)),
   );
   const firstFkError = fkErrors.find((e) => e !== null);
   if (firstFkError) {
@@ -321,6 +333,9 @@ export async function createTask(
   const initialStatus = input.status ?? 'not_started';
 
   const insertPayload: Record<string, unknown> = {
+    // Stamped explicitly: a task with no property/reservation has no parent for
+    // the derive_org_id trigger to key off, so org_id must be set here.
+    org_id: org,
     title: input.title,
     description: descriptionJson,
     status: initialStatus,
@@ -371,6 +386,7 @@ export async function createTask(
     const assignments = userIds.map((uid) => ({
       task_id: taskId,
       user_id: uid,
+      org_id: org,
     }));
     const { error: asgnError } = await supabase
       .from('task_assignments')
@@ -546,6 +562,7 @@ export type PreviewCreateTaskResult =
  */
 export async function previewCreateTask(
   rawInput: unknown,
+  orgId: string,
 ): Promise<PreviewCreateTaskResult> {
   const parsed = createTaskInputSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -562,8 +579,8 @@ export async function previewCreateTask(
   const input = parsed.data;
   const supabase = getSupabaseServer();
 
-  // Run all FK lookups in parallel. Each lookup pulls the display label
-  // (or fails with not_found, surfaced verbatim like createTask).
+  // Run all FK lookups in parallel, ALL org-scoped so a cross-org id fails with
+  // not_found (mirrors createTask's validation so a passing preview also writes).
   type LookupOk<T> = { ok: true; value: T | null };
   type LookupErr = { ok: false; error: CreateTaskError };
   type Lookup<T> = LookupOk<T> | LookupErr;
@@ -579,6 +596,7 @@ export async function previewCreateTask(
       .from(table)
       .select(select)
       .eq('id', id)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (error) {
       return {
@@ -645,6 +663,7 @@ export async function previewCreateTask(
     const { data, error } = await supabase
       .from('users')
       .select('id, name, role')
+      .eq('org_id', orgId)
       .in('id', input.assigned_user_ids);
     if (error) {
       return {

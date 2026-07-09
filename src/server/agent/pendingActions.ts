@@ -69,6 +69,13 @@ export interface PendingActionRow {
   surface: 'slack' | 'web';
   action_kind: PendingActionKind;
   status: 'pending' | 'processing' | 'committed' | 'cancelled' | 'failed' | 'expired';
+  /**
+   * Owning org. Derived at insert time from requester_app_user_id via the
+   * derive_org_id trigger, so it is authoritative for scoping the commit —
+   * the executor stamps it onto the created row(s) rather than re-resolving.
+   * Null only when the row had no requester (fails closed on commit).
+   */
+  org_id: string | null;
   requester_app_user_id: string | null;
   slack_team_id: string | null;
   slack_channel_id: string | null;
@@ -531,12 +538,40 @@ async function executePendingAction(
   };
 }
 
+/**
+ * Resolve the org a pending action must commit under. The value was derived
+ * from requester_app_user_id when the row was created, so it's authoritative;
+ * we only need to fail closed if it's somehow absent (parent-less row).
+ */
+function requireRowOrg(
+  row: PendingActionRow,
+  action: string,
+):
+  | { ok: true; orgId: string }
+  | { ok: false; result: PendingExecutionResult } {
+  if (!row.org_id) {
+    return {
+      ok: false,
+      result: {
+        ok: false,
+        status: 'failed',
+        text: `I could not ${action}: no organization is associated with this request.`,
+        error: 'missing_org',
+      },
+    };
+  }
+  return { ok: true, orgId: row.org_id };
+}
+
 async function executeCreateTask(
   row: PendingActionRow,
 ): Promise<PendingExecutionResult> {
+  const org = requireRowOrg(row, 'create the task');
+  if (!org.ok) return org.result;
   const stored = row.canonical_input as CreateTaskPendingInput;
   const result = await createTask(stored.input, {
     actor: { user_id: row.requester_app_user_id },
+    orgId: org.orgId,
   });
   if (!result.ok) {
     return {
@@ -580,9 +615,12 @@ async function executeCreateTask(
 async function executeUpdateTask(
   row: PendingActionRow,
 ): Promise<PendingExecutionResult> {
+  const org = requireRowOrg(row, 'update the task');
+  if (!org.ok) return org.result;
   const stored = row.canonical_input as GenericPendingInput;
   const result = await updateTask(stored.input, {
     actor: { user_id: row.requester_app_user_id },
+    orgId: org.orgId,
   });
   if (!result.ok) {
     return {
@@ -610,8 +648,10 @@ async function executeUpdateTask(
 async function executeDeleteTask(
   row: PendingActionRow,
 ): Promise<PendingExecutionResult> {
+  const org = requireRowOrg(row, 'delete the task');
+  if (!org.ok) return org.result;
   const stored = row.canonical_input as GenericPendingInput;
-  const result = await deleteTask(stored.input);
+  const result = await deleteTask(stored.input, org.orgId);
   if (!result.ok) {
     return {
       ok: false,
@@ -633,9 +673,12 @@ async function executeDeleteTask(
 async function executeCreateTasksBatch(
   row: PendingActionRow,
 ): Promise<PendingExecutionResult> {
+  const org = requireRowOrg(row, 'create the task batch');
+  if (!org.ok) return org.result;
   const stored = row.canonical_input as GenericPendingInput;
   const result = await createTasksBatch(stored.input, {
     actor: { user_id: row.requester_app_user_id },
+    orgId: org.orgId,
   });
   if (!result.ok) {
     return {
@@ -667,9 +710,12 @@ async function executeCreateTasksBatch(
 async function executeUpdateTasksBatch(
   row: PendingActionRow,
 ): Promise<PendingExecutionResult> {
+  const org = requireRowOrg(row, 'update the task batch');
+  if (!org.ok) return org.result;
   const stored = row.canonical_input as GenericPendingInput;
   const result = await updateTasksBatch(stored.input, {
     actor: { user_id: row.requester_app_user_id },
+    orgId: org.orgId,
   });
   if (!result.ok) {
     return {
@@ -701,8 +747,10 @@ async function executeUpdateTasksBatch(
 async function executeCreateBin(
   row: PendingActionRow,
 ): Promise<PendingExecutionResult> {
+  const org = requireRowOrg(row, 'create the sub-bin');
+  if (!org.ok) return org.result;
   const stored = row.canonical_input as GenericPendingInput;
-  const result = await createBin(stored.input);
+  const result = await createBin(stored.input, org.orgId);
   if (!result.ok) {
     return {
       ok: false,
@@ -724,8 +772,10 @@ async function executeCreateBin(
 async function executeAddComment(
   row: PendingActionRow,
 ): Promise<PendingExecutionResult> {
+  const org = requireRowOrg(row, 'add the comment');
+  if (!org.ok) return org.result;
   const stored = row.canonical_input as GenericPendingInput;
-  const result = await addComment(stored.input);
+  const result = await addComment(stored.input, org.orgId);
   if (!result.ok) {
     return {
       ok: false,

@@ -134,6 +134,12 @@ export type UpdateTaskResult =
 
 export interface UpdateTaskOptions {
   actor?: NotificationActor | null;
+  /**
+   * The org the target task must belong to. REQUIRED: every row load and
+   * mutation is scoped to it so a cross-org task_id (e.g. from prompt
+   * injection) resolves to not_found instead of being read or written.
+   */
+  orgId: string;
 }
 
 // ---------- helpers --------------------------------------------------------
@@ -174,11 +180,13 @@ interface FkCheck {
 async function validateForeignKey(
   supabase: Supabase,
   check: FkCheck,
+  org: string,
 ): Promise<UpdateTaskError | null> {
   const { data, error } = await supabase
     .from(check.table)
     .select('id')
     .eq('id', check.value)
+    .eq('org_id', org)
     .maybeSingle();
   if (error) {
     return { code: 'db_error', message: error.message, field: check.field };
@@ -213,6 +221,7 @@ interface ExistingTask {
 async function loadExistingTask(
   supabase: Supabase,
   taskId: string,
+  org: string,
 ): Promise<ExistingTask | null> {
   const { data } = await supabase
     .from('turnover_tasks')
@@ -222,6 +231,7 @@ async function loadExistingTask(
        department_id, completed_at`,
     )
     .eq('id', taskId)
+    .eq('org_id', org)
     .maybeSingle();
   return (data as ExistingTask | null) ?? null;
 }
@@ -459,8 +469,9 @@ function computeChanges(args: ChangePlanArgs): UpdateTaskFieldChange[] {
  */
 export async function updateTask(
   rawInput: unknown,
-  options: UpdateTaskOptions = {},
+  options: UpdateTaskOptions,
 ): Promise<UpdateTaskResult> {
+  const org = options.orgId;
   // Reject locked fields BEFORE Zod parse so the caller gets a
   // specific error rather than an "unknown field" rejection if/when
   // strict() is added. Mirrors the UI route's hard-block at
@@ -508,8 +519,9 @@ export async function updateTask(
   const supabase = getSupabaseServer();
 
   // Pull the existing row first. Doubles as the "does this task exist"
-  // check and as the source of truth for the change diff.
-  const existing = await loadExistingTask(supabase, input.task_id);
+  // check and as the source of truth for the change diff. Org-scoped so a
+  // cross-org task_id is indistinguishable from a nonexistent one.
+  const existing = await loadExistingTask(supabase, input.task_id, org);
   if (!existing) {
     return {
       ok: false,
@@ -564,7 +576,7 @@ export async function updateTask(
     fkChecks.push({ field: 'assigned_user_ids', table: 'users', value: userId });
   }
   const fkErrors = await Promise.all(
-    fkChecks.map((c) => validateForeignKey(supabase, c)),
+    fkChecks.map((c) => validateForeignKey(supabase, c, org)),
   );
   const firstFk = fkErrors.find((e) => e !== null);
   if (firstFk) return { ok: false, error: firstFk };
@@ -628,7 +640,8 @@ export async function updateTask(
     const { error: updErr } = await supabase
       .from('turnover_tasks')
       .update(updatePayload)
-      .eq('id', input.task_id);
+      .eq('id', input.task_id)
+      .eq('org_id', org);
     if (updErr) {
       return {
         ok: false,
@@ -641,7 +654,8 @@ export async function updateTask(
     const { error: delErr } = await supabase
       .from('task_assignments')
       .delete()
-      .eq('task_id', input.task_id);
+      .eq('task_id', input.task_id)
+      .eq('org_id', org);
     if (delErr) {
       return {
         ok: false,
@@ -656,6 +670,7 @@ export async function updateTask(
       const rows = input.assigned_user_ids.map((uid) => ({
         task_id: input.task_id,
         user_id: uid,
+        org_id: org,
       }));
       const { error: insErr } = await supabase
         .from('task_assignments')
@@ -904,6 +919,7 @@ export type PreviewUpdateTaskResult =
  */
 export async function previewUpdateTask(
   rawInput: unknown,
+  orgId: string,
 ): Promise<PreviewUpdateTaskResult> {
   // Mirror updateTask's locked-field rejection so the error surfaces
   // at preview time too.
@@ -948,7 +964,7 @@ export async function previewUpdateTask(
   const input = parsed.data;
   const supabase = getSupabaseServer();
 
-  const existing = await loadExistingTask(supabase, input.task_id);
+  const existing = await loadExistingTask(supabase, input.task_id, orgId);
   if (!existing) {
     return {
       ok: false,
@@ -993,7 +1009,12 @@ export async function previewUpdateTask(
   ): Promise<Lbl | BinLbl | null> {
     if (!id) return null;
     const select = table === 'project_bins' ? 'id, name, is_system' : 'id, name';
-    const { data } = await supabase.from(table).select(select).eq('id', id).maybeSingle();
+    const { data } = await supabase
+      .from(table)
+      .select(select)
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle();
     return (data as Lbl | BinLbl | null) ?? null;
   }
 
@@ -1052,6 +1073,7 @@ export async function previewUpdateTask(
     const { data } = await supabase
       .from('users')
       .select('id, name')
+      .eq('org_id', orgId)
       .in('id', existingAssignmentIds);
     prevAssignedUserLabels = ((data ?? []) as Array<{ id: string; name: string }>).map(
       (u) => ({ user_id: u.id, name: u.name }),
@@ -1064,6 +1086,7 @@ export async function previewUpdateTask(
       const { data, error } = await supabase
         .from('users')
         .select('id, name, role')
+        .eq('org_id', orgId)
         .in('id', input.assigned_user_ids);
       if (error) {
         return {
