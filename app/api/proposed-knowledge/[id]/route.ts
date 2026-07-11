@@ -1,21 +1,23 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthContext } from '@/lib/requireAuthContext';
-import { normalizeTags } from '@/lib/propertyAttributes';
+import { normalizeTags, normalizeContactTags } from '@/lib/propertyAttributes';
 import {
   encodeFieldResourceId,
   RESOURCE_FIELD_SETS,
   type VisibilityResourceType,
 } from '@/lib/propertyKnowledgeVisibility';
+import { commitPropertyKnowledgeWrite } from '@/src/server/properties/propertyKnowledgeWrite';
+import { upsertPropertyContact } from '@/src/server/properties/upsertPropertyContact';
 import type { KnowledgeTarget } from '@/src/server/messages/draftKnowledge';
 
 // Accept / dismiss a concierge-proposed knowledge addition.
 //
 // A proposed_knowledge row carries a structured `target`. Accepting (the human
 // click is the confirmation) replays it through the SAME non-token property
-// write path the Knowledge UI uses — create a room if needed, then a room note
-// or an attribute — and, when the reviewer chose guest-visible, unlocks the new
-// item's default fields via property_knowledge_visibility (per-field model).
+// write path the Knowledge UI uses — a room note, an attribute, a wifi
+// (connectivity) update, or a new vendor/contact — and, when the reviewer chose
+// guest-visible, unlocks the item's fields via property_knowledge_visibility.
 
 export const maxDuration = 60;
 
@@ -135,6 +137,18 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const editBody = typeof body.body === 'string' ? body.body : undefined;
   const editNotes = typeof body.notes === 'string' ? body.notes : undefined;
   const editTags = Array.isArray(body.tags) ? normalizeTags(body.tags) : undefined;
+  // Connectivity + contact edit-overrides (each proposal is a single kind, so
+  // only the relevant subset is consumed by the branch below).
+  const asStr = (v: unknown) => (typeof v === 'string' ? v : undefined);
+  const editWifiSsid = asStr(body.wifi_ssid);
+  const editWifiPassword = asStr(body.wifi_password);
+  const editWifiRouter = asStr(body.wifi_router_location);
+  const editName = typeof body.name === 'string' ? body.name.trim() : undefined;
+  const editRole = asStr(body.role);
+  const editPhone = asStr(body.phone);
+  const editEmail = asStr(body.email);
+  const editSchedule = asStr(body.schedule);
+  const editContactTags = Array.isArray(body.tags) ? normalizeContactTags(body.tags) : undefined;
 
   if (!proposal.property_id) {
     return NextResponse.json(
@@ -169,8 +183,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         type: 'room_field' as const,
         resourceId: encodeFieldResourceId(room.id, field),
       }));
-    } else {
-      // attribute
+    } else if (target.kind === 'attribute') {
       const room = await ensureRoom(supabase, propertyId, target.room, actorId, orgId);
       const attrTitle = editTitle && editTitle !== '' ? editTitle : target.attribute.title;
       const attrBody =
@@ -207,6 +220,95 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         type: 'attribute_field' as const,
         resourceId: encodeFieldResourceId(resourceId, field),
       }));
+    } else if (target.kind === 'connectivity') {
+      // Wi-Fi is a singleton per property — merge in only the fields that carry
+      // a value, so we never null out other existing wifi columns.
+      const merged = {
+        wifi_ssid: editWifiSsid !== undefined ? editWifiSsid : target.fields.wifi_ssid,
+        wifi_password:
+          editWifiPassword !== undefined ? editWifiPassword : target.fields.wifi_password,
+        wifi_router_location:
+          editWifiRouter !== undefined ? editWifiRouter : target.fields.wifi_router_location,
+      };
+      const fields: { wifi_ssid?: string; wifi_password?: string; wifi_router_location?: string } = {};
+      for (const key of ['wifi_ssid', 'wifi_password', 'wifi_router_location'] as const) {
+        const v = (merged[key] ?? '').trim();
+        if (v) fields[key] = v;
+      }
+      const result = await commitPropertyKnowledgeWrite({
+        action: 'upsert_connectivity',
+        property_id: propertyId,
+        fields,
+        actor_user_id: actorId,
+        source: 'agent_web',
+      });
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error.message }, { status: 500 });
+      }
+      resourceType = 'connectivity';
+      resourceId = (result.row as { id?: string } | null)?.id ?? propertyId;
+      // Singleton field-bag: unlock the wifi fields we set, keyed by BARE column
+      // name (NOT encodeFieldResourceId).
+      visibilityEntries = Object.keys(fields).map((field) => ({
+        type: 'connectivity_field' as const,
+        resourceId: field,
+      }));
+    } else if (target.kind === 'contact') {
+      const c = target.contact;
+      const pick = (edit: string | undefined, stored: string | null): string | null => {
+        if (edit === undefined) return stored;
+        const t = edit.trim();
+        return t === '' ? null : t;
+      };
+      // Build a sparse input: include only fields that carry a value, so an
+      // UPDATE (contact_id present) patches — never nulls — the fields the
+      // proposal didn't touch. upsertPropertyContact preserves omitted fields.
+      const input: Record<string, unknown> = {
+        property_id: propertyId,
+        actor_user_id: actorId,
+        source: 'web',
+      };
+      if (c.id) input.contact_id = c.id; // present → UPDATE an existing contact; absent → CREATE
+      const name = editName && editName !== '' ? editName : c.name;
+      if (name && name.trim()) input.name = name.trim();
+      const tags = editContactTags !== undefined ? editContactTags : c.tags;
+      if (tags.length) input.tags = tags;
+      const optional: Array<[string, string | undefined, string | null]> = [
+        ['role', editRole, c.role],
+        ['phone', editPhone, c.phone],
+        ['email', editEmail, c.email],
+        ['schedule', editSchedule, c.schedule],
+        ['notes', editNotes, c.notes],
+      ];
+      for (const [field, edit, stored] of optional) {
+        const v = pick(edit, stored);
+        if (v) input[field] = v;
+      }
+      const result = await upsertPropertyContact(input);
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error.message }, { status: 500 });
+      }
+      resourceType = 'contact';
+      resourceId = result.contact.id;
+      // Unlock only the contact fields that ended up carrying a value.
+      const contactHasValue: Record<string, boolean> = {
+        name: true,
+        role: result.contact.role != null,
+        phone: result.contact.phone != null,
+        email: result.contact.email != null,
+        schedule: result.contact.schedule != null,
+        preferences: result.contact.preferences != null,
+        notes: result.contact.notes != null,
+      };
+      visibilityEntries = RESOURCE_FIELD_SETS.contact_field
+        .filter((field) => contactHasValue[field])
+        .map((field) => ({
+          type: 'contact_field' as const,
+          resourceId: encodeFieldResourceId(resourceId, field),
+        }));
+    } else {
+      // Unreachable given KnowledgeTarget; keeps resourceType definitely assigned.
+      return NextResponse.json({ error: 'Unsupported proposal target.' }, { status: 400 });
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to write knowledge';

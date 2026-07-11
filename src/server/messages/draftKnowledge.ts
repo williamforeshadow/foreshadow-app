@@ -2,7 +2,15 @@ import type { TextBlock } from '@anthropic-ai/sdk/resources/messages';
 import { getAnthropic, MODEL } from '@/src/agent/anthropic';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { loadPropertyKnowledge } from '@/src/server/properties/propertyKnowledge';
-import { ATTRIBUTE_TAGS, normalizeTags, type AttributeTag } from '@/lib/propertyAttributes';
+import {
+  ATTRIBUTE_TAGS,
+  normalizeTags,
+  type AttributeTag,
+  CONTACT_TAGS,
+  normalizeContactTags,
+  type ContactTag,
+} from '@/lib/propertyAttributes';
+import { LOCKABLE_CONNECTIVITY_FIELDS } from '@/lib/propertyKnowledgeVisibility';
 import {
   getConversationContext,
   type ConversationContext,
@@ -12,8 +20,9 @@ import type { GuestMessageRecord } from '@/lib/messages';
 // Knowledge-triage generator — the concierge's "did this conversation teach us
 // something durable about the PROPERTY worth saving for next time?" pass. The
 // operator-facing sibling of draftReply/draftTask. It reads the conversation AND
-// the property's current knowledge tree, and proposes additions (a room note or
-// a room attribute) — rarely. The result compounds: an accepted, guest-visible
+// the property's current knowledge tree, and proposes additions (a room note, a
+// room attribute, a wifi detail, or a vendor/contact) — rarely. The result
+// compounds: an accepted, guest-visible
 // fact later informs the concierge's replies.
 //
 // Single structured call, temp 0. Domain-agnostic; what qualifies is judged from
@@ -31,9 +40,29 @@ export interface RoomRef {
   title: string | null;
 }
 
+export interface ConnectivityFields {
+  wifi_ssid: string | null;
+  wifi_password: string | null;
+  wifi_router_location: string | null;
+}
+
+export interface ContactFields {
+  /** Existing contact id to UPDATE, or null to create a new contact. */
+  id: string | null;
+  tags: ContactTag[];
+  name: string;
+  role: string | null;
+  phone: string | null;
+  email: string | null;
+  schedule: string | null;
+  notes: string | null;
+}
+
 export type KnowledgeTarget =
   | { kind: 'room_note'; room: RoomRef; notes: string }
-  | { kind: 'attribute'; room: RoomRef; attribute: { tags: AttributeTag[]; title: string; body: string | null } };
+  | { kind: 'attribute'; room: RoomRef; attribute: { tags: AttributeTag[]; title: string; body: string | null } }
+  | { kind: 'connectivity'; fields: ConnectivityFields }
+  | { kind: 'contact'; contact: ContactFields };
 
 export interface KnowledgeProposalDraft {
   target: KnowledgeTarget;
@@ -55,20 +84,26 @@ Save it when it's a discovered fix or quirk (e.g. the TV only works on a certain
 
 Ground every proposal ONLY in what the conversation actually established — never invent details, names, times, or numbers.
 
+UPDATES & CORRECTIONS: a fact that CHANGES or corrects a value already on file, or already listed as awaiting review, IS worth proposing — save the corrected value (for example a new wifi password, or a vendor whose schedule changed). Only skip it when the value is unchanged (already exactly on file or already proposed).
+
 WHERE to put each fact (choose the best target):
 - A discrete thing tied to a specific room/area — an appliance, amenity, safety item, utility, or a quirk about a particular object → an ATTRIBUTE under that room. Tag it appropriately (you may apply multiple tags). Use an existing room when one fits (reference its id); if the relevant room clearly exists in the property but isn't in the list, create it (set room.id to null and give scope + title). For a property-wide fact not tied to a specific room, create or reuse a general/whole-property area (scope "interior") and attach the attribute there.
-- A general characteristic or recurring fact about a room or area AS A WHOLE (e.g. "basement tends to smell", "landscaper comes every other Friday" for the yard) → a ROOM NOTE on that room's notes.
+- A general characteristic of a room or area ITSELF — its layout, condition, or a standing quirk (e.g. "basement tends to smell") → a ROOM NOTE on that room's notes. (A person or service is NOT a room note — see CONTACT below.)
+- The property's Wi-Fi — network name (SSID), password, or router location, often a correction to what's on file → a CONNECTIVITY target carrying whichever of these fields (${LOCKABLE_CONNECTIVITY_FIELDS.join(', ')}) were established.
+- A person, company, or recurring vendor/service tied to the property — a cleaner, landscaper, pool service, trash/recycling pickup, HOA, handyman, emergency contact, or the owner — especially a recurring one someone (usually the host) mentions in passing (e.g. "heads up, the landscapers come 10am Friday") → a CONTACT. Capture whatever was given: name, role, phone, email, schedule. A recurring schedule alone is enough — do not wait for a phone number; give the contact a sensible name/role. Tag with one or more of: ${CONTACT_TAGS.join(', ')}. If the fact UPDATES a contact already on file (e.g. that vendor's schedule or number changed), set contact.id to that contact's id and restate its details including the change; otherwise set contact.id to null to create a new one.
 
 Rooms have a scope ("interior" or "exterior") and a title. Valid attribute tags: ${ATTRIBUTE_TAGS.join(', ')} (use "quirk" for a quirky behavior, "appliance" for a device, "amenity" for a guest amenity, "safety" for a hazard, "utility" for shutoffs/utilities, "access" for entry, "other" otherwise). You may combine tags (e.g. a guest-facing device = ["appliance","amenity"]).
 
-VISIBILITY: set guest_visible true when this is something you'd happily share with any guest (how to use an amenity, a TV input, parking, wifi). Set it false when it's internal (an operational note or anything you would not tell a guest).
+VISIBILITY: set guest_visible true when this is something you'd happily share with any guest (how to use an amenity, a TV input, parking, the wifi network + password). Set it false when it's internal (an operational note, a vendor/contact, or anything you would not tell a guest).
 
 Output: respond with ONLY a single JSON object, no prose, no code fences:
 {"proposals": [{"target": <Target>, "summary": string, "guest_visible": boolean, "reasoning": string}], "reasoning": string}
-"proposals" is an array of zero or more (usually zero or one). "summary" is a short human-readable line like "Living Room - quirk: TV must be on HDMI 2".
+"proposals" is an array of zero or more (usually zero or one). "summary" is a short human-readable line like "Living Room - quirk: TV must be on HDMI 2" or "Contact - Landscaping (maintenance): Fridays 10am".
 A <Target> is exactly one of:
 - {"kind":"room_note","room":{"id":string|null,"scope":"interior"|"exterior","title":string|null},"notes":string}
 - {"kind":"attribute","room":{"id":string|null,"scope":"interior"|"exterior","title":string|null},"attribute":{"tags":string[],"title":string,"body":string|null}}
+- {"kind":"connectivity","fields":{"wifi_ssid":string|null,"wifi_password":string|null,"wifi_router_location":string|null}}
+- {"kind":"contact","contact":{"id":string|null,"tags":string[],"name":string,"role":string|null,"phone":string|null,"email":string|null,"schedule":string|null,"notes":string|null}}
 Keep "reasoning" to one short sentence.`;
 
 interface KnowledgeRoom {
@@ -79,14 +114,20 @@ interface KnowledgeRoom {
   attributes: Array<{ tags: AttributeTag[]; title: string }>;
 }
 
+interface KnowledgeContact {
+  id: string;
+  name: string;
+}
+
 /** Compact the property's current knowledge into prompt text for placement + dedup. */
 async function loadKnowledgeContext(propertyId: string | null): Promise<{
   block: string;
   rooms: KnowledgeRoom[];
+  contacts: KnowledgeContact[];
 }> {
-  if (!propertyId) return { block: '(no property linked)', rooms: [] };
+  if (!propertyId) return { block: '(no property linked)', rooms: [], contacts: [] };
   const knowledge = await loadPropertyKnowledge(propertyId);
-  if (!knowledge) return { block: '(property knowledge unavailable)', rooms: [] };
+  if (!knowledge) return { block: '(property knowledge unavailable)', rooms: [], contacts: [] };
 
   const rooms: KnowledgeRoom[] = (knowledge.rooms as unknown as Array<Record<string, unknown>>).map((r) => ({
     id: r.id as string,
@@ -113,20 +154,109 @@ async function loadKnowledgeContext(propertyId: string | null): Promise<{
       lines.push(`- [id: ${room.id}] ${room.scope} "${label}"${noteStr}${attrStr}`);
     }
   }
-  return { block: lines.join('\n'), rooms };
+
+  // Wi-Fi (single row) + vendors/contacts — surfaced so the model dedups
+  // connectivity and contact proposals against what's already on file.
+  const conn = (knowledge.connectivity as Record<string, unknown> | null) ?? null;
+  if (conn && (conn.wifi_ssid || conn.wifi_password || conn.wifi_router_location)) {
+    const parts: string[] = [];
+    if (conn.wifi_ssid) parts.push(`network "${conn.wifi_ssid}"`);
+    if (conn.wifi_password) parts.push(`password "${conn.wifi_password}"`);
+    if (conn.wifi_router_location) parts.push(`router at "${conn.wifi_router_location}"`);
+    lines.push(`Wi-Fi on file: ${parts.join(', ')}`);
+  } else {
+    lines.push('Wi-Fi on file: (none)');
+  }
+
+  // Vendors/contacts on file — with ids so a proposal can reference one to UPDATE
+  // it, and with real values so the model can tell an unchanged fact from a change.
+  const rawContacts = (knowledge.contacts as Array<Record<string, unknown>> | null) ?? [];
+  const contacts: KnowledgeContact[] = rawContacts.map((c) => ({
+    id: c.id as string,
+    name: (c.name as string) || 'contact',
+  }));
+  lines.push(
+    'Existing vendors/contacts (reference a contact by its id to UPDATE it; do NOT re-propose an unchanged one):',
+  );
+  if (rawContacts.length === 0) {
+    lines.push('- (none yet)');
+  } else {
+    for (const c of rawContacts) {
+      const tags = normalizeContactTags(c.tags);
+      const bits: string[] = [];
+      if (tags.length) bits.push(tags.join('/'));
+      if (c.role) bits.push(`role "${String(c.role).slice(0, 60)}"`);
+      if (c.phone) bits.push(`phone "${c.phone}"`);
+      if (c.email) bits.push(`email "${c.email}"`);
+      if (c.schedule) bits.push(`schedule "${String(c.schedule).slice(0, 80)}"`);
+      const detail = bits.length ? ` — ${bits.join(', ')}` : '';
+      lines.push(`- [id: ${c.id}] "${(c.name as string) || 'contact'}"${detail}`);
+    }
+  }
+
+  return { block: lines.join('\n'), rooms, contacts };
 }
 
-/** Existing pending/accepted knowledge-proposal summaries for this conversation (dedup). */
-async function loadExistingProposalSummaries(conversationId: string): Promise<string[]> {
-  const { data, error } = await getSupabaseServer()
+/** Value-aware, one-line description of a stored proposal target (for pending dedup). */
+function describePendingTarget(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const t = raw as Record<string, unknown>;
+  const kind = t.kind;
+  const s = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  if (kind === 'connectivity') {
+    const f = (t.fields as Record<string, unknown> | null) ?? {};
+    const parts: string[] = [];
+    if (s(f.wifi_ssid)) parts.push(`network "${s(f.wifi_ssid)}"`);
+    if (s(f.wifi_password)) parts.push(`password "${s(f.wifi_password)}"`);
+    if (s(f.wifi_router_location)) parts.push(`router "${s(f.wifi_router_location)}"`);
+    return `Wi-Fi — ${parts.join(', ') || 'details'}`;
+  }
+  if (kind === 'contact') {
+    const c = (t.contact as Record<string, unknown> | null) ?? {};
+    const bits: string[] = [];
+    const tags = normalizeContactTags(c.tags);
+    if (tags.length) bits.push(tags.join('/'));
+    if (s(c.schedule)) bits.push(`schedule "${s(c.schedule)}"`);
+    if (s(c.phone)) bits.push(`phone "${s(c.phone)}"`);
+    return `Contact — "${s(c.name) || 'contact'}"${bits.length ? ` (${bits.join(', ')})` : ''}`;
+  }
+  const room = (t.room as Record<string, unknown> | null) ?? {};
+  const where = `${room.scope === 'exterior' ? 'Exterior' : 'Interior'} → ${s(room.title) || 'room'}`;
+  if (kind === 'room_note') return `${where} — note: "${(s(t.notes) ?? '').slice(0, 100)}"`;
+  if (kind === 'attribute') {
+    const a = (t.attribute as Record<string, unknown> | null) ?? {};
+    return `${where} — ${s(a.title) || 'attribute'}`;
+  }
+  return null;
+}
+
+/**
+ * Pending proposals for the whole PROPERTY (across every thread) — value-aware, so
+ * the model dedups true repeats yet still proposes a correction when a value here
+ * has since changed. Falls back to the conversation when no property is linked.
+ */
+async function loadPendingProposalDigest(
+  propertyId: string | null,
+  conversationId: string,
+): Promise<string[]> {
+  const base = getSupabaseServer()
     .from('proposed_knowledge')
-    .select('summary, status')
-    .eq('conversation_id', conversationId)
-    .in('status', ['pending', 'accepted']);
+    .select('target, summary')
+    .eq('status', 'pending');
+  const { data, error } = await (propertyId
+    ? base.eq('property_id', propertyId)
+    : base.eq('conversation_id', conversationId));
   if (error) return [];
-  return ((data ?? []) as Array<{ summary: string | null }>)
-    .map((r) => (r.summary ?? '').trim())
-    .filter(Boolean);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const row of (data ?? []) as Array<{ target: unknown; summary: string | null }>) {
+    const line = describePendingTarget(row.target) ?? (row.summary ?? '').trim();
+    if (line && !seen.has(line)) {
+      seen.add(line);
+      out.push(line);
+    }
+  }
+  return out;
 }
 
 function parseRoomRef(raw: unknown, rooms: KnowledgeRoom[]): RoomRef | null {
@@ -144,7 +274,11 @@ function parseRoomRef(raw: unknown, rooms: KnowledgeRoom[]): RoomRef | null {
   return { id, scope: finalScope, title };
 }
 
-function parseTarget(raw: unknown, rooms: KnowledgeRoom[]): KnowledgeTarget | null {
+function parseTarget(
+  raw: unknown,
+  rooms: KnowledgeRoom[],
+  contacts: KnowledgeContact[],
+): KnowledgeTarget | null {
   if (!raw || typeof raw !== 'object') return null;
   const t = raw as Record<string, unknown>;
   const kind = t.kind;
@@ -166,10 +300,50 @@ function parseTarget(raw: unknown, rooms: KnowledgeRoom[]): KnowledgeTarget | nu
     const body = typeof aa.body === 'string' && aa.body.trim() ? aa.body.trim() : null;
     return { kind: 'attribute', room, attribute: { tags, title, body } };
   }
+  if (kind === 'connectivity') {
+    const f =
+      t.fields && typeof t.fields === 'object' ? (t.fields as Record<string, unknown>) : {};
+    const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+    const fields: ConnectivityFields = {
+      wifi_ssid: str(f.wifi_ssid),
+      wifi_password: str(f.wifi_password),
+      wifi_router_location: str(f.wifi_router_location),
+    };
+    if (!fields.wifi_ssid && !fields.wifi_password && !fields.wifi_router_location) return null;
+    return { kind: 'connectivity', fields };
+  }
+  if (kind === 'contact') {
+    const c =
+      t.contact && typeof t.contact === 'object' ? (t.contact as Record<string, unknown>) : null;
+    if (!c) return null;
+    const name = typeof c.name === 'string' ? c.name.trim() : '';
+    if (!name) return null;
+    const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+    // Honor a contact id only when it matches an existing contact; else create.
+    let id = typeof c.id === 'string' && c.id.trim() ? c.id.trim() : null;
+    if (id && !contacts.some((x) => x.id === id)) id = null;
+    return {
+      kind: 'contact',
+      contact: {
+        id,
+        tags: normalizeContactTags(c.tags),
+        name,
+        role: str(c.role),
+        phone: str(c.phone),
+        email: str(c.email),
+        schedule: str(c.schedule),
+        notes: str(c.notes),
+      },
+    };
+  }
   return null;
 }
 
-function parseTriageJson(raw: string, rooms: KnowledgeRoom[]): KnowledgeTriageResult | null {
+function parseTriageJson(
+  raw: string,
+  rooms: KnowledgeRoom[],
+  contacts: KnowledgeContact[],
+): KnowledgeTriageResult | null {
   const unfenced = raw
     .trim()
     .replace(/^```(?:json)?\s*/i, '')
@@ -192,7 +366,7 @@ function parseTriageJson(raw: string, rooms: KnowledgeRoom[]): KnowledgeTriageRe
   for (const p of rawProposals) {
     if (!p || typeof p !== 'object') continue;
     const pp = p as Record<string, unknown>;
-    const target = parseTarget(pp.target, rooms);
+    const target = parseTarget(pp.target, rooms, contacts);
     if (!target) continue;
     const summary = typeof pp.summary === 'string' && pp.summary.trim() ? pp.summary.trim() : describeTarget(target);
     const guest_visible = pp.guest_visible === true;
@@ -204,6 +378,22 @@ function parseTriageJson(raw: string, rooms: KnowledgeRoom[]): KnowledgeTriageRe
 
 /** Fallback human-readable summary if the model omits one. */
 export function describeTarget(target: KnowledgeTarget): string {
+  // Roomless kinds first — they have no `target.room` to read.
+  if (target.kind === 'connectivity') {
+    const set = [
+      target.fields.wifi_ssid ? 'network' : null,
+      target.fields.wifi_password ? 'password' : null,
+      target.fields.wifi_router_location ? 'router location' : null,
+    ]
+      .filter(Boolean)
+      .join(' + ');
+    return `Wi-Fi — ${set || 'details'}`;
+  }
+  if (target.kind === 'contact') {
+    const tags = target.contact.tags.join('/');
+    const verb = target.contact.id ? 'Contact update' : 'Contact';
+    return `${verb} — ${target.contact.name}${tags ? ` (${tags})` : ''}`;
+  }
   const where = `${target.room.scope === 'exterior' ? 'Exterior' : 'Interior'} → ${target.room.title || 'room'}`;
   if (target.kind === 'room_note') return `${where} — note: ${target.notes.slice(0, 80)}`;
   const tagLabel = target.attribute.tags.join('/') || 'attribute';
@@ -221,9 +411,9 @@ export async function generateProposedKnowledgeFromContext(
   }
 
   const propertyId = ctx.conversation.property_id ?? null;
-  const [{ block: knowledgeBlock, rooms }, existingSummaries] = await Promise.all([
+  const [{ block: knowledgeBlock, rooms, contacts }, pendingDigest] = await Promise.all([
     loadKnowledgeContext(propertyId),
-    loadExistingProposalSummaries(ctx.conversation.id),
+    loadPendingProposalDigest(propertyId, ctx.conversation.id),
   ]);
 
   const propertyName =
@@ -238,11 +428,11 @@ export async function generateProposedKnowledgeFromContext(
     'Current property knowledge (do NOT propose anything already here):',
     knowledgeBlock,
   ];
-  if (existingSummaries.length) {
+  if (pendingDigest.length) {
     userParts.push(
       '',
-      'Already proposed for this conversation (do NOT duplicate):',
-      existingSummaries.map((s) => `- ${s}`).join('\n'),
+      'Already proposed and awaiting review (do NOT duplicate — but DO propose a correction if one of these values has since changed):',
+      pendingDigest.map((s) => `- ${s}`).join('\n'),
     );
   }
   userParts.push(
@@ -268,7 +458,7 @@ export async function generateProposedKnowledgeFromContext(
     .join('')
     .trim();
 
-  const parsed = parseTriageJson(text, rooms);
+  const parsed = parseTriageJson(text, rooms, contacts);
   if (!parsed) {
     console.warn('[knowledge triage] unparseable model output', { raw: text.slice(0, 200) });
     return { proposals: [], reasoning: 'Unparseable triage output.' };
