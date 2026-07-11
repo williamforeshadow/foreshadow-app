@@ -49,6 +49,7 @@ const KNOWLEDGE_PILLS: KnowledgePill[] = [
   { id: 'vendors', label: 'Vendors & Contacts', slug: 'vendors' },
   { id: 'documents', label: 'Documents', slug: 'documents' },
   { id: 'guest-access', label: 'Guest Visibility', slug: 'guest-access' },
+  { id: 'proposals', label: 'Proposals', slug: 'proposals' },
   { id: 'activity', label: 'Activity', slug: 'activity' },
 ];
 
