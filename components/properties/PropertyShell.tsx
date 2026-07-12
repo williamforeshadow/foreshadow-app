@@ -3,6 +3,19 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import React from 'react';
+import {
+  Info,
+  KeyRound,
+  Wifi,
+  Sofa,
+  Trees,
+  Users,
+  FileText,
+  Eye,
+  Sparkles,
+  History,
+  type LucideIcon,
+} from 'lucide-react';
 import { PropertyProvider, usePropertyContext } from './PropertyContext';
 
 // ---- Tab definitions -------------------------------------------------------
@@ -12,8 +25,8 @@ import { PropertyProvider, usePropertyContext } from './PropertyContext';
 //   /properties/[id]/tasks              ← primary tab "Tasks"
 //   /properties/[id]/schedule           ← primary tab "Schedule"
 //
-// "Knowledge" expands into a second row of pill tabs for the eight knowledge
-// sub-sections. Tasks and Schedule have no sub-tabs for now.
+// "Knowledge" expands into a grouped left sidebar (a horizontal scroll strip on
+// mobile) for its sub-sections. Tasks and Schedule have no sub-nav for now.
 //
 // The root `/properties/[id]` URL redirects to `./knowledge`, so every rendered
 // path falls under exactly one primary tab.
@@ -38,20 +51,42 @@ interface KnowledgePill {
   // Trailing slug appended to `/properties/:id/knowledge`. Empty string for
   // the index (Information).
   slug: string;
+  icon: LucideIcon;
 }
 
-const KNOWLEDGE_PILLS: KnowledgePill[] = [
-  { id: 'info', label: 'Information', slug: '' },
-  { id: 'access', label: 'Access', slug: 'access' },
-  { id: 'connectivity', label: 'Connectivity', slug: 'connectivity' },
-  { id: 'interior', label: 'Interior', slug: 'interior' },
-  { id: 'exterior', label: 'Exterior', slug: 'exterior' },
-  { id: 'vendors', label: 'Vendors & Contacts', slug: 'vendors' },
-  { id: 'documents', label: 'Documents', slug: 'documents' },
-  { id: 'guest-access', label: 'Guest Visibility', slug: 'guest-access' },
-  { id: 'proposals', label: 'Proposals', slug: 'proposals' },
-  { id: 'activity', label: 'Activity', slug: 'activity' },
+interface KnowledgeGroup {
+  title: string;
+  items: KnowledgePill[];
+}
+
+// The knowledge sub-sections, grouped for the sidebar. Same items + routes as
+// the old pill row — just bucketed into "Property" (the content sections) and
+// "Management" (visibility, proposals, activity).
+const KNOWLEDGE_GROUPS: KnowledgeGroup[] = [
+  {
+    title: 'Property',
+    items: [
+      { id: 'info', label: 'Information', slug: '', icon: Info },
+      { id: 'access', label: 'Access', slug: 'access', icon: KeyRound },
+      { id: 'connectivity', label: 'Connectivity', slug: 'connectivity', icon: Wifi },
+      { id: 'interior', label: 'Interior', slug: 'interior', icon: Sofa },
+      { id: 'exterior', label: 'Exterior', slug: 'exterior', icon: Trees },
+      { id: 'vendors', label: 'Vendors & Contacts', slug: 'vendors', icon: Users },
+      { id: 'documents', label: 'Documents', slug: 'documents', icon: FileText },
+    ],
+  },
+  {
+    title: 'Management',
+    items: [
+      { id: 'guest-access', label: 'Guest Visibility', slug: 'guest-access', icon: Eye },
+      { id: 'proposals', label: 'Proposals', slug: 'proposals', icon: Sparkles },
+      { id: 'activity', label: 'Activity', slug: 'activity', icon: History },
+    ],
+  },
 ];
+
+// Flat list for resolving the active sub-section from the URL.
+const KNOWLEDGE_PILLS: KnowledgePill[] = KNOWLEDGE_GROUPS.flatMap((g) => g.items);
 
 // Client wrapper around the property detail shell. Responsible for
 // fetching the property (via PropertyProvider), rendering the shared
@@ -144,7 +179,7 @@ function ShellBody({
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header + tab strip */}
       <div className="flex-shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
-        <div className="max-w-[760px] px-5 sm:px-8 pt-4 sm:pt-6 pb-0">
+        <div className="px-5 sm:px-8 pt-4 sm:pt-6 pb-0">
           <Link
             href="/properties"
             className="hidden sm:inline-flex items-center gap-1.5 text-[12px] text-neutral-500 dark:text-[#66645f] hover:text-neutral-800 dark:hover:text-[#f0efed] uppercase tracking-[0.04em] font-medium mb-4 transition-colors"
@@ -211,27 +246,30 @@ function ShellBody({
             })}
           </nav>
 
-          {/* Secondary pill row — renders only under the Knowledge primary tab */}
+          {/* Knowledge sub-nav on mobile: a horizontal scroll strip. At md+ the
+              desktop sidebar (below) replaces it. */}
           {activePrimaryId === 'knowledge' && (
             <nav
               aria-label="Knowledge sub-sections"
-              className="flex flex-wrap items-center gap-1.5 -mx-5 sm:-mx-8 px-5 sm:px-8 pt-3 pb-3"
+              className="md:hidden flex items-center gap-1.5 overflow-x-auto -mx-5 sm:-mx-8 px-5 sm:px-8 pt-3 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
               {KNOWLEDGE_PILLS.map((pill) => {
                 const href = pill.slug
                   ? `${basePath}/knowledge/${pill.slug}`
                   : `${basePath}/knowledge`;
                 const isActive = activePillId === pill.id;
+                const Icon = pill.icon;
                 return (
                   <Link
                     key={pill.id}
                     href={href as any}
-                    className={`shrink-0 px-3 py-1 rounded-full text-[12px] font-medium border whitespace-nowrap transition-colors ${
+                    className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-medium border whitespace-nowrap transition-colors ${
                       isActive
                         ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)] border-[var(--accent-3)]/30 dark:border-[var(--accent-1)]/30'
                         : 'bg-transparent text-neutral-600 dark:text-[#a09e9a] border-transparent hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-800 dark:hover:text-[#f0efed]'
                     }`}
                   >
+                    <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     {pill.label}
                   </Link>
                 );
@@ -241,10 +279,55 @@ function ShellBody({
         </div>
       </div>
 
-      {/* Tab content */}
-      <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-        {children}
-      </div>
+      {/* Body: under Knowledge, a grouped sidebar (desktop) beside the content;
+          Tasks/Schedule render content full-width. */}
+      {activePrimaryId === 'knowledge' ? (
+        <div className="flex-1 min-h-0 flex overflow-hidden">
+          <nav
+            aria-label="Knowledge sections"
+            className="hidden md:flex md:flex-col shrink-0 w-[216px] gap-6 overflow-y-auto border-r border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] px-3 py-5"
+          >
+            {KNOWLEDGE_GROUPS.map((group) => (
+              <div key={group.title}>
+                <div className="px-2.5 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-[#66645f]">
+                  {group.title}
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  {group.items.map((item) => {
+                    const href = item.slug
+                      ? `${basePath}/knowledge/${item.slug}`
+                      : `${basePath}/knowledge`;
+                    const isActive = activePillId === item.id;
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        key={item.id}
+                        href={href as any}
+                        aria-current={isActive ? 'page' : undefined}
+                        className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
+                          isActive
+                            ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)]'
+                            : 'text-neutral-600 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-900 dark:hover:text-[#f0efed]'
+                        }`}
+                      >
+                        <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                        <span className="truncate">{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+          <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+            {children}
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
