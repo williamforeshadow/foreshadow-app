@@ -25,24 +25,9 @@ export function isVisibilityResourceType(v: unknown): v is VisibilityResourceTyp
   return typeof v === 'string' && (VISIBILITY_RESOURCE_TYPES as readonly string[]).includes(v);
 }
 
-// The lockable fields of the two singleton "field-bag" tables. resource_id for
-// an access_field / connectivity_field is one of these column names directly.
-export const LOCKABLE_ACCESS_FIELDS = [
-  'guest_code',
-  'cleaner_code',
-  'backup_code',
-  'code_rotation_notes',
-  'outer_door_code',
-  'gate_code',
-  'elevator_notes',
-  'unit_door_code',
-  'key_location',
-  'lockbox_code',
-  'parking_spot_number',
-  'parking_type',
-  'parking_instructions',
-] as const;
-
+// Connectivity is the one remaining singleton "field-bag": its resource_id is a
+// bare column name. (Access is now a collection — property_access_items — keyed
+// per item like rooms/attributes/contacts, with value/notes as its fields.)
 export const LOCKABLE_CONNECTIVITY_FIELDS = [
   'wifi_ssid',
   'wifi_password',
@@ -53,7 +38,7 @@ export const LOCKABLE_CONNECTIVITY_FIELDS = [
 // pseudo-fields that gate the nested binary arrays. resource_id for these is
 // `${rowId}:${fieldName}`.
 export const RESOURCE_FIELD_SETS: Record<VisibilityResourceType, readonly string[]> = {
-  access_field: LOCKABLE_ACCESS_FIELDS,
+  access_field: ['value', 'notes'],
   connectivity_field: LOCKABLE_CONNECTIVITY_FIELDS,
   room_field: ['title', 'notes', 'photos'],
   attribute_field: ['title', 'body', 'tags', 'photos'],
@@ -80,9 +65,10 @@ export function decodeFieldResourceId(resourceId: string): { rowId: string; fiel
   return { rowId: resourceId.slice(0, i), field: resourceId.slice(i + 1) };
 }
 
-/** True for the two singleton field-bags whose resource_id is a bare column name. */
+/** True for the singleton field-bag (connectivity) whose resource_id is a bare
+ *  column name. Everything else (incl. access items) keys by `${rowId}:${field}`. */
 export function isSingletonFieldType(type: VisibilityResourceType): boolean {
-  return type === 'access_field' || type === 'connectivity_field';
+  return type === 'connectivity_field';
 }
 
 /** A unique key for an unlocked item, used to build a Set on the client/tool. */

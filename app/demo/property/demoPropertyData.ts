@@ -67,31 +67,33 @@ export const DEMO_PROPERTY = {
 };
 
 // ---------------------------------------------------------------------------
-// 2. Access  →  GET /api/properties/:id/access  →  { access }
+// 2. Access  →  GET /api/properties/:id/access  →  { items }  (property_access_items)
 // ---------------------------------------------------------------------------
 export function getDemoAccess() {
-  return {
+  const rows: Array<[string, string, string, string | null, string | null]> = [
+    ['acc-entry', 'entry_code', 'Entry code (guest)', '4827', 'Rotate after every checkout from the Schlage Encode app.'],
+    ['acc-team', 'team_code', 'Team / cleaner code', '9931', 'Permanent — do not change.'],
+    ['acc-backup', 'backup_code', 'Backup code', '5500', null],
+    ['acc-building', 'building_code', 'Building / exterior door code', '2240', null],
+    ['acc-gate', 'gate_code', 'Gate code', '#1404', null],
+    ['acc-elevator', 'elevator', 'Elevator', null, 'After 10pm the elevator needs the building fob — tap it, then press 14. Fob lives in the kitchen drawer.'],
+    ['acc-lockbox', 'lockbox_code', 'Lockbox code', '3104', 'On the railing just left of unit 1404’s door.'],
+    ['acc-key', 'key_location', 'Key location', 'Lockbox on the railing left of the door; front desk holds a spare.', null],
+    ['acc-spot', 'parking_spot', 'Parking spot number', 'P2 · #114', null],
+    ['acc-ptype', 'parking_type', 'Parking type', 'garage', null],
+    ['acc-ploc', 'parking_location', 'Parking location / instructions', null, 'Garage fob at the gate on Cedar St (do NOT tailgate). Guest spots up front are 2-hour only.'],
+  ];
+  return rows.map(([id, type, label, value, notes], i) => ({
+    id,
     property_id: DEMO_PROPERTY_ID,
-    guest_code: '4827',
-    cleaner_code: '9931',
-    backup_code: '5500',
-    code_rotation_notes:
-      'Rotate the unit-door guest code after every checkout from the Schlage Encode app. The cleaner code (9931) is permanent — do not change it.',
-    outer_door_code: '2240',
-    gate_code: '#1404',
-    elevator_notes:
-      'After 10pm the elevator requires the building fob — tap it on the reader, then press 14. Fob lives in the kitchen drawer.',
-    unit_door_code: '4827',
-    lockbox_code: '3104',
-    key_location:
-      'Backup fob + mailbox key are in the lockbox on the railing just left of unit 1404’s door. Front desk also holds a spare.',
-    parking_spot_number: 'P2 · #114',
-    parking_type: 'garage',
-    parking_instructions:
-      'One assigned space, P2-114. Use the garage fob at the gate on Cedar St (do NOT tailgate — it triggers a fine). Guest spots up front are 2-hour only.',
+    type,
+    label,
+    value,
+    notes,
+    sort_order: i,
     created_at: isoAt(-400),
     updated_at: isoAt(-6),
-  };
+  }));
 }
 
 // ---------------------------------------------------------------------------

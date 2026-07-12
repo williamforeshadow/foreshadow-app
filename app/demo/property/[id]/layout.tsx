@@ -61,7 +61,7 @@ function makeMockFetch(original: typeof fetch): typeof fetch {
     // Property profile endpoints — GETs return fabricated data; everything else
     // (mutations) falls through to the benign catch-all.
     if (url.includes('/api/properties/') && method === 'GET') {
-      if (url.includes('/access')) return json({ access: getDemoAccess() });
+      if (url.includes('/access')) return json({ items: getDemoAccess() });
       if (url.includes('/connectivity')) return json({ connectivity: getDemoConnectivity() });
       if (url.includes('/tech-accounts')) return json({ accounts: getDemoTechAccounts() });
       if (url.includes('/rooms')) {

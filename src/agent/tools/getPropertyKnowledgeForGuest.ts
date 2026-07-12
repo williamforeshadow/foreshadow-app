@@ -33,7 +33,8 @@ const inputSchema = z.object({
 type Input = z.infer<typeof inputSchema>;
 
 export interface GuestPropertyKnowledge {
-  access: Json | null;
+  /** Unlocked access items (each with its type/label + value/notes). */
+  access: Json[];
   connectivity: Json | null;
   contacts: Json[];
   documents: Json[];
@@ -175,8 +176,19 @@ async function handler(_input: Input, ctx: ToolContext): Promise<ToolResult<Gues
     }
   }
 
+  // Access items: unlocked per-item (value/notes). Carry type + label through as
+  // non-sensitive context so the concierge knows what each code is for.
+  const access: Json[] = [];
+  for (const item of dossier.access) {
+    const redacted = redactRow(item, 'access_field', unlocked, {
+      type: (item.type as string | null) ?? null,
+      label: (item.label as string | null) ?? null,
+    });
+    if (redacted) access.push(redacted);
+  }
+
   const data: GuestPropertyKnowledge = {
-    access: filterFields(dossier.access, 'access_field', unlocked),
+    access,
     connectivity: filterFields(dossier.connectivity, 'connectivity_field', unlocked),
     contacts: redactRows(dossier.contacts, 'contact_field', unlocked),
     documents: redactRows(dossier.documents, 'document_field', unlocked),
@@ -187,7 +199,7 @@ async function handler(_input: Input, ctx: ToolContext): Promise<ToolResult<Gues
     empty: false,
   };
   data.empty =
-    !data.access &&
+    data.access.length === 0 &&
     !data.connectivity &&
     data.contacts.length === 0 &&
     data.documents.length === 0 &&

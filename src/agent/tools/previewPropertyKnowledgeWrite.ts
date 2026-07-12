@@ -11,7 +11,8 @@ import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } 
 const inputSchema = z
   .object({
     action: z.enum([
-      'upsert_access',
+      'upsert_access_item',
+      'delete_access_item',
       'upsert_connectivity',
       'upsert_room',
       'delete_room',
@@ -21,6 +22,7 @@ const inputSchema = z
       'delete_document',
     ]),
     property_id: z.string().uuid(),
+    item_id: z.string().uuid().optional(),
     room_id: z.string().uuid().optional(),
     attribute_id: z.string().uuid().optional(),
     document_id: z.string().uuid().optional(),
@@ -148,7 +150,7 @@ export const previewPropertyKnowledgeWriteTool: ToolDefinition<
 > = {
   name: 'preview_property_knowledge_write',
   description:
-    "PREVIEW writes to Property Knowledge sections that are not Information or Activity: Access, Connectivity, Interior/Exterior rooms, Interior/Exterior attributes, and Document metadata/deletes. Use this for access codes, parking instructions, wifi/router details, creating/updating/deleting rooms, creating/updating/deleting room attributes, and editing/deleting existing documents. It does NOT upload new document files, and it does NOT write property Information or Activity. The specialized contact tool still handles Vendor contacts. Required workflow: call this preview tool, present the plan/diff to the user, get explicit confirmation, then call commit_property_knowledge_write with the returned token. If plan.changes is empty on an update, tell the user nothing would change and do not commit.",
+    "PREVIEW writes to Property Knowledge sections that are not Information or Activity: Access items, Connectivity, Interior/Exterior rooms, Interior/Exterior attributes, and Document metadata/deletes. Access is a list of items — use upsert_access_item to create (omit item_id) or update (supply item_id) an access item (a code, key, or parking detail), and delete_access_item to remove one. Also handles wifi/router details, creating/updating/deleting rooms + room attributes, and editing/deleting existing documents. It does NOT upload new document files, and it does NOT write property Information or Activity. The specialized contact tool still handles Vendor contacts. Required workflow: call this preview tool, present the plan/diff to the user, get explicit confirmation, then call commit_property_knowledge_write with the returned token. If plan.changes is empty on an update, tell the user nothing would change and do not commit.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -156,7 +158,8 @@ export const previewPropertyKnowledgeWriteTool: ToolDefinition<
       action: {
         type: 'string',
         enum: [
-          'upsert_access',
+          'upsert_access_item',
+          'delete_access_item',
           'upsert_connectivity',
           'upsert_room',
           'delete_room',
@@ -166,11 +169,16 @@ export const previewPropertyKnowledgeWriteTool: ToolDefinition<
           'delete_document',
         ],
         description:
-          'Which Property Knowledge write to preview. upsert_room/upsert_attribute create when id is omitted and update when id is supplied.',
+          'Which Property Knowledge write to preview. upsert_access_item/upsert_room/upsert_attribute create when the id is omitted and update when the id is supplied.',
       },
       property_id: {
         type: 'string',
         description: 'Property UUID. Resolve names with find_properties first.',
+      },
+      item_id: {
+        type: 'string',
+        description:
+          'Access item UUID for updating/deleting an access item, or omitted when creating one.',
       },
       room_id: {
         type: 'string',
@@ -189,7 +197,7 @@ export const previewPropertyKnowledgeWriteTool: ToolDefinition<
       fields: {
         type: 'object',
         description:
-          "Fields for the selected action. Access fields include guest_code, cleaner_code, backup_code, code_rotation_notes, outer_door_code, gate_code, elevator_notes, unit_door_code, key_location, lockbox_code, parking_spot_number, parking_type, parking_instructions. Connectivity fields: wifi_ssid, wifi_password, wifi_router_location. Room fields: scope ('interior'|'exterior'), title, notes, sort_order. Attribute fields: room_id, tags (array of: appliance, amenity, safety, quirk, utility, access, other), title, body, sort_order. Document fields: title, notes, tag. Pass null to clear nullable text fields.",
+          "Fields for the selected action. Access item fields: type (one of entry_code, backup_code, team_code, owner_code, building_code, lobby_code, gate_code, elevator, parking_garage_code, mailbox_code, amenity_code, intercom_code, storage_code, lockbox_code, lockbox_location, key_location, fob_keycard, alarm_code, parking_spot, parking_type, parking_location, guest_parking_pass, ev_charger, other), label (defaults from type; required for 'other'), value (the code/number; for a parking_type item it must be assigned/street/garage/other), notes (optional). Connectivity fields: wifi_ssid, wifi_password, wifi_router_location. Room fields: scope ('interior'|'exterior'), title, notes, sort_order. Attribute fields: room_id, tags (array of: appliance, amenity, safety, quirk, utility, access, other), title, body, sort_order. Document fields: title, notes, tag. Pass null to clear nullable text fields.",
       },
       attachment_inbound_file_ids: {
         type: 'array',

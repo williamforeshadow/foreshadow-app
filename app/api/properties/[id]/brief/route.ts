@@ -49,10 +49,11 @@ export async function GET(
       .eq('id', id)
       .maybeSingle(),
     supabase
-      .from('property_access')
-      .select('*')
+      .from('property_access_items')
+      .select('id, type, label, value, notes, sort_order')
       .eq('property_id', id)
-      .maybeSingle(),
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true }),
     supabase
       .from('property_connectivity')
       .select('*')
@@ -124,7 +125,7 @@ export async function GET(
 
   return NextResponse.json({
     property: propertyRes.data,
-    access: accessRes.error ? null : accessRes.data ?? null,
+    access: accessRes.error ? [] : accessRes.data ?? [],
     connectivity: connectivityRes.error ? null : connectivityRes.data ?? null,
     tech_accounts: techAccountsRes.error ? [] : techAccountsRes.data ?? [],
     contacts: contactsRes.error ? [] : contactsRes.data ?? [],

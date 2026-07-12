@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Eye, EyeOff, Lock } from 'lucide-react';
 import { apiFetch } from '@/lib/apiFetch';
 import {
-  LOCKABLE_ACCESS_FIELDS,
   LOCKABLE_CONNECTIVITY_FIELDS,
   RESOURCE_FIELD_SETS,
   visibilityKey,
@@ -30,29 +29,13 @@ import { resolvePublicPhotoUrl } from '@/components/properties/cards/PhotoGrid';
 type Rec = Record<string, unknown>;
 
 interface Brief {
-  access: Rec | null;
+  access: Rec[];
   connectivity: Rec | null;
   tech_accounts: Rec[];
   contacts: Rec[];
   rooms: Rec[];
   documents: Rec[];
 }
-
-const ACCESS_LABELS: Record<string, string> = {
-  guest_code: 'Guest door code',
-  cleaner_code: 'Cleaner code',
-  backup_code: 'Backup code',
-  code_rotation_notes: 'Code rotation notes',
-  outer_door_code: 'Outer door code',
-  gate_code: 'Gate code',
-  elevator_notes: 'Elevator notes',
-  unit_door_code: 'Unit door code',
-  key_location: 'Key location',
-  lockbox_code: 'Lockbox code',
-  parking_spot_number: 'Parking spot number',
-  parking_type: 'Parking type',
-  parking_instructions: 'Parking instructions',
-};
 
 const CONNECTIVITY_LABELS: Record<string, string> = {
   wifi_ssid: 'Wi-Fi network (SSID)',
@@ -160,7 +143,14 @@ interface RoomsGroup {
   blocks: RoomBlock[];
 }
 
-type Group = FieldsGroup | RoomsGroup;
+interface AccessGroup {
+  kind: 'access';
+  key: 'access';
+  title: string;
+  packages: Package[];
+}
+
+type Group = FieldsGroup | RoomsGroup | AccessGroup;
 
 function roomPackage(room: Rec): Package {
   const id = String(room.id);
@@ -275,17 +265,29 @@ export default function GuestAccessTab() {
     if (!brief) return [];
     const out: Group[] = [];
 
-    // Access (singleton, bare column names)
-    if (brief.access) {
-      const rows: FieldRow[] = [];
-      for (const f of LOCKABLE_ACCESS_FIELDS) {
-        const v = brief.access[f];
-        if (hasContent(v)) {
-          rows.push({ type: 'access_field', resourceId: f, label: ACCESS_LABELS[f] ?? f, sub: preview(v) });
-        }
-      }
-      if (rows.length) out.push({ kind: 'fields', key: 'access', title: 'Access', items: [{ key: 'access', rows }] });
+    // Access — a collection of value+notes packages (property_access_items).
+    const accessPkgs: Package[] = [];
+    for (const raw of brief.access) {
+      const a = raw as Rec;
+      const id = String(a.id);
+      const ids: string[] = [];
+      if (hasContent(a.value)) ids.push(encodeFieldResourceId(id, 'value'));
+      if (hasContent(a.notes)) ids.push(encodeFieldResourceId(id, 'notes'));
+      if (ids.length === 0) continue;
+      const bits: string[] = [];
+      if (hasContent(a.value)) bits.push(String(a.value));
+      if (hasContent(a.notes)) bits.push(String(a.notes));
+      accessPkgs.push({
+        key: id,
+        type: 'access_field',
+        resourceIds: ids,
+        label: (a.label as string) || 'Access item',
+        notesPreview: bits.length ? preview(bits.join(' — ')) : undefined,
+        tags: [],
+        photos: [],
+      });
     }
+    if (accessPkgs.length) out.push({ kind: 'access', key: 'access', title: 'Access', packages: accessPkgs });
 
     // Connectivity (singleton)
     if (brief.connectivity) {
@@ -450,6 +452,29 @@ export default function GuestAccessTab() {
                           ))}
                         </div>
                       )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : group.kind === 'access' ? (
+              <section key={group.key} className="mb-8">
+                <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-neutral-500 dark:text-[#66645f]">
+                  {group.title}
+                </h2>
+                <div className="flex flex-col gap-2">
+                  {group.packages.map((pkg) => (
+                    <div
+                      key={pkg.key}
+                      className="flex items-start gap-3 rounded-lg border border-neutral-200/80 dark:border-[rgba(255,255,255,0.07)] px-3.5 py-2.5"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[12.5px] font-medium text-neutral-700 dark:text-[#cbc9c4]">{pkg.label}</p>
+                        <PackageMeta pkg={pkg} />
+                      </div>
+                      <VisibilityToggle
+                        visible={isPackageVisible(pkg)}
+                        onClick={() => setVisibility(pkg.type, pkg.resourceIds, !isPackageVisible(pkg))}
+                      />
                     </div>
                   ))}
                 </div>

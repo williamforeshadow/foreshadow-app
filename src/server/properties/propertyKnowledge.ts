@@ -32,7 +32,8 @@ export type Json = Record<string, unknown>;
 
 export interface PropertyKnowledge {
   property: PropertyRow;
-  access: Json | null;
+  /** Configurable access items (property_access_items), ordered. */
+  access: Json[];
   connectivity: Json | null;
   tech_accounts: Json[];
   contacts: Json[];
@@ -65,7 +66,12 @@ export async function loadPropertyKnowledge(
     docsRes,
   ] = await Promise.all([
     supabase.from('properties').select(PROPERTY_COLUMNS).eq('id', propertyId).maybeSingle(),
-    supabase.from('property_access').select('*').eq('property_id', propertyId).maybeSingle(),
+    supabase
+      .from('property_access_items')
+      .select('id, type, label, value, notes, sort_order')
+      .eq('property_id', propertyId)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true }),
     supabase
       .from('property_connectivity')
       .select('*')
@@ -127,7 +133,7 @@ export async function loadPropertyKnowledge(
 
   return {
     property: propertyRes.data as PropertyRow,
-    access: accessRes.error ? null : ((accessRes.data as Json | null) ?? null),
+    access: accessRes.error ? [] : ((accessRes.data as Json[] | null) ?? []),
     connectivity: connectivityRes.error ? null : ((connectivityRes.data as Json | null) ?? null),
     tech_accounts: techAccountsRes.error ? [] : ((techAccountsRes.data as Json[] | null) ?? []),
     contacts: contactsRes.error ? [] : ((contactsRes.data as Json[] | null) ?? []),

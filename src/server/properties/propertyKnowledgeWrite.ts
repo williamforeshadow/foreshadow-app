@@ -11,22 +11,16 @@ import {
   type AttributeScope,
   type AttributeTag,
 } from '@/lib/propertyAttributes';
-
-const ACCESS_FIELDS = [
-  'guest_code',
-  'cleaner_code',
-  'backup_code',
-  'code_rotation_notes',
-  'outer_door_code',
-  'gate_code',
-  'elevator_notes',
-  'unit_door_code',
-  'key_location',
-  'lockbox_code',
-  'parking_spot_number',
-  'parking_type',
-  'parking_instructions',
-] as const;
+import {
+  normalizeAccessType,
+  defaultAccessLabel,
+  accessValueKind,
+  isParkingType,
+} from '@/lib/propertyAccess';
+import {
+  upsertPropertyAccessItem,
+  deletePropertyAccessItem,
+} from '@/src/server/properties/upsertPropertyAccessItem';
 
 const CONNECTIVITY_FIELDS = [
   'wifi_ssid',
@@ -35,17 +29,21 @@ const CONNECTIVITY_FIELDS = [
 ] as const;
 
 const DOCUMENT_TAGS = ['lease', 'appliance_manual', 'inspection', 'insurance', 'other'] as const;
-const PARKING_TYPES = ['assigned', 'street', 'garage', 'other'] as const;
 
 const DEFAULT_ROOM_TITLE = 'New room';
 
 const nullableString = z.union([z.string(), z.null()]);
 const sourceSchema = z.enum(['web', 'agent_slack', 'agent_web', 'system']).optional();
 
-const accessFieldsSchema = z
-  .object(Object.fromEntries(ACCESS_FIELDS.map((f) => [f, nullableString.optional()])))
-  .strict()
-  .refine((v) => Object.keys(v).length > 0, 'at least one access field is required');
+const accessItemFieldsSchema = z
+  .object({
+    type: z.string().optional(),
+    label: nullableString.optional(),
+    value: nullableString.optional(),
+    notes: nullableString.optional(),
+    sort_order: z.number().finite().optional(),
+  })
+  .strict();
 
 const connectivityFieldsSchema = z
   .object(Object.fromEntries(CONNECTIVITY_FIELDS.map((f) => [f, nullableString.optional()])))
@@ -82,9 +80,17 @@ const documentFieldsSchema = z
 
 export const propertyKnowledgeWriteInputSchema = z.discriminatedUnion('action', [
   z.object({
-    action: z.literal('upsert_access'),
+    action: z.literal('upsert_access_item'),
     property_id: z.string().uuid(),
-    fields: accessFieldsSchema,
+    item_id: z.string().uuid().optional(),
+    fields: accessItemFieldsSchema,
+    actor_user_id: z.string().nullable().optional(),
+    source: sourceSchema,
+  }),
+  z.object({
+    action: z.literal('delete_access_item'),
+    property_id: z.string().uuid(),
+    item_id: z.string().uuid(),
     actor_user_id: z.string().nullable().optional(),
     source: sourceSchema,
   }),
@@ -240,19 +246,13 @@ function source(input: PropertyKnowledgeWriteInput): KnowledgeSource {
 
 async function planSingleton(
   supabase: Supabase,
-  input: Extract<PropertyKnowledgeWriteInput, { action: 'upsert_access' | 'upsert_connectivity' }>,
+  input: Extract<PropertyKnowledgeWriteInput, { action: 'upsert_connectivity' }>,
   property: { id: string; name: string },
 ): Promise<PreviewPropertyKnowledgeWriteResult> {
-  const isAccess = input.action === 'upsert_access';
-  const table = isAccess ? 'property_access' : 'property_connectivity';
-  const allowed = isAccess ? ACCESS_FIELDS : CONNECTIVITY_FIELDS;
-  const label = isAccess ? 'Access info' : 'Connectivity info';
-  const patch = normalizePatch(input.fields, allowed);
-  if ('parking_type' in patch && patch.parking_type && !PARKING_TYPES.includes(patch.parking_type as (typeof PARKING_TYPES)[number])) {
-    return { ok: false, error: { code: 'invalid_input', message: 'parking_type must be one of: assigned, street, garage, other', field: 'fields.parking_type' } };
-  }
+  const label = 'Connectivity info';
+  const patch = normalizePatch(input.fields, CONNECTIVITY_FIELDS);
   const { data, error } = await supabase
-    .from(table)
+    .from('property_connectivity')
     .select('*')
     .eq('property_id', input.property_id)
     .maybeSingle();
@@ -266,7 +266,7 @@ async function planSingleton(
       action: input.action,
       mode: before ? 'update' : 'create',
       property: { property_id: property.id, name: property.name },
-      subject: { type: isAccess ? 'access' : 'connectivity', id: (before?.id as string | undefined) ?? null, label },
+      subject: { type: 'connectivity', id: (before?.id as string | undefined) ?? null, label },
       changes,
       summary: `${before ? 'Update' : 'Create'} ${label.toLowerCase()} for ${property.name}`,
     },
@@ -276,17 +276,14 @@ async function planSingleton(
 
 async function commitSingleton(
   supabase: Supabase,
-  input: Extract<PropertyKnowledgeWriteInput, { action: 'upsert_access' | 'upsert_connectivity' }>,
+  input: Extract<PropertyKnowledgeWriteInput, { action: 'upsert_connectivity' }>,
   plan: PropertyKnowledgeWritePlan,
 ): Promise<PropertyKnowledgeWriteResult> {
-  const isAccess = input.action === 'upsert_access';
-  const table = isAccess ? 'property_access' : 'property_connectivity';
-  const allowed = isAccess ? ACCESS_FIELDS : CONNECTIVITY_FIELDS;
-  const label = isAccess ? 'Access info' : 'Connectivity info';
-  const patch = normalizePatch(input.fields, allowed);
+  const label = 'Connectivity info';
+  const patch = normalizePatch(input.fields, CONNECTIVITY_FIELDS);
 
   const { data: before } = await supabase
-    .from(table)
+    .from('property_connectivity')
     .select('*')
     .eq('property_id', input.property_id)
     .maybeSingle();
@@ -299,7 +296,7 @@ async function commitSingleton(
   if (!before) payload.created_by_user_id = input.actor_user_id ?? null;
 
   const { data, error } = await supabase
-    .from(table)
+    .from('property_connectivity')
     .upsert(payload, { onConflict: 'property_id' })
     .select('*')
     .maybeSingle();
@@ -310,7 +307,7 @@ async function commitSingleton(
     await logPropertyKnowledgeActivity({
       property_id: input.property_id,
       user_id: input.actor_user_id ?? null,
-      resource_type: isAccess ? 'access' : 'connectivity',
+      resource_type: 'connectivity',
       resource_id: (data as { id?: string }).id ?? null,
       action: before ? 'update' : 'create',
       changes: before ? { kind: 'diff', entries: changes } : { kind: 'snapshot', row: patch },
@@ -320,6 +317,113 @@ async function commitSingleton(
   }
 
   return { ok: true, plan: { ...plan, changes }, row: data };
+}
+
+// --- Access items (a collection; delegates to upsertPropertyAccessItem) -------
+
+async function planAccessItem(
+  supabase: Supabase,
+  input: Extract<PropertyKnowledgeWriteInput, { action: 'upsert_access_item' | 'delete_access_item' }>,
+  property: { id: string; name: string },
+): Promise<PreviewPropertyKnowledgeWriteResult> {
+  if (input.action === 'delete_access_item') {
+    const { data, error } = await supabase
+      .from('property_access_items')
+      .select('id, label')
+      .eq('id', input.item_id)
+      .eq('property_id', input.property_id)
+      .maybeSingle();
+    if (error) return { ok: false, error: { code: 'db_error', message: error.message } };
+    if (!data)
+      return { ok: false, error: { code: 'not_found', message: `No access item ${input.item_id} on this property.`, field: 'item_id' } };
+    const label = (data as { label?: string }).label || 'access item';
+    return {
+      ok: true,
+      plan: {
+        action: input.action,
+        mode: 'delete',
+        property: { property_id: property.id, name: property.name },
+        subject: { type: 'access', id: input.item_id, label },
+        changes: [],
+        summary: `Delete access item "${label}"`,
+      },
+      canonicalInput: input,
+    };
+  }
+
+  const f = input.fields;
+  const isUpdate = !!input.item_id;
+  let before: Record<string, unknown> | null = null;
+  if (input.item_id) {
+    const { data, error } = await supabase
+      .from('property_access_items')
+      .select('id, type, label, value, notes, sort_order')
+      .eq('id', input.item_id)
+      .eq('property_id', input.property_id)
+      .maybeSingle();
+    if (error) return { ok: false, error: { code: 'db_error', message: error.message } };
+    if (!data)
+      return { ok: false, error: { code: 'not_found', message: `No access item ${input.item_id} on this property.`, field: 'item_id' } };
+    before = data as Record<string, unknown>;
+  }
+  const type = normalizeAccessType(f.type ?? (before?.type as string | undefined) ?? 'other');
+  const label =
+    (normalizeNullable(f.label) ?? (before?.label as string | null | undefined) ?? defaultAccessLabel(type)) ||
+    'Custom access';
+  const effValue = 'value' in f ? normalizeNullable(f.value) : ((before?.value as string | null) ?? null);
+  if (effValue != null && accessValueKind(type) === 'parking_type' && !isParkingType(effValue)) {
+    return { ok: false, error: { code: 'invalid_input', message: 'parking_type value must be one of: assigned, street, garage, other', field: 'fields.value' } };
+  }
+  const after: Record<string, unknown> = {
+    type,
+    label,
+    value: effValue,
+    notes: 'notes' in f ? normalizeNullable(f.notes) : ((before?.notes as string | null) ?? null),
+  };
+  const changes = diffFields(before, after, ['type', 'label', 'value', 'notes']);
+  return {
+    ok: true,
+    plan: {
+      action: input.action,
+      mode: isUpdate ? 'update' : 'create',
+      property: { property_id: property.id, name: property.name },
+      subject: { type: 'access', id: input.item_id ?? null, label: String(label) },
+      changes,
+      summary: `${isUpdate ? 'Update' : 'Add'} access item "${label}"`,
+    },
+    canonicalInput: input,
+  };
+}
+
+async function commitAccessItem(
+  _supabase: Supabase,
+  input: Extract<PropertyKnowledgeWriteInput, { action: 'upsert_access_item' | 'delete_access_item' }>,
+  plan: PropertyKnowledgeWritePlan,
+): Promise<PropertyKnowledgeWriteResult> {
+  if (input.action === 'delete_access_item') {
+    const res = await deletePropertyAccessItem(
+      input.property_id,
+      input.item_id,
+      input.actor_user_id ?? null,
+      source(input),
+    );
+    if (!res.ok) return { ok: false, error: { code: res.error.code, message: res.error.message, field: res.error.field } };
+    return { ok: true, plan, row: { id: input.item_id } };
+  }
+  const f = input.fields;
+  const res = await upsertPropertyAccessItem({
+    property_id: input.property_id,
+    ...(input.item_id ? { item_id: input.item_id } : {}),
+    ...('type' in f ? { type: f.type } : {}),
+    ...('label' in f ? { label: f.label } : {}),
+    ...('value' in f ? { value: f.value } : {}),
+    ...('notes' in f ? { notes: f.notes } : {}),
+    ...('sort_order' in f ? { sort_order: f.sort_order } : {}),
+    actor_user_id: input.actor_user_id ?? null,
+    source: source(input),
+  });
+  if (!res.ok) return { ok: false, error: { code: res.error.code, message: res.error.message, field: res.error.field } };
+  return { ok: true, plan: { ...plan, changes: res.changes ?? plan.changes }, row: res.item };
 }
 
 async function planRoom(
@@ -633,7 +737,8 @@ export async function previewPropertyKnowledgeWrite(
   const supabase = getSupabaseServer();
   const prop = await loadProperty(supabase, input.property_id);
   if (!prop.ok) return { ok: false, error: prop.error };
-  if (input.action === 'upsert_access' || input.action === 'upsert_connectivity') return planSingleton(supabase, input, prop.property);
+  if (input.action === 'upsert_connectivity') return planSingleton(supabase, input, prop.property);
+  if (input.action === 'upsert_access_item' || input.action === 'delete_access_item') return planAccessItem(supabase, input, prop.property);
   if (input.action === 'upsert_room' || input.action === 'delete_room') return planRoom(supabase, input, prop.property);
   if (input.action === 'upsert_attribute' || input.action === 'delete_attribute') return planAttribute(supabase, input, prop.property);
   return planDocument(supabase, input, prop.property);
@@ -646,7 +751,8 @@ export async function commitPropertyKnowledgeWrite(
   if (!preview.ok) return { ok: false, error: preview.error };
   const input = preview.canonicalInput;
   const supabase = getSupabaseServer();
-  if (input.action === 'upsert_access' || input.action === 'upsert_connectivity') return commitSingleton(supabase, input, preview.plan);
+  if (input.action === 'upsert_connectivity') return commitSingleton(supabase, input, preview.plan);
+  if (input.action === 'upsert_access_item' || input.action === 'delete_access_item') return commitAccessItem(supabase, input, preview.plan);
   if (input.action === 'upsert_room' || input.action === 'delete_room') return commitRoom(supabase, input, preview.plan);
   if (input.action === 'upsert_attribute' || input.action === 'delete_attribute') return commitAttribute(supabase, input, preview.plan);
   return commitDocument(supabase, input, preview.plan);
