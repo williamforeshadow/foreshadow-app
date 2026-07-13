@@ -20,14 +20,6 @@ import { requireAuthContext } from '@/lib/requireAuthContext';
 // Response shape mirrors the field names ScheduleReservation and
 // ScheduleTask consume so the panel takes it as-is.
 
-const FALLBACK_WINDOW_DAYS = 60;
-
-function addDaysISO(dateOnly: string, days: number): string {
-  const d = new Date(`${dateOnly}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
 export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> }
@@ -61,9 +53,13 @@ export async function GET(
 
   const start = (reservation.check_in || '').slice(0, 10);
   const checkOut = (reservation.check_out || '').slice(0, 10);
+  // Upper bound of the turnover window: the next booking's check-in date, or
+  // null (open-ended) when there's no next booking — matching the turnovers
+  // page. The consuming panel refines this coarse range to the precise
+  // minute-level window.
   const end = reservation.next_check_in
     ? reservation.next_check_in.slice(0, 10)
-    : addDaysISO(start, FALLBACK_WINDOW_DAYS);
+    : null;
 
   // Nights = whole days between check-in and check-out.
   let nights: number | null = null;
@@ -96,7 +92,7 @@ export async function GET(
   const resolvedPropertyName: string | null =
     propertyRow?.name || reservation.property_name || null;
 
-  const { data: tasks, error: tasksError } = await supabase
+  let tasksQuery = supabase
     .from('turnover_tasks')
     .select(
       `
@@ -126,9 +122,17 @@ export async function GET(
     )
     .eq('property_id', reservation.property_id)
     .not('scheduled_date', 'is', null)
-    .gte('scheduled_date', start)
-    .lte('scheduled_date', end)
-    .order('scheduled_date', { ascending: true });
+    .gte('scheduled_date', start);
+
+  // Only cap the top of the range when there's a next booking; otherwise the
+  // window is open-ended (all future tasks from check-in onward).
+  if (end) {
+    tasksQuery = tasksQuery.lte('scheduled_date', end);
+  }
+
+  const { data: tasks, error: tasksError } = await tasksQuery.order('scheduled_date', {
+    ascending: true,
+  });
 
   if (tasksError) {
     return NextResponse.json({ error: tasksError.message }, { status: 500 });

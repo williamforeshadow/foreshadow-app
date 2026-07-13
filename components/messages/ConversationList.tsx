@@ -65,22 +65,24 @@ export function ConversationList({
               <UserAvatar name={guestName} size="md" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="flex items-baseline gap-2">
+              <span className="flex items-center gap-2">
                 <span
-                  className={`min-w-0 flex-1 truncate text-sm ${
+                  className={`min-w-0 truncate text-sm ${
                     unread
                       ? 'font-semibold text-foreground'
                       : 'font-medium text-foreground/90'
                   }`}
                 >
                   {guestName}
-                  {c.message_count > 1 ? (
-                    <span className="ml-2 rounded-full bg-black/[0.05] px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground dark:bg-white/[0.08]">
-                      {c.message_count}
-                    </span>
-                  ) : null}
                 </span>
-                <span className="flex shrink-0 items-center gap-1.5">
+                {stage ? (
+                  <span
+                    className={`shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium ${stage.className}`}
+                  >
+                    {stage.label}
+                  </span>
+                ) : null}
+                <span className="ml-auto flex shrink-0 items-center gap-1.5">
                   <span
                     className={`text-xs tabular-nums ${
                       unread
@@ -98,20 +100,9 @@ export function ConversationList({
                   ) : null}
                 </span>
               </span>
-              {c.property_name || stage ? (
-                <span className="mt-0.5 flex items-center gap-1.5">
-                  {c.property_name ? (
-                    <span className="min-w-0 truncate text-xs text-muted-foreground">
-                      {c.property_name}
-                    </span>
-                  ) : null}
-                  {stage ? (
-                    <span
-                      className={`shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium ${stage.className}`}
-                    >
-                      {stage.label}
-                    </span>
-                  ) : null}
+              {c.property_name ? (
+                <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                  {c.property_name}
                 </span>
               ) : null}
               <span

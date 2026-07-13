@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { CheckCircle2, RotateCcw, Mail } from 'lucide-react';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { Button } from '@/components/ui/button';
@@ -10,15 +10,19 @@ import { useMessages } from '@/components/messages/MessagesProvider';
 import { ConversationThread } from '@/components/messages/ConversationThread';
 import { ConversationDetailPanel } from '@/components/messages/ConversationDetailPanel';
 import { ProposedTaskEditorOverlay } from '@/components/messages/ProposedTaskEditorOverlay';
+import { PropertyTaskDetailOverlay } from '@/components/properties/tasks/PropertyTaskDetailOverlay';
 import type { ProposedTaskData } from '@/components/messages/ProposedTask';
 import type { ProposedKnowledgeData } from '@/components/messages/ProposedKnowledge';
+import type { ReservationContextTask } from '@/components/messages/useReservationContext';
 import type { ConversationRow } from '@/lib/conversations';
 import type { GuestMessageRecord } from '@/lib/messages';
+import { taskPath } from '@/src/lib/links';
 
 // /messages/[conversationId] — one conversation (uuid). Fetches the thread, marks
 // it read on open, and exposes complete/reopen + mark-unread actions.
 export default function ConversationPage() {
   const params = useParams();
+  const router = useRouter();
   const isMobile = useIsMobile();
   const { reload } = useMessages();
 
@@ -35,6 +39,11 @@ export default function ConversationPage() {
   // The proposal whose task editor is open (in-layout right-side panel). Stays
   // open until the user closes it or opens another — not a click-away modal.
   const [editorProposal, setEditorProposal] = useState<ProposedTaskData | null>(null);
+  // An already-created associated task opened in the standard task detail panel
+  // (the same panel used everywhere else in the app). Bumping tasksRefreshKey
+  // after an edit re-fetches the detail panel's associated-tasks list.
+  const [selectedTask, setSelectedTask] = useState<ReservationContextTask | null>(null);
+  const [tasksRefreshKey, setTasksRefreshKey] = useState(0);
 
   const load = useCallback(async () => {
     if (!conversationId) return;
@@ -87,6 +96,23 @@ export default function ConversationPage() {
     },
     [conversationId, load, reload],
   );
+
+  // The proposed-task editor and the created-task detail panel share the same
+  // right-side slot — keep them mutually exclusive (open one, close the other).
+  const openProposalEditor = useCallback((proposal: ProposedTaskData) => {
+    setSelectedTask(null);
+    setEditorProposal(proposal);
+  }, []);
+  const openTaskDetail = useCallback((task: ReservationContextTask) => {
+    setEditorProposal(null);
+    setSelectedTask(task);
+  }, []);
+  // A proposal was accepted/dismissed: refetch the thread (proposals + tombstones)
+  // and bump the associated-tasks list so a newly created task shows up there.
+  const handleProposedTaskChange = useCallback(() => {
+    load();
+    setTasksRefreshKey((k) => k + 1);
+  }, [load]);
 
   if (isMobile === null) return null;
 
@@ -149,8 +175,8 @@ export default function ConversationPage() {
             proposedReplyAnswersMessageId={conversation?.proposed_reply_answers_message_id ?? null}
             onProposedReplyChange={load}
             proposedTasks={proposedTasks}
-            onProposedTaskChange={load}
-            onOpenTaskEditor={setEditorProposal}
+            onProposedTaskChange={handleProposedTaskChange}
+            onOpenTaskEditor={openProposalEditor}
             proposedKnowledge={proposedKnowledge}
             onProposedKnowledgeChange={load}
           />
@@ -191,14 +217,21 @@ export default function ConversationPage() {
           proposedReplyAnswersMessageId={conversation?.proposed_reply_answers_message_id ?? null}
           onProposedReplyChange={load}
           proposedTasks={proposedTasks}
-          onProposedTaskChange={load}
-          onOpenTaskEditor={setEditorProposal}
+          onProposedTaskChange={handleProposedTaskChange}
+          onOpenTaskEditor={openProposalEditor}
           proposedKnowledge={proposedKnowledge}
           onProposedKnowledgeChange={load}
         />
       </div>
       <aside className="msg-pane hidden w-80 shrink-0 overflow-hidden lg:block">
-        <ConversationDetailPanel conversation={conversation} />
+        <ConversationDetailPanel
+          conversation={conversation}
+          onOpenTask={openTaskDetail}
+          tasksRefreshKey={tasksRefreshKey}
+          proposedTasks={proposedTasks}
+          onOpenProposal={openProposalEditor}
+          onProposedTaskChange={handleProposedTaskChange}
+        />
       </aside>
       {editorProposal ? (
         <ProposedTaskEditorOverlay
@@ -210,7 +243,16 @@ export default function ConversationPage() {
             setEditorProposal(null);
             load();
             reload();
+            setTasksRefreshKey((k) => k + 1);
           }}
+        />
+      ) : null}
+      {selectedTask ? (
+        <PropertyTaskDetailOverlay
+          task={selectedTask}
+          onClose={() => setSelectedTask(null)}
+          onTaskUpdated={() => setTasksRefreshKey((k) => k + 1)}
+          onOpenInPage={() => router.push(taskPath(selectedTask.task_id))}
         />
       ) : null}
     </div>

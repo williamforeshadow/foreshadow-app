@@ -104,6 +104,7 @@ export function ProposedTask({
   proposal,
   propertyName = null,
   align = 'end',
+  variant = 'bubble',
   onOpenEditor,
   onChanged,
   onAccept,
@@ -114,6 +115,11 @@ export function ProposedTask({
   /** Which side the bubble sits on. 'end' (right) in the inbox; 'start' (left)
    *  in the concierge test console, where the AI sits on the left. */
   align?: 'start' | 'end';
+  /** 'bubble' (default): the in-thread proposal bubble with tinted chrome and a
+   *  provenance label. 'bare': just the task card + accept/dismiss actions, no
+   *  bubble — used in the reservation panel's Proposed list where it sits beside
+   *  associated-task cards. */
+  variant?: 'bubble' | 'bare';
   /** Open the full task editor (rendered at the page level, in-layout). */
   onOpenEditor?: () => void;
   onChanged?: () => void;
@@ -210,6 +216,74 @@ export function ProposedTask({
     );
   }
 
+  // The proposal previews as the same task card used everywhere else; clicking
+  // it opens the full editor, pre-filled and editable. Shared by both variants.
+  const cardButton = (
+    <button
+      type="button"
+      onClick={() => onOpenEditor?.()}
+      className="block w-full rounded-[0.5625rem] text-left transition-opacity hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] dark:focus-visible:ring-[var(--accent-ring-dark)]"
+      title="Open to review and edit before creating"
+    >
+      <ProjectCard
+        item={proposedTaskToCardItem(proposal, propertyName, usersById)}
+        viewMode="status"
+      />
+    </button>
+  );
+
+  const errorRow = error ? (
+    <div className="flex items-start gap-2 px-0.5 text-[11px] text-muted-foreground">
+      <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-3)] dark:text-[var(--accent-1)]" aria-hidden />
+      <span>{error}</span>
+    </div>
+  ) : null;
+
+  const actionRow = (
+    <div className="flex items-center justify-end gap-2">
+      <button
+        type="button"
+        onClick={dismiss}
+        disabled={busy !== null}
+        className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-[var(--accent-3)]/10 hover:text-foreground disabled:opacity-40 dark:hover:bg-[var(--accent-1)]/15"
+      >
+        {busy === 'dismiss' ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+        ) : (
+          <X className="h-3.5 w-3.5" aria-hidden />
+        )}
+        Dismiss
+      </button>
+      <button
+        type="button"
+        onClick={accept}
+        disabled={busy !== null}
+        className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-3)] px-3.5 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
+      >
+        {busy === 'accept' ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+        ) : (
+          <Check className="h-3.5 w-3.5" aria-hidden />
+        )}
+        Create task
+      </button>
+    </div>
+  );
+
+  // Bare variant (reservation panel's Proposed list): the same card + actions as
+  // the bubble, minus the bubble chrome, provenance label, and description — so
+  // it sits in the list exactly like an associated-task card, just with the
+  // accept/dismiss controls underneath.
+  if (variant === 'bare') {
+    return (
+      <div className="flex flex-col gap-2">
+        {cardButton}
+        {errorRow}
+        {actionRow}
+      </div>
+    );
+  }
+
   return (
     <div className={`mt-4 flex ${justify}`}>
       <div className="msg-in glass-card glass-sheen relative flex w-full max-w-[20rem] flex-col gap-2 rounded-2xl border bg-[var(--proposal-task-bg)] border-[var(--proposal-task-border)] p-2.5">
@@ -222,19 +296,7 @@ export function ProposedTask({
           <span>Proposed Task</span>
         </div>
 
-        {/* The proposal previews as the same task card used everywhere else.
-            Clicking it opens the full editor, pre-filled and editable. */}
-        <button
-          type="button"
-          onClick={() => onOpenEditor?.()}
-          className="block w-full rounded-[0.5625rem] text-left transition-opacity hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] dark:focus-visible:ring-[var(--accent-ring-dark)]"
-          title="Open to review and edit before creating"
-        >
-          <ProjectCard
-            item={proposedTaskToCardItem(proposal, propertyName, usersById)}
-            viewMode="status"
-          />
-        </button>
+        {cardButton}
 
         {/* Full description sits under the card — it won't fit on the card itself. */}
         {proposal.description ? (
@@ -243,41 +305,8 @@ export function ProposedTask({
           </p>
         ) : null}
 
-        {error ? (
-          <div className="flex items-start gap-2 px-0.5 text-[11px] text-muted-foreground">
-            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-3)] dark:text-[var(--accent-1)]" aria-hidden />
-            <span>{error}</span>
-          </div>
-        ) : null}
-
-        <div className="flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={dismiss}
-            disabled={busy !== null}
-            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-[var(--accent-3)]/10 hover:text-foreground disabled:opacity-40 dark:hover:bg-[var(--accent-1)]/15"
-          >
-            {busy === 'dismiss' ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-            ) : (
-              <X className="h-3.5 w-3.5" aria-hidden />
-            )}
-            Dismiss
-          </button>
-          <button
-            type="button"
-            onClick={accept}
-            disabled={busy !== null}
-            className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-3)] px-3.5 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40"
-          >
-            {busy === 'accept' ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-            ) : (
-              <Check className="h-3.5 w-3.5" aria-hidden />
-            )}
-            Create task
-          </button>
-        </div>
+        {errorRow}
+        {actionRow}
       </div>
     </div>
   );

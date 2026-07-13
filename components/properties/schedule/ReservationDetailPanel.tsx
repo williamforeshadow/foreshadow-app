@@ -1,9 +1,10 @@
 'use client';
 
 import React from 'react';
-import { format, parseISO, differenceInCalendarDays } from 'date-fns';
+import { format, differenceInCalendarDays } from 'date-fns';
 import { X, Calendar, User, Clock } from 'lucide-react';
 import type { ScheduleReservation, ScheduleTask } from './MonthGrid';
+import { toDateOnly, filterTasksInTurnoverWindow } from './scheduleDates';
 import { useOperationsSettings } from '@/lib/operationsSettingsContext';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
@@ -52,11 +53,6 @@ interface ReservationDetailPanelProps {
   onOpenTask?: (task: ScheduleTask) => void;
 }
 
-function toDateOnly(raw: string): Date {
-  const slice = raw.length >= 10 ? raw.slice(0, 10) : raw;
-  return parseISO(`${slice}T00:00:00`);
-}
-
 export function ReservationDetailPanel({
   reservation,
   allTasks,
@@ -79,43 +75,21 @@ export function ReservationDetailPanel({
     : null;
 
   // Turnover window = [check_in @ defaultCheckInTime, next_check_in @
-  // defaultCheckInTime). Open-ended when there's no next_check_in.
-  //
-  // We compose 'YYYY-MM-DDTHH:MM' strings on both sides and compare
-  // lexicographically — never instantiating Date objects — so the comparison
-  // is wall-clock and timezone-agnostic, matching the rest of the app's
-  // convention.
-  //
-  // Tasks missing scheduled_time fall back to '00:00' so they sort with the
-  // earliest moment of their day. With Auto-Scheduling now mandatory for
-  // automated tasks this is rare in practice.
-  //
-  // Scheduled-moment-in-window is the sole qualifier — we deliberately do
+  // defaultCheckInTime), open-ended when there's no next_check_in. The precise
+  // wall-clock filter lives in filterTasksInTurnoverWindow (shared with the
+  // messages reservation panel, and faithful to the get_property_turnovers SQL
+  // RPC). Scheduled-moment-in-window is the sole qualifier — we deliberately do
   // NOT short-circuit on reservation_id, so re-scheduling a task naturally
   // re-associates it to whichever reservation owns the new slot.
-  const associatedTasks = React.useMemo(() => {
-    const ciDate = format(checkIn, 'yyyy-MM-dd');
-    const startKey = `${ciDate}T${defaultCheckInTime}`;
-    const endKey = nextCheckIn
-      ? `${format(nextCheckIn, 'yyyy-MM-dd')}T${defaultCheckInTime}`
-      : null;
-
-    return allTasks
-      .filter((t) => {
-        if (!t.scheduled_date) return false;
-        const d = t.scheduled_date.slice(0, 10);
-        const time = (t.scheduled_time || '').slice(0, 5) || '00:00';
-        const key = `${d}T${time}`;
-        if (key < startKey) return false;
-        if (endKey && key >= endKey) return false;
-        return true;
-      })
-      .sort((a, b) => {
-        const ad = (a.scheduled_date || '').localeCompare(b.scheduled_date || '');
-        if (ad !== 0) return ad;
-        return (a.scheduled_time || '').localeCompare(b.scheduled_time || '');
-      });
-  }, [allTasks, checkIn, nextCheckIn, defaultCheckInTime]);
+  const associatedTasks = React.useMemo(
+    () =>
+      filterTasksInTurnoverWindow(allTasks, {
+        checkIn: reservation.check_in,
+        nextCheckIn: reservation.next_check_in ?? null,
+        checkInTime: defaultCheckInTime,
+      }),
+    [allTasks, reservation.check_in, reservation.next_check_in, defaultCheckInTime],
+  );
 
   return (
     <ReservationContextOverride id={reservation.id}>

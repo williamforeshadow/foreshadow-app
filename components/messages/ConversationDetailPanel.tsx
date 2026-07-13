@@ -1,11 +1,20 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { MoveRight } from 'lucide-react';
 import { canonicalChannelLabel } from '@/lib/bookingChannel';
 import { stageMeta } from '@/components/messages/stage';
+import { ProjectCard, type DraggableProjectItem } from '@/components/windows/projects/ProjectCard';
+import { ProposedTask, type ProposedTaskData } from '@/components/messages/ProposedTask';
+import { filterTasksInTurnoverWindow } from '@/components/properties/schedule/scheduleDates';
+import { useOperationsSettings } from '@/lib/operationsSettingsContext';
 import { deriveReservationStatus, type ConversationRow } from '@/lib/conversations';
+import type { ProjectStatus, ProjectPriority, User } from '@/lib/types';
 import { todayInTz, DEFAULT_TIMEZONE } from '@/src/lib/dates';
-import { useReservationContext } from '@/components/messages/useReservationContext';
+import {
+  useReservationContext,
+  type ReservationContextTask,
+} from '@/components/messages/useReservationContext';
 
 // Right-hand context panel for the open conversation: the stay at a glance on
 // top (property, dates, progress through the stay), then associated tasks. For
@@ -49,30 +58,89 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  not_started: 'Not started',
-  in_progress: 'In progress',
-  paused: 'Paused',
-  complete: 'Complete',
-  contingent: 'Contingent',
-};
-
-// Status dot colors — green=done, violet=active, amber=paused/contingent, muted=idle.
-const STATUS_DOT: Record<string, string> = {
-  not_started: 'bg-muted-foreground/50',
-  in_progress: 'bg-[var(--accent-3)]',
-  paused: 'bg-amber-500',
-  complete: 'bg-emerald-500',
-  contingent: 'bg-amber-500',
-};
+// Adapt an associated turnover task into the shape the kanban/proposal
+// ProjectCard renders, so tasks on the reservation panel look identical to
+// tasks everywhere else in the app (bins, schedule, task proposals) rather than
+// a bespoke row. Mirrors proposedTaskToCardItem in ProposedTask.tsx.
+function reservationTaskToCardItem(t: ReservationContextTask): DraggableProjectItem {
+  const project_assignments = (t.assigned_users ?? []).map((u) => ({
+    user_id: u.user_id,
+    user: { id: u.user_id, name: u.name, avatar: u.avatar ?? undefined } as User,
+  }));
+  return {
+    id: t.task_id,
+    columnId: 'associated',
+    project: {
+      id: t.task_id,
+      title: t.title || t.template_name || 'Task',
+      property_name: t.property_name,
+      status: (t.status || 'not_started') as ProjectStatus,
+      priority: (t.priority || 'medium') as ProjectPriority,
+      department_id: t.department_id,
+      department_name: t.department_name,
+      template_id: t.template_id,
+      template_name: t.template_name,
+      project_assignments,
+      scheduled_date: t.scheduled_date ?? null,
+      scheduled_time: t.scheduled_time ?? null,
+      created_at: '',
+      updated_at: '',
+    },
+  };
+}
 
 export function ConversationDetailPanel({
   conversation,
+  onOpenTask,
+  tasksRefreshKey = 0,
+  proposedTasks = [],
+  onOpenProposal,
+  onProposedTaskChange,
 }: {
   conversation: ConversationRow | undefined;
+  /** Open an associated task in the standard task detail panel. */
+  onOpenTask?: (task: ReservationContextTask) => void;
+  /** Bump to re-fetch the associated tasks (e.g. after an edit in the panel). */
+  tasksRefreshKey?: number;
+  /** The conversation's task proposals (pending + accepted); filtered to pending
+   *  here and surfaced under the tasks section's Proposed toggle. */
+  proposedTasks?: ProposedTaskData[];
+  /** Open a proposal in the task editor (the page-level overlay). */
+  onOpenProposal?: (proposal: ProposedTaskData) => void;
+  /** Re-fetch after a proposal is accepted/dismissed from the panel. */
+  onProposedTaskChange?: () => void;
 }) {
   const reservationId = conversation?.reservation_id ?? null;
-  const { reservation, tasks, loading } = useReservationContext(reservationId);
+  const { reservation, tasks, loading } = useReservationContext(
+    reservationId,
+    tasksRefreshKey,
+  );
+
+  // The endpoint returns a coarse date-range set; narrow it to the precise
+  // turnover window [check_in @ check-in-time, next_check_in @ check-in-time)
+  // — the same filter the turnovers-page ReservationDetailPanel applies, so the
+  // two panels list identical associated tasks. Check-in time is the org-wide
+  // default from operations_settings (there's no per-property check-in time).
+  const { settings } = useOperationsSettings();
+  const defaultCheckInTime = (settings.default_check_in_time || '15:00').slice(0, 5);
+  const windowedTasks = useMemo(
+    () =>
+      filterTasksInTurnoverWindow(tasks, {
+        checkIn: reservation?.check_in ?? null,
+        nextCheckIn: reservation?.next_check_in ?? null,
+        checkInTime: defaultCheckInTime,
+      }),
+    [tasks, reservation?.check_in, reservation?.next_check_in, defaultCheckInTime],
+  );
+
+  // Associated (created) vs Proposed toggle for the tasks section. Reset to the
+  // primary "associated" view whenever the open conversation changes.
+  const [taskView, setTaskView] = useState<'associated' | 'proposed'>('associated');
+  const [prevConvId, setPrevConvId] = useState<string | undefined>(conversation?.id);
+  if (conversation?.id !== prevConvId) {
+    setPrevConvId(conversation?.id);
+    setTaskView('associated');
+  }
 
   if (!conversation) return null;
 
@@ -102,6 +170,16 @@ export function ConversationDetailPanel({
     );
   const stage = stageMeta(reservationStatus);
   const progress = reservationStatus === 'current' ? stayProgress(checkIn, checkOut) : null;
+
+  // Task proposals still awaiting a decision (dismissed/accepted ones drop out).
+  const pendingProposals = proposedTasks.filter(
+    (pt) => (pt.status ?? 'pending') === 'pending',
+  );
+  // The tasks section shows when there's a reservation (associated tasks) or any
+  // pending proposal to review. Without a reservation, "Associated" is N/A, so
+  // there's no toggle — just the proposed list.
+  const showTasks = hasReservation || pendingProposals.length > 0;
+  const effectiveView: 'associated' | 'proposed' = hasReservation ? taskView : 'proposed';
 
   return (
     <div className="flex h-full flex-col overflow-y-auto overlay-scrollbar">
@@ -188,55 +266,84 @@ export function ConversationDetailPanel({
         )}
       </div>
 
-      {/* Associated tasks — only once a reservation row is linked. */}
-      {hasReservation ? (
+      {/* Tasks — associated (created) tasks within the turnover window, with a
+          toggle to review this conversation's pending task proposals. Both
+          render as the same card; proposals add inline accept/dismiss. */}
+      {showTasks ? (
         <div className="px-4 py-4">
-          <h2 className="mb-3 flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
-            Associated tasks
-            {tasks.length > 0 ? (
-              <span className="rounded-full bg-black/[0.05] px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground dark:bg-white/[0.08]">
-                {tasks.length}
-              </span>
-            ) : null}
-          </h2>
+          <h2 className="mb-2 text-[11px] font-medium text-muted-foreground">Tasks</h2>
+          {hasReservation ? (
+            <div className="mb-3 msg-well flex gap-0.5 rounded-lg p-0.5">
+              {(
+                [
+                  { key: 'associated', label: 'Associated', count: windowedTasks.length },
+                  { key: 'proposed', label: 'Proposed', count: pendingProposals.length },
+                ] as const
+              ).map((seg) => {
+                const active = effectiveView === seg.key;
+                return (
+                  <button
+                    key={seg.key}
+                    type="button"
+                    onClick={() => setTaskView(seg.key)}
+                    aria-pressed={active}
+                    className={`inline-flex h-6 flex-1 items-center justify-center gap-1.5 rounded-md text-[11px] font-medium transition-colors ${
+                      active
+                        ? 'bg-[var(--accent-3)] text-white shadow-sm'
+                        : 'text-muted-foreground hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.05]'
+                    }`}
+                  >
+                    {seg.label}
+                    {seg.count > 0 ? (
+                      <span
+                        className={`rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${
+                          active
+                            ? 'bg-white/25 text-white'
+                            : 'bg-black/[0.06] text-muted-foreground dark:bg-white/[0.1]'
+                        }`}
+                      >
+                        {seg.count}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
 
-          {loading && tasks.length === 0 ? (
-            <DetailSkeleton rows={2} />
-          ) : tasks.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No associated tasks</p>
+          {effectiveView === 'associated' ? (
+            loading && tasks.length === 0 ? (
+              <DetailSkeleton rows={2} />
+            ) : windowedTasks.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No associated tasks</p>
+            ) : (
+              <div className="space-y-2">
+                {windowedTasks.map((t) => (
+                  <button
+                    key={t.task_id}
+                    type="button"
+                    onClick={() => onOpenTask?.(t)}
+                    title="Open task"
+                    className="block w-full rounded-[0.5625rem] text-left transition-opacity hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] dark:focus-visible:ring-[var(--accent-ring-dark)]"
+                  >
+                    <ProjectCard item={reservationTaskToCardItem(t)} viewMode="status" />
+                  </button>
+                ))}
+              </div>
+            )
+          ) : pendingProposals.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No proposed tasks</p>
           ) : (
-            <div className="space-y-2">
-              {tasks.map((t) => (
-                <div key={t.task_id} className="msg-well rounded-xl px-3 py-2.5">
-                  <div className="flex items-start gap-2">
-                    <span
-                      aria-hidden
-                      className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                        STATUS_DOT[t.status] ?? 'bg-muted-foreground/50'
-                      }`}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm text-foreground">
-                        {t.title || t.template_name || 'Task'}
-                      </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-                        <span>{STATUS_LABELS[t.status] ?? t.status}</span>
-                        {t.scheduled_date ? (
-                          <>
-                            <span aria-hidden>·</span>
-                            <span>{fmtDate(t.scheduled_date)}</span>
-                          </>
-                        ) : null}
-                        {t.department_name ? (
-                          <>
-                            <span aria-hidden>·</span>
-                            <span>{t.department_name}</span>
-                          </>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            <div className="space-y-3">
+              {pendingProposals.map((pt) => (
+                <ProposedTask
+                  key={pt.id}
+                  proposal={pt}
+                  propertyName={propertyName}
+                  variant="bare"
+                  onOpenEditor={() => onOpenProposal?.(pt)}
+                  onChanged={onProposedTaskChange}
+                />
               ))}
             </div>
           )}
