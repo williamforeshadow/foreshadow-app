@@ -125,6 +125,11 @@
   --proposal-knowledge-border:rgba(92, 168, 176, 0.48);
   --proposal-task-bg:         rgba(160, 145, 224, 0.24); /* muted lavender */
   --proposal-task-border:     rgba(160, 145, 224, 0.50);
+
+  /* Neutral frosted tint for real sent (host) message bubbles — a soft blue-grey
+     wash under .glass-card, deliberately neutral vs the colored proposal tints. */
+  --msg-sent-bg:              rgba(145, 165, 198, 0.22);
+  --msg-sent-border:          rgba(145, 165, 198, 0.44);
 }
 
 .dark {
@@ -188,6 +193,9 @@
   --proposal-knowledge-border:rgba(110, 184, 192, 0.38);
   --proposal-task-bg:         rgba(170, 156, 232, 0.15);
   --proposal-task-border:     rgba(170, 156, 232, 0.40);
+
+  --msg-sent-bg:              rgba(158, 178, 210, 0.15);
+  --msg-sent-border:          rgba(158, 178, 210, 0.34);
 }
 
 @theme inline {

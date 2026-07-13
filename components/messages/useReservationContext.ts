@@ -39,6 +39,9 @@ export interface ReservationContextTask {
 export interface ReservationContext {
   id: string;
   guest_name: string | null;
+  guest_email: string | null;
+  guest_phone: string | null;
+  guest_count: number | null;
   check_in: string | null;
   check_out: string | null;
   /** The next reservation's check-in — the turnover window's upper bound

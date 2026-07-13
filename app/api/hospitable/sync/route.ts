@@ -115,12 +115,27 @@ export async function POST() {
         const guestName =
           [guest.first_name, guest.last_name].filter(Boolean).join(' ') || null;
         const isOwner = r.stay_type === 'owner_stay' || r.owner_stay != null;
+        // Guest contact + party size. Hospitable nests contact under `guest`
+        // (email/phone require the connected token's PII scope, else they arrive
+        // null) and exposes party size either as a `guests` object or a flat
+        // count — map defensively across those shapes.
+        const guestEmail: string | null = guest.email ?? null;
+        const guestPhone: string | null =
+          guest.phone ??
+          guest.phone_number ??
+          (Array.isArray(guest.phone_numbers) ? guest.phone_numbers[0] ?? null : null);
+        const guestCountRaw = Number(r.guests?.total ?? r.number_of_guests ?? r.guests);
+        const guestCount: number | null =
+          Number.isFinite(guestCountRaw) && guestCountRaw > 0 ? guestCountRaw : null;
         return {
           org_id: orgId,
           hospitable_reservation_id: String(r.id),
           property_id: prop.id,
           property_name: prop.name,
           guest_name: guestName ?? (isOwner ? 'Owner Stay' : 'Guest'),
+          guest_email: guestEmail,
+          guest_phone: guestPhone,
+          guest_count: guestCount,
           check_in: r.check_in ?? r.arrival_date ?? null,
           check_out: r.check_out ?? r.departure_date ?? null,
           // Store the raw PMS channel (matching the Hostaway sync's raw

@@ -36,7 +36,7 @@ export async function GET(
   const { data: reservation, error: resError } = await supabase
     .from('reservations')
     .select(
-      'id, guest_name, check_in, check_out, next_check_in, property_id, property_name, channel'
+      'id, guest_name, guest_email, guest_phone, guest_count, check_in, check_out, next_check_in, property_id, property_name, channel'
     )
     .eq('id', id)
     .maybeSingle();
@@ -180,6 +180,9 @@ export async function GET(
     reservation: {
       id: reservation.id,
       guest_name: reservation.guest_name,
+      guest_email: reservation.guest_email ?? null,
+      guest_phone: reservation.guest_phone ?? null,
+      guest_count: reservation.guest_count ?? null,
       check_in: start,
       check_out: checkOut,
       next_check_in: reservation.next_check_in

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { MoveRight } from 'lucide-react';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { canonicalChannelLabel } from '@/lib/bookingChannel';
 import { stageMeta } from '@/components/messages/stage';
 import { ProjectCard, type DraggableProjectItem } from '@/components/windows/projects/ProjectCard';
@@ -38,22 +38,68 @@ function nightsBetween(start: string | null | undefined, end: string | null | un
   return Math.max(0, Math.round((e - s) / 86_400_000));
 }
 
-// How far through the stay we are, 0..1 — display-only, derived from the same
-// dates the panel already shows. Null when the dates can't support it.
-function stayProgress(start: string | null, end: string | null): number | null {
-  if (!start || !end) return null;
-  const s = Date.parse(`${start.slice(0, 10)}T00:00:00Z`);
-  const e = Date.parse(`${end.slice(0, 10)}T00:00:00Z`);
-  if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) return null;
-  const now = Date.now();
-  return Math.min(1, Math.max(0, (now - s) / (e - s)));
-}
-
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
       <div className="mt-0.5 text-sm text-foreground">{value}</div>
+    </div>
+  );
+}
+
+// 'HH:MM' (24h) → '3:00 PM' for the org check-in/out time display.
+function formatTime12(hhmm: string): string {
+  const [h, m] = hhmm.split(':').map(Number);
+  if (!Number.isFinite(h)) return hhmm;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(Number.isFinite(m) ? m : 0).padStart(2, '0')} ${ampm}`;
+}
+
+// The Properties nav icon from the app sidebar (components/Sidebar.tsx),
+// reused so the property reads consistently with the rest of the app.
+function PropertyIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+      />
+    </svg>
+  );
+}
+
+// Split a trailing "(...)" off a property name into a sub-label, e.g.
+// "5023 Foothill Blvd (ADU)" → { primary: "5023 Foothill Blvd", sub: "ADU" }.
+function splitPropertyName(name: string | null): { primary: string; sub: string | null } {
+  if (!name) return { primary: '—', sub: null };
+  const m = name.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+  if (m && m[1].trim()) return { primary: m[1].trim(), sub: m[2].trim() };
+  return { primary: name, sub: null };
+}
+
+// A labeled cell in the reservation details grid: an uppercase label, a primary
+// value, and an optional muted sub-value (e.g. the check-in time under a date).
+function GridField({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-0.5 truncate text-sm text-foreground">{value}</div>
+      {sub ? (
+        <div className="truncate text-xs tabular-nums text-muted-foreground">{sub}</div>
+      ) : null}
     </div>
   );
 }
@@ -123,6 +169,7 @@ export function ConversationDetailPanel({
   // default from operations_settings (there's no per-property check-in time).
   const { settings } = useOperationsSettings();
   const defaultCheckInTime = (settings.default_check_in_time || '15:00').slice(0, 5);
+  const defaultCheckOutTime = (settings.default_check_out_time || '11:00').slice(0, 5);
   const windowedTasks = useMemo(
     () =>
       filterTasksInTurnoverWindow(tasks, {
@@ -169,7 +216,13 @@ export function ConversationDetailPanel({
       todayInTz(DEFAULT_TIMEZONE).date,
     );
   const stage = stageMeta(reservationStatus);
-  const progress = reservationStatus === 'current' ? stayProgress(checkIn, checkOut) : null;
+  const { primary: propPrimary, sub: propSub } = splitPropertyName(propertyName);
+
+  // Guest contact + party size come from the linked reservation (booked threads
+  // only — inquiries have no reservation row). Check-in/out times are org-wide.
+  const guestCount = reservation?.guest_count ?? null;
+  const guestEmail = reservation?.guest_email ?? null;
+  const guestPhone = reservation?.guest_phone ?? null;
 
   // Task proposals still awaiting a decision (dismissed/accepted ones drop out).
   const pendingProposals = proposedTasks.filter(
@@ -183,10 +236,12 @@ export function ConversationDetailPanel({
 
   return (
     <div className="flex h-full flex-col overflow-y-auto overlay-scrollbar">
-      {/* Reservation details */}
-      <div className="msg-divider border-b px-4 py-4">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-[11px] font-medium text-muted-foreground">Reservation</h2>
+      {/* Reservation */}
+      <div className="msg-divider border-b">
+        <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-3">
+          <h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Reservation
+          </h2>
           {stage ? (
             <span
               className={`shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium ${stage.className}`}
@@ -197,7 +252,7 @@ export function ConversationDetailPanel({
         </div>
 
         {isInquiry ? (
-          <div className="space-y-3">
+          <div className="space-y-3 px-4 pb-4">
             <Field label="Guest" value={guestName} />
             <Field label="Property" value={propertyName ?? '—'} />
             {conversation.check_in || conversation.check_out ? (
@@ -213,56 +268,95 @@ export function ConversationDetailPanel({
             </div>
           </div>
         ) : hasReservation && loading && !reservation ? (
-          <DetailSkeleton />
+          <div className="px-4 pb-4">
+            <DetailSkeleton />
+          </div>
         ) : (
-          <div className="space-y-3">
-            <div className="msg-well rounded-xl p-3">
-              <div className="text-sm font-semibold text-foreground">
-                {propertyName ?? '—'}
+          <>
+            {/* Guest hero */}
+            <div className="flex items-center gap-3 px-4 pb-4">
+              <UserAvatar name={guestName} size="xl" />
+              <div className="min-w-0 truncate text-lg font-semibold text-foreground">
+                {guestName}
               </div>
-              <div className="mt-0.5 truncate text-xs text-muted-foreground">{guestName}</div>
-              <div className="mt-2.5 flex items-center gap-2 text-sm text-foreground">
-                <span className="tabular-nums">{fmtDate(checkIn)}</span>
-                <MoveRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                <span className="tabular-nums">{fmtDate(checkOut)}</span>
-              </div>
-              <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span>{nights != null ? `${nights} night${nights === 1 ? '' : 's'}` : '—'}</span>
-                {channel ? (
-                  <>
-                    <span aria-hidden>·</span>
-                    <span>{channel}</span>
-                  </>
+            </div>
+
+            {/* Property — same house icon as the app sidebar's Properties nav. */}
+            <div className="msg-divider flex items-center gap-3 border-t px-4 py-3.5">
+              <PropertyIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-foreground">{propPrimary}</div>
+                {propSub ? (
+                  <div className="truncate text-xs text-muted-foreground">{propSub}</div>
                 ) : null}
               </div>
-              {progress !== null ? (
-                <div className="mt-2.5">
-                  <div
-                    role="progressbar"
-                    aria-label="Stay progress"
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={Math.round(progress * 100)}
-                    className="h-1 overflow-hidden rounded-full bg-black/[0.08] dark:bg-white/[0.1]"
-                  >
-                    <div
-                      className="h-full rounded-full bg-[var(--accent-3)] transition-[width] duration-500 dark:bg-[var(--accent-1)]"
-                      style={{ width: `${Math.round(progress * 100)}%` }}
-                    />
-                  </div>
+            </div>
+
+            {/* Stay + guest fields */}
+            <div className="msg-divider border-t px-4 py-4">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+                <GridField
+                  label="Check-in"
+                  value={<span className="tabular-nums">{fmtDate(checkIn)}</span>}
+                  sub={formatTime12(defaultCheckInTime)}
+                />
+                <GridField
+                  label="Checkout"
+                  value={<span className="tabular-nums">{fmtDate(checkOut)}</span>}
+                  sub={formatTime12(defaultCheckOutTime)}
+                />
+                <GridField
+                  label="Nights"
+                  value={
+                    <span className="tabular-nums">{nights != null ? nights : '—'}</span>
+                  }
+                />
+                <GridField
+                  label="Phone"
+                  value={
+                    guestPhone ? (
+                      <a
+                        href={`tel:${guestPhone}`}
+                        className="tabular-nums text-[var(--accent-3)] hover:underline dark:text-[var(--accent-1)]"
+                      >
+                        {guestPhone}
+                      </a>
+                    ) : (
+                      '—'
+                    )
+                  }
+                />
+                <GridField label="Guests" value={guestCount != null ? guestCount : '—'} />
+                <GridField label="Channel" value={channel ?? '—'} />
+              </div>
+
+              {guestEmail ? (
+                <div className="mt-4">
+                  <GridField
+                    label="Email"
+                    value={
+                      <a
+                        href={`mailto:${guestEmail}`}
+                        className="text-[var(--accent-3)] hover:underline dark:text-[var(--accent-1)]"
+                      >
+                        {guestEmail}
+                      </a>
+                    }
+                  />
+                </div>
+              ) : null}
+
+              {isCancelled ? (
+                <div className="msg-well mt-4 rounded-lg px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                  Reservation cancelled
+                </div>
+              ) : !hasReservation ? (
+                <div className="msg-well mt-4 rounded-lg px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                  Booked — syncing full reservation details
                 </div>
               ) : null}
             </div>
-            {isCancelled ? (
-              <div className="msg-well rounded-lg px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-                Reservation cancelled
-              </div>
-            ) : !hasReservation ? (
-              <div className="msg-well rounded-lg px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-                Booked — syncing full reservation details
-              </div>
-            ) : null}
-          </div>
+          </>
         )}
       </div>
 

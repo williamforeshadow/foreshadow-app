@@ -186,7 +186,9 @@ export async function POST() {
     //    (property_id included so we can gate inactive properties below)
     const { data: existingRows } = await supabase
       .from('reservations')
-      .select('id, hostaway_reservation_id, check_in, check_out, guest_name, property_id, kind')
+      .select(
+        'id, hostaway_reservation_id, check_in, check_out, guest_name, property_id, kind, guest_email, guest_phone, guest_count',
+      )
       .eq('org_id', orgId)
       .not('hostaway_reservation_id', 'is', null);
 
@@ -197,6 +199,9 @@ export async function POST() {
       guest_name: string;
       property_id: string | null;
       kind: string;
+      guest_email: string | null;
+      guest_phone: string | null;
+      guest_count: number | null;
     }>();
     for (const row of existingRows || []) {
       existingMap.set(row.hostaway_reservation_id, {
@@ -206,6 +211,9 @@ export async function POST() {
         guest_name: row.guest_name,
         property_id: row.property_id ?? null,
         kind: row.kind ?? 'guest_booking',
+        guest_email: row.guest_email ?? null,
+        guest_phone: row.guest_phone ?? null,
+        guest_count: row.guest_count ?? null,
       });
     }
 
@@ -238,6 +246,14 @@ export async function POST() {
       const guestName =
         [r.guestFirstName, r.guestLastName].filter(Boolean).join(' ') ||
         (kind === 'owner_stay' ? 'Owner Stay' : 'Unknown Guest');
+
+      // Guest contact + party size. The Hostaway reservation object is untyped;
+      // map defensively (field names vary slightly across Hostaway payloads).
+      const guestEmail: string | null = r.guestEmail ?? r.email ?? null;
+      const guestPhone: string | null = r.phone ?? r.guestPhone ?? null;
+      const guestCountRaw = Number(r.numberOfGuests ?? r.personNumber);
+      const guestCount: number | null =
+        Number.isFinite(guestCountRaw) && guestCountRaw > 0 ? guestCountRaw : null;
 
       const existing = existingMap.get(r.id);
 
@@ -273,6 +289,9 @@ export async function POST() {
           // property_name intentionally omitted — the derive_property_name()
           // trigger fills it from properties.name before the NOT NULL check.
           guest_name: guestName,
+          guest_email: guestEmail,
+          guest_phone: guestPhone,
+          guest_count: guestCount,
           check_in: r.arrivalDate,
           check_out: r.departureDate,
           channel: r.channelName ?? null,
@@ -292,12 +311,20 @@ export async function POST() {
           existCheckIn !== r.arrivalDate ||
           existCheckOut !== r.departureDate ||
           existing.guest_name !== guestName ||
-          existing.kind !== kind;
+          existing.kind !== kind ||
+          // Backfill: an existing row whose guest contact/party size is stale
+          // (e.g. null before these columns existed) triggers an update.
+          existing.guest_email !== guestEmail ||
+          existing.guest_phone !== guestPhone ||
+          existing.guest_count !== guestCount;
 
         if (haChanges) {
           updateRows.push({
             supabaseId: existing.id,
             guest_name: guestName,
+            guest_email: guestEmail,
+            guest_phone: guestPhone,
+            guest_count: guestCount,
             check_in: r.arrivalDate,
             check_out: r.departureDate,
             kind,
@@ -362,6 +389,9 @@ export async function POST() {
         .from('reservations')
         .update({
           guest_name: row.guest_name,
+          guest_email: row.guest_email,
+          guest_phone: row.guest_phone,
+          guest_count: row.guest_count,
           check_in: row.check_in,
           check_out: row.check_out,
           kind: row.kind,

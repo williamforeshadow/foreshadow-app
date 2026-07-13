@@ -386,7 +386,7 @@ export function ConversationThread({
                       scheduled
                         ? 'border border-dashed border-[var(--accent-3)]/50 bg-[var(--accent-bg-soft)] text-foreground dark:border-[var(--accent-1)]/50 dark:bg-[var(--accent-bg-soft-dark)]'
                         : outbound
-                          ? 'bg-[var(--accent-3)] text-white shadow-sm'
+                          ? 'glass-card glass-sheen relative overflow-hidden border bg-[var(--msg-sent-bg)] border-[var(--msg-sent-border)] text-foreground'
                           : 'bg-white/85 text-foreground shadow-sm ring-1 ring-black/[0.05] dark:bg-white/[0.07] dark:ring-white/[0.06]'
                     }`}
                   >
