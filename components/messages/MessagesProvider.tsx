@@ -47,6 +47,11 @@ interface MessagesContextValue {
   toggleSort: () => void;
   query: string;
   setQuery: (q: string) => void;
+  /** Whether the collapsible search field is revealed (the header shows only the
+   *  search icon until toggled). Shared so the icon and the field — which live in
+   *  different parts of the tree — stay in sync across desktop and mobile. */
+  searchOpen: boolean;
+  setSearchOpen: (v: boolean) => void;
   filters: MessagesFilters;
   setFilter: <K extends keyof MessagesFilters>(key: K, value: MessagesFilters[K]) => void;
   clearFilters: () => void;
@@ -68,6 +73,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
   const [tab, setTab] = useState<ConversationTab>('active');
   const [sort, setSort] = useState<ConversationSort>('newest');
   const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [filters, setFilters] = useState<MessagesFilters>(emptyFilters);
 
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
@@ -148,6 +154,8 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     toggleSort,
     query,
     setQuery,
+    searchOpen,
+    setSearchOpen,
     filters,
     setFilter,
     clearFilters,

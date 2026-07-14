@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, ArrowDown, ArrowUp, Filter as FilterIcon } from 'lucide-react';
+import { Search, ArrowDown, ArrowUp, Filter as FilterIcon, X } from 'lucide-react';
 import {
   MultiSelect,
   DateRangeChip,
@@ -30,17 +30,30 @@ const DIRECTION_OPTIONS: FilterOption[] = [
   { value: 'outbound', label: 'You (outbound)' },
 ];
 
+const iconBtn =
+  'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors';
+const iconBtnIdle =
+  'text-muted-foreground hover:bg-black/[0.05] hover:text-foreground dark:hover:bg-white/[0.06]';
+const iconBtnActive =
+  'bg-[var(--accent-bg-soft)] text-[var(--accent-3)] dark:bg-[var(--accent-bg-soft-dark)] dark:text-[var(--accent-1)]';
+
 /**
- * One-row conversation list controls: search + sort arrow + filter funnel.
- * The filter pops out a DETACHED floating panel (portaled, wider than the
- * sidebar) with the filter pills laid out in a horizontal row. Stays open until
- * the funnel is toggled or Escape — so interacting with the pills' own portaled
- * dropdowns (z 9999, above this panel) doesn't dismiss it.
+ * Compact header cluster for the conversation list — a search toggle, the sort
+ * direction arrow, and the filter funnel. Rendered inline with the "Messages"
+ * label (desktop aside header / mobile top bar), NOT as its own row.
+ *
+ * Search collapses to just its icon; toggling it reveals ConversationSearchField
+ * (a separate row below the header). Closing the search clears the query so no
+ * invisible filter lingers. The filter funnel pops a DETACHED floating panel
+ * (portaled, wider than the sidebar) with the filter pills in a horizontal row;
+ * it stays open until the funnel is toggled or Escape.
  */
-export function ConversationControls() {
+export function ConversationHeaderActions() {
   const {
     query,
     setQuery,
+    searchOpen,
+    setSearchOpen,
     sort,
     toggleSort,
     conversations,
@@ -98,55 +111,59 @@ export function ConversationControls() {
   }, [conversations]);
 
   const filterActive = open || activeFilterCount > 0;
+  const searchActive = searchOpen || query.trim().length > 0;
+
+  const toggleSearch = () => {
+    if (searchOpen) {
+      setSearchOpen(false);
+      setQuery('');
+    } else {
+      setSearchOpen(true);
+    }
+  };
 
   return (
-    <div className="shrink-0 px-3 pb-2">
-      <div className="flex items-center gap-2">
-        <div className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search guests"
-            className="msg-well w-full rounded-lg py-1.5 pl-8 pr-2 text-sm text-foreground transition-[border-color,box-shadow] placeholder:text-muted-foreground focus:border-[var(--accent-3)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)] dark:focus:ring-[var(--accent-ring-dark)]"
-          />
-        </div>
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={toggleSearch}
+        aria-pressed={searchActive}
+        title={searchOpen ? 'Hide search' : 'Search guests'}
+        aria-label={searchOpen ? 'Hide search' : 'Search guests'}
+        className={`${iconBtn} ${searchActive ? iconBtnActive : iconBtnIdle}`}
+      >
+        <Search className="h-4 w-4" />
+      </button>
 
-        <button
-          type="button"
-          onClick={toggleSort}
-          title={sort === 'newest' ? 'Newest first' : 'Oldest first'}
-          aria-label={`Sort: ${sort === 'newest' ? 'newest first' : 'oldest first'}`}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-black/[0.05] hover:text-foreground dark:hover:bg-white/[0.06]"
-        >
-          {sort === 'newest' ? (
-            <ArrowDown className="h-4 w-4" />
-          ) : (
-            <ArrowUp className="h-4 w-4" />
-          )}
-        </button>
+      <button
+        type="button"
+        onClick={toggleSort}
+        title={sort === 'newest' ? 'Newest first' : 'Oldest first'}
+        aria-label={`Sort: ${sort === 'newest' ? 'newest first' : 'oldest first'}`}
+        className={`${iconBtn} ${iconBtnIdle}`}
+      >
+        {sort === 'newest' ? (
+          <ArrowDown className="h-4 w-4" />
+        ) : (
+          <ArrowUp className="h-4 w-4" />
+        )}
+      </button>
 
-        <button
-          ref={btnRef}
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-pressed={open}
-          title={open ? 'Hide filters' : 'Show filters'}
-          className={`relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
-            filterActive
-              ? 'bg-[var(--accent-bg-soft)] text-[var(--accent-3)] dark:bg-[var(--accent-bg-soft-dark)] dark:text-[var(--accent-1)]'
-              : 'text-muted-foreground hover:bg-black/[0.05] hover:text-foreground dark:hover:bg-white/[0.06]'
-          }`}
-        >
-          <FilterIcon className="h-4 w-4" />
-          {activeFilterCount > 0 ? (
-            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--accent-3)] px-1 text-[10px] font-semibold text-white">
-              {activeFilterCount}
-            </span>
-          ) : null}
-        </button>
-      </div>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-pressed={open}
+        title={open ? 'Hide filters' : 'Show filters'}
+        className={`${iconBtn} relative ${filterActive ? iconBtnActive : iconBtnIdle}`}
+      >
+        <FilterIcon className="h-4 w-4" />
+        {activeFilterCount > 0 ? (
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--accent-3)] px-1 text-[10px] font-semibold text-white">
+            {activeFilterCount}
+          </span>
+        ) : null}
+      </button>
 
       {open && typeof document !== 'undefined'
         ? createPortal(
@@ -205,6 +222,54 @@ export function ConversationControls() {
             document.body,
           )
         : null}
+    </div>
+  );
+}
+
+/**
+ * The collapsible search input, revealed as its own row beneath the header when
+ * the search icon in ConversationHeaderActions is toggled on. Autofocuses on
+ * open; Escape or the clear button closes it (and clears the query).
+ */
+export function ConversationSearchField() {
+  const { query, setQuery, searchOpen, setSearchOpen } = useMessages();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (searchOpen) inputRef.current?.focus();
+  }, [searchOpen]);
+
+  if (!searchOpen) return null;
+
+  const close = () => {
+    setSearchOpen(false);
+    setQuery('');
+  };
+
+  return (
+    <div className="msg-in shrink-0 px-3 pb-2 pt-1.5">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') close();
+          }}
+          placeholder="Search guests"
+          className="msg-well w-full rounded-lg py-1.5 pl-8 pr-8 text-sm text-foreground transition-[border-color,box-shadow] placeholder:text-muted-foreground focus:border-[var(--accent-3)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)] dark:focus:ring-[var(--accent-ring-dark)]"
+        />
+        <button
+          type="button"
+          onClick={close}
+          aria-label="Close search"
+          className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-black/[0.05] hover:text-foreground dark:hover:bg-white/[0.06]"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </div>
   );
 }

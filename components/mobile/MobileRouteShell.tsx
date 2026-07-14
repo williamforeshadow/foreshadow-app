@@ -83,7 +83,7 @@ const MobileRouteShell = memo(function MobileRouteShell({
               </button>
             )}
             {title && (
-              <h1 className="text-[20px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed] truncate">
+              <h1 className="text-[20px] font-semibold tracking-tight leading-normal text-neutral-900 dark:text-[#f0efed] truncate">
                 {title}
               </h1>
             )}

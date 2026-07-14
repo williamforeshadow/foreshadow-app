@@ -1,25 +1,26 @@
 'use client';
 
-import Link from 'next/link';
-import { GraduationCap } from 'lucide-react';
 import { useSelectedLayoutSegment } from 'next/navigation';
 import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { MessagesProvider, useMessages } from '@/components/messages/MessagesProvider';
 import { ConversationList } from '@/components/messages/ConversationList';
-import { ConversationControls } from '@/components/messages/ConversationControls';
+import {
+  ConversationHeaderActions,
+  ConversationSearchField,
+} from '@/components/messages/ConversationControls';
 import { ConversationTabs } from '@/components/messages/ConversationTabs';
 
 // Master-detail chrome for /messages. The conversation list + its tabs/filters/
 // sort live here (state in MessagesProvider) so they persist while the selected
 // conversation (the child route) changes.
 function ListControls() {
-  const { tab, setTab, counts } = useMessages();
+  const { tab, setTab } = useMessages();
   return (
     <>
-      <ConversationControls />
-      <ConversationTabs tab={tab} onChange={setTab} counts={counts} />
+      <ConversationSearchField />
+      <ConversationTabs tab={tab} onChange={setTab} />
     </>
   );
 }
@@ -47,7 +48,7 @@ function MessagesChrome({ children }: { children: React.ReactNode }) {
   if (isMobile) {
     if (segment !== null) return <>{children}</>;
     return (
-      <MobileRouteShell backHref="/" title="Messages">
+      <MobileRouteShell backHref="/" title="Messages" rightSlot={<ConversationHeaderActions />}>
         <div className="flex h-full min-h-0 flex-col">
           <ListControls />
           <div className="min-h-0 flex-1 overflow-y-auto hide-scrollbar">
@@ -66,18 +67,11 @@ function MessagesChrome({ children }: { children: React.ReactNode }) {
           narrower conversation column. */}
       <div className="glass-bg-neutral relative flex h-full gap-2.5 p-2.5">
         <aside className="msg-pane flex w-80 shrink-0 flex-col overflow-hidden">
-          <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-3.5">
+          <div className="flex shrink-0 items-center justify-between gap-2 px-4 pb-2 pt-3.5">
             <h1 className="text-lg font-semibold tracking-tight text-foreground">
               Messages
             </h1>
-            <Link
-              href="/messages/concierge-training"
-              title="Concierge Training"
-              aria-label="Concierge Training"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-black/[0.05] hover:text-foreground dark:hover:bg-white/[0.06]"
-            >
-              <GraduationCap className="h-4 w-4" aria-hidden />
-            </Link>
+            <ConversationHeaderActions />
           </div>
           <ListControls />
           <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar">

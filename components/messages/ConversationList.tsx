@@ -7,6 +7,24 @@ import { formatRelative } from '@/src/lib/dates';
 import { stageMeta } from '@/components/messages/stage';
 import type { ConversationRow } from '@/lib/conversations';
 
+// Row timestamp: for a message from today, the exact clock time to the minute
+// ("3:47 PM"); older messages keep the compact relative label ("Yesterday", a
+// weekday, or "Mon D").
+function listTimestamp(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  if (sameDay) {
+    return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  }
+  return formatRelative(iso);
+}
+
 /**
  * Left-pane inbox: one row per conversation. Links to /messages/[id] (the
  * conversation uuid). Rows are inset rounded tiles on the glass pane; unread
@@ -90,7 +108,7 @@ export function ConversationList({
                         : 'text-muted-foreground'
                     }`}
                   >
-                    {formatRelative(c.last_message_at ?? '')}
+                    {listTimestamp(c.last_message_at)}
                   </span>
                   {unread ? (
                     <span

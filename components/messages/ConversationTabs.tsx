@@ -1,27 +1,25 @@
 'use client';
 
-import type { ConversationTab, ConversationCounts } from '@/lib/conversations';
+import type { ConversationTab } from '@/lib/conversations';
 
 /**
- * Active / Complete segmented control sunk into the glass pane as a well.
- * Active shows an unread-count badge (the highlight count).
+ * Active / Complete tabs as a minimal underline row — the active option is
+ * marked by an accent underline, no segmented "well" and no count badge.
  */
 export function ConversationTabs({
   tab,
   onChange,
-  counts,
 }: {
   tab: ConversationTab;
   onChange: (tab: ConversationTab) => void;
-  counts: ConversationCounts;
 }) {
-  const items: { key: ConversationTab; label: string; badge?: number }[] = [
-    { key: 'active', label: 'Active', badge: counts.unread },
+  const items: { key: ConversationTab; label: string }[] = [
+    { key: 'active', label: 'Active' },
     { key: 'complete', label: 'Complete' },
   ];
   return (
-    <div className="shrink-0 px-3 pb-2">
-      <div className="msg-well flex gap-1 rounded-lg p-1">
+    <div className="msg-divider shrink-0 border-b px-4">
+      <div className="flex gap-5">
         {items.map((it) => {
           const active = tab === it.key;
           return (
@@ -30,23 +28,18 @@ export function ConversationTabs({
               type="button"
               onClick={() => onChange(it.key)}
               aria-pressed={active}
-              className={`inline-flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md text-xs font-medium transition-colors duration-150 ${
+              className={`relative -mb-px py-2 text-sm font-medium transition-colors ${
                 active
-                  ? 'bg-[var(--accent-3)] text-white shadow-sm'
-                  : 'text-muted-foreground hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.05]'
+                  ? 'text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               {it.label}
-              {it.badge ? (
+              {active ? (
                 <span
-                  className={`rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${
-                    active
-                      ? 'bg-white/25 text-white'
-                      : 'bg-[var(--accent-3)] text-white'
-                  }`}
-                >
-                  {it.badge}
-                </span>
+                  aria-hidden
+                  className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-[var(--accent-3)] dark:bg-[var(--accent-1)]"
+                />
               ) : null}
             </button>
           );
