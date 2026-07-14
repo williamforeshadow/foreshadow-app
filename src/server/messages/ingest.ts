@@ -6,6 +6,7 @@ import {
 } from '@/lib/hostaway';
 import { mapHostawayMessagePayload, type RawGuestMessage } from '@/lib/messages';
 import { getMapper } from '@/src/server/messages/pms';
+import { maybeGenerateSentimentForConversation } from '@/src/server/messages/conversationSentiment';
 import type { HostawayCreds } from '@/lib/pmsIntegrations';
 
 // Shared guest-message ingestion. Upserts a canonical `conversations` row (the
@@ -248,6 +249,11 @@ export async function ingestConversation(
   // The upsert above seeded last_* from the JS rollup, which can't tell future
   // (scheduled) messages from sent ones. Correct it against the DB clock.
   await recomputeSentRollup(supabase, convId);
+
+  // Eager guest-sentiment summary — only on the realtime (webhook) path, so bulk
+  // syncs/backfills don't spend a model call per conversation. PMS-agnostic:
+  // keyed by the internal conversation id. Best-effort (never throws).
+  if (opts?.realtime) await maybeGenerateSentimentForConversation(convId);
 
   return msgRows.length;
 }

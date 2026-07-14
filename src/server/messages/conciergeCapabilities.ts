@@ -99,6 +99,27 @@ export async function loadConciergeToolFlags(orgId: string | null): Promise<Conc
   }
 }
 
+/**
+ * Per-org master switch for autonomous guest-sentiment generation. Read on the
+ * realtime ingest path only (bulk syncs never generate). Tolerant of a missing
+ * column/table/row — degrades to enabled, matching the proposal-flag loaders.
+ */
+export async function loadSentimentSummaryEnabled(orgId: string | null): Promise<boolean> {
+  if (!orgId) return true;
+  try {
+    const { data } = await getSupabaseServer()
+      .from('operations_settings')
+      .select('sentiment_summary_enabled')
+      .eq('org_id', orgId)
+      .maybeSingle();
+    if (!data) return true;
+    return readBool((data as { sentiment_summary_enabled?: unknown }).sentiment_summary_enabled);
+  } catch {
+    // Column/table may be missing in older environments — fall back to enabled.
+    return true;
+  }
+}
+
 export async function loadConciergeProposalFlags(orgId: string | null): Promise<ConciergeProposalFlags> {
   if (!orgId) return ALL_ENABLED;
   try {

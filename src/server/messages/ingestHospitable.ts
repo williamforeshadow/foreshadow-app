@@ -1,5 +1,6 @@
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { fetchHospitableReservationMessages } from '@/lib/hospitable';
+import { maybeGenerateSentimentForConversation } from '@/src/server/messages/conversationSentiment';
 import type { HospitableCreds } from '@/lib/pmsIntegrations';
 
 // Hospitable guest-message ingestion. Upserts a canonical `conversations` row
@@ -134,6 +135,10 @@ export async function ingestHospitableThread(
     .from('guest_messages')
     .upsert(msgRows, { onConflict: 'org_id,source,external_message_id' });
   if (msgErr) throw new Error(msgErr.message);
+
+  // Eager guest-sentiment summary — realtime (webhook) path only, keyed by the
+  // internal conversation id. Same PMS-agnostic hook as the Hostaway ingest.
+  if (opts?.realtime) await maybeGenerateSentimentForConversation(convId);
 
   return msgRows.length;
 }

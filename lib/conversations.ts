@@ -57,6 +57,13 @@ export interface ConversationRow {
   proposed_reply_answers_message_id: string | null;
   proposed_reply_source: 'auto' | 'assistant' | null;
   proposed_reply_generated_at: string | null;
+  // Persisted guest-sentiment summary (generated eagerly on inbound; the panel
+  // reads it). null until first generated.
+  sentiment: 'positive' | 'neutral' | 'negative' | null;
+  sentiment_summary: string | null;
+  /** guest_messages.id the summary was written against — used to skip regen. */
+  sentiment_answers_message_id: string | null;
+  sentiment_generated_at: string | null;
 }
 
 export interface ConversationCounts {

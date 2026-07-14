@@ -12,6 +12,7 @@ export interface ReservationContext {
   reservation_id: string;
   guest_name: string | null;
   property_name: string | null;
+  guest_count: number | null;
   check_in: string | null;
   check_out: string | null;
   nights: number | null;
@@ -68,7 +69,7 @@ export async function getConversationContext(
   if (reservationId) {
     const { data: resRow, error: resError } = await supabase
       .from('reservations')
-      .select('id, guest_name, property_name, check_in, check_out')
+      .select('id, guest_name, property_name, guest_count, check_in, check_out')
       .eq('id', reservationId)
       .maybeSingle();
     if (resError) throw new Error(resError.message);
@@ -77,6 +78,7 @@ export async function getConversationContext(
         reservation_id: resRow.id as string,
         guest_name: (resRow.guest_name as string | null) ?? null,
         property_name: (resRow.property_name as string | null) ?? null,
+        guest_count: (resRow.guest_count as number | null) ?? null,
         check_in: toDateOnly(resRow.check_in as string | null),
         check_out: toDateOnly(resRow.check_out as string | null),
         nights: diffNights(

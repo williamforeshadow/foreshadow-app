@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { canonicalChannelLabel } from '@/lib/bookingChannel';
 import { stageMeta } from '@/components/messages/stage';
@@ -78,6 +79,30 @@ function splitPropertyName(name: string | null): { primary: string; sub: string 
   const m = name.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
   if (m && m[1].trim()) return { primary: m[1].trim(), sub: m[2].trim() };
   return { primary: name, sub: null };
+}
+
+// Visual treatment for the guest-sentiment pill. Positive leans emerald,
+// negative red, neutral stays muted (matching the neutral reservation-stage
+// chips) — deliberately reusing the app's semantic status palette.
+function sentimentMeta(
+  sentiment: 'positive' | 'neutral' | 'negative' | null | undefined,
+): { label: string; className: string } | null {
+  switch (sentiment) {
+    case 'positive':
+      return {
+        label: 'Positive',
+        className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+      };
+    case 'negative':
+      return {
+        label: 'Negative',
+        className: 'bg-red-500/10 text-red-700 dark:text-red-300',
+      };
+    case 'neutral':
+      return { label: 'Neutral', className: 'msg-well text-muted-foreground' };
+    default:
+      return null;
+  }
 }
 
 // A labeled cell in the reservation details grid: an uppercase label, a primary
@@ -183,10 +208,14 @@ export function ConversationDetailPanel({
   // Associated (created) vs Proposed toggle for the tasks section. Reset to the
   // primary "associated" view whenever the open conversation changes.
   const [taskView, setTaskView] = useState<'associated' | 'proposed'>('associated');
+  // The sentiment summary is collapsed by default (just the label + pill); the
+  // operator expands it to read the summary. Reset closed per conversation.
+  const [sentimentOpen, setSentimentOpen] = useState(false);
   const [prevConvId, setPrevConvId] = useState<string | undefined>(conversation?.id);
   if (conversation?.id !== prevConvId) {
     setPrevConvId(conversation?.id);
     setTaskView('associated');
+    setSentimentOpen(false);
   }
 
   if (!conversation) return null;
@@ -233,6 +262,8 @@ export function ConversationDetailPanel({
   // there's no toggle — just the proposed list.
   const showTasks = hasReservation || pendingProposals.length > 0;
   const effectiveView: 'associated' | 'proposed' = hasReservation ? taskView : 'proposed';
+
+  const sentimentPill = sentimentMeta(conversation.sentiment);
 
   return (
     <div className="flex h-full flex-col overflow-y-auto overlay-scrollbar">
@@ -360,12 +391,60 @@ export function ConversationDetailPanel({
         )}
       </div>
 
+      {/* Sentiment — a coarse read of the guest's disposition (positive/neutral/
+          negative) as a pill, collapsed by default. When a summary exists the
+          row is a disclosure toggle that reveals the 1-2 sentence summary.
+          Generated eagerly on inbound and read here; null until first generated. */}
+      <div className="msg-divider border-b px-4 py-4">
+        {conversation.sentiment_summary ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setSentimentOpen((o) => !o)}
+              aria-expanded={sentimentOpen}
+              className="flex w-full items-center justify-between gap-2 text-left"
+            >
+              <h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Sentiment
+              </h2>
+              <span className="flex shrink-0 items-center gap-1.5">
+                {sentimentPill ? (
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${sentimentPill.className}`}
+                  >
+                    {sentimentPill.label}
+                  </span>
+                ) : null}
+                <ChevronDown
+                  className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${
+                    sentimentOpen ? 'rotate-180' : ''
+                  }`}
+                  aria-hidden
+                />
+              </span>
+            </button>
+            {sentimentOpen ? (
+              <p className="mt-2 text-sm leading-relaxed text-foreground">
+                {conversation.sentiment_summary}
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Sentiment
+            </h2>
+            <span className="shrink-0 text-xs text-muted-foreground">No summary yet</span>
+          </div>
+        )}
+      </div>
+
       {/* Tasks — associated (created) tasks within the turnover window, with a
           toggle to review this conversation's pending task proposals. Both
           render as the same card; proposals add inline accept/dismiss. */}
       {showTasks ? (
         <div className="px-4 py-4">
-          <h2 className="mb-2 text-[11px] font-medium text-muted-foreground">Tasks</h2>
+          <h2 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tasks</h2>
           {hasReservation ? (
             <div className="mb-3 msg-well flex gap-0.5 rounded-lg p-0.5">
               {(

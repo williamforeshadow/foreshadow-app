@@ -245,6 +245,10 @@ export async function runConciergeTest(
     proposed_reply_answers_message_id: null,
     proposed_reply_source: null,
     proposed_reply_generated_at: null,
+    sentiment: null,
+    sentiment_summary: null,
+    sentiment_answers_message_id: null,
+    sentiment_generated_at: null,
   };
 
   const ctx: ConversationContext = {
