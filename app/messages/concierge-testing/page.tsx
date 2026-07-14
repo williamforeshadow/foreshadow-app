@@ -109,10 +109,8 @@ export default function ConciergeTestingPage() {
     </MobileRouteShell>
   ) : (
     <DesktopSidebarShell>
-      <div className="glass-bg-neutral flex h-full p-2.5">
-        <div className="msg-pane flex min-w-0 flex-1 flex-col overflow-hidden">
-          {console_}
-        </div>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        {console_}
       </div>
     </DesktopSidebarShell>
   );

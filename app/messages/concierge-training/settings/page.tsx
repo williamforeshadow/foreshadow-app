@@ -312,19 +312,17 @@ export default function ConciergeSettingsPage() {
     </MobileRouteShell>
   ) : (
     <DesktopSidebarShell>
-      <div className="glass-bg-neutral flex h-full p-2.5">
-        <div className="msg-pane flex min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="msg-divider shrink-0 border-b px-4 py-2.5">
-            <Link
-              href="/messages/concierge-training"
-              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <ArrowLeft className="h-4 w-4" aria-hidden />
-              Back to Concierge Training
-            </Link>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar">{content}</div>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        <div className="msg-divider shrink-0 border-b px-4 py-2.5">
+          <Link
+            href="/messages/concierge-training"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+            Back to Concierge Training
+          </Link>
         </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar">{content}</div>
       </div>
     </DesktopSidebarShell>
   );
