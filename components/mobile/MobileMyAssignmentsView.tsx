@@ -624,7 +624,7 @@ export default function MobileMyAssignmentsView({
       )}
 
       {/* Content */}
-      <div className="flex-1 overflow-auto hide-scrollbar">
+      <div className="flex-1 overflow-auto hide-scrollbar pb-mobile-nav">
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 px-6">
             <p className="text-neutral-600 dark:text-[#a09e9a] font-medium">No tasks assigned</p>

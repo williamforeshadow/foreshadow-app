@@ -54,7 +54,7 @@ function MobileNotifications() {
   );
 
   return (
-    <MobileRouteShell backHref="/" title="Notifications" rightSlot={markAllButton}>
+    <MobileRouteShell backHref="/menu" title="Notifications" rightSlot={markAllButton}>
       <div className="flex h-full flex-col">
         <div className="shrink-0 px-2 pb-1">
           <NotificationViewTabs view={view} onChange={setView} />

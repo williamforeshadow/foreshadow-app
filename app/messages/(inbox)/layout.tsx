@@ -48,10 +48,10 @@ function MessagesChrome({ children }: { children: React.ReactNode }) {
   if (isMobile) {
     if (segment !== null) return <>{children}</>;
     return (
-      <MobileRouteShell backHref="/" title="Messages" rightSlot={<ConversationHeaderActions />}>
+      <MobileRouteShell title="Messages" rightSlot={<ConversationHeaderActions />}>
         <div className="flex h-full min-h-0 flex-col">
           <ListControls />
-          <div className="min-h-0 flex-1 overflow-y-auto hide-scrollbar">
+          <div className="min-h-0 flex-1 overflow-y-auto hide-scrollbar pb-mobile-nav">
             <ListBody activeId={null} />
           </div>
         </div>
@@ -61,12 +61,12 @@ function MessagesChrome({ children }: { children: React.ReactNode }) {
 
   return (
     <DesktopSidebarShell>
-      {/* `relative` so the conversation page's task-editor panel anchors here —
-          spanning the full content row (list + conversation), making its w-1/3
-          width match the detail sheet on Bins/Tasks rather than 1/3 of just the
-          narrower conversation column. */}
-      <div className="glass-bg-neutral relative flex h-full gap-2.5 p-2.5">
-        <aside className="msg-pane flex w-80 shrink-0 flex-col overflow-hidden">
+      {/* One flush surface (no floating panes) matching the rest of the app —
+          columns are separated by hairline dividers, not gaps. `relative` so the
+          conversation page's task-editor panel anchors here, spanning the full
+          content row (list + conversation). */}
+      <div className="relative flex h-full min-h-0">
+        <aside className="msg-divider flex w-80 shrink-0 flex-col overflow-hidden border-r">
           <div className="flex shrink-0 items-center justify-between gap-2 px-4 pb-2 pt-3.5">
             <h1 className="text-lg font-semibold tracking-tight text-foreground">
               Messages

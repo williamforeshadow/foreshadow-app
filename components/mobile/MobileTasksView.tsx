@@ -27,7 +27,6 @@ import { MobileTaskRow } from '@/components/tasks/MobileTaskRow';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
 import MobileProjectDetail from '@/components/mobile/MobileProjectDetail';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
-import MobileDrawer from '@/components/mobile/MobileDrawer';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -83,11 +82,11 @@ function toRowItem(task: TaskRowData): TaskRowItem {
 }
 
 function MobileTasksViewContent() {
-  // This view owns the full mobile page chrome (safe-area container + drawer)
+  // This view owns the full mobile page chrome (safe-area container + header)
   // so its header — title + subtitle + toolbar — lives in one gradient block,
   // matching the Schedule / My Assignments / Bins pattern. (Previously the
   // title sat in MobileRouteShell's separate bar, breaking the gradient.)
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  // Tasks is reached from the Menu tab, so the header leads with a back arrow.
   const { user: authUser } = useAuth();
   const { users: rawUsers } = useUsers();
   const users = rawUsers as unknown as User[];
@@ -535,12 +534,12 @@ function MobileTasksViewContent() {
       >
         <div className="flex items-center gap-2 min-w-0">
           <button
-            onClick={() => setDrawerOpen(true)}
+            onClick={() => router.push('/menu')}
             className="-ml-2 w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
-            aria-label="Open menu"
+            aria-label="Back"
           >
             <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
           <h1 className="text-[20px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed] truncate">
@@ -749,8 +748,6 @@ function MobileTasksViewContent() {
           creatingTask={creatingTask}
         />
       )}
-
-      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </div>
   );
 }

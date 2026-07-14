@@ -1,6 +1,5 @@
 // Mobile components barrel export
 export { default as MobileLayout } from './MobileLayout';
-export { default as MobileDrawer } from './MobileDrawer';
 export { default as MobileRouteShell } from './MobileRouteShell';
 export { default as MobileTimelineView } from './MobileTimelineView';
 export { default as MobileProjectsView } from './MobileProjectsView';

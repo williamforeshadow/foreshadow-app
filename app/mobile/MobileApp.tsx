@@ -7,14 +7,13 @@ import { useAuth } from '@/lib/authContext';
 import { useUsers } from '@/lib/useUsers';
 import { useTurnovers } from '@/lib/useTurnovers';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
-import { 
-  MobileLayout, 
-  MobileTimelineView, 
+import {
+  MobileLayout,
+  MobileTimelineView,
   MobileMyAssignmentsView,
   MobileProjectsView,
   MobileProjectDetail,
-  MobileDrawer,
-  type MobileTab 
+  type MobileTab
 } from '@/components/mobile';
 import type { Project, ProjectFormFields, Task, TaskTemplate, PropertyOption } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
@@ -77,7 +76,6 @@ export default function MobileApp() {
   const [mobileSelectedTask, setMobileSelectedTask] = useState<Task | null>(null);
   const [mobileSelectedProject, setMobileSelectedProject] = useState<Project | null>(null);
   const [mobileRefreshTrigger, setMobileRefreshTrigger] = useState(0);
-  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
 
@@ -299,9 +297,7 @@ export default function MobileApp() {
     <>
       <MobileLayout>
         {mobileView === 'assignments' && (
-          <MobileMyAssignmentsView
-            onMenuTap={() => setDrawerOpen(true)}
-            onTaskClick={async (task: Task) => {
+          <MobileMyAssignmentsView            onTaskClick={async (task: Task) => {
               const propName = task.property_name;
               if (task.template_id) {
                 const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
@@ -329,15 +325,11 @@ export default function MobileApp() {
 
         {mobileView === 'projects' && (
           <MobileProjectsView
-            users={users}
-            onMenuTap={() => setDrawerOpen(true)}
-          />
+            users={users}          />
         )}
 
         {mobileView === 'timeline' && (
-          <MobileTimelineView
-            onMenuTap={() => setDrawerOpen(true)}
-            onCardClick={() => {}}
+          <MobileTimelineView            onCardClick={() => {}}
             refreshTrigger={mobileRefreshTrigger}
             onTaskClick={async (task: Task) => {
               const propName = task.property_name;
@@ -363,11 +355,6 @@ export default function MobileApp() {
         )}
 
       </MobileLayout>
-
-      <MobileDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-      />
 
       {/* Task Detail overlay */}
       {mobileSelectedTask && taskAsProject && (

@@ -1,17 +1,14 @@
 'use client';
 
-import { memo, useState } from 'react';
+import { memo } from 'react';
 import Link from 'next/link';
-import MobileDrawer from './MobileDrawer';
 
 interface MobileRouteShellProps {
   children: React.ReactNode;
   /**
-   * When provided, renders a back-arrow button linking to this href.
-   * When omitted, renders a hamburger button that opens the drawer.
-   *
-   * Convention: section "root" pages (e.g. /properties) show the hamburger;
-   * detail pages nested inside (e.g. /properties/[id]) show back.
+   * When provided, renders a back-arrow button linking to this href. When
+   * omitted, no left button renders — tab-root pages rely on the global bottom
+   * tab bar for navigation instead.
    */
   backHref?: string;
   /**
@@ -28,12 +25,13 @@ interface MobileRouteShellProps {
 /**
  * Reusable shell for routed mobile pages (anything outside of the operational
  * `/` view owned by MobileApp). Provides:
- *  - A minimal top bar with back arrow or hamburger
- *  - Safe-area padding (top + bottom) — no bottom nav here
- *  - Self-rendered MobileDrawer that navigates via next/router
+ *  - A minimal top bar with an optional back arrow + title
+ *  - Safe-area padding (top) — the global MobileBottomNav owns bottom chrome
  *
- * Pages are responsible for their own internal scroll container; this shell's
- * <main> is `overflow-hidden` and lets children own the scroll region.
+ * A drill-in detail page passes `backHref`; a tab-root page (e.g. Messages)
+ * omits it and shows just the title, since navigation lives in the bottom tab
+ * bar. Pages own their internal scroll container; this shell's <main> is
+ * `overflow-hidden` and lets children own the scroll region.
  */
 const MobileRouteShell = memo(function MobileRouteShell({
   children,
@@ -41,11 +39,8 @@ const MobileRouteShell = memo(function MobileRouteShell({
   title,
   rightSlot,
 }: MobileRouteShellProps) {
-  const [drawerOpen, setDrawerOpen] = useState(false);
-
   return (
-    <>
-      <div className="h-dvh bg-white dark:bg-card overflow-hidden flex flex-col safe-area-top">
+    <div className="h-dvh bg-white dark:bg-card overflow-hidden flex flex-col safe-area-top">
         {/* Top bar */}
         <div className="flex-shrink-0 h-11 px-2 flex items-center gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -65,23 +60,7 @@ const MobileRouteShell = memo(function MobileRouteShell({
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
               </Link>
-            ) : (
-              <button
-                onClick={() => setDrawerOpen(true)}
-                className="w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors shrink-0"
-                aria-label="Open menu"
-              >
-                <svg
-                  className="w-[22px] h-[22px]"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={1.75}
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
-            )}
+            ) : null}
             {title && (
               <h1 className="text-[20px] font-semibold tracking-tight leading-normal text-neutral-900 dark:text-[#f0efed] truncate">
                 {title}
@@ -95,9 +74,6 @@ const MobileRouteShell = memo(function MobileRouteShell({
         {/* Content region — children own the scroll */}
         <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
       </div>
-
-      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
-    </>
   );
 });
 

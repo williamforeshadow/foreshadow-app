@@ -833,7 +833,7 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
           </div>
           </div>
 
-          <div className={`flex-1 min-h-0 flex flex-col mobile-kanban-wrapper${kanbanDragging ? ' is-dragging' : ''}`}>
+          <div className={`flex-1 min-h-0 flex flex-col mobile-kanban-wrapper pb-mobile-nav${kanbanDragging ? ' is-dragging' : ''}`}>
             {loadingTasks ? (
               <div className="flex items-center justify-center h-full">
                 <div className="w-7 h-7 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin" />
