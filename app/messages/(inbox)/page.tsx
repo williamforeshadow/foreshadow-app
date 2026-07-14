@@ -28,7 +28,7 @@ export default function MessagesIndexPage() {
   if (firstId) return null;
 
   return (
-    <div className="msg-pane flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+    <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
       <span className="msg-well flex h-14 w-14 items-center justify-center rounded-2xl text-muted-foreground">
         <MessagesSquare className="h-6 w-6" />
       </span>
