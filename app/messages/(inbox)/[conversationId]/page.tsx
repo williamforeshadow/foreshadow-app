@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { CheckCircle2, RotateCcw, Mail } from 'lucide-react';
+import { CheckCircle2, RotateCcw, Mail, PanelTopOpen } from 'lucide-react';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { useMessages } from '@/components/messages/MessagesProvider';
 import { ConversationThread } from '@/components/messages/ConversationThread';
 import { ConversationDetailPanel } from '@/components/messages/ConversationDetailPanel';
+import { ConversationOverflowMenu } from '@/components/messages/ConversationOverflowMenu';
+import { MobileConversationDetailSheet } from '@/components/messages/MobileConversationDetailSheet';
 import { ProposedTaskEditorOverlay } from '@/components/messages/ProposedTaskEditorOverlay';
 import { PropertyTaskDetailOverlay } from '@/components/properties/tasks/PropertyTaskDetailOverlay';
 import type { ProposedTaskData } from '@/components/messages/ProposedTask';
@@ -44,6 +46,10 @@ export default function ConversationPage() {
   // after an edit re-fetches the detail panel's associated-tasks list.
   const [selectedTask, setSelectedTask] = useState<ReservationContextTask | null>(null);
   const [tasksRefreshKey, setTasksRefreshKey] = useState(0);
+  // Mobile-only: the reservation-context top sheet, and a signal the top-bar
+  // ••• menu bumps to start "turn into training" selection inside the thread.
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectionSignal, setSelectionSignal] = useState(0);
 
   const load = useCallback(async () => {
     if (!conversationId) return;
@@ -151,11 +157,53 @@ export default function ConversationPage() {
     </>
   ) : null;
 
+  // "Turn into training" is available once the thread has messages (mirrors the
+  // thread's own guard); gates the ••• menu item.
+  const canSelect = !!conversationId && messages.length > 0;
+
   if (isMobile) {
+    // Opening a task / proposal from the top sheet: close the sheet first so its
+    // full-screen overlay doesn't stack behind the sheet.
+    const openTaskFromSheet = (task: ReservationContextTask) => {
+      setDetailOpen(false);
+      openTaskDetail(task);
+    };
+    const openProposalFromSheet = (proposal: ProposedTaskData) => {
+      setDetailOpen(false);
+      openProposalEditor(proposal);
+    };
+
+    const topBarActions = conversation ? (
+      <div className="flex items-center">
+        <button
+          type="button"
+          onClick={() => setDetailOpen(true)}
+          aria-label="Reservation details"
+          title="Details"
+          className="flex h-10 w-10 items-center justify-center rounded-lg text-neutral-700 transition-colors hover:bg-[rgba(30,25,20,0.04)] dark:text-[#a09e9a] dark:hover:bg-[rgba(255,255,255,0.04)]"
+        >
+          <PanelTopOpen className="h-[21px] w-[21px]" strokeWidth={1.75} />
+        </button>
+        <ConversationOverflowMenu
+          isComplete={conversation.app_status === 'complete'}
+          onToggleComplete={() =>
+            patchStatus({
+              app_status:
+                conversation.app_status === 'complete' ? 'active' : 'complete',
+            })
+          }
+          onMarkUnread={() => patchStatus({ unread: true })}
+          canTrain={canSelect}
+          onTurnIntoTraining={() => setSelectionSignal((n) => n + 1)}
+        />
+      </div>
+    ) : null;
+
     return (
       <MobileRouteShell
         backHref="/messages"
         title={conversation?.guest_name ?? 'Conversation'}
+        rightSlot={topBarActions}
       >
         <div className="flex h-full flex-col">
           <ConversationThread
@@ -169,7 +217,8 @@ export default function ConversationPage() {
             error={error}
             onRetry={load}
             showHeader={false}
-            actions={actions}
+            hideInlineSelectionEntry
+            startSelectionSignal={selectionSignal}
             proposedReply={conversation?.proposed_reply ?? null}
             proposedReplySource={conversation?.proposed_reply_source ?? null}
             proposedReplyAnswersMessageId={conversation?.proposed_reply_answers_message_id ?? null}
@@ -181,6 +230,18 @@ export default function ConversationPage() {
             onProposedKnowledgeChange={load}
           />
         </div>
+
+        <MobileConversationDetailSheet
+          open={detailOpen}
+          onClose={() => setDetailOpen(false)}
+          conversation={conversation}
+          proposedTasks={proposedTasks}
+          tasksRefreshKey={tasksRefreshKey}
+          onOpenTask={openTaskFromSheet}
+          onOpenProposal={openProposalFromSheet}
+          onProposedTaskChange={handleProposedTaskChange}
+        />
+
         {editorProposal ? (
           <ProposedTaskEditorOverlay
             proposal={editorProposal}
@@ -192,6 +253,15 @@ export default function ConversationPage() {
               load();
               reload();
             }}
+          />
+        ) : null}
+
+        {selectedTask ? (
+          <PropertyTaskDetailOverlay
+            task={selectedTask}
+            onClose={() => setSelectedTask(null)}
+            onTaskUpdated={() => setTasksRefreshKey((k) => k + 1)}
+            onOpenInPage={() => router.push(taskPath(selectedTask.task_id))}
           />
         ) : null}
       </MobileRouteShell>

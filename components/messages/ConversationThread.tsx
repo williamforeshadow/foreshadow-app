@@ -76,6 +76,8 @@ export function ConversationThread({
   onOpenTaskEditor,
   proposedKnowledge = [],
   onProposedKnowledgeChange,
+  hideInlineSelectionEntry = false,
+  startSelectionSignal,
 }: {
   messages: GuestMessageRecord[];
   conversationId?: string;
@@ -101,12 +103,20 @@ export function ConversationThread({
   /** The conversation's pending proposed knowledge additions. */
   proposedKnowledge?: ProposedKnowledgeData[];
   onProposedKnowledgeChange?: () => void;
+  /** Mobile: entry to "turn into training" selection is driven externally (the
+   *  top-bar ••• menu), so the thread should not render its own inline grad-cap
+   *  entry. The confirm/cancel controls still appear while selecting. */
+  hideInlineSelectionEntry?: boolean;
+  /** Bump to enter selection mode from outside (mobile ••• menu). Its initial
+   *  value is ignored — only a change starts a selection. */
+  startSelectionSignal?: number;
 }) {
   // Render-stable "now" for the scheduled-vs-sent check (one value per mount).
   const [nowMs] = useState(() => Date.now());
   const [composerText, setComposerText] = useState('');
   const [focusSignal, setFocusSignal] = useState(0);
   const [prevConvId, setPrevConvId] = useState(conversationId);
+  const [prevSelSignal, setPrevSelSignal] = useState(startSelectionSignal);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // "Turn into training": pick one or more messages, then promote them into a
@@ -136,6 +146,15 @@ export function ConversationThread({
     setSelectionMode(false);
     setSelectedIds(new Set());
     setTurnIntoOpen(false);
+  }
+
+  // External request (mobile ••• menu) to enter "turn into training" selection:
+  // only a *change* to the signal starts it, so the initial value is ignored and
+  // the thread never opens in selection mode. Render-time adjustment (React's
+  // recommended pattern) rather than a setState-in-effect.
+  if (startSelectionSignal !== prevSelSignal) {
+    setPrevSelSignal(startSelectionSignal);
+    if (startSelectionSignal !== undefined) setSelectionMode(true);
   }
 
   // The latest actually-sent message (future-dated host automations don't count).
@@ -232,7 +251,7 @@ export function ConversationThread({
           <X className="h-4 w-4" />
         </button>
       </div>
-    ) : (
+    ) : hideInlineSelectionEntry ? null : (
       <button
         type="button"
         onClick={() => setSelectionMode(true)}
