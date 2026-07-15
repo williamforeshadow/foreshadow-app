@@ -151,6 +151,17 @@ export function MobileAgentComposer({
                 send();
               }
             }}
+            onPointerDown={(e) => {
+              // Re-tapping the input after the keyboard was dismissed is a user
+              // focus, which the browser scrolls the page up to reveal — the
+              // same shift preventScroll fixes on the programmatic focus. Take
+              // over: focus it ourselves with preventScroll. Skip when already
+              // focused so tap-to-position-caret still works.
+              if (taRef.current && document.activeElement !== taRef.current) {
+                e.preventDefault();
+                taRef.current.focus({ preventScroll: true });
+              }
+            }}
             rows={1}
             placeholder="Ask the agent…"
             aria-label="Ask the agent"
