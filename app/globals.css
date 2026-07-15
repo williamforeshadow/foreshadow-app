@@ -476,11 +476,18 @@ a {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* Bottom padding for tab-root scroll areas so content clears the fixed mobile
-   bottom nav cluster (faux agent bar + tab bar + safe area). Keep in sync with
-   MobileBottomNav's rendered height. */
-.pb-mobile-nav {
-  padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+/* Bottom padding so content clears the fixed mobile bottom chrome. Mobile-only
+   (some consumers are shared desktop/mobile pages). Keep in sync with
+   MobileBottomNav's rendered height.
+     .pb-mobile-nav    — the full cluster (agent bubble + tab bar + safe area)
+     .pb-mobile-bubble — just the floating agent bubble (Menu's child pages) */
+@media (max-width: 767px) {
+  .pb-mobile-nav {
+    padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+  }
+  .pb-mobile-bubble {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+  }
 }
 
 .safe-area-left {
@@ -723,13 +730,26 @@ a {
      to the page scroll. */
   .mobile-kanban-wrapper [data-kanban-board] {
     gap: 0.75rem;
-    padding: 0.75rem 0.75rem 0 0.75rem;
+    /* Bottom padding = the fixed bottom cluster's height, so the board fills the
+       full height (cards scroll BEHIND the translucent agent pill, giving the
+       glass something to frost) while the last cards still clear the cluster. */
+    padding: 0.75rem 0.75rem calc(7rem + env(safe-area-inset-bottom)) 0.75rem;
     overflow: auto;
     overflow-y: auto;
     overscroll-behavior: contain;
     align-items: flex-start;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-x pan-y;
+  }
+
+  /* The board scroller is a composited layer (-webkit-overflow-scrolling:
+     touch), which the floating agent pill's backdrop-filter can't blur — so its
+     solid background reads as a slab behind the pill. Drop it so the pill floats
+     over the page canvas like every other mobile screen. The board bg matches
+     the page bg anyway, so the board area is visually unchanged. */
+  .mobile-kanban-wrapper [data-kanban-board],
+  .dark .mobile-kanban-wrapper [data-kanban-board] {
+    background: transparent;
   }
 
   .mobile-kanban-wrapper [data-kanban-board] [data-kanban-column] {
