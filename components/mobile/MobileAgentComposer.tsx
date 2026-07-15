@@ -5,37 +5,78 @@ import { Sparkles, ArrowUp } from 'lucide-react';
 import { useAiChat } from '@/components/ai-chat/AiChatProvider';
 import { useKeyboardInset } from '@/lib/useKeyboardInset';
 
-// The mobile agent bubble, expanded. Tapping the bubble grows it into this
+// The mobile agent bubble, expanded. Tapping the pill grows it into this
 // keyboard-aware liquid-glass composer (a dimmed backdrop + a bottom-anchored
 // input) instead of opening the heavy chat panel outright. You type here; only
 // on send does the full chat panel come out (open(text) auto-submits it). The
 // composer stays pinned just above the software keyboard via visualViewport, so
 // there's no black gap / slid-up panel while typing.
-export function MobileAgentComposer({ onClose }: { onClose: () => void }) {
-  const { open } = useAiChat();
+//
+// Driven by an `open` prop rather than mount/unmount so it can animate both
+// ways: the pill fades out and the composer scales up from the bottom (reading
+// as the pill expanding), and reverses on close.
+
+const ANIM_MS = 260;
+
+export function MobileAgentComposer({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const { open: openChat } = useAiChat();
   const keyboardInset = useKeyboardInset();
   const [text, setText] = useState('');
-  const [shown, setShown] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
-  // Enter animation + focus (focusing raises the keyboard).
+  // Keep mounted through the exit transition: `shouldRender` gates the DOM,
+  // `shown` drives the scale/opacity. Mount-on-open and start-of-exit are
+  // render-time adjustments; the deferred flips run in effects.
+  const [shouldRender, setShouldRender] = useState(open);
+  const [shown, setShown] = useState(false);
+  const [prevOpen, setPrevOpen] = useState(open);
+
+  if (open && !shouldRender) setShouldRender(true);
+  if (!open && shown) setShown(false);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) setText(''); // fresh input each time it opens
+  }
+
+  // Enter: flip `shown` on just after the mounted (scaled-down) composer paints
+  // so it transitions up. setTimeout (not requestAnimationFrame) so it still
+  // fires when the tab is backgrounded — the composer must never get stuck
+  // invisible.
   useEffect(() => {
-    const raf = requestAnimationFrame(() => setShown(true));
-    const t = window.setTimeout(() => taRef.current?.focus(), 80);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.clearTimeout(t);
-    };
-  }, []);
+    if (!open) return;
+    const t = window.setTimeout(() => setShown(true), 16);
+    return () => window.clearTimeout(t);
+  }, [open]);
+
+  // Exit: unmount after the collapse transition finishes.
+  useEffect(() => {
+    if (open || !shouldRender) return;
+    const t = window.setTimeout(() => setShouldRender(false), ANIM_MS);
+    return () => window.clearTimeout(t);
+  }, [open, shouldRender]);
+
+  // Focus once open (focusing raises the keyboard).
+  useEffect(() => {
+    if (!open) return;
+    const t = window.setTimeout(() => taRef.current?.focus(), 120);
+    return () => window.clearTimeout(t);
+  }, [open]);
 
   // Escape closes.
   useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [open, onClose]);
 
   // Grow the textarea with its content.
   useEffect(() => {
@@ -45,13 +86,15 @@ export function MobileAgentComposer({ onClose }: { onClose: () => void }) {
     el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
   }, [text]);
 
+  if (!shouldRender) return null;
+
   const trimmed = text.trim();
   const send = () => {
     if (!trimmed) return;
     // Drop the keyboard so the chat panel comes out cleanly, then hand the
     // prompt to the panel and collapse back to the pill.
     taRef.current?.blur();
-    open(trimmed);
+    openChat(trimmed);
     onClose();
   };
 
@@ -62,15 +105,16 @@ export function MobileAgentComposer({ onClose }: { onClose: () => void }) {
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className={`absolute inset-0 bg-black/40 transition-opacity duration-200 ${
+        className={`absolute inset-0 bg-black/40 transition-opacity duration-[260ms] ${
           shown ? 'opacity-100' : 'opacity-0'
         }`}
       />
 
-      {/* Composer — pinned just above the keyboard. */}
+      {/* Composer — scales up from the bottom (where the pill sits) and pins
+          just above the keyboard. */}
       <div
-        className={`absolute inset-x-0 px-3 transition-[transform,opacity] duration-200 ease-out ${
-          shown ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
+        className={`absolute inset-x-0 origin-bottom px-3 transition-[transform,opacity] duration-[260ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          shown ? 'scale-100 opacity-100' : 'scale-[0.68] opacity-0'
         }`}
         style={{
           bottom: keyboardInset

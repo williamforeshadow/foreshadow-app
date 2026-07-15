@@ -130,9 +130,7 @@ export function MobileBottomNav() {
 
   return (
     <>
-      {composerOpen ? (
-        <MobileAgentComposer onClose={() => setComposerOpen(false)} />
-      ) : null}
+      <MobileAgentComposer open={composerOpen} onClose={() => setComposerOpen(false)} />
       {/* Transparent, click-through wrapper: only the bubble and the tab bar
           themselves capture taps, so the gap between them (and the page behind
           it) stays interactive — which makes the bubble read as floating. */}
@@ -146,6 +144,7 @@ export function MobileBottomNav() {
           onClick={() => setComposerOpen(true)}
           aria-label="Ask the agent"
           className="agent-glass pointer-events-auto flex w-3/5 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-center transition-opacity active:opacity-90"
+          style={composerOpen ? { opacity: 0, pointerEvents: 'none' } : undefined}
         >
           <Sparkles className="relative h-4 w-4 shrink-0 text-[var(--accent-3)] dark:text-[var(--accent-1)]" aria-hidden />
           <span className="relative text-[13px] text-foreground/70">Ask the agent…</span>
