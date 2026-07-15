@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/authContext';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { useKeyboardInset } from '@/lib/useKeyboardInset';
+import { setChatKeyboardOverlay } from '@/lib/nativeKeyboard';
 import { AGENT_COMMANDS } from '@/src/lib/agentCommands';
 import { ProjectCard } from '@/components/windows/projects/ProjectCard';
 import { useAiChat } from '@/components/ai-chat/AiChatProvider';
@@ -167,6 +168,18 @@ export function MobileAgentChat() {
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
+
+  // iOS only: switch the WebView to keyboard-overlay mode while the chat is open
+  // so the keyboard floats over a full-screen WebView (the drawer stays pinned
+  // to the screen bottom, only the input rides up). Restored on close. No-op on
+  // web/Android. See lib/nativeKeyboard.
+  useEffect(() => {
+    if (!isOpen) return;
+    setChatKeyboardOverlay(true);
+    return () => {
+      setChatKeyboardOverlay(false);
     };
   }, [isOpen]);
 
