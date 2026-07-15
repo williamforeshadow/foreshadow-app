@@ -49,6 +49,8 @@ const CHAT_VALUE = {
   close: () => {},
   toggle: () => {},
   toggleFullscreen: () => {},
+  pendingPrompt: null,
+  clearPendingPrompt: () => {},
 };
 
 const CANNED_ANSWER = [

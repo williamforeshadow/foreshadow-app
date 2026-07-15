@@ -1,15 +1,16 @@
 'use client';
 
+import { useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Sparkles } from 'lucide-react';
 import { useIsMobile } from '@/lib/useIsMobile';
-import { useAiChat } from '@/components/ai-chat/AiChatProvider';
+import { MobileAgentComposer } from './MobileAgentComposer';
 
-// The persistent mobile bottom cluster: a faux "Ask the agent…" bar stacked
-// above a five-item tab bar. Mounted once in AppChrome so it survives route
-// changes; renders only on the tab-root screens (the hamburger/drawer it
-// replaces is gone). Detail screens (a conversation, a task, the Menu's
-// children) hide it and rely on their own back arrow.
+// The persistent mobile bottom cluster: an "Ask the agent…" pill stacked above
+// a five-item tab bar. Mounted once in AppChrome so it survives route changes;
+// renders only on the tab-root screens (the hamburger/drawer it replaces is
+// gone). Detail screens (a conversation, a task, the Menu's children) hide it
+// and rely on their own back arrow. Tapping the pill expands the agent composer.
 //
 // Three of the tabs share the "/" route via ?tab= (the workspace switcher read
 // by MobileApp); Messages + Menu are real routes.
@@ -40,7 +41,10 @@ export function MobileBottomNav() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { open: openAiChat } = useAiChat();
+  // Tapping the pill expands it into the agent composer (a keyboard-aware glass
+  // input) rather than opening the chat panel outright — the panel comes out on
+  // send.
+  const [composerOpen, setComposerOpen] = useState(false);
 
   // The tab bar shows only on the tab roots; the agent bubble shows there and on
   // the Menu's destination pages. Hidden on desktop, before the viewport is
@@ -125,25 +129,24 @@ export function MobileBottomNav() {
   };
 
   return (
-    // Transparent, click-through wrapper: only the bubble and the tab bar
-    // themselves capture taps, so the gap between them (and the page behind it)
-    // stays interactive — which is what makes the bubble read as floating.
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex flex-col">
+    <>
+      {composerOpen ? (
+        <MobileAgentComposer onClose={() => setComposerOpen(false)} />
+      ) : null}
+      {/* Transparent, click-through wrapper: only the bubble and the tab bar
+          themselves capture taps, so the gap between them (and the page behind
+          it) stays interactive — which makes the bubble read as floating. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex flex-col">
       {/* Floating agent bubble — a liquid-glass pill detached from the tab bar;
           opens the universal AI chat panel. `relative` anchors the sheen
           ::before; no transformed ancestor, so the backdrop blur survives. */}
       <div className={`flex justify-center px-4 ${showTabs ? 'pb-2.5' : 'pb-[calc(0.625rem_+_env(safe-area-inset-bottom))]'}`}>
         <button
           type="button"
-          onClick={openAiChat}
+          onClick={() => setComposerOpen(true)}
           aria-label="Ask the agent"
-          className="pointer-events-auto relative flex w-3/5 items-center justify-center gap-2 overflow-hidden rounded-full border border-white/25 bg-white/[0.12] px-4 py-2.5 text-center shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-sm transition-opacity active:opacity-90 dark:border-white/10 dark:bg-white/[0.06]"
+          className="agent-glass pointer-events-auto flex w-3/5 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-center transition-opacity active:opacity-90"
         >
-          {/* Thin top rim highlight — the light edge, without the frosted wash. */}
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent dark:via-white/40"
-          />
           <Sparkles className="relative h-4 w-4 shrink-0 text-[var(--accent-3)] dark:text-[var(--accent-1)]" aria-hidden />
           <span className="relative text-[13px] text-foreground/70">Ask the agent…</span>
         </button>
@@ -177,7 +180,8 @@ export function MobileBottomNav() {
           </div>
         </div>
       ) : null}
-    </div>
+      </div>
+    </>
   );
 }
 

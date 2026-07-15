@@ -476,6 +476,37 @@ a {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* Shared "liquid glass" surface for the mobile agent bubble + its expanded
+   composer, so both read as the same material: a light translucent tint over a
+   subtle backdrop blur, a hairline top-rim highlight, border, and drop shadow.
+   Pair with a rounded-* + padding on the element itself. */
+.agent-glass {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+.dark .agent-glass {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+}
+.agent-glass::before {
+  content: '';
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.5), transparent);
+  pointer-events: none;
+}
+.dark .agent-glass::before {
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.4), transparent);
+}
+
 /* Bottom padding so content clears the fixed mobile bottom chrome. Mobile-only
    (some consumers are shared desktop/mobile pages). Keep in sync with
    MobileBottomNav's rendered height.

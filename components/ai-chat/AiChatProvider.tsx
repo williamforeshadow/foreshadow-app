@@ -17,10 +17,15 @@ import {
 interface AiChatContextValue {
   isOpen: boolean;
   isFullscreen: boolean;
-  open: () => void;
+  /** Open the panel. An optional prompt is auto-submitted on open — used by the
+   *  mobile compose-then-open flow so the panel appears mid-conversation. */
+  open: (initialPrompt?: string) => void;
   close: () => void;
   toggle: () => void;
   toggleFullscreen: () => void;
+  /** A prompt handed to open() that the panel should submit once, then clear. */
+  pendingPrompt: string | null;
+  clearPendingPrompt: () => void;
 }
 
 // Exported so the isolated marketing demo (app/demo/*) can supply an
@@ -30,9 +35,14 @@ export const AiChatContext = createContext<AiChatContextValue | undefined>(undef
 export function AiChatProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
 
-  const open = useCallback(() => setIsOpen(true), []);
+  const open = useCallback((initialPrompt?: string) => {
+    if (initialPrompt && initialPrompt.trim()) setPendingPrompt(initialPrompt);
+    setIsOpen(true);
+  }, []);
   const close = useCallback(() => setIsOpen(false), []);
+  const clearPendingPrompt = useCallback(() => setPendingPrompt(null), []);
   const toggle = useCallback(() => setIsOpen((o) => !o), []);
   const toggleFullscreen = useCallback(() => setIsFullscreen((f) => !f), []);
 
@@ -55,8 +65,17 @@ export function AiChatProvider({ children }: { children: ReactNode }) {
   }, [toggle]);
 
   const value = useMemo(
-    () => ({ isOpen, isFullscreen, open, close, toggle, toggleFullscreen }),
-    [isOpen, isFullscreen, open, close, toggle, toggleFullscreen],
+    () => ({
+      isOpen,
+      isFullscreen,
+      open,
+      close,
+      toggle,
+      toggleFullscreen,
+      pendingPrompt,
+      clearPendingPrompt,
+    }),
+    [isOpen, isFullscreen, open, close, toggle, toggleFullscreen, pendingPrompt, clearPendingPrompt],
   );
 
   return (

@@ -20,6 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/authContext';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { useKeyboardInset } from '@/lib/useKeyboardInset';
 import { AGENT_COMMANDS } from '@/src/lib/agentCommands';
 import { useAiChat } from './AiChatProvider';
 import { ProjectCard } from '@/components/windows/projects/ProjectCard';
@@ -139,7 +140,9 @@ export function AiChatPanel() {
   const { user } = useAuth();
   const router = useRouter();
   const isMobile = useIsMobile() === true;
-  const { isOpen, isFullscreen, close, toggleFullscreen } = useAiChat();
+  const { isOpen, isFullscreen, close, toggleFullscreen, pendingPrompt, clearPendingPrompt } =
+    useAiChat();
+  const keyboardInset = useKeyboardInset();
 
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -209,12 +212,21 @@ export function AiChatPanel() {
     }
   }, [inputValue]);
 
-  // Focus the input when the panel opens.
+  // Whether the current open() carried a prompt (the mobile compose-then-open
+  // flow). If so, skip auto-focus so the keyboard stays down and the answer is
+  // readable. Captured at the open transition (render-time, not an effect).
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  const skipFocusRef = useRef(false);
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
+    if (isOpen) skipFocusRef.current = !!pendingPrompt;
+  }
+
+  // Focus the input when the panel opens (unless a prompt was submitted on open).
   useEffect(() => {
-    if (isOpen) {
-      const id = window.setTimeout(() => textareaRef.current?.focus(), 60);
-      return () => window.clearTimeout(id);
-    }
+    if (!isOpen || skipFocusRef.current) return;
+    const id = window.setTimeout(() => textareaRef.current?.focus(), 60);
+    return () => window.clearTimeout(id);
   }, [isOpen]);
 
   // Run a deterministic slash command (e.g. /myassignments) — no LLM.
@@ -416,6 +428,19 @@ export function AiChatPanel() {
     [user],
   );
 
+  // Auto-submit a prompt handed to open() — the mobile compose-then-open flow,
+  // where the pill's composer types the message and the panel appears with it
+  // already sent. Deferred (not a synchronous setState in the effect body).
+  useEffect(() => {
+    if (!isOpen || !pendingPrompt) return;
+    const prompt = pendingPrompt;
+    const id = window.setTimeout(() => {
+      submitMessage(prompt);
+      clearPendingPrompt();
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [isOpen, pendingPrompt, submitMessage, clearPendingPrompt]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -447,6 +472,9 @@ export function AiChatPanel() {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12, scale: 0.99 }}
           transition={{ duration: 0.16, ease: 'easeOut' }}
+          // Mobile: pin the panel's bottom above the software keyboard so the
+          // input isn't covered and the fixed panel doesn't slide up over black.
+          style={isMobile ? { bottom: keyboardInset } : undefined}
           role="dialog"
           aria-label="Foreshadow AI chat"
         >

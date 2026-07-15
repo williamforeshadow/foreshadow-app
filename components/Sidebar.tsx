@@ -384,7 +384,7 @@ export default function Sidebar({
               })}
               <button
                 type="button"
-                onClick={openAiChat}
+                onClick={() => openAiChat()}
                 tabIndex={isVisible ? 0 : -1}
                 className={`flex w-full min-w-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] font-medium transition-colors ${
                   isAiChatOpen ? activeRowClass : inactiveRowClass
