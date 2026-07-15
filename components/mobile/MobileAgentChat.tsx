@@ -8,7 +8,10 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/authContext';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { useKeyboardInset } from '@/lib/useKeyboardInset';
-import { setChatKeyboardOverlay } from '@/lib/nativeKeyboard';
+import {
+  setChatKeyboardOverlay,
+  useNativeKeyboardHeight,
+} from '@/lib/nativeKeyboard';
 import { AGENT_COMMANDS } from '@/src/lib/agentCommands';
 import { ProjectCard } from '@/components/windows/projects/ProjectCard';
 import { useAiChat } from '@/components/ai-chat/AiChatProvider';
@@ -99,7 +102,12 @@ export function MobileAgentChat() {
   const { user } = useAuth();
   const router = useRouter();
   const { isOpen, close } = useAiChat();
-  const keyboardInset = useKeyboardInset();
+  // Two keyboard signals: visualViewport (web + Android) and the native plugin
+  // (iOS overlay mode, where the WebView no longer shrinks so visualViewport
+  // reports nothing). Whichever sees the keyboard wins.
+  const visualInset = useKeyboardInset();
+  const nativeInset = useNativeKeyboardHeight();
+  const keyboardInset = Math.max(visualInset, nativeInset);
   const { messages, isLoading, submitMessage, runCommand, handleConfirmAction } =
     useAgentChat();
 
