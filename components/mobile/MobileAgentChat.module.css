@@ -120,10 +120,10 @@
   border-radius: 2px;
 }
 
-/* margin-top:auto bottom-anchors a short conversation just above the input;
-   when the thread overflows, it collapses to 0 and the list scrolls normally. */
+/* Top-anchored: the thread fills from just below the header downward. Once it
+   overflows the list scrolls, and the auto-scroll effect keeps the latest
+   message in view. */
 .messages {
-  margin-top: auto;
   display: flex;
   flex-direction: column;
   gap: 0.875rem;
