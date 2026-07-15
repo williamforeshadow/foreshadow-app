@@ -32,6 +32,9 @@ export function MobileAgentComposer({
   // Armed shortly after opening so the initial focus handoff doesn't trigger the
   // blur-to-close below; once armed, dismissing the keyboard collapses it.
   const armedRef = useRef(false);
+  // Set while a send tap is in flight, so the input's blur (from tapping send)
+  // doesn't collapse the composer before send() runs.
+  const sendingRef = useRef(false);
 
   // Keep mounted through the exit transition: `shouldRender` gates the DOM,
   // `shown` drives the scale/opacity. Mount-on-open and start-of-exit are
@@ -168,11 +171,11 @@ export function MobileAgentComposer({
               }
             }}
             onBlur={() => {
-              // Dismissing the keyboard collapses the composer back to the pill,
-              // so there's never a lingering, un-focused composer to re-tap
-              // (which iOS would scroll the app up to reveal). The only focus is
-              // the reliable programmatic one on open.
-              if (armedRef.current) onClose();
+              // Dismissing the keyboard (or tapping away) collapses the composer
+              // back to the pill — so there's never a lingering, un-focused
+              // composer to re-tap (which iOS would scroll the app up to reveal).
+              // But not when the blur is from tapping send: that closes via send.
+              if (armedRef.current && !sendingRef.current) onClose();
             }}
             rows={1}
             placeholder="Ask the agent…"
@@ -181,9 +184,15 @@ export function MobileAgentComposer({
           />
           <button
             type="button"
-            // Don't let tapping send blur the input first (which would close the
-            // composer via onBlur before send runs).
-            onPointerDown={(e) => e.preventDefault()}
+            // Flag the send so the input's blur (from this tap) doesn't collapse
+            // the composer before onClick runs send(); the timeout clears it if
+            // the tap is cancelled (finger slides off).
+            onPointerDown={() => {
+              sendingRef.current = true;
+              window.setTimeout(() => {
+                sendingRef.current = false;
+              }, 500);
+            }}
             onClick={send}
             disabled={!trimmed}
             aria-label="Send"
