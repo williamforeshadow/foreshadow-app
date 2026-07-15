@@ -145,7 +145,7 @@ export function MobileBottomNav() {
           style={chatOpen ? { opacity: 0, pointerEvents: 'none' } : undefined}
         >
           <Sparkles className="relative h-4 w-4 shrink-0 text-[var(--accent-3)] dark:text-[var(--accent-1)]" aria-hidden />
-          <span className="relative text-[13px] text-foreground/70">Ask the agent…</span>
+          <span className="relative text-[13px] text-foreground/70">Work with your agent</span>
         </button>
       </div>
 

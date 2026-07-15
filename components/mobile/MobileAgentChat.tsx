@@ -267,11 +267,6 @@ export function MobileAgentChat() {
           aria-label="Foreshadow AI chat"
         >
           <div className={styles.header}>
-            <span className={styles.grabber} aria-hidden />
-            <span className={styles.title}>
-              <Sparkles size={14} className={styles.titleIcon} aria-hidden />
-              Ask Foreshadow
-            </span>
             <button
               type="button"
               className={styles.closeButton}
