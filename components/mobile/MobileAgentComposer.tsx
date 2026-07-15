@@ -61,11 +61,25 @@ export function MobileAgentComposer({
     return () => window.clearTimeout(t);
   }, [open, shouldRender]);
 
-  // Focus once open (focusing raises the keyboard).
+  // Focus once open (focusing raises the keyboard). `preventScroll` stops the
+  // browser from scrolling the whole page up to reveal the input — the app
+  // stays put and only the composer (pinned via visualViewport) rises above the
+  // keyboard.
   useEffect(() => {
     if (!open) return;
-    const t = window.setTimeout(() => taRef.current?.focus(), 120);
+    const t = window.setTimeout(() => taRef.current?.focus({ preventScroll: true }), 120);
     return () => window.clearTimeout(t);
+  }, [open]);
+
+  // Belt-and-suspenders: lock body scroll while open so the page behind can't be
+  // scrolled up as the keyboard opens.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
   }, [open]);
 
   // Escape closes.

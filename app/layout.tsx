@@ -26,6 +26,10 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
+  // The software keyboard shrinks only the visual viewport, not the layout
+  // viewport — so the app (sized to the layout viewport) stays put while the
+  // keyboard overlays it; the composer rides up via window.visualViewport.
+  interactiveWidget: 'resizes-visual',
 };
 
 export const metadata: Metadata = {
