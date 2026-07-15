@@ -22,29 +22,28 @@ import { taskRowToCardItem } from '@/components/ai-chat/taskCardMapping';
 import type { TaskRow } from '@/src/agent/tools/findTasks';
 import styles from './MobileAgentChat.module.css';
 
-// The mobile agent chat, as a Notion-style bottom sheet. Replaces the old
-// compose-then-open flow (a glass composer that handed off to the full-screen
-// AiChatPanel): here the sheet IS the whole chat, and the liquid-glass input
-// bar persists as its footer once messages start.
+// The mobile agent chat, built as two INDEPENDENT layers so the input never
+// feels stapled to the conversation:
+//
+//   1. The input bubble — a floating liquid-glass bar pinned just above the
+//      software keyboard (and dropping to the bottom + safe-area when the
+//      keyboard is down). It is the only thing that tracks the keyboard.
+//   2. The conversation drawer — anchored to the BOTTOM of the screen and always
+//      rendered down to it, so it never lifts or gets cut off. When the keyboard
+//      is up, its lower portion simply sits behind the keyboard; the input
+//      floats over it (messages scroll behind the glass).
+//
+// The drawer only exists once a conversation does: tapping the pill first shows
+// just the floating input over the dimmed app. The first send brings the drawer
+// up behind the input.
 //
 // Mounted once in AppChrome (mobile only) so the conversation survives route
-// changes, mirroring how the desktop AiChatPanel stays mounted. Visibility is
-// driven by the shared AiChat context (`isOpen`), so the bottom-nav pill just
-// calls open().
-//
-// Keyboard handling: the app itself stays put (layout viewport is unchanged by
-// the keyboard — see useKeyboardInset); the sheet rides up so its input clears
-// the keyboard, and its max-height shrinks to the space above it. Dismissing
-// the keyboard does NOT close the sheet — it's a real conversation now, so you
-// can drop the keyboard to read. Closing is explicit: backdrop, close button,
-// or Escape.
+// changes. Closing is explicit (backdrop tap / Escape); dismissing the keyboard
+// just lowers it and leaves everything open.
 
-const ANIM_MS = 340;
-const EXAMPLE_PROMPT = 'What needs my attention today?';
+const ANIM_MS = 300;
+const GAP = 12; // breathing room between the newest message and the input
 
-// Horizontally-scrollable task-card carousel. Attaches its wheel listener
-// natively (non-passive) so vertical wheel motion over it doesn't bleed into
-// the chat body's scroll.
 function TaskCardCarousel({
   cards,
   onOpen,
@@ -105,44 +104,63 @@ export function MobileAgentChat() {
 
   const [inputValue, setInputValue] = useState('');
   const taRef = useRef<HTMLTextAreaElement>(null);
-  const bodyEndRef = useRef<HTMLDivElement>(null);
+  const fieldRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Keep mounted through the exit transition: `shouldRender` gates the DOM,
-  // `shown` drives the slide/opacity. (Same pattern the old composer used.)
+  // Overlay enter/exit: `shouldRender` gates the DOM, `shown` drives the
+  // backdrop + input transitions.
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [shown, setShown] = useState(false);
+  // Measured input-bar height, so the message list reserves exactly enough
+  // bottom space for the floating input to sit over without hiding the newest
+  // message.
+  const [inputH, setInputH] = useState(52);
+
   if (isOpen && !shouldRender) setShouldRender(true);
   if (!isOpen && shown) setShown(false);
 
-  // Enter: flip `shown` on just after the sheet mounts (translated down) so it
-  // slides up. setTimeout (not rAF) so it still fires when the tab is
-  // backgrounded — the sheet must never get stuck off-screen.
+  // The drawer only exists once there's something to show.
+  const hasConversation = messages.length > 0 || isLoading;
+  const drawerMounted = shouldRender && hasConversation;
+  const [drawerIn, setDrawerIn] = useState(false);
+
+  // Enter the overlay just after mount so the input transitions up.
   useEffect(() => {
     if (!isOpen) return;
     const t = window.setTimeout(() => setShown(true), 16);
     return () => window.clearTimeout(t);
   }, [isOpen]);
 
-  // Exit: unmount after the slide-down finishes.
+  // Unmount after the exit transition.
   useEffect(() => {
     if (isOpen || !shouldRender) return;
     const t = window.setTimeout(() => setShouldRender(false), ANIM_MS);
     return () => window.clearTimeout(t);
   }, [isOpen, shouldRender]);
 
-  // Focus the input when the sheet opens (raises the keyboard — the pill acts
-  // like "tap to type"). preventScroll keeps the app from scrolling up; the
-  // sheet rides above the keyboard on its own.
+  // Slide the drawer up the first time it mounts (a beat after it appears), so
+  // it reads as rising behind the input rather than snapping in.
+  useEffect(() => {
+    if (!drawerMounted) {
+      setDrawerIn(false);
+      return;
+    }
+    const t = window.setTimeout(() => setDrawerIn(true), 16);
+    return () => window.clearTimeout(t);
+  }, [drawerMounted]);
+
+  // Focus the input when the chat opens (raises the keyboard). preventScroll so
+  // the app itself doesn't shift — only the input rides up.
   useEffect(() => {
     if (!isOpen) return;
     const t = window.setTimeout(
       () => taRef.current?.focus({ preventScroll: true }),
-      ANIM_MS - 60,
+      ANIM_MS - 40,
     );
     return () => window.clearTimeout(t);
   }, [isOpen]);
 
-  // Lock body scroll while open so the dimmed app behind can't be scrolled.
+  // Lock body scroll while open.
   useEffect(() => {
     if (!isOpen) return;
     const prev = document.body.style.overflow;
@@ -170,10 +188,23 @@ export function MobileAgentChat() {
     el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
   }, [inputValue]);
 
-  // Keep the latest message in view.
+  // Track the input bar's height so the message padding stays exact as it grows.
   useEffect(() => {
-    bodyEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+    const el = fieldRef.current;
+    if (!el) return;
+    const update = () => setInputH(el.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [shouldRender]);
+
+  // Keep the newest message in view as messages arrive, the keyboard toggles,
+  // or the input grows (all shift how much bottom space is reserved).
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, isLoading, keyboardInset, inputH, drawerMounted]);
 
   const handleInternalNav = (
     e: React.MouseEvent<HTMLAnchorElement>,
@@ -216,8 +247,6 @@ export function MobileAgentChat() {
         );
       },
     }),
-    // handleInternalNav is stable enough for this surface; router/close are
-    // module-stable. Deps intentionally minimal to avoid re-creating the map.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
@@ -229,21 +258,23 @@ export function MobileAgentChat() {
     setInputValue('');
   };
 
-  // Slash-command autocomplete.
   const trimmedInput = inputValue.trim().toLowerCase();
   const commandMatches = trimmedInput.startsWith('/')
     ? AGENT_COMMANDS.filter((c) => c.name.startsWith(trimmedInput))
     : [];
   const showCommandMenu = commandMatches.length > 0 && !isLoading;
 
-  const isEmpty = messages.length === 0 && !isLoading;
-
   if (isMobile !== true || !shouldRender) return null;
 
-  // Cap the sheet at 85% of the screen, but never let it grow past the space
-  // above the keyboard. env() safe-area is folded in so the input clears the
-  // home indicator when no keyboard is up.
-  const maxHeight = `min(85dvh, calc(100dvh - ${keyboardInset}px - 0.75rem))`;
+  // The floating input sits `inputOffset` above the screen bottom (above the
+  // keyboard when up, above the home indicator when down); the message list
+  // reserves that plus the input's own height plus a gap.
+  const messagesPadBottom =
+    keyboardInset > 0
+      ? `${keyboardInset + 8 + inputH + GAP}px`
+      : `calc(env(safe-area-inset-bottom) + ${8 + inputH + GAP}px)`;
+  const inputPadBottom =
+    keyboardInset > 0 ? 8 : 'calc(env(safe-area-inset-bottom) + 8px)';
 
   return (
     <>
@@ -255,14 +286,12 @@ export function MobileAgentChat() {
           shown ? styles.backdropShown : styles.backdropHidden
         }`}
       />
-      {/* The wrapper (position: fixed) carries the keyboard lift; the sheet is a
-          static flex child, so `bottom` on it would be inert. */}
-      <div className={styles.wrap} style={{ bottom: keyboardInset }}>
+
+      {drawerMounted && (
         <div
-          className={`${styles.sheet} ${
-            shown ? styles.sheetShown : styles.sheetHidden
+          className={`${styles.drawer} ${
+            drawerIn && shown ? styles.drawerShown : styles.drawerHidden
           }`}
-          style={{ maxHeight }}
           role="dialog"
           aria-label="Foreshadow AI chat"
         >
@@ -277,180 +306,150 @@ export function MobileAgentChat() {
             </button>
           </div>
 
-          <div className={styles.body}>
-            {isEmpty ? (
-              <div className={styles.empty}>
-                <p className={styles.emptyText}>How can I help?</p>
-                <div className={styles.chips}>
-                  <button
-                    type="button"
-                    className={styles.chip}
-                    onClick={() => runCommand('/myassignments')}
-                  >
-                    My assignments
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.chip}
-                    onClick={() => runCommand('/dailyoutlook')}
-                  >
-                    Daily outlook
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.chip}
-                    onClick={() => submitMessage(EXAMPLE_PROMPT)}
-                  >
-                    {EXAMPLE_PROMPT}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className={styles.messages}>
-                {messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`${styles.row} ${
-                      msg.role === 'user' ? styles.rowUser : styles.rowAssistant
-                    }`}
-                  >
-                    {msg.role === 'user' ? (
-                      <div className={styles.userBubble}>{msg.content}</div>
-                    ) : (
-                      <div className={styles.assistant}>
-                        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-3 prose-ul:my-2 prose-li:my-0.5">
-                          <ReactMarkdown components={markdownComponents}>
-                            {msg.content}
-                          </ReactMarkdown>
-                        </div>
-                        {msg.tasks &&
-                          (() => {
-                            const cards = referencedTasks(
-                              msg.content,
-                              msg.tasks,
-                            );
-                            if (cards.length === 0) return null;
-                            const onOpen = (url: string) => {
-                              close();
-                              router.push(toRelativeHref(url) as never);
-                            };
-                            if (cards.length <= 5) {
-                              return (
-                                <TaskCardCarousel cards={cards} onOpen={onOpen} />
-                              );
-                            }
-                            return (
-                              <TaskAttachment cards={cards} onOpen={onOpen} />
-                            );
-                          })()}
-                        {msg.pendingActionIds &&
-                          msg.pendingActionIds.length > 0 &&
-                          (msg.confirmation === 'pending' ||
-                            msg.confirmation === 'confirming') && (
-                            <div className={styles.confirmationButtons}>
-                              <Button
-                                size="sm"
-                                onClick={() =>
-                                  handleConfirmAction(
-                                    msg.id,
-                                    msg.pendingActionIds!,
-                                    'confirm',
-                                  )
-                                }
-                                disabled={msg.confirmation === 'confirming'}
-                              >
-                                {msg.confirmation === 'confirming'
-                                  ? 'Working…'
-                                  : 'Confirm'}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  handleConfirmAction(
-                                    msg.id,
-                                    msg.pendingActionIds!,
-                                    'cancel',
-                                  )
-                                }
-                                disabled={msg.confirmation === 'confirming'}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {isLoading && (
-                  <div className={`${styles.row} ${styles.rowAssistant}`}>
-                    <div className={styles.loadingDots}>
-                      <span className={styles.loadingDot} />
-                      <span className={styles.loadingDot} />
-                      <span className={styles.loadingDot} />
-                    </div>
-                  </div>
-                )}
-                <div ref={bodyEndRef} />
-              </div>
-            )}
-          </div>
-
           <div
-            className={styles.footer}
-            style={{
-              paddingBottom: keyboardInset
-                ? '0.75rem'
-                : 'calc(env(safe-area-inset-bottom) + 0.75rem)',
-            }}
+            ref={scrollRef}
+            className={styles.messagesScroll}
+            style={{ paddingBottom: messagesPadBottom }}
           >
-            {showCommandMenu && (
-              <div className={styles.commandMenu}>
-                {commandMatches.map((c) => (
-                  <button
-                    key={c.name}
-                    type="button"
-                    className={styles.commandMenuItem}
-                    onClick={() => {
-                      runCommand(c.name);
-                      setInputValue('');
-                    }}
-                  >
-                    <span className={styles.commandName}>{c.name}</span>
-                    <span className={styles.commandDesc}>{c.description}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className={styles.field}>
-              <Sparkles size={18} className={styles.fieldIcon} aria-hidden />
-              <textarea
-                ref={taRef}
-                className={styles.textarea}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    send();
-                  }
-                }}
-                rows={1}
-                placeholder={user ? 'Ask the agent…' : 'Sign in to chat'}
-                aria-label="Ask the agent"
-              />
-              <button
-                type="button"
-                className={styles.sendButton}
-                onClick={send}
-                disabled={isLoading || !inputValue.trim() || !user}
-                aria-label="Send"
-              >
-                <ArrowUp size={16} />
-              </button>
+            <div className={styles.messages}>
+              {messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`${styles.row} ${
+                    msg.role === 'user' ? styles.rowUser : styles.rowAssistant
+                  }`}
+                >
+                  {msg.role === 'user' ? (
+                    <div className={styles.userBubble}>{msg.content}</div>
+                  ) : (
+                    <div className={styles.assistant}>
+                      <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-3 prose-ul:my-2 prose-li:my-0.5">
+                        <ReactMarkdown components={markdownComponents}>
+                          {msg.content}
+                        </ReactMarkdown>
+                      </div>
+                      {msg.tasks &&
+                        (() => {
+                          const cards = referencedTasks(msg.content, msg.tasks);
+                          if (cards.length === 0) return null;
+                          const onOpen = (url: string) => {
+                            close();
+                            router.push(toRelativeHref(url) as never);
+                          };
+                          if (cards.length <= 5) {
+                            return (
+                              <TaskCardCarousel cards={cards} onOpen={onOpen} />
+                            );
+                          }
+                          return <TaskAttachment cards={cards} onOpen={onOpen} />;
+                        })()}
+                      {msg.pendingActionIds &&
+                        msg.pendingActionIds.length > 0 &&
+                        (msg.confirmation === 'pending' ||
+                          msg.confirmation === 'confirming') && (
+                          <div className={styles.confirmationButtons}>
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                handleConfirmAction(
+                                  msg.id,
+                                  msg.pendingActionIds!,
+                                  'confirm',
+                                )
+                              }
+                              disabled={msg.confirmation === 'confirming'}
+                            >
+                              {msg.confirmation === 'confirming'
+                                ? 'Working…'
+                                : 'Confirm'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                handleConfirmAction(
+                                  msg.id,
+                                  msg.pendingActionIds!,
+                                  'cancel',
+                                )
+                              }
+                              disabled={msg.confirmation === 'confirming'}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        )}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {isLoading && (
+                <div className={`${styles.row} ${styles.rowAssistant}`}>
+                  <div className={styles.loadingDots}>
+                    <span className={styles.loadingDot} />
+                    <span className={styles.loadingDot} />
+                    <span className={styles.loadingDot} />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Floating input — a separate fixed layer pinned above the keyboard,
+          independent of the drawer. pointer-events pass through the wrapper so
+          taps beside the field fall through to the backdrop. */}
+      <div
+        className={`${styles.inputWrap} ${
+          shown ? styles.inputShown : styles.inputHidden
+        }`}
+        style={{ bottom: keyboardInset, paddingBottom: inputPadBottom }}
+      >
+        {showCommandMenu && (
+          <div className={styles.commandMenu}>
+            {commandMatches.map((c) => (
+              <button
+                key={c.name}
+                type="button"
+                className={styles.commandMenuItem}
+                onClick={() => {
+                  runCommand(c.name);
+                  setInputValue('');
+                }}
+              >
+                <span className={styles.commandName}>{c.name}</span>
+                <span className={styles.commandDesc}>{c.description}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <div ref={fieldRef} className={styles.field}>
+          <Sparkles size={18} className={styles.fieldIcon} aria-hidden />
+          <textarea
+            ref={taRef}
+            className={styles.textarea}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            rows={1}
+            placeholder={user ? 'Ask the agent…' : 'Sign in to chat'}
+            aria-label="Ask the agent"
+          />
+          <button
+            type="button"
+            className={styles.sendButton}
+            onClick={send}
+            disabled={isLoading || !inputValue.trim() || !user}
+            aria-label="Send"
+          >
+            <ArrowUp size={16} />
+          </button>
         </div>
       </div>
     </>

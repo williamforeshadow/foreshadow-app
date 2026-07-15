@@ -1,10 +1,11 @@
-/* Mobile agent chat — a Notion-style bottom sheet.
+/* Mobile agent chat — two independent layers.
  *
- * A dimmed backdrop over the app and a rounded sheet that slides up from the
- * bottom. The sheet is a solid surface (white in light, near-black in dark, NOT
- * the old navy panel); messages render Notion-style (user = gray bubble right,
- * assistant = plain prose left); a persistent liquid-glass input bar is pinned
- * at the bottom, riding above the software keyboard.
+ * The conversation DRAWER is anchored to the bottom of the screen and always
+ * renders down to it (it never lifts). The INPUT bubble is a separate floating
+ * layer pinned above the software keyboard; it's the only thing that tracks the
+ * keyboard, so the two read as related-but-separate surfaces rather than one
+ * stapled block. The input floats over the drawer, and messages scroll behind
+ * the glass.
  *
  * Color note: the app's design tokens (--foreground, --surface-elevated-line, …)
  * are whole color values, used directly as var(--token) — never wrapped in
@@ -21,7 +22,6 @@
   cursor: default;
   transition: opacity 260ms ease;
 }
-
 .backdropHidden {
   opacity: 0;
 }
@@ -29,64 +29,51 @@
   opacity: 1;
 }
 
-/* Transparent, click-through wrapper so only the sheet itself captures taps —
-   the strip beside it (on wide phones) falls through to the backdrop. */
-.wrap {
+/* ── Drawer ──────────────────────────────────────────────────────────── */
+.drawer {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
   z-index: 81;
-  display: flex;
-  justify-content: center;
-  pointer-events: none;
-}
-
-.sheet {
-  pointer-events: auto;
-  width: 100%;
-  max-width: 640px;
+  height: 85dvh;
   display: flex;
   flex-direction: column;
-  min-height: 0;
   border-radius: 1.375rem 1.375rem 0 0;
   background: #ffffff;
   color: var(--foreground);
   border: 1px solid var(--surface-elevated-line);
   border-bottom: none;
   box-shadow: 0 -12px 48px -10px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
   transition:
-    transform 340ms cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 220ms ease;
+    transform 300ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 200ms ease;
   will-change: transform;
 }
-
-:global(.dark) .sheet {
+:global(.dark) .drawer {
   background: #141416;
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow: 0 -12px 48px -10px rgba(0, 0, 0, 0.62);
 }
-
-.sheetHidden {
+.drawerHidden {
   transform: translateY(100%);
   opacity: 0.6;
 }
-.sheetShown {
+.drawerShown {
   transform: translateY(0);
   opacity: 1;
 }
-
 @media (prefers-reduced-motion: reduce) {
-  .sheet {
+  .drawer {
     transition: opacity 160ms ease;
   }
-  .sheetHidden {
+  .drawerHidden {
     transform: none;
     opacity: 0;
   }
 }
 
-/* ── Header ──────────────────────────────────────────────────────────── */
 .header {
   flex-shrink: 0;
   display: flex;
@@ -94,7 +81,6 @@
   justify-content: flex-end;
   padding: 0.5rem 0.5rem 0.125rem;
 }
-
 .closeButton {
   display: flex;
   align-items: center;
@@ -112,64 +98,32 @@
   background: color-mix(in srgb, var(--foreground) 8%, transparent);
 }
 
-/* ── Body ────────────────────────────────────────────────────────────── */
-.body {
+/* ── Messages ────────────────────────────────────────────────────────── */
+.messagesScroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-anchor: none;
   -webkit-overflow-scrolling: touch;
-  padding: 0.25rem 1rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  padding: 0 1rem;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--foreground) 20%, transparent)
     transparent;
 }
-.body::-webkit-scrollbar {
+.messagesScroll::-webkit-scrollbar {
   width: 4px;
 }
-.body::-webkit-scrollbar-thumb {
+.messagesScroll::-webkit-scrollbar-thumb {
   background-color: color-mix(in srgb, var(--foreground) 18%, transparent);
   border-radius: 2px;
 }
 
-/* ── Empty state ─────────────────────────────────────────────────────── */
-.empty {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding: 0.5rem 0 0.25rem;
-}
-
-.emptyText {
-  font-size: 0.9375rem;
-  font-weight: 500;
-  color: var(--foreground);
-  margin: 0;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4375rem;
-}
-
-.chip {
-  padding: 0.4375rem 0.75rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--foreground) 5%, transparent);
-  border: 1px solid color-mix(in srgb, var(--foreground) 9%, transparent);
-  color: var(--foreground);
-  cursor: pointer;
-  transition: background 0.12s;
-}
-.chip:active {
-  background: color-mix(in srgb, var(--foreground) 10%, transparent);
-}
-
-/* ── Messages ────────────────────────────────────────────────────────── */
+/* margin-top:auto bottom-anchors a short conversation just above the input;
+   when the thread overflows, it collapses to 0 and the list scrolls normally. */
 .messages {
+  margin-top: auto;
   display: flex;
   flex-direction: column;
   gap: 0.875rem;
@@ -256,13 +210,39 @@
   }
 }
 
-/* ── Footer / liquid-glass input ─────────────────────────────────────── */
-.footer {
-  flex-shrink: 0;
-  padding: 0.5rem 0.75rem 0.75rem;
+/* ── Floating input layer ────────────────────────────────────────────── */
+.inputWrap {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 82;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  pointer-events: none; /* only the field + menu capture taps */
+  transition:
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 200ms ease;
+  will-change: transform;
+}
+.inputHidden {
+  transform: translateY(16px);
+  opacity: 0;
+}
+.inputShown {
+  transform: translateY(0);
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .inputWrap {
+    transition: opacity 160ms ease;
+  }
+  .inputHidden {
+    transform: none;
+  }
 }
 
 .commandMenu {
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   background: var(--card);
@@ -299,30 +279,31 @@
   color: var(--muted-foreground);
 }
 
-/* The persistent input bar — the "liquid glass" chip, adapted to read on a
-   solid sheet: translucent tint + blur + a hairline that survives on white,
-   plus the top-rim sheen the pill uses. */
+/* The liquid-glass input bar — floats over the drawer, blurring the messages
+   that scroll behind it. Opaque enough to stay readable, with the top-rim sheen
+   the pill uses and a hairline that survives on white. */
 .field {
   position: relative;
+  pointer-events: auto;
   display: flex;
   align-items: flex-end;
   gap: 0.5rem;
   border-radius: 1.375rem;
   padding: 0.4375rem 0.4375rem 0.4375rem 0.875rem;
   border: 1px solid rgba(0, 0, 0, 0.12);
-  background: rgba(255, 255, 255, 0.55);
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
-  backdrop-filter: blur(10px) saturate(140%);
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
   box-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.08),
-    0 1px 1px rgba(0, 0, 0, 0.04),
+    0 2px 10px rgba(0, 0, 0, 0.1),
+    0 1px 2px rgba(0, 0, 0, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 :global(.dark) .field {
   border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(42, 42, 50, 0.55);
+  background: rgba(38, 38, 44, 0.62);
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 2px 12px rgba(0, 0, 0, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 .field::before {
