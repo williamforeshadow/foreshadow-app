@@ -97,7 +97,7 @@ export function MobileConversationDetailSheet({
         role="dialog"
         aria-modal="true"
         aria-label="Reservation details"
-        className={`safe-area-top absolute inset-x-0 top-0 flex max-h-[88dvh] flex-col rounded-b-[1.5rem] border-b border-[var(--surface-elevated-line)] bg-white shadow-2xl transition-transform duration-[280ms] ease-[cubic-bezier(0.16,1,0.3,1)] dark:bg-card ${
+        className={`safe-area-top absolute inset-x-0 top-0 flex max-h-[88dvh] flex-col overflow-hidden rounded-b-[1.5rem] border-b border-[var(--surface-elevated-line)] bg-white shadow-2xl transition-transform duration-[280ms] ease-[cubic-bezier(0.16,1,0.3,1)] dark:bg-card ${
           shown ? 'translate-y-0' : '-translate-y-full'
         }`}
       >
@@ -113,7 +113,12 @@ export function MobileConversationDetailSheet({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-hidden">
+        {/* The scroll container. It — not the shared panel's own `h-full`
+            overflow — owns the scroll: under a flex parent with min-h-0 the
+            panel's percentage height collapses to its content height on iOS, so
+            its inner overflow never engages and the details get clipped. Making
+            this wrapper the scroller sidesteps that entirely. */}
+        <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar [-webkit-overflow-scrolling:touch]">
           <ConversationDetailPanel
             conversation={conversation}
             proposedTasks={proposedTasks}
@@ -122,11 +127,6 @@ export function MobileConversationDetailSheet({
             onOpenProposal={onOpenProposal}
             onProposedTaskChange={onProposedTaskChange}
           />
-        </div>
-
-        {/* Pull tab — visual affordance for the sheet's bottom edge. */}
-        <div className="flex shrink-0 items-center justify-center pb-2 pt-1">
-          <span className="h-1 w-9 rounded-full bg-black/10 dark:bg-white/15" aria-hidden />
         </div>
       </div>
     </div>
