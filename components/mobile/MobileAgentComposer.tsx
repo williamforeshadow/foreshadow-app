@@ -29,6 +29,9 @@ export function MobileAgentComposer({
   const keyboardInset = useKeyboardInset();
   const [text, setText] = useState('');
   const taRef = useRef<HTMLTextAreaElement>(null);
+  // Armed shortly after opening so the initial focus handoff doesn't trigger the
+  // blur-to-close below; once armed, dismissing the keyboard collapses it.
+  const armedRef = useRef(false);
 
   // Keep mounted through the exit transition: `shouldRender` gates the DOM,
   // `shown` drives the scale/opacity. Mount-on-open and start-of-exit are
@@ -68,6 +71,19 @@ export function MobileAgentComposer({
   useEffect(() => {
     if (!open) return;
     const t = window.setTimeout(() => taRef.current?.focus({ preventScroll: true }), 120);
+    return () => window.clearTimeout(t);
+  }, [open]);
+
+  // Arm blur-to-close a beat after opening, so the open/focus settling doesn't
+  // immediately collapse the composer.
+  useEffect(() => {
+    if (!open) {
+      armedRef.current = false;
+      return;
+    }
+    const t = window.setTimeout(() => {
+      armedRef.current = true;
+    }, 350);
     return () => window.clearTimeout(t);
   }, [open]);
 
@@ -151,16 +167,12 @@ export function MobileAgentComposer({
                 send();
               }
             }}
-            onPointerDown={(e) => {
-              // Re-tapping the input after the keyboard was dismissed is a user
-              // focus, which the browser scrolls the page up to reveal — the
-              // same shift preventScroll fixes on the programmatic focus. Take
-              // over: focus it ourselves with preventScroll. Skip when already
-              // focused so tap-to-position-caret still works.
-              if (taRef.current && document.activeElement !== taRef.current) {
-                e.preventDefault();
-                taRef.current.focus({ preventScroll: true });
-              }
+            onBlur={() => {
+              // Dismissing the keyboard collapses the composer back to the pill,
+              // so there's never a lingering, un-focused composer to re-tap
+              // (which iOS would scroll the app up to reveal). The only focus is
+              // the reliable programmatic one on open.
+              if (armedRef.current) onClose();
             }}
             rows={1}
             placeholder="Ask the agent…"
@@ -169,6 +181,9 @@ export function MobileAgentComposer({
           />
           <button
             type="button"
+            // Don't let tapping send blur the input first (which would close the
+            // composer via onBlur before send runs).
+            onPointerDown={(e) => e.preventDefault()}
             onClick={send}
             disabled={!trimmed}
             aria-label="Send"
