@@ -21,6 +21,18 @@ function isTabRoot(pathname: string | null): boolean {
   return pathname === '/' || pathname === '/messages' || pathname === '/menu';
 }
 
+// The agent bubble is available more broadly than the tab bar — also on the
+// Menu's destination pages. (It stays hidden inside a message conversation,
+// which is in neither set.)
+function isBubbleRoute(pathname: string | null): boolean {
+  if (!pathname) return false;
+  return (
+    pathname === '/tasks' ||
+    pathname === '/properties' ||
+    pathname === '/notifications'
+  );
+}
+
 type TabKey = 'assignments' | 'timeline' | 'projects' | 'messages' | 'menu';
 
 export function MobileBottomNav() {
@@ -30,9 +42,12 @@ export function MobileBottomNav() {
   const router = useRouter();
   const { open: openAiChat } = useAiChat();
 
-  // Hide on desktop, before the viewport is measured, and on every detail
-  // screen. (AppChrome already excludes /login and /demo.)
-  if (!isMobile || !isTabRoot(pathname)) return null;
+  // The tab bar shows only on the tab roots; the agent bubble shows there and on
+  // the Menu's destination pages. Hidden on desktop, before the viewport is
+  // measured, and on every other detail screen (e.g. a message conversation).
+  const showTabs = isTabRoot(pathname);
+  const showBubble = showTabs || isBubbleRoute(pathname);
+  if (!isMobile || !showBubble) return null;
 
   const tab = searchParams?.get('tab') ?? null;
   const onHome = pathname === '/';
@@ -117,7 +132,7 @@ export function MobileBottomNav() {
       {/* Floating agent bubble — a liquid-glass pill detached from the tab bar;
           opens the universal AI chat panel. `relative` anchors the sheen
           ::before; no transformed ancestor, so the backdrop blur survives. */}
-      <div className="flex justify-center px-4 pb-2.5">
+      <div className={`flex justify-center px-4 ${showTabs ? 'pb-2.5' : 'pb-[calc(0.625rem_+_env(safe-area-inset-bottom))]'}`}>
         <button
           type="button"
           onClick={openAiChat}
@@ -134,9 +149,10 @@ export function MobileBottomNav() {
         </button>
       </div>
 
-      {/* Tab bar */}
-      <div className="pointer-events-auto safe-area-bottom border-t border-neutral-200/60 bg-white/90 backdrop-blur-xl dark:border-[rgba(255,255,255,0.07)] dark:bg-[rgba(26,26,31,0.9)]">
-        <div className="grid grid-cols-5 px-1 pb-1 pt-1.5">
+      {/* Tab bar — only on the tab roots. */}
+      {showTabs ? (
+        <div className="pointer-events-auto safe-area-bottom border-t border-neutral-200/60 bg-white/90 backdrop-blur-xl dark:border-[rgba(255,255,255,0.07)] dark:bg-[rgba(26,26,31,0.9)]">
+          <div className="grid grid-cols-5 px-1 pb-1 pt-1.5">
           {items.map((it) => {
           const isActive = active === it.key;
           return (
@@ -158,8 +174,9 @@ export function MobileBottomNav() {
             </button>
           );
         })}
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }

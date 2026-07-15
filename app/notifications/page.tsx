@@ -59,7 +59,7 @@ function MobileNotifications() {
         <div className="shrink-0 px-2 pb-1">
           <NotificationViewTabs view={view} onChange={setView} />
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto hide-scrollbar">
+        <div className="min-h-0 flex-1 overflow-y-auto hide-scrollbar pb-mobile-bubble">
           <NotificationRows
             notifications={notifications}
             loading={loading}

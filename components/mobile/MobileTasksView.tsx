@@ -599,7 +599,7 @@ function MobileTasksViewContent() {
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-mobile-bubble">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <div className="w-7 h-7 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin" />
