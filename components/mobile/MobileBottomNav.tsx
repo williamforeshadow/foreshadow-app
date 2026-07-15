@@ -110,23 +110,34 @@ export function MobileBottomNav() {
   };
 
   return (
-    <div className="safe-area-bottom fixed inset-x-0 bottom-0 z-40 border-t border-neutral-200/60 bg-white/90 backdrop-blur-xl dark:border-[rgba(255,255,255,0.07)] dark:bg-[rgba(26,26,31,0.9)]">
-      {/* Faux agent input — opens the universal AI chat panel. */}
-      <div className="px-3 pt-2">
+    // Transparent, click-through wrapper: only the bubble and the tab bar
+    // themselves capture taps, so the gap between them (and the page behind it)
+    // stays interactive — which is what makes the bubble read as floating.
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex flex-col">
+      {/* Floating agent bubble — a liquid-glass pill detached from the tab bar;
+          opens the universal AI chat panel. `relative` anchors the sheen
+          ::before; no transformed ancestor, so the backdrop blur survives. */}
+      <div className="flex justify-center px-4 pb-2.5">
         <button
           type="button"
           onClick={openAiChat}
           aria-label="Ask the agent"
-          className="flex w-full items-center gap-2.5 rounded-full border border-[var(--surface-elevated-line)] bg-black/[0.03] px-4 py-2.5 text-left transition-colors active:bg-black/[0.06] dark:bg-white/[0.05] dark:active:bg-white/[0.08]"
+          className="pointer-events-auto relative flex w-3/5 items-center justify-center gap-2 overflow-hidden rounded-full border border-white/25 bg-white/[0.12] px-4 py-2.5 text-center shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-sm transition-opacity active:opacity-90 dark:border-white/10 dark:bg-white/[0.06]"
         >
-          <Sparkles className="h-[18px] w-[18px] shrink-0 text-[var(--accent-3)] dark:text-[var(--accent-1)]" aria-hidden />
-          <span className="text-[13px] text-muted-foreground">Ask the agent…</span>
+          {/* Thin top rim highlight — the light edge, without the frosted wash. */}
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent dark:via-white/40"
+          />
+          <Sparkles className="relative h-4 w-4 shrink-0 text-[var(--accent-3)] dark:text-[var(--accent-1)]" aria-hidden />
+          <span className="relative text-[13px] text-foreground/70">Ask the agent…</span>
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="grid grid-cols-5 px-1 pb-1 pt-1.5">
-        {items.map((it) => {
+      {/* Tab bar */}
+      <div className="pointer-events-auto safe-area-bottom border-t border-neutral-200/60 bg-white/90 backdrop-blur-xl dark:border-[rgba(255,255,255,0.07)] dark:bg-[rgba(26,26,31,0.9)]">
+        <div className="grid grid-cols-5 px-1 pb-1 pt-1.5">
+          {items.map((it) => {
           const isActive = active === it.key;
           return (
             <button
@@ -147,6 +158,7 @@ export function MobileBottomNav() {
             </button>
           );
         })}
+        </div>
       </div>
     </div>
   );
