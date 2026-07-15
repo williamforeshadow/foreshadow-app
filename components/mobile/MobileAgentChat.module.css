@@ -99,14 +99,16 @@
 }
 
 /* ── Messages ────────────────────────────────────────────────────────── */
+/* A plain block scroll container — NOT display:flex. As a flex parent it would
+   shrink its .messages child (flex-shrink) when capped by max-height, squishing
+   the thread instead of letting it overflow and scroll. */
 .messagesScroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-anchor: none;
   -webkit-overflow-scrolling: touch;
-  display: flex;
-  flex-direction: column;
+  overscroll-behavior: contain;
   padding: 0 1rem;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--foreground) 20%, transparent)
@@ -128,6 +130,7 @@
   flex-direction: column;
   gap: 0.875rem;
   padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
 }
 
 .row {

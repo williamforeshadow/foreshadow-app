@@ -115,15 +115,16 @@ export function MobileAgentChat() {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fieldRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
 
   // Overlay enter/exit: `shouldRender` gates the DOM, `shown` drives the
   // backdrop + input transitions.
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [shown, setShown] = useState(false);
-  // Measured input-bar height, so the message list reserves exactly enough
-  // bottom space for the floating input to sit over without hiding the newest
-  // message.
+  // Measured input-bar and header heights, so the scroll region can be sized to
+  // exactly the visible area above the floating input (see scrollMaxHeight).
   const [inputH, setInputH] = useState(52);
+  const [headerH, setHeaderH] = useState(44);
 
   if (isOpen && !shouldRender) setShouldRender(true);
   if (!isOpen && shown) setShown(false);
@@ -209,7 +210,8 @@ export function MobileAgentChat() {
     el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
   }, [inputValue]);
 
-  // Track the input bar's height so the message padding stays exact as it grows.
+  // Track the input bar's height so the scroll region sizing stays exact as it
+  // grows.
   useEffect(() => {
     const el = fieldRef.current;
     if (!el) return;
@@ -220,12 +222,18 @@ export function MobileAgentChat() {
     return () => ro.disconnect();
   }, [shouldRender]);
 
+  // Measure the drawer header so the scroll region can subtract it precisely.
+  useEffect(() => {
+    const el = headerRef.current;
+    if (el) setHeaderH(el.offsetHeight);
+  }, [drawerMounted]);
+
   // Keep the newest message in view as messages arrive, the keyboard toggles,
-  // or the input grows (all shift how much bottom space is reserved).
+  // or the geometry shifts (all change how tall the scroll region is).
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, isLoading, keyboardInset, inputH, drawerMounted]);
+  }, [messages, isLoading, keyboardInset, inputH, headerH, drawerMounted]);
 
   const handleInternalNav = (
     e: React.MouseEvent<HTMLAnchorElement>,
@@ -287,15 +295,20 @@ export function MobileAgentChat() {
 
   if (isMobile !== true || !shouldRender) return null;
 
-  // The floating input sits `inputOffset` above the screen bottom (above the
-  // keyboard when up, above the home indicator when down); the message list
-  // reserves that plus the input's own height plus a gap.
-  const messagesPadBottom =
-    keyboardInset > 0
-      ? `${keyboardInset + 8 + inputH + GAP}px`
-      : `calc(env(safe-area-inset-bottom) + ${8 + inputH + GAP}px)`;
+  // The floating input sits 8px above the screen bottom (above the keyboard when
+  // up, above the home indicator when down); it stacks input height + a gap.
   const inputPadBottom =
     keyboardInset > 0 ? 8 : 'calc(env(safe-area-inset-bottom) + 8px)';
+
+  // Size the scroll region to exactly the visible area above the input: the
+  // drawer height (85dvh) minus the header minus the space the input reserves.
+  // An explicit max-height (not flex + a big padding-bottom) is what iOS
+  // reliably bounds a scroll container by, so scrolling engages as soon as the
+  // thread can't fit above the input — not only once it fills the whole screen.
+  const scrollMaxHeight =
+    keyboardInset > 0
+      ? `calc(85dvh - ${headerH + keyboardInset + 8 + inputH + GAP}px)`
+      : `calc(85dvh - ${headerH + 8 + inputH + GAP}px - env(safe-area-inset-bottom))`;
 
   return (
     <>
@@ -316,7 +329,7 @@ export function MobileAgentChat() {
           role="dialog"
           aria-label="Foreshadow AI chat"
         >
-          <div className={styles.header}>
+          <div ref={headerRef} className={styles.header}>
             <button
               type="button"
               className={styles.closeButton}
@@ -330,7 +343,7 @@ export function MobileAgentChat() {
           <div
             ref={scrollRef}
             className={styles.messagesScroll}
-            style={{ paddingBottom: messagesPadBottom }}
+            style={{ maxHeight: scrollMaxHeight }}
           >
             <div className={styles.messages}>
               {messages.map((msg) => (
