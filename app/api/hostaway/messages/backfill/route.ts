@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireCronAuth } from '@/lib/requireCronAuth';
 import { backfillRecentConversations } from '@/src/server/messages/ingest';
 import { getPrimaryHostawayIntegration, hostawayCredsFor } from '@/lib/pmsIntegrations';
 
@@ -9,7 +10,10 @@ import { getPrimaryHostawayIntegration, hostawayCredsFor } from '@/lib/pmsIntegr
 // /api/hostaway/sync.
 export const maxDuration = 300;
 
-export async function POST() {
+export async function POST(request: Request) {
+  const denied = requireCronAuth(request);
+  if (denied) return denied;
+
   try {
     // Cap covers the full inbox (currently ~108 threads) so every thread's
     // status mirrors the PMS each 30-min cycle, not just the most recent 80.
@@ -30,6 +34,6 @@ export async function POST() {
   }
 }
 
-export async function GET() {
-  return POST();
+export async function GET(request: Request) {
+  return POST(request);
 }

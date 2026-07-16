@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireCronAuth } from '@/lib/requireCronAuth';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { getPrimaryHospitableIntegration, hospitableCredsFor } from '@/lib/pmsIntegrations';
 import { fetchHospitableProperties, fetchHospitableReservations } from '@/lib/hospitable';
@@ -20,7 +21,10 @@ function toNum(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  const denied = requireCronAuth(request);
+  if (denied) return denied;
+
   try {
     const supabase = getSupabaseServer();
 
@@ -229,6 +233,6 @@ export async function POST() {
 }
 
 // GET for easy manual/browser trigger, mirroring /api/hostaway/sync.
-export async function GET() {
-  return POST();
+export async function GET(request: Request) {
+  return POST(request);
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireCronAuth } from '@/lib/requireCronAuth';
 import { after } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { fetchListingsDetailed, fetchReservations, type ListingDetail } from '@/lib/hostaway';
@@ -21,7 +22,10 @@ type InsertedReservation = {
 // Allow enough time for paginated Hostaway fetches + batched inserts
 export const maxDuration = 120;
 
-export async function POST() {
+export async function POST(request: Request) {
+  const denied = requireCronAuth(request);
+  if (denied) return denied;
+
   try {
     console.log('[Hostaway Sync] Starting…');
     const supabase = getSupabaseServer();
@@ -490,6 +494,6 @@ export async function POST() {
 }
 
 // GET for easy browser/testing access
-export async function GET() {
-  return POST();
+export async function GET(request: Request) {
+  return POST(request);
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireCronAuth } from '@/lib/requireCronAuth';
 import { runScheduleTick } from '@/src/server/automations/runSchedule';
 
 // Hourly cron — fires scheduled automations from the new engine.
@@ -12,7 +13,10 @@ import { runScheduleTick } from '@/src/server/automations/runSchedule';
 
 export const maxDuration = 60;
 
-export async function POST() {
+export async function POST(request: Request) {
+  const denied = requireCronAuth(request);
+  if (denied) return denied;
+
   const now = new Date();
   const results = await runScheduleTick(now);
   return NextResponse.json({
@@ -25,6 +29,6 @@ export async function POST() {
   });
 }
 
-export async function GET() {
-  return POST();
+export async function GET(request: Request) {
+  return POST(request);
 }

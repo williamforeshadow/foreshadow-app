@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireCronAuth } from '@/lib/requireCronAuth';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { fetchListingCalendar } from '@/lib/hostaway';
 import { getPrimaryHostawayIntegration, hostawayCredsFor } from '@/lib/pmsIntegrations';
@@ -61,7 +62,10 @@ function deriveBlockRanges(days: Array<Record<string, any>>): BlockRange[] {
   return ranges;
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  const denied = requireCronAuth(request);
+  if (denied) return denied;
+
   try {
     console.log('[Calendar Sync] Starting…');
     const supabase = getSupabaseServer();
@@ -164,6 +168,6 @@ export async function POST() {
 }
 
 // GET for easy browser/manual trigger, mirroring /api/hostaway/sync.
-export async function GET() {
-  return POST();
+export async function GET(request: Request) {
+  return POST(request);
 }

@@ -6,9 +6,17 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 //   - app/tasks/[id]/page.tsx     (dedicated task page — server-side fetch
 //                                   → SSR-rendered task body)
 //   - Slack link unfurl handler   (build a card per pasted task URL)
-//   - GET /api/all-tasks/[id]     (kept for external HTTP consumers; no
-//                                   first-party caller after the route
-//                                   migration)
+//
+// Both callers are server-side and already know who's asking. There is
+// deliberately NO HTTP route in front of this: GET /api/all-tasks/[id] used to
+// exist "for external consumers" but had no first-party caller and no auth, so
+// it served any org's task — guest name and stay dates included — to anyone who
+// had a task uuid. It was removed rather than guarded.
+//
+// NOTE this function is org-blind by design: it filters on the primary key
+// alone. That's safe for the two callers above; any FUTURE caller that takes an
+// id from an untrusted source (an HTTP request, a model) must verify the task's
+// org before calling, or pass an org filter of its own.
 //
 // The shape mirrors a row from /api/all-tasks closely enough that the same
 // downstream consumers (e.g. PropertyTaskDetailOverlay's OverlayTaskInput)
