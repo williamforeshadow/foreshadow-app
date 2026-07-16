@@ -37,13 +37,29 @@ export async function generateAndStoreProposedKnowledge(
     reasoning: p.reasoning || result.reasoning || null,
   }));
 
-  const { data, error } = await getSupabaseServer()
-    .from('proposed_knowledge')
-    .insert(rows)
-    .select('id, summary');
-  if (error) throw new Error(error.message);
-
-  const inserted = (data ?? []) as Array<{ id: string; summary: string }>;
+  // Insert one row at a time rather than as a batch. The partial unique index
+  // (property_id, md5(target)) WHERE status='pending' — migration
+  // 20260716140000 — is what actually stops concurrent triage runs from writing
+  // the same fact twice; a burst of guest messages fires one webhook each, and
+  // they all read the "already proposed" digest before any of them has written.
+  // A batch insert is all-or-nothing, so one duplicate would drop the whole
+  // run's proposals on the floor — worse than the duplicate it prevents.
+  const inserted: Array<{ id: string; summary: string }> = [];
+  for (const row of rows) {
+    const { data, error } = await getSupabaseServer()
+      .from('proposed_knowledge')
+      .insert(row)
+      .select('id, summary')
+      .maybeSingle();
+    if (error) {
+      // 23505 = unique_violation: a concurrent run already proposed this exact
+      // fact for this property. Not an error — that run owns it (and its
+      // notification), so skip quietly.
+      if (error.code === '23505') continue;
+      throw new Error(error.message);
+    }
+    if (data) inserted.push(data as { id: string; summary: string });
+  }
   for (const row of inserted) {
     await notifyProposedKnowledge({
       proposedKnowledgeId: row.id,
