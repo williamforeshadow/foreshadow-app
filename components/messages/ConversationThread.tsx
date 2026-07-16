@@ -70,6 +70,8 @@ export function ConversationThread({
   proposedReply = null,
   proposedReplySource = null,
   proposedReplyAnswersMessageId = null,
+  proposedReplyDeclinedMessageId = null,
+  replyProposalEnabled = true,
   onProposedReplyChange,
   proposedTasks = [],
   onProposedTaskChange,
@@ -94,6 +96,11 @@ export function ConversationThread({
   proposedReply?: string | null;
   proposedReplySource?: 'auto' | 'assistant' | null;
   proposedReplyAnswersMessageId?: string | null;
+  /** guest_messages.id the sensitivity gate ruled needs no reply, if any. */
+  proposedReplyDeclinedMessageId?: string | null;
+  /** The org's autonomous reply-drafting master switch. Off ⇒ no unprompted
+   *  proposal bubble; the composer's Sparkles stays as the manual way in. */
+  replyProposalEnabled?: boolean;
   onProposedReplyChange?: () => void;
   /** The conversation's pending proposed tasks (multiple can coexist). */
   proposedTasks?: ProposedTaskData[];
@@ -169,6 +176,12 @@ export function ConversationThread({
   // The stored draft is stale if it was written against an older message.
   const proposalStale =
     !!proposedReply && !!lastInboundId && proposedReplyAnswersMessageId !== lastInboundId;
+  // The gate ruled the latest guest message doesn't warrant a reply of its own.
+  const proposalDeclined = !!lastInboundId && proposedReplyDeclinedMessageId === lastInboundId;
+  // Render the proposal at all? With the master switch off and nothing drafted,
+  // there's no proposal to make and none coming — showing the bubble would just
+  // advertise a capability this org turned off. A stored draft always shows.
+  const showProposedReply = replyProposalEnabled || !!proposedReply;
 
   // Each proposed task anchors to the message that triggered it — NOT the latest
   // inbound — so it persists until a human accepts or dismisses it, even after a
@@ -436,13 +449,14 @@ export function ConversationThread({
                 </div>
               </div>
 
-              {conversationId && !loading && !error && m.id === lastInboundId ? (
+              {conversationId && !loading && !error && m.id === lastInboundId && showProposedReply ? (
                 <ProposedReply
                   key={`proposal-${m.id}`}
                   conversationId={conversationId}
                   draft={proposedReply}
                   source={proposedReplySource}
                   stale={proposalStale}
+                  declined={proposalDeclined}
                   onEdit={handleEditProposed}
                   onChanged={onProposedReplyChange}
                 />

@@ -38,6 +38,9 @@ export default function ConversationPage() {
   const [proposedKnowledge, setProposedKnowledge] = useState<ProposedKnowledgeData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  // The org's autonomous reply-drafting master switch, from the thread payload.
+  // Defaults to true so a stale/failed read never hides the proposal.
+  const [replyProposalEnabled, setReplyProposalEnabled] = useState(true);
   // The proposal whose task editor is open (in-layout right-side panel). Stays
   // open until the user closes it or opens another — not a click-away modal.
   const [editorProposal, setEditorProposal] = useState<ProposedTaskData | null>(null);
@@ -66,6 +69,7 @@ export default function ConversationPage() {
       setMessages(data.messages ?? []);
       setProposedTasks((data.proposed_tasks as ProposedTaskData[] | undefined) ?? []);
       setProposedKnowledge((data.proposed_knowledge as ProposedKnowledgeData[] | undefined) ?? []);
+      setReplyProposalEnabled(data.reply_proposal_enabled !== false);
     } catch {
       setError(true);
     } finally {
@@ -222,6 +226,10 @@ export default function ConversationPage() {
             proposedReply={conversation?.proposed_reply ?? null}
             proposedReplySource={conversation?.proposed_reply_source ?? null}
             proposedReplyAnswersMessageId={conversation?.proposed_reply_answers_message_id ?? null}
+            proposedReplyDeclinedMessageId={
+              conversation?.proposed_reply_declined_message_id ?? null
+            }
+            replyProposalEnabled={replyProposalEnabled}
             onProposedReplyChange={load}
             proposedTasks={proposedTasks}
             onProposedTaskChange={handleProposedTaskChange}
@@ -285,6 +293,8 @@ export default function ConversationPage() {
           proposedReply={conversation?.proposed_reply ?? null}
           proposedReplySource={conversation?.proposed_reply_source ?? null}
           proposedReplyAnswersMessageId={conversation?.proposed_reply_answers_message_id ?? null}
+          proposedReplyDeclinedMessageId={conversation?.proposed_reply_declined_message_id ?? null}
+          replyProposalEnabled={replyProposalEnabled}
           onProposedReplyChange={load}
           proposedTasks={proposedTasks}
           onProposedTaskChange={handleProposedTaskChange}

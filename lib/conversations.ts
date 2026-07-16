@@ -55,6 +55,13 @@ export interface ConversationRow {
   proposed_reply: string | null;
   /** guest_messages.id the draft was written against — used to detect staleness. */
   proposed_reply_answers_message_id: string | null;
+  /**
+   * guest_messages.id the sensitivity gate ruled did NOT warrant a reply. Its
+   * counterpart above records a "yes"; this records the "no", so an undrafted
+   * message can be told apart from a deliberately-skipped one. Never clears
+   * proposed_reply — a decline on a newer message leaves an older draft standing.
+   */
+  proposed_reply_declined_message_id: string | null;
   proposed_reply_source: 'auto' | 'assistant' | null;
   proposed_reply_generated_at: string | null;
   // Persisted guest-sentiment summary (generated eagerly on inbound; the panel

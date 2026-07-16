@@ -8,9 +8,16 @@ import { Sparkles, SendHorizontal, Pencil, RotateCw, AlertCircle } from 'lucide-
  * answers. The draft is PERSISTED on the conversation — generated eagerly when a
  * guest message arrives, or by the ops agent's `concierge` tool. This component
  * reads that stored draft. If none exists yet (e.g. a historical thread or one
- * eager generation missed), it generates one ONCE on open and stores it — so a
- * reply is always just there, no button to click. Crucially it does NOT
- * regenerate when a draft already exists, so re-opening a thread is a cheap read.
+ * eager generation missed), it asks the server ONCE on open.
+ *
+ * That open-time ask goes out as `auto` — nobody clicked anything, so the server
+ * runs the same policy the webhook does and may decline (the org's master switch
+ * is off, or the message doesn't clear the sensitivity bar). A decline renders as
+ * a quiet "no reply needed" row, NOT a draft: the gate's ruling is the product,
+ * and the operator can always override it with ↻ Draft anyway.
+ *
+ * It does NOT re-ask when a draft already exists, or when the gate has already
+ * ruled on this message — so re-opening a thread stays a cheap read either way.
  * Regenerate (↻) re-rolls + re-stores; Edit copies to the composer; Send stubbed.
  */
 export function ProposedReply({
@@ -18,6 +25,7 @@ export function ProposedReply({
   draft: persistedDraft,
   source,
   stale,
+  declined,
   onEdit,
   onChanged,
 }: {
@@ -27,6 +35,8 @@ export function ProposedReply({
   source: 'auto' | 'assistant' | null;
   /** True when a newer guest message arrived after this draft was written. */
   stale: boolean;
+  /** True when the sensitivity gate ruled this message doesn't warrant a reply. */
+  declined: boolean;
   onEdit: (text: string) => void;
   /** Called after a (re)generate so the parent can refetch the conversation. */
   onChanged?: () => void;
@@ -35,6 +45,9 @@ export function ProposedReply({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  // A decline the server reported on THIS mount, before the parent has refetched
+  // the conversation row that carries it.
+  const [justDeclined, setJustDeclined] = useState(false);
   // Generate-when-missing fires at most once per mount (the component is keyed by
   // the guest message, so it remounts fresh per conversation / new message).
   const autoTried = useRef(false);
@@ -44,45 +57,86 @@ export function ProposedReply({
     setDraft(persistedDraft ?? '');
   }, [persistedDraft]);
 
-  const generate = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setNote(null);
-    try {
-      const res = await fetch(`/api/messages/${conversationId}/draft`, { method: 'POST' });
-      if (!res.ok) {
-        const msg = await res
-          .json()
-          .then((d) => (typeof d?.error === 'string' ? d.error : ''))
-          .catch(() => '');
-        setError(msg || 'Could not generate a proposed reply.');
-        return;
+  // `auto` = nobody asked; the server applies the master switch + sensitivity
+  // gate and may decline. Omitting it marks an explicit human ask, which always
+  // drafts — that's what makes ↻ an override rather than another roll of the dice.
+  const generate = useCallback(
+    async (auto = false) => {
+      setLoading(true);
+      setError(null);
+      setNote(null);
+      try {
+        const res = await fetch(`/api/messages/${conversationId}/draft`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ auto }),
+        });
+        if (!res.ok) {
+          const msg = await res
+            .json()
+            .then((d) => (typeof d?.error === 'string' ? d.error : ''))
+            .catch(() => '');
+          setError(msg || 'Could not generate a proposed reply.');
+          return;
+        }
+        const data = await res.json();
+        // The autonomous policy declined. Not an error — show the quiet state.
+        if (data?.skipped) {
+          setJustDeclined(true);
+          return;
+        }
+        setDraft(typeof data.draft === 'string' ? data.draft : '');
+        onChanged?.();
+      } catch {
+        setError('Could not generate a proposed reply.');
+      } finally {
+        setLoading(false);
       }
-      const data = await res.json();
-      setDraft(typeof data.draft === 'string' ? data.draft : '');
-      onChanged?.();
-    } catch {
-      setError('Could not generate a proposed reply.');
-    } finally {
-      setLoading(false);
-    }
-  }, [conversationId, onChanged]);
+    },
+    [conversationId, onChanged],
+  );
 
-  // No stored draft yet → generate one once, automatically. Once it's persisted,
-  // persistedDraft becomes non-null and this never fires again for this thread.
+  // Nothing drafted and the gate hasn't ruled on this message yet → ask once, on
+  // the autonomous path. Once a draft persists (or a decline is recorded), this
+  // never fires again for this thread.
   useEffect(() => {
-    if (!persistedDraft && !autoTried.current) {
+    if (!persistedDraft && !declined && !autoTried.current) {
       autoTried.current = true;
-      void generate();
+      void generate(true);
     }
-  }, [persistedDraft, generate]);
+  }, [persistedDraft, declined, generate]);
 
   const handleSend = useCallback(() => {
     setNote('Sending isn’t available yet. Use Edit to refine, then send from your channel.');
   }, []);
 
+  // The gate ruled no reply was needed AND there's nothing else to show. An older
+  // draft still standing beneath a newer declined message keeps its bubble
+  // (marked stale) — the question it answers is still unanswered.
+  const showDeclined = (declined || justDeclined) && !draft && !loading && !error;
   const showSkeleton = loading || (!draft && !error);
   const showActions = !!draft && !loading && !error;
+
+  // Deliberately quiet: muted, one line, no amber. Amber means "a draft is
+  // waiting for you" — this is the opposite, and reads as noise if it shouts.
+  if (showDeclined) {
+    return (
+      <div className="mt-4 flex justify-end">
+        <div className="msg-in msg-well flex w-full max-w-[88%] items-center gap-2 rounded-2xl px-3.5 py-2 text-[11px] text-muted-foreground">
+          <Sparkles className="h-3 w-3 shrink-0 opacity-60" aria-hidden />
+          <span>No reply needed · the Concierge skipped this one</span>
+          <button
+            type="button"
+            onClick={() => generate(false)}
+            className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 font-medium text-foreground transition-colors hover:bg-foreground/5"
+          >
+            <RotateCw className="h-3 w-3" aria-hidden />
+            Draft anyway
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-4 flex justify-end">
@@ -98,7 +152,7 @@ export function ProposedReply({
           ) : null}
           <button
             type="button"
-            onClick={generate}
+            onClick={() => generate(false)}
             disabled={loading}
             aria-label="Regenerate proposed reply"
             title="Regenerate"

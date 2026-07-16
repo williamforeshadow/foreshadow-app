@@ -5,13 +5,30 @@ import { notifyProposedReply } from '@/src/server/notifications/notifyProposal';
 
 // Persisted proposed replies. The Concierge drafts a reply ONCE and we store it
 // on the conversation; the inbox reads it instead of regenerating on every open.
-// Generation happens in three places, all funneling through here:
-//   - eager, when a new guest message arrives (webhook)        → source 'auto'
-//   - the inbox "Regenerate" / first-generate button           → source 'auto'
-//   - the ops agent's `concierge` tool (often with an instruction) → 'assistant'
+//
+// Generation splits on ONE question: did a human ask for this draft?
+//
+//   AUTONOMOUS — nobody asked. We're drafting because a message arrived, or
+//   because a thread was opened with nothing drafted yet. Both go through
+//   maybeGenerateProposedReplyForConversation, which applies the full policy:
+//   the org master switch, active/unarchived, guest-is-awaiting-a-reply,
+//   not-already-decided, and the reply-warrant sensitivity gate.
+//     - the webhook, when a new guest message arrives    → source 'auto', notify
+//     - the inbox, on open, when nothing is drafted yet  → source 'auto'
+//
+//   MANUAL — a human clicked ↻ Regenerate or the composer's Sparkles, or told
+//   the ops agent to draft. Calls generateAndStoreProposedReply directly and is
+//   deliberately UNGATED: an explicit ask always produces a draft.
+//     - the inbox's ↻ / Sparkles buttons                 → source 'auto'
+//     - the ops agent's `concierge` tool                 → source 'assistant'
+//
+// The distinction matters because the master switch and the gate exist to stop
+// the Concierge from drafting UNPROMPTED. Opening a thread is not a prompt.
 //
 // `answers_message_id` is the latest sent message the draft was written against,
 // so the inbox can tell when a newer guest message has made the draft stale.
+// `declined_message_id` is its counterpart for the gate's "no" — see the
+// 20260716120000 migration for why a decline never clears the stored draft.
 
 export type ProposedReplySource = 'auto' | 'assistant';
 
@@ -87,8 +104,18 @@ export async function generateAndStoreProposedReply(
     replySensitivity,
   });
 
-  // The message didn't clear the sensitivity bar — store nothing, notify no one.
+  // The message didn't clear the sensitivity bar. Record the DECISION, so the
+  // inbox doesn't read "no draft" as "never drafted" and ask us again on every
+  // open — but leave proposed_reply alone. A draft written against an earlier
+  // message is still worth showing (stale) beneath a "thanks!" that declined.
   if (!warranted) {
+    if (latest) {
+      const { error } = await supabase
+        .from('conversations')
+        .update({ proposed_reply_declined_message_id: latest.id })
+        .eq('id', conversationId);
+      if (error) throw new Error(error.message);
+    }
     return { draft: '', answers_message_id: latest?.id ?? null, skipped: true };
   }
 
@@ -99,6 +126,10 @@ export async function generateAndStoreProposedReply(
       proposed_reply_answers_message_id: latest?.id ?? null,
       proposed_reply_source: opts.source,
       proposed_reply_generated_at: new Date().toISOString(),
+      // A draft supersedes any earlier "no" — e.g. a human hit ↻ to override the
+      // gate. Leaving it set would make the next autonomous pass skip as
+      // already-decided when there's now a real draft answering that message.
+      proposed_reply_declined_message_id: null,
     })
     .eq('id', conversationId);
   if (error) throw new Error(error.message);
@@ -133,11 +164,87 @@ export async function generateAndStoreProposedReply(
   return { draft, answers_message_id: latest?.id ?? null };
 }
 
+/** Why an autonomous draft didn't happen. Surfaced to the inbox so it can tell
+ *  "the Concierge declined" apart from "the Concierge is broken". */
+export type AutoDraftSkipReason =
+  | 'not_found'
+  | 'inactive' // archived, or the thread is marked complete
+  | 'disabled' // the org's autonomous reply-drafting master switch is off
+  | 'no_inbound' // the host sent last — nobody is awaiting a reply
+  | 'already_decided' // drafted OR gate-declined for this exact message
+  | 'not_warranted'; // the gate just ruled this message doesn't need a reply
+
+export type AutoDraftOutcome =
+  | { status: 'generated'; draft: string; answers_message_id: string | null }
+  | { status: 'skipped'; reason: AutoDraftSkipReason };
+
 /**
- * Eager hook for the webhook: after ingest, draft a reply for a Hostaway
- * conversation IF it's active, awaiting a guest reply, and not already drafted
- * for that exact message. Resolves the canonical conversation by external id.
- * Never throws — eager drafting is best-effort and must not fail the webhook.
+ * The AUTONOMOUS draft path: draft a reply for a conversation only if the org's
+ * policy says an unprompted draft is wanted here. Shared by both callers where
+ * no human asked for a draft — the webhook (a guest message arrived) and the
+ * inbox (a thread was opened with nothing drafted yet) — so they cannot drift.
+ *
+ * Throws on generation/DB errors; callers map to their own shape.
+ */
+export async function maybeGenerateProposedReplyForConversation(
+  conversationId: string,
+  opts: { notify?: boolean } = {},
+): Promise<AutoDraftOutcome> {
+  const supabase = getSupabaseServer();
+  const { data: conv, error: convError } = await supabase
+    .from('conversations')
+    .select(
+      'id, org_id, app_status, archived, proposed_reply_answers_message_id, proposed_reply_declined_message_id',
+    )
+    .eq('id', conversationId)
+    .maybeSingle();
+  // Surface read failures rather than letting them read as "no such conversation"
+  // — a skip is a DECISION, and a broken query must never impersonate one.
+  if (convError) throw new Error(convError.message);
+  if (!conv) return { status: 'skipped', reason: 'not_found' };
+  const c = conv as {
+    id: string;
+    org_id: string | null;
+    app_status: 'active' | 'complete';
+    archived: boolean;
+    proposed_reply_answers_message_id: string | null;
+    proposed_reply_declined_message_id: string | null;
+  };
+  if (c.archived || c.app_status !== 'active') return { status: 'skipped', reason: 'inactive' };
+
+  // Master switch (per THIS conversation's org): when autonomous reply drafting
+  // is off, nothing unprompted gets drafted — on either autonomous path. Manual
+  // ↻ / Sparkles and the ops-agent tool call generateAndStoreProposedReply
+  // directly and stay unaffected.
+  if (!(await loadConciergeProposalFlags(c.org_id)).reply) {
+    return { status: 'skipped', reason: 'disabled' };
+  }
+
+  const latest = await getLatestSentMessage(c.id);
+  // Only draft when the guest is the one awaiting a reply.
+  if (!latest || latest.direction !== 'inbound') return { status: 'skipped', reason: 'no_inbound' };
+  // Already ruled on this exact message — either a draft answers it, or the gate
+  // declined it. Both are decisions; neither should be re-derived.
+  if (
+    c.proposed_reply_answers_message_id === latest.id ||
+    c.proposed_reply_declined_message_id === latest.id
+  ) {
+    return { status: 'skipped', reason: 'already_decided' };
+  }
+
+  const res = await generateAndStoreProposedReply(c.id, {
+    source: 'auto',
+    notify: opts.notify,
+    gate: true,
+  });
+  if (res.skipped) return { status: 'skipped', reason: 'not_warranted' };
+  return { status: 'generated', draft: res.draft, answers_message_id: res.answers_message_id };
+}
+
+/**
+ * Eager hook for the webhook: resolve the canonical conversation by external id,
+ * then run the autonomous path above. Never throws — eager drafting is
+ * best-effort and must not fail the webhook.
  */
 export async function maybeGenerateProposedReplyForExternal(
   externalConversationId: string,
@@ -147,32 +254,12 @@ export async function maybeGenerateProposedReplyForExternal(
     const supabase = getSupabaseServer();
     const { data: conv } = await supabase
       .from('conversations')
-      .select('id, org_id, app_status, archived, proposed_reply_answers_message_id')
+      .select('id')
       .eq('source', source)
       .eq('external_conversation_id', externalConversationId)
       .maybeSingle();
     if (!conv) return;
-    const c = conv as {
-      id: string;
-      org_id: string | null;
-      app_status: 'active' | 'complete';
-      archived: boolean;
-      proposed_reply_answers_message_id: string | null;
-    };
-    if (c.archived || c.app_status !== 'active') return;
-
-    // Master switch (per THIS conversation's org): when autonomous reply
-    // drafting is off, skip entirely. Manual "Regenerate" and the ops-agent
-    // tool call generateAndStoreProposedReply directly and are unaffected.
-    if (!(await loadConciergeProposalFlags(c.org_id)).reply) return;
-
-    const latest = await getLatestSentMessage(c.id);
-    // Only draft when the guest is the one awaiting a reply.
-    if (!latest || latest.direction !== 'inbound') return;
-    // Already drafted for this exact message — nothing new to answer.
-    if (c.proposed_reply_answers_message_id === latest.id) return;
-
-    await generateAndStoreProposedReply(c.id, { source: 'auto', notify: true, gate: true });
+    await maybeGenerateProposedReplyForConversation((conv as { id: string }).id, { notify: true });
   } catch (err) {
     console.error('[proposed reply] eager generation failed', {
       externalConversationId,

@@ -243,6 +243,7 @@ export async function runConciergeTest(
     archived: false,
     proposed_reply: null,
     proposed_reply_answers_message_id: null,
+    proposed_reply_declined_message_id: null,
     proposed_reply_source: null,
     proposed_reply_generated_at: null,
     sentiment: null,

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAuthContext } from '@/lib/requireAuthContext';
+import { loadConciergeProposalFlags } from '@/src/server/messages/conciergeCapabilities';
 import { taskUrl } from '@/src/lib/links';
 
 // Thread for one conversation: the conversation header + its messages (oldest
@@ -139,10 +140,18 @@ export async function GET(
     };
   });
 
+  // Whether this org drafts replies autonomously. The thread needs it to decide
+  // whether to render the proposal bubble at all: with the switch off and nothing
+  // drafted, an unprompted "Proposed Reply" affordance would be advertising a
+  // capability the operator turned off. An already-stored draft still renders —
+  // flipping the switch off shouldn't hide work already done.
+  const { reply: reply_proposal_enabled } = await loadConciergeProposalFlags(ctx.orgId);
+
   return NextResponse.json({
     conversation,
     messages: messages ?? [],
     proposed_tasks,
     proposed_knowledge,
+    reply_proposal_enabled,
   });
 }
