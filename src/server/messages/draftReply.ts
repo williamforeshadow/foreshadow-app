@@ -103,9 +103,9 @@ Output: return ONLY the reply text the host would send. No preamble, no quotes, 
 // Reply-warrant gate. On the AUTONOMOUS path the operator sets a sensitivity
 // level (1-4) deciding how readily the concierge drafts a reply at all. We fold
 // the decision into this same draft call (no extra classifier): the model
-// decides FIRST and, when the message doesn't clear the bar, emits the sentinel
-// and stops — no tool calls, no draft. Level 4 (and the manual/test paths) skip
-// the gate entirely and always draft, matching the prior behavior.
+// decides FIRST and, when the guest's turn doesn't clear the bar, emits the
+// sentinel and stops — no tool calls, no draft. Level 4 (and the manual/test
+// paths) skip the gate entirely and always draft, matching the prior behavior.
 const NO_REPLY_SENTINEL = '<<NO_REPLY>>';
 
 // Cumulative ladder — each level includes everything a stricter (lower) level
@@ -117,16 +117,30 @@ const REPLY_SENSITIVITY_LADDER: Record<number, string> = {
   4: 'Everything — reply to every inbound message.',
 };
 
-/** Build the gate clause appended to the system prompt for levels 1-3. */
+/**
+ * Build the gate clause appended to the system prompt for levels 1-3.
+ *
+ * The unit of judgment is the guest's TURN — everything they've said since the
+ * host last replied — not their latest message. Judging the latest message alone
+ * silently drops real work: a guest who reports a broken heater and then adds
+ * "thanks" would have the whole turn skipped, because the gate only ever saw the
+ * "thanks". ~15% of threads awaiting a reply have a multi-message guest turn.
+ *
+ * The host's last reply is the right boundary in both directions: anything
+ * before it he has already handled (so a draft answering it is obsolete, not
+ * outstanding), and anything after it is still owed an answer.
+ */
 function buildReplyGateClause(level: number): string {
   const ladder = [1, 2, 3, 4]
     .map((l) => `  ${l}. ${REPLY_SENSITIVITY_LADDER[l]}`)
     .join('\n');
   return `\n\nReply-warrant gate (overrides "Always produce a real reply" above):
-Before anything else, decide whether the LATEST guest message warrants a reply at the configured sensitivity level. The levels are cumulative — a level also answers everything a lower level would:
+Before anything else, decide whether the guest's CURRENT TURN warrants a reply at the configured sensitivity level. Their current turn is everything the guest has said SINCE THE HOST LAST REPLIED — it may be one message or several. The levels are cumulative — a level also answers everything a lower level would:
 ${ladder}
 Configured level: ${level}.
-If the latest message does NOT clear the level-${level} bar, output exactly ${NO_REPLY_SENTINEL} and nothing else — do not call any tool, do not write a message. Otherwise, draft the reply exactly as instructed above. Judge only the latest guest message (use earlier messages for context); if the host sent the most recent message, treat a follow-up as warranted only at level 4.`;
+Judge the turn AS A WHOLE, not just its last message: if ANY message in the turn clears the level-${level} bar, the turn warrants a reply. A guest who asks a real question and then adds "thanks" is still owed an answer — the "thanks" does not cancel the question.
+Only when NOTHING in the whole turn clears the bar, output exactly ${NO_REPLY_SENTINEL} and nothing else — do not call any tool, do not write a message. Otherwise draft one reply covering whatever in the turn is still outstanding, exactly as instructed above.
+Messages from BEFORE the host's last reply are context only — the host has already handled those; do not re-answer them. If the host sent the most recent message, treat a follow-up as warranted only at level 4.`;
 }
 
 export interface GenerateDraftInput {

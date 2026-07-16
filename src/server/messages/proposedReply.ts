@@ -104,15 +104,29 @@ export async function generateAndStoreProposedReply(
     replySensitivity,
   });
 
-  // The message didn't clear the sensitivity bar. Record the DECISION, so the
-  // inbox doesn't read "no draft" as "never drafted" and ask us again on every
-  // open — but leave proposed_reply alone. A draft written against an earlier
-  // message is still worth showing (stale) beneath a "thanks!" that declined.
+  // The guest's turn didn't clear the sensitivity bar. Two things happen here:
+  //
+  // 1. Record the DECISION, so the inbox doesn't read "no draft" as "never
+  //    drafted" and ask us again (burning a model call) on every open.
+  // 2. CLEAR any older draft. A newer guest message always supersedes the last
+  //    draft — it never lingers as "stale". There's no send path, so the host
+  //    answers in the PMS; by the time the guest speaks again he has almost
+  //    always already handled it (measured: 12 of 13 stale drafts had a host
+  //    reply after the message they answered — one had six). The gate judges the
+  //    turn since that reply, so a decline here means the outstanding work is
+  //    genuinely done and the old draft answers a resolved question. Leaving it
+  //    on screen invites sending a reply the guest has moved past.
   if (!warranted) {
     if (latest) {
       const { error } = await supabase
         .from('conversations')
-        .update({ proposed_reply_declined_message_id: latest.id })
+        .update({
+          proposed_reply: null,
+          proposed_reply_answers_message_id: null,
+          proposed_reply_source: null,
+          proposed_reply_generated_at: null,
+          proposed_reply_declined_message_id: latest.id,
+        })
         .eq('id', conversationId);
       if (error) throw new Error(error.message);
     }

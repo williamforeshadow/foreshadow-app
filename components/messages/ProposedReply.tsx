@@ -7,17 +7,24 @@ import { Sparkles, SendHorizontal, Pencil, RotateCw, AlertCircle } from 'lucide-
  * The conversation's proposed reply, rendered beneath the guest message it
  * answers. The draft is PERSISTED on the conversation — generated eagerly when a
  * guest message arrives, or by the ops agent's `concierge` tool. This component
- * reads that stored draft. If none exists yet (e.g. a historical thread or one
- * eager generation missed), it asks the server ONCE on open.
+ * reads that stored draft, and asks the server ONCE on open when there's nothing
+ * to show or what's stored is stale.
  *
- * That open-time ask goes out as `auto` — nobody clicked anything, so the server
- * runs the same policy the webhook does and may decline (the org's master switch
- * is off, or the message doesn't clear the sensitivity bar). A decline renders as
- * a quiet "no reply needed" row, NOT a draft: the gate's ruling is the product,
- * and the operator can always override it with ↻ Draft anyway.
+ * Invariant: a STALE draft is never rendered. It answers a message the guest has
+ * already spoken past, and the newer message changes what the reply should say.
+ * (It's usually worse than merely outdated: with no send path the host answers in
+ * the PMS, so a stale draft normally answers something he settled days ago.) It's
+ * refreshed silently rather than shown behind a "regenerate?" banner — asking a
+ * human to notice a warning before reading the draft puts the most dangerous text
+ * on screen and makes noticing it their job.
  *
- * It does NOT re-ask when a draft already exists, or when the gate has already
- * ruled on this message — so re-opening a thread stays a cheap read either way.
+ * Refreshes go out as `auto` — nobody clicked, so the server runs the same policy
+ * the webhook does and may decline (master switch off, or the guest's turn
+ * doesn't clear the sensitivity bar). A decline renders as a quiet "no reply
+ * needed" row: the gate's ruling is the product, and ↻ Draft anyway overrides it.
+ *
+ * It does NOT re-ask when a fresh draft exists or the gate has already ruled on
+ * this message, so re-opening a thread stays a cheap read either way.
  * Regenerate (↻) re-rolls + re-stores; Edit copies to the composer; Send stubbed.
  */
 export function ProposedReply({
@@ -41,21 +48,23 @@ export function ProposedReply({
   /** Called after a (re)generate so the parent can refetch the conversation. */
   onChanged?: () => void;
 }) {
-  const [draft, setDraft] = useState(persistedDraft ?? '');
+  // A stale draft is never rendered — see the auto-refresh effect below — so it
+  // starts blank and the skeleton covers the refresh.
+  const [draft, setDraft] = useState(stale ? '' : persistedDraft ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   // A decline the server reported on THIS mount, before the parent has refetched
   // the conversation row that carries it.
   const [justDeclined, setJustDeclined] = useState(false);
-  // Generate-when-missing fires at most once per mount (the component is keyed by
-  // the guest message, so it remounts fresh per conversation / new message).
+  // Refresh-when-missing-or-stale fires at most once per mount (the component is
+  // keyed by the guest message, so it remounts fresh per conversation / message).
   const autoTried = useRef(false);
 
   // Sync when the stored draft changes (conversation switch / parent refetch).
   useEffect(() => {
-    setDraft(persistedDraft ?? '');
-  }, [persistedDraft]);
+    setDraft(stale ? '' : persistedDraft ?? '');
+  }, [persistedDraft, stale]);
 
   // `auto` = nobody asked; the server applies the master switch + sensitivity
   // gate and may decline. Omitting it marks an explicit human ask, which always
@@ -96,15 +105,22 @@ export function ProposedReply({
     [conversationId, onChanged],
   );
 
-  // Nothing drafted and the gate hasn't ruled on this message yet → ask once, on
-  // the autonomous path. Once a draft persists (or a decline is recorded), this
-  // never fires again for this thread.
+  // Nothing drafted, OR what's stored answers a message the guest has already
+  // spoken past → ask once, on the autonomous path. Once a fresh draft persists
+  // (or a decline is recorded), this never fires again for this thread.
+  //
+  // A stale draft is refreshed rather than shown with a "regenerate?" prompt.
+  // The newer message changes what the reply should say, and asking a human to
+  // notice a banner before reading the draft gets that backwards — the stale text
+  // is the most dangerous thing on screen, not something to offer for review.
+  // The refresh goes out as `auto`, so the gate still decides: a substantive turn
+  // yields a new draft, a pure "thanks" clears it and shows "no reply needed".
   useEffect(() => {
-    if (!persistedDraft && !declined && !autoTried.current) {
+    if ((!persistedDraft || stale) && !declined && !autoTried.current) {
       autoTried.current = true;
       void generate(true);
     }
-  }, [persistedDraft, declined, generate]);
+  }, [persistedDraft, stale, declined, generate]);
 
   const handleSend = useCallback(() => {
     setNote('Sending isn’t available yet. Use Edit to refine, then send from your channel.');
@@ -161,12 +177,6 @@ export function ProposedReply({
             <RotateCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} aria-hidden />
           </button>
         </div>
-
-        {stale && !loading ? (
-          <p className="mx-3.5 mt-2 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-700 dark:bg-amber-400/10 dark:text-amber-300">
-            A newer guest message has arrived since this draft — regenerate to refresh it.
-          </p>
-        ) : null}
 
         <div className="px-3.5 py-2.5">
           {showSkeleton ? (
