@@ -85,8 +85,6 @@ const TASK_SENSITIVITY_LEVELS: { level: number; name: string; blurb: string }[] 
   { level: 1, name: 'Critical only', blurb: 'Only urgent or safety issues, or anything making the space unusable.' },
   { level: 2, name: 'Clear operational work', blurb: 'Level 1, plus repairs, maintenance, supplies, and explicit “please do X” requests. (Default)' },
   { level: 3, name: 'Operational + administrative', blurb: 'Levels 1 and 2, plus booking/stay changes, special arrangements, and follow-ups that need an action — not just an answer.' },
-  { level: 4, name: 'Proactive', blurb: 'Levels 1–3, plus most actionable requests and notable feedback or preferences that likely need follow-up.' },
-  { level: 5, name: 'Track everything', blurb: 'Levels 1–4, plus almost any feedback, request, or issue worth tracking — skip only pure pleasantries.' },
 ];
 
 function clampLevel(value: unknown, min: number, max: number, fallback: number): number {
@@ -113,7 +111,7 @@ function parseSettings(s: Record<string, unknown> | undefined | null): SettingsS
       knowledge: s?.knowledge_proposal_enabled !== false,
     },
     replySensitivity: clampLevel(s?.reply_proposal_sensitivity, 1, 4, 3),
-    taskSensitivity: clampLevel(s?.task_proposal_sensitivity, 1, 5, 2),
+    taskSensitivity: clampLevel(s?.task_proposal_sensitivity, 1, TASK_SENSITIVITY_LEVELS.length, 2),
     tools: {
       get_property_knowledge_for_guest: toolMap.get_property_knowledge_for_guest !== false,
       check_property_availability: toolMap.check_property_availability !== false,

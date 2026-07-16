@@ -85,19 +85,24 @@ Output: respond with ONLY a single JSON object, no prose, no code fences. Shape:
 
 // The sensitivity ladder. Cumulative: each level includes everything below it.
 // Generic by design — concrete, domain-specific examples belong in Task rules.
+// The operator-facing calibration for what qualifies as a task. 1-3 only: the
+// ladder used to run to 5, but 4 ("Proactive") and 5 ("Track everything") both
+// proposed work the guest never asked anyone to do, contradicting the task
+// definition in SYSTEM_PROMPT above. Keep in sync with TASK_SENSITIVITY_LEVELS
+// in the settings UI and the CHECK constraint (migration 20260716130000).
 const SENSITIVITY_LADDER = [
   'Critical only — draft a task ONLY for urgent or safety-critical issues, or anything making the space unusable. Ignore everything else.',
   'Clear operational work — draft a task when the message clearly calls for hands-on work or an explicit action: repairs, maintenance, a problem with the space, restocking/supplies, or a direct request for staff to do something. Not for questions, information requests, logistics, small talk, or thanks.',
   'Operational + administrative — everything above, plus administrative or service actions the team must handle: booking or stay changes, special arrangements, accommodations, and follow-ups that require an action (not just an answer).',
-  'Proactive — everything above, plus most actionable requests and any notable feedback, problem, or preference that likely needs follow-up, even when the guest did not explicitly ask for action.',
-  'Track everything — draft a task for essentially any guest feedback, request, issue, or preference the team might want to track or follow up on. Skip only pure pleasantries (greetings, thanks) with nothing to act on.',
 ] as const;
 
+const MAX_SENSITIVITY = SENSITIVITY_LADDER.length;
+
 function buildSensitivityBlock(level: number): string {
-  const clamped = Math.min(5, Math.max(1, Math.round(level)));
+  const clamped = Math.min(MAX_SENSITIVITY, Math.max(1, Math.round(level)));
   const lines = SENSITIVITY_LADDER.map((text, i) => `- Level ${i + 1} — ${text}`);
   return [
-    `Sensitivity is set to ${clamped} of 5. The levels are cumulative:`,
+    `Sensitivity is set to ${clamped} of ${MAX_SENSITIVITY}. The levels are cumulative:`,
     ...lines,
     '',
     `Apply level ${clamped}: draft a task only when the latest guest message meets the level ${clamped} threshold.`,
@@ -222,7 +227,11 @@ async function loadTaskProposalSensitivity(orgId: string | null): Promise<number
       .eq('org_id', orgId)
       .maybeSingle();
     const v = (data as { task_proposal_sensitivity?: number } | null)?.task_proposal_sensitivity;
-    if (typeof v === 'number' && v >= 1 && v <= 5) return v;
+    // Clamp rather than reject: if a row still carries a pre-1-3 value (this code
+    // deployed ahead of migration 20260716130000), the operator's intent was "the
+    // most eager setting", so land on the new ceiling instead of silently
+    // dropping them to the default.
+    if (typeof v === 'number' && v >= 1) return Math.min(MAX_SENSITIVITY, Math.round(v));
   } catch {
     // Column/table may be missing in older environments — fall back.
   }

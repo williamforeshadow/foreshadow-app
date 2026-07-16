@@ -20,22 +20,30 @@ import { DEFAULT_TIMEZONE } from '@/src/lib/dates';
 const FALLBACK_CHECK_IN = '15:00';
 const FALLBACK_CHECK_OUT = '11:00';
 const FALLBACK_SENSITIVITY = 2;
+// Task-proposal sensitivity runs 1-3. Levels 4-5 were removed (migration
+// 20260716130000): both proposed work the guest never asked anyone to do, which
+// the triage prompt's own task definition excludes. Keep in sync with
+// SENSITIVITY_LADDER in draftTask.ts and TASK_SENSITIVITY_LEVELS in the UI.
+const MAX_TASK_SENSITIVITY = 3;
 const FALLBACK_REPLY_SENSITIVITY = 3;
 
-// Read the org task-proposal sensitivity (1-5) off a settings row, falling back
+// Read the org task-proposal sensitivity (1-3) off a settings row, falling back
 // to 2. Tolerates the column being absent (migration not yet applied).
 function readSensitivity(value: unknown): number {
   const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
-  if (Number.isFinite(n) && n >= 1 && n <= 5) return Math.round(n);
+  // Clamp on read: a stored 4/5 predates the 1-3 ladder (migration
+  // 20260716130000) and means "most eager", so show the new ceiling rather than
+  // snapping the operator back to the default.
+  if (Number.isFinite(n) && n >= 1) return Math.min(MAX_TASK_SENSITIVITY, Math.round(n));
   return FALLBACK_SENSITIVITY;
 }
 
-// Validate an incoming sensitivity value; returns 1-5 or null.
+// Validate an incoming sensitivity value; returns 1-3 or null.
 function normalizeSensitivity(value: unknown): number | null {
   const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
   if (!Number.isFinite(n)) return null;
   const r = Math.round(n);
-  return r >= 1 && r <= 5 ? r : null;
+  return r >= 1 && r <= MAX_TASK_SENSITIVITY ? r : null;
 }
 
 // Read the org reply-proposal sensitivity (1-4) off a settings row, falling back
@@ -336,7 +344,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// PATCH — partial update. Accepts `task_proposal_sensitivity` (1-5) and the
+// PATCH — partial update. Accepts `task_proposal_sensitivity` (1-3) and the
 // three concierge capability flags (booleans), in any subset, so the
 // concierge-training page can change a single control without resending
 // check-in/out times or timezone. Updates the singleton in place (or seeds it
@@ -353,7 +361,7 @@ export async function PATCH(request: NextRequest) {
       const sensitivity = normalizeSensitivity(body.task_proposal_sensitivity);
       if (sensitivity === null) {
         return NextResponse.json(
-          { error: 'task_proposal_sensitivity must be an integer between 1 and 5' },
+          { error: `task_proposal_sensitivity must be an integer between 1 and ${MAX_TASK_SENSITIVITY}` },
           { status: 400 },
         );
       }
