@@ -3,6 +3,9 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { qk } from '@/lib/queries/keys';
+import { fetchJson } from '@/lib/queries/fetchJson';
 
 interface PropertyRow {
   id: string;
@@ -13,6 +16,8 @@ interface PropertyRow {
   created_at: string;
   updated_at: string;
 }
+
+const EMPTY_PROPERTIES: PropertyRow[] = [];
 
 interface PropertyGroup {
   key: string;
@@ -25,9 +30,19 @@ interface PropertyGroup {
 
 export default function PropertiesPage() {
   const router = useRouter();
-  const [properties, setProperties] = useState<PropertyRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const propertiesQuery = useQuery({
+    queryKey: qk.propertiesAll,
+    queryFn: () =>
+      fetchJson<{ properties?: PropertyRow[] }>('/api/properties?include_inactive=true').then(
+        (d) => d.properties ?? []
+      ),
+  });
+  const properties = propertiesQuery.data ?? EMPTY_PROPERTIES;
+  const loading = propertiesQuery.isLoading;
+  const error = propertiesQuery.error
+    ? propertiesQuery.error.message || 'Failed to fetch properties'
+    : null;
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
     new Set(['inactive'])
   );
@@ -36,24 +51,12 @@ export default function PropertiesPage() {
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Refresh shim — invalidates the shared ['properties'] prefix so both this
+  // include_inactive list and the app-wide active list refresh (a Hostaway
+  // sync or create stales both).
   const fetchProperties = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/properties?include_inactive=true');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to fetch properties');
-      setProperties(data.properties || []);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch properties');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchProperties();
-  }, [fetchProperties]);
+    await queryClient.invalidateQueries({ queryKey: ['properties'] });
+  }, [queryClient]);
 
   const { groups, activeCount, inactiveCount, linkedCount, unlinkedCount } = useMemo(() => {
     const linkedActive: PropertyRow[] = [];

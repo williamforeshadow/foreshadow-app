@@ -1,6 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { qk } from '@/lib/queries/keys';
+import { fetchJson } from '@/lib/queries/fetchJson';
 
 // Full task shape from /api/reservations/[id]/with-window-tasks. Kept as a
 // structural superset of OverlayTaskInput (PropertyTaskDetailOverlay) so an
@@ -57,43 +60,44 @@ export interface ReservationContext {
  * detail panel. Reuses /api/reservations/[id]/with-window-tasks. No-ops (returns
  * nulls) when reservationId is null — i.e. inquiry threads with no booking.
  */
+const EMPTY_TASKS: ReservationContextTask[] = [];
+
 export function useReservationContext(
   reservationId: string | null,
   // Bump to force a re-fetch (e.g. after editing a task in the detail panel so
   // its card reflects the change).
   refreshKey = 0,
 ) {
-  const [reservation, setReservation] = useState<ReservationContext | null>(null);
-  const [tasks, setTasks] = useState<ReservationContextTask[]>([]);
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: qk.reservationWindowTasks(reservationId ?? ''),
+    enabled: !!reservationId,
+    queryFn: async () => {
+      const data = await fetchJson<{
+        reservation?: ReservationContext | null;
+        tasks?: ReservationContextTask[];
+      }>(`/api/reservations/${reservationId}/with-window-tasks`);
+      return { reservation: data.reservation ?? null, tasks: data.tasks ?? [] };
+    },
+  });
 
+  // refreshKey bumps become cache invalidations (skip the initial mount —
+  // the query itself owns the first fetch).
+  const firstRun = useRef(true);
   useEffect(() => {
-    if (!reservationId) {
-      setReservation(null);
-      setTasks([]);
+    if (firstRun.current) {
+      firstRun.current = false;
       return;
     }
-    let cancelled = false;
-    setLoading(true);
-    (async () => {
-      try {
-        const res = await fetch(
-          `/api/reservations/${reservationId}/with-window-tasks`,
-          { cache: 'no-store' },
-        );
-        if (!res.ok) return;
-        const data = await res.json();
-        if (cancelled) return;
-        setReservation(data.reservation ?? null);
-        setTasks(data.tasks ?? []);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [reservationId, refreshKey]);
+    if (reservationId) {
+      queryClient.invalidateQueries({ queryKey: qk.reservationWindowTasks(reservationId) });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
 
-  return { reservation, tasks, loading };
+  return {
+    reservation: query.data?.reservation ?? null,
+    tasks: query.data?.tasks ?? EMPTY_TASKS,
+    loading: query.isLoading,
+  };
 }

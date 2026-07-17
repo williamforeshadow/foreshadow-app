@@ -1,15 +1,29 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { NotificationRecord } from '@/lib/notifications';
+import { qk } from '@/lib/queries/keys';
+import { fetchJson } from '@/lib/queries/fetchJson';
 
 export type NotificationView = 'unread' | 'all';
 
+const EMPTY: NotificationRecord[] = [];
+
+type FeedData = { notifications: NotificationRecord[]; unreadCount: number };
+
+async function fetchFeed(view: NotificationView): Promise<FeedData> {
+  const data = await fetchJson<{ notifications?: NotificationRecord[]; unread_count?: number }>(
+    `/api/notifications?view=${view}&limit=50`
+  );
+  return { notifications: data.notifications ?? [], unreadCount: data.unread_count ?? 0 };
+}
+
 /**
  * Shared notification feed state — fetch + poll + mark-read — used by both the
- * desktop dropdown (NotificationBell) and the mobile notifications page so the
- * two surfaces stay in lockstep. A single effect loads the active view and
- * polls it; changing the view reloads immediately.
+ * desktop dropdown (NotificationBell) and the mobile notifications page. Data
+ * lives in the shared React Query cache, so the two surfaces share one fetch
+ * and one poll instead of polling independently.
  */
 export function useNotificationFeed(opts?: {
   pollMs?: number;
@@ -17,32 +31,13 @@ export function useNotificationFeed(opts?: {
 }) {
   const pollMs = opts?.pollMs ?? 60000;
   const [view, setView] = useState<NotificationView>(opts?.initialView ?? 'unread');
-  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
 
-  const load = useCallback(async (mode: NotificationView) => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/notifications?view=${mode}&limit=50`, {
-        cache: 'no-store',
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      setNotifications(data.notifications ?? []);
-      setUnreadCount(data.unread_count ?? 0);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Load the active view on mount + whenever it changes, and poll it in the
-  // background. The poll interval is re-created on view change, which is fine.
-  useEffect(() => {
-    load(view);
-    const id = window.setInterval(() => load(view), pollMs);
-    return () => window.clearInterval(id);
-  }, [load, view, pollMs]);
+  const query = useQuery({
+    queryKey: qk.notifications(view),
+    queryFn: () => fetchFeed(view),
+    refetchInterval: pollMs,
+  });
 
   const markRead = useCallback(
     async (ids: string[] | 'all') => {
@@ -51,10 +46,18 @@ export function useNotificationFeed(opts?: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(ids === 'all' ? { all: true } : { ids }),
       });
-      await load(view);
+      // Both views change: read items leave 'unread' and flip state in 'all'.
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
-    [load, view],
+    [queryClient],
   );
 
-  return { view, setView, notifications, unreadCount, loading, markRead };
+  return {
+    view,
+    setView,
+    notifications: query.data?.notifications ?? EMPTY,
+    unreadCount: query.data?.unreadCount ?? 0,
+    loading: query.isLoading,
+    markRead,
+  };
 }

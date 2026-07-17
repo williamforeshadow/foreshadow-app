@@ -1,6 +1,9 @@
 'use client';
 
 import React from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { qk } from '@/lib/queries/keys';
+import { fetchJson } from '@/lib/queries/fetchJson';
 
 // Canonical property profile shape used across all detail tabs. Kept in
 // one place so tabs and the shell share one source of truth.
@@ -63,38 +66,35 @@ export function PropertyProvider({
   propertyId: string;
   children: React.ReactNode;
 }) {
-  const [property, setProperty] = React.useState<PropertyProfile | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: qk.property(propertyId),
+    queryFn: () =>
+      fetchJson<{ property: PropertyProfile }>(`/api/properties/${propertyId}`).then(
+        (d) => d.property
+      ),
+  });
+  const { refetch } = query;
 
-  const fetchProperty = React.useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/properties/${propertyId}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to load property');
-      setProperty(data.property as PropertyProfile);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load property');
-    } finally {
-      setLoading(false);
-    }
-  }, [propertyId]);
+  const refresh = React.useCallback(async () => {
+    await refetch();
+  }, [refetch]);
 
-  React.useEffect(() => {
-    fetchProperty();
-  }, [fetchProperty]);
-
-  const applyLocalPatch = React.useCallback((patch: Partial<PropertyProfile>) => {
-    setProperty((prev) => (prev ? { ...prev, ...patch } : prev));
-  }, []);
+  const applyLocalPatch = React.useCallback(
+    (patch: Partial<PropertyProfile>) => {
+      queryClient.cancelQueries({ queryKey: qk.property(propertyId), exact: true });
+      queryClient.setQueryData<PropertyProfile>(qk.property(propertyId), (prev) =>
+        prev ? { ...prev, ...patch } : prev
+      );
+    },
+    [queryClient, propertyId]
+  );
 
   const value: PropertyContextValue = {
-    property,
-    loading,
-    error,
-    refresh: fetchProperty,
+    property: query.data ?? null,
+    loading: query.isLoading,
+    error: query.error ? query.error.message || 'Failed to load property' : null,
+    refresh,
     applyLocalPatch,
   };
 
