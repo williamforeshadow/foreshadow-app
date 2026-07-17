@@ -2,7 +2,7 @@
 
 import { apiFetch } from '@/lib/apiFetch';
 import { toast } from '@/components/ui/toast';
-import { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
+import { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, type SetStateAction } from 'react';
 import { createPortal } from 'react-dom';
 import MobileBinPicker from '@/components/mobile/MobileBinPicker';
 import MobileProjectDetail from '@/components/mobile/MobileProjectDetail';
@@ -12,8 +12,8 @@ import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
 import { useTaskBinGlobalView } from '@/lib/hooks/useTaskBinGlobalView';
 import { useAuth } from '@/lib/authContext';
 import { useDepartments } from '@/lib/departmentsContext';
-import { useProperties, useTaskTemplates, ensureTemplateDetail } from '@/lib/queries';
-import { useQueryClient } from '@tanstack/react-query';
+import { useProperties, useTaskTemplates, ensureTemplateDetail, fetchJson, qk } from '@/lib/queries';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { STATUS_ORDER, STATUS_LABELS, PRIORITY_ORDER, PRIORITY_LABELS } from '@/lib/types';
 import type { ProjectViewMode } from '@/lib/types';
 import { ColumnPicker } from '@/components/windows/projects/ColumnPicker';
@@ -31,6 +31,8 @@ type Screen =
   | { type: 'bins' }
   | { type: 'kanban'; binId: string | null; binName: string }
   | { type: 'detail'; project: Project; binId: string | null; binName: string };
+
+const EMPTY_PROJECTS: Project[] = [];
 
 interface MobileProjectsViewProps {
   users: User[];
@@ -172,9 +174,6 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
     setScreen((prev) => (prev.type === 'detail' ? { type: 'bins' } : prev));
   });
 
-  // Task data (fetched via tasks-for-bin API, same as desktop ProjectsWindow)
-  const [tasks, setTasks] = useState<Project[]>([]);
-  const [loadingTasks, setLoadingTasks] = useState(false);
   const { properties: allProperties } = useProperties();
   const [viewMode, setViewMode] = useState<ProjectViewMode>('status');
   const [kanbanSelectionMode, setKanbanSelectionMode] = useState(false);
@@ -189,6 +188,82 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
   // Draft task state — local-only project not yet persisted
   const [draftTask, setDraftTask] = useState<Project | null>(null);
   const [creatingTask, setCreatingTask] = useState(false);
+
+  // Task Bin "Global" toggle. Mirrors ProjectsWindow desktop: when ON inside
+  // the Task Bin (activeBinId === null), widens the kanban to every binned
+  // task across the Task Bin and every sub-bin via the '__every__' API
+  // sentinel. Persisted in localStorage so the preference survives reloads.
+  const taskBinGlobal = useTaskBinGlobalView();
+  const apiBinIdFor = useCallback(
+    (binId: string | null) =>
+      binId === null && taskBinGlobal.enabled ? '__every__' : binId,
+    [taskBinGlobal.enabled],
+  );
+
+  // The bin task list lives in the shared query cache, keyed by the bin the
+  // user is looking at (derived from screen state — navigation just sets the
+  // screen and the key change drives fetching). Previously-visited bins paint
+  // instantly from cache; the spinner shows only on a bin's first-ever visit.
+  const viewerId = currentUser?.id ?? null;
+  const activeApiBinId = screen.type === 'bins' ? null : apiBinIdFor(screen.binId);
+  const tasksQuery = useQuery({
+    queryKey: qk.tasksForBin(activeApiBinId, viewerId),
+    enabled: screen.type !== 'bins',
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (viewerId) params.set('viewer_user_id', viewerId);
+      if (activeApiBinId !== null) params.set('bin_id', activeApiBinId);
+      const result = await fetchJson<{ data?: Project[] }>(
+        `/api/tasks-for-bin?${params.toString()}`
+      );
+      return result.data ?? [];
+    },
+  });
+  const tasks = tasksQuery.data ?? EMPTY_PROJECTS;
+  const loadingTasks = tasksQuery.isLoading;
+
+  // Preserve the old fetch-failure toast semantic.
+  useEffect(() => {
+    if (tasksQuery.isError) {
+      console.error('Error fetching tasks:', tasksQuery.error);
+      toast.error('Failed to load tasks');
+    }
+  }, [tasksQuery.isError, tasksQuery.error]);
+
+  // Optimistic patch for the ACTIVE bin's cached list. cancelQueries drops
+  // any in-flight background refetch so its pre-mutation response can't land
+  // after — and silently revert — the optimistic write.
+  const patchTasks = useCallback(
+    (action: SetStateAction<Project[]>) => {
+      const key = qk.tasksForBin(activeApiBinId, viewerId);
+      queryClient.cancelQueries({ queryKey: key });
+      queryClient.setQueryData<Project[]>(key, (old) => {
+        const prev = old ?? [];
+        return typeof action === 'function' ? (action as (p: Project[]) => Project[])(prev) : action;
+      });
+    },
+    [queryClient, activeApiBinId, viewerId]
+  );
+
+  // Membership-changing mutations (bin move, dismiss, create, delete) leave
+  // OTHER bins' caches stale — notably the Task Bin vs '__every__' views.
+  // The active key was already patched, so its refetch is flash-free; hidden
+  // keys are marked stale and refetch before their next paint settles.
+  const invalidateAllBinLists = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['tasks-for-bin'] });
+  }, [queryClient]);
+
+  // Quiet refresh when the tab is re-shown after being hidden (keep-mounted
+  // tabs no longer remount). Data stays painted; invalidation refreshes it
+  // in the background.
+  const wasActive = useRef(isActive);
+  useEffect(() => {
+    if (isActive && !wasActive.current) {
+      queryClient.invalidateQueries({ queryKey: qk.projectBins });
+      queryClient.invalidateQueries({ queryKey: ['tasks-for-bin'] });
+    }
+    wasActive.current = isActive;
+  }, [isActive, queryClient]);
 
   // ---- Task filter / search state (mirrors desktop Bins) ---------------
   const NO_DEPT = '__no_department__';
@@ -261,12 +336,12 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
     const result = await res.json();
     if (result.data) {
       setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
-      setTasks(prev => prev.map(t => t.id === detailProject.id ? result.data : t));
+      patchTasks(prev => prev.map(t => t.id === detailProject.id ? result.data : t));
       if (templateId) {
         await fetchTaskTemplate(templateId, result.data.property_name);
       }
     }
-  }, [detailProject, fetchTaskTemplate]);
+  }, [detailProject, fetchTaskTemplate, patchTasks]);
 
   const handleSaveForm = useCallback(async (formData: Record<string, unknown>) => {
     if (!detailProject) return;
@@ -279,63 +354,13 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
       ...prev,
       project: { ...prev.project, form_metadata: formData },
     } : prev);
-    setTasks(prev => prev.map(t => t.id === detailProject.id ? { ...t, form_metadata: formData } : t));
-  }, [detailProject]);
-
-  // Fetch tasks for a given bin (via tasks-for-bin API). `silent` refreshes
-  // without the loading flag so existing content stays visible (used when the
-  // kept-mounted tab is re-shown).
-  const fetchTasksForBin = useCallback(async (binId: string | null, { silent = false } = {}) => {
-    if (!silent) setLoadingTasks(true);
-    try {
-      const params = new URLSearchParams();
-      if (currentUser?.id) params.set('viewer_user_id', currentUser.id);
-      if (binId !== null) {
-        params.set('bin_id', binId);
-      }
-      const res = await fetch(`/api/tasks-for-bin?${params.toString()}`);
-      const result = await res.json();
-      if (res.ok && result.data) {
-        setTasks(result.data);
-      }
-    } catch (err) {
-      console.error('Error fetching tasks:', err);
-      toast.error('Failed to load tasks');
-    } finally {
-      setLoadingTasks(false);
-    }
-  }, [currentUser?.id]);
+    patchTasks(prev => prev.map(t => t.id === detailProject.id ? { ...t, form_metadata: formData } : t));
+  }, [detailProject, patchTasks]);
 
   // Column visibility for the kanban
   const activeBinId = screen.type !== 'bins' ? (screen as any).binId : null;
   const columnVis = useColumnVisibility(activeBinId, viewMode);
 
-  // Task Bin "Global" toggle. Mirrors ProjectsWindow desktop: when ON inside
-  // the Task Bin (activeBinId === null), widens the kanban to every binned
-  // task across the Task Bin and every sub-bin via the '__every__' API
-  // sentinel. Persisted in localStorage so the preference survives reloads.
-  const taskBinGlobal = useTaskBinGlobalView();
-  const apiBinIdFor = useCallback(
-    (binId: string | null) =>
-      binId === null && taskBinGlobal.enabled ? '__every__' : binId,
-    [taskBinGlobal.enabled],
-  );
-
-  // Quiet refresh when the tab is re-shown after being hidden (keep-mounted
-  // tabs no longer remount, so this replaces the old refetch-on-mount). The
-  // preserved screen decides what's stale: the bins list, or the open bin's
-  // tasks.
-  const wasActive = useRef(isActive);
-  useEffect(() => {
-    if (isActive && !wasActive.current) {
-      if (screen.type === 'bins') {
-        binsHook.fetchBins({ silent: true });
-      } else {
-        fetchTasksForBin(apiBinIdFor(screen.binId), { silent: true });
-      }
-    }
-    wasActive.current = isActive;
-  }, [isActive, screen, binsHook, fetchTasksForBin, apiBinIdFor]);
 
   const allColumnOptions = useMemo(() => {
     if (viewMode === 'property') {
@@ -489,22 +514,18 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
     });
   }, [tasks, search, statusSel, assigneeSel, deptSel, prioritySel, propSel, scheduledDateRange]);
 
-  // Navigation
-  const navigateToBin = useCallback(async (binId: string | null, binName: string) => {
+  // Navigation — setting the screen changes the query key, which drives the
+  // fetch; a previously-visited bin paints instantly from cache.
+  const navigateToBin = useCallback((binId: string | null, binName: string) => {
     setScreen({ type: 'kanban', binId, binName });
-    await fetchTasksForBin(apiBinIdFor(binId));
-  }, [fetchTasksForBin, apiBinIdFor]);
+  }, []);
 
-  // Toggle the Task Bin's Global view AND immediately refetch when the user
-  // is currently inside the Task Bin so the kanban updates without waiting
-  // for another navigation. Only renders / called from the Task Bin view.
-  const handleToggleTaskBinGlobal = useCallback(async () => {
+  // Toggle the Task Bin's Global view. The toggle flips apiBinIdFor's output
+  // ('__every__' vs null), which flips the query key — the kanban updates
+  // without an imperative refetch.
+  const handleToggleTaskBinGlobal = useCallback(() => {
     taskBinGlobal.toggle();
-    if (screen.type === 'kanban' && screen.binId === null) {
-      const nextEnabled = !taskBinGlobal.enabled;
-      await fetchTasksForBin(nextEnabled ? '__every__' : null);
-    }
-  }, [taskBinGlobal, screen, fetchTasksForBin]);
+  }, [taskBinGlobal]);
 
   const navigateToProject = useCallback((project: Project, binId: string | null, binName: string) => {
     if (currentUser?.id) {
@@ -522,20 +543,25 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
     if (screen.type === 'detail') {
       setDraftTask(null);
       draftFieldsRef.current = null;
+      // Detail edits already patched the bin's live cache — no refetch needed.
       setScreen({ type: 'kanban', binId: screen.binId, binName: screen.binName });
-      fetchTasksForBin(apiBinIdFor(screen.binId));
     } else if (screen.type === 'kanban') {
       setKanbanSelectionMode(false);
       setScreen({ type: 'bins' });
       binsHook.fetchBins();
     }
-  }, [screen, fetchTasksForBin, binsHook, apiBinIdFor]);
+  }, [screen, binsHook]);
 
   const handleColumnMove = useCallback(async (taskId: string, field: string, value: string) => {
     // Force the kanban to re-sync to server truth so a rejected update
     // doesn't leave the card stranded in the wrong column with a stale
-    // status badge until the next interaction.
-    const revertKanban = () => setTasks(prev => [...prev]);
+    // status badge until the next interaction. The identity refresh snaps
+    // the card back to the cached (pre-drag) truth; the invalidation
+    // re-syncs against the server in case the rejection was due to drift.
+    const revertKanban = () => {
+      patchTasks(prev => [...prev]);
+      invalidateAllBinLists();
+    };
     try {
       const payload: Record<string, unknown> = {};
       if (field === 'property_name') {
@@ -558,13 +584,13 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
         revertKanban();
         return;
       }
-      setTasks(prev => prev.map(t => t.id === taskId ? result.data : t));
+      patchTasks(prev => prev.map(t => t.id === taskId ? result.data : t));
     } catch (err) {
       console.error('Error updating task field:', err);
       toast.error(err instanceof Error ? err.message : 'Failed to update task');
       revertKanban();
     }
-  }, []);
+  }, [patchTasks, invalidateAllBinLists]);
 
   const handleNewTask = useCallback(() => {
     if (screen.type !== 'kanban') return;
@@ -634,7 +660,8 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
       });
       const result = await res.json();
       if (result.data) {
-        setTasks(prev => [...prev, result.data]);
+        patchTasks(prev => [...prev, result.data]);
+        invalidateAllBinLists();
         setDraftTask(null);
         draftFieldsRef.current = null;
         if (screen.type === 'detail') {
@@ -647,13 +674,14 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
     } finally {
       setCreatingTask(false);
     }
-  }, [screen]);
+  }, [screen, patchTasks, invalidateAllBinLists]);
 
   const handleDeleteTask = useCallback(async (task: Project) => {
     try {
       const res = await apiFetch(`/api/tasks-for-bin/${task.id}`, { method: 'DELETE' });
       if (res.ok) {
-        setTasks(prev => prev.filter(t => t.id !== task.id));
+        patchTasks(prev => prev.filter(t => t.id !== task.id));
+        invalidateAllBinLists();
         if (screen.type === 'detail') {
           setScreen({ type: 'kanban', binId: screen.binId, binName: screen.binName });
         }
@@ -662,7 +690,7 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
       console.error('Error deleting task:', err);
       toast.error('Failed to delete task');
     }
-  }, [screen]);
+  }, [screen, patchTasks, invalidateAllBinLists]);
 
   const handleSaveProject = useCallback(async (projectId: string, fields: any) => {
     try {
@@ -684,7 +712,7 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
       const result = await res.json();
       if (result.data) {
         setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
-        setTasks(prev => prev.map(t => t.id === projectId ? result.data : t));
+        patchTasks(prev => prev.map(t => t.id === projectId ? result.data : t));
         return result.data;
       }
     } catch (err) {
@@ -692,7 +720,7 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
       toast.error('Failed to save task');
     }
     return null;
-  }, []);
+  }, [patchTasks]);
 
   const getUnreadCommentCount = useCallback((project: Project): number => {
     return (project as any).unread_comment_count || 0;
@@ -879,7 +907,8 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
                     if (res.ok) {
                       const dismissed: string[] = result?.dismissed_ids || taskIds;
                       const dismissedSet = new Set(dismissed);
-                      setTasks(prev => prev.filter(t => !dismissedSet.has(t.id)));
+                      patchTasks(prev => prev.filter(t => !dismissedSet.has(t.id)));
+                      invalidateAllBinLists();
                       binsHook.fetchBins();
                     } else {
                       console.error('Bulk dismiss failed:', result?.error);
@@ -925,7 +954,7 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
                   const result = await res.json();
                   if (result.data) {
                     setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
-                    setTasks(prev => prev.map(t => t.id === screen.project.id ? result.data : t));
+                    patchTasks(prev => prev.map(t => t.id === screen.project.id ? result.data : t));
                   }
                 }
             }
@@ -940,7 +969,8 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
               const result = await res.json();
               if (result.data) {
                 setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
-                setTasks(prev => prev.map(t => t.id === screen.project.id ? result.data : t));
+                patchTasks(prev => prev.map(t => t.id === screen.project.id ? result.data : t));
+                invalidateAllBinLists();
               }
               binsHook.fetchBins();
             }}
@@ -958,12 +988,13 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
                 if (!isBinned) {
                   // Dismissed from bin — drop from this bin view and return to the board.
                   const dismissedId = screen.project.id;
-                  setTasks(prev => prev.filter(t => t.id !== dismissedId));
+                  patchTasks(prev => prev.filter(t => t.id !== dismissedId));
                   goBack();
                 } else {
                   setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
-                  setTasks(prev => prev.map(t => t.id === screen.project.id ? result.data : t));
+                  patchTasks(prev => prev.map(t => t.id === screen.project.id ? result.data : t));
                 }
+                invalidateAllBinLists();
               }
               binsHook.fetchBins();
             }}
