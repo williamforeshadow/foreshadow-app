@@ -39,4 +39,16 @@ export const DESKTOP_TIMELINE_DETAIL_PANEL_CLASS =
  */
 export const DESKTOP_DETAIL_PANEL_FLEX = `${DESKTOP_DETAIL_PANEL_CLASS} flex flex-col overflow-hidden`;
 
+/**
+ * Positioning-only slot for the unified task detail panel. Unlike the
+ * reservation/day panels (which are flush full-height columns), the task
+ * panel is a *floating popup card*: this slot is transparent and paints
+ * nothing — no background, no border — it just reserves the right-third
+ * region and lets clicks pass through the empty area (`pointer-events-none`;
+ * the card re-enables them). The panel itself owns the card's centering,
+ * height cap, rounding, and shadow (see TaskDetailPanel's 'panel' layout).
+ */
+export const DESKTOP_TASK_PANEL_SLOT =
+  'absolute inset-y-0 right-0 w-1/3 z-20 pointer-events-none';
+
 export const DESKTOP_TIMELINE_DETAIL_PANEL_FLEX = `${DESKTOP_TIMELINE_DETAIL_PANEL_CLASS} flex flex-col overflow-hidden`;

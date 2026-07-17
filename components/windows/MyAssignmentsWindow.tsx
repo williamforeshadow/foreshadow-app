@@ -17,7 +17,7 @@ import {
 } from '@/components/tasks/TaskFilterBar';
 import { CompactSearch } from '@/components/ui/compact-search';
 import { Filter as FilterIcon } from 'lucide-react';
-import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
+import { DESKTOP_TASK_PANEL_SLOT } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { taskPath } from '@/src/lib/links';
@@ -741,7 +741,7 @@ function MyAssignmentsWindowContent({ currentUser }: MyAssignmentsWindowProps) {
 
       {/* Detail panel */}
       {selectedItem && (
-        <div className={DESKTOP_DETAIL_PANEL_FLEX}>
+        <div className={DESKTOP_TASK_PANEL_SLOT}>
           <TaskDetailPanel
             task={rawToTaskInput(selectedItem.raw)}
             onClose={closeSelectedItem}

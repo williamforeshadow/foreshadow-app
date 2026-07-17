@@ -18,7 +18,7 @@ import type { TaskCreatePayload } from '@/components/tasks/detail/useTaskDetailC
 import { TaskRow, TaskListHeader, type TaskRowItem } from '@/components/tasks/TaskRow';
 import { MobileTaskRow } from '@/components/tasks/MobileTaskRow';
 import { useIsMobile } from '@/lib/useIsMobile';
-import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
+import { DESKTOP_TASK_PANEL_SLOT } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import {
   TaskFilterBar,
@@ -942,7 +942,7 @@ function PropertyTasksViewContent({
 
         if (isMobile) return panel; // panel self-renders fixed inset-0
 
-        return <div className={DESKTOP_DETAIL_PANEL_FLEX}>{panel}</div>;
+        return <div className={DESKTOP_TASK_PANEL_SLOT}>{panel}</div>;
       })()}
     </div>
   );

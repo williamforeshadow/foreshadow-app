@@ -10,7 +10,7 @@ import {
   type TaskDraft,
 } from '@/components/tasks/detail/taskInput';
 import type { TaskCreatePayload } from '@/components/tasks/detail/useTaskDetailController';
-import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
+import { DESKTOP_TASK_PANEL_SLOT } from '@/lib/detailPanelGeometry';
 import type { TiptapJSON } from '@/lib/types';
 import type { ProposedTaskData } from './ProposedTask';
 
@@ -127,5 +127,5 @@ export function ProposedTaskEditorOverlay({
 
   if (isMobile) return panel; // self-renders fixed inset-0
 
-  return <div className={DESKTOP_DETAIL_PANEL_FLEX}>{panel}</div>;
+  return <div className={DESKTOP_TASK_PANEL_SLOT}>{panel}</div>;
 }

@@ -326,13 +326,18 @@ export function TaskDetailPanel({
   if (layout === 'page') {
     return body;
   }
-  // Desktop 'panel' layout: a floating card inset from its host slot rather
-  // than a flush full-height column — the panel reads as a popup component.
+  // Desktop 'panel' layout: a floating popup card — vertically centered and
+  // right-anchored inside its (transparent) host slot, height-capped so it
+  // reads as a compact square-ish card rather than a full-height column, and
+  // borderless (shadow alone lifts it off the page).
   return (
-    <div className="h-full w-full p-3 pl-0">
+    <div className="pointer-events-none flex h-full w-full items-center justify-end px-4 py-5">
       <div
-        className="h-full w-full overflow-hidden rounded-2xl border shadow-2xl"
-        style={{ borderColor: 'var(--task-line)' }}
+        className="pointer-events-auto flex h-full max-h-[600px] w-full max-w-[468px] flex-col overflow-hidden rounded-2xl"
+        style={{
+          boxShadow:
+            '0 24px 70px -12px rgba(0,0,0,0.55), 0 8px 24px -8px rgba(0,0,0,0.4)',
+        }}
       >
         {body}
       </div>

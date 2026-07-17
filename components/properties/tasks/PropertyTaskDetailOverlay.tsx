@@ -7,7 +7,7 @@
 
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
 import type { TaskDetailInput } from '@/components/tasks/detail/taskInput';
-import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
+import { DESKTOP_TASK_PANEL_SLOT } from '@/lib/detailPanelGeometry';
 import { useIsMobile } from '@/lib/useIsMobile';
 
 // Minimal task shape the overlay needs — the unified panel's input shape.
@@ -61,7 +61,7 @@ export function PropertyTaskDetailOverlay({
   const wrapperClass =
     layout === 'page'
       ? 'w-full h-full flex flex-col items-stretch overflow-hidden mx-auto max-w-3xl px-4 py-4'
-      : DESKTOP_DETAIL_PANEL_FLEX;
+      : DESKTOP_TASK_PANEL_SLOT;
 
   return <div className={wrapperClass}>{panel}</div>;
 }

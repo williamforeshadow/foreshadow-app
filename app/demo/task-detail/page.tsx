@@ -123,8 +123,10 @@ export default function TaskDetailDemoPage() {
           demo mode — saves are local
         </span>
       </div>
-      <div className="flex min-h-0 flex-1 justify-end p-0 sm:p-4">
-        <div className="h-full w-full sm:w-[460px]">
+      <div className="relative flex min-h-0 flex-1 justify-end">
+        {/* Full-height positioned area; the panel self-centers a capped card
+            inside it, exactly as the production DESKTOP_TASK_PANEL_SLOT does. */}
+        <div className="relative h-full w-full sm:w-[40%]">
           <TaskDetailPanel
             key={fixture.key}
             task={fixture.task}

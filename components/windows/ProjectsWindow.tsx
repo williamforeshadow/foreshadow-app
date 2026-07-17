@@ -15,7 +15,7 @@ import { BinPicker } from './projects';
 import { ColumnPicker } from './projects/ColumnPicker';
 import { ProjectsKanban } from './projects/ProjectsKanban';
 import { useDepartments } from '@/lib/departmentsContext';
-import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
+import { DESKTOP_TASK_PANEL_SLOT } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import { useRouter } from 'next/navigation';
 import { taskPath } from '@/src/lib/links';
@@ -858,7 +858,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
 
       {/* Right Panel - Task Detail */}
       {(expandedProject || draftTask) && (
-        <div className={DESKTOP_DETAIL_PANEL_FLEX}>
+        <div className={DESKTOP_TASK_PANEL_SLOT}>
           <TaskDetailPanel
             task={expandedProject ? projectToTaskInput(expandedProject, users) : null}
             onClose={() => { setExpandedProject(null); setDraftTask(null); }}

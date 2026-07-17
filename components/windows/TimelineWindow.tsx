@@ -39,6 +39,7 @@ import {
 import {
   DESKTOP_TIMELINE_DETAIL_PANEL_CLASS,
   DESKTOP_TIMELINE_DETAIL_PANEL_FLEX,
+  DESKTOP_TASK_PANEL_SLOT,
 } from '@/lib/detailPanelGeometry';
 import { ClipboardCheck, Filter as FilterIcon } from 'lucide-react';
 import { CompactSearch } from '@/components/ui/compact-search';
@@ -1886,7 +1887,11 @@ export default function TimelineWindow({
           expects the outer container to scroll. */}
       {floatingData && (
         <div
-          className={`${DESKTOP_TIMELINE_DETAIL_PANEL_CLASS} overflow-y-auto`}
+          className={
+            floatingData.type === 'task'
+              ? DESKTOP_TASK_PANEL_SLOT
+              : `${DESKTOP_TIMELINE_DETAIL_PANEL_CLASS} overflow-y-auto`
+          }
           onWheel={(e) => e.stopPropagation()}
         >
           {floatingData.type === 'task' ? (() => {

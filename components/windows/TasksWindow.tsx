@@ -21,7 +21,7 @@ import { TaskRow, TaskListHeader, type TaskRowItem } from '@/components/tasks/Ta
 import { TaskFilterBar, SortSelect } from '@/components/tasks/TaskFilterBar';
 import { CompactSearch } from '@/components/ui/compact-search';
 import { Filter as FilterIcon } from 'lucide-react';
-import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
+import { DESKTOP_TASK_PANEL_SLOT } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { taskPath } from '@/src/lib/links';
@@ -528,7 +528,7 @@ function TasksWindowContent({ isActive = true }: TasksWindowProps) {
 
       {/* Detail panel */}
       {detailOpen && (
-        <div className={DESKTOP_DETAIL_PANEL_FLEX}>
+        <div className={DESKTOP_TASK_PANEL_SLOT}>
           <TaskDetailPanel
             task={selectedTask ? taskRowToInput(selectedTask) : null}
             draft={draftTask}
