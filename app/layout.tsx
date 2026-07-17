@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/lib/authContext";
+import { QueryProvider } from "@/lib/queries/QueryProvider";
 import { DepartmentsProvider } from "@/lib/departmentsContext";
 import { OperationsSettingsProvider } from "@/lib/operationsSettingsContext";
 import { ReservationViewerProvider } from "@/lib/reservationViewerContext";
@@ -63,6 +64,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider>
+            <QueryProvider>
             <DepartmentsProvider>
               <OperationsSettingsProvider>
                 <ReservationViewerProvider>
@@ -75,6 +77,7 @@ export default function RootLayout({
                 </ReservationViewerProvider>
               </OperationsSettingsProvider>
             </DepartmentsProvider>
+            </QueryProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

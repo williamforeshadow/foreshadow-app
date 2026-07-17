@@ -45,6 +45,7 @@
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.81.1",
     "@tailwindcss/typography": "^0.5.19",
+    "@tanstack/react-query": "^5.101.2",
     "@tiptap/extension-placeholder": "^3.21.0",
     "@tiptap/extension-task-item": "^3.21.0",
     "@tiptap/extension-task-list": "^3.21.0",
