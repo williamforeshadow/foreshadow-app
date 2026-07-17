@@ -323,5 +323,19 @@ export function TaskDetailPanel({
   if (isMobile) {
     return <div className="fixed inset-0 z-50">{body}</div>;
   }
-  return body;
+  if (layout === 'page') {
+    return body;
+  }
+  // Desktop 'panel' layout: a floating card inset from its host slot rather
+  // than a flush full-height column — the panel reads as a popup component.
+  return (
+    <div className="h-full w-full p-3 pl-0">
+      <div
+        className="h-full w-full overflow-hidden rounded-2xl border shadow-2xl"
+        style={{ borderColor: 'var(--task-line)' }}
+      >
+        {body}
+      </div>
+    </div>
+  );
 }

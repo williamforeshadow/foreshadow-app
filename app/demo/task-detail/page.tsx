@@ -124,7 +124,7 @@ export default function TaskDetailDemoPage() {
         </span>
       </div>
       <div className="flex min-h-0 flex-1 justify-end p-0 sm:p-4">
-        <div className="h-full w-full overflow-hidden rounded-none border-neutral-200 sm:w-[440px] sm:rounded-2xl sm:border dark:border-[rgba(255,255,255,0.08)]">
+        <div className="h-full w-full sm:w-[460px]">
           <TaskDetailPanel
             key={fixture.key}
             task={fixture.task}
