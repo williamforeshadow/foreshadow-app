@@ -12,7 +12,8 @@ import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
 import { useTaskBinGlobalView } from '@/lib/hooks/useTaskBinGlobalView';
 import { useAuth } from '@/lib/authContext';
 import { useDepartments } from '@/lib/departmentsContext';
-import { useProperties, useTaskTemplates } from '@/lib/queries';
+import { useProperties, useTaskTemplates, ensureTemplateDetail } from '@/lib/queries';
+import { useQueryClient } from '@tanstack/react-query';
 import { STATUS_ORDER, STATUS_LABELS, PRIORITY_ORDER, PRIORITY_LABELS } from '@/lib/types';
 import type { ProjectViewMode } from '@/lib/types';
 import { ColumnPicker } from '@/components/windows/projects/ColumnPicker';
@@ -157,6 +158,7 @@ function MobileViewModeToggle({
 // ============================================================================
 
 export default function MobileProjectsView({ users, onMenuTap, isActive = true }: MobileProjectsViewProps) {
+  const queryClient = useQueryClient();
   const { user: currentUser } = useAuth();
   const { departments } = useDepartments();
   const binsHook = useProjectBins({ currentUser: currentUser as User | null });
@@ -224,18 +226,13 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
     if (taskTemplates[cacheKey]) return;
     setLoadingTemplate(true);
     try {
-      const params = new URLSearchParams({ id: templateId });
-      if (propertyName) params.set('property_name', propertyName);
-      const res = await fetch(`/api/templates/${templateId}?${params.toString()}`);
-      const result = await res.json();
-      if (res.ok && result) {
-        setTaskTemplates(prev => ({ ...prev, [cacheKey]: result.template }));
-      }
+      const template = await ensureTemplateDetail(queryClient, templateId, propertyName);
+      setTaskTemplates(prev => ({ ...prev, [cacheKey]: template }));
     } catch {
     } finally {
       setLoadingTemplate(false);
     }
-  }, [taskTemplates]);
+  }, [taskTemplates, queryClient]);
 
   const detailProject = screen.type === 'detail' ? screen.project : null;
 

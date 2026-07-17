@@ -4,3 +4,4 @@ export { QueryProvider } from './QueryProvider';
 export { useProperties, fetchProperties } from './useProperties';
 export { useTaskTemplates, fetchTaskTemplates } from './useTaskTemplates';
 export { useMyAssignments } from './useMyAssignments';
+export { fetchTemplateDetail, ensureTemplateDetail } from './useTemplateDetail';

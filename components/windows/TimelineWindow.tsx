@@ -3,6 +3,8 @@
 import { apiFetch } from '@/lib/apiFetch';
 import { toast } from '@/components/ui/toast';
 import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { ensureTemplateDetail } from '@/lib/queries';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger, PopoverClose } from '@/components/ui/popover';
@@ -316,6 +318,7 @@ export default function TimelineWindow({
   currentUser,
 }: TimelineWindowProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   // State for the floating window
   const [floatingData, setFloatingData] = useState<FloatingWindowData>(null);
   
@@ -595,7 +598,7 @@ export default function TimelineWindow({
   // ============================================================================
   // Task functions
   // ============================================================================
-  const fetchTaskTemplate = useCallback(async (templateId: string, propertyName?: string) => {
+  const fetchTaskTemplate = useCallback(async (templateId: string, propertyName?: string): Promise<any> => {
     const cacheKey = propertyName ? `${templateId}__${propertyName}` : templateId;
 
     if (taskTemplates[cacheKey]) {
@@ -604,18 +607,10 @@ export default function TimelineWindow({
 
     setLoadingTaskTemplate(templateId);
     try {
-      const url = propertyName
-        ? `/api/templates/${templateId}?property_name=${encodeURIComponent(propertyName)}`
-        : `/api/templates/${templateId}`;
-      const res = await fetch(url);
-      const result = await res.json();
+      const template = await ensureTemplateDetail(queryClient, templateId, propertyName);
 
-      if (!res.ok) {
-        throw new Error(result.error || 'Failed to fetch template');
-      }
-
-      setTaskTemplates(prev => ({ ...prev, [cacheKey]: result.template }));
-      return result.template;
+      setTaskTemplates(prev => ({ ...prev, [cacheKey]: template }));
+      return template;
     } catch (err) {
       console.error('Error fetching template:', err);
       toast.error("Couldn't load the task template");
@@ -623,7 +618,7 @@ export default function TimelineWindow({
     } finally {
       setLoadingTaskTemplate(null);
     }
-  }, [taskTemplates]);
+  }, [taskTemplates, queryClient]);
 
   const handleUpdateTaskStatus = useCallback(async (taskId: string, action: string) => {
     try {

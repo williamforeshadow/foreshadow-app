@@ -3,6 +3,8 @@
 import { apiFetch } from '@/lib/apiFetch';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { ensureTemplateDetail } from '@/lib/queries';
 import type {
   TaskStatus,
   AssignedUser,
@@ -353,6 +355,7 @@ export function useTasks(options: UseTasksOptions = {}) {
   const { urlSync = true } = options;
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
 
   // ---- Data ---------------------------------------------------------------
 
@@ -844,14 +847,9 @@ export function useTasks(options: UseTasksOptions = {}) {
       if (taskTemplates[cacheKey]) return taskTemplates[cacheKey];
       setLoadingTaskTemplate(templateId);
       try {
-        const url = propertyName
-          ? `/api/templates/${templateId}?property_name=${encodeURIComponent(propertyName)}`
-          : `/api/templates/${templateId}`;
-        const res = await fetch(url);
-        const result = await res.json();
-        if (!res.ok) throw new Error(result.error || 'Failed to fetch template');
-        setTaskTemplates((prev) => ({ ...prev, [cacheKey]: result.template }));
-        return result.template;
+        const template = await ensureTemplateDetail(queryClient, templateId, propertyName);
+        setTaskTemplates((prev) => ({ ...prev, [cacheKey]: template }));
+        return template;
       } catch (err) {
         console.error('Error fetching template:', err);
         return null;
@@ -859,7 +857,7 @@ export function useTasks(options: UseTasksOptions = {}) {
         setLoadingTaskTemplate(null);
       }
     },
-    [taskTemplates]
+    [taskTemplates, queryClient]
   );
 
   const saveTaskForm = useCallback(

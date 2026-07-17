@@ -13,7 +13,8 @@ import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
 import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
-import { useProperties, useTaskTemplates } from '@/lib/queries';
+import { useProperties, useTaskTemplates, ensureTemplateDetail } from '@/lib/queries';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ProjectDetailPanel,
   ProjectActivitySheet,
@@ -116,6 +117,7 @@ interface ProjectsWindowProps {
 
 function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { departments } = useDepartments();
   const binsHook = useProjectBins({ currentUser });
 
@@ -220,15 +222,9 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
 
     setLoadingTaskTemplate(templateId);
     try {
-      const url = propertyName
-        ? `/api/templates/${templateId}?property_name=${encodeURIComponent(propertyName)}`
-        : `/api/templates/${templateId}`;
-      const res = await fetch(url);
-      const result = await res.json();
-      if (res.ok && result.template) {
-        setTaskTemplates(prev => ({ ...prev, [cacheKey]: result.template }));
-        return result.template as Template;
-      }
+      const template = await ensureTemplateDetail(queryClient, templateId, propertyName);
+      setTaskTemplates(prev => ({ ...prev, [cacheKey]: template }));
+      return template;
     } catch (err) {
       console.error('Error fetching template:', err);
       toast.error('Couldn\'t load the task template.');
@@ -236,7 +232,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       setLoadingTaskTemplate(null);
     }
     return null;
-  }, [taskTemplates]);
+  }, [taskTemplates, queryClient]);
 
   const handleSaveTaskForm = useCallback(async (taskId: string, formData: Record<string, unknown>) => {
     try {

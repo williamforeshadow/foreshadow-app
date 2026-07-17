@@ -44,6 +44,8 @@ import {
   ORIGIN_AUTOMATED,
 } from '@/components/tasks/TaskFilterBar';
 import { taskPath } from '@/src/lib/links';
+import { ensureTemplateDetail } from '@/lib/queries';
+import { useQueryClient } from '@tanstack/react-query';
 
 // Property Tasks ledger — shows every task ever linked to the property.
 // Curation is done by the user via filter + sort, not by the component. The
@@ -156,6 +158,7 @@ function PropertyTasksViewContent({
   propertyId,
   propertyName,
 }: PropertyTasksViewProps) {
+  const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user: authUser, allUsers } = useAuth();
@@ -294,15 +297,9 @@ function PropertyTasksViewContent({
       if (taskTemplates[cacheKey]) return taskTemplates[cacheKey];
       setLoadingTaskTemplate(templateId);
       try {
-        const url = propName
-          ? `/api/templates/${templateId}?property_name=${encodeURIComponent(propName)}`
-          : `/api/templates/${templateId}`;
-        const res = await fetch(url);
-        const data = await res.json();
-        if (data.template) {
-          setTaskTemplates((prev) => ({ ...prev, [cacheKey]: data.template }));
-          return data.template;
-        }
+        const template = await ensureTemplateDetail(queryClient, templateId, propName);
+        setTaskTemplates((prev) => ({ ...prev, [cacheKey]: template }));
+        return template;
       } catch (err) {
         console.error('Error fetching template:', err);
       } finally {
@@ -310,7 +307,7 @@ function PropertyTasksViewContent({
       }
       return null;
     },
-    [taskTemplates]
+    [taskTemplates, queryClient]
   );
 
   // ---- Derived: unified items, filter options ---------------------------

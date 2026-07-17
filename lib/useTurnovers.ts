@@ -2,6 +2,8 @@
 
 import { apiFetch } from '@/lib/apiFetch';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { ensureTemplateDetail } from '@/lib/queries';
 import type { CleaningFilters } from '@/lib/cleaningFilters';
 import type { Turnover, Task, TurnoverStatus } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
@@ -14,6 +16,8 @@ import type { Template } from '@/components/DynamicCleaningForm';
 // per-task helpers below exist solely to keep MobileApp.tsx's task editor
 // working until that surface migrates to PropertyTaskDetailOverlay too.
 export function useTurnovers() {
+  const queryClient = useQueryClient();
+
   // Core data state
   const [response, setResponse] = useState<Turnover[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -333,18 +337,9 @@ export function useTurnovers() {
 
       setLoadingTaskTemplate(templateId);
       try {
-        const url = propertyName
-          ? `/api/templates/${templateId}?property_name=${encodeURIComponent(propertyName)}`
-          : `/api/templates/${templateId}`;
-        const res = await fetch(url);
-        const result = await res.json();
-
-        if (!res.ok) {
-          throw new Error(result.error || 'Failed to fetch template');
-        }
-
-        setTaskTemplates(prev => ({ ...prev, [cacheKey]: result.template }));
-        return result.template;
+        const template = await ensureTemplateDetail(queryClient, templateId, propertyName);
+        setTaskTemplates(prev => ({ ...prev, [cacheKey]: template }));
+        return template;
       } catch (err) {
         console.error('Error fetching template:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch template');
@@ -353,7 +348,7 @@ export function useTurnovers() {
         setLoadingTaskTemplate(null);
       }
     },
-    [taskTemplates]
+    [taskTemplates, queryClient]
   );
 
   const saveTaskForm = useCallback(

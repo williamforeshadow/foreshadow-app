@@ -3,7 +3,8 @@
 import { apiFetch } from '@/lib/apiFetch';
 import { toast } from '@/components/ui/toast';
 import { memo, useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useMyAssignments, useProperties, useTaskTemplates } from '@/lib/queries';
+import { useMyAssignments, useProperties, useTaskTemplates, ensureTemplateDetail } from '@/lib/queries';
+import { useQueryClient } from '@tanstack/react-query';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
@@ -114,6 +115,7 @@ interface MyAssignmentsWindowProps {
 
 function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const { departments: allDepts } = useDepartments();
   // Cached, shared query — mirrors MobileMyAssignmentsView. Refetches keep
@@ -254,15 +256,9 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
     if (taskTemplates[cacheKey]) return taskTemplates[cacheKey];
     setLoadingTaskTemplate(templateId);
     try {
-      const url = propertyName
-        ? `/api/templates/${templateId}?property_name=${encodeURIComponent(propertyName)}`
-        : `/api/templates/${templateId}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (data.template) {
-        setTaskTemplates(prev => ({ ...prev, [cacheKey]: data.template }));
-        return data.template;
-      }
+      const template = await ensureTemplateDetail(queryClient, templateId, propertyName);
+      setTaskTemplates(prev => ({ ...prev, [cacheKey]: template }));
+      return template;
     } catch (err) {
       console.error('Error fetching template:', err);
       toast.error('Couldn\'t load the task template.');
@@ -270,7 +266,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
       setLoadingTaskTemplate(null);
     }
     return null;
-  }, [taskTemplates]);
+  }, [taskTemplates, queryClient]);
 
   // Update selectedItem.raw locally for instant UI feedback
   const updateSelectedRaw = useCallback((patch: Record<string, unknown>) => {

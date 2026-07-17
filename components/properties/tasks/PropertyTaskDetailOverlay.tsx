@@ -28,6 +28,8 @@ import {
 import MobileProjectDetail from '@/components/mobile/MobileProjectDetail';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
+import { ensureTemplateDetail } from '@/lib/queries';
+import { useQueryClient } from '@tanstack/react-query';
 
 // Self-contained detail overlay for a property-scoped task. Wraps the shared
 // ProjectDetailPanel with all the plumbing each consumer previously had to
@@ -117,6 +119,7 @@ export function PropertyTaskDetailOverlay({
   layout = 'overlay',
   onOpenInPage,
 }: PropertyTaskDetailOverlayProps) {
+  const queryClient = useQueryClient();
   const { user: authUser, allUsers } = useAuth();
   const users = allUsers as unknown as User[];
   const currentUser = authUser as unknown as User | null;
@@ -169,15 +172,9 @@ export function PropertyTaskDetailOverlay({
       if (taskTemplates[cacheKey]) return taskTemplates[cacheKey];
       setLoadingTaskTemplate(templateId);
       try {
-        const url = propName
-          ? `/api/templates/${templateId}?property_name=${encodeURIComponent(propName)}`
-          : `/api/templates/${templateId}`;
-        const res = await fetch(url);
-        const data = await res.json();
-        if (data.template) {
-          setTaskTemplates((prev) => ({ ...prev, [cacheKey]: data.template }));
-          return data.template as Template;
-        }
+        const template = await ensureTemplateDetail(queryClient, templateId, propName);
+        setTaskTemplates((prev) => ({ ...prev, [cacheKey]: template }));
+        return template;
       } catch (err) {
         console.error('[TaskDetailOverlay] template fetch failed:', err);
       } finally {
@@ -185,7 +182,7 @@ export function PropertyTaskDetailOverlay({
       }
       return null;
     },
-    [taskTemplates]
+    [taskTemplates, queryClient]
   );
 
   // Detail panel-local state.
