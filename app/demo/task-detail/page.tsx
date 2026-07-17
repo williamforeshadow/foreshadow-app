@@ -126,7 +126,7 @@ export default function TaskDetailDemoPage() {
       <div className="relative flex min-h-0 flex-1 justify-end">
         {/* Full-height positioned area; the panel self-centers a capped card
             inside it, exactly as the production DESKTOP_TASK_PANEL_SLOT does. */}
-        <div className="relative h-full w-full sm:w-[40%]">
+        <div className="relative h-full w-full sm:w-[44%]">
           <TaskDetailPanel
             key={fixture.key}
             task={fixture.task}

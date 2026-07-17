@@ -49,6 +49,6 @@ export const DESKTOP_DETAIL_PANEL_FLEX = `${DESKTOP_DETAIL_PANEL_CLASS} flex fle
  * height cap, rounding, and shadow (see TaskDetailPanel's 'panel' layout).
  */
 export const DESKTOP_TASK_PANEL_SLOT =
-  'absolute inset-y-0 right-0 w-1/3 z-20 pointer-events-none';
+  'absolute inset-y-0 right-0 w-[44%] z-20 pointer-events-none';
 
 export const DESKTOP_TIMELINE_DETAIL_PANEL_FLEX = `${DESKTOP_TIMELINE_DETAIL_PANEL_CLASS} flex flex-col overflow-hidden`;

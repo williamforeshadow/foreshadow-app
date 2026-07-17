@@ -333,7 +333,7 @@ export function TaskDetailPanel({
   return (
     <div className="pointer-events-none flex h-full w-full items-center justify-end px-4 py-5">
       <div
-        className="pointer-events-auto flex h-full max-h-[600px] w-full max-w-[468px] flex-col overflow-hidden rounded-2xl"
+        className="pointer-events-auto flex h-full max-h-[640px] w-full max-w-[760px] flex-col overflow-hidden rounded-2xl"
         style={{
           boxShadow:
             '0 24px 70px -12px rgba(0,0,0,0.55), 0 8px 24px -8px rgba(0,0,0,0.4)',
