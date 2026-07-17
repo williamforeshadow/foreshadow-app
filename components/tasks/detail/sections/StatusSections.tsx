@@ -1,44 +1,29 @@
 'use client';
 
 import * as React from 'react';
-import { useState } from 'react';
-import { toast } from '@/components/ui/toast';
-import { PIP_STAGES, SELECTABLE_STATUSES, railColor, statusVisual } from '../statusConfig';
-import { AdaptivePicker } from '../primitives/AdaptivePicker';
-import { TaskOptionRow } from '../primitives/TaskSheet';
 import { MonoLabel } from './HeaderSections';
 
-// The timer rail: pulsing state bar + play/pause + elapsed. For templated
-// tasks the timer is action-driven (display-only here); non-templated tasks
-// toggle it freely with no status side effects.
+// The timer rail: play/pause + elapsed. For templated tasks the timer is
+// action-driven (display-only here); non-templated tasks toggle it freely
+// with no status side effects.
 export function TimerRail({
-  status,
   running,
   displaySeconds,
   formatTime,
   onToggle,
   toggleDisabled,
 }: {
-  status: string;
   running: boolean;
   displaySeconds: number;
   formatTime: (s: number) => string;
   onToggle?: () => void;
   toggleDisabled?: boolean;
 }) {
-  const rail = railColor(status, running);
   return (
     <div
       className="mt-3 flex items-center gap-2.5 rounded-[10px] px-2.5 py-[9px]"
       style={{ background: 'var(--task-surface-1)' }}
     >
-      <div
-        className="h-[30px] w-[3px] shrink-0 rounded-[2px]"
-        style={{
-          background: rail,
-          animation: running ? 'task-pulse 2.4s ease-in-out infinite' : 'none',
-        }}
-      />
       <button
         type="button"
         onClick={onToggle}
@@ -72,134 +57,6 @@ export function TimerRail({
         <MonoLabel className="mt-0.5 !text-[9px]">{running ? 'Tracking' : 'Paused'}</MonoLabel>
       </div>
     </div>
-  );
-}
-
-// Status pips + label. Non-templated: opens the status picker. Templated:
-// display-only (tap explains the action buttons). Contingent: locked notice.
-export function StatusPips({
-  status,
-  isTemplated,
-  isContingent,
-  onSelectStatus,
-}: {
-  status: string;
-  isTemplated: boolean;
-  isContingent: boolean;
-  onSelectStatus: (status: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const visual = statusVisual(status);
-
-  if (isContingent) {
-    return (
-      <div
-        className="mt-2 flex h-[38px] w-full items-center gap-2.5 rounded-[10px] px-3"
-        style={{ background: 'var(--task-surface-1)' }}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--task-accent-dim)" strokeWidth="1.6" strokeLinecap="round">
-          <rect x="5" y="11" width="14" height="9" rx="2" />
-          <path d="M8 11V8a4 4 0 018 0v3" />
-        </svg>
-        <span
-          className="font-mono text-[11px] uppercase tracking-[0.1em]"
-          style={{ color: 'var(--task-accent-dim)' }}
-        >
-          Contingent — awaiting approval
-        </span>
-      </div>
-    );
-  }
-
-  const pips = (
-    <div className="flex gap-[3px]">
-      {PIP_STAGES.map((stage, i) => {
-        const active = i === visual.pipIndex;
-        const done = i < visual.pipIndex;
-        return (
-          <div
-            key={stage}
-            className="h-[5px] rounded-[3px] transition-all duration-300"
-            style={{
-              width: active ? 16 : 5,
-              background: active
-                ? visual.color
-                : done
-                  ? 'var(--task-accent-dim)'
-                  : 'var(--task-surface-2)',
-            }}
-          />
-        );
-      })}
-    </div>
-  );
-
-  const label = (
-    <span
-      className="flex-1 text-left font-mono text-[11px] uppercase tracking-[0.1em]"
-      style={{ color: visual.color }}
-    >
-      {visual.label}
-    </span>
-  );
-
-  if (isTemplated) {
-    return (
-      <button
-        type="button"
-        onClick={() =>
-          toast.info('Status follows the checklist — use Start, Pause, Complete, or Reopen.')
-        }
-        className="mt-2 flex h-[38px] w-full items-center gap-2.5 rounded-[10px] px-3"
-        style={{ background: 'var(--task-surface-1)' }}
-      >
-        {pips}
-        {label}
-      </button>
-    );
-  }
-
-  return (
-    <AdaptivePicker
-      open={open}
-      onOpenChange={setOpen}
-      title="Status"
-      trigger={
-        <button
-          type="button"
-          className="mt-2 flex h-[38px] w-full items-center gap-2.5 rounded-[10px] px-3 transition-transform active:scale-[0.99]"
-          style={{ background: 'var(--task-surface-1)' }}
-        >
-          {pips}
-          {label}
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--task-ink-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M7 10l5 5 5-5" />
-          </svg>
-        </button>
-      }
-    >
-      {SELECTABLE_STATUSES.map((s) => {
-        const v = statusVisual(s);
-        return (
-          <TaskOptionRow
-            key={s}
-            selected={s === status}
-            onSelect={() => {
-              onSelectStatus(s);
-              setOpen(false);
-            }}
-            leading={
-              <span
-                className="h-2 w-2 shrink-0 rounded-full"
-                style={{ background: s === status ? v.color : 'var(--task-surface-2)' }}
-              />
-            }
-          >
-            {v.label}
-          </TaskOptionRow>
-        );
-      })}
-    </AdaptivePicker>
   );
 }
 

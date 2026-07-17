@@ -12,7 +12,7 @@ import { ChecklistPage } from './ChecklistPage';
 import { AdaptivePicker } from './primitives/AdaptivePicker';
 import { TaskOptionRow } from './primitives/TaskSheet';
 import { HeaderBar, TitleSection, DescriptionSection, IconButton } from './sections/HeaderSections';
-import { TimerRail, StatusPips, ActionBar } from './sections/StatusSections';
+import { TimerRail, ActionBar } from './sections/StatusSections';
 import { ContextChips, StepsSection, CrewSection, PhotosSection } from './sections/BodySections';
 import { CommentsView } from './sections/CommentsView';
 
@@ -55,10 +55,12 @@ export function TaskDetailPanel({
 
   if (!task && !draft) return null;
 
+  const templateId = task?.template_id ?? draft?.template_id ?? null;
   const templateName = task?.template_name ?? draft?.template_name ?? null;
   const propertyName = task?.property_name ?? draft?.property_name ?? null;
-  // Only the template name goes in the top bar; untemplated tasks show nothing.
-  const headerLabel = templateName ?? '';
+  // Only real templated tasks show a top-bar label. `template_name` can be a
+  // placeholder ("Unnamed Task") on untemplated rows, so gate on template_id.
+  const headerLabel = templateId ? (templateName ?? '') : '';
 
   const timerRunning = !!c.timeHook.activeTimeEntry;
   const checklistComplete = c.progress.total > 0 && c.progress.completed === c.progress.total;
@@ -144,7 +146,6 @@ export function TaskDetailPanel({
           />
           {!c.isDraft && (
             <TimerRail
-              status={c.fields.status}
               running={timerRunning}
               displaySeconds={c.timeHook.displaySeconds}
               formatTime={c.timeHook.formatTime}
@@ -158,21 +159,17 @@ export function TaskDetailPanel({
               toggleDisabled={c.isTemplated || editingLocked}
             />
           )}
-          {!c.isDraft && (
-            <StatusPips
-              status={c.fields.status}
-              isTemplated={c.isTemplated}
-              isContingent={c.isContingent}
-              onSelectStatus={(s) => c.writeStatus(s)}
-            />
-          )}
           <div className="mt-3.5" />
           <ContextChips
             isMobile={isMobile}
             isDraft={c.isDraft}
             readOnly={editingLocked}
+            status={c.fields.status}
+            isTemplated={c.isTemplated}
+            isContingent={c.isContingent}
+            onSelectStatus={(s) => c.writeStatus(s)}
             propertyName={propertyName}
-            templateName={templateName}
+            templateName={templateId ? templateName : null}
             binId={c.isDraft ? (draft?.bin_id ?? null) : (c.row?.bin_id ?? null)}
             binName={c.row?.bin_name ?? null}
             bins={c.bins}

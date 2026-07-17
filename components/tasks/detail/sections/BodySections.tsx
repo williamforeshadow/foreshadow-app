@@ -5,11 +5,92 @@ import { useState } from 'react';
 import type { Department, ProjectBin, PropertyOption, TaskTemplate, User } from '@/lib/types';
 import type { Attachment } from '@/lib/types';
 import { PRIORITY_LABELS, PRIORITY_ORDER } from '@/lib/types';
+import { toast } from '@/components/ui/toast';
 import { TaskScheduledDatePicker } from '@/components/windows/projects/TaskScheduledDatePicker';
 import { TaskScheduledTimePicker } from '@/components/windows/projects/TaskScheduledTimePicker';
 import { AdaptivePicker } from '../primitives/AdaptivePicker';
 import { TaskOptionRow } from '../primitives/TaskSheet';
+import {
+  SELECTABLE_STATUSES,
+  statusColorClass,
+  statusIcon,
+  statusLabel,
+} from '../statusConfig';
 import { MonoLabel } from './HeaderSections';
+
+/* ---------- status pill (matches kanban icons + colors) ---------- */
+
+function StatusChip({
+  status,
+  isTemplated,
+  isContingent,
+  onSelectStatus,
+}: {
+  status: string;
+  isTemplated: boolean;
+  isContingent: boolean;
+  onSelectStatus: (status: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const Icon = statusIcon(status);
+  const colorCls = statusColorClass(status);
+  const label = statusLabel(status);
+
+  const pill = (interactive: boolean) => (
+    <button
+      type="button"
+      className="flex h-[30px] shrink-0 items-center gap-1.5 rounded-lg px-[11px] font-mono text-[11px] transition-transform active:scale-95"
+      style={{ background: 'var(--task-surface-2)', cursor: interactive ? 'pointer' : 'default' }}
+    >
+      <Icon size={13} className={colorCls} />
+      <span className={colorCls}>{label}</span>
+    </button>
+  );
+
+  // Contingent is a system state — display-only.
+  if (isContingent) return pill(false);
+
+  // Templated tasks: status follows the checklist actions, not a picker.
+  if (isTemplated) {
+    return (
+      <span
+        onClick={() =>
+          toast.info('Status follows the checklist — use Start, Pause, Complete, or Reopen.')
+        }
+        className="contents"
+      >
+        {pill(true)}
+      </span>
+    );
+  }
+
+  // Non-templated: free status picker.
+  return (
+    <AdaptivePicker
+      open={open}
+      onOpenChange={setOpen}
+      title="Status"
+      trigger={pill(true)}
+    >
+      {SELECTABLE_STATUSES.map((s) => {
+        const OptIcon = statusIcon(s);
+        return (
+          <TaskOptionRow
+            key={s}
+            selected={s === status}
+            onSelect={() => {
+              onSelectStatus(s);
+              setOpen(false);
+            }}
+            leading={<OptIcon size={16} className={statusColorClass(s)} />}
+          >
+            {statusLabel(s)}
+          </TaskOptionRow>
+        );
+      })}
+    </AdaptivePicker>
+  );
+}
 
 /* ---------- chips ---------- */
 
@@ -122,6 +203,10 @@ export function ContextChips({
   onPriorityChange,
   onDraftPropertyChange,
   onDraftTemplateChange,
+  status,
+  isTemplated,
+  isContingent,
+  onSelectStatus,
 }: {
   isMobile: boolean;
   isDraft: boolean;
@@ -145,6 +230,11 @@ export function ContextChips({
   onPriorityChange: (p: string) => void;
   onDraftPropertyChange?: (id: string | null, name: string | null) => void;
   onDraftTemplateChange?: (id: string | null, name: string | null) => void;
+  /** Status pill (omitted in draft mode). */
+  status?: string;
+  isTemplated?: boolean;
+  isContingent?: boolean;
+  onSelectStatus?: (status: string) => void;
 }) {
   const [binOpen, setBinOpen] = useState(false);
   const [schedOpen, setSchedOpen] = useState(false);
@@ -167,6 +257,16 @@ export function ContextChips({
           : 'flex flex-wrap gap-1.5'
       }
     >
+      {/* Status — first pill; matches kanban icons/colors. Omitted for drafts. */}
+      {!isDraft && status !== undefined && onSelectStatus && (
+        <StatusChip
+          status={status}
+          isTemplated={!!isTemplated}
+          isContingent={!!isContingent}
+          onSelectStatus={onSelectStatus}
+        />
+      )}
+
       {/* Property — locked on existing tasks, picker in draft mode */}
       {isDraft && onDraftPropertyChange ? (
         <AdaptivePicker
@@ -400,7 +500,7 @@ export function CrewSection({
   const assigned = users.filter((u) => assignedIds.includes(u.id));
   return (
     <div>
-      <MonoLabel className="mb-2.5">Crew</MonoLabel>
+      <MonoLabel className="mb-2.5">Assignees</MonoLabel>
       <div className="flex items-center">
         {assigned.map((u, i) => (
           <div
@@ -420,11 +520,11 @@ export function CrewSection({
           <AdaptivePicker
             open={open}
             onOpenChange={setOpen}
-            title="Crew"
+            title="Assignees"
             trigger={
               <button
                 type="button"
-                aria-label="Edit crew"
+                aria-label="Edit assignees"
                 className="flex h-7 w-7 items-center justify-center rounded-full transition-transform active:scale-95"
                 style={{
                   marginLeft: assigned.length ? -8 : 0,
