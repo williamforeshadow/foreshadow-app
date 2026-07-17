@@ -1,12 +1,17 @@
 'use client';
 
 import { apiFetch } from '@/lib/apiFetch';
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { ensureTemplateDetail } from '@/lib/queries';
+import { useState, useCallback, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ensureTemplateDetail, fetchJson, qk } from '@/lib/queries';
 import type { CleaningFilters } from '@/lib/cleaningFilters';
 import type { Turnover, Task, TurnoverStatus } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
+
+async function fetchTurnoversData(): Promise<Turnover[]> {
+  const json = await fetchJson<{ data?: Turnover[] }>('/api/turnovers');
+  return json.data ?? [];
+}
 
 // Drives the Turnovers window (cards list + reservation detail) and is also
 // consumed by the mobile shell for the shared task-edit pipeline (status /
@@ -18,10 +23,15 @@ import type { Template } from '@/components/DynamicCleaningForm';
 export function useTurnovers() {
   const queryClient = useQueryClient();
 
-  // Core data state
-  const [response, setResponse] = useState<Turnover[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Core data — shared cache: the desktop Turnovers window and the mobile
+  // task-edit pipeline share one /api/turnovers fetch. Mutation errors keep a
+  // local channel (setError) merged with the query's fetch error below.
+  const query = useQuery({ queryKey: qk.turnovers, queryFn: fetchTurnoversData });
+  const response = query.data ?? null;
+  const [mutationError, setError] = useState<string | null>(null);
+  const error =
+    mutationError ?? (query.error ? query.error.message || 'Failed to fetch turnovers' : null);
+  const loading = query.isLoading;
 
   // View state
   const [viewMode, setViewMode] = useState<'cards' | 'json'>('cards');
@@ -51,32 +61,27 @@ export function useTurnovers() {
   const selectedCardIdRef = useRef<string | null>(null);
   selectedCardIdRef.current = selectedCard?.id || null;
 
-  // Fetch turnovers
+  // Refetch shim — the query owns the mount fetch. Refetches keep existing
+  // cards visible while fresh data loads (no more flash-to-skeleton).
+  const { refetch: refetchTurnovers } = query;
   const fetchTurnovers = useCallback(async () => {
-    setLoading(true);
     setError(null);
-    setResponse(null);
+    await refetchTurnovers();
+  }, [refetchTurnovers]);
 
-    try {
-      const res = await apiFetch('/api/turnovers');
-      const json = await res.json();
-
-      if (!res.ok) {
-        setError(json.error || 'Failed to fetch turnovers');
-      } else {
-        setResponse(json.data);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch turnovers');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Auto-load on mount
-  useEffect(() => {
-    fetchTurnovers();
-  }, [fetchTurnovers]);
+  // Optimistic cache patch used by the task mutators below. cancelQueries
+  // drops any in-flight background refetch so its pre-mutation response
+  // can't land after — and silently revert — the optimistic write.
+  const patchResponse = useCallback(
+    (updater: (prev: Turnover[] | null) => Turnover[] | null) => {
+      queryClient.cancelQueries({ queryKey: qk.turnovers });
+      queryClient.setQueryData<Turnover[]>(qk.turnovers, (old) => {
+        const next = updater(old ?? null);
+        return next ?? old;
+      });
+    },
+    [queryClient]
+  );
 
   // Filter functions. `toggleFilter` only operates on the array-typed
   // filter axes (status/occupancy/timeline/properties); the free-text
@@ -186,7 +191,7 @@ export function useTurnovers() {
       });
 
       // Also update the response array
-      setResponse((prevResponse) => {
+      patchResponse((prevResponse) => {
         if (!prevResponse) return prevResponse;
 
         return prevResponse.map((item) => {
@@ -214,7 +219,7 @@ export function useTurnovers() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update task action');
     }
-  }, []);
+  }, [patchResponse]);
 
   const updateTaskAssignment = useCallback(async (taskId: string, userIds: string[]) => {
     try {
@@ -254,7 +259,7 @@ export function useTurnovers() {
       });
 
       // Update response array
-      setResponse((prevResponse) => {
+      patchResponse((prevResponse) => {
         if (!prevResponse) return prevResponse;
 
         return prevResponse.map((item) => {
@@ -272,7 +277,7 @@ export function useTurnovers() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update task assignment');
     }
-  }, []);
+  }, [patchResponse]);
 
   const updateTaskSchedule = useCallback(
     async (taskId: string, scheduledDate: string | null, scheduledTime: string | null) => {
@@ -303,7 +308,7 @@ export function useTurnovers() {
         });
 
         // Update response array
-        setResponse((prevResponse) => {
+        patchResponse((prevResponse) => {
           if (!prevResponse) return prevResponse;
 
           return prevResponse.map((item) => {
@@ -322,7 +327,7 @@ export function useTurnovers() {
         setError(err instanceof Error ? err.message : 'Failed to update task schedule');
       }
     },
-    []
+    [patchResponse]
   );
 
   const fetchTaskTemplate = useCallback(
@@ -382,7 +387,7 @@ export function useTurnovers() {
         // Update response array
         const currentSelectedCardId = selectedCardIdRef.current;
         if (currentSelectedCardId) {
-          setResponse((prevResponse) => {
+          patchResponse((prevResponse) => {
             if (!prevResponse) return prevResponse;
 
             return prevResponse.map((item) => {
@@ -406,7 +411,7 @@ export function useTurnovers() {
         throw err;
       }
     },
-    []
+    [patchResponse]
   );
 
   // Close selected card. The Turnovers window's selectedTask state is local,
