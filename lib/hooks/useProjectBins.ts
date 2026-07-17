@@ -25,6 +25,7 @@ async function fetchBinsData(): Promise<BinsData> {
 // hook share one fetch, and a mutation from any surface propagates to all of
 // them immediately. The public API is unchanged from the useState era.
 export function useProjectBins({ currentUser }: UseProjectBinsProps) {
+  const currentUserId = currentUser?.id ?? null;
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: qk.projectBins, queryFn: fetchBinsData });
   const { refetch } = query;
@@ -42,7 +43,8 @@ export function useProjectBins({ currentUser }: UseProjectBinsProps) {
   // `silent` is accepted for backward compatibility; refetches are always
   // silent now — cached data stays visible while fresh data loads.
   const fetchBins = useCallback(
-    async (_opts: { silent?: boolean } = {}) => {
+    async (opts: { silent?: boolean } = {}) => {
+      void opts;
       await refetch();
     },
     [refetch]
@@ -56,7 +58,7 @@ export function useProjectBins({ currentUser }: UseProjectBinsProps) {
         body: JSON.stringify({
           name,
           description: description || null,
-          created_by: currentUser?.id || null,
+          created_by: currentUserId,
         }),
       });
       const result = await res.json();
@@ -69,7 +71,7 @@ export function useProjectBins({ currentUser }: UseProjectBinsProps) {
       console.error('Error creating bin:', err);
       return null;
     }
-  }, [currentUser?.id, patchBins]);
+  }, [currentUserId, patchBins]);
 
   const updateBin = useCallback(async (binId: string, updates: Partial<Pick<ProjectBin, 'name' | 'description' | 'sort_order' | 'auto_dismiss_enabled' | 'auto_dismiss_days'>>) => {
     try {

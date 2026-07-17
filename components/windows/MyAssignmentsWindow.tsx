@@ -10,7 +10,7 @@ import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
-import type { User, Project, ProjectFormFields, TaskTemplate, PropertyOption } from '@/lib/types';
+import type { User, Project, ProjectFormFields } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 import { ProjectDetailPanel, AttachmentLightbox } from './projects';
 import { TaskRow, TaskListHeader } from '@/components/tasks/TaskRow';
