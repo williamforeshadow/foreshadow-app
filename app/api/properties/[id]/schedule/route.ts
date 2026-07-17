@@ -92,7 +92,7 @@ export async function GET(
   }
 
   // Tasks scheduled in the window. Same property filter. We pull enough to
-  // render a task pill + open the ProjectDetailPanel on click.
+  // render a task pill + open the task detail panel on click.
   const { data: tasks, error: tasksError } = await supabase
     .from('turnover_tasks')
     .select(

@@ -39,7 +39,7 @@ export function useDemoGuards(_stageRef?: RefObject<HTMLDivElement | null>) {
         return;
       }
 
-      // A clickable task row that would open ProjectDetailPanel. Two homes:
+      // A clickable task row that would open the task detail panel. Two homes:
       //   - the timeline right rail (DESKTOP_TIMELINE_DETAIL_PANEL_CLASS:
       //     right-0 + w-1/3 + z-20);
       //   - the reservation bar's Radix popover (portaled to <body>).

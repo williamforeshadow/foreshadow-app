@@ -58,7 +58,7 @@ export interface ScheduleTask {
   is_automated?: boolean;
   assigned_users?: ScheduleTaskAssignee[];
   // Extended fields — populated by /api/properties/[id]/schedule so that
-  // clicking a task pill can open the full ProjectDetailPanel without a
+  // clicking a task pill can open the full task detail panel without a
   // second fetch.
   property_id?: string | null;
   property_name?: string | null;

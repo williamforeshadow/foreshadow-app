@@ -143,7 +143,7 @@ export default function DemoAssignmentsPage() {
   useDemoGuards(stageRef);
 
   // A TaskRow is <div role="button" class="grid … cursor-pointer">. Clicking it
-  // opens ProjectDetailPanel AND router.replace('/assignments?openTask=…'),
+  // opens the task detail panel AND router.replace('/assignments?openTask=…'),
   // which would navigate the iframe out of /demo. Swallow the row click.
   useEffect(() => {
     const el = stageRef.current;

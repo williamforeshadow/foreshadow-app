@@ -23,7 +23,7 @@ import { getDepartmentIcon } from '@/lib/departmentIcons';
 //
 // This component renders content only; the parent owns the outer
 // positioning (absolute right-1/3 on desktop, fixed inset-0 on mobile) —
-// same contract as ReservationDetailPanel / MobileProjectDetail.
+// same contract as ReservationDetailPanel.
 
 export interface DayDetailReservation {
   id: string;

@@ -123,7 +123,7 @@ export default function PropertyScheduleView() {
     setMonthDate(new Date(now.getFullYear(), now.getMonth(), 1));
   };
 
-  // Clicking a task pill opens the full shared ProjectDetailPanel (same one
+  // Clicking a task pill opens the full shared task detail panel (same one
   // used on Timeline / Bins / Turnovers / Tasks) via PropertyTaskDetailOverlay.
   // All the fields the panel needs are already on the ScheduleTask payload;
   // we map to the overlay's input shape and rely on the reservation panel
@@ -400,7 +400,7 @@ export default function PropertyScheduleView() {
                    app/properties/layout.tsx). Spans viewport top → bottom
                    so it overrides the property header.
           Mobile:  fixed full-screen sheet with safe-area padding, matching
-                   the Bins tab / MobileProjectDetail pattern. */}
+                   the Bins tab pattern. */}
       {selectedReservation && !selectedTask && (
         <div
           className={
@@ -418,7 +418,7 @@ export default function PropertyScheduleView() {
         </div>
       )}
 
-      {/* Task detail panel — shared ProjectDetailPanel wrapped in the
+      {/* Task detail panel — shared task detail panel wrapped in the
           reusable overlay. Anchors to the same outer column for full-height
           coverage. Mutations refetch the schedule so edits (status, bin,
           assignees, etc.) reflect on the calendar immediately. */}
