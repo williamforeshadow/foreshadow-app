@@ -1,7 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/apiFetch';
+import { qk } from '@/lib/queries/keys';
+import { fetchJson } from '@/lib/queries/fetchJson';
 import {
   normalizeTags,
   type AttributeScope,
@@ -65,6 +68,8 @@ const ROOM_PHOTO_CAP = 50;
 const ATTRIBUTE_PHOTO_CAP = 20;
 const DEFAULT_ROOM_TITLE = 'New room';
 
+const EMPTY_ROOMS: PropertyRoom[] = [];
+
 export function RoomsBoard({
   propertyId,
   scope,
@@ -72,31 +77,35 @@ export function RoomsBoard({
   noun,
   nounPlural,
 }: RoomsBoardProps) {
-  const [rooms, setRooms] = useState<PropertyRoom[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const { toast, showToast } = useToast();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const res = await apiFetch(
+  const query = useQuery({
+    queryKey: qk.propertyKnowledge(propertyId, `rooms:${scope}`),
+    queryFn: async () => {
+      const data = await fetchJson<{ rooms?: PropertyRoom[] }>(
         `/api/properties/${propertyId}/rooms?scope=${scope}`
       );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `Failed to load ${nounPlural}`);
-      setRooms((data.rooms || []) as PropertyRoom[]);
-    } catch (err: any) {
-      setLoadError(err.message || `Failed to load ${nounPlural}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [propertyId, scope, nounPlural]);
+      return (data.rooms || []) as PropertyRoom[];
+    },
+  });
+  const rooms = query.data ?? EMPTY_ROOMS;
+  const loading = query.isLoading;
+  const loadError = query.error?.message ?? null;
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const patchRooms = useCallback(
+    (action: SetStateAction<PropertyRoom[]>) => {
+      const key = qk.propertyKnowledge(propertyId, `rooms:${scope}`);
+      queryClient.cancelQueries({ queryKey: key });
+      queryClient.setQueryData<PropertyRoom[]>(key, (old) => {
+        const prev = old ?? [];
+        return typeof action === 'function'
+          ? (action as (p: PropertyRoom[]) => PropertyRoom[])(prev)
+          : action;
+      });
+    },
+    [queryClient, propertyId, scope]
+  );
 
   const handleCreateRoom = useCallback(async () => {
     try {
@@ -111,15 +120,15 @@ export function RoomsBoard({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Failed to create ${noun}`);
       const newRoom = data.room as PropertyRoom;
-      setRooms((prev) => [...prev, newRoom]);
+      patchRooms((prev) => [...prev, newRoom]);
     } catch (err: any) {
       showToast('error', err.message || `Failed to create ${noun}`);
     }
-  }, [propertyId, scope, noun, showToast]);
+  }, [propertyId, scope, noun, showToast, patchRooms]);
 
   const handlePatchRoom = useCallback(
     async (roomId: string, patch: { title?: string; notes?: string | null }) => {
-      setRooms((prev) =>
+      patchRooms((prev) =>
         prev.map((r) => (r.id === roomId ? { ...r, ...patch } : r))
       );
       try {
@@ -133,14 +142,14 @@ export function RoomsBoard({
         );
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Save failed');
-        setRooms((prev) =>
+        patchRooms((prev) =>
           prev.map((r) => (r.id === roomId ? (data.room as PropertyRoom) : r))
         );
       } catch (err: any) {
         showToast('error', err.message || 'Save failed');
       }
     },
-    [propertyId, showToast]
+    [propertyId, showToast, patchRooms]
   );
 
   const handleDeleteRoom = useCallback(
@@ -165,8 +174,9 @@ export function RoomsBoard({
         .filter(Boolean)
         .join('\n');
       if (!window.confirm(confirmLines)) return;
-      const prev = rooms;
-      setRooms((p) => p.filter((r) => r.id !== room.id));
+      const key = qk.propertyKnowledge(propertyId, `rooms:${scope}`);
+      const snapshot = queryClient.getQueryData<PropertyRoom[]>(key) ?? EMPTY_ROOMS;
+      patchRooms((p) => p.filter((r) => r.id !== room.id));
       try {
         const res = await apiFetch(
           `/api/properties/${propertyId}/rooms/${room.id}`,
@@ -177,22 +187,22 @@ export function RoomsBoard({
           throw new Error(data.error || 'Delete failed');
         }
       } catch (err: any) {
-        setRooms(prev);
+        patchRooms(snapshot);
         showToast('error', err.message || 'Delete failed');
       }
     },
-    [rooms, propertyId, noun, showToast]
+    [propertyId, scope, noun, showToast, queryClient, patchRooms]
   );
 
   const handleRoomPhotosChange = useCallback(
     (roomId: string, photos: Photo[]) => {
-      setRooms((prev) =>
+      patchRooms((prev) =>
         prev.map((r) =>
           r.id === roomId ? { ...r, property_room_photos: photos } : r
         )
       );
     },
-    []
+    [patchRooms]
   );
 
   const handleCreateAttribute = useCallback(
@@ -208,7 +218,7 @@ export function RoomsBoard({
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to create attribute');
-        setRooms((prev) =>
+        patchRooms((prev) =>
           prev.map((r) =>
             r.id === roomId
               ? {
@@ -225,7 +235,7 @@ export function RoomsBoard({
         showToast('error', err.message || 'Failed to create attribute');
       }
     },
-    [propertyId, showToast]
+    [propertyId, showToast, patchRooms]
   );
 
   const handlePatchAttribute = useCallback(
@@ -234,7 +244,7 @@ export function RoomsBoard({
       attributeId: string,
       patch: Partial<Pick<PropertyAttribute, 'title' | 'body' | 'tags'>>
     ) => {
-      setRooms((prev) =>
+      patchRooms((prev) =>
         prev.map((r) =>
           r.id !== roomId
             ? r
@@ -257,7 +267,7 @@ export function RoomsBoard({
         );
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Save failed');
-        setRooms((prev) =>
+        patchRooms((prev) =>
           prev.map((r) =>
             r.id !== roomId
               ? r
@@ -273,13 +283,14 @@ export function RoomsBoard({
         showToast('error', err.message || 'Save failed');
       }
     },
-    [propertyId, showToast]
+    [propertyId, showToast, patchRooms]
   );
 
   const handleDeleteAttribute = useCallback(
     async (roomId: string, attributeId: string) => {
-      const prev = rooms;
-      setRooms((p) =>
+      const key = qk.propertyKnowledge(propertyId, `rooms:${scope}`);
+      const snapshot = queryClient.getQueryData<PropertyRoom[]>(key) ?? EMPTY_ROOMS;
+      patchRooms((p) =>
         p.map((r) =>
           r.id !== roomId
             ? r
@@ -301,16 +312,16 @@ export function RoomsBoard({
           throw new Error(data.error || 'Delete failed');
         }
       } catch (err: any) {
-        setRooms(prev);
+        patchRooms(snapshot);
         showToast('error', err.message || 'Delete failed');
       }
     },
-    [rooms, propertyId, showToast]
+    [propertyId, scope, showToast, queryClient, patchRooms]
   );
 
   const handleAttributePhotosChange = useCallback(
     (roomId: string, attributeId: string, photos: Photo[]) => {
-      setRooms((prev) =>
+      patchRooms((prev) =>
         prev.map((r) =>
           r.id !== roomId
             ? r
@@ -325,7 +336,7 @@ export function RoomsBoard({
         )
       );
     },
-    []
+    [patchRooms]
   );
 
   if (loading) {

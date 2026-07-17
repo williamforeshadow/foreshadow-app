@@ -1,9 +1,12 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type SetStateAction } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, EyeOff, Lock } from 'lucide-react';
 import { apiFetch } from '@/lib/apiFetch';
+import { qk } from '@/lib/queries/keys';
+import { fetchJson } from '@/lib/queries/fetchJson';
 import {
   LOCKABLE_CONNECTIVITY_FIELDS,
   RESOURCE_FIELD_SETS,
@@ -36,6 +39,13 @@ interface Brief {
   rooms: Rec[];
   documents: Rec[];
 }
+
+interface GuestAccessData {
+  brief: Brief;
+  unlocked: Set<string>;
+}
+
+const EMPTY_UNLOCKED: Set<string> = new Set();
 
 const CONNECTIVITY_LABELS: Record<string, string> = {
   wifi_ssid: 'Wi-Fi network (SSID)',
@@ -181,41 +191,48 @@ function attributePackage(attr: Rec): Package {
 export default function GuestAccessTab() {
   const params = useParams<{ id: string }>();
   const propertyId = params?.id as string;
+  const queryClient = useQueryClient();
 
-  const [brief, setBrief] = useState<Brief | null>(null);
-  const [unlocked, setUnlocked] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [briefRes, visRes] = await Promise.all([
-        apiFetch(`/api/properties/${propertyId}/brief`),
-        apiFetch(`/api/properties/${propertyId}/guest-visibility`),
+  const query = useQuery({
+    queryKey: qk.propertyKnowledge(propertyId, 'guest-access'),
+    queryFn: async () => {
+      const [briefData, visData] = await Promise.all([
+        fetchJson<Brief>(`/api/properties/${propertyId}/brief`),
+        fetchJson<{ unlocked?: Array<{ resource_type: VisibilityResourceType; resource_id: string }> }>(
+          `/api/properties/${propertyId}/guest-visibility`,
+        ),
       ]);
-      const briefData = await briefRes.json();
-      if (!briefRes.ok) throw new Error(briefData.error || 'Failed to load property');
-      const visData = await visRes.json();
-      if (!visRes.ok) throw new Error(visData.error || 'Failed to load visibility');
-
-      setBrief(briefData as Brief);
       const set = new Set<string>();
-      for (const r of (visData.unlocked ?? []) as Array<{ resource_type: VisibilityResourceType; resource_id: string }>) {
+      for (const r of visData.unlocked ?? []) {
         set.add(visibilityKey(r.resource_type, r.resource_id));
       }
-      setUnlocked(set);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load');
-    } finally {
-      setLoading(false);
-    }
-  }, [propertyId]);
+      return { brief: briefData, unlocked: set } as GuestAccessData;
+    },
+  });
+  const brief = query.data?.brief ?? null;
+  const unlocked = query.data?.unlocked ?? EMPTY_UNLOCKED;
+  const loading = query.isLoading;
+  const loadError = query.error?.message ?? null;
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const error = mutationError ?? loadError;
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // SetStateAction-compatible patch helper over the `unlocked` field of the
+  // combined brief+visibility cache entry (mirrors patchItems/patchContacts
+  // in the other knowledge tabs, scoped to one field of an object cache).
+  const patchUnlocked = useCallback(
+    (action: SetStateAction<Set<string>>) => {
+      const key = qk.propertyKnowledge(propertyId, 'guest-access');
+      queryClient.cancelQueries({ queryKey: key });
+      queryClient.setQueryData<GuestAccessData>(key, (prev) => {
+        if (!prev) return prev;
+        const prevSet = prev.unlocked;
+        const nextSet =
+          typeof action === 'function' ? (action as (p: Set<string>) => Set<string>)(prevSet) : action;
+        return { ...prev, unlocked: nextSet };
+      });
+    },
+    [queryClient, propertyId],
+  );
 
   // Set visibility for one or more field resource_ids of a single resource
   // type at once (one id = a field row; many ids = a room/attribute package).
@@ -223,7 +240,7 @@ export default function GuestAccessTab() {
     async (resourceType: VisibilityResourceType, resourceIds: string[], nextVisible: boolean) => {
       if (resourceIds.length === 0) return;
       const keys = resourceIds.map((rid) => visibilityKey(resourceType, rid));
-      setUnlocked((prev) => {
+      patchUnlocked((prev) => {
         const next = new Set(prev);
         for (const k of keys) {
           if (nextVisible) next.add(k);
@@ -242,7 +259,7 @@ export default function GuestAccessTab() {
           throw new Error(data.error || 'Failed to update');
         }
       } catch (err) {
-        setUnlocked((prev) => {
+        patchUnlocked((prev) => {
           const next = new Set(prev);
           for (const k of keys) {
             if (nextVisible) next.delete(k);
@@ -250,10 +267,10 @@ export default function GuestAccessTab() {
           }
           return next;
         });
-        setError(err instanceof Error ? err.message : 'Failed to update');
+        setMutationError(err instanceof Error ? err.message : 'Failed to update');
       }
     },
-    [propertyId],
+    [propertyId, patchUnlocked],
   );
 
   const isPackageVisible = useCallback(
@@ -390,7 +407,7 @@ export default function GuestAccessTab() {
         {error && (
           <div className="mb-4 flex items-center justify-between rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-[13px] text-red-700 dark:text-red-300">
             <span>{error}</span>
-            <button onClick={() => setError(null)} className="ml-2 text-red-500 hover:text-red-700">✕</button>
+            <button onClick={() => setMutationError(null)} className="ml-2 text-red-500 hover:text-red-700">✕</button>
           </div>
         )}
 

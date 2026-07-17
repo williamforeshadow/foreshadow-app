@@ -1,8 +1,11 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/apiFetch';
+import { qk } from '@/lib/queries/keys';
+import { fetchJson } from '@/lib/queries/fetchJson';
 import {
   Field,
   Input,
@@ -57,36 +60,44 @@ function resolveDocUrl(storagePath: string) {
   return '#';
 }
 
+const EMPTY_DOCS: PropertyDocument[] = [];
+
 export default function PropertyDocumentsTab() {
   const params = useParams<{ id: string }>();
   const propertyId = params?.id as string;
+  const queryClient = useQueryClient();
 
-  const [docs, setDocs] = useState<PropertyDocument[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const query = useQuery({
+    queryKey: qk.propertyKnowledge(propertyId, 'documents'),
+    queryFn: async () => {
+      const data = await fetchJson<{ documents?: PropertyDocument[] }>(
+        `/api/properties/${propertyId}/documents`,
+      );
+      return (data.documents || []) as PropertyDocument[];
+    },
+  });
+  const docs = query.data ?? EMPTY_DOCS;
+  const loading = query.isLoading;
+  const loadError = query.error?.message ?? null;
+
   const [uploading, setUploading] = useState(false);
   const [pendingTag, setPendingTag] = useState<DocTag>('other');
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast, showToast } = useToast();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const res = await apiFetch(`/api/properties/${propertyId}/documents`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to load documents');
-      setDocs((data.documents || []) as PropertyDocument[]);
-    } catch (err: any) {
-      setLoadError(err.message || 'Failed to load documents');
-    } finally {
-      setLoading(false);
-    }
-  }, [propertyId]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const patchDocs = useCallback(
+    (action: SetStateAction<PropertyDocument[]>) => {
+      const key = qk.propertyKnowledge(propertyId, 'documents');
+      queryClient.cancelQueries({ queryKey: key });
+      queryClient.setQueryData<PropertyDocument[]>(key, (old) => {
+        const prev = old ?? [];
+        return typeof action === 'function'
+          ? (action as (p: PropertyDocument[]) => PropertyDocument[])(prev)
+          : action;
+      });
+    },
+    [queryClient, propertyId],
+  );
 
   const docsByTag = useMemo(() => {
     const map = new Map<DocTag, PropertyDocument[]>();
@@ -102,7 +113,6 @@ export default function PropertyDocumentsTab() {
     if (!files || files.length === 0) return;
     setUploading(true);
     try {
-      const next = [...docs];
       for (const file of Array.from(files)) {
         const form = new FormData();
         form.append('file', file);
@@ -116,9 +126,8 @@ export default function PropertyDocumentsTab() {
           showToast('error', data.error || `Upload failed for ${file.name}`);
           continue;
         }
-        next.unshift(data.document as PropertyDocument);
+        patchDocs((prev) => [data.document as PropertyDocument, ...prev]);
       }
-      setDocs(next);
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';
@@ -127,7 +136,7 @@ export default function PropertyDocumentsTab() {
 
   const handlePatch = useCallback(
     async (docId: string, patch: Partial<Pick<PropertyDocument, 'title' | 'notes' | 'tag'>>) => {
-      setDocs((prev) => prev.map((d) => (d.id === docId ? { ...d, ...patch } : d)));
+      patchDocs((prev) => prev.map((d) => (d.id === docId ? { ...d, ...patch } : d)));
       try {
         const res = await apiFetch(
           `/api/properties/${propertyId}/documents/${docId}`,
@@ -139,21 +148,22 @@ export default function PropertyDocumentsTab() {
         );
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Save failed');
-        setDocs((prev) =>
+        patchDocs((prev) =>
           prev.map((d) => (d.id === docId ? (data.document as PropertyDocument) : d))
         );
       } catch (err: any) {
         showToast('error', err.message || 'Save failed');
       }
     },
-    [propertyId, showToast]
+    [propertyId, showToast, patchDocs]
   );
 
   const handleDelete = useCallback(
     async (doc: PropertyDocument) => {
       if (!window.confirm(`Delete "${doc.title}"?`)) return;
-      const prev = docs;
-      setDocs((p) => p.filter((d) => d.id !== doc.id));
+      const key = qk.propertyKnowledge(propertyId, 'documents');
+      const snapshot = queryClient.getQueryData<PropertyDocument[]>(key) ?? EMPTY_DOCS;
+      patchDocs((p) => p.filter((d) => d.id !== doc.id));
       try {
         const res = await apiFetch(
           `/api/properties/${propertyId}/documents/${doc.id}`,
@@ -164,11 +174,11 @@ export default function PropertyDocumentsTab() {
           throw new Error(data.error || 'Delete failed');
         }
       } catch (err: any) {
-        setDocs(prev);
+        patchDocs(snapshot);
         showToast('error', err.message || 'Delete failed');
       }
     },
-    [docs, propertyId, showToast]
+    [propertyId, queryClient, patchDocs, showToast]
   );
 
   if (loading) {

@@ -1,7 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/apiFetch';
+import { qk } from '@/lib/queries/keys';
+import { fetchJson } from '@/lib/queries/fetchJson';
 import {
   KIND_CHIP_CLASSES,
   KIND_LABELS,
@@ -38,30 +41,38 @@ interface TechAccount {
   property_tech_account_photos?: Photo[];
 }
 
+const EMPTY_ACCOUNTS: TechAccount[] = [];
+
 export function TechAccountsList({ propertyId }: { propertyId: string }) {
-  const [accounts, setAccounts] = useState<TechAccount[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const { toast, showToast } = useToast();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const res = await apiFetch(`/api/properties/${propertyId}/tech-accounts`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to load accounts');
-      setAccounts((data.accounts || []) as TechAccount[]);
-    } catch (err: any) {
-      setLoadError(err.message || 'Failed to load accounts');
-    } finally {
-      setLoading(false);
-    }
-  }, [propertyId]);
+  const query = useQuery({
+    queryKey: qk.propertyKnowledge(propertyId, 'tech-accounts'),
+    queryFn: async () => {
+      const data = await fetchJson<{ accounts?: TechAccount[] }>(
+        `/api/properties/${propertyId}/tech-accounts`
+      );
+      return (data.accounts || []) as TechAccount[];
+    },
+  });
+  const accounts = query.data ?? EMPTY_ACCOUNTS;
+  const loading = query.isLoading;
+  const loadError = query.error?.message ?? null;
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const patchAccounts = useCallback(
+    (action: SetStateAction<TechAccount[]>) => {
+      const key = qk.propertyKnowledge(propertyId, 'tech-accounts');
+      queryClient.cancelQueries({ queryKey: key });
+      queryClient.setQueryData<TechAccount[]>(key, (old) => {
+        const prev = old ?? [];
+        return typeof action === 'function'
+          ? (action as (p: TechAccount[]) => TechAccount[])(prev)
+          : action;
+      });
+    },
+    [queryClient, propertyId]
+  );
 
   const handleCreate = useCallback(
     async (seed?: TechAccountPreset) => {
@@ -73,12 +84,12 @@ export function TechAccountsList({ propertyId }: { propertyId: string }) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to create account');
-        setAccounts((prev) => [...prev, data.account as TechAccount]);
+        patchAccounts((prev) => [...prev, data.account as TechAccount]);
       } catch (err: any) {
         showToast('error', err.message || 'Failed to create account');
       }
     },
-    [propertyId, showToast]
+    [propertyId, showToast, patchAccounts]
   );
 
   const handlePatch = useCallback(
@@ -88,7 +99,7 @@ export function TechAccountsList({ propertyId }: { propertyId: string }) {
         Pick<TechAccount, 'service_name' | 'username' | 'password' | 'notes' | 'kind'>
       >
     ) => {
-      setAccounts((prev) =>
+      patchAccounts((prev) =>
         prev.map((a) => (a.id === accountId ? { ...a, ...patch } : a))
       );
       try {
@@ -102,21 +113,22 @@ export function TechAccountsList({ propertyId }: { propertyId: string }) {
         );
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Save failed');
-        setAccounts((prev) =>
+        patchAccounts((prev) =>
           prev.map((a) => (a.id === accountId ? (data.account as TechAccount) : a))
         );
       } catch (err: any) {
         showToast('error', err.message || 'Save failed');
       }
     },
-    [propertyId, showToast]
+    [propertyId, showToast, patchAccounts]
   );
 
   const handleDelete = useCallback(
     async (account: TechAccount) => {
       if (!window.confirm(`Delete "${account.service_name}"?`)) return;
-      const prev = accounts;
-      setAccounts((p) => p.filter((a) => a.id !== account.id));
+      const key = qk.propertyKnowledge(propertyId, 'tech-accounts');
+      const snapshot = queryClient.getQueryData<TechAccount[]>(key) ?? EMPTY_ACCOUNTS;
+      patchAccounts((p) => p.filter((a) => a.id !== account.id));
       try {
         const res = await apiFetch(
           `/api/properties/${propertyId}/tech-accounts/${account.id}`,
@@ -127,16 +139,16 @@ export function TechAccountsList({ propertyId }: { propertyId: string }) {
           throw new Error(data.error || 'Delete failed');
         }
       } catch (err: any) {
-        setAccounts(prev);
+        patchAccounts(snapshot);
         showToast('error', err.message || 'Delete failed');
       }
     },
-    [accounts, propertyId, showToast]
+    [propertyId, queryClient, patchAccounts, showToast]
   );
 
   const handlePhotosChange = useCallback(
     (accountId: string, photos: Photo[]) => {
-      setAccounts((prev) =>
+      patchAccounts((prev) =>
         prev.map((a) =>
           a.id === accountId
             ? { ...a, property_tech_account_photos: photos }
@@ -144,7 +156,7 @@ export function TechAccountsList({ propertyId }: { propertyId: string }) {
         )
       );
     },
-    []
+    [patchAccounts]
   );
 
   return (

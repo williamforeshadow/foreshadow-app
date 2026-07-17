@@ -1,7 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/apiFetch';
+import { qk } from '@/lib/queries/keys';
+import { fetchJson } from '@/lib/queries/fetchJson';
 import {
   Field,
   FieldGroup,
@@ -38,35 +41,50 @@ function fromServer(row: any | null | undefined): WifiDraft {
 }
 
 export function WifiSection({ propertyId }: { propertyId: string }) {
-  const [baseline, setBaseline] = useState<WifiDraft | null>(null);
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: qk.propertyKnowledge(propertyId, 'connectivity'),
+    queryFn: async () => {
+      const data = await fetchJson<{ connectivity?: any }>(
+        `/api/properties/${propertyId}/connectivity`
+      );
+      return fromServer(data.connectivity);
+    },
+  });
+  const baseline = query.data ?? null;
+  const loading = query.isLoading;
+  const loadError = query.error?.message ?? null;
+
   const [draft, setDraft] = useState<WifiDraft | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showPwd, setShowPwd] = useState(false);
   const { toast, showToast } = useToast();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const res = await apiFetch(`/api/properties/${propertyId}/connectivity`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to load WiFi');
-      const d = fromServer(data.connectivity);
-      setBaseline(d);
-      setDraft(d);
-    } catch (err: any) {
-      setLoadError(err.message || 'Failed to load WiFi');
-    } finally {
-      setLoading(false);
-    }
-  }, [propertyId]);
-
+  // Hydrate the editable draft from the cached baseline — but never while the
+  // user has unsaved edits, or a background refetch (focus/reconnect/stale)
+  // would silently wipe them. Dirty drafts reconcile on save or discard.
+  const prevBaselineRef = useRef<WifiDraft | null>(null);
   useEffect(() => {
-    load();
-  }, [load]);
+    if (!baseline) return;
+    setDraft((prev) => {
+      if (!prev) return baseline;
+      const prevBaseline = prevBaselineRef.current;
+      const dirty = prevBaseline && JSON.stringify(prev) !== JSON.stringify(prevBaseline);
+      return dirty ? prev : baseline;
+    });
+    prevBaselineRef.current = baseline;
+  }, [baseline]);
+
+  const patchConnectivity = useCallback(
+    (next: WifiDraft) => {
+      const key = qk.propertyKnowledge(propertyId, 'connectivity');
+      queryClient.cancelQueries({ queryKey: key });
+      queryClient.setQueryData<WifiDraft>(key, next);
+    },
+    [queryClient, propertyId]
+  );
 
   const isDirty = useMemo(() => {
     if (!baseline || !draft) return false;
@@ -97,7 +115,7 @@ export function WifiSection({ propertyId }: { propertyId: string }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save');
       const d = fromServer(data.connectivity);
-      setBaseline(d);
+      patchConnectivity(d);
       setDraft(d);
       showToast('success', 'WiFi saved');
     } catch (err: any) {

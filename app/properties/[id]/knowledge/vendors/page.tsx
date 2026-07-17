@@ -1,8 +1,11 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/apiFetch';
+import { qk } from '@/lib/queries/keys';
+import { fetchJson } from '@/lib/queries/fetchJson';
 import {
   CONTACT_TAGS,
   CONTACT_TAG_LABELS,
@@ -45,39 +48,43 @@ type ContactPatch = Partial<
   Pick<Contact, 'name' | 'role' | 'phone' | 'email' | 'schedule' | 'preferences' | 'notes' | 'tags'>
 >;
 
+const EMPTY_CONTACTS: Contact[] = [];
+
 export default function PropertyVendorsTab() {
   const params = useParams<{ id: string }>();
   const propertyId = params?.id as string;
+  const queryClient = useQueryClient();
 
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const query = useQuery({
+    queryKey: qk.propertyKnowledge(propertyId, 'contacts'),
+    queryFn: async () => {
+      const data = await fetchJson<{ contacts?: Contact[] }>(
+        `/api/properties/${propertyId}/contacts`,
+      );
+      return ((data.contacts || []) as Contact[]).map((c) => ({
+        ...c,
+        tags: normalizeContactTags(c.tags),
+      }));
+    },
+  });
+  const contacts = query.data ?? EMPTY_CONTACTS;
+  const loading = query.isLoading;
+  const loadError = query.error?.message ?? null;
+
   const [filter, setFilter] = useState<ContactTag | 'all'>('all');
   const { toast, showToast } = useToast();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const res = await apiFetch(`/api/properties/${propertyId}/contacts`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to load contacts');
-      setContacts(
-        ((data.contacts || []) as Contact[]).map((c) => ({
-          ...c,
-          tags: normalizeContactTags(c.tags),
-        })),
-      );
-    } catch (err: any) {
-      setLoadError(err.message || 'Failed to load contacts');
-    } finally {
-      setLoading(false);
-    }
-  }, [propertyId]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const patchContacts = useCallback(
+    (action: SetStateAction<Contact[]>) => {
+      const key = qk.propertyKnowledge(propertyId, 'contacts');
+      queryClient.cancelQueries({ queryKey: key });
+      queryClient.setQueryData<Contact[]>(key, (old) => {
+        const prev = old ?? [];
+        return typeof action === 'function' ? (action as (p: Contact[]) => Contact[])(prev) : action;
+      });
+    },
+    [queryClient, propertyId],
+  );
 
   const visible = useMemo(
     () => (filter === 'all' ? contacts : contacts.filter((c) => c.tags.includes(filter))),
@@ -96,18 +103,18 @@ export default function PropertyVendorsTab() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create contact');
-      setContacts((prev) => [
+      patchContacts((prev) => [
         ...prev,
         { ...(data.contact as Contact), tags: normalizeContactTags(data.contact.tags) },
       ]);
     } catch (err: any) {
       showToast('error', err.message || 'Failed to create contact');
     }
-  }, [propertyId, filter, showToast]);
+  }, [propertyId, filter, showToast, patchContacts]);
 
   const handlePatch = useCallback(
     async (contactId: string, patch: ContactPatch) => {
-      setContacts((prev) =>
+      patchContacts((prev) =>
         prev.map((c) => (c.id === contactId ? { ...c, ...patch } : c))
       );
       try {
@@ -121,7 +128,7 @@ export default function PropertyVendorsTab() {
         );
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Save failed');
-        setContacts((prev) =>
+        patchContacts((prev) =>
           prev.map((c) =>
             c.id === contactId
               ? { ...(data.contact as Contact), tags: normalizeContactTags(data.contact.tags) }
@@ -132,13 +139,14 @@ export default function PropertyVendorsTab() {
         showToast('error', err.message || 'Save failed');
       }
     },
-    [propertyId, showToast]
+    [propertyId, showToast, patchContacts]
   );
 
   const handleDelete = useCallback(
     async (contactId: string) => {
-      const prev = contacts;
-      setContacts((p) => p.filter((c) => c.id !== contactId));
+      const key = qk.propertyKnowledge(propertyId, 'contacts');
+      const snapshot = queryClient.getQueryData<Contact[]>(key) ?? EMPTY_CONTACTS;
+      patchContacts((p) => p.filter((c) => c.id !== contactId));
       try {
         const res = await apiFetch(
           `/api/properties/${propertyId}/contacts/${contactId}`,
@@ -149,11 +157,11 @@ export default function PropertyVendorsTab() {
           throw new Error(data.error || 'Delete failed');
         }
       } catch (err: any) {
-        setContacts(prev);
+        patchContacts(snapshot);
         showToast('error', err.message || 'Delete failed');
       }
     },
-    [contacts, propertyId, showToast]
+    [propertyId, queryClient, patchContacts, showToast]
   );
 
   if (loading) {

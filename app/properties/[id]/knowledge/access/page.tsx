@@ -1,8 +1,11 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/apiFetch';
+import { qk } from '@/lib/queries/keys';
+import { fetchJson } from '@/lib/queries/fetchJson';
 import {
   ACCESS_TYPE_GROUPS,
   accessValueKind,
@@ -33,33 +36,39 @@ interface AccessItem {
   sort_order: number;
 }
 
+const EMPTY_ITEMS: AccessItem[] = [];
+
 export default function PropertyAccessTab() {
   const params = useParams<{ id: string }>();
   const propertyId = params?.id as string;
+  const queryClient = useQueryClient();
 
-  const [items, setItems] = useState<AccessItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const query = useQuery({
+    queryKey: qk.propertyKnowledge(propertyId, 'access'),
+    queryFn: async () => {
+      const data = await fetchJson<{ items?: AccessItem[] }>(
+        `/api/properties/${propertyId}/access`,
+      );
+      return (data.items || []) as AccessItem[];
+    },
+  });
+  const items = query.data ?? EMPTY_ITEMS;
+  const loading = query.isLoading;
+  const loadError = query.error?.message ?? null;
+
   const { toast, showToast } = useToast();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const res = await apiFetch(`/api/properties/${propertyId}/access`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to load access');
-      setItems((data.items || []) as AccessItem[]);
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Failed to load access');
-    } finally {
-      setLoading(false);
-    }
-  }, [propertyId]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const patchItems = useCallback(
+    (action: SetStateAction<AccessItem[]>) => {
+      const key = qk.propertyKnowledge(propertyId, 'access');
+      queryClient.cancelQueries({ queryKey: key });
+      queryClient.setQueryData<AccessItem[]>(key, (old) => {
+        const prev = old ?? [];
+        return typeof action === 'function' ? (action as (p: AccessItem[]) => AccessItem[])(prev) : action;
+      });
+    },
+    [queryClient, propertyId],
+  );
 
   const handleCreate = useCallback(
     async (typeKey: string) => {
@@ -72,17 +81,17 @@ export default function PropertyAccessTab() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to add item');
-        setItems((prev) => [...prev, data.item as AccessItem]);
+        patchItems((prev) => [...prev, data.item as AccessItem]);
       } catch (err) {
         showToast('error', err instanceof Error ? err.message : 'Failed to add item');
       }
     },
-    [propertyId, items.length, showToast],
+    [propertyId, items.length, showToast, patchItems],
   );
 
   const handlePatch = useCallback(
     async (id: string, patch: Partial<Pick<AccessItem, 'label' | 'value' | 'notes'>>) => {
-      setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+      patchItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
       try {
         const res = await apiFetch(`/api/properties/${propertyId}/access/${id}`, {
           method: 'PATCH',
@@ -91,19 +100,20 @@ export default function PropertyAccessTab() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Save failed');
-        setItems((prev) => prev.map((it) => (it.id === id ? (data.item as AccessItem) : it)));
+        patchItems((prev) => prev.map((it) => (it.id === id ? (data.item as AccessItem) : it)));
       } catch (err) {
         showToast('error', err instanceof Error ? err.message : 'Save failed');
       }
     },
-    [propertyId, showToast],
+    [propertyId, showToast, patchItems],
   );
 
   const handleDelete = useCallback(
     async (item: AccessItem) => {
       if (!window.confirm(`Delete "${item.label}"?`)) return;
-      const prev = items;
-      setItems((p) => p.filter((it) => it.id !== item.id));
+      const key = qk.propertyKnowledge(propertyId, 'access');
+      const snapshot = queryClient.getQueryData<AccessItem[]>(key) ?? EMPTY_ITEMS;
+      patchItems((p) => p.filter((it) => it.id !== item.id));
       try {
         const res = await apiFetch(`/api/properties/${propertyId}/access/${item.id}`, {
           method: 'DELETE',
@@ -113,11 +123,11 @@ export default function PropertyAccessTab() {
           throw new Error(data.error || 'Delete failed');
         }
       } catch (err) {
-        setItems(prev);
+        patchItems(snapshot);
         showToast('error', err instanceof Error ? err.message : 'Delete failed');
       }
     },
-    [items, propertyId, showToast],
+    [propertyId, queryClient, patchItems, showToast],
   );
 
   if (loading) {

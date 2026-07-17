@@ -1,8 +1,10 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { apiFetch } from '@/lib/apiFetch';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { qk } from '@/lib/queries/keys';
+import { fetchJson } from '@/lib/queries/fetchJson';
 import {
   SectionCaption,
   SectionHeader,
@@ -204,35 +206,28 @@ function ActivityDetails({ changes }: { changes: KnowledgeChanges }) {
   );
 }
 
+const EMPTY_ACTIVITY: ActivityEntry[] = [];
+
 export default function PropertyKnowledgeActivityPage() {
   const params = useParams<{ id: string }>();
   const propertyId = params?.id as string;
-  const [entries, setEntries] = useState<ActivityEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const res = await apiFetch(
+  const query = useQuery({
+    queryKey: qk.propertyKnowledge(propertyId, 'activity'),
+    queryFn: async () => {
+      const data = await fetchJson<{ activities?: ActivityEntry[]; hasMore?: boolean }>(
         `/api/properties/${propertyId}/knowledge/activity?limit=100`,
       );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to load activity');
-      setEntries((data.activities || []) as ActivityEntry[]);
-      setHasMore(Boolean(data.hasMore));
-    } catch (err: any) {
-      setLoadError(err.message || 'Failed to load activity');
-    } finally {
-      setLoading(false);
-    }
-  }, [propertyId]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+      return {
+        activities: (data.activities ?? EMPTY_ACTIVITY) as ActivityEntry[],
+        hasMore: Boolean(data.hasMore),
+      };
+    },
+  });
+  const entries = query.data?.activities ?? EMPTY_ACTIVITY;
+  const loading = query.isLoading;
+  const loadError = query.error?.message ?? null;
+  const hasMore = query.data?.hasMore ?? false;
 
   const groupedEntries = useMemo(() => {
     return entries;
@@ -253,7 +248,7 @@ export default function PropertyKnowledgeActivityPage() {
           {loadError}
         </p>
         <button
-          onClick={load}
+          onClick={() => query.refetch()}
           className="text-[13px] text-neutral-800 dark:text-[#f0efed] underline"
         >
           Try again

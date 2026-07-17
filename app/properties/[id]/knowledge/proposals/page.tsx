@@ -1,11 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
-import { apiFetch } from '@/lib/apiFetch';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { channelLabel } from '@/lib/bookingChannel';
+import { qk } from '@/lib/queries/keys';
+import { fetchJson } from '@/lib/queries/fetchJson';
 import {
   ProposedKnowledge,
   type ProposedKnowledgeData,
@@ -15,8 +17,8 @@ import {
 // concierge knowledge proposals. Same cyan bubbles as the guest threads, but
 // gathered here so operators can clear a backlog in one place instead of
 // hunting across conversations. Accept/dismiss go through the shared bubble
-// (→ /api/proposed-knowledge/[id]); on change we silently refetch, so a decided
-// item just drops out of the queue.
+// (→ /api/proposed-knowledge/[id]); on change we drop the decided proposal
+// from the cached list, so it just disappears from the queue.
 
 interface LedgerProposal extends ProposedKnowledgeData {
   conversation_id: string | null;
@@ -38,35 +40,39 @@ function formatWhen(iso: string | null): string {
   });
 }
 
+const EMPTY_PROPOSALS: LedgerProposal[] = [];
+
 export default function PropertyKnowledgeProposalsTab() {
   const params = useParams<{ id: string }>();
   const propertyId = params?.id as string;
+  const queryClient = useQueryClient();
 
-  const [proposals, setProposals] = useState<LedgerProposal[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchProposals = useCallback(
-    async (opts?: { silent?: boolean }) => {
-      if (!opts?.silent) setLoading(true);
-      setError(null);
-      try {
-        const res = await apiFetch(`/api/properties/${propertyId}/knowledge-proposals`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to load proposals');
-        setProposals((data.proposals ?? []) as LedgerProposal[]);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load proposals');
-      } finally {
-        if (!opts?.silent) setLoading(false);
-      }
+  const query = useQuery({
+    queryKey: qk.propertyKnowledge(propertyId, 'proposals'),
+    queryFn: async () => {
+      const data = await fetchJson<{ proposals?: LedgerProposal[] }>(
+        `/api/properties/${propertyId}/knowledge-proposals`,
+      );
+      return (data.proposals ?? EMPTY_PROPOSALS) as LedgerProposal[];
     },
-    [propertyId],
-  );
+  });
+  const proposals = query.data ?? EMPTY_PROPOSALS;
+  const loading = query.isLoading;
+  const error = query.error?.message ?? null;
 
-  useEffect(() => {
-    fetchProposals();
-  }, [fetchProposals]);
+  // Accept/dismiss are persisted by the shared bubble itself
+  // (POST/DELETE /api/proposed-knowledge/[id]); the list only ever contains
+  // pending rows, so once one is decided it just drops out of the cache.
+  const removeProposal = useCallback(
+    (id: string) => {
+      const key = qk.propertyKnowledge(propertyId, 'proposals');
+      queryClient.cancelQueries({ queryKey: key });
+      queryClient.setQueryData<LedgerProposal[]>(key, (old) =>
+        (old ?? EMPTY_PROPOSALS).filter((p) => p.id !== id),
+      );
+    },
+    [queryClient, propertyId],
+  );
 
   if (loading) {
     return (
@@ -133,7 +139,7 @@ export default function PropertyKnowledgeProposalsTab() {
                   proposal={p}
                   propertyId={propertyId}
                   align="start"
-                  onChanged={() => fetchProposals({ silent: true })}
+                  onChanged={() => removeProposal(p.id)}
                 />
               </div>
             ))}
