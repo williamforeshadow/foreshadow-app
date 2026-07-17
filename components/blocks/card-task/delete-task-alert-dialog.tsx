@@ -9,7 +9,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog/alert-dialog";
-import { Button } from "@/components/ui/button/button";
+import { Button } from "@/components/ui/button";
 import styles from "./card-task.module.css";
 
 type DeleteTaskAlertDialogProps = {
