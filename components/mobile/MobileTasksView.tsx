@@ -15,11 +15,10 @@ import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useTasks, type TaskRow as TaskRowData } from '@/lib/useTasks';
 import { apiFetch } from '@/lib/apiFetch';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
+import { useProperties, useTaskTemplates } from '@/lib/queries';
 import type {
   Project,
   ProjectFormFields,
-  PropertyOption,
-  TaskTemplate,
   User,
 } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
@@ -139,29 +138,8 @@ function MobileTasksViewContent() {
 
   // ---- Supporting lists --------------------------------------------------
 
-  const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
-  const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/properties');
-        const result = await res.json();
-        if (res.ok && result.properties) setAllProperties(result.properties);
-      } catch {
-        // ignore
-      }
-    })();
-    (async () => {
-      try {
-        const res = await fetch('/api/tasks');
-        const result = await res.json();
-        if (res.ok && result.data) setAvailableTemplates(result.data);
-      } catch {
-        // ignore
-      }
-    })();
-  }, []);
+  const { properties: allProperties } = useProperties();
+  const { templates: availableTemplates } = useTaskTemplates();
 
   // ---- Detail / draft state ---------------------------------------------
 

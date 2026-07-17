@@ -13,6 +13,7 @@ import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
 import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
+import { useProperties, useTaskTemplates } from '@/lib/queries';
 import {
   ProjectDetailPanel,
   ProjectActivitySheet,
@@ -131,10 +132,10 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   // Task data (fetched from tasks-for-bin API)
   const [tasks, setTasks] = useState<Project[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
-  const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
+  const { properties: allProperties } = useProperties();
 
   // Template state
-  const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
+  const { templates: availableTemplates } = useTaskTemplates();
   const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
   const [loadingTaskTemplate, setLoadingTaskTemplate] = useState<string | null>(null);
 
@@ -212,36 +213,6 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   useEffect(() => {
     editingFieldsRef.current = editingProjectFields;
   }, [editingProjectFields]);
-
-  // Fetch properties list on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/properties');
-        const result = await res.json();
-        if (res.ok && result.properties) {
-          setAllProperties(result.properties);
-        }
-      } catch (err) {
-        console.error('Error fetching properties:', err);
-      }
-    })();
-  }, []);
-
-  // Fetch available templates on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/tasks');
-        const result = await res.json();
-        if (res.ok && result.data) {
-          setAvailableTemplates(result.data);
-        }
-      } catch (err) {
-        console.error('Error fetching templates:', err);
-      }
-    })();
-  }, []);
 
   const fetchTaskTemplate = useCallback(async (templateId: string, propertyName?: string) => {
     const cacheKey = propertyName ? `${templateId}__${propertyName}` : templateId;

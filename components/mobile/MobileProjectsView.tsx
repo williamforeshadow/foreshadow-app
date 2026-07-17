@@ -12,10 +12,11 @@ import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
 import { useTaskBinGlobalView } from '@/lib/hooks/useTaskBinGlobalView';
 import { useAuth } from '@/lib/authContext';
 import { useDepartments } from '@/lib/departmentsContext';
+import { useProperties, useTaskTemplates } from '@/lib/queries';
 import { STATUS_ORDER, STATUS_LABELS, PRIORITY_ORDER, PRIORITY_LABELS } from '@/lib/types';
 import type { ProjectViewMode } from '@/lib/types';
 import { ColumnPicker } from '@/components/windows/projects/ColumnPicker';
-import type { Project, User, PropertyOption, TaskTemplate } from '@/lib/types';
+import type { Project, User } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
@@ -172,12 +173,14 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
   // Task data (fetched via tasks-for-bin API, same as desktop ProjectsWindow)
   const [tasks, setTasks] = useState<Project[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
-  const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
+  const { properties: allProperties } = useProperties();
   const [viewMode, setViewMode] = useState<ProjectViewMode>('status');
   const [kanbanSelectionMode, setKanbanSelectionMode] = useState(false);
 
-  // Template state
-  const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
+  // Template state — lazy: only fetch once a task detail screen is open.
+  const { templates: availableTemplates } = useTaskTemplates({
+    enabled: screen.type === 'detail',
+  });
   const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
   const [loadingTemplate, setLoadingTemplate] = useState(false);
 
@@ -215,28 +218,6 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
       0 ||
     !!scheduledDateRange.from ||
     !!scheduledDateRange.to;
-
-  // Fetch properties on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/properties');
-        const result = await res.json();
-        if (res.ok && result.properties) {
-          setAllProperties(result.properties);
-        }
-      } catch {}
-    })();
-  }, []);
-
-  // Fetch available templates lazily when detail opens
-  useEffect(() => {
-    if (screen.type === 'detail' && availableTemplates.length === 0) {
-      fetch('/api/tasks').then(r => r.json()).then(result => {
-        if (result?.data) setAvailableTemplates(result.data);
-      }).catch(() => {});
-    }
-  }, [screen.type]);
 
   const fetchTaskTemplate = useCallback(async (templateId: string, propertyName?: string | null) => {
     const cacheKey = propertyName ? `${templateId}__${propertyName}` : templateId;

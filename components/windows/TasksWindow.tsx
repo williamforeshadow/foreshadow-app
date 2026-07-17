@@ -17,6 +17,7 @@ import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
+import { useProperties, useTaskTemplates } from '@/lib/queries';
 import type {
   User,
   Project,
@@ -159,36 +160,14 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
   const binsHook = useProjectBins({ currentUser });
 
   // Available templates list for the detail panel template-picker.
-  const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
+  const { templates: availableTemplates } = useTaskTemplates();
   // Properties list for the detail panel property-picker (used for both the
   // existing-task panel's property change and the new-task draft flow).
-  const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
+  const { properties: allProperties } = useProperties();
 
   useEffect(() => {
     editingFieldsRef.current = editingFields;
   }, [editingFields]);
-
-  // Fetch supporting lists once.
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/properties');
-        const result = await res.json();
-        if (res.ok && result.properties) setAllProperties(result.properties);
-      } catch (err) {
-        console.error('Error fetching properties:', err);
-      }
-    })();
-    (async () => {
-      try {
-        const res = await fetch('/api/tasks');
-        const result = await res.json();
-        if (res.ok && result.data) setAvailableTemplates(result.data);
-      } catch (err) {
-        console.error('Error fetching templates:', err);
-      }
-    })();
-  }, []);
 
   // ---- New-task draft state ---------------------------------------------
 

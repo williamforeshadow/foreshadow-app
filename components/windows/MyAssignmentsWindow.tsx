@@ -3,6 +3,7 @@
 import { apiFetch } from '@/lib/apiFetch';
 import { toast } from '@/components/ui/toast';
 import { memo, useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useMyAssignments, useProperties, useTaskTemplates } from '@/lib/queries';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
@@ -115,9 +116,19 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
   const router = useRouter();
   const searchParams = useSearchParams();
   const { departments: allDepts } = useDepartments();
-  const [rawData, setRawData] = useState<{ tasks: RawAssignmentTask[]; projects: unknown[] } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Cached, shared query — mirrors MobileMyAssignmentsView. Refetches keep
+  // existing data visible while fresh data loads.
+  const {
+    rawData,
+    loading,
+    error: queryError,
+    refetch,
+  } = useMyAssignments<RawAssignmentTask, unknown>(currentUser?.id);
+  const error = queryError
+    ? queryError instanceof Error
+      ? queryError.message
+      : 'Failed to fetch assignments'
+    : null;
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [selectedItem, setSelectedItem] = useState<UnifiedItem | null>(null);
 
@@ -207,8 +218,10 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
   const [staffOpen, setStaffOpen] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [viewingAttachmentIndex, setViewingAttachmentIndex] = useState<number | null>(null);
-  const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
-  const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
+  // Lazy templates: only fetch once a detail panel opens (enabled flag keeps
+  // the old on-demand timing while sharing the app-wide cache).
+  const { templates: availableTemplates } = useTaskTemplates({ enabled: !!selectedItem });
+  const { properties: allProperties } = useProperties();
   const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
   const [loadingTaskTemplate, setLoadingTaskTemplate] = useState<string | null>(null);
 
@@ -235,18 +248,6 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
     editingFieldsRef.current = editingFields;
   }, [editingFields]);
 
-  // Fetch properties list on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/properties');
-        const result = await res.json();
-        if (res.ok && result.properties) setAllProperties(result.properties);
-      } catch (err) {
-        console.error('Error fetching properties:', err);
-      }
-    })();
-  }, []);
 
   const fetchTaskTemplate = useCallback(async (templateId: string, propertyName?: string) => {
     const cacheKey = propertyName ? `${templateId}__${propertyName}` : templateId;
@@ -279,31 +280,11 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
     });
   }, []);
 
-  // Fetch assignments
+  // Refetch shim — the query owns the mount fetch; callers use this after
+  // mutations to reconcile with server truth.
   const fetchAssignments = useCallback(async () => {
-    if (!currentUser?.id) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/my-assignments?user_id=${currentUser.id}`);
-      const result = await response.json() as {
-        error?: string;
-        tasks?: RawAssignmentTask[];
-        projects?: unknown[];
-      };
-      if (!response.ok) throw new Error(result.error || 'Failed to fetch assignments');
-      setRawData({ tasks: result.tasks || [], projects: result.projects || [] });
-    } catch (err) {
-      console.error('Error fetching assignments:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch assignments');
-    } finally {
-      setLoading(false);
-    }
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    if (currentUser?.id) fetchAssignments();
-  }, [currentUser?.id, fetchAssignments]);
+    await refetch();
+  }, [refetch]);
 
   // Unify items
   const items = useMemo((): UnifiedItem[] => {
@@ -626,19 +607,6 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
     }
   }, [selectedItem?.key]);
 
-  useEffect(() => {
-    if (selectedItem && availableTemplates.length === 0) {
-      (async () => {
-        try {
-          const res = await fetch('/api/tasks');
-          const result = await res.json();
-          if (res.ok && result.data) setAvailableTemplates(result.data);
-        } catch (err) {
-          console.error('Error fetching templates:', err);
-        }
-      })();
-    }
-  }, [selectedItem?.key]);
 
   // ProjectDetailPanel calls `onSave(f)` synchronously after
   // `setEditingFields(f)` when the user picks a status/priority/

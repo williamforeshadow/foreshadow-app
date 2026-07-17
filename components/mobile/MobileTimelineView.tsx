@@ -11,7 +11,8 @@ import {
 import { cn } from '@/lib/utils';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useDepartments } from '@/lib/departmentsContext';
-import type { Task, PropertyOption } from '@/lib/types';
+import { useProperties } from '@/lib/queries';
+import type { Task } from '@/lib/types';
 import { DayDetailPanel, type DayDetailReservation } from '@/components/tasks/DayDetailPanel';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
@@ -111,13 +112,7 @@ export default function MobileTimelineView({
   // labels clickable (open the property's detail page in a new tab).
   // Mirrors the desktop TimelineWindow behavior. Names that don't resolve
   // (orphaned reservation strings) fall back to plain text.
-  const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
-  useEffect(() => {
-    fetch('/api/properties')
-      .then(r => r.json())
-      .then(result => { if (result.properties) setAllProperties(result.properties); })
-      .catch(err => console.error('Error fetching properties:', err));
-  }, []);
+  const { properties: allProperties } = useProperties();
   const propertyIdByName = useMemo(() => {
     const map = new Map<string, string>();
     for (const p of allProperties) {

@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/authContext';
 import { useUsers } from '@/lib/useUsers';
 import { useTurnovers } from '@/lib/useTurnovers';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
+import { useProperties, useTaskTemplates } from '@/lib/queries';
 import {
   MobileLayout,
   MobileTimelineView,
@@ -15,7 +16,7 @@ import {
   MobileProjectDetail,
   type MobileTab
 } from '@/components/mobile';
-import type { Project, ProjectFormFields, Task, TaskTemplate, PropertyOption } from '@/lib/types';
+import type { Project, ProjectFormFields, Task } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 import { ReservationDetailOverlay } from '@/components/reservations/ReservationDetailOverlay';
 import { ContextTaskDetailOverlay } from '@/components/reservations/ContextTaskDetailOverlay';
@@ -53,18 +54,7 @@ export default function MobileApp() {
   const binsHook = useProjectBins({ currentUser });
 
   // Fetch properties list (replaces projectsHook.allProperties)
-  const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/properties');
-        const result = await res.json();
-        if (res.ok && result.properties) {
-          setAllProperties(result.properties);
-        }
-      } catch {}
-    })();
-  }, []);
+  const { properties: allProperties } = useProperties();
 
   // Tab state is driven by ?tab= so the drawer (rendered from any route) can
   // navigate cross-route into the right workspace view via router.push().
@@ -89,7 +79,10 @@ export default function MobileApp() {
   const [mobileSelectedProject, setMobileSelectedProject] = useState<Project | null>(null);
   const [mobileRefreshTrigger, setMobileRefreshTrigger] = useState(0);
 
-  const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
+  // Lazy: only fetch once a task/project detail panel is open.
+  const { templates: availableTemplates } = useTaskTemplates({
+    enabled: !!(mobileSelectedTask || mobileSelectedProject),
+  });
 
   // Strict single-panel rule: when any global detail panel (reservation
   // overlay or context task overlay) opens, close the mobile-shell panels.
@@ -97,14 +90,6 @@ export default function MobileApp() {
     setMobileSelectedTask(null);
     setMobileSelectedProject(null);
   });
-
-  useEffect(() => {
-    if ((mobileSelectedTask || mobileSelectedProject) && availableTemplates.length === 0) {
-      fetch('/api/tasks').then(r => r.json()).then(result => {
-        if (result?.data) setAvailableTemplates(result.data);
-      }).catch(() => {});
-    }
-  }, [mobileSelectedTask, mobileSelectedProject]);
 
   // Transform Task → Project shape for unified detail panel
   const taskAsProject = useMemo((): Project | null => {

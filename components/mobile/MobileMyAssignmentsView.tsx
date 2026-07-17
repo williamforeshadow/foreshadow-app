@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useMyAssignments } from '@/lib/queries';
 import { KeyAffordance } from '@/components/tasks/KeyAffordance';
 import { useAuth } from '@/lib/authContext';
 import { Button } from '@/components/ui/button';
@@ -205,43 +206,33 @@ export default function MobileMyAssignmentsView({
   const handleNewTask = useCallback(() => {
     router.push('/tasks?newTask=1');
   }, [router]);
-  const [rawData, setRawData] = useState<{ tasks: RawTask[]; projects: RawProject[] } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
-  // `silent` refreshes without touching the loading flag so existing content
-  // stays visible (used when the tab is re-shown after being hidden).
-  const fetchAssignments = useCallback(async ({ silent = false } = {}) => {
-    if (!user?.id) return;
-    if (!silent) setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/my-assignments?user_id=${user.id}`);
-      const result = await response.json() as {
-        error?: string;
-        tasks?: RawTask[];
-        projects?: RawProject[];
-      };
-      if (!response.ok) throw new Error(result.error || 'Failed to fetch assignments');
-      setRawData({ tasks: result.tasks || [], projects: result.projects || [] });
-    } catch (err) {
-      console.error('Error fetching assignments:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch assignments');
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id]);
+  // Cached, shared query — remounts (e.g. returning from /messages) paint
+  // instantly from cache and refresh in the background. Refetches are
+  // naturally silent: existing data stays visible while fresh data loads.
+  const {
+    rawData,
+    loading,
+    error: queryError,
+    refetch: fetchAssignments,
+  } = useMyAssignments<RawTask, RawProject>(user?.id);
+  const error = queryError
+    ? queryError instanceof Error
+      ? queryError.message
+      : 'Failed to fetch assignments'
+    : null;
 
+  // Bumped by the parent when a detail overlay closes (mount fetch is owned
+  // by the query itself).
   useEffect(() => {
-    if (user?.id) fetchAssignments();
-  }, [user?.id, refreshTrigger, fetchAssignments]);
+    if (refreshTrigger) fetchAssignments();
+  }, [refreshTrigger, fetchAssignments]);
 
-  // Quiet refresh when the tab is re-shown after being hidden (keep-mounted
-  // tabs no longer remount, so this replaces the old refetch-on-mount).
+  // Quiet refresh when the tab is re-shown after being hidden.
   const wasActive = useRef(isActive);
   useEffect(() => {
-    if (isActive && !wasActive.current) fetchAssignments({ silent: true });
+    if (isActive && !wasActive.current) fetchAssignments();
     wasActive.current = isActive;
   }, [isActive, fetchAssignments]);
 
