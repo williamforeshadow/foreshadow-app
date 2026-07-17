@@ -57,11 +57,8 @@ export function TaskDetailPanel({
 
   const templateName = task?.template_name ?? draft?.template_name ?? null;
   const propertyName = task?.property_name ?? draft?.property_name ?? null;
-  const headerLabel = templateName
-    ? templateName
-    : propertyName
-      ? `Task · ${propertyName}`
-      : 'Task';
+  // Only the template name goes in the top bar; untemplated tasks show nothing.
+  const headerLabel = templateName ?? '';
 
   const timerRunning = !!c.timeHook.activeTimeEntry;
   const checklistComplete = c.progress.total > 0 && c.progress.completed === c.progress.total;
@@ -125,16 +122,19 @@ export function TaskDetailPanel({
       <style>{`@keyframes task-pulse { 0%,100%{opacity:.35} 50%{opacity:1} }`}</style>
 
       {/* header zone */}
-      <div className="shrink-0 border-b px-[18px] pb-3" style={{ borderColor: 'var(--task-line-soft)' }}>
-        <div className="pt-2">
-          <HeaderBar
-            label={headerLabel}
-            onClose={onClose}
-            closeGlyph={isMobile ? 'back' : 'x'}
-            menu={menu}
-            accessory={headerAccessory}
-          />
-        </div>
+      {/* Sticky top bar — only the close/label/menu chrome stays pinned. */}
+      <div className="shrink-0 px-[18px] pt-2">
+        <HeaderBar
+          label={headerLabel}
+          onClose={onClose}
+          closeGlyph={isMobile ? 'back' : 'x'}
+          menu={menu}
+          accessory={headerAccessory}
+        />
+      </div>
+
+      {/* scroll body — title, timer, and status scroll with everything else */}
+      <div className="flex-1 overflow-y-auto px-[18px] pt-2" style={{ scrollbarWidth: 'none' }}>
         <div className={layout === 'page' ? 'mx-auto w-full max-w-2xl' : undefined}>
           <TitleSection
             title={c.fields.title}
@@ -166,12 +166,7 @@ export function TaskDetailPanel({
               onSelectStatus={(s) => c.writeStatus(s)}
             />
           )}
-        </div>
-      </div>
-
-      {/* scroll body */}
-      <div className="flex-1 overflow-y-auto px-[18px] pt-3.5" style={{ scrollbarWidth: 'none' }}>
-        <div className={layout === 'page' ? 'mx-auto w-full max-w-2xl' : undefined}>
+          <div className="mt-3.5" />
           <ContextChips
             isMobile={isMobile}
             isDraft={c.isDraft}
