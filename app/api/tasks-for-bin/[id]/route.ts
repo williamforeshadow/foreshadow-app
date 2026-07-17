@@ -93,6 +93,12 @@ export async function PUT(
     if (title !== undefined) updateData.title = title;
     if (description !== undefined) updateData.description = description;
     if (status !== undefined) {
+      // Same allow-list as /api/update-task-action — this PUT is the
+      // canonical task-save endpoint, so it must not accept unknown states.
+      const allowedStatuses = ['contingent', 'not_started', 'in_progress', 'paused', 'complete'];
+      if (!allowedStatuses.includes(status)) {
+        return NextResponse.json({ error: 'Invalid status provided' }, { status: 400 });
+      }
       updateData.status = status;
       // Keep completed_at in sync with status transitions so downstream
       // surfaces (auto-dismiss countdown, sweeps, reporting) work without

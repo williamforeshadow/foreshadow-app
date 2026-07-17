@@ -140,6 +140,8 @@ A cool, low-chroma neutral field with a single saturated violet accent — restr
 
 **The Cool-Only Rule.** The neutral field is cool or true-neutral, never warm. No cream, sand, beige, or paper backgrounds. The only warm color in the system is the terracotta destructive, and it only ever appears as a signal.
 
+**Task-status semantics (scoped exception).** Inside the task detail panel (`.task-detail` tokens), amber (`--task-amber`) and green (`--task-green`) carry exactly one meaning each: paused and complete. They are status semantics, not accents — never decorative, never interactive affordances. Violet remains the only "live/interactive" signal (`--task-accent`, the panel-scoped tint of Signal Violet). The panel's dark surfaces run one rung deeper than the app ramp (`#131315/#191919/#1F1F22`) because it is the most-focused surface in the product.
+
 ## 3. Typography
 
 **Display / Body Font:** Geist (with `ui-sans-serif, system-ui, -apple-system, sans-serif`)

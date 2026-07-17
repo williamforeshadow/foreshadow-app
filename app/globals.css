@@ -199,6 +199,49 @@
   --msg-sent-border:          rgba(158, 178, 210, 0.34);
 }
 
+/* ============================================================================
+   Task detail panel tokens — scoped to .task-detail (the unified task panel).
+   Dark values are the panel's reference palette (deeper than the app ramp —
+   the panel is the app's most-focused surface, so it gets the finest tonal
+   steps). Light values derive from the standard light theme.
+   Amber/green here are STATUS SEMANTICS (paused / complete), not accents —
+   violet remains the only "live" signal per DESIGN.md.
+   ========================================================================= */
+.task-detail {
+  --task-surface-0: oklch(0.9774 0.0042 236.4961); /* panel base (card) */
+  --task-surface-1: oklch(0.9581 0 0);             /* inset cards (bg) */
+  --task-surface-2: oklch(0.9219 0 0);             /* controls / chips */
+  --task-line: oklch(0.884 0.0031 228.8405);       /* hairline */
+  --task-line-soft: oklch(0.9219 0 0);
+  --task-ink-1: oklch(0.3134 0.0203 244.5185);     /* primary text */
+  --task-ink-2: oklch(0.51 0.015 244);             /* secondary */
+  --task-ink-3: oklch(0.66 0.01 244);              /* faint / labels */
+  --task-accent: #6366f1;                          /* in progress / live */
+  --task-accent-dim: #8b7fc9;
+  --task-amber: #b45309;                           /* paused */
+  --task-green: #047857;                           /* complete */
+  --task-accent-soft: rgba(99, 102, 241, 0.1);
+  --task-amber-soft: rgba(180, 83, 9, 0.1);
+  --task-green-soft: rgba(4, 120, 87, 0.1);
+}
+.dark .task-detail {
+  --task-surface-0: #131315;
+  --task-surface-1: #191919;
+  --task-surface-2: #1f1f22;
+  --task-line: #26262a;
+  --task-line-soft: #1e1e21;
+  --task-ink-1: #ededef;
+  --task-ink-2: #9a9aa2;
+  --task-ink-3: #5e5e68;
+  --task-accent: #7f77dd;
+  --task-accent-dim: #534ab7;
+  --task-amber: #d99e4a;
+  --task-green: #4ad991;
+  --task-accent-soft: rgba(127, 119, 221, 0.14);
+  --task-amber-soft: rgba(217, 158, 74, 0.12);
+  --task-green-soft: rgba(74, 217, 145, 0.12);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
