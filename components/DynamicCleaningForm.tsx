@@ -345,14 +345,18 @@ function DynamicCleaningForm({
               <FieldLabel className={`!mb-0 ${readOnly ? '' : ''}`}>
                 {field.label} {field.required && !readOnly && <span className="text-red-500">*</span>}
               </FieldLabel>
+              {/* Read-only still shows the checked state (dimmed) — a locked
+                  checklist must remain legible. */}
               <div className={`w-7 h-7 rounded-md border-2 flex items-center justify-center transition-all flex-shrink-0 ${
-                readOnly
-                  ? 'border-neutral-200 dark:border-neutral-700 opacity-50'
-                  : value
-                    ? 'bg-emerald-500 border-emerald-500'
+                value
+                  ? readOnly
+                    ? 'bg-emerald-500/60 border-transparent opacity-70'
+                    : 'bg-emerald-500 border-emerald-500'
+                  : readOnly
+                    ? 'border-neutral-200 dark:border-neutral-700 opacity-50'
                     : 'border-neutral-300 dark:border-neutral-600 group-hover:border-emerald-400'
               }`}>
-                {value && !readOnly && (
+                {value && (
                   <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                   </svg>
