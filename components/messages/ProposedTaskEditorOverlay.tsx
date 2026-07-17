@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/apiFetch';
+import { toast } from '@/components/ui/toast';
 import { useAuth } from '@/lib/authContext';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { ProjectDetailPanel } from '@/components/windows/projects';
@@ -189,6 +190,7 @@ export function ProposedTaskEditorOverlay({
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           console.error('[proposed task editor] create failed', data);
+          toast.error(data?.error || "Couldn't create the task");
           setCreating(false);
           return;
         }
@@ -196,6 +198,7 @@ export function ProposedTaskEditorOverlay({
         onClose();
       } catch (err) {
         console.error('[proposed task editor] create error', err);
+        toast.error("Couldn't create the task");
         setCreating(false);
       }
     },

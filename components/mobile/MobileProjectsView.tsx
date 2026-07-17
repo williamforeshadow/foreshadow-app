@@ -1,6 +1,7 @@
 'use client';
 
 import { apiFetch } from '@/lib/apiFetch';
+import { toast } from '@/components/ui/toast';
 import { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import MobileBinPicker from '@/components/mobile/MobileBinPicker';
@@ -317,6 +318,7 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
       }
     } catch (err) {
       console.error('Error fetching tasks:', err);
+      toast.error('Failed to load tasks');
     } finally {
       setLoadingTasks(false);
     }
@@ -554,14 +556,14 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
       if (!res.ok || !result.data) {
         const message = result?.error || `Failed to update task (HTTP ${res.status})`;
         console.error('Error updating task field:', message, result);
-        alert(message);
+        toast.error(message);
         revertKanban();
         return;
       }
       setTasks(prev => prev.map(t => t.id === taskId ? result.data : t));
     } catch (err) {
       console.error('Error updating task field:', err);
-      alert(err instanceof Error ? err.message : 'Failed to update task');
+      toast.error(err instanceof Error ? err.message : 'Failed to update task');
       revertKanban();
     }
   }, []);
@@ -643,6 +645,7 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
       }
     } catch (err) {
       console.error('Error creating task:', err);
+      toast.error('Failed to create task');
     } finally {
       setCreatingTask(false);
     }
@@ -659,6 +662,7 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
       }
     } catch (err) {
       console.error('Error deleting task:', err);
+      toast.error('Failed to delete task');
     }
   }, [screen]);
 
@@ -687,6 +691,7 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
       }
     } catch (err) {
       console.error('Error saving task:', err);
+      toast.error('Failed to save task');
     }
     return null;
   }, []);
@@ -880,9 +885,11 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
                       binsHook.fetchBins();
                     } else {
                       console.error('Bulk dismiss failed:', result?.error);
+                      toast.error(result?.error || 'Failed to dismiss tasks');
                     }
                   } catch (err) {
                     console.error('Error bulk dismissing tasks:', err);
+                    toast.error('Failed to dismiss tasks');
                   }
                 }}
               />

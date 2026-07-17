@@ -20,6 +20,7 @@ import type { Template } from '@/components/DynamicCleaningForm';
 import { ReservationDetailOverlay } from '@/components/reservations/ReservationDetailOverlay';
 import { ContextTaskDetailOverlay } from '@/components/reservations/ContextTaskDetailOverlay';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
+import { toast } from '@/components/ui/toast';
 
 function toTaskStatus(status: string | undefined): Task['status'] | undefined {
   if (
@@ -261,6 +262,7 @@ export default function MobileApp() {
       }
     } catch (err) {
       console.error('Error saving project:', err);
+      toast.error('Failed to save project');
     }
     return null;
   }, []);

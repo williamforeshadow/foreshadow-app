@@ -1,6 +1,7 @@
 'use client';
 
 import { apiFetch } from '@/lib/apiFetch';
+import { toast } from '@/components/ui/toast';
 import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
@@ -617,6 +618,7 @@ export default function TimelineWindow({
       return result.template;
     } catch (err) {
       console.error('Error fetching template:', err);
+      toast.error("Couldn't load the task template");
       return null;
     } finally {
       setLoadingTaskTemplate(null);
@@ -653,6 +655,7 @@ export default function TimelineWindow({
       ));
     } catch (err) {
       console.error('Error updating task status:', err);
+      toast.error("Couldn't update the task status");
     }
   }, [setReservations, setRecurringTasks]);
 
@@ -673,6 +676,7 @@ export default function TimelineWindow({
       setLocalTask(prev => prev ? { ...prev, form_metadata: formData } : null);
     } catch (err) {
       console.error('Error saving task form:', err);
+      toast.error("Couldn't save the form");
       throw err;
     }
   }, []);
@@ -730,6 +734,7 @@ export default function TimelineWindow({
       }
     } catch (err) {
       console.error('Error updating task assignment:', err);
+      toast.error("Couldn't update the task assignment");
     }
   }, [floatingData, setReservations]);
 
@@ -781,6 +786,7 @@ export default function TimelineWindow({
       }
     } catch (err) {
       console.error('Error updating task schedule:', err);
+      toast.error("Couldn't reschedule the task");
       // Resync from the server to undo the optimistic move.
       fetchReservations();
     }
@@ -927,6 +933,7 @@ export default function TimelineWindow({
       }
     } catch (err) {
       console.error('Error fetching templates:', err);
+      toast.error("Couldn't load task templates");
     }
   }, []);
 
@@ -982,6 +989,7 @@ export default function TimelineWindow({
       setShowAddTaskDialog(false);
     } catch (err) {
       console.error('Error adding task:', err);
+      toast.error("Couldn't add the task");
     }
   }, [floatingData, setReservations]);
 
@@ -1025,6 +1033,7 @@ export default function TimelineWindow({
       });
     } catch (err) {
       console.error('Error deleting task:', err);
+      toast.error("Couldn't delete the task");
     }
   }, [floatingData, setReservations]);
 
@@ -1085,6 +1094,7 @@ export default function TimelineWindow({
       }
     } catch (err) {
       console.error('Error saving project:', err);
+      toast.error("Couldn't save the project");
     } finally {
       setSavingProjectEdit(false);
     }
@@ -1122,6 +1132,7 @@ export default function TimelineWindow({
       }
     } catch (err) {
       console.error('Error deleting project:', err);
+      toast.error("Couldn't delete the project");
     }
   }, []);
 
@@ -1195,10 +1206,13 @@ export default function TimelineWindow({
             t.task_id === taskId ? { ...t, ...fieldUpdates } : t
           ));
         } else {
-          console.error('Error updating task fields:', await res.json().catch(() => ({})));
+          const result = await res.json().catch(() => ({}));
+          console.error('Error updating task fields:', result);
+          toast.error(result?.error || "Couldn't update the task");
         }
       } catch (err) {
         console.error('Error updating task fields:', err);
+        toast.error("Couldn't update the task");
       }
     }
 
@@ -1310,6 +1324,7 @@ export default function TimelineWindow({
       }
     } catch (err) {
       console.error('Error saving project:', err);
+      toast.error("Couldn't save the project");
     } finally {
       setSavingProjectEdit(false);
     }
@@ -1344,6 +1359,7 @@ export default function TimelineWindow({
       }
     } catch (err) {
       console.error('Error deleting project:', err);
+      toast.error("Couldn't delete the project");
     }
   }, []);
 
@@ -1427,6 +1443,7 @@ export default function TimelineWindow({
       }
     } catch (err) {
       console.error('Error creating task:', err);
+      toast.error("Couldn't create the task");
     } finally {
       setCreatingTask(false);
     }
@@ -1503,6 +1520,7 @@ export default function TimelineWindow({
       }
     } catch (err) {
       console.error('Error updating kanban assignment:', err);
+      toast.error("Couldn't update the task assignment");
     }
   }, [users, setReservations, setRecurringTasks, floatingData, localTask]);
 
@@ -2308,6 +2326,7 @@ export default function TimelineWindow({
                   fetchReservations();
                 } catch (err) {
                   console.error('Error deleting task:', err);
+                  toast.error("Couldn't delete the task");
                 }
                 handleCloseFloatingWindow();
               }}
@@ -2360,6 +2379,7 @@ export default function TimelineWindow({
                       }
                     } catch (err) {
                       console.error('Error changing template:', err);
+                      toast.error("Couldn't change the template");
                     }
                   }
               }
@@ -2419,6 +2439,7 @@ export default function TimelineWindow({
                   binsHook.fetchBins();
                 } catch (err) {
                   console.error('Error updating bin:', err);
+                  toast.error("Couldn't update the bin");
                 }
               }}
               onIsBinnedChange={async (isBinned) => {
@@ -2445,6 +2466,7 @@ export default function TimelineWindow({
                   binsHook.fetchBins();
                 } catch (err) {
                   console.error('Error updating is_binned:', err);
+                  toast.error("Couldn't update the bin");
                 }
               }}
             />
@@ -2478,6 +2500,7 @@ export default function TimelineWindow({
                   }
                 } catch (err) {
                   console.error('Error updating property:', err);
+                  toast.error("Couldn't update the property");
                 }
               }}
               // Comments
@@ -2523,6 +2546,7 @@ export default function TimelineWindow({
                   }
                 } catch (err) {
                   console.error('Error updating bin:', err);
+                  toast.error("Couldn't update the bin");
                 }
                 binsHook.fetchBins();
               }}
@@ -2546,6 +2570,7 @@ export default function TimelineWindow({
                   }
                 } catch (err) {
                   console.error('Error updating is_binned:', err);
+                  toast.error("Couldn't update the bin");
                 }
                 binsHook.fetchBins();
               }}

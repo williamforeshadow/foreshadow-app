@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { toast } from '@/components/ui/toast';
 import type { Project, ProjectStatus, ProjectPriority, PropertyOption, User, Department, ProjectBin } from '@/lib/types';
 import type { ProjectViewMode } from '@/lib/types';
 import { STATUS_LABELS, PRIORITY_LABELS, STATUS_ORDER, PRIORITY_ORDER } from '@/lib/types';
@@ -336,7 +337,7 @@ export function ProjectsKanban({
         // Block any drag-based status change and revert the visual drag.
         // This is a backup to canMoveToColumn, which already prevents the drop.
         if (draggedProject?.template_id) {
-          alert('This task uses a checklist template. Open the task and use Start, Pause, Complete, or Reopen to change its status.');
+          toast.info('This task uses a checklist template. Open the task and use Start, Pause, Complete, or Reopen to change its status.');
           setItems([...initialItems]);
           return;
         }
@@ -397,7 +398,7 @@ export function ProjectsKanban({
     if (viewMode === 'property') {
       const currentColumnId = `prop:${project.property_name || 'No Property'}`;
       if (targetColumnId !== currentColumnId) {
-        alert('Property can\'t be changed after a task is created.');
+        toast.info('Property can\'t be changed after a task is created.');
         return false;
       }
       return true;

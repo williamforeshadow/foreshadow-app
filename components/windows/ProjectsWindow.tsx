@@ -1,6 +1,7 @@
 'use client';
 
 import { apiFetch } from '@/lib/apiFetch';
+import { toast } from '@/components/ui/toast';
 import { memo, useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import type { ProjectViewMode, ProjectBin } from '@/lib/types';
@@ -259,6 +260,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       }
     } catch (err) {
       console.error('Error fetching template:', err);
+      toast.error('Couldn\'t load the task template.');
     } finally {
       setLoadingTaskTemplate(null);
     }
@@ -282,6 +284,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       }
     } catch (err) {
       console.error('Error saving task form:', err);
+      toast.error('Couldn\'t save the form.');
     }
   }, [expandedProject?.id]);
 
@@ -304,6 +307,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       }
     } catch (err) {
       console.error('Error changing template:', err);
+      toast.error('Couldn\'t change the template.');
     }
   }, [expandedProject, fetchTaskTemplate]);
 
@@ -323,6 +327,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       }
     } catch (err) {
       console.error('Error fetching tasks for bin:', err);
+      toast.error('Couldn\'t load tasks for this bin.');
     } finally {
       setLoadingTasks(false);
     }
@@ -634,6 +639,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       }
     } catch (err) {
       console.error('Error saving task:', err);
+      toast.error('Couldn\'t save the task.');
     } finally {
       setSavingEdit(false);
     }
@@ -701,6 +707,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       }
     } catch (err) {
       console.error('Error creating task:', err);
+      toast.error('Couldn\'t create the task.');
     } finally {
       setCreatingTask(false);
     }
@@ -717,6 +724,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       }
     } catch (err) {
       console.error('Error deleting task:', err);
+      toast.error('Couldn\'t delete the task.');
     }
   }, [expandedProject?.id]);
 
@@ -726,7 +734,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       if (task) {
         const currentProp = task.property_name || '';
         if (currentProp !== value) {
-          alert('Property can\'t be changed after a task is created.');
+          toast.info('Property can\'t be changed after a task is created.');
           return;
         }
       }
@@ -755,7 +763,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       if (!res.ok || !result.data) {
         const message = result?.error || `Failed to update task (HTTP ${res.status})`;
         console.error('Error updating task field:', message, result);
-        alert(message);
+        toast.error(message);
         revertKanban();
         return;
       }
@@ -776,7 +784,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       }
     } catch (err) {
       console.error('Error updating task field:', err);
-      alert(err instanceof Error ? err.message : 'Failed to update task');
+      toast.error(err instanceof Error ? err.message : 'Failed to update task');
       revertKanban();
     }
   }, [expandedProject?.id, tasks]);
@@ -1049,9 +1057,11 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
                   binsHook.fetchBins();
                 } else {
                   console.error('Bulk dismiss failed:', result?.error);
+                  toast.error(result?.error || 'Couldn\'t dismiss the selected tasks.');
                 }
               } catch (err) {
                 console.error('Error bulk dismissing tasks:', err);
+                toast.error('Couldn\'t dismiss the selected tasks.');
               }
             }}
           />
@@ -1113,6 +1123,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
                   }
                 } catch (err) {
                   console.error('Error updating property:', err);
+                  toast.error('Couldn\'t update the property.');
                 }
               }
           }
@@ -1132,6 +1143,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
               binsHook.fetchBins();
             } catch (err) {
               console.error('Error updating bin:', err);
+              toast.error('Couldn\'t move the task to that bin.');
             }
           }}
           onIsBinnedChange={async (isBinned) => {
@@ -1157,6 +1169,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
               binsHook.fetchBins();
             } catch (err) {
               console.error('Error updating is_binned:', err);
+              toast.error('Couldn\'t update the task.');
             }
           }}
           comments={commentsHook.projectComments as Comment[]}

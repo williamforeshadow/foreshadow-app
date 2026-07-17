@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { useTasks, type TaskRow as TaskRowData } from '@/lib/useTasks';
 import { apiFetch } from '@/lib/apiFetch';
+import { toast } from '@/components/ui/toast';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useProjectComments } from '@/lib/hooks/useProjectComments';
@@ -333,6 +334,7 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
         }
       } catch (err) {
         console.error('Error changing template:', err);
+        toast.error('Couldn\'t change the template.');
       }
     },
     [selectedTask, availableTemplates, fetchTaskTemplate, updateTaskInState]
@@ -354,6 +356,7 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
         });
       } catch (err) {
         console.error('Error updating property:', err);
+        toast.error('Couldn\'t update the property.');
       }
     },
     [selectedTask, updateTaskInState]
@@ -375,6 +378,7 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
         binsHook.fetchBins();
       } catch (err) {
         console.error('Error updating bin:', err);
+        toast.error('Couldn\'t move the task to that bin.');
       }
     },
     [selectedTask, updateTaskInState, binsHook]
@@ -398,6 +402,7 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
         binsHook.fetchBins();
       } catch (err) {
         console.error('Error updating is_binned:', err);
+        toast.error('Couldn\'t update the task.');
       }
     },
     [selectedTask, updateTaskInState, binsHook]
@@ -441,9 +446,11 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
         await fetchTasks();
       } else {
         console.error('Create failed:', result.error);
+        toast.error(result.error || 'Couldn\'t create the task.');
       }
     } catch (err) {
       console.error('Error creating task:', err);
+      toast.error('Couldn\'t create the task.');
     } finally {
       setCreatingTask(false);
     }
@@ -461,6 +468,7 @@ function TasksWindowContent({ currentUser, users, isActive = true }: TasksWindow
         }
       } catch (err) {
         console.error('Error deleting task:', err);
+        toast.error('Couldn\'t delete the task.');
       }
     },
     [fetchTasks, setSelectedTask]

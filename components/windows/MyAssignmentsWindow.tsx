@@ -1,6 +1,7 @@
 'use client';
 
 import { apiFetch } from '@/lib/apiFetch';
+import { toast } from '@/components/ui/toast';
 import { memo, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
@@ -263,6 +264,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
       }
     } catch (err) {
       console.error('Error fetching template:', err);
+      toast.error('Couldn\'t load the task template.');
     } finally {
       setLoadingTaskTemplate(null);
     }
@@ -766,6 +768,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
       fetchAssignments();
     } catch (err) {
       console.error('Error updating task fields:', err);
+      toast.error('Couldn\'t save the task.');
     }
   }, [selectedItem, fetchAssignments, updateSelectedRaw, users]);
 
@@ -788,6 +791,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
       fetchAssignments();
     } catch (err) {
       console.error('Error changing template:', err);
+      toast.error('Couldn\'t change the template.');
     }
   }, [selectedItem, fetchTaskTemplate, fetchAssignments, updateSelectedRaw, availableTemplates]);
 
@@ -804,6 +808,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
       fetchAssignments();
     } catch (err) {
       console.error('Error updating property:', err);
+      toast.error('Couldn\'t update the property.');
     }
   }, [selectedItem, fetchAssignments, updateSelectedRaw]);
 
@@ -818,6 +823,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
       });
     } catch (err) {
       console.error('Error saving form:', err);
+      toast.error('Couldn\'t save the form.');
     }
   }, [selectedItem]);
 
@@ -1131,6 +1137,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
                 fetchAssignments();
               } catch (err) {
                 console.error('Error updating bin:', err);
+                toast.error('Couldn\'t move the task to that bin.');
               }
             }}
             onIsBinnedChange={async (isBinned) => {
@@ -1151,6 +1158,7 @@ function MyAssignmentsWindowContent({ users, currentUser }: MyAssignmentsWindowP
                 fetchAssignments();
               } catch (err) {
                 console.error('Error updating is_binned:', err);
+                toast.error('Couldn\'t update the task.');
               }
             }}
           />

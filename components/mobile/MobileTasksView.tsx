@@ -29,6 +29,7 @@ import MobileProjectDetail from '@/components/mobile/MobileProjectDetail';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { toast } from '@/components/ui/toast';
 
 // Mobile-tailored Tasks view. Shares the same useTasks hook + filter bar as
 // the desktop dashboard tab — only the row + detail components swap out for
@@ -223,6 +224,7 @@ function MobileTasksViewContent() {
         });
       } catch (err) {
         console.error('Error updating property:', err);
+        toast.error("Couldn't update the property");
       }
     },
     [selectedTask, updateTaskInState]
@@ -244,6 +246,7 @@ function MobileTasksViewContent() {
         binsHook.fetchBins();
       } catch (err) {
         console.error('Error updating bin:', err);
+        toast.error("Couldn't update the bin");
       }
     },
     [selectedTask, updateTaskInState, binsHook]
@@ -267,6 +270,7 @@ function MobileTasksViewContent() {
         binsHook.fetchBins();
       } catch (err) {
         console.error('Error updating is_binned:', err);
+        toast.error("Couldn't update the task");
       }
     },
     [selectedTask, updateTaskInState, binsHook]
@@ -299,6 +303,7 @@ function MobileTasksViewContent() {
         }
       } catch (err) {
         console.error('Error changing template:', err);
+        toast.error("Couldn't change the template");
       }
     },
     [selectedTask, availableTemplates, updateTaskInState, fetchTaskTemplate]
@@ -326,6 +331,7 @@ function MobileTasksViewContent() {
         }
       } catch (err) {
         console.error('Error deleting task:', err);
+        toast.error("Couldn't delete the task");
       }
     },
     [setSelectedTask, fetchTasks]
@@ -412,9 +418,11 @@ function MobileTasksViewContent() {
           await fetchTasks();
         } else {
           console.error('Create failed:', result.error);
+          toast.error(result.error || "Couldn't create the task");
         }
       } catch (err) {
         console.error('Error creating task:', err);
+        toast.error("Couldn't create the task");
       } finally {
         setCreatingTask(false);
       }
