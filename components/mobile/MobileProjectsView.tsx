@@ -33,6 +33,8 @@ type Screen =
 interface MobileProjectsViewProps {
   users: User[];
   onMenuTap?: () => void;
+  /** False while the view is kept mounted but hidden behind another tab. */
+  isActive?: boolean;
 }
 
 // ============================================================================
@@ -153,7 +155,7 @@ function MobileViewModeToggle({
 // Component
 // ============================================================================
 
-export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsViewProps) {
+export default function MobileProjectsView({ users, onMenuTap, isActive = true }: MobileProjectsViewProps) {
   const { user: currentUser } = useAuth();
   const { departments } = useDepartments();
   const binsHook = useProjectBins({ currentUser: currentUser as User | null });
@@ -302,9 +304,11 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
     setTasks(prev => prev.map(t => t.id === detailProject.id ? { ...t, form_metadata: formData } : t));
   }, [detailProject]);
 
-  // Fetch tasks for a given bin (via tasks-for-bin API)
-  const fetchTasksForBin = useCallback(async (binId: string | null) => {
-    setLoadingTasks(true);
+  // Fetch tasks for a given bin (via tasks-for-bin API). `silent` refreshes
+  // without the loading flag so existing content stays visible (used when the
+  // kept-mounted tab is re-shown).
+  const fetchTasksForBin = useCallback(async (binId: string | null, { silent = false } = {}) => {
+    if (!silent) setLoadingTasks(true);
     try {
       const params = new URLSearchParams();
       if (currentUser?.id) params.set('viewer_user_id', currentUser.id);
@@ -338,6 +342,22 @@ export default function MobileProjectsView({ users, onMenuTap }: MobileProjectsV
       binId === null && taskBinGlobal.enabled ? '__every__' : binId,
     [taskBinGlobal.enabled],
   );
+
+  // Quiet refresh when the tab is re-shown after being hidden (keep-mounted
+  // tabs no longer remount, so this replaces the old refetch-on-mount). The
+  // preserved screen decides what's stale: the bins list, or the open bin's
+  // tasks.
+  const wasActive = useRef(isActive);
+  useEffect(() => {
+    if (isActive && !wasActive.current) {
+      if (screen.type === 'bins') {
+        binsHook.fetchBins({ silent: true });
+      } else {
+        fetchTasksForBin(apiBinIdFor(screen.binId), { silent: true });
+      }
+    }
+    wasActive.current = isActive;
+  }, [isActive, screen, binsHook, fetchTasksForBin, apiBinIdFor]);
 
   const allColumnOptions = useMemo(() => {
     if (viewMode === 'property') {

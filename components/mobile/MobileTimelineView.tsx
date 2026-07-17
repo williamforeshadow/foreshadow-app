@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useTimeline } from '@/lib/useTimeline';
 import {
   useExclusiveDetailPanelHost,
@@ -57,6 +57,8 @@ interface MobileTimelineViewProps {
    */
   onNewTask?: (params: { propertyName: string; dateStr: string }) => void;
   onMenuTap?: () => void;
+  /** False while the view is kept mounted but hidden behind another tab. */
+  isActive?: boolean;
 }
 
 export default function MobileTimelineView({
@@ -66,6 +68,7 @@ export default function MobileTimelineView({
   onSheetOpen,
   onNewTask,
   onMenuTap,
+  isActive = true,
 }: MobileTimelineViewProps) {
   const {
     properties,
@@ -134,9 +137,18 @@ export default function MobileTimelineView({
 
   useEffect(() => {
     if (refreshTrigger && refreshTrigger > 0) {
-      fetchReservations();
+      // Silent: the grid already has content — refresh it without blanking.
+      fetchReservations({ silent: true });
     }
   }, [refreshTrigger, fetchReservations]);
+
+  // Quiet refresh when the tab is re-shown after being hidden (keep-mounted
+  // tabs no longer remount, so this replaces the old refetch-on-mount).
+  const wasActive = useRef(isActive);
+  useEffect(() => {
+    if (isActive && !wasActive.current) fetchReservations({ silent: true });
+    wasActive.current = isActive;
+  }, [isActive, fetchReservations]);
 
   // Mirrors TimelineWindow's synthesis: each task carries its own
   // `reservation_id` FK from the get_property_turnovers RPC payload —

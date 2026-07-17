@@ -74,6 +74,17 @@ export default function MobileApp() {
   const mobileView: MobileTab =
     tabParam === 'projects' || tabParam === 'timeline' ? tabParam : 'assignments';
 
+  // Keep-mounted tabs: a view mounts on first visit and stays mounted (hidden
+  // via CSS) afterwards, so flipping tabs preserves data, filters, scroll, and
+  // nav state instead of cold-starting every time. Views refresh themselves
+  // quietly when re-shown (see their isActive prop).
+  const [visitedTabs, setVisitedTabs] = useState<Set<MobileTab>>(() => new Set([mobileView]));
+  if (!visitedTabs.has(mobileView)) {
+    // Render-phase state adjustment (React's "adjusting state when a prop
+    // changes" pattern) — re-renders immediately, before children mount.
+    setVisitedTabs(new Set(visitedTabs).add(mobileView));
+  }
+
   const [mobileSelectedTask, setMobileSelectedTask] = useState<Task | null>(null);
   const [mobileSelectedProject, setMobileSelectedProject] = useState<Project | null>(null);
   const [mobileRefreshTrigger, setMobileRefreshTrigger] = useState(0);
@@ -298,8 +309,11 @@ export default function MobileApp() {
   return (
     <>
       <MobileLayout>
-        {mobileView === 'assignments' && (
-          <MobileMyAssignmentsView            onTaskClick={async (task: Task) => {
+        {visitedTabs.has('assignments') && (
+          <div className={mobileView === 'assignments' ? 'h-full' : 'hidden'}>
+          <MobileMyAssignmentsView
+            isActive={mobileView === 'assignments'}
+            onTaskClick={async (task: Task) => {
               const propName = task.property_name;
               if (task.template_id) {
                 const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
@@ -323,15 +337,23 @@ export default function MobileApp() {
             }}
             refreshTrigger={mobileRefreshTrigger}
           />
+          </div>
         )}
 
-        {mobileView === 'projects' && (
+        {visitedTabs.has('projects') && (
+          <div className={mobileView === 'projects' ? 'h-full' : 'hidden'}>
           <MobileProjectsView
-            users={users}          />
+            isActive={mobileView === 'projects'}
+            users={users}
+          />
+          </div>
         )}
 
-        {mobileView === 'timeline' && (
-          <MobileTimelineView            onCardClick={() => {}}
+        {visitedTabs.has('timeline') && (
+          <div className={mobileView === 'timeline' ? 'h-full' : 'hidden'}>
+          <MobileTimelineView
+            isActive={mobileView === 'timeline'}
+            onCardClick={() => {}}
             refreshTrigger={mobileRefreshTrigger}
             onTaskClick={async (task: Task) => {
               const propName = task.property_name;
@@ -354,6 +376,7 @@ export default function MobileApp() {
               router.push(`/properties/${match.id}/tasks?newTaskDate=${dateStr}`);
             }}
           />
+          </div>
         )}
 
       </MobileLayout>

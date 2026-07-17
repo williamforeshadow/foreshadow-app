@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { KeyAffordance } from '@/components/tasks/KeyAffordance';
 import { useAuth } from '@/lib/authContext';
 import { Button } from '@/components/ui/button';
@@ -100,6 +100,8 @@ interface MobileMyAssignmentsViewProps {
   onProjectClick?: BivariantCallback<Project & { task_id?: string }>;
   refreshTrigger?: number;
   onMenuTap?: () => void;
+  /** False while the view is kept mounted but hidden behind another tab. */
+  isActive?: boolean;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -155,6 +157,7 @@ export default function MobileMyAssignmentsView({
   onProjectClick,
   refreshTrigger,
   onMenuTap,
+  isActive = true,
 }: MobileMyAssignmentsViewProps) {
   const { user, loading: authLoading } = useAuth();
   const { departments: allDepts } = useDepartments();
@@ -207,9 +210,11 @@ export default function MobileMyAssignmentsView({
   const [error, setError] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
-  const fetchAssignments = useCallback(async () => {
+  // `silent` refreshes without touching the loading flag so existing content
+  // stays visible (used when the tab is re-shown after being hidden).
+  const fetchAssignments = useCallback(async ({ silent = false } = {}) => {
     if (!user?.id) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const response = await fetch(`/api/my-assignments?user_id=${user.id}`);
@@ -231,6 +236,14 @@ export default function MobileMyAssignmentsView({
   useEffect(() => {
     if (user?.id) fetchAssignments();
   }, [user?.id, refreshTrigger, fetchAssignments]);
+
+  // Quiet refresh when the tab is re-shown after being hidden (keep-mounted
+  // tabs no longer remount, so this replaces the old refetch-on-mount).
+  const wasActive = useRef(isActive);
+  useEffect(() => {
+    if (isActive && !wasActive.current) fetchAssignments({ silent: true });
+    wasActive.current = isActive;
+  }, [isActive, fetchAssignments]);
 
   const items = useMemo((): UnifiedItem[] => {
     if (!rawData) return [];
@@ -533,7 +546,7 @@ export default function MobileMyAssignmentsView({
     return (
       <div className="flex flex-col items-center justify-center h-64 px-6">
         <p className="text-neutral-600 dark:text-[#a09e9a] text-center text-sm mb-3">{error}</p>
-        <Button variant="outline" size="sm" onClick={fetchAssignments}>Try Again</Button>
+        <Button variant="outline" size="sm" onClick={() => fetchAssignments()}>Try Again</Button>
       </div>
     );
   }

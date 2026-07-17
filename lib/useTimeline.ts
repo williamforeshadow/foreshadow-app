@@ -36,9 +36,11 @@ export function useTimeline() {
     generateDateRange();
   }, [generateDateRange]);
 
-  // Fetch reservations + recurring tasks on mount
-  const fetchReservations = useCallback(async () => {
-    setLoading(true);
+  // Fetch reservations + recurring tasks on mount. `silent` refreshes without
+  // the loading flag so existing content stays visible (used when a
+  // kept-mounted view is re-shown).
+  const fetchReservations = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       // Fetch reservations (turnovers), recurring tasks, blocks, and the active
       // property list in parallel.

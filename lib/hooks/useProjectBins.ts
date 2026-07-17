@@ -12,8 +12,10 @@ export function useProjectBins({ currentUser }: UseProjectBinsProps) {
   const [loadingBins, setLoadingBins] = useState(false);
   const [totalProjects, setTotalProjects] = useState(0);
 
-  const fetchBins = useCallback(async () => {
-    setLoadingBins(true);
+  // `silent` refreshes without the loading flag so existing content stays
+  // visible (used when a kept-mounted view is re-shown).
+  const fetchBins = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoadingBins(true);
     try {
       const res = await fetch('/api/project-bins');
       const result = await res.json();
