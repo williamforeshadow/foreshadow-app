@@ -2,7 +2,7 @@
 
 import { apiFetch } from '@/lib/apiFetch';
 import { toast } from '@/components/ui/toast';
-import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo, type SetStateAction } from 'react';
+import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ensureTemplateDetail, fetchJson, qk, useProperties } from '@/lib/queries';
 import { createPortal } from 'react-dom';
@@ -10,11 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger, PopoverClose } from '@/components/ui/popover';
 import { useTimeline } from '@/lib/useTimeline';
 import { getActiveTurnoverForProperty } from '@/lib/turnoverUtils';
-import { useProjectComments } from '@/lib/hooks/useProjectComments';
-import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
-import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
-import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
-import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import {
   DndContext,
   DragOverlay,
@@ -31,8 +26,10 @@ import { TimelineNavBar } from './timeline/TimelineNavBar';
 import { WeatherWidgetTrigger } from './timeline/WeatherWidgetTrigger';
 import { marbleBackground } from './timeline/timelineStatus';
 import { TaskRowList } from './timeline/TaskRowList';
-import { AttachmentLightbox, ProjectActivitySheet, ProjectDetailPanel } from './projects';
 import { TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
+import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
+import type { TaskDetailInput, TaskDraft } from '@/components/tasks/detail/taskInput';
+import type { TaskCreatePayload } from '@/components/tasks/detail/useTaskDetailController';
 import { DayDetailPanel } from '@/components/tasks/DayDetailPanel';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
 import {
@@ -46,7 +43,7 @@ import {
 import { ClipboardCheck, Filter as FilterIcon } from 'lucide-react';
 import { CompactSearch } from '@/components/ui/compact-search';
 import { RowsIcon, KanbanColumnsIcon } from './timeline/TimelineViewIcons';
-import type { Project, Task, User, ProjectFormFields, Turnover, TaskTemplate } from '@/lib/types';
+import type { Project, Task, User, Turnover, TaskTemplate } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 import { cn } from '@/lib/utils';
 import { UserAvatar } from '@/components/ui/user-avatar';
@@ -69,6 +66,87 @@ const getRowStyles = (status: string) => {
       return `${base} bg-[rgba(167,139,250,0.06)] dark:bg-[rgba(167,139,250,0.10)] border border-[rgba(167,139,250,0.14)] dark:border-[rgba(167,139,250,0.22)]`;
   }
 };
+
+// Map a Task-shaped row (task_id, assigned_users — lib/types' Task interface,
+// the shape reservations/recurringTasks carry) into the unified
+// TaskDetailInput. Mirrors projectToTaskInput, but Task lacks
+// created_at/updated_at/bin_name/unread_comment_count — those fall back to
+// '' / null since this shape never carries them.
+function taskToTaskDetailInput(task: Task, propertyName: string): TaskDetailInput {
+  return {
+    task_id: task.task_id,
+    reservation_id: task.reservation_id ?? null,
+    property_id: task.property_id ?? null,
+    property_name: propertyName || task.property_name || null,
+    template_id: task.template_id ?? null,
+    template_name: task.template_name ?? null,
+    title: task.title ?? null,
+    description: task.description ?? null,
+    priority: task.priority ?? 'medium',
+    department_id: task.department_id ?? null,
+    department_name: task.department_name ?? null,
+    status: task.status ?? 'not_started',
+    scheduled_date: task.scheduled_date ?? null,
+    scheduled_time: task.scheduled_time ?? null,
+    form_metadata: (task.form_metadata as Record<string, unknown> | null) ?? null,
+    bin_id: task.bin_id ?? null,
+    bin_name: null,
+    is_binned: task.is_binned ?? false,
+    created_at: '',
+    updated_at: '',
+    assigned_users: (task.assigned_users || []).map((u) => ({
+      user_id: u.user_id,
+      name: u.name,
+      avatar: u.avatar ?? null,
+      role: u.role,
+    })),
+  };
+}
+
+// Draft (new-task) tasks flow through the grid/kanban/turnover creation
+// entry points as Task-shaped placeholders (see createDraftTask below) so
+// existing identity checks (`task_id.startsWith('draft-')`) keep working.
+// These two converters translate that placeholder to/from the TaskDraft
+// shape TaskDetailPanel's draft mode actually edits.
+function taskToDraft(task: Task): TaskDraft {
+  return {
+    title: task.title || task.template_name || '',
+    description: task.description ?? null,
+    priority: task.priority || 'medium',
+    status: task.status || 'not_started',
+    department_id: task.department_id ?? null,
+    scheduled_date: task.scheduled_date ?? null,
+    scheduled_time: task.scheduled_time ?? null,
+    assigned_staff: (task.assigned_users || []).map((u) => u.user_id),
+    property_id: task.property_id ?? null,
+    property_name: task.property_name ?? null,
+    template_id: task.template_id ?? null,
+    template_name: task.template_name ?? null,
+    bin_id: task.bin_id ?? null,
+  };
+}
+
+function applyDraftToTask(task: Task, draft: TaskDraft, users: User[]): Task {
+  return {
+    ...task,
+    title: draft.title,
+    description: draft.description as Task['description'],
+    priority: draft.priority,
+    status: draft.status as Task['status'],
+    department_id: draft.department_id,
+    scheduled_date: draft.scheduled_date,
+    scheduled_time: draft.scheduled_time,
+    assigned_users: draft.assigned_staff.map((id) => {
+      const u = users.find((x) => x.id === id);
+      return { user_id: id, name: u?.name || '', avatar: u?.avatar, role: u?.role };
+    }),
+    property_id: draft.property_id,
+    property_name: draft.property_name || undefined,
+    template_id: draft.template_id || undefined,
+    template_name: draft.template_name || undefined,
+    bin_id: draft.bin_id,
+  };
+}
 
 interface TimelineWindowProps {
   users: User[];
@@ -379,22 +457,6 @@ export default function TimelineWindow({
   // Old fetch had no loading state — don't introduce one here.
   const projects = projectsQuery.data ?? EMPTY_PROJECTS;
   const { properties: allProperties } = useProperties();
-  const [savingProjectEdit, setSavingProjectEdit] = useState(false);
-
-  // Optimistic patch for the '__all__' projects list cache. cancelQueries
-  // drops any in-flight background refetch so its pre-mutation response
-  // can't land after — and silently revert — the optimistic write.
-  const patchProjects = useCallback(
-    (action: SetStateAction<Project[]>) => {
-      const key = qk.tasksForBin('__all__', currentUser?.id ?? null);
-      queryClient.cancelQueries({ queryKey: key });
-      queryClient.setQueryData<Project[]>(key, (old) => {
-        const prev = old ?? EMPTY_PROJECTS;
-        return typeof action === 'function' ? (action as (p: Project[]) => Project[])(prev) : action;
-      });
-    },
-    [queryClient, currentUser?.id]
-  );
 
   // fetchProjects remains as a refetch shim for existing callers.
   const { refetch: refetchProjects } = projectsQuery;
@@ -460,23 +522,6 @@ export default function TimelineWindow({
   // detail-panel geometry and obeys strict-swap with any other panel.
   const { open: openReservationViewer } = useReservationViewer();
 
-  // ============================================================================
-  // LOCAL instances of sub-hooks for projects (independent from other windows)
-  // ============================================================================
-  const commentsHook = useProjectComments({ currentUser });
-  const attachmentsHook = useProjectAttachments({ currentUser });
-  const timeTrackingHook = useProjectTimeTracking({ currentUser });
-  const activityHook = useProjectActivity();
-  const binsHook = useProjectBins({ currentUser });
-
-  // ============================================================================
-  // LOCAL UI State for Projects (independent from other windows)
-  // ============================================================================
-  const [projectFields, setProjectFields] = useState<ProjectFormFields | null>(null);
-  const [newComment, setNewComment] = useState('');
-  const [staffOpen, setStaffOpen] = useState(false);
-  const [viewingAttachmentIndex, setViewingAttachmentIndex] = useState<number | null>(null);
-
   // Expanded property rows in timeline grid
   const [expandedProperties, setExpandedProperties] = useState<Set<string>>(new Set());
   const togglePropertyExpanded = useCallback((property: string) => {
@@ -496,29 +541,15 @@ export default function TimelineWindow({
       return new Set(properties);
     });
   }, [properties]);
-  const [activitySheetOpen, setActivitySheetOpen] = useState(false);
 
   // ============================================================================
   // Task state
   // ============================================================================
+  // taskTemplates/fetchTaskTemplate still feed TurnoverTaskList's template
+  // labels — TaskDetailPanel loads its own template internally and no longer
+  // needs this cache.
   const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
-  const [loadingTaskTemplate, setLoadingTaskTemplate] = useState<string | null>(null);
-  const [localTask, setLocalTask] = useState<Task | null>(null);
-  const [taskEditingFields, setTaskEditingFields] = useState<ProjectFormFields | null>(null);
-  const [taskStaffOpen, setTaskStaffOpen] = useState(false);
-  const taskEditingFieldsRef = useRef<ProjectFormFields | null>(null);
-  const taskAttachmentRef = useRef<HTMLInputElement>(null);
-  const [taskNewComment, setTaskNewComment] = useState('');
-  const [taskViewingAttachmentIndex, setTaskViewingAttachmentIndex] = useState<number | null>(null);
   const [creatingTask, setCreatingTask] = useState(false);
-
-  const taskCommentsHook = useProjectComments({ currentUser });
-  const taskAttachmentsHook = useProjectAttachments({ currentUser });
-  const taskTimeTrackingHook = useProjectTimeTracking({ currentUser });
-
-  useEffect(() => {
-    taskEditingFieldsRef.current = taskEditingFields;
-  }, [taskEditingFields]);
 
 
   // ============================================================================
@@ -527,87 +558,6 @@ export default function TimelineWindow({
   const [turnoverRightPanelView, setTurnoverRightPanelView] = useState<'tasks' | 'projects'>('tasks');
   const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
   const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
-  const [expandedProjectInTurnover, setExpandedProjectInTurnover] = useState<Project | null>(null);
-  const [turnoverProjectFields, setTurnoverProjectFields] = useState<ProjectFormFields | null>(null);
-  const [turnoverStaffOpen, setTurnoverStaffOpen] = useState(false);
-  const [turnoverNewComment, setTurnoverNewComment] = useState('');
-
-  // Separate hooks for turnover projects panel
-  const turnoverCommentsHook = useProjectComments({ currentUser });
-  const turnoverAttachmentsHook = useProjectAttachments({ currentUser });
-  const turnoverTimeTrackingHook = useProjectTimeTracking({ currentUser });
-  const turnoverActivityHook = useProjectActivity();
-  const [turnoverActivitySheetOpen, setTurnoverActivitySheetOpen] = useState(false);
-  const [turnoverViewingAttachmentIndex, setTurnoverViewingAttachmentIndex] = useState<number | null>(null);
-
-  // Ref to track the latest project fields (avoids stale closure issues)
-  const projectFieldsRef = useRef<ProjectFormFields | null>(null);
-
-  // Keep ref in sync with state
-  useEffect(() => {
-    projectFieldsRef.current = projectFields;
-  }, [projectFields]);
-
-  // ============================================================================
-  // Initialize project fields when opening a project in floating window
-  // ============================================================================
-  // Compute the item ID based on type (tasks use task_id, projects use id)
-  const floatingItemId = floatingData?.type === 'task'
-    ? (floatingData?.item as Task)?.task_id
-    : (floatingData?.item as Project)?.id;
-
-  useEffect(() => {
-    if (floatingData?.type === 'project') {
-      const project = floatingData.item as Project;
-      setProjectFields({
-        title: project.title,
-        description: project.description || null,
-        status: project.status,
-        priority: project.priority,
-        assigned_staff: project.project_assignments?.map(a => a.user_id) || [],
-        department_id: project.department_id || '',
-        scheduled_date: project.scheduled_date || '',
-        scheduled_time: project.scheduled_time || ''
-      });
-      commentsHook.fetchProjectComments(project.id);
-      attachmentsHook.fetchProjectAttachments(project.id);
-      timeTrackingHook.fetchProjectTimeEntries(project.id);
-    } else if (floatingData?.type === 'task') {
-      const task = floatingData.item as Task;
-      setLocalTask(task);
-      setTaskEditingFields({
-        title: task.title || task.template_name || 'Task',
-        description: task.description || null,
-        status: task.status,
-        priority: task.priority || 'medium',
-        assigned_staff: (task.assigned_users || []).map(u => u.user_id),
-        department_id: task.department_id || '',
-        scheduled_date: task.scheduled_date || '',
-        scheduled_time: task.scheduled_time || '',
-      });
-      const isDraftTask = task.task_id.startsWith('draft-');
-      if (!isDraftTask) {
-        const propName = floatingData.propertyName || task.property_name;
-        const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
-        if (task.template_id && !taskTemplates[cacheKey!]) {
-          fetchTaskTemplate(task.template_id, propName);
-        }
-        taskCommentsHook.fetchProjectComments(task.task_id, 'task');
-        taskAttachmentsHook.fetchProjectAttachments(task.task_id, 'task');
-        taskTimeTrackingHook.fetchProjectTimeEntries(task.task_id, 'task');
-      }
-      if (availableTemplates.length === 0) fetchAvailableTemplates();
-    } else {
-      setProjectFields(null);
-      setLocalTask(null);
-      setTaskEditingFields(null);
-      setTaskStaffOpen(false);
-      setTaskNewComment('');
-      taskCommentsHook.clearComments();
-      taskAttachmentsHook.clearAttachments();
-      taskTimeTrackingHook.clearTimeTracking();
-    }
-  }, [floatingData?.type, floatingItemId]);
 
   // ============================================================================
   // Task functions
@@ -619,7 +569,6 @@ export default function TimelineWindow({
       return taskTemplates[cacheKey];
     }
 
-    setLoadingTaskTemplate(templateId);
     try {
       const template = await ensureTemplateDetail(queryClient, templateId, propertyName);
 
@@ -629,66 +578,8 @@ export default function TimelineWindow({
       console.error('Error fetching template:', err);
       toast.error("Couldn't load the task template");
       return null;
-    } finally {
-      setLoadingTaskTemplate(null);
     }
   }, [taskTemplates, queryClient]);
-
-  const handleUpdateTaskStatus = useCallback(async (taskId: string, action: string) => {
-    try {
-      const res = await apiFetch('/api/update-task-action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId, action })
-      });
-
-      if (!res.ok) {
-        const result = await res.json();
-        throw new Error(result.error || 'Failed to update task action');
-      }
-
-      // Update local task state (for the currently open panel)
-      setLocalTask(prev => prev ? { ...prev, status: action as Task['status'] } : null);
-
-      // Persist status into turnover/occupancy/vacancy tasks nested inside reservations
-      setReservations((prev: any[]) => prev.map((r: any) => ({
-        ...r,
-        tasks: (r.tasks || []).map((t: any) =>
-          t.task_id === taskId ? { ...t, status: action } : t
-        ),
-      })));
-
-      // Persist status into recurring tasks
-      setRecurringTasks((prev: any[]) => prev.map((t: any) =>
-        t.task_id === taskId ? { ...t, status: action } : t
-      ));
-    } catch (err) {
-      console.error('Error updating task status:', err);
-      toast.error("Couldn't update the task status");
-    }
-  }, [setReservations, setRecurringTasks]);
-
-  const handleSaveTaskForm = useCallback(async (taskId: string, formData: Record<string, unknown>) => {
-    try {
-      const res = await fetch('/api/save-task-form', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId, formData })
-      });
-
-      if (!res.ok) {
-        const result = await res.json();
-        throw new Error(result.error || 'Failed to save task form');
-      }
-
-      // Update local task state
-      setLocalTask(prev => prev ? { ...prev, form_metadata: formData } : null);
-    } catch (err) {
-      console.error('Error saving task form:', err);
-      toast.error("Couldn't save the form");
-      throw err;
-    }
-  }, []);
 
   // ============================================================================
   // Turnover task handlers
@@ -714,38 +605,36 @@ export default function TimelineWindow({
 
       setReservations(prev => prev.map(reservation => ({
         ...reservation,
-        tasks: (reservation.tasks || []).map((task: Task) => 
+        tasks: (reservation.tasks || []).map((task: Task) =>
           task.task_id === taskId ? { ...task, assigned_users: assignedUsers } : task
         )
       })));
 
-      // Update localTask if it's the same task
-      setLocalTask(prev => {
-        if (!prev || prev.task_id !== taskId) return prev;
-        return { ...prev, assigned_users: assignedUsers };
-      });
-
-      // Update floatingData if viewing a turnover
-      if (floatingData?.type === 'turnover') {
-        setFloatingData(prev => {
-          if (!prev || prev.type !== 'turnover') return prev;
+      // Update floatingData if it's the same task (turnover, or the open task panel)
+      setFloatingData(prev => {
+        if (!prev) return prev;
+        if (prev.type === 'turnover') {
           const turnover = prev.item as Turnover;
           return {
             ...prev,
             item: {
               ...turnover,
-              tasks: turnover.tasks.map(task => 
+              tasks: turnover.tasks.map(task =>
                 task.task_id === taskId ? { ...task, assigned_users: assignedUsers } : task
               )
             }
           };
-        });
-      }
+        }
+        if (prev.type === 'task' && (prev.item as Task).task_id === taskId) {
+          return { ...prev, item: { ...(prev.item as Task), assigned_users: assignedUsers } };
+        }
+        return prev;
+      });
     } catch (err) {
       console.error('Error updating task assignment:', err);
       toast.error("Couldn't update the task assignment");
     }
-  }, [floatingData, setReservations]);
+  }, [setReservations]);
 
   const updateTurnoverTaskSchedule = useCallback(async (taskId: string, scheduledDate: string | null, scheduledTime: string | null) => {
     // Optimistic-first: move the task in local state immediately so the grid
@@ -762,10 +651,12 @@ export default function TimelineWindow({
       t.task_id === taskId ? { ...t, scheduled_date: scheduledDate, scheduled_time: scheduledTime } : t
     ));
 
-    setLocalTask(prev => {
-      if (!prev || prev.task_id !== taskId) return prev;
-      return { ...prev, scheduled_date: scheduledDate, scheduled_time: scheduledTime };
-    });
+    if (floatingData?.type === 'task' && (floatingData.item as Task).task_id === taskId) {
+      setFloatingData(prev => {
+        if (!prev || prev.type !== 'task') return prev;
+        return { ...prev, item: { ...(prev.item as Task), scheduled_date: scheduledDate, scheduled_time: scheduledTime } };
+      });
+    }
 
     if (floatingData?.type === 'turnover') {
       setFloatingData(prev => {
@@ -1048,338 +939,19 @@ export default function TimelineWindow({
 
   const handleTurnoverTaskClick = useCallback((task: Task) => {
     if (floatingData?.type !== 'turnover') return;
-    // Switch to task view within the same panel
+    // Switch to task view within the same panel — TaskDetailPanel loads its
+    // own template/comments/attachments/time entries once mounted.
     setFloatingData({
       type: 'task',
       item: task,
       propertyName: floatingData.propertyName,
     });
-    setLocalTask(task);
-    const propName = floatingData?.propertyName || task.property_name;
-    const cacheKey = propName ? `${task.template_id}__${propName}` : task.template_id;
-    if (task.template_id && !taskTemplates[cacheKey!]) {
-      fetchTaskTemplate(task.template_id, propName);
-    }
-  }, [floatingData, taskTemplates, fetchTaskTemplate]);
-
-  // ============================================================================
-  // Project wrapper functions
-  // ============================================================================
-  const handleSaveProject = useCallback(async (directFields?: ProjectFormFields) => {
-    const currentFields = directFields || projectFieldsRef.current;
-    if (floatingData?.type !== 'project' || !currentFields) return;
-    const project = floatingData.item as Project;
-    setSavingProjectEdit(true);
-    try {
-      const res = await apiFetch(`/api/tasks-for-bin/${project.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: currentFields.title,
-          description: currentFields.description || null,
-          status: currentFields.status,
-          priority: currentFields.priority,
-          assigned_user_ids: currentFields.assigned_staff || [],
-          department_id: currentFields.department_id || null,
-          scheduled_date: currentFields.scheduled_date || null,
-          scheduled_time: currentFields.scheduled_time || null,
-        }),
-      });
-      const data = await res.json();
-      if (data.data) {
-        const d = data.data;
-        patchProjects(prev => prev.map(p => p.id === project.id ? d : p));
-        setFloatingData(prev => prev ? { ...prev, item: d } : null);
-        setProjectFields({
-          title: d.title,
-          description: d.description || null,
-          status: d.status,
-          priority: d.priority,
-          assigned_staff: d.project_assignments?.map((a: { user_id: string }) => a.user_id) || currentFields.assigned_staff || [],
-          department_id: d.department_id || '',
-          scheduled_date: d.scheduled_date || '',
-          scheduled_time: d.scheduled_time || '',
-        });
-      }
-    } catch (err) {
-      console.error('Error saving project:', err);
-      toast.error("Couldn't save the project");
-    } finally {
-      setSavingProjectEdit(false);
-    }
-  }, [floatingData, patchProjects]);
-
-  const handlePostComment = useCallback(async () => {
-    if (floatingData?.type !== 'project' || !newComment.trim()) return;
-    const project = floatingData.item as Project;
-    await commentsHook.postProjectComment(project.id, newComment);
-    setNewComment('');
-  }, [floatingData, newComment, commentsHook]);
-
-  const handleAttachmentUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (floatingData?.type === 'project') {
-      const project = floatingData.item as Project;
-      attachmentsHook.handleAttachmentUpload(e, project.id);
-    }
-  }, [floatingData, attachmentsHook]);
-
-  const handleStartTimer = useCallback(() => {
-    if (floatingData?.type === 'project') {
-      const project = floatingData.item as Project;
-      timeTrackingHook.startProjectTimer(project.id);
-    }
-  }, [floatingData, timeTrackingHook]);
-
-  const handleDeleteProject = useCallback(async (project: Project) => {
-    if (!confirm(`Delete project "${project.title}"?`)) return;
-    try {
-      const res = await apiFetch(`/api/tasks-for-bin/${project.id}`, { method: 'DELETE' });
-      if (res.ok) {
-        patchProjects(prev => prev.filter(p => p.id !== project.id));
-        queryClient.invalidateQueries({ queryKey: ['tasks-for-bin'] });
-        setFloatingData(null);
-        setProjectFields(null);
-      }
-    } catch (err) {
-      console.error('Error deleting project:', err);
-      toast.error("Couldn't delete the project");
-    }
-  }, [patchProjects, queryClient]);
-
-  const handleOpenActivity = useCallback(() => {
-    if (floatingData?.type === 'project') {
-      const project = floatingData.item as Project;
-      activityHook.fetchProjectActivity(project.id);
-      setActivitySheetOpen(true);
-    }
-  }, [floatingData, activityHook]);
-
-  // ============================================================================
-  // Task → ProjectDetailPanel: save handler + derived data
-  // ============================================================================
-  const handleSaveTaskEditFields = useCallback(async (directFields?: ProjectFormFields) => {
-    if (!localTask) return;
-    if (localTask.task_id.startsWith('draft-')) return;
-    const fields = directFields || taskEditingFieldsRef.current;
-    if (!fields) return;
-    const taskId = localTask.task_id;
-
-    if (fields.status !== localTask.status) {
-      handleUpdateTaskStatus(taskId, fields.status);
-      setLocalTask((prev: Task | null) => prev ? { ...prev, status: fields.status as Task['status'] } : null);
-    }
-
-    const oldDate = localTask.scheduled_date || '';
-    const oldTime = localTask.scheduled_time || '';
-    if (fields.scheduled_date !== oldDate || fields.scheduled_time !== oldTime) {
-      updateTurnoverTaskSchedule(taskId, fields.scheduled_date || null, fields.scheduled_time || null);
-    }
-
-    const oldAssignees = (localTask.assigned_users || []).map(u => u.user_id).sort().join(',');
-    const newAssignees = (fields.assigned_staff || []).sort().join(',');
-    if (oldAssignees !== newAssignees) {
-      updateTurnoverTaskAssignment(taskId, fields.assigned_staff || []);
-    }
-
-    const fieldUpdates: Record<string, unknown> = {};
-    const origTitle = localTask.title || localTask.template_name || 'Task';
-    const origPriority = localTask.priority || 'medium';
-    if (fields.title !== origTitle) fieldUpdates.title = fields.title;
-    if (JSON.stringify(fields.description) !== JSON.stringify(localTask.description || null)) fieldUpdates.description = fields.description;
-    if (fields.priority !== origPriority) fieldUpdates.priority = fields.priority;
-    if (fields.department_id !== (localTask.department_id || '')) fieldUpdates.department_id = fields.department_id || null;
-
-    if (Object.keys(fieldUpdates).length > 0) {
-      try {
-        const res = await apiFetch('/api/update-task-fields', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ taskId, fields: fieldUpdates }),
-        });
-        if (res.ok) {
-          // Optimistically reconcile local state — unlike status/schedule/
-          // assignment (which patch via their helpers), plain fields have no
-          // refetch path, so without this the panel rebuilds from stale
-          // reservations/recurringTasks on reopen and the edit looks lost.
-          // `fieldUpdates` keys (title/description/priority/department_id)
-          // already match the Task shape.
-          setLocalTask((prev: Task | null) =>
-            prev && prev.task_id === taskId ? { ...prev, ...fieldUpdates } : prev
-          );
-          setReservations(prev => prev.map(reservation => ({
-            ...reservation,
-            tasks: (reservation.tasks || []).map((task: Task) =>
-              task.task_id === taskId ? { ...task, ...fieldUpdates } : task
-            ),
-          })));
-          setRecurringTasks((prev: any[]) => prev.map((t: any) =>
-            t.task_id === taskId ? { ...t, ...fieldUpdates } : t
-          ));
-        } else {
-          const result = await res.json().catch(() => ({}));
-          console.error('Error updating task fields:', result);
-          toast.error(result?.error || "Couldn't update the task");
-        }
-      } catch (err) {
-        console.error('Error updating task fields:', err);
-        toast.error("Couldn't update the task");
-      }
-    }
-
-    if (directFields) {
-      setTaskEditingFields(directFields);
-    }
-  }, [localTask, handleUpdateTaskStatus, updateTurnoverTaskSchedule, updateTurnoverTaskAssignment, setReservations, setRecurringTasks]);
-
-  const taskAsProject: Project | null = localTask ? {
-    id: localTask.task_id,
-    property_id:
-      (localTask as { property_id?: string | null }).property_id ||
-      propertyIdByName.get(floatingData?.propertyName || localTask.property_name || '') ||
-      null,
-    property_name: floatingData?.propertyName || localTask.property_name || null,
-    bin_id: localTask.bin_id || null,
-    is_binned: localTask.is_binned ?? !!localTask.bin_id,
-    template_id: localTask.template_id || null,
-    template_name: localTask.template_name || null,
-    title: localTask.title || localTask.template_name || 'Task',
-    description: localTask.description || null,
-    status: localTask.status as Project['status'],
-    priority: (localTask.priority || 'medium') as Project['priority'],
-    department_id: localTask.department_id || null,
-    department_name: localTask.department_name || null,
-    scheduled_date: localTask.scheduled_date || null,
-    scheduled_time: localTask.scheduled_time || null,
-    reservation_id: localTask.reservation_id ?? null,
-    form_metadata: localTask.form_metadata || undefined,
-    project_assignments: (localTask.assigned_users || []).map(u => ({
-      user_id: u.user_id,
-      user: { id: u.user_id, name: u.name, avatar: u.avatar, role: u.role }
-    })),
-    created_at: '',
-    updated_at: '',
-  } : null;
-
-  const resolvedTaskTemplate = localTask?.template_id
-    ? (taskTemplates[`${localTask.template_id}__${floatingData?.propertyName}`] as Template
-       || taskTemplates[localTask.template_id] as Template)
-    : null;
-
-  const formatTimeDisplay = useCallback((seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${String(s).padStart(2, '0')}`;
-  }, []);
+  }, [floatingData]);
 
   const handleCloseFloatingWindow = useCallback(() => {
     setFloatingData(null);
-    setProjectFields(null);
-    setLocalTask(null);
-    setTaskEditingFields(null);
-    setTaskStaffOpen(false);
     setTurnoverRightPanelView('tasks');
-    setExpandedProjectInTurnover(null);
-    setTurnoverProjectFields(null);
   }, []);
-
-  // ============================================================================
-  // Turnover projects panel handlers
-  // ============================================================================
-  const turnoverProjectFieldsRef = useRef<ProjectFormFields | null>(null);
-  useEffect(() => {
-    turnoverProjectFieldsRef.current = turnoverProjectFields;
-  }, [turnoverProjectFields]);
-
-  useEffect(() => {
-    if (expandedProjectInTurnover) {
-      setTurnoverProjectFields({
-        title: expandedProjectInTurnover.title,
-        description: expandedProjectInTurnover.description || null,
-        status: expandedProjectInTurnover.status,
-        priority: expandedProjectInTurnover.priority,
-        assigned_staff: expandedProjectInTurnover.project_assignments?.map(a => a.user_id) || [],
-        department_id: expandedProjectInTurnover.department_id || '',
-        scheduled_date: expandedProjectInTurnover.scheduled_date || '',
-        scheduled_time: expandedProjectInTurnover.scheduled_time || ''
-      });
-      turnoverCommentsHook.fetchProjectComments(expandedProjectInTurnover.id);
-      turnoverAttachmentsHook.fetchProjectAttachments(expandedProjectInTurnover.id);
-      turnoverTimeTrackingHook.fetchProjectTimeEntries(expandedProjectInTurnover.id);
-    }
-  }, [expandedProjectInTurnover?.id]);
-
-  const handleTurnoverSaveProject = useCallback(async () => {
-    const currentFields = turnoverProjectFieldsRef.current;
-    if (!expandedProjectInTurnover || !currentFields) return;
-    setSavingProjectEdit(true);
-    try {
-      const res = await apiFetch(`/api/tasks-for-bin/${expandedProjectInTurnover.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: currentFields.title,
-          description: currentFields.description || null,
-          status: currentFields.status,
-          priority: currentFields.priority,
-          assigned_user_ids: currentFields.assigned_staff || [],
-          department_id: currentFields.department_id || null,
-          scheduled_date: currentFields.scheduled_date || null,
-          scheduled_time: currentFields.scheduled_time || null,
-        }),
-      });
-      const data = await res.json();
-      if (data.data) {
-        patchProjects(prev => prev.map(p => p.id === expandedProjectInTurnover.id ? data.data : p));
-        setExpandedProjectInTurnover(data.data);
-      }
-    } catch (err) {
-      console.error('Error saving project:', err);
-      toast.error("Couldn't save the project");
-    } finally {
-      setSavingProjectEdit(false);
-    }
-  }, [expandedProjectInTurnover, patchProjects]);
-
-  const handleTurnoverPostComment = useCallback(async () => {
-    if (!expandedProjectInTurnover || !turnoverNewComment.trim()) return;
-    await turnoverCommentsHook.postProjectComment(expandedProjectInTurnover.id, turnoverNewComment);
-    setTurnoverNewComment('');
-  }, [expandedProjectInTurnover, turnoverNewComment, turnoverCommentsHook]);
-
-  const handleTurnoverAttachmentUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (expandedProjectInTurnover) {
-      turnoverAttachmentsHook.handleAttachmentUpload(e, expandedProjectInTurnover.id);
-    }
-  }, [expandedProjectInTurnover, turnoverAttachmentsHook]);
-
-  const handleTurnoverStartTimer = useCallback(() => {
-    if (expandedProjectInTurnover) {
-      turnoverTimeTrackingHook.startProjectTimer(expandedProjectInTurnover.id);
-    }
-  }, [expandedProjectInTurnover, turnoverTimeTrackingHook]);
-
-  const handleTurnoverDeleteProject = useCallback(async (project: Project) => {
-    if (!confirm(`Delete project "${project.title}"?`)) return;
-    try {
-      const res = await apiFetch(`/api/tasks-for-bin/${project.id}`, { method: 'DELETE' });
-      if (res.ok) {
-        patchProjects(prev => prev.filter(p => p.id !== project.id));
-        queryClient.invalidateQueries({ queryKey: ['tasks-for-bin'] });
-        setExpandedProjectInTurnover(null);
-        setTurnoverProjectFields(null);
-      }
-    } catch (err) {
-      console.error('Error deleting project:', err);
-      toast.error("Couldn't delete the project");
-    }
-  }, [patchProjects, queryClient]);
-
-  const handleTurnoverOpenActivity = useCallback(() => {
-    if (expandedProjectInTurnover) {
-      turnoverActivityHook.fetchProjectActivity(expandedProjectInTurnover.id);
-      setTurnoverActivitySheetOpen(true);
-    }
-  }, [expandedProjectInTurnover, turnoverActivityHook]);
 
   const createDraftTask = useCallback((payload: Record<string, unknown>): Task => {
     return {
@@ -1400,28 +972,33 @@ export default function TimelineWindow({
     } as Task;
   }, []);
 
-  const handleConfirmCreateTaskTimeline = useCallback(async () => {
-    if (!localTask || !localTask.task_id.startsWith('draft-')) return;
+  // TaskDetailPanel draft-mode create handler for the main floating task
+  // panel (grid cell / header "new task" / day panel "new task" entry
+  // points). Invalidates the shared caches afterward so the grid/kanban
+  // (qk.timeline) and the tasks-for-bin lists pick up the new row without a
+  // manual refetch — the old code left the grid stale until the next
+  // natural reload; this closes that gap.
+  const handleConfirmCreateTaskTimeline = useCallback(async (payload: TaskCreatePayload) => {
     setCreatingTask(true);
     try {
-      const fields = taskEditingFieldsRef.current;
-      const payload: Record<string, unknown> = {
-        title: fields?.title || localTask.title || 'New Task',
-        status: fields?.status || 'not_started',
-        priority: fields?.priority || 'medium',
-        description: fields?.description || null,
-        department_id: fields?.department_id || null,
-        scheduled_date: fields?.scheduled_date || localTask.scheduled_date || null,
-        scheduled_time: fields?.scheduled_time || localTask.scheduled_time || null,
+      const body: Record<string, unknown> = {
+        title: payload.fields.title || 'New Task',
+        status: payload.fields.status || 'not_started',
+        priority: payload.fields.priority || 'medium',
+        description: payload.fields.description || null,
+        department_id: payload.fields.department_id || null,
+        scheduled_date: payload.fields.scheduled_date || null,
+        scheduled_time: payload.fields.scheduled_time || null,
       };
-      if (localTask.property_name) payload.property_name = localTask.property_name;
-      if (localTask.template_id) payload.template_id = localTask.template_id;
-      if (fields?.assigned_staff?.length) payload.assigned_user_ids = fields.assigned_staff;
+      if (payload.property_name) body.property_name = payload.property_name;
+      if (payload.template_id) body.template_id = payload.template_id;
+      if (payload.bin_id) body.bin_id = payload.bin_id;
+      if (payload.fields.assigned_staff?.length) body.assigned_user_ids = payload.fields.assigned_staff;
 
       const res = await fetch('/api/tasks-for-bin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       });
       const result = await res.json();
       const data = result.data;
@@ -1437,9 +1014,11 @@ export default function TimelineWindow({
           department_id: data.department_id || null,
           department_name: data.department_name || null,
           status: data.status || 'not_started',
+          property_id: data.property_id || null,
           property_name: data.property_name || undefined,
           scheduled_date: data.scheduled_date || null,
           scheduled_time: data.scheduled_time || null,
+          reservation_id: data.reservation_id ?? null,
           assigned_users: (data.project_assignments || []).map((a: any) => ({
             user_id: a.user_id,
             name: a.user?.name || '',
@@ -1447,10 +1026,10 @@ export default function TimelineWindow({
             role: a.user?.role || '',
           })),
         } as Task;
-        setLocalTask(createdTask);
-        if (floatingData) {
-          setFloatingData({ ...floatingData, item: createdTask });
-        }
+        setFloatingData(prev => (prev && prev.type === 'task' ? { ...prev, item: createdTask } : prev));
+        queryClient.invalidateQueries({ queryKey: ['tasks-for-bin'] });
+        queryClient.invalidateQueries({ queryKey: qk.timeline });
+        queryClient.invalidateQueries({ queryKey: qk.turnovers });
       }
     } catch (err) {
       console.error('Error creating task:', err);
@@ -1458,12 +1037,7 @@ export default function TimelineWindow({
     } finally {
       setCreatingTask(false);
     }
-  }, [localTask, floatingData]);
-
-  const handleTurnoverCreateProject = useCallback(async (propertyName: string) => {
-    const draft = createDraftTask({ property_name: propertyName });
-    setExpandedProjectInTurnover(draft as any);
-  }, [createDraftTask]);
+  }, [queryClient]);
 
   const handleCreateProjectFromTimelineCell = useCallback((propertyName: string, date: Date) => {
     const scheduledDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -1524,16 +1098,18 @@ export default function TimelineWindow({
         t.task_id === taskId ? { ...t, assigned_users: assignedUsers } : t
       ));
 
-      if (floatingData?.type === 'task' && localTask?.task_id === taskId) {
-        setLocalTask((prev: Task | null) =>
-          prev ? { ...prev, assigned_users: assignedUsers } : prev
+      if (floatingData?.type === 'task' && (floatingData.item as Task).task_id === taskId) {
+        setFloatingData(prev =>
+          prev && prev.type === 'task'
+            ? { ...prev, item: { ...(prev.item as Task), assigned_users: assignedUsers } }
+            : prev
         );
       }
     } catch (err) {
       console.error('Error updating kanban assignment:', err);
       toast.error("Couldn't update the task assignment");
     }
-  }, [users, setReservations, setRecurringTasks, floatingData, localTask]);
+  }, [users, setReservations, setRecurringTasks, floatingData]);
 
   // Extract ALL tasks from reservations + recurring tasks, tagged with property_name
   const allTasksWithProperty = useMemo(() => {
@@ -2265,7 +1841,7 @@ export default function TimelineWindow({
             tasks={displayedScheduledTasks}
             users={users}
             openTaskId={
-              floatingData?.type === 'task' ? localTask?.task_id ?? null : null
+              floatingData?.type === 'task' ? (floatingData.item as Task).task_id : null
             }
             onClose={() => setViewMode('grid')}
             onTaskClick={(task, propertyName) => {
@@ -2305,288 +1881,51 @@ export default function TimelineWindow({
       )}
 
       {/* Right Panel Overlay - Detail View
-          Uses block layout + overflow-y-auto since the contained
-          ProjectDetailPanel / TurnoverProjectsPanel manage their own
-          interior layout and expect the outer container to scroll. */}
+          Block layout + overflow-y-auto — TaskDetailPanel fills its host and
+          manages its own interior scroll; the turnover branch below still
+          expects the outer container to scroll. */}
       {floatingData && (
         <div
           className={`${DESKTOP_TIMELINE_DETAIL_PANEL_CLASS} overflow-y-auto`}
           onWheel={(e) => e.stopPropagation()}
         >
-          {floatingData.type === 'task' && taskAsProject && taskEditingFields ? (
-            <ProjectDetailPanel
-              project={taskAsProject}
-              editingFields={taskEditingFields}
-              setEditingFields={setTaskEditingFields}
-              users={users}
-              allProperties={allProperties}
-              savingEdit={false}
-              onSave={handleSaveTaskEditFields}
-              isNewTask={localTask?.task_id?.startsWith('draft-') ?? false}
-              onConfirmCreate={localTask?.task_id?.startsWith('draft-') ? handleConfirmCreateTaskTimeline : undefined}
-              creatingTask={creatingTask}
-              onDelete={async () => {
-                const task = localTask || floatingData.item as Task;
-                if (task.task_id.startsWith('draft-')) {
-                  handleCloseFloatingWindow();
-                  return;
-                }
-                try {
-                  await apiFetch(`/api/tasks-for-bin/${task.task_id}`, { method: 'DELETE' });
-                  setRecurringTasks(prev => prev.filter((t: any) => t.task_id !== task.task_id));
-                  fetchReservations();
-                } catch (err) {
-                  console.error('Error deleting task:', err);
-                  toast.error("Couldn't delete the task");
-                }
-                handleCloseFloatingWindow();
-              }}
-              onClose={handleCloseFloatingWindow}
-              onOpenInPage={
-                localTask && !localTask.task_id.startsWith('draft-')
-                  ? () => {
-                      const id = localTask.task_id;
-                      handleCloseFloatingWindow();
-                      router.push(taskPath(id));
-                    }
-                  : undefined
-              }
-              onOpenActivity={() => {}}
-              onPropertyChange={localTask?.task_id?.startsWith('draft-')
-                ? (_propertyId, propertyName) => {
-                    setLocalTask(prev => prev ? { ...prev, property_name: propertyName || undefined } : prev);
-                  }
-                : undefined
-              }
-              staffOpen={taskStaffOpen}
-              setStaffOpen={setTaskStaffOpen}
-              // Template / checklist slide-over
-              template={resolvedTaskTemplate || undefined}
-              formMetadata={(localTask || floatingData.item as Task).form_metadata}
-              onSaveForm={async (formData) => {
-                const task = localTask || floatingData.item as Task;
-                await handleSaveTaskForm(task.task_id, formData);
-              }}
-              loadingTemplate={loadingTaskTemplate === (localTask || floatingData.item as Task).template_id}
-              currentUser={currentUser}
-              // Template picker
-              availableTemplates={availableTemplates}
-              onTemplateChange={localTask?.task_id?.startsWith('draft-')
-                ? (templateId) => {
-                    const tmpl = availableTemplates.find(t => t.id === templateId);
-                    setLocalTask(prev => prev ? { ...prev, template_id: templateId || undefined, template_name: tmpl?.name || undefined } : prev);
-                  }
-                : async (templateId) => {
-                    const task = localTask || floatingData.item as Task;
-                    try {
-                      await apiFetch('/api/update-task-fields', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ taskId: task.task_id, fields: { template_id: templateId || null } }),
-                      });
-                      setLocalTask(prev => prev ? { ...prev, template_id: templateId || undefined } : prev);
-                      if (templateId) {
-                        fetchTaskTemplate(templateId, task.property_name);
+          {floatingData.type === 'task' ? (() => {
+            const item = floatingData.item as Task;
+            const isDraftTask = item.task_id.startsWith('draft-');
+            return (
+              <TaskDetailPanel
+                task={isDraftTask ? null : taskToTaskDetailInput(item, floatingData.propertyName)}
+                draft={isDraftTask ? taskToDraft(item) : null}
+                onDraftChange={
+                  isDraftTask
+                    ? (d: TaskDraft) => {
+                        setFloatingData(prev =>
+                          prev && prev.type === 'task'
+                            ? { ...prev, item: applyDraftToTask(item, d, users), propertyName: d.property_name || prev.propertyName }
+                            : prev
+                        );
                       }
-                    } catch (err) {
-                      console.error('Error changing template:', err);
-                      toast.error("Couldn't change the template");
-                    }
-                  }
-              }
-              // Comments
-              comments={taskCommentsHook.projectComments}
-              loadingComments={taskCommentsHook.loadingComments}
-              newComment={taskNewComment}
-              setNewComment={setTaskNewComment}
-              postingComment={taskCommentsHook.postingComment}
-              onPostComment={async () => {
-                const task = localTask || floatingData.item as Task;
-                if (taskNewComment.trim()) {
-                  await taskCommentsHook.postProjectComment(task.task_id, taskNewComment, 'task');
-                  setTaskNewComment('');
+                    : undefined
                 }
-              }}
-              // Attachments
-              attachments={taskAttachmentsHook.projectAttachments}
-              loadingAttachments={taskAttachmentsHook.loadingAttachments}
-              uploadingAttachment={taskAttachmentsHook.uploadingAttachment}
-              attachmentInputRef={taskAttachmentsHook.attachmentInputRef}
-              onAttachmentUpload={(e) => {
-                const task = localTask || floatingData.item as Task;
-                taskAttachmentsHook.handleAttachmentUpload(e, task.task_id, 'task');
-              }}
-              onViewAttachment={(index) => setTaskViewingAttachmentIndex(index)}
-              // Time tracking
-              activeTimeEntry={taskTimeTrackingHook.activeTimeEntry}
-              displaySeconds={taskTimeTrackingHook.displaySeconds}
-              formatTime={taskTimeTrackingHook.formatTime}
-              onStartTimer={() => {
-                const task = localTask || floatingData.item as Task;
-                taskTimeTrackingHook.startProjectTimer(task.task_id, 'task');
-              }}
-              onStopTimer={taskTimeTrackingHook.stopProjectTimer}
-              // Bins
-              bins={binsHook.bins}
-              onBinChange={async (binId) => {
-                const task = localTask || floatingData.item as Task;
-                try {
-                  await apiFetch('/api/update-task-fields', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ taskId: task.task_id, fields: { bin_id: binId || null } }),
-                  });
-                  const patch = { bin_id: binId || null };
-                  setLocalTask(prev => prev && prev.task_id === task.task_id ? { ...prev, ...patch } : prev);
-                  setReservations(prev => prev.map(r => ({
-                    ...r,
-                    tasks: (r.tasks || []).map((t: Task) =>
-                      t.task_id === task.task_id ? { ...t, ...patch } : t
-                    ),
-                  })));
-                  setRecurringTasks((prev: any[]) => prev.map((t: any) =>
-                    t.task_id === task.task_id ? { ...t, ...patch } : t
-                  ));
-                  binsHook.fetchBins();
-                } catch (err) {
-                  console.error('Error updating bin:', err);
-                  toast.error("Couldn't update the bin");
+                onConfirmCreate={isDraftTask ? handleConfirmCreateTaskTimeline : undefined}
+                creating={creatingTask}
+                onClose={handleCloseFloatingWindow}
+                onDeleted={() => {
+                  setRecurringTasks(prev => prev.filter((t: any) => t.task_id !== item.task_id));
+                  handleCloseFloatingWindow();
+                }}
+                onOpenInPage={
+                  !isDraftTask
+                    ? () => {
+                        const id = item.task_id;
+                        handleCloseFloatingWindow();
+                        router.push(taskPath(id));
+                      }
+                    : undefined
                 }
-              }}
-              onIsBinnedChange={async (isBinned) => {
-                const task = localTask || floatingData.item as Task;
-                try {
-                  const fields: Record<string, unknown> = { is_binned: isBinned };
-                  if (!isBinned) fields.bin_id = null;
-                  await apiFetch('/api/update-task-fields', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ taskId: task.task_id, fields }),
-                  });
-                  const patch = { is_binned: isBinned, ...(isBinned ? {} : { bin_id: null }) };
-                  setLocalTask(prev => prev && prev.task_id === task.task_id ? { ...prev, ...patch } : prev);
-                  setReservations(prev => prev.map(r => ({
-                    ...r,
-                    tasks: (r.tasks || []).map((t: Task) =>
-                      t.task_id === task.task_id ? { ...t, ...patch } : t
-                    ),
-                  })));
-                  setRecurringTasks((prev: any[]) => prev.map((t: any) =>
-                    t.task_id === task.task_id ? { ...t, ...patch } : t
-                  ));
-                  binsHook.fetchBins();
-                } catch (err) {
-                  console.error('Error updating is_binned:', err);
-                  toast.error("Couldn't update the bin");
-                }
-              }}
-            />
-          ) : floatingData.type === 'project' && projectFields ? (
-            <ProjectDetailPanel
-              project={floatingData.item as Project}
-              users={users}
-              allProperties={allProperties}
-              editingFields={projectFields}
-              setEditingFields={setProjectFields}
-              savingEdit={savingProjectEdit}
-              onSave={handleSaveProject}
-              onDelete={handleDeleteProject}
-              onClose={handleCloseFloatingWindow}
-              onOpenActivity={handleOpenActivity}
-              onPropertyChange={async (_propertyId, propertyName) => {
-                const project = floatingData.item as Project;
-                try {
-                  const res = await apiFetch(`/api/tasks-for-bin/${project.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ property_name: propertyName || null }),
-                  });
-                  const data = await res.json();
-                  if (data.data) {
-                    patchProjects(prev => prev.map(p => p.id === project.id ? data.data : p));
-                    setFloatingData(prev => {
-                      if (!prev || prev.type !== 'project') return prev;
-                      return { ...prev, item: data.data, propertyName: propertyName || '' };
-                    });
-                  }
-                } catch (err) {
-                  console.error('Error updating property:', err);
-                  toast.error("Couldn't update the property");
-                }
-              }}
-              // Comments
-              comments={commentsHook.projectComments}
-              loadingComments={commentsHook.loadingComments}
-              newComment={newComment}
-              setNewComment={setNewComment}
-              postingComment={commentsHook.postingComment}
-              onPostComment={handlePostComment}
-              // Attachments
-              attachments={attachmentsHook.projectAttachments}
-              loadingAttachments={attachmentsHook.loadingAttachments}
-              uploadingAttachment={attachmentsHook.uploadingAttachment}
-              attachmentInputRef={attachmentsHook.attachmentInputRef}
-              onAttachmentUpload={handleAttachmentUpload}
-              onViewAttachment={(index) => setViewingAttachmentIndex(index)}
-              // Time tracking
-              activeTimeEntry={timeTrackingHook.activeTimeEntry}
-              displaySeconds={timeTrackingHook.displaySeconds}
-              formatTime={timeTrackingHook.formatTime}
-              onStartTimer={handleStartTimer}
-              onStopTimer={timeTrackingHook.stopProjectTimer}
-              // Popover states
-              staffOpen={staffOpen}
-              setStaffOpen={setStaffOpen}
-              // Bins
-              bins={binsHook.bins}
-              onBinChange={async (binId) => {
-                const project = floatingData.item as Project;
-                try {
-                  const res = await apiFetch(`/api/tasks-for-bin/${project.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ bin_id: binId || null }),
-                  });
-                  const data = await res.json();
-                  if (data.data) {
-                    patchProjects(prev => prev.map(p => p.id === project.id ? data.data : p));
-                    setFloatingData(prev => {
-                      if (!prev || prev.type !== 'project') return prev;
-                      return { ...prev, item: data.data };
-                    });
-                  }
-                } catch (err) {
-                  console.error('Error updating bin:', err);
-                  toast.error("Couldn't update the bin");
-                }
-                binsHook.fetchBins();
-              }}
-              onIsBinnedChange={async (isBinned) => {
-                const project = floatingData.item as Project;
-                try {
-                  const payload: Record<string, unknown> = { is_binned: isBinned };
-                  if (!isBinned) payload.bin_id = null;
-                  const res = await apiFetch(`/api/tasks-for-bin/${project.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                  });
-                  const data = await res.json();
-                  if (data.data) {
-                    patchProjects(prev => prev.map(p => p.id === project.id ? data.data : p));
-                    setFloatingData(prev => {
-                      if (!prev || prev.type !== 'project') return prev;
-                      return { ...prev, item: data.data };
-                    });
-                  }
-                } catch (err) {
-                  console.error('Error updating is_binned:', err);
-                  toast.error("Couldn't update the bin");
-                }
-                binsHook.fetchBins();
-              }}
-            />
-          ) : floatingData.type === 'turnover' ? (
+              />
+            );
+          })() : floatingData.type === 'turnover' ? (
             /* Turnover Detail Panel */
             <div className="flex flex-col h-full">
               {/* Sticky Header - Property Info + Toggle */}
@@ -2645,11 +1984,7 @@ export default function TimelineWindow({
                 <div className="px-4 pb-3">
                   <div className="flex rounded-xl bg-white/20 dark:bg-white/[0.05] backdrop-blur-sm border border-white/20 dark:border-white/10 p-1">
                     <button
-                      onClick={() => {
-                        setTurnoverRightPanelView('tasks');
-                        setExpandedProjectInTurnover(null);
-                        setTurnoverProjectFields(null);
-                      }}
+                      onClick={() => setTurnoverRightPanelView('tasks')}
                       className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
                         turnoverRightPanelView === 'tasks'
                           ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
@@ -2695,98 +2030,14 @@ export default function TimelineWindow({
                     propertyName={(floatingData.item as Turnover).property_name}
                     projects={projects}
                     users={users}
-                    currentUser={currentUser}
-                    expandedProject={expandedProjectInTurnover}
-                    projectFields={turnoverProjectFields}
-                    savingProject={savingProjectEdit}
-                    staffOpen={turnoverStaffOpen}
-                    setExpandedProject={setExpandedProjectInTurnover}
-                    setProjectFields={setTurnoverProjectFields}
-                    setStaffOpen={setTurnoverStaffOpen}
-                    onSaveProject={handleTurnoverSaveProject}
-                    onDeleteProject={handleTurnoverDeleteProject}
                     onOpenProjectInWindow={() => {}}
-                    onCreateProject={handleTurnoverCreateProject}
-                    onOpenInPage={
-                      expandedProjectInTurnover &&
-                      !expandedProjectInTurnover.id.startsWith('draft-')
-                        ? () => {
-                            const id = expandedProjectInTurnover.id;
-                            setExpandedProjectInTurnover(null);
-                            setTurnoverProjectFields(null);
-                            router.push(taskPath(id));
-                          }
-                        : undefined
-                    }
-                    projectComments={turnoverCommentsHook.projectComments}
-                    loadingComments={turnoverCommentsHook.loadingComments}
-                    newComment={turnoverNewComment}
-                    setNewComment={setTurnoverNewComment}
-                    postingComment={turnoverCommentsHook.postingComment}
-                    onPostComment={handleTurnoverPostComment}
-                    projectAttachments={turnoverAttachmentsHook.projectAttachments}
-                    loadingAttachments={turnoverAttachmentsHook.loadingAttachments}
-                    uploadingAttachment={turnoverAttachmentsHook.uploadingAttachment}
-                    attachmentInputRef={turnoverAttachmentsHook.attachmentInputRef}
-                    onAttachmentUpload={handleTurnoverAttachmentUpload}
-                    onViewAttachment={setTurnoverViewingAttachmentIndex}
-                    activeTimeEntry={turnoverTimeTrackingHook.activeTimeEntry}
-                    displaySeconds={turnoverTimeTrackingHook.displaySeconds}
-                    formatTime={turnoverTimeTrackingHook.formatTime}
-                    onStartTimer={handleTurnoverStartTimer}
-                    onStopTimer={turnoverTimeTrackingHook.stopProjectTimer}
-                    onOpenActivity={handleTurnoverOpenActivity}
                   />
                 )}
               </div>
             </div>
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-neutral-500">Loading...</p>
-            </div>
-          )}
+          ) : null}
         </div>
       )}
-
-      {/* Attachment Lightbox */}
-      <AttachmentLightbox
-        attachments={attachmentsHook.projectAttachments}
-        viewingIndex={viewingAttachmentIndex}
-        onClose={() => setViewingAttachmentIndex(null)}
-        onNavigate={setViewingAttachmentIndex}
-      />
-
-      {/* Activity Sheet */}
-      <ProjectActivitySheet
-        open={activitySheetOpen}
-        onOpenChange={setActivitySheetOpen}
-        activities={activityHook.projectActivity}
-        loading={activityHook.loadingActivity}
-      />
-
-      {/* Task Attachment Lightbox */}
-      <AttachmentLightbox
-        attachments={taskAttachmentsHook.projectAttachments}
-        viewingIndex={taskViewingAttachmentIndex}
-        onClose={() => setTaskViewingAttachmentIndex(null)}
-        onNavigate={setTaskViewingAttachmentIndex}
-      />
-
-      {/* Turnover Projects - Attachment Lightbox */}
-      <AttachmentLightbox
-        attachments={turnoverAttachmentsHook.projectAttachments}
-        viewingIndex={turnoverViewingAttachmentIndex}
-        onClose={() => setTurnoverViewingAttachmentIndex(null)}
-        onNavigate={setTurnoverViewingAttachmentIndex}
-      />
-
-      {/* Turnover Projects - Activity Sheet */}
-      <ProjectActivitySheet
-        open={turnoverActivitySheetOpen}
-        onOpenChange={setTurnoverActivitySheetOpen}
-        activities={turnoverActivityHook.projectActivity}
-        loading={turnoverActivityHook.loadingActivity}
-      />
 
     </div>
   );

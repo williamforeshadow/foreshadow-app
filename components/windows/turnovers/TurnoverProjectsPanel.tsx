@@ -1,68 +1,31 @@
 'use client';
 
-import { RefObject } from 'react';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ProjectDetailPanel } from '../projects';
-import type { Project, Comment, User, ProjectFormFields, Attachment, TimeEntry, TaskTemplate } from '@/lib/types';
+import { toast } from '@/components/ui/toast';
+import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
+import { projectToTaskInput, emptyDraft, type TaskDraft } from '@/components/tasks/detail/taskInput';
+import type { TaskCreatePayload } from '@/components/tasks/detail/useTaskDetailController';
+import { qk } from '@/lib/queries';
+import type { Project, User } from '@/lib/types';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useDepartments } from '@/lib/departmentsContext';
 import { tiptapToPlainText, tiptapHasContent } from '@/lib/utils';
+import { taskPath } from '@/src/lib/links';
 
 interface TurnoverProjectsPanelProps {
   propertyName: string;
   projects: Project[];
   users: User[];
-  currentUser: User | null;
-  expandedProject: Project | null;
-  projectFields: ProjectFormFields | null;
-  savingProject: boolean;
-  staffOpen: boolean;
-  setExpandedProject: (project: Project | null) => void;
-  setProjectFields: (fields: ProjectFormFields | null | ((prev: ProjectFormFields | null) => ProjectFormFields | null)) => void;
-  setStaffOpen: (open: boolean) => void;
-  onSaveProject: () => void;
-  onDeleteProject: (project: Project) => void;
-  onOpenProjectInWindow: (project: Project) => void;
-  onCreateProject: (propertyName: string) => void;
-  // Comments
-  projectComments: Comment[];
-  loadingComments: boolean;
-  newComment: string;
-  setNewComment: (comment: string) => void;
-  postingComment: boolean;
-  onPostComment: () => void;
-  // Attachments
-  projectAttachments: Attachment[];
-  loadingAttachments: boolean;
-  uploadingAttachment: boolean;
-  attachmentInputRef: RefObject<HTMLInputElement | null>;
-  onAttachmentUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onViewAttachment: (index: number) => void;
-  // Time tracking
-  activeTimeEntry: TimeEntry | null;
-  displaySeconds: number;
-  formatTime: (seconds: number) => string;
-  onStartTimer: () => void;
-  onStopTimer: () => void;
-  // Activity
-  onOpenActivity: () => void;
-  // Draft/creation flow
-  isNewTask?: boolean;
-  onConfirmCreate?: () => void;
-  creatingTask?: boolean;
-  onPropertyChange?: (propertyId: string | null, propertyName: string | null) => void;
-  onTemplateChange?: (templateId: string | null) => void;
-  availableTemplates?: TaskTemplate[];
   /**
-   * Optional "open in dedicated page" affordance forwarded into the
-   * inner ProjectDetailPanel header. When provided, the panel renders
-   * the small outward-arrow button next to Close. Suppressed when
-   * undefined (e.g. callers that don't care about deep-linking, or
-   * when the expanded item isn't a task with a /tasks/[id] route).
+   * Pop-out icon on each card — opens the project in the Projects window.
+   * Unrelated to the detail panel below.
    */
-  onOpenInPage?: () => void;
+  onOpenProjectInWindow: (project: Project) => void;
 }
 
 function ProjectCard({
@@ -152,103 +115,82 @@ export function TurnoverProjectsPanel({
   propertyName,
   projects,
   users,
-  expandedProject,
-  projectFields,
-  savingProject,
-  staffOpen,
-  setExpandedProject,
-  setProjectFields,
-  setStaffOpen,
-  onSaveProject,
-  onDeleteProject,
   onOpenProjectInWindow,
-  onCreateProject,
-  // Comments
-  projectComments,
-  loadingComments,
-  newComment,
-  setNewComment,
-  postingComment,
-  onPostComment,
-  // Attachments
-  projectAttachments,
-  loadingAttachments,
-  uploadingAttachment,
-  attachmentInputRef,
-  onAttachmentUpload,
-  onViewAttachment,
-  // Time tracking
-  activeTimeEntry,
-  displaySeconds,
-  formatTime,
-  onStartTimer,
-  onStopTimer,
-  // Activity
-  onOpenActivity,
-  // Draft/creation flow
-  isNewTask = false,
-  onConfirmCreate,
-  creatingTask = false,
-  onPropertyChange,
-  onTemplateChange,
-  availableTemplates = [],
-  onOpenInPage,
 }: TurnoverProjectsPanelProps) {
   const propertyProjects = projects.filter(p => p.property_name === propertyName);
   const { deptIconMap } = useDepartments();
+  const queryClient = useQueryClient();
+  const router = useRouter();
 
-  const handleProjectClick = (project: Project) => {
-    setExpandedProject(project);
+  // Selection is local — the "Property Projects" tab unmounts this component
+  // whenever the turnover panel closes or the tab switches away, so this
+  // resets for free rather than needing to be reached in from the parent.
+  const [expandedProject, setExpandedProject] = useState<Project | null>(null);
+  const [draft, setDraft] = useState<TaskDraft | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const handleConfirmCreate = async (payload: TaskCreatePayload) => {
+    setCreating(true);
+    try {
+      const body: Record<string, unknown> = {
+        title: payload.fields.title || 'New Task',
+        status: payload.fields.status || 'not_started',
+        priority: payload.fields.priority || 'medium',
+        description: payload.fields.description || null,
+        department_id: payload.fields.department_id || null,
+        scheduled_date: payload.fields.scheduled_date || null,
+        scheduled_time: payload.fields.scheduled_time || null,
+      };
+      if (payload.property_name) body.property_name = payload.property_name;
+      if (payload.template_id) body.template_id = payload.template_id;
+      if (payload.bin_id) body.bin_id = payload.bin_id;
+      if (payload.fields.assigned_staff?.length) body.assigned_user_ids = payload.fields.assigned_staff;
+
+      const res = await fetch('/api/tasks-for-bin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const result = await res.json();
+      if (result.data) {
+        setDraft(null);
+        setExpandedProject(result.data as Project);
+        queryClient.invalidateQueries({ queryKey: ['tasks-for-bin'] });
+        queryClient.invalidateQueries({ queryKey: qk.timeline });
+        queryClient.invalidateQueries({ queryKey: qk.turnovers });
+      }
+    } catch (err) {
+      console.error('Error creating project:', err);
+      toast.error("Couldn't create the task");
+    } finally {
+      setCreating(false);
+    }
   };
 
-  if (expandedProject && projectFields) {
+  if (expandedProject || draft) {
     return (
       <div className="flex flex-col h-full">
-        {/* Project Detail Panel - full width override */}
-        <div className="flex-1 min-h-0 [&>div]:w-full [&>div]:border-l-0">
-          <ProjectDetailPanel
-            project={expandedProject}
-            editingFields={projectFields}
-            setEditingFields={setProjectFields}
-            users={users}
-            savingEdit={savingProject}
-            onSave={onSaveProject}
-            onDelete={onDeleteProject}
+        <div className="flex-1 min-h-0">
+          <TaskDetailPanel
+            task={expandedProject ? projectToTaskInput(expandedProject, users) : null}
+            draft={draft}
+            onDraftChange={setDraft}
+            onConfirmCreate={handleConfirmCreate}
+            creating={creating}
             onClose={() => {
               setExpandedProject(null);
-              setProjectFields(null);
+              setDraft(null);
             }}
-            onOpenInPage={onOpenInPage}
-            onOpenActivity={onOpenActivity}
-            isNewTask={isNewTask}
-            onConfirmCreate={onConfirmCreate}
-            creatingTask={creatingTask}
-            onPropertyChange={onPropertyChange}
-            availableTemplates={availableTemplates}
-            onTemplateChange={onTemplateChange}
-            // Comments
-            comments={projectComments}
-            loadingComments={loadingComments}
-            newComment={newComment}
-            setNewComment={setNewComment}
-            postingComment={postingComment}
-            onPostComment={onPostComment}
-            // Attachments
-            attachments={projectAttachments}
-            loadingAttachments={loadingAttachments}
-            uploadingAttachment={uploadingAttachment}
-            attachmentInputRef={attachmentInputRef}
-            onAttachmentUpload={onAttachmentUpload}
-            onViewAttachment={onViewAttachment}
-            // Time tracking
-            activeTimeEntry={activeTimeEntry}
-            displaySeconds={displaySeconds}
-            formatTime={formatTime}
-            onStartTimer={onStartTimer}
-            onStopTimer={onStopTimer}
-            // Popover states
-            staffOpen={staffOpen}
-            setStaffOpen={setStaffOpen}
+            onDeleted={() => setExpandedProject(null)}
+            onOpenInPage={
+              expandedProject
+                ? () => {
+                    const id = expandedProject.id;
+                    setExpandedProject(null);
+                    router.push(taskPath(id));
+                  }
+                : undefined
+            }
           />
         </div>
       </div>
@@ -263,7 +205,7 @@ export function TurnoverProjectsPanel({
           variant="outline"
           size="sm"
           className="mt-3"
-          onClick={() => onCreateProject(propertyName)}
+          onClick={() => setDraft(emptyDraft({ property_name: propertyName }))}
         >
           Create Project
         </Button>
@@ -278,18 +220,17 @@ export function TurnoverProjectsPanel({
           key={project.id}
           project={project}
           deptIconMap={deptIconMap}
-          onClick={() => handleProjectClick(project)}
+          onClick={() => setExpandedProject(project)}
           onOpenInWindow={onOpenProjectInWindow}
         />
       ))}
       <Button
         variant="outline"
         className="w-full mt-2"
-        onClick={() => onCreateProject(propertyName)}
+        onClick={() => setDraft(emptyDraft({ property_name: propertyName }))}
       >
         Add Project
       </Button>
     </div>
   );
 }
-

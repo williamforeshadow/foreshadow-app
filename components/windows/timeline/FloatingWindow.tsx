@@ -1,59 +1,54 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, RefObject } from 'react';
-import { ProjectDetailPanel } from '../projects';
-import type { Task, Project, User, ProjectFormFields, Comment, Attachment, TimeEntry, ProjectBin } from '@/lib/types';
-import type { Template } from '@/components/DynamicCleaningForm';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
+import { projectToTaskInput, type TaskDetailInput } from '@/components/tasks/detail/taskInput';
+import type { Task, Project, User } from '@/lib/types';
 
 interface FloatingWindowProps {
   type: 'task' | 'project';
   item: Task | Project;
   propertyName: string;
   onClose: () => void;
-  currentUser: User | null;
-  // Unified detail panel props (used for both tasks and projects)
+  /** Needed to resolve assignee names/avatars when `item` is a Project row. */
   users: User[];
-  editingFields: ProjectFormFields | null;
-  setEditingFields: (fields: ProjectFormFields | null | ((prev: ProjectFormFields | null) => ProjectFormFields | null)) => void;
-  savingEdit: boolean;
-  onSave: (fields?: ProjectFormFields) => void;
-  onDelete: (item: Project) => void;
-  onOpenActivity: () => void;
-  // Comments
-  comments: Comment[];
-  loadingComments: boolean;
-  newComment: string;
-  setNewComment: (comment: string) => void;
-  postingComment: boolean;
-  onPostComment: () => void;
-  // Attachments
-  attachments: Attachment[];
-  loadingAttachments: boolean;
-  uploadingAttachment: boolean;
-  attachmentInputRef: RefObject<HTMLInputElement | null>;
-  onAttachmentUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onViewAttachment: (index: number) => void;
-  // Time tracking
-  activeTimeEntry: TimeEntry | null;
-  displaySeconds: number;
-  formatTime: (seconds: number) => string;
-  onStartTimer: () => void;
-  onStopTimer: () => void;
-  // Popover states
-  staffOpen: boolean;
-  setStaffOpen: (open: boolean) => void;
-  // Template/checklist (for tasks)
-  template?: Template | null;
-  formMetadata?: Record<string, unknown>;
-  onSaveForm?: (formData: Record<string, unknown>) => Promise<void>;
-  loadingTemplate?: boolean;
-  onValidationChange?: (allRequiredFilled: boolean) => void;
-  // Optional extras
-  allProperties?: Array<{ id: string | null; name: string }>;
-  bins?: ProjectBin[];
-  onBinChange?: (binId: string | null, binName: string | null) => void;
-  onIsBinnedChange?: (isBinned: boolean) => void;
-  onPropertyChange?: (propertyId: string | null, propertyName: string | null) => void;
+  onSaved?: (row: TaskDetailInput) => void;
+  onDeleted?: (taskId: string) => void;
+}
+
+// Map a Task-shaped row (task_id, assigned_users — lib/types' Task interface)
+// into the unified TaskDetailInput. Mirrors projectToTaskInput, but Task
+// lacks created_at/updated_at/bin_name/unread_comment_count — those fall
+// back to '' / null since this shape never carries them.
+function taskToTaskDetailInput(task: Task, propertyName: string): TaskDetailInput {
+  return {
+    task_id: task.task_id,
+    reservation_id: task.reservation_id ?? null,
+    property_id: task.property_id ?? null,
+    property_name: propertyName || task.property_name || null,
+    template_id: task.template_id ?? null,
+    template_name: task.template_name ?? null,
+    title: task.title ?? null,
+    description: task.description ?? null,
+    priority: task.priority ?? 'medium',
+    department_id: task.department_id ?? null,
+    department_name: task.department_name ?? null,
+    status: task.status ?? 'not_started',
+    scheduled_date: task.scheduled_date ?? null,
+    scheduled_time: task.scheduled_time ?? null,
+    form_metadata: (task.form_metadata as Record<string, unknown> | null) ?? null,
+    bin_id: task.bin_id ?? null,
+    bin_name: null,
+    is_binned: task.is_binned ?? false,
+    created_at: '',
+    updated_at: '',
+    assigned_users: (task.assigned_users || []).map((u) => ({
+      user_id: u.user_id,
+      name: u.name,
+      avatar: u.avatar ?? null,
+      role: u.role,
+    })),
+  };
 }
 
 export function FloatingWindow({
@@ -61,43 +56,9 @@ export function FloatingWindow({
   item,
   propertyName,
   onClose,
-  currentUser,
   users,
-  editingFields,
-  setEditingFields,
-  savingEdit,
-  onSave,
-  onDelete,
-  onOpenActivity,
-  comments,
-  loadingComments,
-  newComment,
-  setNewComment,
-  postingComment,
-  onPostComment,
-  attachments,
-  loadingAttachments,
-  uploadingAttachment,
-  attachmentInputRef,
-  onAttachmentUpload,
-  onViewAttachment,
-  activeTimeEntry,
-  displaySeconds,
-  formatTime,
-  onStartTimer,
-  onStopTimer,
-  staffOpen,
-  setStaffOpen,
-  template,
-  formMetadata,
-  onSaveForm,
-  loadingTemplate,
-  onValidationChange,
-  allProperties,
-  bins,
-  onBinChange,
-  onIsBinnedChange,
-  onPropertyChange,
+  onSaved,
+  onDeleted,
 }: FloatingWindowProps) {
   // Position state - calculate initial position to be 3/4 to the right
   const [position, setPosition] = useState(() => {
@@ -108,11 +69,11 @@ export function FloatingWindow({
       y: Math.round(windowHeight * 0.1), // 10% from top
     };
   });
-  
+
   // Size state - start at default, allow resizing
   const [size, setSize] = useState({ width: 375, height: 600 });
   const minSize = { width: 320, height: 400 };
-  
+
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const dragOffset = useRef({ x: 0, y: 0 });
@@ -165,16 +126,19 @@ export function FloatingWindow({
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
     }
-    
+
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isDragging, isResizing, handleMouseMove, handleMouseUp]);
 
-  const title = type === 'task'
-    ? (item as Task).title || (item as Task).template_name || 'Task'
-    : (item as Project).title;
+  const taskInput: TaskDetailInput =
+    type === 'task'
+      ? taskToTaskDetailInput(item as Task, propertyName)
+      : projectToTaskInput(item as Project, users);
+
+  const title = taskInput.title || taskInput.template_name || 'Task';
 
   return (
     <div
@@ -208,79 +172,15 @@ export function FloatingWindow({
           </svg>
         </button>
       </div>
-      
-      {/* Content - Unified detail panel for both tasks and projects */}
-      <div className="flex-1 overflow-auto overscroll-contain [&>div]:h-full [&>div]:w-full [&>div]:border-l-0">
-        {editingFields ? (
-          <ProjectDetailPanel
-            project={type === 'task' ? {
-              id: (item as Task).task_id,
-              property_id:
-                (item as { property_id?: string | null }).property_id ||
-                allProperties?.find((p) => p.name === propertyName)?.id ||
-                null,
-              property_name: propertyName || null,
-              bin_id: (item as Task).bin_id || null,
-              title: (item as Task).title || (item as Task).template_name || 'Task',
-              description: (item as Task).description || null,
-              status: (item as Task).status as Project['status'],
-              priority: ((item as Task).priority || 'medium') as Project['priority'],
-              department_id: (item as Task).department_id || null,
-              department_name: (item as Task).department_name || null,
-              scheduled_date: (item as Task).scheduled_date || null,
-              scheduled_time: (item as Task).scheduled_time || null,
-              reservation_id: (item as Task).reservation_id ?? null,
-              project_assignments: ((item as Task).assigned_users || []).map(u => ({
-                user_id: u.user_id,
-                user: { id: u.user_id, name: u.name, avatar: u.avatar, role: u.role }
-              })),
-              created_at: '',
-              updated_at: '',
-            } : item as Project}
-            editingFields={editingFields}
-            setEditingFields={setEditingFields}
-            users={users}
-            allProperties={allProperties}
-            savingEdit={savingEdit}
-            onSave={onSave}
-            onDelete={onDelete}
-            onClose={onClose}
-            onOpenActivity={onOpenActivity}
-            onPropertyChange={onPropertyChange}
-            bins={bins}
-            onBinChange={onBinChange}
-            onIsBinnedChange={onIsBinnedChange}
-            comments={comments}
-            loadingComments={loadingComments}
-            newComment={newComment}
-            setNewComment={setNewComment}
-            postingComment={postingComment}
-            onPostComment={onPostComment}
-            attachments={attachments}
-            loadingAttachments={loadingAttachments}
-            uploadingAttachment={uploadingAttachment}
-            attachmentInputRef={attachmentInputRef}
-            onAttachmentUpload={onAttachmentUpload}
-            onViewAttachment={onViewAttachment}
-            activeTimeEntry={activeTimeEntry}
-            displaySeconds={displaySeconds}
-            formatTime={formatTime}
-            onStartTimer={onStartTimer}
-            onStopTimer={onStopTimer}
-            staffOpen={staffOpen}
-            setStaffOpen={setStaffOpen}
-            template={template}
-            formMetadata={formMetadata}
-            onSaveForm={onSaveForm}
-            loadingTemplate={loadingTemplate}
-            currentUser={currentUser}
-            onValidationChange={onValidationChange}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-sm text-muted-foreground">Loading...</p>
-          </div>
-        )}
+
+      {/* Content - unified task detail panel for both tasks and projects */}
+      <div className="flex-1 overflow-hidden">
+        <TaskDetailPanel
+          task={taskInput}
+          onClose={onClose}
+          onSaved={onSaved}
+          onDeleted={onDeleted}
+        />
       </div>
 
       {/* Resize Handle - Bottom Right Corner */}
