@@ -27,4 +27,6 @@ export const qk = {
   // its knowledge tabs; use exact:true for profile-only refreshes.
   propertyKnowledge: (id: string, section: string) =>
     ['property', id, 'knowledge', section] as const,
+  // The per-property task ledger (GET /api/properties/[id]/tasks).
+  propertyTasks: (id: string) => ['property', id, 'tasks'] as const,
 };

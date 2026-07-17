@@ -2,9 +2,9 @@
 
 import { apiFetch } from '@/lib/apiFetch';
 import { toast } from '@/components/ui/toast';
-import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { ensureTemplateDetail } from '@/lib/queries';
+import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo, type SetStateAction } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ensureTemplateDetail, fetchJson, qk, useProperties } from '@/lib/queries';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger, PopoverClose } from '@/components/ui/popover';
@@ -46,7 +46,7 @@ import {
 import { ClipboardCheck, Filter as FilterIcon } from 'lucide-react';
 import { CompactSearch } from '@/components/ui/compact-search';
 import { RowsIcon, KanbanColumnsIcon } from './timeline/TimelineViewIcons';
-import type { Project, Task, User, ProjectFormFields, Turnover, TaskTemplate, PropertyOption } from '@/lib/types';
+import type { Project, Task, User, ProjectFormFields, Turnover, TaskTemplate } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 import { cn } from '@/lib/utils';
 import { UserAvatar } from '@/components/ui/user-avatar';
@@ -81,6 +81,8 @@ type FloatingWindowData = {
   item: Task | Project | Turnover;
   propertyName: string;
 } | null;
+
+const EMPTY_PROJECTS: Project[] = [];
 
 // Droppable date cell: a task icon/dot dragged onto it reschedules the task
 // to this day (same-property only — see handleTaskDragEnd). Forwards the
@@ -365,30 +367,42 @@ export default function TimelineWindow({
   // ============================================================================
   // LOCAL project data (fetched from tasks-for-bin API)
   // ============================================================================
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
-  const [savingProjectEdit, setSavingProjectEdit] = useState(false);
-
-  const fetchProjects = useCallback(async () => {
-    try {
+  const projectsQuery = useQuery({
+    queryKey: qk.tasksForBin('__all__', currentUser?.id ?? null),
+    queryFn: async () => {
       const params = new URLSearchParams({ bin_id: '__all__' });
       if (currentUser?.id) params.set('viewer_user_id', currentUser.id);
-      const res = await fetch(`/api/tasks-for-bin?${params.toString()}`);
-      const result = await res.json();
-      if (res.ok && result.data) setProjects(result.data);
-    } catch (err) {
-      console.error('Error fetching projects:', err);
-    }
-  }, [currentUser?.id]);
+      const result = await fetchJson<{ data?: Project[] }>(`/api/tasks-for-bin?${params.toString()}`);
+      return result.data ?? [];
+    },
+  });
+  // Old fetch had no loading state — don't introduce one here.
+  const projects = projectsQuery.data ?? EMPTY_PROJECTS;
+  const { properties: allProperties } = useProperties();
+  const [savingProjectEdit, setSavingProjectEdit] = useState(false);
+
+  // Optimistic patch for the '__all__' projects list cache. cancelQueries
+  // drops any in-flight background refetch so its pre-mutation response
+  // can't land after — and silently revert — the optimistic write.
+  const patchProjects = useCallback(
+    (action: SetStateAction<Project[]>) => {
+      const key = qk.tasksForBin('__all__', currentUser?.id ?? null);
+      queryClient.cancelQueries({ queryKey: key });
+      queryClient.setQueryData<Project[]>(key, (old) => {
+        const prev = old ?? EMPTY_PROJECTS;
+        return typeof action === 'function' ? (action as (p: Project[]) => Project[])(prev) : action;
+      });
+    },
+    [queryClient, currentUser?.id]
+  );
+
+  // fetchProjects remains as a refetch shim for existing callers.
+  const { refetch: refetchProjects } = projectsQuery;
+  const fetchProjects = useCallback(async () => {
+    await refetchProjects();
+  }, [refetchProjects]);
 
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
-
-  useEffect(() => {
-    fetch('/api/properties')
-      .then(r => r.json())
-      .then(result => { if (result.properties) setAllProperties(result.properties); })
-      .catch(err => console.error('Error fetching properties:', err));
-  }, []);
 
   // Property name → id lookup. Powers the clickable property labels in the
   // y-axis column: clicking a property opens its detail page in a new tab
@@ -1074,7 +1088,7 @@ export default function TimelineWindow({
       const data = await res.json();
       if (data.data) {
         const d = data.data;
-        setProjects(prev => prev.map(p => p.id === project.id ? d : p));
+        patchProjects(prev => prev.map(p => p.id === project.id ? d : p));
         setFloatingData(prev => prev ? { ...prev, item: d } : null);
         setProjectFields({
           title: d.title,
@@ -1093,7 +1107,7 @@ export default function TimelineWindow({
     } finally {
       setSavingProjectEdit(false);
     }
-  }, [floatingData]);
+  }, [floatingData, patchProjects]);
 
   const handlePostComment = useCallback(async () => {
     if (floatingData?.type !== 'project' || !newComment.trim()) return;
@@ -1121,7 +1135,8 @@ export default function TimelineWindow({
     try {
       const res = await apiFetch(`/api/tasks-for-bin/${project.id}`, { method: 'DELETE' });
       if (res.ok) {
-        setProjects(prev => prev.filter(p => p.id !== project.id));
+        patchProjects(prev => prev.filter(p => p.id !== project.id));
+        queryClient.invalidateQueries({ queryKey: ['tasks-for-bin'] });
         setFloatingData(null);
         setProjectFields(null);
       }
@@ -1129,7 +1144,7 @@ export default function TimelineWindow({
       console.error('Error deleting project:', err);
       toast.error("Couldn't delete the project");
     }
-  }, []);
+  }, [patchProjects, queryClient]);
 
   const handleOpenActivity = useCallback(() => {
     if (floatingData?.type === 'project') {
@@ -1314,7 +1329,7 @@ export default function TimelineWindow({
       });
       const data = await res.json();
       if (data.data) {
-        setProjects(prev => prev.map(p => p.id === expandedProjectInTurnover.id ? data.data : p));
+        patchProjects(prev => prev.map(p => p.id === expandedProjectInTurnover.id ? data.data : p));
         setExpandedProjectInTurnover(data.data);
       }
     } catch (err) {
@@ -1323,7 +1338,7 @@ export default function TimelineWindow({
     } finally {
       setSavingProjectEdit(false);
     }
-  }, [expandedProjectInTurnover]);
+  }, [expandedProjectInTurnover, patchProjects]);
 
   const handleTurnoverPostComment = useCallback(async () => {
     if (!expandedProjectInTurnover || !turnoverNewComment.trim()) return;
@@ -1348,7 +1363,8 @@ export default function TimelineWindow({
     try {
       const res = await apiFetch(`/api/tasks-for-bin/${project.id}`, { method: 'DELETE' });
       if (res.ok) {
-        setProjects(prev => prev.filter(p => p.id !== project.id));
+        patchProjects(prev => prev.filter(p => p.id !== project.id));
+        queryClient.invalidateQueries({ queryKey: ['tasks-for-bin'] });
         setExpandedProjectInTurnover(null);
         setTurnoverProjectFields(null);
       }
@@ -1356,7 +1372,7 @@ export default function TimelineWindow({
       console.error('Error deleting project:', err);
       toast.error("Couldn't delete the project");
     }
-  }, []);
+  }, [patchProjects, queryClient]);
 
   const handleTurnoverOpenActivity = useCallback(() => {
     if (expandedProjectInTurnover) {
@@ -2487,7 +2503,7 @@ export default function TimelineWindow({
                   });
                   const data = await res.json();
                   if (data.data) {
-                    setProjects(prev => prev.map(p => p.id === project.id ? data.data : p));
+                    patchProjects(prev => prev.map(p => p.id === project.id ? data.data : p));
                     setFloatingData(prev => {
                       if (!prev || prev.type !== 'project') return prev;
                       return { ...prev, item: data.data, propertyName: propertyName || '' };
@@ -2533,7 +2549,7 @@ export default function TimelineWindow({
                   });
                   const data = await res.json();
                   if (data.data) {
-                    setProjects(prev => prev.map(p => p.id === project.id ? data.data : p));
+                    patchProjects(prev => prev.map(p => p.id === project.id ? data.data : p));
                     setFloatingData(prev => {
                       if (!prev || prev.type !== 'project') return prev;
                       return { ...prev, item: data.data };
@@ -2557,7 +2573,7 @@ export default function TimelineWindow({
                   });
                   const data = await res.json();
                   if (data.data) {
-                    setProjects(prev => prev.map(p => p.id === project.id ? data.data : p));
+                    patchProjects(prev => prev.map(p => p.id === project.id ? data.data : p));
                     setFloatingData(prev => {
                       if (!prev || prev.type !== 'project') return prev;
                       return { ...prev, item: data.data };

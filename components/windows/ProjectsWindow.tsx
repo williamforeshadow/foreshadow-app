@@ -2,7 +2,7 @@
 
 import { apiFetch } from '@/lib/apiFetch';
 import { toast } from '@/components/ui/toast';
-import { memo, useCallback, useState, useEffect, useRef, useMemo } from 'react';
+import { memo, useCallback, useState, useEffect, useRef, useMemo, type SetStateAction } from 'react';
 import { Button } from '@/components/ui/button';
 import type { ProjectViewMode, ProjectBin } from '@/lib/types';
 import { STATUS_LABELS, STATUS_ORDER, PRIORITY_LABELS, PRIORITY_ORDER } from '@/lib/types';
@@ -13,8 +13,8 @@ import { useProjectComments } from '@/lib/hooks/useProjectComments';
 import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
 import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
 import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
-import { useProperties, useTaskTemplates, ensureTemplateDetail } from '@/lib/queries';
-import { useQueryClient } from '@tanstack/react-query';
+import { useProperties, useTaskTemplates, ensureTemplateDetail, fetchJson, qk } from '@/lib/queries';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ProjectDetailPanel,
   ProjectActivitySheet,
@@ -110,6 +110,8 @@ function ViewModeToggle({
 
 // ============================================================================
 
+const EMPTY_PROJECTS: Project[] = [];
+
 interface ProjectsWindowProps {
   users: User[];
   currentUser: User | null;
@@ -131,10 +133,79 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   const [selectedBinName, setSelectedBinName] = useState<string>('Task Bin');
   const [showKanban, setShowKanban] = useState(false);
 
-  // Task data (fetched from tasks-for-bin API)
-  const [tasks, setTasks] = useState<Project[]>([]);
-  const [loadingTasks, setLoadingTasks] = useState(false);
   const { properties: allProperties } = useProperties();
+
+  // Task Bin "Global" toggle. When ON inside the Task Bin view, the kanban
+  // widens to every binned task (Task Bin orphans + every sub-bin) by
+  // fetching with the internal '__every__' API sentinel. When OFF, only
+  // orphan binned tasks render. Persisted in localStorage so the user's
+  // preference survives navigation and reloads.
+  const taskBinGlobal = useTaskBinGlobalView();
+
+  // Resolve a logical bin selection (`null` = Task Bin, `<uuid>` = sub-bin)
+  // to the API's `bin_id` query param. The Task Bin's "Global" toggle, when
+  // on, widens the Task Bin fetch to every binned task via the internal
+  // '__every__' sentinel. Sub-bin selections are never widened — Global is
+  // a Task-Bin-only knob.
+  const apiBinIdFor = useCallback(
+    (binId: string | null) =>
+      binId === null && taskBinGlobal.enabled ? '__every__' : binId,
+    [taskBinGlobal.enabled],
+  );
+
+  // The bin task list lives in the shared query cache, keyed by the bin the
+  // user is looking at (derived from navigation state — selecting a bin just
+  // sets state and the key change drives fetching). Previously-visited bins
+  // paint instantly from cache; the spinner shows only on a bin's first-ever
+  // visit.
+  const viewerId = currentUser?.id ?? null;
+  const activeApiBinId = showKanban ? apiBinIdFor(selectedBinId) : null;
+  const tasksQuery = useQuery({
+    queryKey: qk.tasksForBin(activeApiBinId, viewerId),
+    enabled: showKanban,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (viewerId) params.set('viewer_user_id', viewerId);
+      if (activeApiBinId !== null) params.set('bin_id', activeApiBinId);
+      const result = await fetchJson<{ data?: Project[] }>(
+        `/api/tasks-for-bin?${params.toString()}`
+      );
+      return result.data ?? [];
+    },
+  });
+  const tasks = tasksQuery.data ?? EMPTY_PROJECTS;
+  const loadingTasks = tasksQuery.isLoading;
+
+  // Preserve the old fetch-failure toast semantic.
+  useEffect(() => {
+    if (tasksQuery.isError) {
+      console.error('Error fetching tasks for bin:', tasksQuery.error);
+      toast.error('Couldn\'t load tasks for this bin.');
+    }
+  }, [tasksQuery.isError, tasksQuery.error]);
+
+  // Optimistic patch for the ACTIVE bin's cached list. cancelQueries drops
+  // any in-flight background refetch so its pre-mutation response can't land
+  // after — and silently revert — the optimistic write.
+  const patchTasks = useCallback(
+    (action: SetStateAction<Project[]>) => {
+      const key = qk.tasksForBin(activeApiBinId, viewerId);
+      queryClient.cancelQueries({ queryKey: key });
+      queryClient.setQueryData<Project[]>(key, (old) => {
+        const prev = old ?? [];
+        return typeof action === 'function' ? (action as (p: Project[]) => Project[])(prev) : action;
+      });
+    },
+    [queryClient, activeApiBinId, viewerId]
+  );
+
+  // Membership-changing mutations (bin move, dismiss, create, delete) leave
+  // OTHER bins' caches stale — notably the Task Bin vs '__every__' views.
+  // The active key was already patched, so its refetch is flash-free; hidden
+  // keys are marked stale and refetch before their next paint settles.
+  const invalidateAllBinLists = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['tasks-for-bin'] });
+  }, [queryClient]);
 
   // Template state
   const { templates: availableTemplates } = useTaskTemplates();
@@ -242,7 +313,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
         body: JSON.stringify({ taskId, formData }),
       });
       if (res.ok) {
-        setTasks(prev => prev.map(t =>
+        patchTasks(prev => prev.map(t =>
           t.id === taskId ? { ...t, form_metadata: formData } : t
         ));
         if (expandedProject?.id === taskId) {
@@ -253,7 +324,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       console.error('Error saving task form:', err);
       toast.error('Couldn\'t save the form.');
     }
-  }, [expandedProject?.id]);
+  }, [expandedProject?.id, patchTasks]);
 
   const handleTemplateChange = useCallback(async (templateId: string | null) => {
     if (!expandedProject) return;
@@ -267,7 +338,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       if (result.data) {
         const updated = { ...result.data, form_metadata: templateId ? (result.data.form_metadata || {}) : null };
         setExpandedProject(updated);
-        setTasks(prev => prev.map(t => t.id === expandedProject.id ? updated : t));
+        patchTasks(prev => prev.map(t => t.id === expandedProject.id ? updated : t));
         if (templateId) {
           fetchTaskTemplate(templateId, updated.property_name || undefined);
         }
@@ -276,39 +347,10 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       console.error('Error changing template:', err);
       toast.error('Couldn\'t change the template.');
     }
-  }, [expandedProject, fetchTaskTemplate]);
-
-  // Fetch tasks for a given bin
-  const fetchTasksForBin = useCallback(async (binId: string | null) => {
-    setLoadingTasks(true);
-    try {
-      const params = new URLSearchParams();
-      if (currentUser?.id) params.set('viewer_user_id', currentUser.id);
-      if (binId !== null) {
-        params.set('bin_id', binId);
-      }
-      const res = await fetch(`/api/tasks-for-bin?${params.toString()}`);
-      const result = await res.json();
-      if (res.ok && result.data) {
-        setTasks(result.data);
-      }
-    } catch (err) {
-      console.error('Error fetching tasks for bin:', err);
-      toast.error('Couldn\'t load tasks for this bin.');
-    } finally {
-      setLoadingTasks(false);
-    }
-  }, [currentUser?.id]);
+  }, [expandedProject, fetchTaskTemplate, patchTasks]);
 
   // Column visibility
   const columnVis = useColumnVisibility(selectedBinId, viewMode);
-
-  // Task Bin "Global" toggle. When ON inside the Task Bin view, the kanban
-  // widens to every binned task (Task Bin orphans + every sub-bin) by
-  // fetching with the internal '__every__' API sentinel. When OFF, only
-  // orphan binned tasks render. Persisted in localStorage so the user's
-  // preference survives navigation and reloads.
-  const taskBinGlobal = useTaskBinGlobalView();
 
   const allColumnOptions = useMemo(() => {
     if (viewMode === 'property') {
@@ -467,18 +509,9 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   // ============================================================================
   // Bin Navigation
   // ============================================================================
-  // Resolve a logical bin selection (`null` = Task Bin, `<uuid>` = sub-bin)
-  // to the API's `bin_id` query param. The Task Bin's "Global" toggle, when
-  // on, widens the Task Bin fetch to every binned task via the internal
-  // '__every__' sentinel. Sub-bin selections are never widened — Global is
-  // a Task-Bin-only knob.
-  const apiBinIdFor = useCallback(
-    (binId: string | null) =>
-      binId === null && taskBinGlobal.enabled ? '__every__' : binId,
-    [taskBinGlobal.enabled],
-  );
-
-  const handleSelectBin = useCallback(async (binId: string | null) => {
+  // Navigation — setting bin state changes the query key, which drives the
+  // fetch; a previously-visited bin paints instantly from cache.
+  const handleSelectBin = useCallback((binId: string | null) => {
     setSelectedBinId(binId);
     setShowKanban(true);
     setExpandedProject(null);
@@ -489,22 +522,14 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       const bin = binsHook.bins.find(b => b.id === binId);
       setSelectedBinName(bin?.name || 'Sub-Bin');
     }
+  }, [binsHook.bins]);
 
-    await fetchTasksForBin(apiBinIdFor(binId));
-  }, [binsHook.bins, fetchTasksForBin, apiBinIdFor]);
-
-  // Toggle the Task Bin's Global view AND immediately refetch so the kanban
-  // updates without waiting for another navigation. No-op when the user
-  // isn't inside the Task Bin (the toggle button only renders there anyway).
-  const handleToggleTaskBinGlobal = useCallback(async () => {
+  // Toggle the Task Bin's Global view. The toggle flips apiBinIdFor's output
+  // ('__every__' vs null), which flips the query key — the kanban updates
+  // without an imperative refetch.
+  const handleToggleTaskBinGlobal = useCallback(() => {
     taskBinGlobal.toggle();
-    if (selectedBinId === null) {
-      // taskBinGlobal.toggle is async (state setter), so flip the value
-      // locally to compute the next API param without racing the state.
-      const nextEnabled = !taskBinGlobal.enabled;
-      await fetchTasksForBin(nextEnabled ? '__every__' : null);
-    }
-  }, [taskBinGlobal, selectedBinId, fetchTasksForBin]);
+  }, [taskBinGlobal]);
 
   const handleBackToBins = useCallback(() => {
     setShowKanban(false);
@@ -592,7 +617,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       if (result.data) {
         const d = result.data;
         setExpandedProject(d);
-        setTasks(prev => prev.map(t => t.id === expandedProject.id ? d : t));
+        patchTasks(prev => prev.map(t => t.id === expandedProject.id ? d : t));
         setEditingProjectFields({
           title: d.title,
           description: d.description || null,
@@ -610,7 +635,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     } finally {
       setSavingEdit(false);
     }
-  }, [expandedProject]);
+  }, [expandedProject, patchTasks]);
 
   const handleNewTask = useCallback(() => {
     // In Task Bin view (selectedBinId === null), a new task has no specific
@@ -668,7 +693,8 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       });
       const result = await res.json();
       if (result.data) {
-        setTasks(prev => [...prev, result.data]);
+        patchTasks(prev => [...prev, result.data]);
+        invalidateAllBinLists();
         setDraftTask(null);
         setExpandedProject(result.data);
       }
@@ -678,13 +704,14 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     } finally {
       setCreatingTask(false);
     }
-  }, [draftTask]);
+  }, [draftTask, patchTasks, invalidateAllBinLists]);
 
   const handleDeleteTask = useCallback(async (task: Project) => {
     try {
       const res = await apiFetch(`/api/tasks-for-bin/${task.id}`, { method: 'DELETE' });
       if (res.ok) {
-        setTasks(prev => prev.filter(t => t.id !== task.id));
+        patchTasks(prev => prev.filter(t => t.id !== task.id));
+        invalidateAllBinLists();
         if (expandedProject?.id === task.id) {
           setExpandedProject(null);
         }
@@ -693,7 +720,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       console.error('Error deleting task:', err);
       toast.error('Couldn\'t delete the task.');
     }
-  }, [expandedProject?.id]);
+  }, [expandedProject?.id, patchTasks, invalidateAllBinLists]);
 
   const handleColumnMove = useCallback(async (taskId: string, field: string, value: string) => {
     if (field === 'property_name') {
@@ -706,10 +733,15 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
         }
       }
     }
-    // Force the kanban to re-sync to server truth. Used when an update is
-    // rejected so the card snaps back to its real column instead of sitting
-    // in the wrong column with a stale status badge until the next click.
-    const revertKanban = () => setTasks(prev => [...prev]);
+    // Force the kanban to re-sync to server truth so a rejected update
+    // doesn't leave the card stranded in the wrong column with a stale
+    // status badge until the next interaction. The identity refresh snaps
+    // the card back to the cached (pre-drag) truth; the invalidation
+    // re-syncs against the server in case the rejection was due to drift.
+    const revertKanban = () => {
+      patchTasks(prev => [...prev]);
+      invalidateAllBinLists();
+    };
     try {
       const payload: Record<string, unknown> = {};
 
@@ -735,7 +767,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
         return;
       }
       const d = result.data;
-      setTasks(prev => prev.map(t => t.id === taskId ? d : t));
+      patchTasks(prev => prev.map(t => t.id === taskId ? d : t));
       if (expandedProject?.id === taskId) {
         setExpandedProject(d);
         setEditingProjectFields({
@@ -754,7 +786,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       toast.error(err instanceof Error ? err.message : 'Failed to update task');
       revertKanban();
     }
-  }, [expandedProject?.id, tasks]);
+  }, [expandedProject?.id, tasks, patchTasks, invalidateAllBinLists]);
 
   // Unread comment count from the task data
   const getUnreadCommentCount = useCallback((project: Project): number => {
@@ -770,13 +802,13 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ project_id: taskId, user_id: currentUser.id }),
       });
-      setTasks(prev => prev.map(t =>
+      patchTasks(prev => prev.map(t =>
         t.id === taskId ? { ...t, unread_comment_count: 0 } as any : t
       ));
     } catch (err) {
       console.error('Error recording view:', err);
     }
-  }, [currentUser?.id]);
+  }, [currentUser?.id, patchTasks]);
 
   // ============================================================================
   // Detail panel actions
@@ -1017,7 +1049,8 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
                 if (res.ok) {
                   const dismissed: string[] = result?.dismissed_ids || taskIds;
                   const dismissedSet = new Set(dismissed);
-                  setTasks(prev => prev.filter(t => !dismissedSet.has(t.id)));
+                  patchTasks(prev => prev.filter(t => !dismissedSet.has(t.id)));
+                  invalidateAllBinLists();
                   if (expandedProject && dismissedSet.has(expandedProject.id)) {
                     setExpandedProject(null);
                   }
@@ -1086,7 +1119,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
                   const result = await res.json();
                   if (result.data) {
                     setExpandedProject(result.data);
-                    setTasks(prev => prev.map(t => t.id === expandedProject.id ? result.data : t));
+                    patchTasks(prev => prev.map(t => t.id === expandedProject.id ? result.data : t));
                   }
                 } catch (err) {
                   console.error('Error updating property:', err);
@@ -1105,7 +1138,8 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
               const result = await res.json();
               if (result.data) {
                 setExpandedProject(result.data);
-                setTasks(prev => prev.map(t => t.id === expandedProject.id ? result.data : t));
+                patchTasks(prev => prev.map(t => t.id === expandedProject.id ? result.data : t));
+                invalidateAllBinLists();
               }
               binsHook.fetchBins();
             } catch (err) {
@@ -1126,12 +1160,13 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
               if (result.data) {
                 if (!isBinned) {
                   // Dismissed from bin — drop from this bin view and close the panel.
-                  setTasks(prev => prev.filter(t => t.id !== expandedProject.id));
+                  patchTasks(prev => prev.filter(t => t.id !== expandedProject.id));
                   setExpandedProject(null);
                 } else {
                   setExpandedProject(result.data);
-                  setTasks(prev => prev.map(t => t.id === expandedProject.id ? result.data : t));
+                  patchTasks(prev => prev.map(t => t.id === expandedProject.id ? result.data : t));
                 }
+                invalidateAllBinLists();
               }
               binsHook.fetchBins();
             } catch (err) {

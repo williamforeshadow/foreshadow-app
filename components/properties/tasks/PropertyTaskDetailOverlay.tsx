@@ -16,8 +16,6 @@ import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import type {
   Project,
   ProjectFormFields,
-  PropertyOption,
-  TaskTemplate,
   User,
 } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
@@ -28,7 +26,7 @@ import {
 import MobileProjectDetail from '@/components/mobile/MobileProjectDetail';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
-import { ensureTemplateDetail } from '@/lib/queries';
+import { ensureTemplateDetail, useProperties, useTaskTemplates } from '@/lib/queries';
 import { useQueryClient } from '@tanstack/react-query';
 
 // Self-contained detail overlay for a property-scoped task. Wraps the shared
@@ -125,46 +123,15 @@ export function PropertyTaskDetailOverlay({
   const currentUser = authUser as unknown as User | null;
   const isMobile = useIsMobile();
 
-  // Lazy caches for users-independent data the panel needs.
-  const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
-  const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>(
-    []
-  );
+  // Shared caches for users-independent data the panel needs.
+  const { properties: allProperties } = useProperties();
+  const { templates: availableTemplates } = useTaskTemplates();
   const [taskTemplates, setTaskTemplates] = useState<
     Record<string, Template>
   >({});
   const [loadingTaskTemplate, setLoadingTaskTemplate] = useState<string | null>(
     null
   );
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch('/api/properties');
-        const result = await res.json();
-        if (!cancelled && res.ok && result.properties) {
-          setAllProperties(result.properties);
-        }
-      } catch (err) {
-        console.error('[TaskDetailOverlay] properties fetch failed:', err);
-      }
-    })();
-    (async () => {
-      try {
-        const res = await fetch('/api/tasks');
-        const result = await res.json();
-        if (!cancelled && res.ok && result.data) {
-          setAvailableTemplates(result.data);
-        }
-      } catch (err) {
-        console.error('[TaskDetailOverlay] templates fetch failed:', err);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const fetchTaskTemplate = useCallback(
     async (templateId: string, propName?: string | null) => {

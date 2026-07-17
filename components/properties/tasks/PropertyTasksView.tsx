@@ -20,8 +20,6 @@ import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import type {
   Project,
   ProjectFormFields,
-  TaskTemplate,
-  PropertyOption,
   User,
 } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
@@ -44,8 +42,8 @@ import {
   ORIGIN_AUTOMATED,
 } from '@/components/tasks/TaskFilterBar';
 import { taskPath } from '@/src/lib/links';
-import { ensureTemplateDetail } from '@/lib/queries';
-import { useQueryClient } from '@tanstack/react-query';
+import { ensureTemplateDetail, fetchJson, qk, useProperties, useTaskTemplates } from '@/lib/queries';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 // Property Tasks ledger — shows every task ever linked to the property.
 // Curation is done by the user via filter + sort, not by the component. The
@@ -54,6 +52,8 @@ import { useQueryClient } from '@tanstack/react-query';
 // that matches the Projects kanban detail width.
 
 // ---- Types ----------------------------------------------------------------
+
+const EMPTY_RAW_TASKS: RawTask[] = [];
 
 interface RawTask {
   task_id: string;
@@ -241,55 +241,30 @@ function PropertyTasksViewContent({
 
   // ---- Data fetch ---------------------------------------------------------
 
-  const [rawTasks, setRawTasks] = useState<RawTask[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
+  // Cached property task ledger — revisits paint instantly; mutation handlers
+  // call fetchTasks() (now a silent refetch) to reconcile with server truth.
+  const tasksQuery = useQuery({
+    queryKey: qk.propertyTasks(propertyId),
+    queryFn: () =>
+      fetchJson<{ tasks?: RawTask[] }>(`/api/properties/${propertyId}/tasks`).then(
+        (d) => d.tasks ?? []
+      ),
+  });
+  const rawTasks = tasksQuery.data ?? EMPTY_RAW_TASKS;
+  const loading = tasksQuery.isLoading;
+  const error = tasksQuery.error
+    ? tasksQuery.error.message || 'Failed to fetch tasks'
+    : null;
+  const { refetch: refetchTasks } = tasksQuery;
   const fetchTasks = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/properties/${propertyId}/tasks`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to fetch tasks');
-      setRawTasks(data.tasks || []);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch tasks');
-    } finally {
-      setLoading(false);
-    }
-  }, [propertyId]);
-
-  useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
+    await refetchTasks();
+  }, [refetchTasks]);
 
   // Supporting data for the detail panel (properties list, templates list).
-  const [allProperties, setAllProperties] = useState<PropertyOption[]>([]);
-  const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
+  const { properties: allProperties } = useProperties();
+  const { templates: availableTemplates } = useTaskTemplates();
   const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
   const [loadingTaskTemplate, setLoadingTaskTemplate] = useState<string | null>(null);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/properties');
-        const result = await res.json();
-        if (res.ok && result.properties) setAllProperties(result.properties);
-      } catch (err) {
-        console.error('Error fetching properties:', err);
-      }
-    })();
-    (async () => {
-      try {
-        const res = await fetch('/api/tasks');
-        const result = await res.json();
-        if (res.ok && result.data) setAvailableTemplates(result.data);
-      } catch (err) {
-        console.error('Error fetching templates:', err);
-      }
-    })();
-  }, []);
 
   const fetchTaskTemplate = useCallback(
     async (templateId: string, propName?: string) => {
