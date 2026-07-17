@@ -2,25 +2,16 @@
 
 import { apiFetch } from '@/lib/apiFetch';
 import { toast } from '@/components/ui/toast';
-import { memo, useCallback, useState, useEffect, useRef, useMemo, type SetStateAction } from 'react';
+import { memo, useCallback, useState, useEffect, useMemo, useRef, type SetStateAction } from 'react';
 import { Button } from '@/components/ui/button';
 import type { ProjectViewMode, ProjectBin } from '@/lib/types';
 import { STATUS_LABELS, STATUS_ORDER, PRIORITY_LABELS, PRIORITY_ORDER } from '@/lib/types';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
 import { useTaskBinGlobalView } from '@/lib/hooks/useTaskBinGlobalView';
-import { useProjectComments } from '@/lib/hooks/useProjectComments';
-import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
-import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
-import { useProjectActivity } from '@/lib/hooks/useProjectActivity';
-import { useProperties, useTaskTemplates, ensureTemplateDetail, fetchJson, qk } from '@/lib/queries';
+import { useProperties, fetchJson, qk } from '@/lib/queries';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ProjectDetailPanel,
-  ProjectActivitySheet,
-  AttachmentLightbox,
-  BinPicker,
-} from './projects';
+import { BinPicker } from './projects';
 import { ColumnPicker } from './projects/ColumnPicker';
 import { ProjectsKanban } from './projects/ProjectsKanban';
 import { useDepartments } from '@/lib/departmentsContext';
@@ -28,11 +19,13 @@ import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import { useRouter } from 'next/navigation';
 import { taskPath } from '@/src/lib/links';
-import type { User, Project, Attachment, Comment, ProjectFormFields, PropertyOption, TaskTemplate } from '@/lib/types';
-import type { Template } from '@/components/DynamicCleaningForm';
+import type { User, Project } from '@/lib/types';
 import { Filter as FilterIcon } from 'lucide-react';
 import { CompactSearch } from '@/components/ui/compact-search';
 import { TaskFilterBar, type FilterOption } from '@/components/tasks/TaskFilterBar';
+import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
+import { projectToTaskInput, emptyDraft, type TaskDraft, type TaskDetailInput } from '@/components/tasks/detail/taskInput';
+import type { TaskCreatePayload } from '@/components/tasks/detail/useTaskDetailController';
 
 // ============================================================================
 // View Mode Toggle — compact pill that expands on click
@@ -111,6 +104,37 @@ function ViewModeToggle({
 // ============================================================================
 
 const EMPTY_PROJECTS: Project[] = [];
+
+// Merge a saved/updated TaskDetailInput row (from the unified TaskDetailPanel)
+// back onto a Project row, so this window's kanban list + expandedProject
+// state stay visually in sync without waiting on the panel's own cache
+// invalidation to round-trip.
+function mergeRowIntoProject(project: Project, row: TaskDetailInput): Project {
+  return {
+    ...project,
+    title: row.title || project.title,
+    description: (row.description as Project['description']) ?? null,
+    status: row.status as Project['status'],
+    priority: row.priority as Project['priority'],
+    department_id: row.department_id,
+    department_name: row.department_name,
+    scheduled_date: row.scheduled_date,
+    scheduled_time: row.scheduled_time,
+    bin_id: row.bin_id,
+    is_binned: row.is_binned,
+    property_id: row.property_id,
+    property_name: row.property_name,
+    template_id: row.template_id,
+    template_name: row.template_name,
+    form_metadata: row.form_metadata ?? undefined,
+    reservation_id: row.reservation_id,
+    updated_at: row.updated_at,
+    project_assignments: row.assigned_users.map((u) => ({
+      user_id: u.user_id,
+      user: { id: u.user_id, name: u.name, avatar: u.avatar ?? undefined, role: u.role } as User,
+    })),
+  };
+}
 
 interface ProjectsWindowProps {
   users: User[];
@@ -207,11 +231,6 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     queryClient.invalidateQueries({ queryKey: ['tasks-for-bin'] });
   }, [queryClient]);
 
-  // Template state
-  const { templates: availableTemplates } = useTaskTemplates();
-  const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
-  const [loadingTaskTemplate, setLoadingTaskTemplate] = useState<string | null>(null);
-
   // View mode
   const [viewMode, setViewMode] = useState<ProjectViewMode>('status');
   const [kanbanSelectionMode, setKanbanSelectionMode] = useState(false);
@@ -251,15 +270,12 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     !!scheduledDateRange.from ||
     !!scheduledDateRange.to;
 
-  // Sub-hooks for detail panel features
-  const commentsHook = useProjectComments({ currentUser });
-  const attachmentsHook = useProjectAttachments({ currentUser });
-  const timeTrackingHook = useProjectTimeTracking({ currentUser });
-  const activityHook = useProjectActivity();
-
   // UI state
   const [expandedProject, setExpandedProject] = useState<Project | null>(null);
-  const [editingProjectFields, setEditingProjectFields] = useState<ProjectFormFields | null>(null);
+
+  // Draft task state — local-only task not yet persisted
+  const [draftTask, setDraftTask] = useState<TaskDraft | null>(null);
+  const [creatingTask, setCreatingTask] = useState(false);
 
   // Strict single-panel rule (both directions): close our local panel
   // when a context overlay opens; surfaces call closeGlobals() before
@@ -268,86 +284,10 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   // Strict single-panel rule: when any global detail panel (reservation
   // overlay or context task overlay) opens, close this surface's local
   // detail panel.
-  const closeGlobals = useExclusiveDetailPanelHost(() =>
-    setExpandedProject(null)
-  );
-  const [newComment, setNewComment] = useState('');
-  const [staffOpen, setStaffOpen] = useState(false);
-  const [viewingAttachmentIndex, setViewingAttachmentIndex] = useState<number | null>(null);
-  const [activityPopoverOpen, setActivityPopoverOpen] = useState(false);
-  const [savingEdit, setSavingEdit] = useState(false);
-
-  // Draft task state — local-only project not yet persisted
-  const [draftTask, setDraftTask] = useState<Project | null>(null);
-  const [creatingTask, setCreatingTask] = useState(false);
-
-  const editingFieldsRef = useRef<ProjectFormFields | null>(null);
-
-  useEffect(() => {
-    editingFieldsRef.current = editingProjectFields;
-  }, [editingProjectFields]);
-
-  const fetchTaskTemplate = useCallback(async (templateId: string, propertyName?: string) => {
-    const cacheKey = propertyName ? `${templateId}__${propertyName}` : templateId;
-    if (taskTemplates[cacheKey]) return taskTemplates[cacheKey];
-
-    setLoadingTaskTemplate(templateId);
-    try {
-      const template = await ensureTemplateDetail(queryClient, templateId, propertyName);
-      setTaskTemplates(prev => ({ ...prev, [cacheKey]: template }));
-      return template;
-    } catch (err) {
-      console.error('Error fetching template:', err);
-      toast.error('Couldn\'t load the task template.');
-    } finally {
-      setLoadingTaskTemplate(null);
-    }
-    return null;
-  }, [taskTemplates, queryClient]);
-
-  const handleSaveTaskForm = useCallback(async (taskId: string, formData: Record<string, unknown>) => {
-    try {
-      const res = await fetch('/api/save-task-form', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId, formData }),
-      });
-      if (res.ok) {
-        patchTasks(prev => prev.map(t =>
-          t.id === taskId ? { ...t, form_metadata: formData } : t
-        ));
-        if (expandedProject?.id === taskId) {
-          setExpandedProject(prev => prev ? { ...prev, form_metadata: formData } : prev);
-        }
-      }
-    } catch (err) {
-      console.error('Error saving task form:', err);
-      toast.error('Couldn\'t save the form.');
-    }
-  }, [expandedProject?.id, patchTasks]);
-
-  const handleTemplateChange = useCallback(async (templateId: string | null) => {
-    if (!expandedProject) return;
-    try {
-      const res = await apiFetch(`/api/tasks-for-bin/${expandedProject.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ template_id: templateId }),
-      });
-      const result = await res.json();
-      if (result.data) {
-        const updated = { ...result.data, form_metadata: templateId ? (result.data.form_metadata || {}) : null };
-        setExpandedProject(updated);
-        patchTasks(prev => prev.map(t => t.id === expandedProject.id ? updated : t));
-        if (templateId) {
-          fetchTaskTemplate(templateId, updated.property_name || undefined);
-        }
-      }
-    } catch (err) {
-      console.error('Error changing template:', err);
-      toast.error('Couldn\'t change the template.');
-    }
-  }, [expandedProject, fetchTaskTemplate, patchTasks]);
+  const closeGlobals = useExclusiveDetailPanelHost(() => {
+    setExpandedProject(null);
+    setDraftTask(null);
+  });
 
   // Column visibility
   const columnVis = useColumnVisibility(selectedBinId, viewMode);
@@ -556,140 +496,40 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   );
 
   // ============================================================================
-  // Detail panel initialization
-  // ============================================================================
-  const isDraft = expandedProject?.id?.startsWith('draft-') ?? false;
-
-  useEffect(() => {
-    if (expandedProject) {
-      setEditingProjectFields({
-        title: expandedProject.title,
-        description: expandedProject.description || null,
-        status: expandedProject.status,
-        priority: expandedProject.priority,
-        assigned_staff: expandedProject.project_assignments?.map(a => a.user_id) || [],
-        department_id: expandedProject.department_id || '',
-        scheduled_date: expandedProject.scheduled_date || '',
-        scheduled_time: expandedProject.scheduled_time || ''
-      });
-
-      if (!expandedProject.id.startsWith('draft-')) {
-        commentsHook.fetchProjectComments(expandedProject.id, 'task');
-        attachmentsHook.fetchProjectAttachments(expandedProject.id, 'task');
-        timeTrackingHook.fetchProjectTimeEntries(expandedProject.id, 'task');
-
-        if (expandedProject.template_id) {
-          const propName = expandedProject.property_name || undefined;
-          const cacheKey = propName ? `${expandedProject.template_id}__${propName}` : expandedProject.template_id;
-          if (!taskTemplates[cacheKey]) {
-            fetchTaskTemplate(expandedProject.template_id, propName);
-          }
-        }
-      }
-    }
-  }, [expandedProject?.id]);
-
-  // ============================================================================
   // Task CRUD via tasks-for-bin APIs
   // ============================================================================
-  const handleSaveProject = useCallback(async (directFields?: ProjectFormFields) => {
-    const currentFields = directFields || editingFieldsRef.current;
-    if (!expandedProject || !currentFields) return;
-    if (expandedProject.id.startsWith('draft-')) return;
-
-    setSavingEdit(true);
-    try {
-      const res = await apiFetch(`/api/tasks-for-bin/${expandedProject.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: currentFields.title,
-          description: currentFields.description || null,
-          status: currentFields.status,
-          priority: currentFields.priority,
-          assigned_user_ids: currentFields.assigned_staff || [],
-          department_id: currentFields.department_id || null,
-          scheduled_date: currentFields.scheduled_date || null,
-          scheduled_time: currentFields.scheduled_time || null,
-        }),
-      });
-      const result = await res.json();
-      if (result.data) {
-        const d = result.data;
-        setExpandedProject(d);
-        patchTasks(prev => prev.map(t => t.id === expandedProject.id ? d : t));
-        setEditingProjectFields({
-          title: d.title,
-          description: d.description || null,
-          status: d.status,
-          priority: d.priority,
-          assigned_staff: d.project_assignments?.map((a: { user_id: string }) => a.user_id) || currentFields.assigned_staff || [],
-          department_id: d.department_id || '',
-          scheduled_date: d.scheduled_date || '',
-          scheduled_time: d.scheduled_time || '',
-        });
-      }
-    } catch (err) {
-      console.error('Error saving task:', err);
-      toast.error('Couldn\'t save the task.');
-    } finally {
-      setSavingEdit(false);
-    }
-  }, [expandedProject, patchTasks]);
-
   const handleNewTask = useCallback(() => {
     // In Task Bin view (selectedBinId === null), a new task has no specific
     // sub-bin — it lands in the Task Bin by default. In a sub-bin view we
     // pre-fill bin_id so the new task lands in that sub-bin.
-    const draft: Project = {
-      id: `draft-${Date.now()}`,
-      property_id: null,
-      property_name: null,
-      bin_id: selectedBinId,
-      is_binned: true,
-      template_id: null,
-      template_name: null,
-      title: 'New Task',
-      description: null,
-      status: 'not_started' as Project['status'],
-      priority: 'medium' as Project['priority'],
-      department_id: null,
-      department_name: null,
-      scheduled_date: null,
-      scheduled_time: null,
-      form_metadata: undefined,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
     closeGlobals();
-    setDraftTask(draft);
-    setExpandedProject(draft);
+    setExpandedProject(null);
+    setDraftTask(emptyDraft({ bin_id: selectedBinId }));
   }, [selectedBinId, closeGlobals]);
 
-  const handleConfirmCreateTask = useCallback(async () => {
-    if (!draftTask) return;
+  const handleConfirmCreateTask = useCallback(async (payload: TaskCreatePayload) => {
     setCreatingTask(true);
     try {
-      const fields = editingFieldsRef.current;
-      const payload: Record<string, unknown> = {
-        title: fields?.title || draftTask.title || 'New Task',
-        status: fields?.status || 'not_started',
-        priority: fields?.priority || 'medium',
+      const f = payload.fields;
+      const body: Record<string, unknown> = {
+        title: f.title || 'New Task',
+        status: f.status || 'not_started',
+        priority: f.priority || 'medium',
         is_binned: true,
-        description: fields?.description || null,
-        department_id: fields?.department_id || null,
-        scheduled_date: fields?.scheduled_date || null,
-        scheduled_time: fields?.scheduled_time || null,
+        description: f.description || null,
+        department_id: f.department_id || null,
+        scheduled_date: f.scheduled_date || null,
+        scheduled_time: f.scheduled_time || null,
       };
-      if (draftTask.bin_id) payload.bin_id = draftTask.bin_id;
-      if (draftTask.property_name) payload.property_name = draftTask.property_name;
-      if (draftTask.template_id) payload.template_id = draftTask.template_id;
-      if (fields?.assigned_staff?.length) payload.assigned_user_ids = fields.assigned_staff;
+      if (payload.bin_id) body.bin_id = payload.bin_id;
+      if (payload.property_name) body.property_name = payload.property_name;
+      if (payload.template_id) body.template_id = payload.template_id;
+      if (f.assigned_staff?.length) body.assigned_user_ids = f.assigned_staff;
 
       const res = await fetch('/api/tasks-for-bin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       });
       const result = await res.json();
       if (result.data) {
@@ -704,23 +544,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     } finally {
       setCreatingTask(false);
     }
-  }, [draftTask, patchTasks, invalidateAllBinLists]);
-
-  const handleDeleteTask = useCallback(async (task: Project) => {
-    try {
-      const res = await apiFetch(`/api/tasks-for-bin/${task.id}`, { method: 'DELETE' });
-      if (res.ok) {
-        patchTasks(prev => prev.filter(t => t.id !== task.id));
-        invalidateAllBinLists();
-        if (expandedProject?.id === task.id) {
-          setExpandedProject(null);
-        }
-      }
-    } catch (err) {
-      console.error('Error deleting task:', err);
-      toast.error('Couldn\'t delete the task.');
-    }
-  }, [expandedProject?.id, patchTasks, invalidateAllBinLists]);
+  }, [patchTasks, invalidateAllBinLists]);
 
   const handleColumnMove = useCallback(async (taskId: string, field: string, value: string) => {
     if (field === 'property_name') {
@@ -770,16 +594,6 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       patchTasks(prev => prev.map(t => t.id === taskId ? d : t));
       if (expandedProject?.id === taskId) {
         setExpandedProject(d);
-        setEditingProjectFields({
-          title: d.title,
-          description: d.description || null,
-          status: d.status,
-          priority: d.priority,
-          assigned_staff: d.project_assignments?.map((a: { user_id: string }) => a.user_id) || [],
-          department_id: d.department_id || '',
-          scheduled_date: d.scheduled_date || '',
-          scheduled_time: d.scheduled_time || '',
-        });
       }
     } catch (err) {
       console.error('Error updating task field:', err);
@@ -809,32 +623,6 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       console.error('Error recording view:', err);
     }
   }, [currentUser?.id, patchTasks]);
-
-  // ============================================================================
-  // Detail panel actions
-  // ============================================================================
-  const handlePostComment = useCallback(async () => {
-    if (!expandedProject || !newComment.trim()) return;
-    await commentsHook.postProjectComment(expandedProject.id, newComment, 'task');
-    setNewComment('');
-  }, [expandedProject, newComment, commentsHook]);
-
-  const handleAttachmentUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!expandedProject) return;
-    attachmentsHook.handleAttachmentUpload(e, expandedProject.id, 'task');
-  }, [expandedProject, attachmentsHook]);
-
-  const handleStartTimer = useCallback(() => {
-    if (!expandedProject) return;
-    timeTrackingHook.startProjectTimer(expandedProject.id, 'task');
-  }, [expandedProject, timeTrackingHook]);
-
-  const handleOpenActivity = useCallback(() => {
-    if (expandedProject) {
-      activityHook.fetchProjectActivity(expandedProject.id);
-      setActivityPopoverOpen(true);
-    }
-  }, [expandedProject, activityHook]);
 
   const handleProjectSelect = useCallback((project: Project) => {
     if (expandedProject?.id === project.id) {
@@ -1069,165 +857,36 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       </div>
 
       {/* Right Panel - Task Detail */}
-      {expandedProject && editingProjectFields && (() => {
-        const propName = expandedProject.property_name || undefined;
-        const resolvedTemplate = expandedProject.template_id
-          ? (taskTemplates[`${expandedProject.template_id}__${propName}`] as Template
-            || taskTemplates[expandedProject.template_id] as Template
-            || null)
-          : null;
-
-        return (
+      {(expandedProject || draftTask) && (
         <div className={DESKTOP_DETAIL_PANEL_FLEX}>
-        <ProjectDetailPanel
-          project={expandedProject}
-          editingFields={editingProjectFields}
-          setEditingFields={setEditingProjectFields}
-          users={users}
-          allProperties={allProperties}
-          savingEdit={savingEdit}
-          onSave={handleSaveProject}
-          onDelete={handleDeleteTask}
-          onClose={() => { setExpandedProject(null); setDraftTask(null); }}
-          onOpenInPage={
-            !isDraft && expandedProject
-              ? () => {
-                  const id = expandedProject.id;
-                  setExpandedProject(null);
-                  setDraftTask(null);
-                  router.push(taskPath(id));
-                }
-              : undefined
-          }
-          onOpenActivity={handleOpenActivity}
-          isNewTask={isDraft}
-          onConfirmCreate={isDraft ? handleConfirmCreateTask : undefined}
-          creatingTask={creatingTask}
-          onPropertyChange={isDraft
-            ? (_propertyId, propertyName) => {
-                const updated = { ...expandedProject, property_name: propertyName };
-                setExpandedProject(updated);
-                setDraftTask(updated);
-              }
-            : async (_propertyId, propertyName) => {
-                try {
-                  const res = await apiFetch(`/api/tasks-for-bin/${expandedProject.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ property_name: propertyName || null }),
-                  });
-                  const result = await res.json();
-                  if (result.data) {
-                    setExpandedProject(result.data);
-                    patchTasks(prev => prev.map(t => t.id === expandedProject.id ? result.data : t));
+          <TaskDetailPanel
+            task={expandedProject ? projectToTaskInput(expandedProject, users) : null}
+            onClose={() => { setExpandedProject(null); setDraftTask(null); }}
+            onSaved={(row) => {
+              patchTasks(prev => prev.map(t => t.id === row.task_id ? mergeRowIntoProject(t, row) : t));
+              setExpandedProject(prev => (prev && prev.id === row.task_id ? mergeRowIntoProject(prev, row) : prev));
+            }}
+            onDeleted={(taskId) => {
+              patchTasks(prev => prev.filter(t => t.id !== taskId));
+              setExpandedProject(null);
+            }}
+            onOpenInPage={
+              expandedProject
+                ? () => {
+                    const id = expandedProject.id;
+                    setExpandedProject(null);
+                    setDraftTask(null);
+                    router.push(taskPath(id));
                   }
-                } catch (err) {
-                  console.error('Error updating property:', err);
-                  toast.error('Couldn\'t update the property.');
-                }
-              }
-          }
-          bins={binsHook.bins}
-          onBinChange={async (binId) => {
-            try {
-              const res = await apiFetch(`/api/tasks-for-bin/${expandedProject.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ bin_id: binId || null }),
-              });
-              const result = await res.json();
-              if (result.data) {
-                setExpandedProject(result.data);
-                patchTasks(prev => prev.map(t => t.id === expandedProject.id ? result.data : t));
-                invalidateAllBinLists();
-              }
-              binsHook.fetchBins();
-            } catch (err) {
-              console.error('Error updating bin:', err);
-              toast.error('Couldn\'t move the task to that bin.');
+                : undefined
             }
-          }}
-          onIsBinnedChange={async (isBinned) => {
-            try {
-              const payload: Record<string, unknown> = { is_binned: isBinned };
-              if (!isBinned) payload.bin_id = null;
-              const res = await apiFetch(`/api/tasks-for-bin/${expandedProject.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-              });
-              const result = await res.json();
-              if (result.data) {
-                if (!isBinned) {
-                  // Dismissed from bin — drop from this bin view and close the panel.
-                  patchTasks(prev => prev.filter(t => t.id !== expandedProject.id));
-                  setExpandedProject(null);
-                } else {
-                  setExpandedProject(result.data);
-                  patchTasks(prev => prev.map(t => t.id === expandedProject.id ? result.data : t));
-                }
-                invalidateAllBinLists();
-              }
-              binsHook.fetchBins();
-            } catch (err) {
-              console.error('Error updating is_binned:', err);
-              toast.error('Couldn\'t update the task.');
-            }
-          }}
-          comments={commentsHook.projectComments as Comment[]}
-          loadingComments={commentsHook.loadingComments}
-          newComment={newComment}
-          setNewComment={setNewComment}
-          postingComment={commentsHook.postingComment}
-          onPostComment={handlePostComment}
-          attachments={attachmentsHook.projectAttachments as Attachment[]}
-          loadingAttachments={attachmentsHook.loadingAttachments}
-          uploadingAttachment={attachmentsHook.uploadingAttachment}
-          attachmentInputRef={attachmentsHook.attachmentInputRef}
-          onAttachmentUpload={handleAttachmentUpload}
-          onViewAttachment={setViewingAttachmentIndex}
-          activeTimeEntry={timeTrackingHook.activeTimeEntry}
-          displaySeconds={timeTrackingHook.displaySeconds}
-          formatTime={timeTrackingHook.formatTime}
-          onStartTimer={handleStartTimer}
-          onStopTimer={timeTrackingHook.stopProjectTimer}
-          staffOpen={staffOpen}
-          setStaffOpen={setStaffOpen}
-          template={resolvedTemplate || undefined}
-          formMetadata={expandedProject.form_metadata}
-          onSaveForm={async (formData) => {
-            await handleSaveTaskForm(expandedProject.id, formData);
-          }}
-          loadingTemplate={loadingTaskTemplate === expandedProject.template_id}
-          currentUser={currentUser}
-          availableTemplates={availableTemplates}
-          onTemplateChange={isDraft
-            ? (templateId) => {
-                const tmpl = availableTemplates.find(t => t.id === templateId);
-                const updated = { ...expandedProject, template_id: templateId, template_name: tmpl?.name || null };
-                setExpandedProject(updated);
-                setDraftTask(updated);
-              }
-            : handleTemplateChange
-          }
-        />
+            draft={draftTask}
+            onDraftChange={setDraftTask}
+            onConfirmCreate={handleConfirmCreateTask}
+            creating={creatingTask}
+          />
         </div>
-        );
-      })()}
-
-      <ProjectActivitySheet
-        open={activityPopoverOpen}
-        onOpenChange={setActivityPopoverOpen}
-        activities={activityHook.projectActivity}
-        loading={activityHook.loadingActivity}
-      />
-
-      <AttachmentLightbox
-        attachments={attachmentsHook.projectAttachments as Attachment[]}
-        viewingIndex={viewingAttachmentIndex}
-        onClose={() => setViewingAttachmentIndex(null)}
-        onNavigate={setViewingAttachmentIndex}
-      />
+      )}
     </div>
   );
 }

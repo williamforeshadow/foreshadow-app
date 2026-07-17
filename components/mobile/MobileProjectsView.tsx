@@ -5,20 +5,21 @@ import { toast } from '@/components/ui/toast';
 import { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, type SetStateAction } from 'react';
 import { createPortal } from 'react-dom';
 import MobileBinPicker from '@/components/mobile/MobileBinPicker';
-import MobileProjectDetail from '@/components/mobile/MobileProjectDetail';
+import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
+import { projectToTaskInput, type TaskDetailInput, type TaskDraft } from '@/components/tasks/detail/taskInput';
+import type { TaskCreatePayload } from '@/components/tasks/detail/useTaskDetailController';
 import { ProjectsKanban } from '@/components/windows/projects/ProjectsKanban';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
 import { useTaskBinGlobalView } from '@/lib/hooks/useTaskBinGlobalView';
 import { useAuth } from '@/lib/authContext';
 import { useDepartments } from '@/lib/departmentsContext';
-import { useProperties, useTaskTemplates, ensureTemplateDetail, fetchJson, qk } from '@/lib/queries';
+import { useProperties, fetchJson, qk } from '@/lib/queries';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { STATUS_ORDER, STATUS_LABELS, PRIORITY_ORDER, PRIORITY_LABELS } from '@/lib/types';
 import type { ProjectViewMode } from '@/lib/types';
 import { ColumnPicker } from '@/components/windows/projects/ColumnPicker';
 import type { Project, User } from '@/lib/types';
-import type { Template } from '@/components/DynamicCleaningForm';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
 import type { FilterOption } from '@/components/tasks/TaskFilterBar';
@@ -33,6 +34,86 @@ type Screen =
   | { type: 'detail'; project: Project; binId: string | null; binName: string };
 
 const EMPTY_PROJECTS: Project[] = [];
+
+// ============================================================================
+// TaskDetailPanel adapters — the panel speaks TaskDetailInput/TaskDraft;
+// this view's screen/kanban state speaks Project. These convert both ways
+// so the draft Project living in `screen.project` stays the source of truth.
+// ============================================================================
+
+function projectToDraft(project: Project): TaskDraft {
+  return {
+    title: project.title || '',
+    description: project.description ?? null,
+    priority: project.priority || 'medium',
+    status: project.status || 'not_started',
+    department_id: project.department_id || null,
+    scheduled_date: project.scheduled_date || null,
+    scheduled_time: project.scheduled_time || null,
+    assigned_staff: (project.project_assignments ?? []).map((a) => a.user_id),
+    property_id: project.property_id ?? null,
+    property_name: project.property_name ?? null,
+    template_id: project.template_id ?? null,
+    template_name: project.template_name ?? null,
+    bin_id: project.bin_id ?? null,
+  };
+}
+
+function applyDraftToProject(project: Project, draft: TaskDraft): Project {
+  return {
+    ...project,
+    title: draft.title,
+    description: draft.description as Project['description'],
+    priority: draft.priority as Project['priority'],
+    status: draft.status as Project['status'],
+    department_id: draft.department_id,
+    scheduled_date: draft.scheduled_date,
+    scheduled_time: draft.scheduled_time,
+    property_id: draft.property_id,
+    property_name: draft.property_name,
+    template_id: draft.template_id,
+    template_name: draft.template_name,
+    bin_id: draft.bin_id,
+    project_assignments: draft.assigned_staff.map((id) => ({ user_id: id })),
+  };
+}
+
+// Fold a saved TaskDetailInput row back into the Project shape the kanban
+// cache + screen state use. `prev` supplies fields the panel doesn't surface
+// (e.g. anything only ever set by the list fetch).
+function taskInputToProject(row: TaskDetailInput, prev: Project): Project {
+  const next: Project = {
+    ...prev,
+    id: row.task_id,
+    property_id: row.property_id,
+    property_name: row.property_name,
+    bin_id: row.bin_id,
+    is_binned: row.is_binned,
+    template_id: row.template_id,
+    template_name: row.template_name,
+    title: row.title || row.template_name || 'Task',
+    description: (row.description as Project['description']) ?? null,
+    status: row.status as Project['status'],
+    priority: row.priority as Project['priority'],
+    department_id: row.department_id,
+    department_name: row.department_name,
+    scheduled_date: row.scheduled_date,
+    scheduled_time: row.scheduled_time,
+    reservation_id: row.reservation_id,
+    form_metadata: (row.form_metadata as Record<string, unknown>) ?? undefined,
+    project_assignments: row.assigned_users.map((u) => ({
+      user_id: u.user_id,
+      user: { id: u.user_id, name: u.name, avatar: u.avatar ?? undefined, role: u.role },
+    })),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+  return {
+    ...next,
+    bin_name: row.bin_name,
+    unread_comment_count: row.unread_comment_count,
+  } as Project;
+}
 
 interface MobileProjectsViewProps {
   users: User[];
@@ -178,15 +259,9 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
   const [viewMode, setViewMode] = useState<ProjectViewMode>('status');
   const [kanbanSelectionMode, setKanbanSelectionMode] = useState(false);
 
-  // Template state — lazy: only fetch once a task detail screen is open.
-  const { templates: availableTemplates } = useTaskTemplates({
-    enabled: screen.type === 'detail',
-  });
-  const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
-  const [loadingTemplate, setLoadingTemplate] = useState(false);
-
-  // Draft task state — local-only project not yet persisted
-  const [draftTask, setDraftTask] = useState<Project | null>(null);
+  // Draft (new-task) creation is in-flight while the panel's Create action
+  // awaits the POST. TaskDetailPanel owns everything else about the draft —
+  // it lives entirely in screen.project until confirmed.
   const [creatingTask, setCreatingTask] = useState(false);
 
   // Task Bin "Global" toggle. Mirrors ProjectsWindow desktop: when ON inside
@@ -295,67 +370,6 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
       0 ||
     !!scheduledDateRange.from ||
     !!scheduledDateRange.to;
-
-  const fetchTaskTemplate = useCallback(async (templateId: string, propertyName?: string | null) => {
-    const cacheKey = propertyName ? `${templateId}__${propertyName}` : templateId;
-    if (taskTemplates[cacheKey]) return;
-    setLoadingTemplate(true);
-    try {
-      const template = await ensureTemplateDetail(queryClient, templateId, propertyName);
-      setTaskTemplates(prev => ({ ...prev, [cacheKey]: template }));
-    } catch {
-    } finally {
-      setLoadingTemplate(false);
-    }
-  }, [taskTemplates, queryClient]);
-
-  const detailProject = screen.type === 'detail' ? screen.project : null;
-
-  const detailTemplate = useMemo((): Template | null => {
-    if (!detailProject?.template_id) return null;
-    const templateId = detailProject.template_id;
-    const cacheKey = detailProject.property_name
-      ? `${templateId}__${detailProject.property_name}`
-      : templateId;
-    return taskTemplates[cacheKey] || taskTemplates[templateId] || null;
-  }, [detailProject, taskTemplates]);
-
-  useEffect(() => {
-    if (detailProject?.template_id) {
-      fetchTaskTemplate(detailProject.template_id, detailProject.property_name);
-    }
-  }, [detailProject?.id]);
-
-  const handleTemplateChange = useCallback(async (templateId: string | null) => {
-    if (!detailProject) return;
-    const res = await apiFetch(`/api/tasks-for-bin/${detailProject.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ template_id: templateId }),
-    });
-    const result = await res.json();
-    if (result.data) {
-      setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
-      patchTasks(prev => prev.map(t => t.id === detailProject.id ? result.data : t));
-      if (templateId) {
-        await fetchTaskTemplate(templateId, result.data.property_name);
-      }
-    }
-  }, [detailProject, fetchTaskTemplate, patchTasks]);
-
-  const handleSaveForm = useCallback(async (formData: Record<string, unknown>) => {
-    if (!detailProject) return;
-    await fetch('/api/save-task-form', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ task_id: detailProject.id, form_metadata: formData }),
-    });
-    setScreen(prev => prev.type === 'detail' ? {
-      ...prev,
-      project: { ...prev.project, form_metadata: formData },
-    } : prev);
-    patchTasks(prev => prev.map(t => t.id === detailProject.id ? { ...t, form_metadata: formData } : t));
-  }, [detailProject, patchTasks]);
 
   // Column visibility for the kanban
   const activeBinId = screen.type !== 'bins' ? (screen as any).binId : null;
@@ -541,8 +555,6 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
 
   const goBack = useCallback(() => {
     if (screen.type === 'detail') {
-      setDraftTask(null);
-      draftFieldsRef.current = null;
       // Detail edits already patched the bin's live cache — no refetch needed.
       setScreen({ type: 'kanban', binId: screen.binId, binName: screen.binName });
     } else if (screen.type === 'kanban') {
@@ -619,54 +631,43 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
       updated_at: new Date().toISOString(),
     };
     closeGlobals();
-    setDraftTask(draft);
     setScreen({ type: 'detail', project: draft, binId: screen.binId, binName: screen.binName });
   }, [screen, closeGlobals]);
 
-  const draftFieldsRef = useRef<any>(null);
-  const draftTaskRef = useRef<Project | null>(null);
-  draftTaskRef.current = draftTask;
-
-  const handleDraftSave = useCallback(async (_projectId: string, fields: any) => {
-    draftFieldsRef.current = fields;
-    return null;
-  }, []);
-
-  const handleConfirmCreateTask = useCallback(async (latestFields?: any) => {
-    const currentDraft = draftTaskRef.current;
-    if (!currentDraft) return;
+  // TaskDetailPanel's Create action hands back the fully-formed payload
+  // (fields + the property/template/bin locked in at draft time) — no need
+  // to track pending field edits ourselves.
+  const handleConfirmCreateTask = useCallback(async (payload: TaskCreatePayload) => {
     setCreatingTask(true);
     try {
-      const fields = latestFields || draftFieldsRef.current;
-      const payload: Record<string, unknown> = {
-        title: fields?.title || currentDraft.title || 'New Task',
-        status: fields?.status || 'not_started',
-        priority: fields?.priority || 'medium',
+      const body: Record<string, unknown> = {
+        title: payload.fields.title || 'New Task',
+        status: payload.fields.status || 'not_started',
+        priority: payload.fields.priority || 'medium',
         is_binned: true,
-        description: fields?.description || null,
-        department_id: fields?.department_id || null,
-        scheduled_date: fields?.scheduled_date || null,
-        scheduled_time: fields?.scheduled_time || null,
+        description: payload.fields.description || null,
+        department_id: payload.fields.department_id || null,
+        scheduled_date: payload.fields.scheduled_date || null,
+        scheduled_time: payload.fields.scheduled_time || null,
       };
-      if (currentDraft.bin_id) payload.bin_id = currentDraft.bin_id;
-      if (currentDraft.property_name) payload.property_name = currentDraft.property_name;
-      if (currentDraft.template_id) payload.template_id = currentDraft.template_id;
-      if (fields?.assigned_staff?.length) payload.assigned_user_ids = fields.assigned_staff;
+      if (payload.bin_id) body.bin_id = payload.bin_id;
+      if (payload.property_name) body.property_name = payload.property_name;
+      if (payload.template_id) body.template_id = payload.template_id;
+      if (payload.fields.assigned_staff?.length) body.assigned_user_ids = payload.fields.assigned_staff;
 
       const res = await fetch('/api/tasks-for-bin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       });
       const result = await res.json();
       if (result.data) {
         patchTasks(prev => [...prev, result.data]);
         invalidateAllBinLists();
-        setDraftTask(null);
-        draftFieldsRef.current = null;
-        if (screen.type === 'detail') {
-          setScreen({ type: 'detail', project: result.data, binId: screen.binId, binName: screen.binName });
-        }
+        setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
+      } else {
+        console.error('Create failed:', result.error);
+        toast.error(result.error || 'Failed to create task');
       }
     } catch (err) {
       console.error('Error creating task:', err);
@@ -674,53 +675,7 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
     } finally {
       setCreatingTask(false);
     }
-  }, [screen, patchTasks, invalidateAllBinLists]);
-
-  const handleDeleteTask = useCallback(async (task: Project) => {
-    try {
-      const res = await apiFetch(`/api/tasks-for-bin/${task.id}`, { method: 'DELETE' });
-      if (res.ok) {
-        patchTasks(prev => prev.filter(t => t.id !== task.id));
-        invalidateAllBinLists();
-        if (screen.type === 'detail') {
-          setScreen({ type: 'kanban', binId: screen.binId, binName: screen.binName });
-        }
-      }
-    } catch (err) {
-      console.error('Error deleting task:', err);
-      toast.error('Failed to delete task');
-    }
-  }, [screen, patchTasks, invalidateAllBinLists]);
-
-  const handleSaveProject = useCallback(async (projectId: string, fields: any) => {
-    try {
-      const payload: Record<string, unknown> = {};
-      if (fields.title !== undefined) payload.title = fields.title;
-      if (fields.description !== undefined) payload.description = fields.description || null;
-      if (fields.status !== undefined) payload.status = fields.status;
-      if (fields.priority !== undefined) payload.priority = fields.priority;
-      if (fields.assigned_staff !== undefined) payload.assigned_user_ids = fields.assigned_staff || [];
-      if (fields.department_id !== undefined) payload.department_id = fields.department_id || null;
-      if (fields.scheduled_date !== undefined) payload.scheduled_date = fields.scheduled_date || null;
-      if (fields.scheduled_time !== undefined) payload.scheduled_time = fields.scheduled_time || null;
-
-      const res = await apiFetch(`/api/tasks-for-bin/${projectId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const result = await res.json();
-      if (result.data) {
-        setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
-        patchTasks(prev => prev.map(t => t.id === projectId ? result.data : t));
-        return result.data;
-      }
-    } catch (err) {
-      console.error('Error saving task:', err);
-      toast.error('Failed to save task');
-    }
-    return null;
-  }, [patchTasks]);
+  }, [patchTasks, invalidateAllBinLists]);
 
   const getUnreadCommentCount = useCallback((project: Project): number => {
     return (project as any).unread_comment_count || 0;
@@ -929,88 +884,27 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
       {screen.type === 'detail' && (() => {
         const isDraft = screen.project.id.startsWith('draft-');
         return (
-          <MobileProjectDetail
-            project={screen.project}
-            users={users}
+          <TaskDetailPanel
+            task={isDraft ? null : projectToTaskInput(screen.project, users)}
+            draft={isDraft ? projectToDraft(screen.project) : undefined}
             onClose={goBack}
-            onSave={isDraft ? handleDraftSave : handleSaveProject}
-            onDelete={isDraft ? undefined : handleDeleteTask}
-            allProperties={allProperties}
-            isNewTask={isDraft}
+            onSaved={(row) => {
+              patchTasks(prev => prev.map(t => t.id === row.task_id ? taskInputToProject(row, t) : t));
+              setScreen(prev => prev.type === 'detail' ? { ...prev, project: taskInputToProject(row, prev.project) } : prev);
+            }}
+            onDeleted={(taskId) => {
+              patchTasks(prev => prev.filter(t => t.id !== taskId));
+              invalidateAllBinLists();
+              goBack();
+            }}
             onConfirmCreate={isDraft ? handleConfirmCreateTask : undefined}
-            creatingTask={creatingTask}
-            onPropertyChange={isDraft
-              ? (_propertyId, propertyName) => {
-                  const updated = { ...screen.project, property_name: propertyName };
+            creating={creatingTask}
+            onDraftChange={isDraft
+              ? (nextDraft) => {
+                  const updated = applyDraftToProject(screen.project, nextDraft);
                   setScreen(prev => prev.type === 'detail' ? { ...prev, project: updated } : prev);
-                  setDraftTask(updated);
                 }
-              : async (propertyId, propertyName) => {
-                  const res = await apiFetch(`/api/tasks-for-bin/${screen.project.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ property_name: propertyName || null }),
-                  });
-                  const result = await res.json();
-                  if (result.data) {
-                    setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
-                    patchTasks(prev => prev.map(t => t.id === screen.project.id ? result.data : t));
-                  }
-                }
-            }
-            bins={binsHook.bins}
-            onBinChange={async (binId) => {
-              if (isDraft) return;
-              const res = await apiFetch(`/api/tasks-for-bin/${screen.project.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ bin_id: binId || null }),
-              });
-              const result = await res.json();
-              if (result.data) {
-                setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
-                patchTasks(prev => prev.map(t => t.id === screen.project.id ? result.data : t));
-                invalidateAllBinLists();
-              }
-              binsHook.fetchBins();
-            }}
-            onIsBinnedChange={async (isBinned) => {
-              if (isDraft) return;
-              const payload: Record<string, unknown> = { is_binned: isBinned };
-              if (!isBinned) payload.bin_id = null;
-              const res = await apiFetch(`/api/tasks-for-bin/${screen.project.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-              });
-              const result = await res.json();
-              if (result.data) {
-                if (!isBinned) {
-                  // Dismissed from bin — drop from this bin view and return to the board.
-                  const dismissedId = screen.project.id;
-                  patchTasks(prev => prev.filter(t => t.id !== dismissedId));
-                  goBack();
-                } else {
-                  setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
-                  patchTasks(prev => prev.map(t => t.id === screen.project.id ? result.data : t));
-                }
-                invalidateAllBinLists();
-              }
-              binsHook.fetchBins();
-            }}
-            template={detailTemplate}
-            formMetadata={screen.project.form_metadata as Record<string, unknown> | undefined}
-            onSaveForm={handleSaveForm}
-            loadingTemplate={loadingTemplate}
-            availableTemplates={availableTemplates}
-            onTemplateChange={isDraft
-              ? (templateId) => {
-                  const tmpl = availableTemplates.find(t => t.id === templateId);
-                  const updated = { ...screen.project, template_id: templateId, template_name: tmpl?.name || null };
-                  setScreen(prev => prev.type === 'detail' ? { ...prev, project: updated } : prev);
-                  setDraftTask(updated);
-                }
-              : handleTemplateChange
+              : undefined
             }
           />
         );

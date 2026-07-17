@@ -6,28 +6,15 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useAuth } from '@/lib/authContext';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
-import { useProjectComments } from '@/lib/hooks/useProjectComments';
-import { useProjectAttachments } from '@/lib/hooks/useProjectAttachments';
-import { useProjectTimeTracking } from '@/lib/hooks/useProjectTimeTracking';
-import { useProjectBins } from '@/lib/hooks/useProjectBins';
-import type {
-  Project,
-  ProjectFormFields,
-  User,
-} from '@/lib/types';
-import type { Template } from '@/components/DynamicCleaningForm';
-import {
-  ProjectDetailPanel,
-  AttachmentLightbox,
-} from '@/components/windows/projects';
-import MobileProjectDetail from '@/components/mobile/MobileProjectDetail';
+import { toast } from '@/components/ui/toast';
+import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
+import { emptyDraft, type TaskDetailInput, type TaskDraft } from '@/components/tasks/detail/taskInput';
+import type { TaskCreatePayload } from '@/components/tasks/detail/useTaskDetailController';
 import { TaskRow, TaskListHeader, type TaskRowItem } from '@/components/tasks/TaskRow';
 import { MobileTaskRow } from '@/components/tasks/MobileTaskRow';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -42,8 +29,8 @@ import {
   ORIGIN_AUTOMATED,
 } from '@/components/tasks/TaskFilterBar';
 import { taskPath } from '@/src/lib/links';
-import { ensureTemplateDetail, fetchJson, qk, useProperties, useTaskTemplates } from '@/lib/queries';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchJson, qk } from '@/lib/queries';
+import { useQuery } from '@tanstack/react-query';
 
 // Property Tasks ledger — shows every task ever linked to the property.
 // Curation is done by the user via filter + sort, not by the component. The
@@ -92,6 +79,39 @@ interface RawTask {
     role: string;
   }[];
   comment_count: number;
+}
+
+// Adapt a ledger row (task_id-keyed) into the unified panel's input shape.
+// `raw.property_id`/`property_name` fall back to the view's own props since
+// this is a property-scoped page (every task here belongs to `propertyId`).
+function rawTaskToDetailInput(
+  raw: RawTask,
+  propertyId: string,
+  propertyName: string
+): TaskDetailInput {
+  return {
+    task_id: raw.task_id,
+    reservation_id: raw.reservation_id,
+    property_id: raw.property_id ?? propertyId,
+    property_name: raw.property_name ?? propertyName,
+    template_id: raw.template_id,
+    template_name: raw.template_name,
+    title: raw.title,
+    description: raw.description,
+    priority: raw.priority,
+    department_id: raw.department_id,
+    department_name: raw.department_name,
+    status: raw.status,
+    scheduled_date: raw.scheduled_date,
+    scheduled_time: raw.scheduled_time,
+    form_metadata: raw.form_metadata,
+    bin_id: raw.bin_id,
+    bin_name: raw.bin_name,
+    is_binned: raw.is_binned,
+    created_at: raw.created_at,
+    updated_at: raw.updated_at,
+    assigned_users: raw.assigned_users,
+  };
 }
 
 interface UnifiedItem extends TaskRowItem {
@@ -158,17 +178,10 @@ function PropertyTasksViewContent({
   propertyId,
   propertyName,
 }: PropertyTasksViewProps) {
-  const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user: authUser, allUsers } = useAuth();
   const { departments: allDepts } = useDepartments();
   const isMobile = useIsMobile();
-
-  // The detail panel props type `User[]` from lib/types; AppUser is
-  // structurally compatible for the fields used. Cast once at the boundary.
-  const users = allUsers as unknown as User[];
-  const currentUser = authUser as unknown as User | null;
 
   // ---- Filter / sort state (URL-persisted) --------------------------------
 
@@ -259,31 +272,6 @@ function PropertyTasksViewContent({
   const fetchTasks = useCallback(async () => {
     await refetchTasks();
   }, [refetchTasks]);
-
-  // Supporting data for the detail panel (properties list, templates list).
-  const { properties: allProperties } = useProperties();
-  const { templates: availableTemplates } = useTaskTemplates();
-  const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
-  const [loadingTaskTemplate, setLoadingTaskTemplate] = useState<string | null>(null);
-
-  const fetchTaskTemplate = useCallback(
-    async (templateId: string, propName?: string) => {
-      const cacheKey = propName ? `${templateId}__${propName}` : templateId;
-      if (taskTemplates[cacheKey]) return taskTemplates[cacheKey];
-      setLoadingTaskTemplate(templateId);
-      try {
-        const template = await ensureTemplateDetail(queryClient, templateId, propName);
-        setTaskTemplates((prev) => ({ ...prev, [cacheKey]: template }));
-        return template;
-      } catch (err) {
-        console.error('Error fetching template:', err);
-      } finally {
-        setLoadingTaskTemplate(null);
-      }
-      return null;
-    },
-    [taskTemplates, queryClient]
-  );
 
   // ---- Derived: unified items, filter options ---------------------------
 
@@ -628,7 +616,7 @@ function PropertyTasksViewContent({
   // ---- Detail panel wiring (mirrors MyAssignmentsWindow pattern) ---------
 
   const [selectedItem, setSelectedItem] = useState<UnifiedItem | null>(null);
-  const [draftTask, setDraftTask] = useState<Project | null>(null);
+  const [draftTask, setDraftTask] = useState<TaskDraft | null>(null);
   const [creatingTask, setCreatingTask] = useState(false);
 
   // Strict single-panel rule (both directions):
@@ -641,323 +629,32 @@ function PropertyTasksViewContent({
     setDraftTask(null);
   });
 
-  const [editingFields, setEditingFields] = useState<ProjectFormFields | null>(null);
-  const editingFieldsRef = useRef<ProjectFormFields | null>(null);
-  const [staffOpen, setStaffOpen] = useState(false);
-  const [newComment, setNewComment] = useState('');
-  const [viewingAttachmentIndex, setViewingAttachmentIndex] = useState<number | null>(null);
-  const [savingEdit, setSavingEdit] = useState(false);
-
-  const commentsHook = useProjectComments({ currentUser });
-  const attachmentsHook = useProjectAttachments({ currentUser });
-  const timeTrackingHook = useProjectTimeTracking({ currentUser });
-  const binsHook = useProjectBins({ currentUser });
-
-  useEffect(() => {
-    editingFieldsRef.current = editingFields;
-  }, [editingFields]);
-
-  const updateSelectedRaw = useCallback(
-    (patch: Record<string, unknown>) => {
-      setSelectedItem((prev) => {
-        if (!prev) return prev;
-        return { ...prev, raw: { ...prev.raw, ...patch } };
-      });
-    },
-    []
-  );
-
-  // Seed editingFields when selection changes. Draft tasks seed from the draft
-  // Project shape; real tasks seed from raw.
-  useEffect(() => {
-    if (draftTask) {
-      setEditingFields({
-        title: draftTask.title || 'New Task',
-        description: draftTask.description || null,
-        status: draftTask.status || 'not_started',
-        priority: draftTask.priority || 'medium',
-        assigned_staff: [],
-        department_id: draftTask.department_id || '',
-        scheduled_date: draftTask.scheduled_date || '',
-        scheduled_time: draftTask.scheduled_time || '',
-      });
-      commentsHook.clearComments();
-      attachmentsHook.clearAttachments();
-      timeTrackingHook.clearTimeTracking();
-      return;
-    }
-    if (selectedItem) {
-      const raw = selectedItem.raw;
-      setEditingFields({
-        title: raw.title || raw.template_name || 'Task',
-        description: raw.description || null,
-        status: raw.status || 'not_started',
-        priority: raw.priority || 'medium',
-        assigned_staff: raw.assigned_users.map((u) => u.user_id),
-        department_id: raw.department_id || '',
-        scheduled_date: raw.scheduled_date || '',
-        scheduled_time: raw.scheduled_time || '',
-      });
-      const taskId = raw.task_id;
-      commentsHook.fetchProjectComments(taskId, 'task');
-      attachmentsHook.fetchProjectAttachments(taskId, 'task');
-      timeTrackingHook.fetchProjectTimeEntries(taskId, 'task');
-      if (raw.template_id) {
-        fetchTaskTemplate(raw.template_id, raw.property_name || undefined);
-      }
-    } else {
-      setEditingFields(null);
-      setStaffOpen(false);
-      setNewComment('');
-      commentsHook.clearComments();
-      attachmentsHook.clearAttachments();
-      timeTrackingHook.clearTimeTracking();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedItem?.key, draftTask?.id]);
-
-  // ProjectDetailPanel passes fresh fields synchronously when toggling
-  // assignees (onSave(f)). Honor `directFields` so we don't read a stale
-  // ref, and fan the save out to the right endpoints — same pattern as
-  // TimelineWindow's handleSaveTaskEditFields:
-  //   /api/update-task-fields      title, description, priority, department_id
-  //   /api/update-task-action      status (server-side allow-list on the action)
-  //   /api/update-task-schedule    scheduled_date + scheduled_time
-  //   /api/update-task-assignment  assignees
-  // `/api/update-task-fields`'s server allow-list silently drops status /
-  // scheduled_date / scheduled_time, which is why sending those through it
-  // used to appear to update the row (optimistic patch) and then revert on
-  // reopen. All four endpoints can run in parallel — they touch different
-  // DB columns / tables.
-  const handleSaveFields = useCallback(
-    async (directFields?: ProjectFormFields) => {
-      if (!selectedItem) return;
-      const fields = directFields ?? editingFieldsRef.current;
-      if (!fields) return;
-      const raw = selectedItem.raw;
-      const taskId = raw.task_id;
-
-      const oldAssignees = raw.assigned_users
-        .map((u) => u.user_id)
-        .sort()
-        .join(',');
-      const newAssignees = (fields.assigned_staff || []).slice().sort().join(',');
-      const assigneesChanged = oldAssignees !== newAssignees;
-
-      // Plain-field diffs — allowed through /api/update-task-fields.
-      const fieldUpdates: Record<string, unknown> = {};
-      if (fields.title !== (raw.title || raw.template_name || 'Task'))
-        fieldUpdates.title = fields.title;
-      if (JSON.stringify(fields.description) !== JSON.stringify(raw.description || null))
-        fieldUpdates.description = fields.description;
-      if (fields.priority !== (raw.priority || 'medium'))
-        fieldUpdates.priority = fields.priority;
-      if (fields.department_id !== (raw.department_id || ''))
-        fieldUpdates.department_id = fields.department_id || null;
-
-      // Status has its own action endpoint so the server can validate the
-      // transition and keep a single write path across the app.
-      const oldStatus = raw.status || 'not_started';
-      const newStatus = fields.status || 'not_started';
-      const statusChanged = newStatus !== oldStatus;
-
-      // Schedule has its own endpoint; compare normalized empty strings.
-      const oldDate = raw.scheduled_date || '';
-      const oldTime = raw.scheduled_time || '';
-      const newDate = fields.scheduled_date || '';
-      const newTime = fields.scheduled_time || '';
-      const scheduleChanged = newDate !== oldDate || newTime !== oldTime;
-
-      const hasFieldChanges = Object.keys(fieldUpdates).length > 0;
-      if (!hasFieldChanges && !assigneesChanged && !statusChanged && !scheduleChanged)
-        return;
-
-      setSavingEdit(true);
-
-      // Optimistic local patches so the detail panel + list row reflect
-      // the change immediately, before any network round-trip.
-      if (hasFieldChanges) updateSelectedRaw(fieldUpdates);
-      if (statusChanged) updateSelectedRaw({ status: newStatus });
-      if (scheduleChanged)
-        updateSelectedRaw({
-          scheduled_date: newDate || null,
-          scheduled_time: newTime || null,
-        });
-      if (assigneesChanged) {
-        const nextAssignedUsers = (fields.assigned_staff || []).map((uid) => {
-          const u = users.find((x) => x.id === uid);
-          if (!u) {
-            const existing = raw.assigned_users.find((a) => a.user_id === uid);
-            return existing || { user_id: uid, name: '', avatar: null, role: '' };
-          }
-          return {
-            user_id: u.id,
-            name: u.name || '',
-            avatar: u.avatar || null,
-            role: u.role || '',
-          };
-        });
-        updateSelectedRaw({ assigned_users: nextAssignedUsers });
-      }
-
-      try {
-        const calls: Promise<Response>[] = [];
-        if (hasFieldChanges) {
-          calls.push(
-            apiFetch('/api/update-task-fields', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ taskId, fields: fieldUpdates }),
-            })
-          );
-        }
-        if (statusChanged) {
-          calls.push(
-            apiFetch('/api/update-task-action', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ taskId, action: newStatus }),
-            })
-          );
-        }
-        if (scheduleChanged) {
-          calls.push(
-            apiFetch('/api/update-task-schedule', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                taskId,
-                scheduledDate: newDate || null,
-                scheduledTime: newTime || null,
-              }),
-            })
-          );
-        }
-        if (assigneesChanged) {
-          calls.push(
-            apiFetch('/api/update-task-assignment', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                taskId,
-                userIds: fields.assigned_staff || [],
-              }),
-            })
-          );
-        }
-        await Promise.all(calls);
-        fetchTasks();
-      } catch (err) {
-        console.error('Error updating task fields:', err);
-      } finally {
-        setSavingEdit(false);
-      }
-    },
-    [selectedItem, fetchTasks, updateSelectedRaw, users]
-  );
-
-  const handleTemplateChange = useCallback(
-    async (templateId: string | null) => {
-      if (!selectedItem) return;
-      const taskId = selectedItem.raw.task_id;
-      const templateName = templateId
-        ? availableTemplates.find((t) => t.id === templateId)?.name || null
-        : null;
-      updateSelectedRaw({ template_id: templateId || null, template_name: templateName });
-      try {
-        await apiFetch('/api/update-task-fields', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ taskId, fields: { template_id: templateId || null } }),
-        });
-        if (templateId) {
-          fetchTaskTemplate(templateId, selectedItem.raw.property_name || undefined);
-        }
-        fetchTasks();
-      } catch (err) {
-        console.error('Error changing template:', err);
-      }
-    },
-    [selectedItem, availableTemplates, fetchTaskTemplate, fetchTasks, updateSelectedRaw]
-  );
-
-  const handlePropertyChange = useCallback(
-    async (_propertyId: string | null, propName: string | null) => {
-      if (!selectedItem) return;
-      const taskId = selectedItem.raw.task_id;
-      updateSelectedRaw({ property_name: propName || null });
-      try {
-        await apiFetch('/api/update-task-fields', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ taskId, fields: { property_name: propName || null } }),
-        });
-        fetchTasks();
-      } catch (err) {
-        console.error('Error updating property:', err);
-      }
-    },
-    [selectedItem, fetchTasks, updateSelectedRaw]
-  );
-
-  const handleSaveTaskForm = useCallback(
-    async (formData: Record<string, unknown>) => {
-      if (!selectedItem) return;
-      const taskId = selectedItem.raw.task_id;
-      try {
-        await fetch('/api/save-task-form', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ taskId, formData }),
-        });
-      } catch (err) {
-        console.error('Error saving form:', err);
-      }
-    },
-    [selectedItem]
-  );
-
-  const handleDeleteTask = useCallback(
-    async (task: Project) => {
-      try {
-        const res = await apiFetch(`/api/tasks-for-bin/${task.id}`, { method: 'DELETE' });
-        if (res.ok) {
-          setSelectedItem(null);
-          fetchTasks();
-        }
-      } catch (err) {
-        console.error('Error deleting task:', err);
-      }
-    },
-    [fetchTasks]
+  // Adapt the current selection into the unified panel's input shape. The
+  // panel is fully self-contained (comments/attachments/timers/templates/
+  // bins/saves all live inside it, keyed on task_id + updated_at), so no
+  // local mirroring of the row is needed here — `fetchTasks` (via the
+  // panel's own cache invalidation) keeps the list in sync.
+  const taskDetailInput: TaskDetailInput | null = useMemo(
+    () => (selectedItem ? rawTaskToDetailInput(selectedItem.raw, propertyId, propertyName) : null),
+    [selectedItem, propertyId, propertyName]
   );
 
   // ---- New task (draft → POST) -------------------------------------------
+  // This page is property-scoped, so the draft's property is locked to the
+  // view's own propertyId/propertyName from the start.
 
   const handleNewTask = useCallback((prefilledDate?: string) => {
-    const draft: Project = {
-      id: `draft-${Date.now()}`,
-      property_name: propertyName,
-      bin_id: null,
-      is_binned: false,
-      template_id: null,
-      template_name: null,
-      title: 'New Task',
-      description: null,
-      status: 'not_started' as Project['status'],
-      priority: 'medium' as Project['priority'],
-      department_id: null,
-      department_name: null,
-      scheduled_date: prefilledDate ?? null,
-      scheduled_time: null,
-      form_metadata: undefined,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
     closeGlobals();
     setSelectedItem(null);
-    setDraftTask(draft);
-  }, [propertyName, closeGlobals]);
+    setDraftTask(
+      emptyDraft({
+        title: 'New Task',
+        property_id: propertyId,
+        property_name: propertyName,
+        scheduled_date: prefilledDate ?? null,
+      })
+    );
+  }, [propertyId, propertyName, closeGlobals]);
 
   // The Schedule tab's DayDetailPanel deep-links "New task" here by pushing
   // `?newTaskDate=YYYY-MM-DD`. We pop the draft with that date pre-filled
@@ -977,91 +674,51 @@ function PropertyTasksViewContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams?.get('newTaskDate')]);
 
-  // Accept fields either from the ref (desktop ProjectDetailPanel flow) or
-  // directly from the caller (MobileProjectDetail passes fields to
-  // onConfirmCreate) so both surfaces can share the same create logic.
+  // Draft create — property is fixed (this page IS the property), so it's
+  // sourced from the view's own props rather than the (locked) draft fields.
   const handleConfirmCreateTask = useCallback(
-    async (directFields?: ProjectFormFields) => {
-      if (!draftTask) return;
+    async (payload: TaskCreatePayload) => {
       setCreatingTask(true);
       try {
-        const fields = directFields ?? editingFieldsRef.current;
-        const payload: Record<string, unknown> = {
-          title: fields?.title || draftTask.title || 'New Task',
-          status: fields?.status || 'not_started',
-          priority: fields?.priority || 'medium',
+        const body: Record<string, unknown> = {
+          title: payload.fields.title || 'New Task',
+          status: payload.fields.status || 'not_started',
+          priority: payload.fields.priority || 'medium',
           is_binned: false,
-          description: fields?.description || null,
-          department_id: fields?.department_id || null,
-          scheduled_date: fields?.scheduled_date || null,
-          scheduled_time: fields?.scheduled_time || null,
+          description: payload.fields.description ?? null,
+          department_id: payload.fields.department_id || null,
+          scheduled_date: payload.fields.scheduled_date || null,
+          scheduled_time: payload.fields.scheduled_time || null,
           property_id: propertyId,
           property_name: propertyName,
+          template_id: payload.template_id || null,
         };
-        if (fields?.assigned_staff?.length) payload.assigned_user_ids = fields.assigned_staff;
+        if (payload.fields.assigned_staff?.length) {
+          body.assigned_user_ids = payload.fields.assigned_staff;
+        }
 
-        const res = await fetch('/api/tasks-for-bin', {
+        const res = await apiFetch('/api/tasks-for-bin', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(body),
         });
-        const result = await res.json();
+        const result = await res.json().catch(() => ({}));
         if (result.data) {
           setDraftTask(null);
           await fetchTasks();
         } else {
           console.error('Create failed:', result.error);
+          toast.error(result?.error || "Couldn't create the task");
         }
       } catch (err) {
         console.error('Error creating task:', err);
+        toast.error("Couldn't create the task");
       } finally {
         setCreatingTask(false);
       }
     },
-    [draftTask, propertyId, propertyName, fetchTasks]
+    [propertyId, propertyName, fetchTasks]
   );
-
-  const handleDeleteDraft = useCallback(() => {
-    setDraftTask(null);
-  }, []);
-
-  // Convert the active selection (real task or draft) into the Project shape
-  // that ProjectDetailPanel expects.
-  const itemAsProject: Project | null = useMemo(() => {
-    if (draftTask) return draftTask;
-    if (!selectedItem) return null;
-    const raw = selectedItem.raw;
-    return {
-      id: raw.task_id,
-      property_id: raw.property_id || null,
-      property_name: raw.property_name || null,
-      bin_id: raw.bin_id || null,
-      is_binned: raw.is_binned,
-      template_id: raw.template_id || null,
-      template_name: raw.template_name || null,
-      title: raw.title || raw.template_name || 'Task',
-      description: raw.description || null,
-      status: (raw.status || 'not_started') as Project['status'],
-      priority: (raw.priority || 'medium') as Project['priority'],
-      department_id: raw.department_id || null,
-      department_name: raw.department_name || null,
-      scheduled_date: raw.scheduled_date || null,
-      scheduled_time: raw.scheduled_time || null,
-      reservation_id: raw.reservation_id || null,
-      form_metadata: raw.form_metadata || undefined,
-      project_assignments: raw.assigned_users.map((u) => ({
-        user_id: u.user_id,
-        user: {
-          id: u.user_id,
-          name: u.name,
-          avatar: u.avatar,
-          role: u.role,
-        } as any,
-      })),
-      created_at: raw.created_at || '',
-      updated_at: raw.updated_at || '',
-    } as Project;
-  }, [selectedItem, draftTask]);
 
   const openCount = useMemo(
     () => allItems.filter((i) => i.status !== 'complete').length,
@@ -1252,228 +909,41 @@ function PropertyTasksViewContent({
         </div>
       </div>
 
-      {/* Detail panel — desktop renders the shared ProjectDetailPanel as
-          an absolute right-1/3 overlay anchored to the outer /properties
-          column (so it spans from the viewport top past the property
-          header). Mobile renders MobileProjectDetail, which owns its own
-          `fixed inset-0` full-screen chrome. */}
-      {detailOpen && itemAsProject && editingFields && (() => {
-        const raw = selectedItem?.raw;
-        const resolvedTemplate = raw?.template_id
-          ? ((taskTemplates[`${raw.template_id}__${raw.property_name}`] as Template) ||
-              (taskTemplates[raw.template_id] as Template) ||
-              undefined)
-          : undefined;
-        const isDraft = draftTask != null;
-
-        if (isMobile) {
-          return (
-            <MobileProjectDetail
-              project={itemAsProject}
-              users={users}
-              onClose={() => {
-                setSelectedItem(null);
-                setDraftTask(null);
-              }}
-              onSave={async (_projectId, nextFields) => {
-                // Drafts shouldn't hit the server per keystroke — their
-                // state is captured on "Create Task". For existing tasks
-                // route through the shared handler so fields + assignment
-                // diffs go to the right endpoints.
-                if (isDraft) {
-                  setEditingFields(nextFields);
-                  return itemAsProject;
-                }
-                await handleSaveFields(nextFields);
-                return itemAsProject;
-              }}
-              onDelete={isDraft ? handleDeleteDraft : handleDeleteTask}
-              allProperties={allProperties}
-              onPropertyChange={isDraft
-                ? (_pid, name) => {
-                    setDraftTask((prev) =>
-                      prev ? { ...prev, property_name: name } : prev
-                    );
+      {/* Detail panel — the unified TaskDetailPanel is fully self-contained
+          (comments/attachments/timers/templates/bins/saves all live inside
+          it). Mobile self-renders `fixed inset-0`; desktop renders as a
+          floating card filling the absolute right-1/3 host slot anchored to
+          the outer /properties column. */}
+      {detailOpen && (() => {
+        const panel = (
+          <TaskDetailPanel
+            task={taskDetailInput}
+            onClose={() => {
+              setSelectedItem(null);
+              setDraftTask(null);
+            }}
+            onOpenInPage={
+              taskDetailInput
+                ? () => {
+                    const id = taskDetailInput.task_id;
+                    setSelectedItem(null);
+                    setDraftTask(null);
+                    router.push(taskPath(id));
                   }
-                : handlePropertyChange}
-              bins={binsHook.bins}
-              onBinChange={async (binId) => {
-                if (!selectedItem) return;
-                const taskId = selectedItem.raw.task_id;
-                updateSelectedRaw({ bin_id: binId || null });
-                try {
-                  await apiFetch('/api/update-task-fields', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      taskId,
-                      fields: { bin_id: binId || null },
-                    }),
-                  });
-                  binsHook.fetchBins();
-                  fetchTasks();
-                } catch (err) {
-                  console.error('Error updating bin:', err);
-                }
-              }}
-              onIsBinnedChange={async (isBinned) => {
-                if (!selectedItem) return;
-                const taskId = selectedItem.raw.task_id;
-                const patch: Record<string, unknown> = { is_binned: isBinned };
-                if (!isBinned) patch.bin_id = null;
-                updateSelectedRaw(patch);
-                try {
-                  const fields: Record<string, unknown> = { is_binned: isBinned };
-                  if (!isBinned) fields.bin_id = null;
-                  await apiFetch('/api/update-task-fields', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ taskId, fields }),
-                  });
-                  binsHook.fetchBins();
-                  fetchTasks();
-                } catch (err) {
-                  console.error('Error updating is_binned:', err);
-                }
-              }}
-              template={resolvedTemplate ?? null}
-              formMetadata={raw?.form_metadata ?? undefined}
-              onSaveForm={handleSaveTaskForm}
-              loadingTemplate={
-                !!raw?.template_id && loadingTaskTemplate === raw.template_id
-              }
-              availableTemplates={availableTemplates}
-              onTemplateChange={handleTemplateChange}
-              isNewTask={isDraft}
-              onConfirmCreate={
-                isDraft
-                  ? (fields) => handleConfirmCreateTask(fields)
-                  : undefined
-              }
-              creatingTask={creatingTask}
-            />
-          );
-        }
-
-        return (
-          <div className={DESKTOP_DETAIL_PANEL_FLEX}>
-            <ProjectDetailPanel
-              project={itemAsProject}
-              editingFields={editingFields}
-              setEditingFields={setEditingFields}
-              users={users}
-              allProperties={allProperties}
-              savingEdit={savingEdit}
-              onSave={handleSaveFields}
-              onDelete={isDraft ? handleDeleteDraft : handleDeleteTask}
-              onClose={() => {
-                setSelectedItem(null);
-                setDraftTask(null);
-              }}
-              onOpenInPage={
-                !isDraft && itemAsProject
-                  ? () => {
-                      const id = itemAsProject.id;
-                      setSelectedItem(null);
-                      setDraftTask(null);
-                      router.push(taskPath(id));
-                    }
-                  : undefined
-              }
-              onOpenActivity={() => {}}
-              isNewTask={isDraft}
-              onConfirmCreate={isDraft ? handleConfirmCreateTask : undefined}
-              creatingTask={creatingTask}
-              onPropertyChange={isDraft
-                ? (_pid, name) => {
-                    setDraftTask((prev) => (prev ? { ...prev, property_name: name } : prev));
-                  }
-                : handlePropertyChange}
-              staffOpen={staffOpen}
-              setStaffOpen={setStaffOpen}
-              template={resolvedTemplate}
-              formMetadata={raw?.form_metadata ?? undefined}
-              onSaveForm={handleSaveTaskForm}
-              loadingTemplate={!!raw?.template_id && loadingTaskTemplate === raw.template_id}
-              currentUser={currentUser}
-              comments={commentsHook.projectComments}
-              loadingComments={commentsHook.loadingComments}
-              newComment={newComment}
-              setNewComment={setNewComment}
-              postingComment={commentsHook.postingComment}
-              onPostComment={async () => {
-                if (raw && newComment.trim()) {
-                  await commentsHook.postProjectComment(raw.task_id, newComment, 'task');
-                  setNewComment('');
-                }
-              }}
-              attachments={attachmentsHook.projectAttachments}
-              loadingAttachments={attachmentsHook.loadingAttachments}
-              uploadingAttachment={attachmentsHook.uploadingAttachment}
-              attachmentInputRef={attachmentsHook.attachmentInputRef}
-              onAttachmentUpload={(e) => {
-                if (raw) {
-                  attachmentsHook.handleAttachmentUpload(e, raw.task_id, 'task');
-                }
-              }}
-              onViewAttachment={(index) => setViewingAttachmentIndex(index)}
-              activeTimeEntry={timeTrackingHook.activeTimeEntry}
-              displaySeconds={timeTrackingHook.displaySeconds}
-              formatTime={timeTrackingHook.formatTime}
-              onStartTimer={() => {
-                if (raw) timeTrackingHook.startProjectTimer(raw.task_id, 'task');
-              }}
-              onStopTimer={timeTrackingHook.stopProjectTimer}
-              availableTemplates={availableTemplates}
-              onTemplateChange={handleTemplateChange}
-              bins={binsHook.bins}
-              onBinChange={async (binId) => {
-                if (!selectedItem) return;
-                const taskId = selectedItem.raw.task_id;
-                updateSelectedRaw({ bin_id: binId || null });
-                try {
-                  await apiFetch('/api/update-task-fields', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ taskId, fields: { bin_id: binId || null } }),
-                  });
-                  binsHook.fetchBins();
-                  fetchTasks();
-                } catch (err) {
-                  console.error('Error updating bin:', err);
-                }
-              }}
-              onIsBinnedChange={async (isBinned) => {
-                if (!selectedItem) return;
-                const taskId = selectedItem.raw.task_id;
-                const patch: Record<string, unknown> = { is_binned: isBinned };
-                if (!isBinned) patch.bin_id = null;
-                updateSelectedRaw(patch);
-                try {
-                  const fields: Record<string, unknown> = { is_binned: isBinned };
-                  if (!isBinned) fields.bin_id = null;
-                  await apiFetch('/api/update-task-fields', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ taskId, fields }),
-                  });
-                  binsHook.fetchBins();
-                  fetchTasks();
-                } catch (err) {
-                  console.error('Error updating is_binned:', err);
-                }
-              }}
-            />
-          </div>
+                : undefined
+            }
+            onDeleted={() => setSelectedItem(null)}
+            draft={draftTask}
+            onDraftChange={setDraftTask}
+            onConfirmCreate={handleConfirmCreateTask}
+            creating={creatingTask}
+          />
         );
-      })()}
 
-      <AttachmentLightbox
-        attachments={attachmentsHook.projectAttachments}
-        viewingIndex={viewingAttachmentIndex}
-        onClose={() => setViewingAttachmentIndex(null)}
-        onNavigate={setViewingAttachmentIndex}
-      />
+        if (isMobile) return panel; // panel self-renders fixed inset-0
+
+        return <div className={DESKTOP_DETAIL_PANEL_FLEX}>{panel}</div>;
+      })()}
     </div>
   );
 }
