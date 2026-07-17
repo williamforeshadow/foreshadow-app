@@ -3,8 +3,8 @@
 import { apiFetch } from '@/lib/apiFetch';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
-import { ensureTemplateDetail } from '@/lib/queries';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ensureTemplateDetail, fetchJson, qk } from '@/lib/queries';
 import type {
   TaskStatus,
   AssignedUser,
@@ -351,6 +351,15 @@ interface UseTasksOptions {
   urlSync?: boolean;
 }
 
+type AllTasksData = { tasks: TaskRow[]; summary: TaskSummary | null };
+
+const EMPTY_TASKS: TaskRow[] = [];
+
+async function fetchAllTasksData(): Promise<AllTasksData> {
+  const result = await fetchJson<{ data?: TaskRow[]; summary?: TaskSummary }>('/api/all-tasks');
+  return { tasks: result.data ?? [], summary: result.summary ?? null };
+}
+
 export function useTasks(options: UseTasksOptions = {}) {
   const { urlSync = true } = options;
   const router = useRouter();
@@ -358,11 +367,17 @@ export function useTasks(options: UseTasksOptions = {}) {
   const queryClient = useQueryClient();
 
   // ---- Data ---------------------------------------------------------------
+  // Shared cache: mobile /tasks and the desktop Tasks window mount this hook
+  // independently but share one /api/all-tasks fetch and see each other's
+  // optimistic edits. Filters/sort/urlSync stay per-instance below.
 
-  const [tasks, setTasks] = useState<TaskRow[]>([]);
-  const [summary, setSummary] = useState<TaskSummary | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const query = useQuery({ queryKey: qk.allTasks, queryFn: fetchAllTasksData });
+  const tasks = query.data?.tasks ?? EMPTY_TASKS;
+  const summary = query.data?.summary ?? null;
+  const loading = query.isLoading;
+  const error = query.error
+    ? query.error.message || 'Failed to fetch tasks'
+    : null;
 
   // ---- Filters / sort (hydrated from URL → storage → defaults) ----------
 
@@ -424,26 +439,13 @@ export function useTasks(options: UseTasksOptions = {}) {
   }, [filters, sort, urlSync]);
 
   // ---- Fetch --------------------------------------------------------------
+  // The query owns the mount fetch; fetchTasks is the manual-reconcile shim
+  // (refetches keep existing rows visible while fresh data loads).
 
+  const { refetch: refetchTasks } = query;
   const fetchTasks = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/all-tasks');
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Failed to fetch tasks');
-      setTasks(result.data || []);
-      setSummary(result.summary || null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch tasks');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
+    await refetchTasks();
+  }, [refetchTasks]);
 
   // ---- Filter option lists (computed from full set so users can discover
   //      values even when they're filtered out) ----------------------------
@@ -701,14 +703,24 @@ export function useTasks(options: UseTasksOptions = {}) {
 
   const updateTaskInState = useCallback(
     (taskId: string, updates: Partial<TaskRow>) => {
-      setTasks((prev) =>
-        prev.map((t) => (t.task_id === taskId ? { ...t, ...updates } : t))
+      // cancelQueries protects the optimistic patch from an in-flight
+      // background refetch landing after it with pre-mutation data.
+      queryClient.cancelQueries({ queryKey: qk.allTasks });
+      queryClient.setQueryData<AllTasksData>(qk.allTasks, (old) =>
+        old
+          ? {
+              ...old,
+              tasks: old.tasks.map((t) =>
+                t.task_id === taskId ? { ...t, ...updates } : t
+              ),
+            }
+          : old
       );
       setSelectedTask((prev) =>
         prev?.task_id === taskId ? { ...prev, ...updates } : prev
       );
     },
-    []
+    [queryClient]
   );
 
   // Fan-out save mirroring PropertyTasksView / MyAssignmentsWindow:
