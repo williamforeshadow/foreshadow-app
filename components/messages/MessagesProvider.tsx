@@ -4,16 +4,18 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
 } from 'react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ConversationRow,
   ConversationCounts,
   ConversationTab,
 } from '@/lib/conversations';
 import type { DateRange } from '@/components/tasks/TaskFilterBar';
+import { qk } from '@/lib/queries/keys';
+import { fetchJson } from '@/lib/queries/fetchJson';
 
 export type ConversationSort = 'newest' | 'oldest';
 
@@ -60,6 +62,9 @@ interface MessagesContextValue {
 
 const MessagesContext = createContext<MessagesContextValue | null>(null);
 
+const EMPTY_CONVERSATIONS: ConversationRow[] = [];
+const DEFAULT_COUNTS: ConversationCounts = { active: 0, complete: 0, unread: 0 };
+
 function inRange(value: string | null, range: DateRange): boolean {
   if (!range.from && !range.to) return true;
   if (!value) return false;
@@ -76,34 +81,28 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [filters, setFilters] = useState<MessagesFilters>(emptyFilters);
 
-  const [conversations, setConversations] = useState<ConversationRow[]>([]);
-  const [counts, setCounts] = useState<ConversationCounts>({
-    active: 0,
-    complete: 0,
-    unread: 0,
+  const queryClient = useQueryClient();
+  // Server does the tab filtering + sorting, so both are part of the key.
+  // keepPreviousData keeps the old list on screen across tab/sort switches
+  // (matches the old load(), which never emptied the list mid-fetch).
+  const listQuery = useQuery({
+    queryKey: qk.conversations(tab, sort),
+    queryFn: () =>
+      fetchJson<{ conversations?: ConversationRow[]; counts?: ConversationCounts }>(
+        `/api/messages?tab=${tab}&sort=${sort}`
+      ),
+    refetchInterval: 60_000,
+    placeholderData: keepPreviousData,
   });
-  const [loading, setLoading] = useState(false);
+  const conversations = listQuery.data?.conversations ?? EMPTY_CONVERSATIONS;
+  const counts = listQuery.data?.counts ?? DEFAULT_COUNTS;
+  const loading = listQuery.isLoading;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/messages?tab=${tab}&sort=${sort}`, {
-        cache: 'no-store',
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      setConversations(data.conversations ?? []);
-      setCounts(data.counts ?? { active: 0, complete: 0, unread: 0 });
-    } finally {
-      setLoading(false);
-    }
-  }, [tab, sort]);
-
-  useEffect(() => {
-    load();
-    const id = window.setInterval(load, 60000);
-    return () => window.clearInterval(id);
-  }, [load]);
+  // Refresh every tab/sort combination — a mark-read or status change in one
+  // thread affects the unread count on all tabs.
+  const load = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['conversations'] });
+  }, [queryClient]);
 
   const setFilter = useCallback(
     <K extends keyof MessagesFilters>(key: K, value: MessagesFilters[K]) => {

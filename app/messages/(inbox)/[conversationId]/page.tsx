@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { qk } from '@/lib/queries/keys';
+import { fetchJson } from '@/lib/queries/fetchJson';
 import { CheckCircle2, RotateCcw, Mail, PanelTopOpen } from 'lucide-react';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { Button } from '@/components/ui/button';
@@ -20,6 +23,18 @@ import type { ConversationRow } from '@/lib/conversations';
 import type { GuestMessageRecord } from '@/lib/messages';
 import { taskPath } from '@/src/lib/links';
 
+type ThreadData = {
+  conversation?: ConversationRow;
+  messages: GuestMessageRecord[];
+  proposedTasks: ProposedTaskData[];
+  proposedKnowledge: ProposedKnowledgeData[];
+  replyProposalEnabled: boolean;
+};
+
+const EMPTY_MESSAGES: GuestMessageRecord[] = [];
+const EMPTY_PROPOSED_TASKS: ProposedTaskData[] = [];
+const EMPTY_PROPOSED_KNOWLEDGE: ProposedKnowledgeData[] = [];
+
 // /messages/[conversationId] — one conversation (uuid). Fetches the thread, marks
 // it read on open, and exposes complete/reopen + mark-unread actions.
 export default function ConversationPage() {
@@ -32,15 +47,7 @@ export default function ConversationPage() {
   const idParam = Array.isArray(raw) ? raw[0] : raw;
   const conversationId = idParam ? decodeURIComponent(idParam) : '';
 
-  const [conversation, setConversation] = useState<ConversationRow | undefined>();
-  const [messages, setMessages] = useState<GuestMessageRecord[]>([]);
-  const [proposedTasks, setProposedTasks] = useState<ProposedTaskData[]>([]);
-  const [proposedKnowledge, setProposedKnowledge] = useState<ProposedKnowledgeData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  // The org's autonomous reply-drafting master switch, from the thread payload.
-  // Defaults to true so a stale/failed read never hides the proposal.
-  const [replyProposalEnabled, setReplyProposalEnabled] = useState(true);
+  const queryClient = useQueryClient();
   // The proposal whose task editor is open (in-layout right-side panel). Stays
   // open until the user closes it or opens another — not a click-away modal.
   const [editorProposal, setEditorProposal] = useState<ProposedTaskData | null>(null);
@@ -54,34 +61,47 @@ export default function ConversationPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectionSignal, setSelectionSignal] = useState(0);
 
+  // Cached thread — revisiting a conversation paints instantly from cache
+  // and refreshes in the background.
+  const threadQuery = useQuery({
+    queryKey: qk.conversation(conversationId),
+    enabled: !!conversationId,
+    queryFn: async (): Promise<ThreadData> => {
+      const data = await fetchJson<{
+        conversation?: ConversationRow;
+        messages?: GuestMessageRecord[];
+        proposed_tasks?: ProposedTaskData[];
+        proposed_knowledge?: ProposedKnowledgeData[];
+        reply_proposal_enabled?: boolean;
+      }>(`/api/messages/${conversationId}`);
+      return {
+        conversation: data.conversation ?? undefined,
+        messages: data.messages ?? [],
+        proposedTasks: data.proposed_tasks ?? [],
+        proposedKnowledge: data.proposed_knowledge ?? [],
+        // The org's autonomous reply-drafting master switch. Defaults to true
+        // so a stale/failed read never hides the proposal.
+        replyProposalEnabled: data.reply_proposal_enabled !== false,
+      };
+    },
+  });
+  const conversation = threadQuery.data?.conversation;
+  const messages = threadQuery.data?.messages ?? EMPTY_MESSAGES;
+  const proposedTasks = threadQuery.data?.proposedTasks ?? EMPTY_PROPOSED_TASKS;
+  const proposedKnowledge = threadQuery.data?.proposedKnowledge ?? EMPTY_PROPOSED_KNOWLEDGE;
+  const replyProposalEnabled = threadQuery.data?.replyProposalEnabled ?? true;
+  const loading = threadQuery.isLoading;
+  const error = threadQuery.isError;
+
+  // Kept under its old name — threaded through ~8 child callbacks as the
+  // "refetch the thread" trigger.
+  const { refetch: refetchThread } = threadQuery;
   const load = useCallback(async () => {
-    if (!conversationId) return;
-    setLoading(true);
-    setError(false);
-    try {
-      const res = await fetch(`/api/messages/${conversationId}`, { cache: 'no-store' });
-      if (!res.ok) {
-        setError(true);
-        return;
-      }
-      const data = await res.json();
-      setConversation(data.conversation ?? undefined);
-      setMessages(data.messages ?? []);
-      setProposedTasks((data.proposed_tasks as ProposedTaskData[] | undefined) ?? []);
-      setProposedKnowledge((data.proposed_knowledge as ProposedKnowledgeData[] | undefined) ?? []);
-      setReplyProposalEnabled(data.reply_proposal_enabled !== false);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [conversationId]);
+    await refetchThread();
+  }, [refetchThread]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  // Mark read on open.
+  // Mark read on open (optimistic cache patch so the effect doesn't re-fire
+  // after background refetches unless the server still says unread).
   useEffect(() => {
     if (conversation?.id && conversation.unread) {
       fetch(`/api/messages/${conversation.id}/status`, {
@@ -89,7 +109,12 @@ export default function ConversationPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ unread: false }),
       }).then(() => reload());
-      setConversation((c) => (c ? { ...c, unread: false } : c));
+      queryClient.cancelQueries({ queryKey: qk.conversation(conversationId) });
+      queryClient.setQueryData<ThreadData>(qk.conversation(conversationId), (old) =>
+        old?.conversation
+          ? { ...old, conversation: { ...old.conversation, unread: false } }
+          : old
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversation?.id]);
