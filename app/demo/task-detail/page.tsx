@@ -9,8 +9,19 @@ import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { qk } from '@/lib/queries';
 import type { Template } from '@/components/DynamicCleaningForm';
+import type { Department } from '@/lib/types';
+import { DepartmentsContext } from '@/lib/departmentsContext';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
 import { emptyDraft, type TaskDetailInput, type TaskDraft } from '@/components/tasks/detail/taskInput';
+
+// Mock departments (each with its own icon key) so the department pill + picker
+// are demonstrable offline — the real context fetches /api/departments.
+const DEMO_DEPARTMENTS: Department[] = [
+  { id: 'dept-clean', name: 'Housekeeping', icon: 'spray-can', created_at: '', updated_at: '' },
+  { id: 'dept-maint', name: 'Maintenance', icon: 'wrench', created_at: '', updated_at: '' },
+  { id: 'dept-inspect', name: 'Inspections', icon: 'clipboard-check', created_at: '', updated_at: '' },
+  { id: 'dept-land', name: 'Landscaping', icon: 'trees', created_at: '', updated_at: '' },
+];
 
 const DEMO_TEMPLATE: Template = {
   id: 'demo-template',
@@ -36,8 +47,8 @@ function baseTask(overrides: Partial<TaskDetailInput>): TaskDetailInput {
     title: 'Upload Turo PDFs to Slack messages',
     description: null,
     priority: 'medium',
-    department_id: null,
-    department_name: null,
+    department_id: 'dept-clean',
+    department_name: 'Housekeeping',
     status: 'in_progress',
     scheduled_date: '2026-07-17',
     scheduled_time: '14:00',
@@ -127,21 +138,30 @@ export default function TaskDetailDemoPage() {
         {/* Full-height positioned area; the panel self-centers a capped card
             inside it, exactly as the production DESKTOP_TASK_PANEL_SLOT does. */}
         <div className="relative h-full w-full sm:w-[44%]">
-          <TaskDetailPanel
-            key={fixture.key}
-            task={fixture.task}
-            demo
-            onClose={() => {}}
-            draft={fixture.key === 'draft' ? draft : null}
-            onDraftChange={setDraft}
-            creating={creating}
-            onConfirmCreate={async () => {
-              setCreating(true);
-              await new Promise((r) => setTimeout(r, 800));
-              setCreating(false);
+          <DepartmentsContext.Provider
+            value={{
+              departments: DEMO_DEPARTMENTS,
+              loading: false,
+              deptIconMap: Object.fromEntries(DEMO_DEPARTMENTS.map((d) => [d.id, d.icon])),
+              refreshDepartments: async () => {},
             }}
-            onOpenInPage={() => {}}
-          />
+          >
+            <TaskDetailPanel
+              key={fixture.key}
+              task={fixture.task}
+              demo
+              onClose={() => {}}
+              draft={fixture.key === 'draft' ? draft : null}
+              onDraftChange={setDraft}
+              creating={creating}
+              onConfirmCreate={async () => {
+                setCreating(true);
+                await new Promise((r) => setTimeout(r, 800));
+                setCreating(false);
+              }}
+              onOpenInPage={() => {}}
+            />
+          </DepartmentsContext.Provider>
         </div>
       </div>
     </div>

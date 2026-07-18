@@ -50,6 +50,7 @@ export interface TaskDraft {
   template_id: string | null;
   template_name: string | null;
   bin_id: string | null;
+  is_binned: boolean;
 }
 
 export function emptyDraft(partial: Partial<TaskDraft> = {}): TaskDraft {
@@ -67,6 +68,7 @@ export function emptyDraft(partial: Partial<TaskDraft> = {}): TaskDraft {
     template_id: null,
     template_name: null,
     bin_id: null,
+    is_binned: false,
     ...partial,
   };
 }

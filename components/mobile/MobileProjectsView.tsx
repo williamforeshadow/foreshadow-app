@@ -56,6 +56,7 @@ function projectToDraft(project: Project): TaskDraft {
     template_id: project.template_id ?? null,
     template_name: project.template_name ?? null,
     bin_id: project.bin_id ?? null,
+    is_binned: project.is_binned ?? false,
   };
 }
 

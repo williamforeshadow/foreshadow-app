@@ -435,9 +435,9 @@ export function useTaskDetailController({
 
   // ---- bin move (not part of ProjectFormFields — its own small PUT) --------
   const updateBin = useCallback(
-    async (binId: string | null) => {
+    async (binId: string | null, isBinned: boolean) => {
       if (isDraft) {
-        onDraftChange?.({ ...(draft ?? emptyDraft()), bin_id: binId });
+        onDraftChange?.({ ...(draft ?? emptyDraft()), bin_id: binId, is_binned: isBinned });
         return;
       }
       const current = rowRef.current;
@@ -446,12 +446,12 @@ export function useTaskDetailController({
         const res = await apiFetch(`/api/tasks-for-bin/${current.task_id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bin_id: binId, is_binned: true }),
+          body: JSON.stringify({ bin_id: binId, is_binned: isBinned }),
         });
         const result = await res.json().catch(() => ({}));
         if (!res.ok || !result.data) throw new Error(result?.error || 'Failed to move the task');
         const binName = binsHook.bins.find((b) => b.id === binId)?.name ?? null;
-        const adapted = { ...current, bin_id: binId, bin_name: binName };
+        const adapted = { ...current, bin_id: binId, bin_name: binName, is_binned: isBinned };
         lastSeedRef.current = `${adapted.task_id}:${(result.data as { updated_at?: string }).updated_at ?? adapted.updated_at}`;
         setRow(adapted);
         onSaved?.(adapted);

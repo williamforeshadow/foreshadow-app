@@ -124,6 +124,7 @@ function taskToDraft(task: Task): TaskDraft {
     template_id: task.template_id ?? null,
     template_name: task.template_name ?? null,
     bin_id: task.bin_id ?? null,
+    is_binned: task.is_binned ?? false,
   };
 }
 

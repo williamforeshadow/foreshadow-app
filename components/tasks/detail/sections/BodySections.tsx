@@ -5,6 +5,8 @@ import { useState } from 'react';
 import type { Department, ProjectBin, User } from '@/lib/types';
 import type { Attachment } from '@/lib/types';
 import { PRIORITY_LABELS, PRIORITY_ORDER } from '@/lib/types';
+import { PRIORITY_ICONS } from '@/lib/taskPriorityIcons';
+import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { toast } from '@/components/ui/toast';
 import { TaskScheduledDatePicker } from '@/components/windows/projects/TaskScheduledDatePicker';
 import { TaskScheduledTimePicker } from '@/components/windows/projects/TaskScheduledTimePicker';
@@ -103,15 +105,21 @@ const Chip = React.forwardRef<
     children: React.ReactNode;
     set: boolean;
     locked?: boolean;
+    /** Variable-length pills (bin, department) shrink + truncate to hold the
+     * one-row rule; fixed pills (status, date, priority) stay full width. */
+    flexible?: boolean;
+    /** Show the label even when unset (labeled meta rows, where the row's own
+     * label supplies context, unlike the icon-only pill row). */
+    forceLabel?: boolean;
   } & React.ButtonHTMLAttributes<HTMLButtonElement>
->(function Chip({ icon, children, set, locked, disabled, style, ...rest }, ref) {
+>(function Chip({ icon, children, set, locked, flexible, forceLabel, disabled, style, ...rest }, ref) {
   return (
     <button
       ref={ref}
       type="button"
       disabled={disabled}
       {...rest}
-      className="flex h-[30px] shrink-0 items-center gap-1.5 rounded-lg px-[11px] font-mono text-[11px] transition-transform active:scale-95 disabled:active:scale-100"
+      className={`flex h-[30px] ${flexible && set ? 'min-w-[3.5rem]' : 'shrink-0'} items-center gap-1.5 rounded-lg px-[11px] font-mono text-[11px] transition-transform active:scale-95 disabled:active:scale-100`}
       style={{
         background: set ? 'var(--task-surface-2)' : 'transparent',
         border: `1px ${set ? 'solid transparent' : 'dashed var(--task-line)'}`,
@@ -120,8 +128,12 @@ const Chip = React.forwardRef<
         ...style,
       }}
     >
-      {icon}
-      <span className="max-w-[220px] truncate">{children}</span>
+      <span className="shrink-0">{icon}</span>
+      {/* Unset pills collapse to the icon alone (dashed placeholder); only a
+          chosen value — or a labeled meta row — shows a label. */}
+      {(set || forceLabel) && (
+        <span className={flexible ? 'truncate' : 'max-w-[130px] truncate'}>{children}</span>
+      )}
       {locked && (
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" opacity={0.6}>
           <rect x="5" y="11" width="14" height="9" rx="2" />
@@ -145,17 +157,24 @@ const ICONS = {
       <path d="M3.5 10h17M8 3v4M16 3v4" />
     </svg>
   ),
-  spark: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 4l1.6 4.4L18 10l-4.4 1.6L12 16l-1.6-4.4L6 10l4.4-1.6z" />
-    </svg>
-  ),
   flag: (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M5 21V4m0 1h12l-2.5 4L17 13H5" />
     </svg>
   ),
 };
+
+// Renders a department's own icon (chosen on the Departments page). Kept as a
+// module-level component so it isn't recreated during render (e.g. inside the
+// options .map()).
+function DeptGlyph({ iconKey, size, muted }: { iconKey?: string | null; size: number; muted?: boolean }) {
+  return React.createElement(getDepartmentIcon(iconKey), {
+    size,
+    strokeWidth: 1.8,
+    style: { color: muted ? 'var(--task-ink-3)' : 'var(--task-ink-2)' },
+    'aria-hidden': true,
+  });
+}
 
 function formatScheduleChip(date: string, time: string): string | null {
   if (!date) return null;
@@ -171,18 +190,11 @@ function formatScheduleChip(date: string, time: string): string | null {
 export function ContextChips({
   isDraft,
   readOnly,
-  binId,
-  binName,
-  bins,
   scheduledDate,
   scheduledTime,
-  departmentId,
-  departments,
   priority,
   propertyId,
-  onBinChange,
   onScheduleChange,
-  onDepartmentChange,
   onPriorityChange,
   status,
   isTemplated,
@@ -191,18 +203,11 @@ export function ContextChips({
 }: {
   isDraft: boolean;
   readOnly?: boolean;
-  binId: string | null;
-  binName: string | null;
-  bins: ProjectBin[];
   scheduledDate: string;
   scheduledTime: string;
-  departmentId: string;
-  departments: Department[];
   priority: string;
   propertyId: string | null;
-  onBinChange: (binId: string | null) => void;
   onScheduleChange: (date: string, time: string) => void;
-  onDepartmentChange: (id: string) => void;
   onPriorityChange: (p: string) => void;
   /** Status pill (omitted in draft mode). */
   status?: string;
@@ -210,21 +215,18 @@ export function ContextChips({
   isContingent?: boolean;
   onSelectStatus?: (status: string) => void;
 }) {
-  const [binOpen, setBinOpen] = useState(false);
   const [schedOpen, setSchedOpen] = useState(false);
-  const [deptOpen, setDeptOpen] = useState(false);
   const [prioOpen, setPrioOpen] = useState(false);
 
-  const dept = departments.find((d) => d.id === departmentId);
   const schedLabel = formatScheduleChip(scheduledDate, scheduledTime);
-  const currentBinName = binName ?? bins.find((b) => b.id === binId)?.name ?? null;
+  const PriorityIcon = PRIORITY_ICONS[priority] ?? PRIORITY_ICONS.medium;
 
   const disabled = readOnly;
 
   return (
-    // Wraps to as many rows as needed — property + template pills removed
-    // (property is shown in the header; template can't change here).
-    <div className="flex flex-wrap gap-1.5">
+    // Status · schedule · priority only — these three always fit one row. Bin
+    // and department moved to the labeled meta rows below (TaskMetaFields).
+    <div className="flex flex-nowrap gap-1.5 overflow-x-auto [scrollbar-width:none]">
       {/* Status — first pill; matches kanban icons/colors. Omitted for drafts. */}
       {!isDraft && status !== undefined && onSelectStatus && (
         <StatusChip
@@ -234,28 +236,6 @@ export function ContextChips({
           onSelectStatus={onSelectStatus}
         />
       )}
-
-      {/* Bin */}
-      <AdaptivePicker
-        open={binOpen}
-        onOpenChange={setBinOpen}
-        title="Bin"
-        disabled={disabled}
-        trigger={
-          <Chip icon={ICONS.box} set={!!currentBinName} disabled={disabled}>
-            {currentBinName ?? 'Bin'}
-          </Chip>
-        }
-      >
-        <TaskOptionRow selected={!binId} onSelect={() => { onBinChange(null); setBinOpen(false); }}>
-          Task Bin
-        </TaskOptionRow>
-        {bins.map((b) => (
-          <TaskOptionRow key={b.id} selected={b.id === binId} onSelect={() => { onBinChange(b.id); setBinOpen(false); }}>
-            {b.name}
-          </TaskOptionRow>
-        ))}
-      </AdaptivePicker>
 
       {/* Schedule */}
       <AdaptivePicker
@@ -283,36 +263,15 @@ export function ContextChips({
         </div>
       </AdaptivePicker>
 
-      {/* Department */}
-      <AdaptivePicker
-        open={deptOpen}
-        onOpenChange={setDeptOpen}
-        title="Department"
-        disabled={disabled}
-        trigger={
-          <Chip icon={ICONS.spark} set={!!dept} disabled={disabled}>
-            {dept?.name ?? 'Department'}
-          </Chip>
-        }
-      >
-        <TaskOptionRow selected={!departmentId} onSelect={() => { onDepartmentChange(''); setDeptOpen(false); }}>
-          No department
-        </TaskOptionRow>
-        {departments.map((d) => (
-          <TaskOptionRow key={d.id} selected={d.id === departmentId} onSelect={() => { onDepartmentChange(d.id); setDeptOpen(false); }}>
-            {d.name}
-          </TaskOptionRow>
-        ))}
-      </AdaptivePicker>
-
-      {/* Priority */}
+      {/* Priority — always has a value (medium by default, no "none"), so the
+          pill is always a solid/set chip, never the dashed unset style. */}
       <AdaptivePicker
         open={prioOpen}
         onOpenChange={setPrioOpen}
         title="Priority"
         disabled={disabled}
         trigger={
-          <Chip icon={ICONS.flag} set={priority !== 'medium'} disabled={disabled}>
+          <Chip icon={<PriorityIcon size={13} strokeWidth={2} aria-hidden />} set disabled={disabled}>
             {PRIORITY_LABELS[priority as keyof typeof PRIORITY_LABELS] ?? priority}
           </Chip>
         }
@@ -323,6 +282,126 @@ export function ContextChips({
           </TaskOptionRow>
         ))}
       </AdaptivePicker>
+    </div>
+  );
+}
+
+/* ---------- meta fields (bin + department as labeled rows) ---------- */
+
+function MetaRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <MonoLabel className="shrink-0">{label}</MonoLabel>
+      {/* Fixed-width value column on the right, left-aligned inside — both pills
+          share one left edge (first letters flush) and grow rightward. */}
+      <div className="flex w-[180px] shrink-0 justify-start">{children}</div>
+    </div>
+  );
+}
+
+// Bin + department: single-value fields shown as full-width labeled rows (in
+// the lower meta block, near Assignees/Attachments) so long names have room
+// instead of crowding the top pill row.
+export function TaskMetaFields({
+  readOnly,
+  binId,
+  binName,
+  isBinned,
+  bins,
+  departmentId,
+  departments,
+  onBinChange,
+  onDepartmentChange,
+}: {
+  readOnly?: boolean;
+  binId: string | null;
+  binName: string | null;
+  /** Distinguishes "No bin" (false) from "Task Bin" (true, null binId). */
+  isBinned: boolean;
+  bins: ProjectBin[];
+  departmentId: string;
+  departments: Department[];
+  onBinChange: (binId: string | null, isBinned: boolean) => void;
+  onDepartmentChange: (id: string) => void;
+}) {
+  const [binOpen, setBinOpen] = useState(false);
+  const [deptOpen, setDeptOpen] = useState(false);
+
+  const dept = departments.find((d) => d.id === departmentId);
+  // Binned + no sub-bin ⇒ the system "Task Bin"; unbinned ⇒ "No bin".
+  const currentBinName = isBinned
+    ? (binName ?? bins.find((b) => b.id === binId)?.name ?? 'Task Bin')
+    : null;
+  const disabled = readOnly;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <MetaRow label="Bin">
+        <AdaptivePicker
+          open={binOpen}
+          onOpenChange={setBinOpen}
+          title="Bin"
+          align="end"
+          disabled={disabled}
+          trigger={
+            <Chip icon={ICONS.box} set={isBinned} flexible forceLabel disabled={disabled} title={currentBinName ?? undefined}>
+              {currentBinName ?? 'No bin'}
+            </Chip>
+          }
+        >
+          <TaskOptionRow selected={!isBinned} onSelect={() => { onBinChange(null, false); setBinOpen(false); }}>
+            No bin
+          </TaskOptionRow>
+          <TaskOptionRow selected={isBinned && !binId} onSelect={() => { onBinChange(null, true); setBinOpen(false); }}>
+            Task Bin
+          </TaskOptionRow>
+          {bins.filter((b) => !b.is_system).map((b) => (
+            <TaskOptionRow key={b.id} selected={isBinned && b.id === binId} onSelect={() => { onBinChange(b.id, true); setBinOpen(false); }}>
+              {b.name}
+            </TaskOptionRow>
+          ))}
+        </AdaptivePicker>
+      </MetaRow>
+
+      <MetaRow label="Department">
+        <AdaptivePicker
+          open={deptOpen}
+          onOpenChange={setDeptOpen}
+          title="Department"
+          align="end"
+          disabled={disabled}
+          trigger={
+            <Chip
+              icon={dept ? <DeptGlyph iconKey={dept.icon} size={13} /> : ICONS.flag}
+              set={!!dept}
+              flexible
+              forceLabel
+              disabled={disabled}
+              title={dept?.name}
+            >
+              {dept?.name ?? 'No department'}
+            </Chip>
+          }
+        >
+          <TaskOptionRow
+            selected={!departmentId}
+            onSelect={() => { onDepartmentChange(''); setDeptOpen(false); }}
+            leading={<span className="flex h-4 w-4 items-center justify-center" style={{ color: 'var(--task-ink-3)' }}>{ICONS.flag}</span>}
+          >
+            No department
+          </TaskOptionRow>
+          {departments.map((d) => (
+            <TaskOptionRow
+              key={d.id}
+              selected={d.id === departmentId}
+              onSelect={() => { onDepartmentChange(d.id); setDeptOpen(false); }}
+              leading={<DeptGlyph iconKey={d.icon} size={16} />}
+            >
+              {d.name}
+            </TaskOptionRow>
+          ))}
+        </AdaptivePicker>
+      </MetaRow>
     </div>
   );
 }
@@ -474,9 +553,15 @@ export function CrewSection({
   );
 }
 
-/* ---------- photos / attachments ---------- */
+/* ---------- attachments (images, PDFs, docs, video) ---------- */
 
-export function PhotosSection({
+function isImageAttachment(a: Attachment): boolean {
+  if (a.mime_type) return a.mime_type.startsWith('image/');
+  if (a.file_type) return a.file_type === 'image';
+  return /\.(png|jpe?g|gif|webp|heic|avif|bmp|svg)$/i.test(a.file_name ?? '');
+}
+
+export function AttachmentsSection({
   attachments,
   uploading,
   inputRef,
@@ -493,7 +578,7 @@ export function PhotosSection({
 }) {
   return (
     <div>
-      <MonoLabel className="mb-2.5">Photos</MonoLabel>
+      <MonoLabel className="mb-2.5">Attachments</MonoLabel>
       {attachments.length > 0 && (
         <div className="mb-2 grid grid-cols-4 gap-2">
           {attachments.map((a, i) => (
@@ -501,11 +586,29 @@ export function PhotosSection({
               key={a.id}
               type="button"
               onClick={() => onView(i)}
+              title={a.file_name ?? undefined}
               className="aspect-square overflow-hidden rounded-lg border transition-transform active:scale-95"
               style={{ borderColor: 'var(--task-line)' }}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={a.file_url} alt={a.file_name ?? 'Attachment'} className="h-full w-full object-cover" />
+              {isImageAttachment(a) ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img src={a.file_url} alt={a.file_name ?? 'Attachment'} className="h-full w-full object-cover" />
+              ) : (
+                // Non-image (PDF/doc/etc.) — a file tile with its extension;
+                // the lightbox renders the actual file on open.
+                <span
+                  className="flex h-full w-full flex-col items-center justify-center gap-1 px-1"
+                  style={{ background: 'var(--task-surface-2)', color: 'var(--task-ink-3)' }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M7 3h7l5 5v13H7z" />
+                    <path d="M14 3v5h5" />
+                  </svg>
+                  <span className="max-w-full truncate font-mono text-[9px] tracking-[0.06em]">
+                    {a.file_name?.split('.').pop()?.toUpperCase() || 'FILE'}
+                  </span>
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -519,13 +622,14 @@ export function PhotosSection({
             className="flex h-[52px] w-full items-center justify-center gap-2 rounded-[10px] font-mono text-[11.5px] tracking-[0.04em] transition-transform active:scale-[0.99] disabled:opacity-50"
             style={{ border: '1.5px dashed var(--task-line)', color: 'var(--task-ink-3)' }}
           >
+            {/* paperclip — general attachment, not just photos */}
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 8h3l1.5-2h7L17 8h3v11H4z" />
-              <circle cx="12" cy="13" r="3.2" />
+              <path d="M21.44 11.05l-9.19 9.19a5 5 0 01-7.07-7.07l9.19-9.19a3 3 0 014.24 4.24l-9.2 9.19a1 1 0 01-1.41-1.41l8.49-8.49" />
             </svg>
-            {uploading ? 'Uploading…' : 'Add photo'}
+            {uploading ? 'Uploading…' : 'Add attachment'}
           </button>
-          <input ref={inputRef} type="file" accept="image/*" multiple className="hidden" onChange={onUpload} />
+          {/* No accept filter — images, PDFs, docs, etc. are all valid. */}
+          <input ref={inputRef} type="file" multiple className="hidden" onChange={onUpload} />
         </>
       )}
     </div>

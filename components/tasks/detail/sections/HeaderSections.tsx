@@ -24,30 +24,31 @@ export function MonoLabel({
   );
 }
 
-export function IconButton({
-  label,
-  onClick,
-  children,
-  className = '',
-}: {
-  label: string;
-  onClick?: () => void;
-  children: React.ReactNode;
-  className?: string;
-}) {
+// forwardRef + prop spread so it can serve as a Radix Popover trigger (asChild
+// needs a real ref/anchor — a display:contents wrapper has no box and mislays
+// the popover at the container origin).
+export const IconButton = React.forwardRef<
+  HTMLButtonElement,
+  {
+    label: string;
+    children: React.ReactNode;
+    className?: string;
+  } & React.ButtonHTMLAttributes<HTMLButtonElement>
+>(function IconButton({ label, children, className = '', ...rest }, ref) {
   return (
     <button
+      ref={ref}
       type="button"
       aria-label={label}
       title={label}
-      onClick={onClick}
+      {...rest}
       className={`flex h-[34px] w-[34px] items-center justify-center rounded-lg transition-transform active:scale-95 hover:bg-[var(--task-surface-2)] ${className}`}
       style={{ color: 'var(--task-ink-2)' }}
     >
       {children}
     </button>
   );
-}
+});
 
 // Header: back/close · mono micro-label · overflow slot
 export function HeaderBar({

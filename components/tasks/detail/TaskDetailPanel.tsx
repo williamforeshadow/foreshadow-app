@@ -13,7 +13,7 @@ import { AdaptivePicker } from './primitives/AdaptivePicker';
 import { TaskOptionRow } from './primitives/TaskSheet';
 import { HeaderBar, TitleSection, DescriptionSection, IconButton } from './sections/HeaderSections';
 import { TimerRail, ActionBar } from './sections/StatusSections';
-import { ContextChips, StepsSection, CrewSection, PhotosSection } from './sections/BodySections';
+import { ContextChips, TaskMetaFields, StepsSection, CrewSection, AttachmentsSection } from './sections/BodySections';
 import { CommentsView } from './sections/CommentsView';
 
 export interface TaskDetailPanelProps {
@@ -84,15 +84,13 @@ export function TaskDetailPanel({
       title="Task"
       align="end"
       trigger={
-        <span className="contents">
-          <IconButton label="More" onClick={() => setMenuOpen(true)}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="6" cy="12" r="1.6" />
-              <circle cx="12" cy="12" r="1.6" />
-              <circle cx="18" cy="12" r="1.6" />
-            </svg>
-          </IconButton>
-        </span>
+        <IconButton label="More">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="6" cy="12" r="1.6" />
+            <circle cx="12" cy="12" r="1.6" />
+            <circle cx="18" cy="12" r="1.6" />
+          </svg>
+        </IconButton>
       }
     >
       {onOpenInPage && layout !== 'page' && (
@@ -166,23 +164,16 @@ export function TaskDetailPanel({
             isTemplated={c.isTemplated}
             isContingent={c.isContingent}
             onSelectStatus={(s) => c.writeStatus(s)}
-            binId={c.isDraft ? (draft?.bin_id ?? null) : (c.row?.bin_id ?? null)}
-            binName={c.row?.bin_name ?? null}
-            bins={c.bins}
             scheduledDate={c.fields.scheduled_date}
             scheduledTime={c.fields.scheduled_time}
-            departmentId={c.fields.department_id}
-            departments={c.departments}
             priority={c.fields.priority}
             propertyId={task?.property_id ?? draft?.property_id ?? null}
-            onBinChange={(binId) => void c.updateBin(binId)}
             onScheduleChange={(date, time) => {
               const updated = { ...c.fields, scheduled_date: date, scheduled_time: time };
               c.updateField('scheduled_date', date, false);
               c.updateField('scheduled_time', time, false);
               void c.saveFields(updated as ProjectFormFields);
             }}
-            onDepartmentChange={(id) => c.updateField('department_id', id)}
             onPriorityChange={(p) => c.updateField('priority', p as ProjectFormFields['priority'])}
           />
 
@@ -222,8 +213,19 @@ export function TaskDetailPanel({
                 c.updateField('assigned_staff', next);
               }}
             />
+            <TaskMetaFields
+              readOnly={editingLocked}
+              binId={c.isDraft ? (draft?.bin_id ?? null) : (c.row?.bin_id ?? null)}
+              binName={c.row?.bin_name ?? null}
+              isBinned={c.isDraft ? (draft?.is_binned ?? false) : (c.row?.is_binned ?? false)}
+              bins={c.bins}
+              departmentId={c.fields.department_id}
+              departments={c.departments}
+              onBinChange={(binId, isBinned) => void c.updateBin(binId, isBinned)}
+              onDepartmentChange={(id) => c.updateField('department_id', id)}
+            />
             {!c.isDraft && (
-              <PhotosSection
+              <AttachmentsSection
                 attachments={c.attachmentsHook.projectAttachments}
                 uploading={c.attachmentsHook.uploadingAttachment}
                 inputRef={c.attachmentsHook.attachmentInputRef}
