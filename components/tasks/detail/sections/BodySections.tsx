@@ -94,34 +94,34 @@ function StatusChip({
 
 /* ---------- chips ---------- */
 
-function Chip({
-  icon,
-  children,
-  set,
-  locked,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  children: React.ReactNode;
-  set: boolean;
-  locked?: boolean;
-  onClick?: () => void;
-}) {
+// forwardRef + prop spread so it can serve as a Radix Popover trigger (the
+// picker needs to inject onClick + a ref to anchor the popover).
+const Chip = React.forwardRef<
+  HTMLButtonElement,
+  {
+    icon: React.ReactNode;
+    children: React.ReactNode;
+    set: boolean;
+    locked?: boolean;
+  } & React.ButtonHTMLAttributes<HTMLButtonElement>
+>(function Chip({ icon, children, set, locked, disabled, style, ...rest }, ref) {
   return (
     <button
+      ref={ref}
       type="button"
-      onClick={onClick}
-      disabled={!onClick}
+      disabled={disabled}
+      {...rest}
       className="flex h-[30px] shrink-0 items-center gap-1.5 rounded-lg px-[11px] font-mono text-[11px] transition-transform active:scale-95 disabled:active:scale-100"
       style={{
         background: set ? 'var(--task-surface-2)' : 'transparent',
         border: `1px ${set ? 'solid transparent' : 'dashed var(--task-line)'}`,
         color: set ? 'var(--task-ink-2)' : 'var(--task-ink-3)',
-        cursor: onClick ? 'pointer' : 'default',
+        cursor: disabled ? 'default' : 'pointer',
+        ...style,
       }}
     >
       {icon}
-      <span className="max-w-[160px] truncate">{children}</span>
+      <span className="max-w-[220px] truncate">{children}</span>
       {locked && (
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" opacity={0.6}>
           <rect x="5" y="11" width="14" height="9" rx="2" />
@@ -130,7 +130,7 @@ function Chip({
       )}
     </button>
   );
-}
+});
 
 const ICONS = {
   pin: (
@@ -181,7 +181,6 @@ function formatScheduleChip(date: string, time: string): string | null {
 }
 
 export function ContextChips({
-  isMobile,
   isDraft,
   readOnly,
   propertyName,
@@ -208,7 +207,6 @@ export function ContextChips({
   isContingent,
   onSelectStatus,
 }: {
-  isMobile: boolean;
   isDraft: boolean;
   readOnly?: boolean;
   propertyName: string | null;
@@ -250,13 +248,8 @@ export function ContextChips({
   const disabled = readOnly;
 
   return (
-    <div
-      className={
-        isMobile
-          ? 'm-scroll -mx-[18px] flex gap-1.5 overflow-x-auto px-[18px] pb-1 [scrollbar-width:none]'
-          : 'flex flex-wrap gap-1.5'
-      }
-    >
+    // Always a single horizontal scroll strip — never wraps to a second row.
+    <div className="-mx-[18px] flex gap-1.5 overflow-x-auto px-[18px] pb-1 [scrollbar-width:none]">
       {/* Status — first pill; matches kanban icons/colors. Omitted for drafts. */}
       {!isDraft && status !== undefined && onSelectStatus && (
         <StatusChip
@@ -294,7 +287,7 @@ export function ContextChips({
         </AdaptivePicker>
       ) : (
         propertyName && (
-          <Chip icon={ICONS.pin} set locked>
+          <Chip icon={ICONS.pin} set locked disabled>
             {propertyName}
           </Chip>
         )
@@ -327,7 +320,7 @@ export function ContextChips({
         </AdaptivePicker>
       ) : (
         templateName && (
-          <Chip icon={ICONS.doc} set locked>
+          <Chip icon={ICONS.doc} set locked disabled>
             {templateName}
           </Chip>
         )
@@ -338,8 +331,9 @@ export function ContextChips({
         open={binOpen}
         onOpenChange={setBinOpen}
         title="Bin"
+        disabled={disabled}
         trigger={
-          <Chip icon={ICONS.box} set={!!currentBinName} onClick={disabled ? undefined : () => setBinOpen(true)}>
+          <Chip icon={ICONS.box} set={!!currentBinName} disabled={disabled}>
             {currentBinName ?? 'Bin'}
           </Chip>
         }
@@ -360,8 +354,9 @@ export function ContextChips({
         onOpenChange={setSchedOpen}
         title="Scheduled"
         contentClassName="w-auto"
+        disabled={disabled}
         trigger={
-          <Chip icon={ICONS.cal} set={!!schedLabel} onClick={disabled ? undefined : () => setSchedOpen(true)}>
+          <Chip icon={ICONS.cal} set={!!schedLabel} disabled={disabled}>
             {schedLabel ?? 'Schedule'}
           </Chip>
         }
@@ -384,8 +379,9 @@ export function ContextChips({
         open={deptOpen}
         onOpenChange={setDeptOpen}
         title="Department"
+        disabled={disabled}
         trigger={
-          <Chip icon={ICONS.spark} set={!!dept} onClick={disabled ? undefined : () => setDeptOpen(true)}>
+          <Chip icon={ICONS.spark} set={!!dept} disabled={disabled}>
             {dept?.name ?? 'Department'}
           </Chip>
         }
@@ -405,8 +401,9 @@ export function ContextChips({
         open={prioOpen}
         onOpenChange={setPrioOpen}
         title="Priority"
+        disabled={disabled}
         trigger={
-          <Chip icon={ICONS.flag} set={priority !== 'medium'} onClick={disabled ? undefined : () => setPrioOpen(true)}>
+          <Chip icon={ICONS.flag} set={priority !== 'medium'} disabled={disabled}>
             {PRIORITY_LABELS[priority as keyof typeof PRIORITY_LABELS] ?? priority}
           </Chip>
         }

@@ -17,6 +17,7 @@ export function AdaptivePicker({
   children,
   align = 'start',
   contentClassName,
+  disabled,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -25,8 +26,12 @@ export function AdaptivePicker({
   children: React.ReactNode;
   align?: 'start' | 'center' | 'end';
   contentClassName?: string;
+  disabled?: boolean;
 }) {
   const isMobile = useIsMobile();
+
+  // Locked (read-only) — render the trigger inert, no picker.
+  if (disabled) return <>{trigger}</>;
 
   if (isMobile) {
     return (

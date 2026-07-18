@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import type { JSONContent } from '@tiptap/react';
 
@@ -85,7 +85,11 @@ export function HeaderBar({
   );
 }
 
-// Editable title (blur-save) + rich-text description (blur-save).
+// Editable title (blur-save). Auto-grows up to 3 lines so the full title is
+// visible; past that it scrolls internally.
+const TITLE_LINE_HEIGHT = 26.25; // 21px * 1.25
+const TITLE_MAX_LINES = 3;
+
 export function TitleSection({
   title,
   onTitleChange,
@@ -97,14 +101,30 @@ export function TitleSection({
   onTitleBlur: () => void;
   readOnly?: boolean;
 }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const resize = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const max = TITLE_LINE_HEIGHT * TITLE_MAX_LINES;
+    el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+    el.style.overflowY = el.scrollHeight > max + 1 ? 'auto' : 'hidden';
+  }, []);
+  useLayoutEffect(resize, [title, resize]);
+
   return (
-    <input
+    <textarea
+      ref={ref}
+      rows={1}
       value={title}
-      onChange={(e) => onTitleChange(e.target.value)}
+      onChange={(e) => {
+        onTitleChange(e.target.value);
+        resize();
+      }}
       onBlur={onTitleBlur}
       readOnly={readOnly}
       placeholder="Task title"
-      className="mt-2 w-full bg-transparent text-[21px] font-medium leading-[1.25] tracking-[-0.02em] outline-none"
+      className="mt-2 w-full resize-none bg-transparent text-[21px] font-medium leading-[1.25] tracking-[-0.02em] outline-none [scrollbar-width:none]"
       style={{ color: 'var(--task-ink-1)' }}
     />
   );

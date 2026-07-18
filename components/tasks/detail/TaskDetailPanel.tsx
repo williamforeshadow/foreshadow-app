@@ -161,7 +161,6 @@ export function TaskDetailPanel({
           )}
           <div className="mt-3.5" />
           <ContextChips
-            isMobile={isMobile}
             isDraft={c.isDraft}
             readOnly={editingLocked}
             status={c.fields.status}
