@@ -55,12 +55,11 @@ export function TaskDetailPanel({
 
   if (!task && !draft) return null;
 
-  const templateId = task?.template_id ?? draft?.template_id ?? null;
   const templateName = task?.template_name ?? draft?.template_name ?? null;
   const propertyName = task?.property_name ?? draft?.property_name ?? null;
-  // Only real templated tasks show a top-bar label. `template_name` can be a
-  // placeholder ("Unnamed Task") on untemplated rows, so gate on template_id.
-  const headerLabel = templateId ? (templateName ?? '') : '';
+  // The top-bar micro-label shows the property name (or nothing when the task
+  // has no property).
+  const headerLabel = propertyName ?? '';
 
   const timerRunning = !!c.timeHook.activeTimeEntry;
   const checklistComplete = c.progress.total > 0 && c.progress.completed === c.progress.total;
@@ -167,8 +166,6 @@ export function TaskDetailPanel({
             isTemplated={c.isTemplated}
             isContingent={c.isContingent}
             onSelectStatus={(s) => c.writeStatus(s)}
-            propertyName={propertyName}
-            templateName={templateId ? templateName : null}
             binId={c.isDraft ? (draft?.bin_id ?? null) : (c.row?.bin_id ?? null)}
             binName={c.row?.bin_name ?? null}
             bins={c.bins}
@@ -178,8 +175,6 @@ export function TaskDetailPanel({
             departments={c.departments}
             priority={c.fields.priority}
             propertyId={task?.property_id ?? draft?.property_id ?? null}
-            allProperties={c.allProperties}
-            availableTemplates={c.availableTemplates}
             onBinChange={(binId) => void c.updateBin(binId)}
             onScheduleChange={(date, time) => {
               const updated = { ...c.fields, scheduled_date: date, scheduled_time: time };
@@ -189,18 +184,6 @@ export function TaskDetailPanel({
             }}
             onDepartmentChange={(id) => c.updateField('department_id', id)}
             onPriorityChange={(p) => c.updateField('priority', p as ProjectFormFields['priority'])}
-            onDraftPropertyChange={
-              c.isDraft && onDraftChange
-                ? (id, name) =>
-                    onDraftChange({ ...(draft ?? emptyDraft()), property_id: id, property_name: name })
-                : undefined
-            }
-            onDraftTemplateChange={
-              c.isDraft && onDraftChange
-                ? (id, name) =>
-                    onDraftChange({ ...(draft ?? emptyDraft()), template_id: id, template_name: name })
-                : undefined
-            }
           />
 
           {c.isTemplated && !c.isDraft && (

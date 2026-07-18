@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useState } from 'react';
-import type { Department, ProjectBin, PropertyOption, TaskTemplate, User } from '@/lib/types';
+import type { Department, ProjectBin, User } from '@/lib/types';
 import type { Attachment } from '@/lib/types';
 import { PRIORITY_LABELS, PRIORITY_ORDER } from '@/lib/types';
 import { toast } from '@/components/ui/toast';
@@ -133,12 +133,6 @@ const Chip = React.forwardRef<
 });
 
 const ICONS = {
-  pin: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="10" r="2.5" />
-      <path d="M12 21c4-5 7-8 7-11a7 7 0 1 0-14 0c0 3 3 6 7 11z" />
-    </svg>
-  ),
   box: (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="4" width="18" height="4" rx="1" />
@@ -161,12 +155,6 @@ const ICONS = {
       <path d="M5 21V4m0 1h12l-2.5 4L17 13H5" />
     </svg>
   ),
-  doc: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M7 3h7l5 5v13H7z" />
-      <path d="M14 3v5h5M10 13h6M10 17h6" />
-    </svg>
-  ),
 };
 
 function formatScheduleChip(date: string, time: string): string | null {
@@ -183,8 +171,6 @@ function formatScheduleChip(date: string, time: string): string | null {
 export function ContextChips({
   isDraft,
   readOnly,
-  propertyName,
-  templateName,
   binId,
   binName,
   bins,
@@ -194,14 +180,10 @@ export function ContextChips({
   departments,
   priority,
   propertyId,
-  allProperties,
-  availableTemplates,
   onBinChange,
   onScheduleChange,
   onDepartmentChange,
   onPriorityChange,
-  onDraftPropertyChange,
-  onDraftTemplateChange,
   status,
   isTemplated,
   isContingent,
@@ -209,8 +191,6 @@ export function ContextChips({
 }: {
   isDraft: boolean;
   readOnly?: boolean;
-  propertyName: string | null;
-  templateName: string | null;
   binId: string | null;
   binName: string | null;
   bins: ProjectBin[];
@@ -220,14 +200,10 @@ export function ContextChips({
   departments: Department[];
   priority: string;
   propertyId: string | null;
-  allProperties: PropertyOption[];
-  availableTemplates: TaskTemplate[];
   onBinChange: (binId: string | null) => void;
   onScheduleChange: (date: string, time: string) => void;
   onDepartmentChange: (id: string) => void;
   onPriorityChange: (p: string) => void;
-  onDraftPropertyChange?: (id: string | null, name: string | null) => void;
-  onDraftTemplateChange?: (id: string | null, name: string | null) => void;
   /** Status pill (omitted in draft mode). */
   status?: string;
   isTemplated?: boolean;
@@ -238,8 +214,6 @@ export function ContextChips({
   const [schedOpen, setSchedOpen] = useState(false);
   const [deptOpen, setDeptOpen] = useState(false);
   const [prioOpen, setPrioOpen] = useState(false);
-  const [propOpen, setPropOpen] = useState(false);
-  const [tmplOpen, setTmplOpen] = useState(false);
 
   const dept = departments.find((d) => d.id === departmentId);
   const schedLabel = formatScheduleChip(scheduledDate, scheduledTime);
@@ -248,8 +222,9 @@ export function ContextChips({
   const disabled = readOnly;
 
   return (
-    // Always a single horizontal scroll strip — never wraps to a second row.
-    <div className="-mx-[18px] flex gap-1.5 overflow-x-auto px-[18px] pb-1 [scrollbar-width:none]">
+    // Wraps to as many rows as needed — property + template pills removed
+    // (property is shown in the header; template can't change here).
+    <div className="flex flex-wrap gap-1.5">
       {/* Status — first pill; matches kanban icons/colors. Omitted for drafts. */}
       {!isDraft && status !== undefined && onSelectStatus && (
         <StatusChip
@@ -258,72 +233,6 @@ export function ContextChips({
           isContingent={!!isContingent}
           onSelectStatus={onSelectStatus}
         />
-      )}
-
-      {/* Property — locked on existing tasks, picker in draft mode */}
-      {isDraft && onDraftPropertyChange ? (
-        <AdaptivePicker
-          open={propOpen}
-          onOpenChange={setPropOpen}
-          title="Property"
-          trigger={
-            <Chip icon={ICONS.pin} set={!!propertyName}>
-              {propertyName ?? 'Property'}
-            </Chip>
-          }
-        >
-          <TaskOptionRow selected={!propertyName} onSelect={() => { onDraftPropertyChange(null, null); setPropOpen(false); }}>
-            No property
-          </TaskOptionRow>
-          {allProperties.map((p) => (
-            <TaskOptionRow
-              key={p.id ?? p.name}
-              selected={p.name === propertyName}
-              onSelect={() => { onDraftPropertyChange(p.id, p.name); setPropOpen(false); }}
-            >
-              {p.name}
-            </TaskOptionRow>
-          ))}
-        </AdaptivePicker>
-      ) : (
-        propertyName && (
-          <Chip icon={ICONS.pin} set locked disabled>
-            {propertyName}
-          </Chip>
-        )
-      )}
-
-      {/* Template — locked on existing tasks, picker in draft mode */}
-      {isDraft && onDraftTemplateChange ? (
-        <AdaptivePicker
-          open={tmplOpen}
-          onOpenChange={setTmplOpen}
-          title="Template"
-          trigger={
-            <Chip icon={ICONS.doc} set={!!templateName}>
-              {templateName ?? 'Template'}
-            </Chip>
-          }
-        >
-          <TaskOptionRow selected={!templateName} onSelect={() => { onDraftTemplateChange(null, null); setTmplOpen(false); }}>
-            No template
-          </TaskOptionRow>
-          {availableTemplates.map((t) => (
-            <TaskOptionRow
-              key={t.id}
-              selected={t.id && templateName === t.name ? true : false}
-              onSelect={() => { onDraftTemplateChange(t.id, t.name); setTmplOpen(false); }}
-            >
-              {t.name}
-            </TaskOptionRow>
-          ))}
-        </AdaptivePicker>
-      ) : (
-        templateName && (
-          <Chip icon={ICONS.doc} set locked disabled>
-            {templateName}
-          </Chip>
-        )
       )}
 
       {/* Bin */}
