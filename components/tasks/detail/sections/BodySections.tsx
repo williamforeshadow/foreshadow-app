@@ -6,7 +6,7 @@ import type { Department, ProjectBin, User } from '@/lib/types';
 import type { Attachment } from '@/lib/types';
 import { PRIORITY_LABELS, PRIORITY_ORDER } from '@/lib/types';
 import { PRIORITY_ICONS } from '@/lib/taskPriorityIcons';
-import { getDepartmentIcon } from '@/lib/departmentIcons';
+import { DeptGlyph } from '../../DeptGlyph';
 import { toast } from '@/components/ui/toast';
 import { TaskScheduledDatePicker } from '@/components/windows/projects/TaskScheduledDatePicker';
 import { TaskScheduledTimePicker } from '@/components/windows/projects/TaskScheduledTimePicker';
@@ -164,17 +164,6 @@ const ICONS = {
   ),
 };
 
-// Renders a department's own icon (chosen on the Departments page). Kept as a
-// module-level component so it isn't recreated during render (e.g. inside the
-// options .map()).
-function DeptGlyph({ iconKey, size, muted }: { iconKey?: string | null; size: number; muted?: boolean }) {
-  return React.createElement(getDepartmentIcon(iconKey), {
-    size,
-    strokeWidth: 1.8,
-    style: { color: muted ? 'var(--task-ink-3)' : 'var(--task-ink-2)' },
-    'aria-hidden': true,
-  });
-}
 
 function formatScheduleChip(date: string, time: string): string | null {
   if (!date) return null;
