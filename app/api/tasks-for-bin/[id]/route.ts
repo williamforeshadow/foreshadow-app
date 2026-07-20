@@ -320,7 +320,11 @@ export async function PUT(
       is_binned: taskRow.is_binned ?? false,
       template_id: taskRow.template_id || null,
       template_name: taskRow.templates?.name || null,
-      title: taskRow.title || 'Untitled Task',
+      // Templated tasks carry a null title and display their template's name,
+      // so fall back to it exactly as the list GET does — without this, any
+      // PUT (e.g. a status write on pause) hands the client "Untitled Task"
+      // and the panel's title visibly resets.
+      title: taskRow.title || taskRow.templates?.name || 'Untitled Task',
       description: taskRow.description || null,
       status: taskRow.status || 'not_started',
       priority: taskRow.priority || 'medium',
