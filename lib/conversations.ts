@@ -2,6 +2,7 @@
 // PMS normalizes into these types via src/server/messages/pms/*.
 
 import type { MessageDirection } from '@/lib/messages';
+import type { ConciergeSourcesRecord } from '@/lib/conciergeSources';
 
 // Stored on the conversation (captured from the PMS at ingest).
 export type BookingState = 'inquiry' | 'booked' | 'cancelled';
@@ -64,6 +65,14 @@ export interface ConversationRow {
   proposed_reply_declined_message_id: string | null;
   proposed_reply_source: 'auto' | 'assistant' | null;
   proposed_reply_generated_at: string | null;
+  /**
+   * What grounded the draft — always-on training, loaded procedures, tool calls —
+   * distilled for the inbox's source chips. null means the draft predates this
+   * column (the inbox shows nothing rather than claiming the Concierge used
+   * nothing); a record with an empty `sources` array is the real "nothing
+   * grounded this" and renders as such.
+   */
+  proposed_reply_sources: ConciergeSourcesRecord | null;
   // Persisted guest-sentiment summary (generated eagerly on inbound; the panel
   // reads it). null until first generated.
   sentiment: 'positive' | 'neutral' | 'negative' | null;

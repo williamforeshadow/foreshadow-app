@@ -19,6 +19,11 @@ export const maxDuration = 60;
 //                legitimately answer { skipped: true, reason }.
 //   default    — a human clicked ↻ Regenerate or the composer's Sparkles.
 //                Deliberately ungated: an explicit ask always drafts.
+//
+// The response carries `sources` alongside the draft rather than leaving the
+// inbox to pick them up on its refetch. The bubble swaps in the new draft the
+// moment this returns, so sources arriving a beat later would briefly caption a
+// draft with the PREVIOUS generation's grounding.
 export async function POST(
   request: Request,
   context: { params: Promise<{ conversationId: string }> },
@@ -56,13 +61,15 @@ export async function POST(
       return NextResponse.json({
         draft: outcome.draft,
         answers_message_id: outcome.answers_message_id,
+        sources: outcome.sources,
       });
     }
 
-    const { draft, answers_message_id } = await generateAndStoreProposedReply(conversationId, {
-      source: 'auto',
-    });
-    return NextResponse.json({ draft, answers_message_id });
+    const { draft, answers_message_id, sources } = await generateAndStoreProposedReply(
+      conversationId,
+      { source: 'auto' },
+    );
+    return NextResponse.json({ draft, answers_message_id, sources });
   } catch (err) {
     console.error('[messages draft] generation failed:', err);
     const message = err instanceof Error ? err.message : 'Failed to draft a reply';

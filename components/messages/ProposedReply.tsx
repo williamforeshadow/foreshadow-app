@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sparkles, SendHorizontal, Pencil, RotateCw, AlertCircle } from 'lucide-react';
+import { TrainingReferences } from '@/components/messages/TrainingReferences';
+import {
+  CONCIERGE_SOURCES_VERSION,
+  type ConciergeSource,
+  type ConciergeSourcesRecord,
+} from '@/lib/conciergeSources';
 
 /**
  * The conversation's proposed reply, rendered beneath the guest message it
@@ -31,6 +37,7 @@ export function ProposedReply({
   conversationId,
   draft: persistedDraft,
   source,
+  sources: persistedSources,
   stale,
   declined,
   onEdit,
@@ -40,6 +47,11 @@ export function ProposedReply({
   /** The stored draft, or null when none has been generated yet. */
   draft: string | null;
   source: 'auto' | 'assistant' | null;
+  /**
+   * What grounded the stored draft. null on drafts written before sources were
+   * recorded — the chips row renders nothing rather than claiming it used nothing.
+   */
+  sources: ConciergeSourcesRecord | null;
   /** True when a newer guest message arrived after this draft was written. */
   stale: boolean;
   /** True when the sensitivity gate ruled this message doesn't warrant a reply. */
@@ -51,6 +63,11 @@ export function ProposedReply({
   // A stale draft is never rendered — see the auto-refresh effect below — so it
   // starts blank and the skeleton covers the refresh.
   const [draft, setDraft] = useState(stale ? '' : persistedDraft ?? '');
+  // Sources move in lockstep with `draft` — they caption the text on screen, so
+  // a stale draft's grounding is dropped exactly when its text is.
+  const [sources, setSources] = useState<ConciergeSourcesRecord | null>(
+    stale ? null : persistedSources,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -64,7 +81,8 @@ export function ProposedReply({
   // Sync when the stored draft changes (conversation switch / parent refetch).
   useEffect(() => {
     setDraft(stale ? '' : persistedDraft ?? '');
-  }, [persistedDraft, stale]);
+    setSources(stale ? null : persistedSources);
+  }, [persistedDraft, persistedSources, stale]);
 
   // `auto` = nobody asked; the server applies the master switch + sensitivity
   // gate and may decline. Omitting it marks an explicit human ask, which always
@@ -95,6 +113,14 @@ export function ProposedReply({
           return;
         }
         setDraft(typeof data.draft === 'string' ? data.draft : '');
+        // Set from the same response as the draft: the parent's refetch lands a
+        // beat later, and until it does the chips would describe the previous
+        // generation's grounding.
+        setSources(
+          Array.isArray(data.sources)
+            ? { version: CONCIERGE_SOURCES_VERSION, sources: data.sources as ConciergeSource[] }
+            : null,
+        );
         onChanged?.();
       } catch {
         setError('Could not generate a proposed reply.');
@@ -160,7 +186,18 @@ export function ProposedReply({
         <div className="flex items-center gap-1.5 px-3.5 pt-2.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
           <Sparkles className="h-3 w-3" aria-hidden />
           <span>Proposed Reply</span>
-          <span className="font-normal opacity-70">· not sent</span>
+          {/* The references button takes the "· not sent" slot, but only once a
+              real draft is on screen: mid-regenerate `sources` still holds the
+              PREVIOUS generation's record, and a popup describing a draft that's
+              being replaced is the same trap the stale-draft rule exists to
+              avoid. Drafts written before sources were recorded have nothing to
+              open, so they keep the original label rather than offering a button
+              that opens an empty popup. */}
+          {showActions && sources ? (
+            <TrainingReferences sources={sources} />
+          ) : (
+            <span className="font-normal opacity-70">· not sent</span>
+          )}
           {source === 'assistant' ? (
             <span className="rounded-full bg-amber-500/15 px-1.5 text-[10px] font-medium dark:bg-amber-400/15">
               via assistant

@@ -25,6 +25,11 @@ import {
   formatTrainingIndexForPrompt,
 } from './conciergeTraining';
 import { loadConciergeToolFlags } from './conciergeCapabilities';
+import {
+  buildConciergeSources,
+  type ConciergeSource,
+  type ConciergeTrainingRuleRef,
+} from './conciergeSources';
 import { resolveOpsToday } from './opsToday';
 import type { GuestMessageRecord } from '@/lib/messages';
 
@@ -202,6 +207,12 @@ export interface GuestReplyDraftResult {
    * test / level 4). False only when the sensitivity gate short-circuited.
    */
   warranted: boolean;
+  /**
+   * What grounded this draft — always-on training, any situational procedures
+   * the model loaded, and its tool calls — distilled for display. Empty on the
+   * gate-decline path: the gate forbids tool calls and nothing is persisted.
+   */
+  sources: ConciergeSource[];
 }
 
 /**
@@ -224,19 +235,28 @@ export async function generateGuestReplyDraftFromContext(
   //    matches. This keeps the standing payload small and undiluted.
   let alwaysTrainingBlock = '';
   let situationalIndexBlock = '';
+  // The always-tier rules, kept for the sources record: they ground every reply
+  // from inside the cached prompt with no tool call to observe, so this is the
+  // only point they can be captured.
+  let alwaysTrainingRules: ConciergeTrainingRuleRef[] = [];
   try {
     const rules = await getConciergeTrainingForProperty(
       ctx.conversation.property_id,
       (ctx.conversation as { org_id?: string | null }).org_id ?? null,
     );
-    alwaysTrainingBlock = formatTrainingForPrompt(rules.filter((r) => r.tier !== 'situational'));
+    const always = rules.filter((r) => r.tier !== 'situational');
+    alwaysTrainingBlock = formatTrainingForPrompt(always);
+    alwaysTrainingRules = always.map((r) => ({ id: r.id, title: r.title }));
     situationalIndexBlock = formatTrainingIndexForPrompt(
       rules.filter((r) => r.tier === 'situational'),
     );
   } catch {
     // Training is enhancement, not a hard dependency — never block a draft on it.
+    // A failed load records no training sources, which is the honest outcome:
+    // none reached the model.
     alwaysTrainingBlock = '';
     situationalIndexBlock = '';
+    alwaysTrainingRules = [];
   }
 
   const nowMs = Date.now();
@@ -418,12 +438,16 @@ export async function generateGuestReplyDraftFromContext(
         .trim();
       // Gate short-circuit: the model judged no reply warranted at this level.
       if (gateActive && draft.includes(NO_REPLY_SENTINEL)) {
-        return { draft: '', warranted: false };
+        return { draft: '', warranted: false, sources: [] };
       }
       if (!draft) {
         throw new Error('The model returned an empty draft.');
       }
-      return { draft, warranted: true };
+      return {
+        draft,
+        warranted: true,
+        sources: buildConciergeSources(trace, alwaysTrainingRules),
+      };
     }
 
     const toolUses = response.content.filter(

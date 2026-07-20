@@ -1,0 +1,34 @@
+-- What the Concierge actually used to ground a proposed reply, persisted.
+--
+-- The draft was the only artifact of a generation: an operator reading a wrong
+-- reply had no way to tell whether it came from a property-knowledge lookup, an
+-- availability check, a standing training rule, or nothing at all. Each of those
+-- implies a different fix (unlock a field, correct a listing, edit a rule, add
+-- training), so without this the Concierge is hard to refine — you can only
+-- re-roll it and hope.
+--
+-- Shape: {"version": 1, "sources": [...]}. A source is one of
+--   training_always — tier-'always' rules, pinned into the system prompt on every
+--                     draft with no tool call of their own. Recorded because they
+--                     ground the reply exactly as much as an on-demand call does;
+--                     a tool-calls-only record would render them invisible.
+--   procedure       — a situational rule the model chose to load for THIS message
+--                     (via get_concierge_procedure). Title captured from the tool
+--                     output, so a chip survives a later rule rename or delete.
+--   tool            — any other concierge tool call, aggregated per tool.
+--
+-- Distilled, never raw: the source of truth is src/server/messages/
+-- conciergeSources.ts, which records counts, labels, and the dates asked — never
+-- a payload. get_property_knowledge_for_guest returns door codes and wifi
+-- passwords; none of that may ever land in this column.
+--
+-- null and {"sources": []} mean DIFFERENT things and the inbox renders them
+-- differently. null = written before this column existed (the inbox shows
+-- nothing, making no claim). [] = recorded, and genuinely nothing grounded the
+-- draft (the inbox says "Conversation only"). Collapsing the two would tell an
+-- operator the Concierge answered from nothing when it had in fact looked things
+-- up. Cleared to null on the gate-decline path alongside the draft itself — a
+-- record left behind would describe a draft that no longer exists.
+
+alter table public.conversations
+  add column if not exists proposed_reply_sources jsonb;

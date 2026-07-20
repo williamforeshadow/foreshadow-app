@@ -250,6 +250,7 @@ export default function ConversationPage() {
             startSelectionSignal={selectionSignal}
             proposedReply={conversation?.proposed_reply ?? null}
             proposedReplySource={conversation?.proposed_reply_source ?? null}
+            proposedReplySources={conversation?.proposed_reply_sources ?? null}
             proposedReplyAnswersMessageId={conversation?.proposed_reply_answers_message_id ?? null}
             proposedReplyDeclinedMessageId={
               conversation?.proposed_reply_declined_message_id ?? null
@@ -317,6 +318,7 @@ export default function ConversationPage() {
           actions={actions}
           proposedReply={conversation?.proposed_reply ?? null}
           proposedReplySource={conversation?.proposed_reply_source ?? null}
+          proposedReplySources={conversation?.proposed_reply_sources ?? null}
           proposedReplyAnswersMessageId={conversation?.proposed_reply_answers_message_id ?? null}
           proposedReplyDeclinedMessageId={conversation?.proposed_reply_declined_message_id ?? null}
           replyProposalEnabled={replyProposalEnabled}

@@ -10,6 +10,7 @@ import { ProposedTask, type ProposedTaskData } from '@/components/messages/Propo
 import { ProposedKnowledge, type ProposedKnowledgeData } from '@/components/messages/ProposedKnowledge';
 import { TurnIntoTrainingDialog } from '@/components/messages/TurnIntoTrainingDialog';
 import { canonicalChannelLabel } from '@/lib/bookingChannel';
+import type { ConciergeSourcesRecord } from '@/lib/conciergeSources';
 import type { GuestMessageRecord } from '@/lib/messages';
 
 /**
@@ -69,6 +70,7 @@ export function ConversationThread({
   actions,
   proposedReply = null,
   proposedReplySource = null,
+  proposedReplySources = null,
   proposedReplyAnswersMessageId = null,
   proposedReplyDeclinedMessageId = null,
   replyProposalEnabled = true,
@@ -95,6 +97,8 @@ export function ConversationThread({
   /** The conversation's persisted proposed reply (read, not regenerated here). */
   proposedReply?: string | null;
   proposedReplySource?: 'auto' | 'assistant' | null;
+  /** What grounded the draft (training + tool calls); null on pre-feature drafts. */
+  proposedReplySources?: ConciergeSourcesRecord | null;
   proposedReplyAnswersMessageId?: string | null;
   /** guest_messages.id the sensitivity gate ruled needs no reply, if any. */
   proposedReplyDeclinedMessageId?: string | null;
@@ -455,6 +459,7 @@ export function ConversationThread({
                   conversationId={conversationId}
                   draft={proposedReply}
                   source={proposedReplySource}
+                  sources={proposedReplySources}
                   stale={proposalStale}
                   declined={proposalDeclined}
                   onEdit={handleEditProposed}

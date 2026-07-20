@@ -1,5 +1,6 @@
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { generateGuestReplyDraft } from './draftReply';
+import { CONCIERGE_SOURCES_VERSION, type ConciergeSource } from './conciergeSources';
 import { loadConciergeProposalFlags, loadReplyProposalSensitivity } from './conciergeCapabilities';
 import { notifyProposedReply } from '@/src/server/notifications/notifyProposal';
 
@@ -56,6 +57,8 @@ export async function getLatestSentMessage(conversationId: string): Promise<Late
 export interface StoredProposedReply {
   draft: string;
   answers_message_id: string | null;
+  /** What grounded the draft (training + tool calls), for the inbox's source chips. */
+  sources: ConciergeSource[];
   /** True when the sensitivity gate decided no reply was warranted (nothing stored). */
   skipped?: boolean;
 }
@@ -98,7 +101,7 @@ export async function generateAndStoreProposedReply(
       ((orgRow as { org_id?: string | null } | null)?.org_id as string | null) ?? null,
     );
   }
-  const { draft, warranted } = await generateGuestReplyDraft({
+  const { draft, warranted, sources } = await generateGuestReplyDraft({
     conversationId,
     instruction: opts.instruction,
     replySensitivity,
@@ -125,12 +128,15 @@ export async function generateAndStoreProposedReply(
           proposed_reply_answers_message_id: null,
           proposed_reply_source: null,
           proposed_reply_generated_at: null,
+          // Clears with the draft it described — a sources record left behind
+          // would explain the grounding of a draft that no longer exists.
+          proposed_reply_sources: null,
           proposed_reply_declined_message_id: latest.id,
         })
         .eq('id', conversationId);
       if (error) throw new Error(error.message);
     }
-    return { draft: '', answers_message_id: latest?.id ?? null, skipped: true };
+    return { draft: '', answers_message_id: latest?.id ?? null, sources: [], skipped: true };
   }
 
   const { error } = await supabase
@@ -140,6 +146,10 @@ export async function generateAndStoreProposedReply(
       proposed_reply_answers_message_id: latest?.id ?? null,
       proposed_reply_source: opts.source,
       proposed_reply_generated_at: new Date().toISOString(),
+      // Written with the draft, always. An empty `sources` array is meaningful
+      // (nothing grounded this reply) and must not be confused with the null a
+      // pre-feature draft carries — the inbox renders the two differently.
+      proposed_reply_sources: { version: CONCIERGE_SOURCES_VERSION, sources },
       // A draft supersedes any earlier "no" — e.g. a human hit ↻ to override the
       // gate. Leaving it set would make the next autonomous pass skip as
       // already-decided when there's now a real draft answering that message.
@@ -175,7 +185,7 @@ export async function generateAndStoreProposedReply(
     }
   }
 
-  return { draft, answers_message_id: latest?.id ?? null };
+  return { draft, answers_message_id: latest?.id ?? null, sources };
 }
 
 /** Why an autonomous draft didn't happen. Surfaced to the inbox so it can tell
@@ -189,7 +199,12 @@ export type AutoDraftSkipReason =
   | 'not_warranted'; // the gate just ruled this message doesn't need a reply
 
 export type AutoDraftOutcome =
-  | { status: 'generated'; draft: string; answers_message_id: string | null }
+  | {
+      status: 'generated';
+      draft: string;
+      answers_message_id: string | null;
+      sources: ConciergeSource[];
+    }
   | { status: 'skipped'; reason: AutoDraftSkipReason };
 
 /**
@@ -252,7 +267,12 @@ export async function maybeGenerateProposedReplyForConversation(
     gate: true,
   });
   if (res.skipped) return { status: 'skipped', reason: 'not_warranted' };
-  return { status: 'generated', draft: res.draft, answers_message_id: res.answers_message_id };
+  return {
+    status: 'generated',
+    draft: res.draft,
+    answers_message_id: res.answers_message_id,
+    sources: res.sources,
+  };
 }
 
 /**
