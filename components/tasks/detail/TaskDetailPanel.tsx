@@ -297,7 +297,22 @@ export function TaskDetailPanel({
   );
 
   if (isMobile) {
-    return <div className="fixed inset-0 z-50">{body}</div>;
+    // Full-screen on mobile covers the status bar / notch, so inset the whole
+    // panel below it — otherwise the back chevron and overflow menu sit under
+    // it and can't be tapped. Padding here (rather than in each header) also
+    // covers the checklist/comments takeovers, which are absolute inset-0
+    // inside this container. The action bar handles the bottom inset itself.
+    return (
+      <div
+        className="task-detail fixed inset-0 z-50"
+        style={{
+          paddingTop: 'env(safe-area-inset-top)',
+          background: 'var(--task-surface-0)',
+        }}
+      >
+        {body}
+      </div>
+    );
   }
   if (layout === 'page') {
     return body;
