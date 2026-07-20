@@ -350,12 +350,18 @@ export function useTaskDetailController({
         return;
       }
       try {
+        // NB: this route takes camelCase (taskId/formData), unlike the
+        // snake_case tasks-for-bin routes — sending snake_case here silently
+        // 400s as "Task ID is required".
         const res = await apiFetch('/api/save-task-form', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ task_id: taskId, form_metadata: formData }),
+          body: JSON.stringify({ taskId, formData }),
         });
-        if (!res.ok) throw new Error('Failed to save the form');
+        if (!res.ok) {
+          const result = await res.json().catch(() => ({}));
+          throw new Error(result.error || 'Failed to save the form');
+        }
         setRow((prev) => (prev ? { ...prev, form_metadata: formData } : prev));
         invalidateTaskCaches();
       } catch (err) {
