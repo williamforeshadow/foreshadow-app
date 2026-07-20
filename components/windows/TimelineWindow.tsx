@@ -28,8 +28,8 @@ import { marbleBackground } from './timeline/timelineStatus';
 import { TaskRowList } from './timeline/TaskRowList';
 import { TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
-import type { TaskDetailInput, TaskDraft } from '@/components/tasks/detail/taskInput';
-import type { TaskCreatePayload } from '@/components/tasks/detail/useTaskDetailController';
+import type { TaskDetailInput } from '@/components/tasks/detail/taskInput';
+import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
 import { DayDetailPanel } from '@/components/tasks/DayDetailPanel';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
 import {
@@ -104,51 +104,7 @@ function taskToTaskDetailInput(task: Task, propertyName: string): TaskDetailInpu
   };
 }
 
-// Draft (new-task) tasks flow through the grid/kanban/turnover creation
-// entry points as Task-shaped placeholders (see createDraftTask below) so
-// existing identity checks (`task_id.startsWith('draft-')`) keep working.
-// These two converters translate that placeholder to/from the TaskDraft
-// shape TaskDetailPanel's draft mode actually edits.
-function taskToDraft(task: Task): TaskDraft {
-  return {
-    title: task.title || task.template_name || '',
-    description: task.description ?? null,
-    priority: task.priority || 'medium',
-    status: task.status || 'not_started',
-    department_id: task.department_id ?? null,
-    scheduled_date: task.scheduled_date ?? null,
-    scheduled_time: task.scheduled_time ?? null,
-    assigned_staff: (task.assigned_users || []).map((u) => u.user_id),
-    property_id: task.property_id ?? null,
-    property_name: task.property_name ?? null,
-    template_id: task.template_id ?? null,
-    template_name: task.template_name ?? null,
-    bin_id: task.bin_id ?? null,
-    is_binned: task.is_binned ?? false,
-  };
-}
 
-function applyDraftToTask(task: Task, draft: TaskDraft, users: User[]): Task {
-  return {
-    ...task,
-    title: draft.title,
-    description: draft.description as Task['description'],
-    priority: draft.priority,
-    status: draft.status as Task['status'],
-    department_id: draft.department_id,
-    scheduled_date: draft.scheduled_date,
-    scheduled_time: draft.scheduled_time,
-    assigned_users: draft.assigned_staff.map((id) => {
-      const u = users.find((x) => x.id === id);
-      return { user_id: id, name: u?.name || '', avatar: u?.avatar, role: u?.role };
-    }),
-    property_id: draft.property_id,
-    property_name: draft.property_name || undefined,
-    template_id: draft.template_id || undefined,
-    template_name: draft.template_name || undefined,
-    bin_id: draft.bin_id,
-  };
-}
 
 interface TimelineWindowProps {
   users: User[];
@@ -551,7 +507,8 @@ export default function TimelineWindow({
   // labels — TaskDetailPanel loads its own template internally and no longer
   // needs this cache.
   const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
-  const [creatingTask, setCreatingTask] = useState(false);
+  const [creatingOpen, setCreatingOpen] = useState(false);
+  const [createSeed, setCreateSeed] = useState<{ property_name?: string | null; scheduled_date?: string | null }>({});
 
 
   // ============================================================================
@@ -955,114 +912,22 @@ export default function TimelineWindow({
     setTurnoverRightPanelView('tasks');
   }, []);
 
-  const createDraftTask = useCallback((payload: Record<string, unknown>): Task => {
-    return {
-      task_id: `draft-${Date.now()}`,
-      template_id: undefined,
-      template_name: undefined,
-      title: (payload.title as string) || 'New Task',
-      description: null,
-      priority: (payload.priority as string) || 'medium',
-      bin_id: (payload.bin_id as string) || null,
-      department_id: null,
-      department_name: null,
-      status: (payload.status as Task['status']) || 'not_started',
-      property_name: (payload.property_name as string) || undefined,
-      scheduled_date: (payload.scheduled_date as string) || null,
-      scheduled_time: (payload.scheduled_time as string) || null,
-      assigned_users: [],
-    } as Task;
-  }, []);
+  // Draft placeholders are gone — creation opens CreateTaskPanel directly.
 
-  // TaskDetailPanel draft-mode create handler for the main floating task
-  // panel (grid cell / header "new task" / day panel "new task" entry
-  // points). Invalidates the shared caches afterward so the grid/kanban
-  // (qk.timeline) and the tasks-for-bin lists pick up the new row without a
-  // manual refetch — the old code left the grid stale until the next
-  // natural reload; this closes that gap.
-  const handleConfirmCreateTaskTimeline = useCallback(async (payload: TaskCreatePayload) => {
-    setCreatingTask(true);
-    try {
-      const body: Record<string, unknown> = {
-        title: payload.fields.title || 'New Task',
-        status: payload.fields.status || 'not_started',
-        priority: payload.fields.priority || 'medium',
-        description: payload.fields.description || null,
-        department_id: payload.fields.department_id || null,
-        scheduled_date: payload.fields.scheduled_date || null,
-        scheduled_time: payload.fields.scheduled_time || null,
-      };
-      if (payload.property_name) body.property_name = payload.property_name;
-      if (payload.template_id) body.template_id = payload.template_id;
-      if (payload.bin_id) body.bin_id = payload.bin_id;
-      if (payload.fields.assigned_staff?.length) body.assigned_user_ids = payload.fields.assigned_staff;
-
-      const res = await fetch('/api/tasks-for-bin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const result = await res.json();
-      const data = result.data;
-      if (data) {
-        const createdTask: Task = {
-          task_id: data.id,
-          template_id: data.template_id || undefined,
-          template_name: data.template_name || undefined,
-          title: data.title || 'New Task',
-          description: data.description || null,
-          priority: data.priority || 'medium',
-          bin_id: data.bin_id || null,
-          department_id: data.department_id || null,
-          department_name: data.department_name || null,
-          status: data.status || 'not_started',
-          property_id: data.property_id || null,
-          property_name: data.property_name || undefined,
-          scheduled_date: data.scheduled_date || null,
-          scheduled_time: data.scheduled_time || null,
-          reservation_id: data.reservation_id ?? null,
-          assigned_users: (data.project_assignments || []).map((a: any) => ({
-            user_id: a.user_id,
-            name: a.user?.name || '',
-            avatar: a.user?.avatar || '',
-            role: a.user?.role || '',
-          })),
-        } as Task;
-        setFloatingData(prev => (prev && prev.type === 'task' ? { ...prev, item: createdTask } : prev));
-        queryClient.invalidateQueries({ queryKey: ['tasks-for-bin'] });
-        queryClient.invalidateQueries({ queryKey: qk.timeline });
-        queryClient.invalidateQueries({ queryKey: qk.turnovers });
-      }
-    } catch (err) {
-      console.error('Error creating task:', err);
-      toast.error("Couldn't create the task");
-    } finally {
-      setCreatingTask(false);
-    }
-  }, [queryClient]);
+  // Creation is owned by useTaskCreate (CreateTaskPanel).
 
   const handleCreateProjectFromTimelineCell = useCallback((propertyName: string, date: Date) => {
     const scheduledDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    const draft = createDraftTask({ property_name: propertyName, scheduled_date: scheduledDate });
-
     closeGlobals();
-    setFloatingData({
-      type: 'task',
-      item: draft,
-      propertyName,
-    });
-  }, [createDraftTask, closeGlobals]);
+    setCreateSeed({ property_name: propertyName, scheduled_date: scheduledDate });
+    setCreatingOpen(true);
+  }, [closeGlobals]);
 
   const handleCreateProjectFromHeader = useCallback(() => {
-    const draft = createDraftTask({});
-
     closeGlobals();
-    setFloatingData({
-      type: 'task',
-      item: draft,
-      propertyName: '',
-    });
-  }, [createDraftTask, closeGlobals]);
+    setCreateSeed({});
+    setCreatingOpen(true);
+  }, [closeGlobals]);
 
   // Persist a task's full assignee list from a Timeline-Kanban drag, then
   // optimistically reflect it across reservation tasks, recurring tasks, and
@@ -1303,15 +1168,11 @@ export default function TimelineWindow({
   }, [allScheduledTasks, closeGlobals]);
 
   const handleNewTaskFromDay = useCallback((dateStr: string) => {
-    const draft = createDraftTask({ scheduled_date: dateStr });
     closeGlobals();
     setSelectedDay(null);
-    setFloatingData({
-      type: 'task',
-      item: draft,
-      propertyName: '',
-    });
-  }, [createDraftTask, closeGlobals]);
+    setCreateSeed({ scheduled_date: dateStr });
+    setCreatingOpen(true);
+  }, [closeGlobals]);
 
   // Note: projects state is kept for TurnoverProjectsPanel but NOT shown on the
   // grid — useTimeline's recurringTasks already includes all non-reservation tasks.
@@ -1897,38 +1758,19 @@ export default function TimelineWindow({
         >
           {floatingData.type === 'task' ? (() => {
             const item = floatingData.item as Task;
-            const isDraftTask = item.task_id.startsWith('draft-');
             return (
               <TaskDetailPanel
-                task={isDraftTask ? null : taskToTaskDetailInput(item, floatingData.propertyName)}
-                draft={isDraftTask ? taskToDraft(item) : null}
-                onDraftChange={
-                  isDraftTask
-                    ? (d: TaskDraft) => {
-                        setFloatingData(prev =>
-                          prev && prev.type === 'task'
-                            ? { ...prev, item: applyDraftToTask(item, d, users), propertyName: d.property_name || prev.propertyName }
-                            : prev
-                        );
-                      }
-                    : undefined
-                }
-                onConfirmCreate={isDraftTask ? handleConfirmCreateTaskTimeline : undefined}
-                creating={creatingTask}
+                task={taskToTaskDetailInput(item, floatingData.propertyName)}
                 onClose={handleCloseFloatingWindow}
                 onDeleted={() => {
                   setRecurringTasks(prev => prev.filter((t: any) => t.task_id !== item.task_id));
                   handleCloseFloatingWindow();
                 }}
-                onOpenInPage={
-                  !isDraftTask
-                    ? () => {
-                        const id = item.task_id;
-                        handleCloseFloatingWindow();
-                        router.push(taskPath(id));
-                      }
-                    : undefined
-                }
+                onOpenInPage={() => {
+                  const id = item.task_id;
+                  handleCloseFloatingWindow();
+                  router.push(taskPath(id));
+                }}
               />
             );
           })() : floatingData.type === 'turnover' ? (
@@ -2045,6 +1887,17 @@ export default function TimelineWindow({
         </div>
       )}
 
+      {creatingOpen && (
+        <CreateTaskPanel
+          seed={createSeed}
+          onClose={() => setCreatingOpen(false)}
+          onCreated={() => {
+            setCreatingOpen(false);
+            queryClient.invalidateQueries({ queryKey: qk.timeline });
+            queryClient.invalidateQueries({ queryKey: ['tasks-for-bin'] });
+          }}
+        />
+      )}
     </div>
   );
 }

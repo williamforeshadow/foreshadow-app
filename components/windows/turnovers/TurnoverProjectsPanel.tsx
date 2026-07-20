@@ -6,10 +6,9 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { toast } from '@/components/ui/toast';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
-import { projectToTaskInput, emptyDraft, type TaskDraft } from '@/components/tasks/detail/taskInput';
-import type { TaskCreatePayload } from '@/components/tasks/detail/useTaskDetailController';
+import { projectToTaskInput } from '@/components/tasks/detail/taskInput';
+import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
 import { qk } from '@/lib/queries';
 import type { Project, User } from '@/lib/types';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
@@ -126,60 +125,32 @@ export function TurnoverProjectsPanel({
   // whenever the turnover panel closes or the tab switches away, so this
   // resets for free rather than needing to be reached in from the parent.
   const [expandedProject, setExpandedProject] = useState<Project | null>(null);
-  const [draft, setDraft] = useState<TaskDraft | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [creatingOpen, setCreatingOpen] = useState(false);
 
-  const handleConfirmCreate = async (payload: TaskCreatePayload) => {
-    setCreating(true);
-    try {
-      const body: Record<string, unknown> = {
-        title: payload.fields.title || 'New Task',
-        status: payload.fields.status || 'not_started',
-        priority: payload.fields.priority || 'medium',
-        description: payload.fields.description || null,
-        department_id: payload.fields.department_id || null,
-        scheduled_date: payload.fields.scheduled_date || null,
-        scheduled_time: payload.fields.scheduled_time || null,
-      };
-      if (payload.property_name) body.property_name = payload.property_name;
-      if (payload.template_id) body.template_id = payload.template_id;
-      if (payload.bin_id) body.bin_id = payload.bin_id;
-      if (payload.fields.assigned_staff?.length) body.assigned_user_ids = payload.fields.assigned_staff;
-
-      const res = await fetch('/api/tasks-for-bin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const result = await res.json();
-      if (result.data) {
-        setDraft(null);
-        setExpandedProject(result.data as Project);
+  // Creation is owned by useTaskCreate (CreateTaskPanel). Rendered in each
+  // return branch below since this component has several.
+  const createPanel = creatingOpen ? (
+    <CreateTaskPanel
+      seed={{ property_name: propertyName }}
+      onClose={() => setCreatingOpen(false)}
+      onCreated={(row) => {
+        setCreatingOpen(false);
+        setExpandedProject(row as unknown as Project);
         queryClient.invalidateQueries({ queryKey: ['tasks-for-bin'] });
         queryClient.invalidateQueries({ queryKey: qk.timeline });
         queryClient.invalidateQueries({ queryKey: qk.turnovers });
-      }
-    } catch (err) {
-      console.error('Error creating project:', err);
-      toast.error("Couldn't create the task");
-    } finally {
-      setCreating(false);
-    }
-  };
+      }}
+    />
+  ) : null;
 
-  if (expandedProject || draft) {
+  if (expandedProject) {
     return (
       <div className="flex flex-col h-full">
         <div className="flex-1 min-h-0">
           <TaskDetailPanel
-            task={expandedProject ? projectToTaskInput(expandedProject, users) : null}
-            draft={draft}
-            onDraftChange={setDraft}
-            onConfirmCreate={handleConfirmCreate}
-            creating={creating}
+            task={projectToTaskInput(expandedProject, users)}
             onClose={() => {
               setExpandedProject(null);
-              setDraft(null);
             }}
             onDeleted={() => setExpandedProject(null)}
             onOpenInPage={
@@ -193,6 +164,7 @@ export function TurnoverProjectsPanel({
             }
           />
         </div>
+        {createPanel}
       </div>
     );
   }
@@ -205,10 +177,11 @@ export function TurnoverProjectsPanel({
           variant="outline"
           size="sm"
           className="mt-3"
-          onClick={() => setDraft(emptyDraft({ property_name: propertyName }))}
+          onClick={() => setCreatingOpen(true)}
         >
           Create Project
         </Button>
+        {createPanel}
       </div>
     );
   }
@@ -227,10 +200,11 @@ export function TurnoverProjectsPanel({
       <Button
         variant="outline"
         className="w-full mt-2"
-        onClick={() => setDraft(emptyDraft({ property_name: propertyName }))}
+        onClick={() => setCreatingOpen(true)}
       >
         Add Project
       </Button>
+      {createPanel}
     </div>
   );
 }

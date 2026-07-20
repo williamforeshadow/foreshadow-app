@@ -6,8 +6,8 @@ import { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, typ
 import { createPortal } from 'react-dom';
 import MobileBinPicker from '@/components/mobile/MobileBinPicker';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
-import { projectToTaskInput, type TaskDetailInput, type TaskDraft } from '@/components/tasks/detail/taskInput';
-import type { TaskCreatePayload } from '@/components/tasks/detail/useTaskDetailController';
+import { projectToTaskInput, type TaskDetailInput } from '@/components/tasks/detail/taskInput';
+import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
 import { ProjectsKanban } from '@/components/windows/projects/ProjectsKanban';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { useColumnVisibility } from '@/lib/hooks/useColumnVisibility';
@@ -36,48 +36,9 @@ type Screen =
 const EMPTY_PROJECTS: Project[] = [];
 
 // ============================================================================
-// TaskDetailPanel adapters — the panel speaks TaskDetailInput/TaskDraft;
-// this view's screen/kanban state speaks Project. These convert both ways
-// so the draft Project living in `screen.project` stays the source of truth.
+// TaskDetailPanel adapter — the panel speaks TaskDetailInput; this view's
+// screen/kanban state speaks Project.
 // ============================================================================
-
-function projectToDraft(project: Project): TaskDraft {
-  return {
-    title: project.title || '',
-    description: project.description ?? null,
-    priority: project.priority || 'medium',
-    status: project.status || 'not_started',
-    department_id: project.department_id || null,
-    scheduled_date: project.scheduled_date || null,
-    scheduled_time: project.scheduled_time || null,
-    assigned_staff: (project.project_assignments ?? []).map((a) => a.user_id),
-    property_id: project.property_id ?? null,
-    property_name: project.property_name ?? null,
-    template_id: project.template_id ?? null,
-    template_name: project.template_name ?? null,
-    bin_id: project.bin_id ?? null,
-    is_binned: project.is_binned ?? false,
-  };
-}
-
-function applyDraftToProject(project: Project, draft: TaskDraft): Project {
-  return {
-    ...project,
-    title: draft.title,
-    description: draft.description as Project['description'],
-    priority: draft.priority as Project['priority'],
-    status: draft.status as Project['status'],
-    department_id: draft.department_id,
-    scheduled_date: draft.scheduled_date,
-    scheduled_time: draft.scheduled_time,
-    property_id: draft.property_id,
-    property_name: draft.property_name,
-    template_id: draft.template_id,
-    template_name: draft.template_name,
-    bin_id: draft.bin_id,
-    project_assignments: draft.assigned_staff.map((id) => ({ user_id: id })),
-  };
-}
 
 // Fold a saved TaskDetailInput row back into the Project shape the kanban
 // cache + screen state use. `prev` supplies fields the panel doesn't surface
@@ -263,7 +224,8 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
   // Draft (new-task) creation is in-flight while the panel's Create action
   // awaits the POST. TaskDetailPanel owns everything else about the draft —
   // it lives entirely in screen.project until confirmed.
-  const [creatingTask, setCreatingTask] = useState(false);
+  const [creatingOpen, setCreatingOpen] = useState(false);
+  const [createSeedBinId, setCreateSeedBinId] = useState<string | null>(null);
 
   // Task Bin "Global" toggle. Mirrors ProjectsWindow desktop: when ON inside
   // the Task Bin (activeBinId === null), widens the kanban to every binned
@@ -607,76 +569,14 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
 
   const handleNewTask = useCallback(() => {
     if (screen.type !== 'kanban') return;
-    const draft: Project = {
-      id: `draft-${Date.now()}`,
-      title: 'New Task',
-      description: null,
-      status: 'not_started',
-      priority: 'medium',
-      property_id: null,
-      property_name: null,
-      template_id: null,
-      template_name: null,
-      // In Task Bin view (screen.binId === null), a new task has no specific
-      // sub-bin — it lands in the Task Bin by default. In a sub-bin view we
-      // pre-fill bin_id so the new task lands in that sub-bin.
-      bin_id: screen.binId,
-      is_binned: true,
-      assigned_user_ids: [],
-      project_assignments: [],
-      department_id: null,
-      department_name: null,
-      scheduled_date: null,
-      scheduled_time: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+    // Task Bin view (screen.binId === null) lands the task in the Task Bin;
+    // a sub-bin view pre-fills that sub-bin.
     closeGlobals();
-    setScreen({ type: 'detail', project: draft, binId: screen.binId, binName: screen.binName });
+    setCreateSeedBinId(screen.binId);
+    setCreatingOpen(true);
   }, [screen, closeGlobals]);
 
-  // TaskDetailPanel's Create action hands back the fully-formed payload
-  // (fields + the property/template/bin locked in at draft time) — no need
-  // to track pending field edits ourselves.
-  const handleConfirmCreateTask = useCallback(async (payload: TaskCreatePayload) => {
-    setCreatingTask(true);
-    try {
-      const body: Record<string, unknown> = {
-        title: payload.fields.title || 'New Task',
-        status: payload.fields.status || 'not_started',
-        priority: payload.fields.priority || 'medium',
-        is_binned: true,
-        description: payload.fields.description || null,
-        department_id: payload.fields.department_id || null,
-        scheduled_date: payload.fields.scheduled_date || null,
-        scheduled_time: payload.fields.scheduled_time || null,
-      };
-      if (payload.bin_id) body.bin_id = payload.bin_id;
-      if (payload.property_name) body.property_name = payload.property_name;
-      if (payload.template_id) body.template_id = payload.template_id;
-      if (payload.fields.assigned_staff?.length) body.assigned_user_ids = payload.fields.assigned_staff;
-
-      const res = await fetch('/api/tasks-for-bin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const result = await res.json();
-      if (result.data) {
-        patchTasks(prev => [...prev, result.data]);
-        invalidateAllBinLists();
-        setScreen(prev => prev.type === 'detail' ? { ...prev, project: result.data } : prev);
-      } else {
-        console.error('Create failed:', result.error);
-        toast.error(result.error || 'Failed to create task');
-      }
-    } catch (err) {
-      console.error('Error creating task:', err);
-      toast.error('Failed to create task');
-    } finally {
-      setCreatingTask(false);
-    }
-  }, [patchTasks, invalidateAllBinLists]);
+  // Creation is owned by useTaskCreate (CreateTaskPanel).
 
   const getUnreadCommentCount = useCallback((project: Project): number => {
     return (project as any).unread_comment_count || 0;
@@ -883,11 +783,9 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
 
       {/* Task detail screen */}
       {screen.type === 'detail' && (() => {
-        const isDraft = screen.project.id.startsWith('draft-');
         return (
           <TaskDetailPanel
-            task={isDraft ? null : projectToTaskInput(screen.project, users)}
-            draft={isDraft ? projectToDraft(screen.project) : undefined}
+            task={projectToTaskInput(screen.project, users)}
             onClose={goBack}
             onSaved={(row) => {
               patchTasks(prev => prev.map(t => t.id === row.task_id ? taskInputToProject(row, t) : t));
@@ -898,18 +796,21 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
               invalidateAllBinLists();
               goBack();
             }}
-            onConfirmCreate={isDraft ? handleConfirmCreateTask : undefined}
-            creating={creatingTask}
-            onDraftChange={isDraft
-              ? (nextDraft) => {
-                  const updated = applyDraftToProject(screen.project, nextDraft);
-                  setScreen(prev => prev.type === 'detail' ? { ...prev, project: updated } : prev);
-                }
-              : undefined
-            }
           />
         );
       })()}
+
+      {creatingOpen && (
+        <CreateTaskPanel
+          seed={{ bin_id: createSeedBinId, is_binned: true }}
+          onClose={() => setCreatingOpen(false)}
+          onCreated={(row) => {
+            setCreatingOpen(false);
+            patchTasks((prev) => [...prev, row as unknown as Project]);
+            invalidateAllBinLists();
+          }}
+        />
+      )}
     </div>
   );
 }

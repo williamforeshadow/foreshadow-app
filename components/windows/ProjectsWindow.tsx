@@ -24,8 +24,8 @@ import { Filter as FilterIcon } from 'lucide-react';
 import { CompactSearch } from '@/components/ui/compact-search';
 import { TaskFilterBar, type FilterOption } from '@/components/tasks/TaskFilterBar';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
-import { projectToTaskInput, emptyDraft, type TaskDraft, type TaskDetailInput } from '@/components/tasks/detail/taskInput';
-import type { TaskCreatePayload } from '@/components/tasks/detail/useTaskDetailController';
+import { projectToTaskInput, type TaskDetailInput } from '@/components/tasks/detail/taskInput';
+import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
 
 // ============================================================================
 // View Mode Toggle — compact pill that expands on click
@@ -273,9 +273,9 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   // UI state
   const [expandedProject, setExpandedProject] = useState<Project | null>(null);
 
-  // Draft task state — local-only task not yet persisted
-  const [draftTask, setDraftTask] = useState<TaskDraft | null>(null);
-  const [creatingTask, setCreatingTask] = useState(false);
+  // New-task form (creation lives in useTaskCreate via CreateTaskPanel).
+  const [creatingOpen, setCreatingOpen] = useState(false);
+  const [createSeedBinId, setCreateSeedBinId] = useState<string | null>(null);
 
   // Strict single-panel rule (both directions): close our local panel
   // when a context overlay opens; surfaces call closeGlobals() before
@@ -286,7 +286,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   // detail panel.
   const closeGlobals = useExclusiveDetailPanelHost(() => {
     setExpandedProject(null);
-    setDraftTask(null);
+    setCreatingOpen(false);
   });
 
   // Column visibility
@@ -504,47 +504,12 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     // pre-fill bin_id so the new task lands in that sub-bin.
     closeGlobals();
     setExpandedProject(null);
-    setDraftTask(emptyDraft({ bin_id: selectedBinId }));
+    setCreateSeedBinId(selectedBinId);
+    setCreatingOpen(true);
   }, [selectedBinId, closeGlobals]);
 
-  const handleConfirmCreateTask = useCallback(async (payload: TaskCreatePayload) => {
-    setCreatingTask(true);
-    try {
-      const f = payload.fields;
-      const body: Record<string, unknown> = {
-        title: f.title || 'New Task',
-        status: f.status || 'not_started',
-        priority: f.priority || 'medium',
-        is_binned: true,
-        description: f.description || null,
-        department_id: f.department_id || null,
-        scheduled_date: f.scheduled_date || null,
-        scheduled_time: f.scheduled_time || null,
-      };
-      if (payload.bin_id) body.bin_id = payload.bin_id;
-      if (payload.property_name) body.property_name = payload.property_name;
-      if (payload.template_id) body.template_id = payload.template_id;
-      if (f.assigned_staff?.length) body.assigned_user_ids = f.assigned_staff;
-
-      const res = await fetch('/api/tasks-for-bin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const result = await res.json();
-      if (result.data) {
-        patchTasks(prev => [...prev, result.data]);
-        invalidateAllBinLists();
-        setDraftTask(null);
-        setExpandedProject(result.data);
-      }
-    } catch (err) {
-      console.error('Error creating task:', err);
-      toast.error('Couldn\'t create the task.');
-    } finally {
-      setCreatingTask(false);
-    }
-  }, [patchTasks, invalidateAllBinLists]);
+  // Creation is owned by useTaskCreate (CreateTaskPanel); this surface only
+  // reacts to the created row below.
 
   const handleColumnMove = useCallback(async (taskId: string, field: string, value: string) => {
     if (field === 'property_name') {
@@ -857,11 +822,11 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
       </div>
 
       {/* Right Panel - Task Detail */}
-      {(expandedProject || draftTask) && (
+      {expandedProject && (
         <div className={DESKTOP_TASK_PANEL_SLOT}>
           <TaskDetailPanel
             task={expandedProject ? projectToTaskInput(expandedProject, users) : null}
-            onClose={() => { setExpandedProject(null); setDraftTask(null); }}
+            onClose={() => setExpandedProject(null)}
             onSaved={(row) => {
               patchTasks(prev => prev.map(t => t.id === row.task_id ? mergeRowIntoProject(t, row) : t));
               setExpandedProject(prev => (prev && prev.id === row.task_id ? mergeRowIntoProject(prev, row) : prev));
@@ -875,17 +840,25 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
                 ? () => {
                     const id = expandedProject.id;
                     setExpandedProject(null);
-                    setDraftTask(null);
                     router.push(taskPath(id));
                   }
                 : undefined
             }
-            draft={draftTask}
-            onDraftChange={setDraftTask}
-            onConfirmCreate={handleConfirmCreateTask}
-            creating={creatingTask}
           />
         </div>
+      )}
+
+      {creatingOpen && (
+        <CreateTaskPanel
+          seed={{ bin_id: createSeedBinId, is_binned: true }}
+          onClose={() => setCreatingOpen(false)}
+          onCreated={(row) => {
+            setCreatingOpen(false);
+            patchTasks((prev) => [...prev, row as unknown as Project]);
+            invalidateAllBinLists();
+            setExpandedProject(row as unknown as Project);
+          }}
+        />
       )}
     </div>
   );

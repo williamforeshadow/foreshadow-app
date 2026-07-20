@@ -34,45 +34,6 @@ export interface TaskDetailInput {
   unread_comment_count?: number;
 }
 
-// Draft (new-task) mode seed. Property/template are editable ONLY here —
-// they lock at creation.
-export interface TaskDraft {
-  title: string;
-  description: unknown;
-  priority: string;
-  status: string;
-  department_id: string | null;
-  scheduled_date: string | null;
-  scheduled_time: string | null;
-  assigned_staff: string[];
-  property_id: string | null;
-  property_name: string | null;
-  template_id: string | null;
-  template_name: string | null;
-  bin_id: string | null;
-  is_binned: boolean;
-}
-
-export function emptyDraft(partial: Partial<TaskDraft> = {}): TaskDraft {
-  return {
-    title: '',
-    description: null,
-    priority: 'medium',
-    status: 'not_started',
-    department_id: null,
-    scheduled_date: null,
-    scheduled_time: null,
-    assigned_staff: [],
-    property_id: null,
-    property_name: null,
-    template_id: null,
-    template_name: null,
-    bin_id: null,
-    is_binned: false,
-    ...partial,
-  };
-}
-
 // Adapt a Project row (kanban / tasks-for-bin shape: `id`, project_assignments)
 // into TaskDetailInput. Some rows carry project_assignments without joined
 // user objects — fall back to the users list for names/avatars.
@@ -126,15 +87,3 @@ export function buildFields(task: TaskDetailInput): ProjectFormFields {
   };
 }
 
-export function draftToFields(draft: TaskDraft): ProjectFormFields {
-  return {
-    title: draft.title,
-    description: draft.description as ProjectFormFields['description'],
-    status: (draft.status as ProjectFormFields['status']) || 'not_started',
-    priority: (draft.priority as ProjectFormFields['priority']) || 'medium',
-    assigned_staff: draft.assigned_staff,
-    department_id: draft.department_id || '',
-    scheduled_date: draft.scheduled_date || '',
-    scheduled_time: draft.scheduled_time || '',
-  };
-}

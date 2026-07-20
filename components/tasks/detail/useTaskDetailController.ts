@@ -18,30 +18,14 @@ import {
 } from '@/lib/tasks/templateProgress';
 import type { ProjectFormFields, User } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
-import {
-  buildFields,
-  draftToFields,
-  emptyDraft,
-  type TaskDetailInput,
-  type TaskDraft,
-} from './taskInput';
+import { buildFields, type TaskDetailInput } from './taskInput';
 
 export type TaskDetailView = 'main' | 'checklist' | 'comments';
 
-export interface TaskCreatePayload {
-  fields: ProjectFormFields;
-  property_id: string | null;
-  property_name: string | null;
-  template_id: string | null;
-  bin_id: string | null;
-}
-
 interface ControllerArgs {
   task: TaskDetailInput | null;
-  draft?: TaskDraft | null;
   onSaved?: (row: TaskDetailInput) => void;
   onDeleted?: (taskId: string) => void;
-  onDraftChange?: (draft: TaskDraft) => void;
   /** Demo fixtures mode: saves apply locally, no network. */
   demo?: boolean;
 }
@@ -62,10 +46,8 @@ async function flushChecklistSave() {
 
 export function useTaskDetailController({
   task,
-  draft,
   onSaved,
   onDeleted,
-  onDraftChange,
   demo = false,
 }: ControllerArgs) {
   const queryClient = useQueryClient();
@@ -77,13 +59,12 @@ export function useTaskDetailController({
   const { templates: availableTemplates } = useTaskTemplates();
   const binsHook = useProjectBins({ currentUser });
 
-  const isDraft = !task && !!draft;
   const taskId = task?.task_id ?? null;
 
-  // ---- fields state (seeded from task/draft; reseeds when the row changes
+  // ---- fields state (seeded from the task; reseeds when the row changes
   // externally — keyed on updated_at, not just id) ------------------------
   const [fields, setFields] = useState<ProjectFormFields>(() =>
-    task ? buildFields(task) : draftToFields(draft ?? emptyDraft())
+    task ? buildFields(task) : ({} as ProjectFormFields)
   );
   const fieldsRef = useRef(fields);
   fieldsRef.current = fields;
@@ -91,7 +72,7 @@ export function useTaskDetailController({
   // Local mirror of the task row: optimistic patches + PUT responses land
   // here so the panel is self-consistent between parent refreshes.
   const [row, setRow] = useState<TaskDetailInput | null>(task);
-  const seedKey = task ? `${task.task_id}:${task.updated_at}` : 'draft';
+  const seedKey = task ? `${task.task_id}:${task.updated_at}` : 'none';
   const lastSeedRef = useRef(seedKey);
   useEffect(() => {
     if (lastSeedRef.current === seedKey) return;
@@ -101,7 +82,7 @@ export function useTaskDetailController({
       setFields(buildFields(task));
     } else {
       setRow(null);
-      setFields(draftToFields(draft ?? emptyDraft()));
+      setFields({} as ProjectFormFields);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seedKey]);
@@ -134,8 +115,8 @@ export function useTaskDetailController({
   }, [taskId]);
 
   // ---- template loading ---------------------------------------------------
-  const templateId = task?.template_id ?? draft?.template_id ?? null;
-  const propertyName = task?.property_name ?? draft?.property_name ?? null;
+  const templateId = task?.template_id ?? null;
+  const propertyName = task?.property_name ?? null;
   const [template, setTemplate] = useState<Template | null>(null);
   const [loadingTemplate, setLoadingTemplate] = useState(false);
   useEffect(() => {
@@ -212,21 +193,6 @@ export function useTaskDetailController({
     async (directFields?: ProjectFormFields) => {
       const current = rowRef.current;
       const nextFields = directFields ?? fieldsRef.current;
-      if (isDraft) {
-        // Draft mode never touches the network — mirror to the parent.
-        onDraftChange?.({
-          ...(draft ?? emptyDraft()),
-          title: nextFields.title,
-          description: nextFields.description,
-          priority: nextFields.priority,
-          status: nextFields.status,
-          department_id: nextFields.department_id || null,
-          scheduled_date: nextFields.scheduled_date || null,
-          scheduled_time: nextFields.scheduled_time || null,
-          assigned_staff: nextFields.assigned_staff || [],
-        });
-        return;
-      }
       if (!current) return;
 
       if (demo) {
@@ -326,7 +292,7 @@ export function useTaskDetailController({
         setSavingEdit(false);
       }
     },
-    [isDraft, draft, onDraftChange, onSaved, invalidateTaskCaches, users, demo]
+    [onSaved, invalidateTaskCaches, users, demo]
   );
 
   // Field update helpers: pickers save immediately (optimistic), text saves
@@ -442,10 +408,6 @@ export function useTaskDetailController({
   // ---- bin move (not part of ProjectFormFields — its own small PUT) --------
   const updateBin = useCallback(
     async (binId: string | null, isBinned: boolean) => {
-      if (isDraft) {
-        onDraftChange?.({ ...(draft ?? emptyDraft()), bin_id: binId, is_binned: isBinned });
-        return;
-      }
       const current = rowRef.current;
       if (!current) return;
       try {
@@ -468,7 +430,7 @@ export function useTaskDetailController({
         toast.error("Couldn't move the task to that bin");
       }
     },
-    [isDraft, draft, onDraftChange, binsHook.bins, onSaved, invalidateTaskCaches, queryClient]
+    [binsHook.bins, onSaved, invalidateTaskCaches, queryClient]
   );
 
   // ---- delete ---------------------------------------------------------------
@@ -497,7 +459,6 @@ export function useTaskDetailController({
 
   return {
     // identity/context
-    isDraft,
     row,
     fields,
     updateField,

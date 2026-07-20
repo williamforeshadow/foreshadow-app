@@ -13,7 +13,6 @@ import { useUsers } from '@/lib/useUsers';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useTasks, type TaskRow as TaskRowData } from '@/lib/useTasks';
-import { useProperties } from '@/lib/queries';
 import type {
   Project,
   User,
@@ -21,12 +20,11 @@ import type {
 import { MobileTaskRow } from '@/components/tasks/MobileTaskRow';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
-import { projectToTaskInput, type TaskDraft } from '@/components/tasks/detail/taskInput';
-import type { TaskCreatePayload } from '@/components/tasks/detail/useTaskDetailController';
+import { projectToTaskInput } from '@/components/tasks/detail/taskInput';
+import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { toast } from '@/components/ui/toast';
 
 // Mobile-tailored Tasks view. Shares the same useTasks hook + filter bar as
 // the desktop dashboard tab — only the row + detail components swap out for
@@ -79,45 +77,6 @@ function toRowItem(task: TaskRowData): TaskRowItem {
   };
 }
 
-// Adapters between this view's Project-shaped draft state and the panel's
-// TaskDraft (same pattern as MobileProjectsView).
-function projectToDraft(project: Project): TaskDraft {
-  return {
-    title: project.title || '',
-    description: project.description ?? null,
-    priority: project.priority || 'medium',
-    status: project.status || 'not_started',
-    department_id: project.department_id || null,
-    scheduled_date: project.scheduled_date || null,
-    scheduled_time: project.scheduled_time || null,
-    assigned_staff: (project.project_assignments ?? []).map((a) => a.user_id),
-    property_id: project.property_id ?? null,
-    property_name: project.property_name ?? null,
-    template_id: project.template_id ?? null,
-    template_name: project.template_name ?? null,
-    bin_id: project.bin_id ?? null,
-    is_binned: project.is_binned ?? false,
-  };
-}
-
-function applyDraftToProject(project: Project, draft: TaskDraft): Project {
-  return {
-    ...project,
-    title: draft.title,
-    description: draft.description as Project['description'],
-    priority: draft.priority as Project['priority'],
-    status: draft.status as Project['status'],
-    department_id: draft.department_id,
-    scheduled_date: draft.scheduled_date,
-    scheduled_time: draft.scheduled_time,
-    property_id: draft.property_id,
-    property_name: draft.property_name,
-    template_id: draft.template_id,
-    template_name: draft.template_name,
-    bin_id: draft.bin_id,
-    project_assignments: draft.assigned_staff.map((id) => ({ user_id: id })),
-  };
-}
 
 function MobileTasksViewContent() {
   // This view owns the full mobile page chrome (safe-area container + header)
@@ -157,50 +116,25 @@ function MobileTasksViewContent() {
     setSelectedTask,
   } = useTasks({ urlSync: true });
 
+  // Declared before closeGlobals, which closes over setCreatingOpen.
+  const [creatingOpen, setCreatingOpen] = useState(false);
+
   const closeGlobals = useExclusiveDetailPanelHost(() => {
     setSelectedTask(null);
-    setDraftTask(null);
+    setCreatingOpen(false);
   });
-
-  // ---- Supporting lists --------------------------------------------------
-
-  const { properties: allProperties } = useProperties();
-
-  // ---- Detail / draft state ---------------------------------------------
-
-  const [draftTask, setDraftTask] = useState<Project | null>(null);
-  const [creatingTask, setCreatingTask] = useState(false);
 
   // ---- New task draft flow ----------------------------------------------
 
   const handleNewTask = useCallback(() => {
-    const draft: Project = {
-      id: `draft-${Date.now()}`,
-      property_name: null,
-      bin_id: null,
-      is_binned: false,
-      template_id: null,
-      template_name: null,
-      title: 'New Task',
-      description: null,
-      status: 'not_started' as Project['status'],
-      priority: 'medium' as Project['priority'],
-      department_id: null,
-      department_name: null,
-      scheduled_date: null,
-      scheduled_time: null,
-      form_metadata: undefined,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
     closeGlobals();
     setSelectedTask(null);
-    setDraftTask(draft);
+    setCreatingOpen(true);
   }, [closeGlobals, setSelectedTask]);
 
-  // Auto-open the new-task draft when arriving via `/tasks?newTask=1` (e.g.
+  // Auto-open the new-task form when arriving via `/tasks?newTask=1` (e.g.
   // the + task button on Schedule / My Assignments, which have no local
-  // draft flow). Fires once, then strips the param so a refresh doesn't
+  // create flow). Fires once, then strips the param so a refresh doesn't
   // re-open it.
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -216,60 +150,11 @@ function MobileTasksViewContent() {
     router.replace(qs ? `/tasks?${qs}` : '/tasks');
   }, [newTaskSentinel, handleNewTask, router, searchParams]);
 
-  const handleConfirmCreate = useCallback(
-    async (create: TaskCreatePayload) => {
-      if (!draftTask) return;
-      const fields = create.fields;
-      const propertyName = create.property_name;
-
-      setCreatingTask(true);
-      try {
-        const matchedProperty = propertyName
-          ? allProperties.find((p) => p.name === propertyName)
-          : null;
-        const payload: Record<string, unknown> = {
-          title: fields.title || 'New Task',
-          status: fields.status || 'not_started',
-          priority: fields.priority || 'medium',
-          is_binned: false,
-          description: fields.description || null,
-          department_id: fields.department_id || null,
-          scheduled_date: fields.scheduled_date || null,
-          scheduled_time: fields.scheduled_time || null,
-          template_id: create.template_id || null,
-          property_id: create.property_id ?? matchedProperty?.id ?? null,
-          property_name: propertyName,
-        };
-        if (fields.assigned_staff?.length)
-          payload.assigned_user_ids = fields.assigned_staff;
-
-        const res = await fetch('/api/tasks-for-bin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const result = await res.json();
-        if (result.data) {
-          setDraftTask(null);
-          await fetchTasks();
-        } else {
-          console.error('Create failed:', result.error);
-          toast.error(result.error || "Couldn't create the task");
-        }
-      } catch (err) {
-        console.error('Error creating task:', err);
-        toast.error("Couldn't create the task");
-      } finally {
-        setCreatingTask(false);
-      }
-    },
-    [draftTask, allProperties, fetchTasks]
-  );
+  // Creation itself is owned by useTaskCreate (CreateTaskPanel).
 
   // ---- Selection → Project mapping --------------------------------------
 
   const itemAsProject: Project | null = useMemo(() => {
-    if (draftTask) return draftTask;
     if (!selectedTask) return null;
     return {
       id: selectedTask.task_id,
@@ -301,7 +186,7 @@ function MobileTasksViewContent() {
       created_at: selectedTask.created_at || '',
       updated_at: selectedTask.updated_at || '',
     } as Project;
-  }, [selectedTask, draftTask]);
+  }, [selectedTask]);
 
   // ---- Grouping ---------------------------------------------------------
 
@@ -529,7 +414,7 @@ function MobileTasksViewContent() {
                                 setSelectedTask(null);
                               } else {
                                 closeGlobals();
-                                setDraftTask(null);
+                                setCreatingOpen(false);
                                 setSelectedTask(t);
                               }
                             }}
@@ -547,16 +432,16 @@ function MobileTasksViewContent() {
       </div>
 
       {/* Detail overlay — unified panel (self-renders fixed inset-0 on mobile) */}
-      {draftTask ? (
-        <TaskDetailPanel
-          task={null}
-          draft={projectToDraft(draftTask)}
-          onDraftChange={(d) => setDraftTask((prev) => (prev ? applyDraftToProject(prev, d) : prev))}
-          onConfirmCreate={handleConfirmCreate}
-          creating={creatingTask}
-          onClose={() => setDraftTask(null)}
+      {creatingOpen && (
+        <CreateTaskPanel
+          onClose={() => setCreatingOpen(false)}
+          onCreated={() => {
+            setCreatingOpen(false);
+            void fetchTasks();
+          }}
         />
-      ) : selectedTask && itemAsProject ? (
+      )}
+      {selectedTask && itemAsProject ? (
         <TaskDetailPanel
           task={projectToTaskInput(itemAsProject, users)}
           onClose={() => setSelectedTask(null)}

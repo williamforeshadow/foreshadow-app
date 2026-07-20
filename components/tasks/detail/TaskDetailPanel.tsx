@@ -6,8 +6,8 @@ import type { JSONContent } from '@tiptap/react';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { AttachmentLightbox } from '@/components/windows/projects/AttachmentLightbox';
 import type { ProjectFormFields } from '@/lib/types';
-import { useTaskDetailController, type TaskCreatePayload } from './useTaskDetailController';
-import { emptyDraft, type TaskDetailInput, type TaskDraft } from './taskInput';
+import { useTaskDetailController } from './useTaskDetailController';
+import { type TaskDetailInput } from './taskInput';
 import { ChecklistPage } from './ChecklistPage';
 import { AdaptivePicker } from './primitives/AdaptivePicker';
 import { TaskOptionRow } from './primitives/TaskSheet';
@@ -26,11 +26,6 @@ export interface TaskDetailPanelProps {
   onOpenInPage?: () => void;
   /** Extra header slot (e.g. TurnoverProjectsPanel's back affordance). */
   headerAccessory?: React.ReactNode;
-  // Draft (new-task) mode:
-  draft?: TaskDraft | null;
-  onConfirmCreate?: (payload: TaskCreatePayload) => Promise<void> | void;
-  creating?: boolean;
-  onDraftChange?: (draft: TaskDraft) => void;
   /** Demo fixtures mode: saves apply locally, no network. */
   demo?: boolean;
 }
@@ -43,20 +38,16 @@ export function TaskDetailPanel({
   onDeleted,
   onOpenInPage,
   headerAccessory,
-  draft,
-  onConfirmCreate,
-  creating,
-  onDraftChange,
   demo,
 }: TaskDetailPanelProps) {
   const isMobile = useIsMobile() ?? false;
-  const c = useTaskDetailController({ task, draft, onSaved, onDeleted, onDraftChange, demo });
+  const c = useTaskDetailController({ task, onSaved, onDeleted, demo });
   const [menuOpen, setMenuOpen] = useState(false);
 
-  if (!task && !draft) return null;
+  if (!task) return null;
 
-  const templateName = task?.template_name ?? draft?.template_name ?? null;
-  const propertyName = task?.property_name ?? draft?.property_name ?? null;
+  const templateName = task?.template_name ?? null;
+  const propertyName = task?.property_name ?? null;
   // The top-bar micro-label shows the property name (or nothing when the task
   // has no property).
   const headerLabel = propertyName ?? '';
@@ -64,18 +55,6 @@ export function TaskDetailPanel({
   const timerRunning = !!c.timeHook.activeTimeEntry;
   const checklistComplete = c.progress.total > 0 && c.progress.completed === c.progress.total;
   const editingLocked = c.isContingent;
-
-  const handleCreate = () => {
-    if (!onConfirmCreate) return;
-    const d = draft ?? emptyDraft();
-    void onConfirmCreate({
-      fields: c.fields,
-      property_id: d.property_id,
-      property_name: d.property_name,
-      template_id: d.template_id,
-      bin_id: d.bin_id,
-    });
-  };
 
   const menu = (
     <AdaptivePicker
@@ -103,7 +82,7 @@ export function TaskDetailPanel({
           Open in page
         </TaskOptionRow>
       )}
-      {!c.isDraft && (
+      {(
         <TaskOptionRow
           onSelect={() => {
             setMenuOpen(false);
@@ -141,7 +120,7 @@ export function TaskDetailPanel({
             onTitleBlur={() => void c.saveFields()}
             readOnly={editingLocked}
           />
-          {!c.isDraft && (
+          {(
             <TimerRail
               running={timerRunning}
               displaySeconds={c.timeHook.displaySeconds}
@@ -158,7 +137,6 @@ export function TaskDetailPanel({
           )}
           <div className="mt-3.5" />
           <ContextChips
-            isDraft={c.isDraft}
             readOnly={editingLocked}
             status={c.fields.status}
             isTemplated={c.isTemplated}
@@ -167,7 +145,7 @@ export function TaskDetailPanel({
             scheduledDate={c.fields.scheduled_date}
             scheduledTime={c.fields.scheduled_time}
             priority={c.fields.priority}
-            propertyId={task?.property_id ?? draft?.property_id ?? null}
+            propertyId={task?.property_id ?? null}
             onScheduleChange={(date, time) => {
               const updated = { ...c.fields, scheduled_date: date, scheduled_time: time };
               c.updateField('scheduled_date', date, false);
@@ -177,7 +155,7 @@ export function TaskDetailPanel({
             onPriorityChange={(p) => c.updateField('priority', p as ProjectFormFields['priority'])}
           />
 
-          {c.isTemplated && !c.isDraft && (
+          {c.isTemplated && (
             <StepsSection
               completed={c.progress.completed}
               total={c.progress.total}
@@ -215,16 +193,16 @@ export function TaskDetailPanel({
             />
             <TaskMetaFields
               readOnly={editingLocked}
-              binId={c.isDraft ? (draft?.bin_id ?? null) : (c.row?.bin_id ?? null)}
+              binId={c.row?.bin_id ?? null}
               binName={c.row?.bin_name ?? null}
-              isBinned={c.isDraft ? (draft?.is_binned ?? false) : (c.row?.is_binned ?? false)}
+              isBinned={c.row?.is_binned ?? false}
               bins={c.bins}
               departmentId={c.fields.department_id}
               departments={c.departments}
               onBinChange={(binId, isBinned) => void c.updateBin(binId, isBinned)}
               onDepartmentChange={(id) => c.updateField('department_id', id)}
             />
-            {!c.isDraft && (
+            {(
               <AttachmentsSection
                 attachments={c.attachmentsHook.projectAttachments}
                 uploading={c.attachmentsHook.uploadingAttachment}
@@ -242,20 +220,17 @@ export function TaskDetailPanel({
 
       <ActionBar
         isMobile={isMobile}
-        isDraft={c.isDraft}
         isContingent={c.isContingent}
         isTemplated={c.isTemplated}
         status={c.fields.status}
         checklistComplete={checklistComplete}
         unreadDot={(task?.unread_comment_count ?? 0) > 0}
-        creating={creating}
         onOpenComments={() => void c.openView('comments')}
         onStart={() => void c.handleStart()}
         onPause={() => void c.handlePause()}
         onComplete={() => void c.handleComplete()}
         onReopen={() => c.handleReopen()}
         onWriteStatus={(s) => c.writeStatus(s)}
-        onCreate={handleCreate}
       />
 
       {/* takeover views */}

@@ -1,21 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { apiFetch } from '@/lib/apiFetch';
-import { toast } from '@/components/ui/toast';
-import { useIsMobile } from '@/lib/useIsMobile';
-import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
-import {
-  emptyDraft,
-  type TaskDraft,
-} from '@/components/tasks/detail/taskInput';
-import type { TaskCreatePayload } from '@/components/tasks/detail/useTaskDetailController';
-import { DESKTOP_TASK_PANEL_SLOT } from '@/lib/detailPanelGeometry';
+import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
 import type { TiptapJSON } from '@/lib/types';
 import type { ProposedTaskData } from './ProposedTask';
 
-// Opens the unified task detail panel in draft mode, pre-filled from a
-// concierge task proposal and fully editable. Nothing persists until the user
+// Opens the shared create-task form, pre-filled from a concierge task
+// proposal and fully editable. Nothing persists until the user
 // hits "Create task", which sends the (possibly edited) fields to the
 // proposal-accept endpoint — creating the real task AND flipping the proposal
 // to accepted (recording who/when).
@@ -50,11 +42,8 @@ export function ProposedTaskEditorOverlay({
   /** Called after a successful create with the new task's url (or null). */
   onCreated: (taskUrl: string | null) => void;
 }) {
-  const isMobile = useIsMobile();
-  const [creating, setCreating] = useState(false);
-
-  const [draft, setDraft] = useState<TaskDraft>(() =>
-    emptyDraft({
+  const seed = useMemo(
+    () => ({
       title: proposal.title,
       description: proposal.description ? textToTiptap(proposal.description) : null,
       priority: proposal.priority,
@@ -64,68 +53,46 @@ export function ProposedTaskEditorOverlay({
       assigned_staff: proposal.suggested_assignee_ids ?? [],
       property_id: propertyId,
       property_name: propertyName,
-    })
+    }),
+    [proposal, propertyId, propertyName]
   );
 
   // Escape closes the editor (unless mid-create).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !creating) onClose();
+      if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose, creating]);
+  }, [onClose]);
 
-  const handleConfirmCreate = useCallback(
-    async (payload: TaskCreatePayload) => {
-      setCreating(true);
-      try {
-        const res = await apiFetch(`/api/proposed-tasks/${proposal.id}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: payload.fields.title || proposal.title,
-            description: payload.fields.description ?? null,
-            priority: payload.fields.priority || proposal.priority,
-            status: payload.fields.status || 'not_started',
-            department_id: payload.fields.department_id || null,
-            property_id: payload.property_id || null,
-            template_id: payload.template_id || null,
-            scheduled_date: payload.fields.scheduled_date || null,
-            scheduled_time: payload.fields.scheduled_time || null,
-            assigned_user_ids: payload.fields.assigned_staff || [],
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          console.error('[proposed task editor] create failed', data);
-          toast.error(data?.error || "Couldn't create the task");
-          setCreating(false);
-          return;
-        }
-        onCreated(typeof data?.task_url === 'string' ? data.task_url : null);
-        onClose();
-      } catch (err) {
-        console.error('[proposed task editor] create error', err);
-        toast.error("Couldn't create the task");
-        setCreating(false);
+  // Same form and body as everywhere else, but accepting a proposal creates
+  // the task AND resolves the proposal in one call, so it posts elsewhere.
+  const submitOverride = useCallback(
+    async (body: Record<string, unknown>) => {
+      const res = await apiFetch(`/api/proposed-tasks/${proposal.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || "Couldn't create the task");
       }
+      onCreated(typeof data?.task_url === 'string' ? data.task_url : null);
+      onClose();
+      return null; // the endpoint returns a url, not a task row
     },
-    [proposal.id, proposal.title, proposal.priority, onCreated, onClose]
+    [proposal.id, onCreated, onClose]
   );
 
-  const panel = (
-    <TaskDetailPanel
-      task={null}
-      draft={draft}
-      onDraftChange={setDraft}
-      onConfirmCreate={handleConfirmCreate}
-      creating={creating}
+  // CreateTaskPanel renders its own overlay on both breakpoints.
+  return (
+    <CreateTaskPanel
+      seed={seed}
       onClose={onClose}
+      submitOverride={submitOverride}
+      submitLabel="Create task"
     />
   );
-
-  if (isMobile) return panel; // self-renders fixed inset-0
-
-  return <div className={DESKTOP_TASK_PANEL_SLOT}>{panel}</div>;
 }

@@ -31,6 +31,10 @@ export interface TaskCreateSeed {
   department_id?: string | null;
   status?: string;
   priority?: string;
+  /** Pre-filled content (e.g. accepting an AI-proposed task). */
+  title?: string;
+  description?: JSONContent | null;
+  assigned_staff?: string[];
 }
 
 export interface TaskCreateDraft {
@@ -63,14 +67,14 @@ export interface TaskCreateErrors {
 function draftFromSeed(seed: TaskCreateSeed): TaskCreateDraft {
   return {
     // A template's name is the default title, and stays fully editable.
-    title: seed.template_name ?? '',
-    description: null,
+    title: seed.title ?? seed.template_name ?? '',
+    description: seed.description ?? null,
     status: seed.status ?? 'not_started',
     priority: seed.priority ?? 'medium',
     department_id: seed.department_id ?? null,
     scheduled_date: seed.scheduled_date ?? null,
     scheduled_time: seed.scheduled_time ?? null,
-    assigned_staff: [],
+    assigned_staff: seed.assigned_staff ?? [],
     property_id: seed.property_id ?? null,
     property_name: seed.property_name ?? null,
     template_id: seed.template_id ?? null,
@@ -83,11 +87,17 @@ function draftFromSeed(seed: TaskCreateSeed): TaskCreateDraft {
 export function useTaskCreate({
   seed,
   onCreated,
+  submitOverride,
 }: {
   seed: TaskCreateSeed;
   /** Fired with the created row so the surface can react (open it, close the
    *  sheet, select it). Surfaces should do UI only — persistence is done. */
   onCreated?: (task: CreatedTaskRow) => void;
+  /** Post the same body somewhere other than /api/tasks-for-bin — used by the
+   *  proposed-task flow, which creates the task and resolves the proposal in
+   *  one call. Returns the created row (or null when it has no id to give).
+   *  Validation, attachments, invalidation and error handling stay here. */
+  submitOverride?: (body: Record<string, unknown>) => Promise<CreatedTaskRow | null>;
 }) {
   const queryClient = useQueryClient();
   const { user: authUser } = useAuth();
@@ -210,6 +220,11 @@ export function useTaskCreate({
         scheduled_date: draft.scheduled_date || null,
         scheduled_time: draft.scheduled_time || null,
         property_id: draft.property_id || null,
+        // Some surfaces only know the property by name; the server resolves
+        // name → id when no id is given, so send it rather than lose it.
+        ...(!draft.property_id && draft.property_name
+          ? { property_name: draft.property_name }
+          : {}),
         department_id: draft.department_id || null,
         template_id: draft.template_id || null,
         bin_id: draft.bin_id || null,
@@ -217,20 +232,25 @@ export function useTaskCreate({
       };
       if (draft.assigned_staff.length) body.assigned_user_ids = draft.assigned_staff;
 
-      const res = await apiFetch('/api/tasks-for-bin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const result = await res.json().catch(() => ({}));
-      if (!res.ok || !result?.data) {
-        throw new Error(result?.error || `Failed to create the task (HTTP ${res.status})`);
+      let created: CreatedTaskRow | null;
+      if (submitOverride) {
+        created = await submitOverride(body);
+      } else {
+        const res = await apiFetch('/api/tasks-for-bin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const result = await res.json().catch(() => ({}));
+        if (!res.ok || !result?.data) {
+          throw new Error(result?.error || `Failed to create the task (HTTP ${res.status})`);
+        }
+        created = result.data as CreatedTaskRow;
       }
 
-      const created = result.data as CreatedTaskRow;
-      await uploadStagedAttachments(created.id);
+      if (created?.id) await uploadStagedAttachments(created.id);
       invalidateTaskCaches();
-      onCreated?.(created);
+      if (created) onCreated?.(created);
       return created;
     } catch (err) {
       console.error('Error creating task:', err);

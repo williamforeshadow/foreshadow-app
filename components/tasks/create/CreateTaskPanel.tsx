@@ -132,9 +132,19 @@ export interface CreateTaskPanelProps {
   seed?: TaskCreateSeed;
   onClose: () => void;
   onCreated?: (task: CreatedTaskRow) => void;
+  /** Alternate submit target (see useTaskCreate) — the proposed-task flow. */
+  submitOverride?: (body: Record<string, unknown>) => Promise<CreatedTaskRow | null>;
+  /** Label for the confirm button when "Create task" isn't right. */
+  submitLabel?: string;
 }
 
-export function CreateTaskPanel({ seed = {}, onClose, onCreated }: CreateTaskPanelProps) {
+export function CreateTaskPanel({
+  seed = {},
+  onClose,
+  onCreated,
+  submitOverride,
+  submitLabel = 'Create task',
+}: CreateTaskPanelProps) {
   const isMobile = useIsMobile() ?? false;
   const { allUsers } = useAuth();
   const users = (allUsers as unknown as User[]) ?? [];
@@ -144,7 +154,7 @@ export function CreateTaskPanel({ seed = {}, onClose, onCreated }: CreateTaskPan
   const { user: authUser } = useAuth();
   const binsHook = useProjectBins({ currentUser: authUser as unknown as User | null });
 
-  const c = useTaskCreate({ seed, onCreated });
+  const c = useTaskCreate({ seed, onCreated, submitOverride });
 
   const [templateOpen, setTemplateOpen] = useState(false);
   const [propertyOpen, setPropertyOpen] = useState(false);
@@ -530,7 +540,7 @@ export function CreateTaskPanel({ seed = {}, onClose, onCreated }: CreateTaskPan
           className="flex h-[46px] w-full items-center justify-center rounded-xl font-mono text-[12px] uppercase tracking-[0.1em] transition-transform active:scale-[0.99] disabled:opacity-50"
           style={{ background: 'var(--task-accent)', color: '#fff' }}
         >
-          {c.creating ? 'Creating…' : 'Create task'}
+          {c.creating ? 'Creating…' : submitLabel}
         </button>
       </div>
     </div>

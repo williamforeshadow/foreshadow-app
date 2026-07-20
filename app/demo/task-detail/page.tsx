@@ -12,7 +12,7 @@ import type { Template } from '@/components/DynamicCleaningForm';
 import type { Department } from '@/lib/types';
 import { DepartmentsContext } from '@/lib/departmentsContext';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
-import { emptyDraft, type TaskDetailInput, type TaskDraft } from '@/components/tasks/detail/taskInput';
+import { type TaskDetailInput } from '@/components/tasks/detail/taskInput';
 
 // Mock departments (each with its own icon key) so the department pill + picker
 // are demonstrable offline — the real context fetches /api/departments.
@@ -93,16 +93,11 @@ const FIXTURES: { key: string; label: string; task: TaskDetailInput | null }[] =
       title: 'Guest-requested late checkout clean',
     }),
   },
-  { key: 'draft', label: 'Draft', task: null },
 ];
 
 export default function TaskDetailDemoPage() {
   const queryClient = useQueryClient();
   const [fixtureKey, setFixtureKey] = useState('templated');
-  const [draft, setDraft] = useState<TaskDraft>(() =>
-    emptyDraft({ title: 'New task from demo', property_name: 'Cortez Hill · 4B' })
-  );
-  const [creating, setCreating] = useState(false);
 
   // Pre-seed the template detail cache so ensureTemplateDetail never fetches.
   // Must happen during render (not an effect) — the panel's controller kicks
@@ -151,14 +146,6 @@ export default function TaskDetailDemoPage() {
               task={fixture.task}
               demo
               onClose={() => {}}
-              draft={fixture.key === 'draft' ? draft : null}
-              onDraftChange={setDraft}
-              creating={creating}
-              onConfirmCreate={async () => {
-                setCreating(true);
-                await new Promise((r) => setTimeout(r, 800));
-                setCreating(false);
-              }}
               onOpenInPage={() => {}}
             />
           </DepartmentsContext.Provider>

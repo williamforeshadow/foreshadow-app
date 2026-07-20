@@ -1,6 +1,5 @@
 'use client';
 
-import { apiFetch } from '@/lib/apiFetch';
 import {
   memo,
   useCallback,
@@ -11,10 +10,9 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
-import { toast } from '@/components/ui/toast';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
-import { emptyDraft, type TaskDetailInput, type TaskDraft } from '@/components/tasks/detail/taskInput';
-import type { TaskCreatePayload } from '@/components/tasks/detail/useTaskDetailController';
+import { type TaskDetailInput } from '@/components/tasks/detail/taskInput';
+import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
 import { TaskRow, TaskListHeader, type TaskRowItem } from '@/components/tasks/TaskRow';
 import { MobileTaskRow } from '@/components/tasks/MobileTaskRow';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -616,8 +614,8 @@ function PropertyTasksViewContent({
   // ---- Detail panel wiring (mirrors MyAssignmentsWindow pattern) ---------
 
   const [selectedItem, setSelectedItem] = useState<UnifiedItem | null>(null);
-  const [draftTask, setDraftTask] = useState<TaskDraft | null>(null);
-  const [creatingTask, setCreatingTask] = useState(false);
+  const [creatingOpen, setCreatingOpen] = useState(false);
+  const [createSeedDate, setCreateSeedDate] = useState<string | null>(null);
 
   // Strict single-panel rule (both directions):
   //   global → local: close our locals when context overlays open
@@ -626,7 +624,7 @@ function PropertyTasksViewContent({
   //                   context overlay (same z-20 slot).
   const closeGlobals = useExclusiveDetailPanelHost(() => {
     setSelectedItem(null);
-    setDraftTask(null);
+    setCreatingOpen(false);
   });
 
   // Adapt the current selection into the unified panel's input shape. The
@@ -646,15 +644,9 @@ function PropertyTasksViewContent({
   const handleNewTask = useCallback((prefilledDate?: string) => {
     closeGlobals();
     setSelectedItem(null);
-    setDraftTask(
-      emptyDraft({
-        title: 'New Task',
-        property_id: propertyId,
-        property_name: propertyName,
-        scheduled_date: prefilledDate ?? null,
-      })
-    );
-  }, [propertyId, propertyName, closeGlobals]);
+    setCreateSeedDate(prefilledDate ?? null);
+    setCreatingOpen(true);
+  }, [closeGlobals]);
 
   // The Schedule tab's DayDetailPanel deep-links "New task" here by pushing
   // `?newTaskDate=YYYY-MM-DD`. We pop the draft with that date pre-filled
@@ -674,58 +666,14 @@ function PropertyTasksViewContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams?.get('newTaskDate')]);
 
-  // Draft create — property is fixed (this page IS the property), so it's
-  // sourced from the view's own props rather than the (locked) draft fields.
-  const handleConfirmCreateTask = useCallback(
-    async (payload: TaskCreatePayload) => {
-      setCreatingTask(true);
-      try {
-        const body: Record<string, unknown> = {
-          title: payload.fields.title || 'New Task',
-          status: payload.fields.status || 'not_started',
-          priority: payload.fields.priority || 'medium',
-          is_binned: false,
-          description: payload.fields.description ?? null,
-          department_id: payload.fields.department_id || null,
-          scheduled_date: payload.fields.scheduled_date || null,
-          scheduled_time: payload.fields.scheduled_time || null,
-          property_id: propertyId,
-          property_name: propertyName,
-          template_id: payload.template_id || null,
-        };
-        if (payload.fields.assigned_staff?.length) {
-          body.assigned_user_ids = payload.fields.assigned_staff;
-        }
-
-        const res = await apiFetch('/api/tasks-for-bin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        const result = await res.json().catch(() => ({}));
-        if (result.data) {
-          setDraftTask(null);
-          await fetchTasks();
-        } else {
-          console.error('Create failed:', result.error);
-          toast.error(result?.error || "Couldn't create the task");
-        }
-      } catch (err) {
-        console.error('Error creating task:', err);
-        toast.error("Couldn't create the task");
-      } finally {
-        setCreatingTask(false);
-      }
-    },
-    [propertyId, propertyName, fetchTasks]
-  );
+  // Creation is owned by useTaskCreate (CreateTaskPanel).
 
   const openCount = useMemo(
     () => allItems.filter((i) => i.status !== 'complete').length,
     [allItems]
   );
 
-  const detailOpen = selectedItem != null || draftTask != null;
+  const detailOpen = selectedItem != null;
 
   // ---- Render -------------------------------------------------------------
 
@@ -865,11 +813,10 @@ function PropertyTasksViewContent({
                           const isLast = idx === group.items.length - 1;
                           const handleClick = () => {
                             if (isSelected) {
-                              setDraftTask(null);
                               setSelectedItem(null);
                             } else {
                               closeGlobals();
-                              setDraftTask(null);
+                              setCreatingOpen(false);
                               setSelectedItem(item);
                             }
                           };
@@ -920,23 +867,17 @@ function PropertyTasksViewContent({
             task={taskDetailInput}
             onClose={() => {
               setSelectedItem(null);
-              setDraftTask(null);
             }}
             onOpenInPage={
               taskDetailInput
                 ? () => {
                     const id = taskDetailInput.task_id;
                     setSelectedItem(null);
-                    setDraftTask(null);
                     router.push(taskPath(id));
                   }
                 : undefined
             }
             onDeleted={() => setSelectedItem(null)}
-            draft={draftTask}
-            onDraftChange={setDraftTask}
-            onConfirmCreate={handleConfirmCreateTask}
-            creating={creatingTask}
           />
         );
 
@@ -944,6 +885,21 @@ function PropertyTasksViewContent({
 
         return <div className={DESKTOP_TASK_PANEL_SLOT}>{panel}</div>;
       })()}
+
+      {creatingOpen && (
+        <CreateTaskPanel
+          seed={{
+            property_id: propertyId,
+            property_name: propertyName,
+            scheduled_date: createSeedDate,
+          }}
+          onClose={() => setCreatingOpen(false)}
+          onCreated={() => {
+            setCreatingOpen(false);
+            void fetchTasks();
+          }}
+        />
+      )}
     </div>
   );
 }

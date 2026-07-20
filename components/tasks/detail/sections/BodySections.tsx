@@ -177,7 +177,6 @@ function formatScheduleChip(date: string, time: string): string | null {
 }
 
 export function ContextChips({
-  isDraft,
   readOnly,
   scheduledDate,
   scheduledTime,
@@ -190,7 +189,6 @@ export function ContextChips({
   isContingent,
   onSelectStatus,
 }: {
-  isDraft: boolean;
   readOnly?: boolean;
   scheduledDate: string;
   scheduledTime: string;
@@ -198,7 +196,7 @@ export function ContextChips({
   propertyId: string | null;
   onScheduleChange: (date: string, time: string) => void;
   onPriorityChange: (p: string) => void;
-  /** Status pill (omitted in draft mode). */
+  /** Status pill. */
   status?: string;
   isTemplated?: boolean;
   isContingent?: boolean;
@@ -216,8 +214,8 @@ export function ContextChips({
     // Status · schedule · priority only — these three always fit one row. Bin
     // and department moved to the labeled meta rows below (TaskMetaFields).
     <div className="flex flex-nowrap gap-1.5 overflow-x-auto [scrollbar-width:none]">
-      {/* Status — first pill; matches kanban icons/colors. Omitted for drafts. */}
-      {!isDraft && status !== undefined && onSelectStatus && (
+      {/* Status — first pill; matches kanban icons/colors. */}
+      {status !== undefined && onSelectStatus && (
         <StatusChip
           status={status}
           isTemplated={!!isTemplated}

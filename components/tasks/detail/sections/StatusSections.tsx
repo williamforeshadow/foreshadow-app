@@ -63,54 +63,36 @@ export function TimerRail({
 // Thumb-zone action bar: comments button + the primary CTA.
 export function ActionBar({
   isMobile,
-  isDraft,
   isContingent,
   isTemplated,
   status,
   checklistComplete,
   unreadDot,
-  creating,
   onOpenComments,
   onStart,
   onPause,
   onComplete,
   onReopen,
   onWriteStatus,
-  onCreate,
 }: {
   isMobile: boolean;
-  isDraft: boolean;
   isContingent: boolean;
   isTemplated: boolean;
   status: string;
   checklistComplete: boolean;
   unreadDot: boolean;
-  creating?: boolean;
   onOpenComments: () => void;
   onStart: () => void;
   onPause: () => void;
   onComplete: () => void;
   onReopen: () => void;
   onWriteStatus: (s: string) => void;
-  onCreate?: () => void;
 }) {
   const ctaBase =
     'flex-1 h-[46px] rounded-xl font-mono text-[12px] uppercase tracking-[0.1em] transition-all active:scale-[0.98] disabled:opacity-50';
 
   let cta: React.ReactNode = null;
-  if (isDraft) {
-    cta = (
-      <button
-        type="button"
-        onClick={onCreate}
-        disabled={creating}
-        className={ctaBase}
-        style={{ background: 'var(--task-accent)', color: '#0c0c0e' }}
-      >
-        {creating ? 'Creating…' : 'Create task'}
-      </button>
-    );
-  } else if (isContingent) {
+  if (isContingent) {
     cta = (
       <div
         className="flex h-[46px] flex-1 items-center justify-center rounded-xl font-mono text-[11px] uppercase tracking-[0.1em]"
@@ -194,7 +176,7 @@ export function ActionBar({
         paddingBottom: isMobile ? 'calc(0.75rem + env(safe-area-inset-bottom))' : '0.625rem',
       }}
     >
-      {!isDraft && (
+      {(
         <button
           type="button"
           aria-label="Comments"
