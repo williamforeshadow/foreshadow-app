@@ -304,11 +304,8 @@ export function TaskDetailPanel({
     // inside this container. The action bar handles the bottom inset itself.
     return (
       <div
-        className="task-detail fixed inset-0 z-50"
-        style={{
-          paddingTop: 'env(safe-area-inset-top)',
-          background: 'var(--task-surface-0)',
-        }}
+        className="task-detail safe-area-top fixed inset-0 z-50"
+        style={{ background: 'var(--task-surface-0)' }}
       >
         {body}
       </div>

@@ -53,8 +53,12 @@ export function AttachmentLightbox({
         <DialogTitle className="sr-only">Attachment Viewer</DialogTitle>
 
         <div className="relative w-full h-full">
-          {/* Header */}
-          <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 z-20">
+          {/* Header — full-screen dialog covers the status bar / notch, so inset
+              the close button below it or it can't be tapped on mobile. */}
+          <div
+            className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 z-20"
+            style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top))' }}
+          >
             <span className="text-white/70 text-sm">
               {viewingIndex + 1} / {attachments.length}
             </span>
