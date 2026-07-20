@@ -9,14 +9,12 @@ import {
   useState,
 } from 'react';
 import { useTasks, type TaskRow as TaskRowData } from '@/lib/useTasks';
-import { toast } from '@/components/ui/toast';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
-import { useProperties } from '@/lib/queries';
 import type { User } from '@/lib/types';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
-import { emptyDraft, type TaskDetailInput, type TaskDraft } from '@/components/tasks/detail/taskInput';
-import type { TaskCreatePayload } from '@/components/tasks/detail/useTaskDetailController';
+import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
+import { type TaskDetailInput } from '@/components/tasks/detail/taskInput';
 import { TaskRow, TaskListHeader, type TaskRowItem } from '@/components/tasks/TaskRow';
 import { TaskFilterBar, SortSelect } from '@/components/tasks/TaskFilterBar';
 import { CompactSearch } from '@/components/ui/compact-search';
@@ -155,31 +153,24 @@ function TasksWindowContent({ isActive = true }: TasksWindowProps) {
     setSelectedTask,
   } = useTasks({ urlSync: isActive });
 
+  // ---- New-task state -----------------------------------------------------
+  // Declared before closeGlobals, which closes over setCreatingOpen.
+
+  const [creatingOpen, setCreatingOpen] = useState(false);
+
   // ---- Single-panel rule -------------------------------------------------
 
   const closeGlobals = useExclusiveDetailPanelHost(() => {
     setSelectedTask(null);
-    setDraftTask(null);
+    setCreatingOpen(false);
   });
 
-  // Properties list feeds both the detail panel's draft property-picker (via
-  // TaskDetailPanel's own fetch) and the create-payload property_id lookup
-  // below.
-  const { properties: allProperties } = useProperties();
-
-  // ---- New-task draft state -----------------------------------------------
-
-  const [draftTask, setDraftTask] = useState<TaskDraft | null>(null);
-  const [creatingTask, setCreatingTask] = useState(false);
-
   const handleNewTask = useCallback(() => {
-    // Property starts unset — the global Tasks tab is not pre-scoped, so the
-    // user picks a property in the draft panel before Create is enabled.
-    // (Property Tasks page seeds with the current property; we have no such
-    // context here.)
+    // No seed — the global Tasks tab isn't scoped to a property, so the user
+    // picks one in the form. (Property Tasks seeds its current property.)
     closeGlobals();
     setSelectedTask(null);
-    setDraftTask(emptyDraft());
+    setCreatingOpen(true);
   }, [closeGlobals, setSelectedTask]);
 
   // Auto-open the new-task draft when arriving via `?newTask=1` (e.g. from
@@ -199,54 +190,8 @@ function TasksWindowContent({ isActive = true }: TasksWindowProps) {
     router.replace(qs ? `/?${qs}` : '/');
   }, [newTaskSentinel, handleNewTask, router, searchParams]);
 
-  // ---- Draft → server (create new task) ---------------------------------
-
-  const handleConfirmCreateTask = useCallback(
-    async (payload: TaskCreatePayload) => {
-      setCreatingTask(true);
-      try {
-        const matchedProperty = payload.property_name
-          ? allProperties.find((p) => p.name === payload.property_name)
-          : null;
-        const body: Record<string, unknown> = {
-          title: payload.fields.title || 'New Task',
-          status: payload.fields.status || 'not_started',
-          priority: payload.fields.priority || 'medium',
-          is_binned: !!payload.bin_id,
-          bin_id: payload.bin_id || null,
-          description: payload.fields.description || null,
-          department_id: payload.fields.department_id || null,
-          scheduled_date: payload.fields.scheduled_date || null,
-          scheduled_time: payload.fields.scheduled_time || null,
-          property_id: payload.property_id || matchedProperty?.id || null,
-          property_name: payload.property_name || null,
-          template_id: payload.template_id || null,
-        };
-        if (payload.fields.assigned_staff?.length)
-          body.assigned_user_ids = payload.fields.assigned_staff;
-
-        const res = await fetch('/api/tasks-for-bin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        const result = await res.json();
-        if (result.data) {
-          setDraftTask(null);
-          await fetchTasks();
-        } else {
-          console.error('Create failed:', result.error);
-          toast.error(result.error || 'Couldn\'t create the task.');
-        }
-      } catch (err) {
-        console.error('Error creating task:', err);
-        toast.error('Couldn\'t create the task.');
-      } finally {
-        setCreatingTask(false);
-      }
-    },
-    [allProperties, fetchTasks]
-  );
+  // Creation itself lives in useTaskCreate (via CreateTaskPanel) — this
+  // surface only reacts to the result.
 
   // ---- Date-bucket grouping (mirrors PropertyTasksView) -----------------
 
@@ -321,7 +266,7 @@ function TasksWindowContent({ isActive = true }: TasksWindowProps) {
     });
   }, []);
 
-  const detailOpen = selectedTask != null || draftTask != null;
+  const detailOpen = selectedTask != null;
 
   return (
     <div className="relative h-full overflow-hidden bg-white dark:bg-card">
@@ -507,7 +452,7 @@ function TasksWindowContent({ isActive = true }: TasksWindowProps) {
                                   setSelectedTask(null);
                                 } else {
                                   closeGlobals();
-                                  setDraftTask(null);
+                                  setCreatingOpen(false);
                                   setSelectedTask(t);
                                 }
                               }}
@@ -531,13 +476,8 @@ function TasksWindowContent({ isActive = true }: TasksWindowProps) {
         <div className={DESKTOP_TASK_PANEL_SLOT}>
           <TaskDetailPanel
             task={selectedTask ? taskRowToInput(selectedTask) : null}
-            draft={draftTask}
-            onDraftChange={setDraftTask}
-            onConfirmCreate={handleConfirmCreateTask}
-            creating={creatingTask}
             onClose={() => {
               setSelectedTask(null);
-              setDraftTask(null);
             }}
             onDeleted={() => setSelectedTask(null)}
             onOpenInPage={
@@ -551,6 +491,17 @@ function TasksWindowContent({ isActive = true }: TasksWindowProps) {
             }
           />
         </div>
+      )}
+
+      {/* Create task — renders its own overlay, so no panel slot. */}
+      {creatingOpen && (
+        <CreateTaskPanel
+          onClose={() => setCreatingOpen(false)}
+          onCreated={() => {
+            setCreatingOpen(false);
+            void fetchTasks();
+          }}
+        />
       )}
     </div>
   );

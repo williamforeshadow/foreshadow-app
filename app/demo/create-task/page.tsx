@@ -43,8 +43,14 @@ export default function CreateTaskDemoPage() {
   const [seedKey, setSeedKey] = useState<'blank' | 'property' | 'template'>('blank');
   const [lastCreated, setLastCreated] = useState<string | null>(null);
 
+  // `?live=1` skips the fixtures so an authenticated session loads real
+  // properties/templates/bins/departments — the only way to exercise a true
+  // end-to-end create, since the fixture ids aren't real rows.
+  const live =
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('live');
+
   // Seed during render so the panel's hooks read cache instead of fetching.
-  if (!queryClient.getQueryData(qk.properties)) {
+  if (!live && !queryClient.getQueryData(qk.properties)) {
     queryClient.setQueryData(qk.properties, DEMO_PROPERTIES);
     queryClient.setQueryData(qk.taskTemplates, DEMO_TEMPLATES);
     queryClient.setQueryData(qk.projectBins, { bins: DEMO_BINS, totalProjects: 0 });
@@ -80,21 +86,31 @@ export default function CreateTaskDemoPage() {
         </span>
       </div>
 
-      <DepartmentsContext.Provider
-        value={{
-          departments: DEMO_DEPARTMENTS,
-          loading: false,
-          deptIconMap: Object.fromEntries(DEMO_DEPARTMENTS.map((d) => [d.id, d.icon])),
-          refreshDepartments: async () => {},
-        }}
-      >
+      {live ? (
+        // Real DepartmentsProvider from the app shell supplies departments.
         <CreateTaskPanel
           key={seedKey}
           seed={seed}
           onClose={() => {}}
           onCreated={(t) => setLastCreated(String(t.id))}
         />
-      </DepartmentsContext.Provider>
+      ) : (
+        <DepartmentsContext.Provider
+          value={{
+            departments: DEMO_DEPARTMENTS,
+            loading: false,
+            deptIconMap: Object.fromEntries(DEMO_DEPARTMENTS.map((d) => [d.id, d.icon])),
+            refreshDepartments: async () => {},
+          }}
+        >
+          <CreateTaskPanel
+            key={seedKey}
+            seed={seed}
+            onClose={() => {}}
+            onCreated={(t) => setLastCreated(String(t.id))}
+          />
+        </DepartmentsContext.Provider>
+      )}
     </div>
   );
 }
