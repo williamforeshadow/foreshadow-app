@@ -548,16 +548,10 @@ export function CreateTaskPanel({
 
   if (isMobile) {
     // Same status-bar inset as the detail panel — full-screen covers the notch.
-    //
-    // Height is pinned to 100vh (the layout viewport, which iOS leaves alone
-    // when the keyboard opens) rather than `inset-0`. Anchoring the bottom
-    // edge makes iOS clamp the panel to the *visual* viewport while a field is
-    // focused, which drags the Create button up to sit on top of the keyboard;
-    // this keeps it in its normal place at the bottom, simply covered.
     return (
       <div
-        className="task-detail safe-area-top fixed left-0 top-0 z-50 w-full"
-        style={{ height: '100vh', background: 'var(--task-surface-0)' }}
+        className="task-detail safe-area-top fixed inset-0 z-50"
+        style={{ background: 'var(--task-surface-0)' }}
       >
         {body}
       </div>
