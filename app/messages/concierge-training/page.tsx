@@ -278,8 +278,11 @@ export default function ConciergeTrainingPage() {
   return (
     <>
       {isMobile ? (
-        <MobileRouteShell backHref="/messages" title="Concierge Training">
-          {content}
+        <MobileRouteShell backHref="/menu" title="Concierge Training">
+          {/* The shell's <main> is overflow-hidden and hands the scroll to us,
+              so content needs its own scroll region (as the desktop branch has).
+              h-full resolves against main's flex-sized height. */}
+          <div className="h-full overflow-y-auto overscroll-contain hide-scrollbar">{content}</div>
         </MobileRouteShell>
       ) : (
         <DesktopSidebarShell>

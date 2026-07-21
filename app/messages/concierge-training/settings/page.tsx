@@ -306,8 +306,10 @@ export default function ConciergeSettingsPage() {
   );
 
   return isMobile ? (
-    <MobileRouteShell backHref="/messages/concierge-training" title="Concierge Settings">
-      {content}
+    <MobileRouteShell backHref="/menu" title="Concierge Settings">
+      {/* The shell's <main> is overflow-hidden and hands the scroll to us, so
+          content needs its own scroll region (as the desktop branch has). */}
+      <div className="h-full overflow-y-auto overscroll-contain hide-scrollbar">{content}</div>
     </MobileRouteShell>
   ) : (
     <DesktopSidebarShell>

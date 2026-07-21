@@ -104,7 +104,7 @@ export default function ConciergeTestingPage() {
   const console_ = <TestConsole properties={properties} loadingProperties={loading} />;
 
   return isMobile ? (
-    <MobileRouteShell backHref="/messages" title="Concierge Testing">
+    <MobileRouteShell backHref="/menu" title="Concierge Testing">
       {console_}
     </MobileRouteShell>
   ) : (
@@ -438,8 +438,11 @@ function TestConsole({
   // ---- Empty hero: the screenshot's centered, minimal composer -----------
   if (!started) {
     return (
-      <div className="flex h-full flex-col items-center justify-center px-4 pb-[8vh]">
-        <div className="w-full max-w-2xl">
+      // Scrollable so a short viewport (small phone, keyboard open) can still
+      // reach the composer; min-h-full keeps it vertically centered when it fits.
+      <div className="h-full overflow-y-auto overscroll-contain hide-scrollbar">
+        <div className="flex min-h-full flex-col items-center justify-center px-4 py-[8vh]">
+          <div className="w-full max-w-2xl">
           <h1 className="mb-2 text-center text-[2.75rem] font-semibold leading-tight tracking-tight text-foreground text-balance">
             Concierge Testing
           </h1>
@@ -450,6 +453,7 @@ function TestConsole({
           {error && (
             <p className="mt-3 text-center text-sm text-[var(--destructive)]">{error}</p>
           )}
+          </div>
         </div>
       </div>
     );
