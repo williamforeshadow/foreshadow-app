@@ -65,9 +65,9 @@ export function TrainingReferences({ sources }: { sources: ConciergeSourcesRecor
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-normal opacity-80 transition-colors hover:bg-amber-500/15 hover:opacity-100 dark:hover:bg-amber-400/15"
+        className="inline-flex items-center gap-1.5 rounded-full border border-[var(--msg-sent-border)] px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-foreground/5"
       >
-        <GraduationCap className="h-3 w-3" aria-hidden />
+        <GraduationCap className="h-3.5 w-3.5" aria-hidden />
         Referenced Training Blocks
       </button>
 

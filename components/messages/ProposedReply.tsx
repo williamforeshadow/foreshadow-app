@@ -41,6 +41,7 @@ export function ProposedReply({
   stale,
   declined,
   onEdit,
+  onSend,
   onChanged,
 }: {
   conversationId: string;
@@ -57,6 +58,8 @@ export function ProposedReply({
   /** True when the sensitivity gate ruled this message doesn't warrant a reply. */
   declined: boolean;
   onEdit: (text: string) => void;
+  /** Send this draft through the PMS; resolves true on success. Absent ⇒ Send is inert. */
+  onSend?: (text: string) => Promise<boolean>;
   /** Called after a (re)generate so the parent can refetch the conversation. */
   onChanged?: () => void;
 }) {
@@ -74,6 +77,7 @@ export function ProposedReply({
   // A decline the server reported on THIS mount, before the parent has refetched
   // the conversation row that carries it.
   const [justDeclined, setJustDeclined] = useState(false);
+  const [sending, setSending] = useState(false);
   // Refresh-when-missing-or-stale fires at most once per mount (the component is
   // keyed by the guest message, so it remounts fresh per conversation / message).
   const autoTried = useRef(false);
@@ -148,9 +152,19 @@ export function ProposedReply({
     }
   }, [persistedDraft, stale, declined, generate]);
 
-  const handleSend = useCallback(() => {
-    setNote('Sending isn’t available yet. Use Edit to refine, then send from your channel.');
-  }, []);
+  const handleSend = useCallback(async () => {
+    if (sending) return;
+    if (!onSend) {
+      setNote('Sending isn’t available for this conversation.');
+      return;
+    }
+    setSending(true);
+    setNote(null);
+    // On success the parent refetches; the host message becomes latest and this
+    // bubble unmounts. On failure the parent has toasted; leave the draft up.
+    await onSend(draft);
+    setSending(false);
+  }, [sending, onSend, draft]);
 
   // The gate ruled no reply was needed AND there's nothing else to show. An older
   // draft still standing beneath a newer declined message keeps its bubble
@@ -182,24 +196,13 @@ export function ProposedReply({
 
   return (
     <div className="mt-4 flex justify-end">
-      <div className="msg-in glass-card glass-sheen relative w-full max-w-[88%] overflow-hidden rounded-2xl border bg-[var(--proposal-reply-bg)] border-[var(--proposal-reply-border)]">
-        <div className="flex items-center gap-1.5 px-3.5 pt-2.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
-          <Sparkles className="h-3 w-3" aria-hidden />
-          <span>Proposed Reply</span>
-          {/* The references button takes the "· not sent" slot, but only once a
-              real draft is on screen: mid-regenerate `sources` still holds the
-              PREVIOUS generation's record, and a popup describing a draft that's
-              being replaced is the same trap the stale-draft rule exists to
-              avoid. Drafts written before sources were recorded have nothing to
-              open, so they keep the original label rather than offering a button
-              that opens an empty popup. */}
-          {showActions && sources ? (
-            <TrainingReferences sources={sources} />
-          ) : (
-            <span className="font-normal opacity-70">· not sent</span>
-          )}
+      {/* Same grey frost as a real sent message, set apart only by a dashed
+          border — it reads as "a message, but a draft" rather than a colored alert. */}
+      <div className="msg-in glass-card glass-sheen relative w-full max-w-[88%] overflow-hidden rounded-2xl border border-dashed bg-[var(--msg-sent-bg)] border-[var(--msg-sent-border)]">
+        <div className="flex items-center gap-1.5 px-3.5 pt-2.5 text-[11px] font-medium text-muted-foreground">
+          <span className="text-white">Proposed Reply</span>
           {source === 'assistant' ? (
-            <span className="rounded-full bg-amber-500/15 px-1.5 text-[10px] font-medium dark:bg-amber-400/15">
+            <span className="rounded-full bg-foreground/10 px-1.5 text-[10px] font-medium">
               via assistant
             </span>
           ) : null}
@@ -209,7 +212,7 @@ export function ProposedReply({
             disabled={loading}
             aria-label="Regenerate proposed reply"
             title="Regenerate"
-            className="ml-auto inline-flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-amber-500/15 disabled:opacity-40 dark:hover:bg-amber-400/15"
+            className="ml-auto inline-flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-foreground/10 disabled:opacity-40"
           >
             <RotateCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} aria-hidden />
           </button>
@@ -223,7 +226,7 @@ export function ProposedReply({
             </div>
           ) : error ? (
             <div className="flex items-start gap-2 text-sm text-muted-foreground">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
               <span>{error} Use ↻ to try again.</span>
             </div>
           ) : (
@@ -240,23 +243,35 @@ export function ProposedReply({
         ) : null}
 
         {showActions ? (
-          <div className="flex items-center justify-end gap-2 px-3 pb-2.5">
-            <button
-              type="button"
-              onClick={() => onEdit(draft)}
-              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-amber-500/15 dark:hover:bg-amber-400/15"
-            >
-              <Pencil className="h-3.5 w-3.5" aria-hidden />
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={handleSend}
-              className="inline-flex items-center gap-1.5 rounded-full bg-amber-500 px-3.5 py-1.5 text-xs font-medium text-amber-950 shadow-sm transition-opacity hover:opacity-90"
-            >
-              <SendHorizontal className="h-3.5 w-3.5" aria-hidden />
-              Send
-            </button>
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-2.5">
+            {/* Bottom-left: the references pill (only with a sources record —
+                same mid-regenerate guard the header had). Left empty otherwise so
+                Edit/Send stay right. */}
+            <div>{sources ? <TrainingReferences sources={sources} /> : null}</div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onEdit(draft)}
+                disabled={sending}
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-foreground/5 disabled:opacity-50"
+              >
+                <Pencil className="h-3.5 w-3.5" aria-hidden />
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={sending}
+                className="inline-flex items-center gap-1.5 rounded-full bg-foreground px-3.5 py-1.5 text-xs font-medium text-background shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
+              >
+                {sending ? (
+                  <RotateCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <SendHorizontal className="h-3.5 w-3.5" aria-hidden />
+                )}
+                Send
+              </button>
+            </div>
           </div>
         ) : null}
       </div>
