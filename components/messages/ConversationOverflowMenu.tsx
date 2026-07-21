@@ -8,6 +8,7 @@ import {
   Mail,
   GraduationCap,
 } from 'lucide-react';
+import { ConciergeToggleIcon } from '@/components/messages/ConciergeToggleIcon';
 
 /**
  * Mobile-only overflow (•••) menu for a conversation, rendered in the
@@ -23,6 +24,8 @@ export function ConversationOverflowMenu({
   isComplete,
   onToggleComplete,
   onMarkUnread,
+  conciergeEnabled,
+  onToggleConcierge,
   canTrain,
   onTurnIntoTraining,
 }: {
@@ -30,6 +33,9 @@ export function ConversationOverflowMenu({
   isComplete: boolean;
   onToggleComplete: () => void;
   onMarkUnread: () => void;
+  /** True when the concierge is active on this conversation. */
+  conciergeEnabled: boolean;
+  onToggleConcierge: () => void;
   /** Whether "Turn into training" is available (thread has messages). */
   canTrain: boolean;
   onTurnIntoTraining: () => void;
@@ -92,6 +98,11 @@ export function ConversationOverflowMenu({
               icon={<Mail className="h-4 w-4" />}
               label="Mark unread"
               onClick={run(onMarkUnread)}
+            />
+            <MenuItem
+              icon={<ConciergeToggleIcon enabled={conciergeEnabled} />}
+              label={conciergeEnabled ? 'Turn off concierge' : 'Turn on concierge'}
+              onClick={run(onToggleConcierge)}
             />
             {canTrain ? (
               <MenuItem

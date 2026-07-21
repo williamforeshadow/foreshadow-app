@@ -83,7 +83,7 @@ export async function maybeGenerateProposedTaskForExternal(
     const supabase = getSupabaseServer();
     const { data: conv } = await supabase
       .from('conversations')
-      .select('id, org_id, app_status, archived')
+      .select('id, org_id, app_status, archived, concierge_enabled')
       .eq('source', source)
       .eq('external_conversation_id', externalConversationId)
       .maybeSingle();
@@ -93,8 +93,12 @@ export async function maybeGenerateProposedTaskForExternal(
       org_id: string | null;
       app_status: 'active' | 'complete';
       archived: boolean;
+      concierge_enabled: boolean;
     };
     if (c.archived || c.app_status !== 'active') return;
+
+    // Per-conversation kill switch: the operator is running this thread by hand.
+    if (c.concierge_enabled === false) return;
 
     // Master switch (per THIS conversation's org): when autonomous task
     // proposing is off, skip entirely.

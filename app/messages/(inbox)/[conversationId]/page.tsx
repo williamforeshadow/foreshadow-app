@@ -6,8 +6,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { qk } from '@/lib/queries/keys';
 import { fetchJson } from '@/lib/queries/fetchJson';
 import { CheckCircle2, RotateCcw, Mail, PanelTopOpen } from 'lucide-react';
+import { ConciergeToggleIcon } from '@/components/messages/ConciergeToggleIcon';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
-import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { useMessages } from '@/components/messages/MessagesProvider';
 import { ConversationThread } from '@/components/messages/ConversationThread';
@@ -30,6 +30,12 @@ type ThreadData = {
   proposedKnowledge: ProposedKnowledgeData[];
   replyProposalEnabled: boolean;
 };
+
+// Shared style for the thread-header icon buttons — an explicit neutral hover
+// (the ghost Button's hover:bg-accent is invisible against the header) and full
+// foreground color so they read as clickable, matching the grad-cap next to them.
+const HEADER_ICON_BTN =
+  'flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground transition-colors hover:bg-black/[0.06] dark:hover:bg-white/[0.08]';
 
 const EMPTY_MESSAGES: GuestMessageRecord[] = [];
 const EMPTY_PROPOSED_TASKS: ProposedTaskData[] = [];
@@ -153,36 +159,49 @@ export default function ConversationPage() {
 
   const actions = conversation ? (
     <>
+      <button
+        type="button"
+        className={HEADER_ICON_BTN}
+        title={
+          conversation.concierge_enabled
+            ? 'Concierge on · turn off for this conversation'
+            : 'Concierge off · turn on for this conversation'
+        }
+        aria-label={conversation.concierge_enabled ? 'Turn concierge off' : 'Turn concierge on'}
+        onClick={() => patchStatus({ concierge_enabled: !conversation.concierge_enabled })}
+      >
+        <ConciergeToggleIcon enabled={conversation.concierge_enabled} />
+      </button>
       {conversation.app_status === 'complete' ? (
-        <Button
-          variant="ghost"
-          size="icon-sm"
+        <button
+          type="button"
+          className={HEADER_ICON_BTN}
           title="Reopen"
           aria-label="Reopen"
           onClick={() => patchStatus({ app_status: 'active' })}
         >
           <RotateCcw className="h-4 w-4" />
-        </Button>
+        </button>
       ) : (
-        <Button
-          variant="ghost"
-          size="icon-sm"
+        <button
+          type="button"
+          className={HEADER_ICON_BTN}
           title="Mark complete"
           aria-label="Mark complete"
           onClick={() => patchStatus({ app_status: 'complete' })}
         >
           <CheckCircle2 className="h-4 w-4" />
-        </Button>
+        </button>
       )}
-      <Button
-        variant="ghost"
-        size="icon-sm"
+      <button
+        type="button"
+        className={HEADER_ICON_BTN}
         title="Mark unread"
         aria-label="Mark unread"
         onClick={() => patchStatus({ unread: true })}
       >
         <Mail className="h-4 w-4" />
-      </Button>
+      </button>
     </>
   ) : null;
 
@@ -222,6 +241,10 @@ export default function ConversationPage() {
             })
           }
           onMarkUnread={() => patchStatus({ unread: true })}
+          conciergeEnabled={conversation.concierge_enabled}
+          onToggleConcierge={() =>
+            patchStatus({ concierge_enabled: !conversation.concierge_enabled })
+          }
           canTrain={canSelect}
           onTurnIntoTraining={() => setSelectionSignal((n) => n + 1)}
         />
@@ -256,6 +279,7 @@ export default function ConversationPage() {
               conversation?.proposed_reply_declined_message_id ?? null
             }
             replyProposalEnabled={replyProposalEnabled}
+            conciergeEnabled={conversation?.concierge_enabled ?? true}
             onProposedReplyChange={load}
             proposedTasks={proposedTasks}
             onProposedTaskChange={handleProposedTaskChange}
@@ -322,6 +346,7 @@ export default function ConversationPage() {
           proposedReplyAnswersMessageId={conversation?.proposed_reply_answers_message_id ?? null}
           proposedReplyDeclinedMessageId={conversation?.proposed_reply_declined_message_id ?? null}
           replyProposalEnabled={replyProposalEnabled}
+          conciergeEnabled={conversation?.concierge_enabled ?? true}
           onProposedReplyChange={load}
           proposedTasks={proposedTasks}
           onProposedTaskChange={handleProposedTaskChange}

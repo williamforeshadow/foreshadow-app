@@ -194,6 +194,7 @@ export type AutoDraftSkipReason =
   | 'not_found'
   | 'inactive' // archived, or the thread is marked complete
   | 'disabled' // the org's autonomous reply-drafting master switch is off
+  | 'conversation_disabled' // the per-conversation concierge switch is off
   | 'no_inbound' // the host sent last — nobody is awaiting a reply
   | 'already_decided' // drafted OR gate-declined for this exact message
   | 'not_warranted'; // the gate just ruled this message doesn't need a reply
@@ -223,7 +224,7 @@ export async function maybeGenerateProposedReplyForConversation(
   const { data: conv, error: convError } = await supabase
     .from('conversations')
     .select(
-      'id, org_id, app_status, archived, proposed_reply_answers_message_id, proposed_reply_declined_message_id',
+      'id, org_id, app_status, archived, concierge_enabled, proposed_reply_answers_message_id, proposed_reply_declined_message_id',
     )
     .eq('id', conversationId)
     .maybeSingle();
@@ -236,10 +237,16 @@ export async function maybeGenerateProposedReplyForConversation(
     org_id: string | null;
     app_status: 'active' | 'complete';
     archived: boolean;
+    concierge_enabled: boolean;
     proposed_reply_answers_message_id: string | null;
     proposed_reply_declined_message_id: string | null;
   };
   if (c.archived || c.app_status !== 'active') return { status: 'skipped', reason: 'inactive' };
+
+  // Per-conversation kill switch: the operator is running this thread by hand.
+  if (c.concierge_enabled === false) {
+    return { status: 'skipped', reason: 'conversation_disabled' };
+  }
 
   // Master switch (per THIS conversation's org): when autonomous reply drafting
   // is off, nothing unprompted gets drafted — on either autonomous path. Manual

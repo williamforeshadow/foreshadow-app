@@ -51,6 +51,13 @@ export interface ConversationRow {
   app_status: ConversationTab;
   unread: boolean;
   archived: boolean;
+  /**
+   * Per-conversation concierge kill switch. When false, the concierge makes no
+   * autonomous proposals (reply/task/knowledge/sentiment) or auto-sends on this
+   * thread — the operator is handling it by hand. Defaults true; composes with
+   * the org master switches (effective gate = org flag AND this).
+   */
+  concierge_enabled: boolean;
   // Persisted Concierge draft (generated eagerly on inbound / by the ops agent;
   // the inbox reads it rather than regenerating). null until first generated.
   proposed_reply: string | null;

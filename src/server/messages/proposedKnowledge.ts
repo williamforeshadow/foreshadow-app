@@ -101,11 +101,13 @@ export async function maybeGenerateProposedKnowledgeForConversation(
     // on-complete caller). operations_settings is per-org.
     const { data: orgRow } = await getSupabaseServer()
       .from('conversations')
-      .select('org_id')
+      .select('org_id, concierge_enabled')
       .eq('id', conversationId)
       .maybeSingle();
-    const convOrgId =
-      ((orgRow as { org_id?: string | null } | null)?.org_id as string | null) ?? null;
+    const row = orgRow as { org_id?: string | null; concierge_enabled?: boolean } | null;
+    // Per-conversation kill switch: the operator is running this thread by hand.
+    if (row && row.concierge_enabled === false) return;
+    const convOrgId = (row?.org_id as string | null) ?? null;
     if (!(await loadConciergeProposalFlags(convOrgId)).knowledge) return;
 
     if (opts.requireHostMessage && !(await threadHasHostMessage(conversationId))) {

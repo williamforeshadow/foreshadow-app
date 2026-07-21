@@ -74,6 +74,7 @@ export function ConversationThread({
   proposedReplyAnswersMessageId = null,
   proposedReplyDeclinedMessageId = null,
   replyProposalEnabled = true,
+  conciergeEnabled = true,
   onProposedReplyChange,
   proposedTasks = [],
   onProposedTaskChange,
@@ -105,6 +106,9 @@ export function ConversationThread({
   /** The org's autonomous reply-drafting master switch. Off ⇒ no unprompted
    *  proposal bubble; the composer's Sparkles stays as the manual way in. */
   replyProposalEnabled?: boolean;
+  /** Per-conversation concierge switch. Off ⇒ no proposal bubble at all (the
+   *  operator is running this thread by hand). */
+  conciergeEnabled?: boolean;
   onProposedReplyChange?: () => void;
   /** The conversation's pending proposed tasks (multiple can coexist). */
   proposedTasks?: ProposedTaskData[];
@@ -185,7 +189,9 @@ export function ConversationThread({
   // Render the proposal at all? With the master switch off and nothing drafted,
   // there's no proposal to make and none coming — showing the bubble would just
   // advertise a capability this org turned off. A stored draft always shows.
-  const showProposedReply = replyProposalEnabled || !!proposedReply;
+  // The per-conversation switch is absolute: off ⇒ no bubble even if a draft
+  // lingered (the status route clears it, but gate here too so it never flashes).
+  const showProposedReply = conciergeEnabled && (replyProposalEnabled || !!proposedReply);
 
   // Each proposed task anchors to the message that triggered it — NOT the latest
   // inbound — so it persists until a human accepts or dismisses it, even after a
@@ -274,7 +280,7 @@ export function ConversationThread({
         onClick={() => setSelectionMode(true)}
         aria-label="Turn into training"
         title="Turn into training"
-        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.08]"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-foreground transition-colors hover:bg-black/[0.06] dark:hover:bg-white/[0.08]"
       >
         <GraduationCap className="h-4 w-4" />
       </button>

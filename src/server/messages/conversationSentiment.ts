@@ -212,7 +212,7 @@ export async function maybeGenerateSentimentForConversation(
     const supabase = getSupabaseServer();
     const { data: conv } = await supabase
       .from('conversations')
-      .select('id, org_id, app_status, archived, sentiment_answers_message_id')
+      .select('id, org_id, app_status, archived, concierge_enabled, sentiment_answers_message_id')
       .eq('id', conversationId)
       .maybeSingle();
     if (!conv) return;
@@ -221,9 +221,13 @@ export async function maybeGenerateSentimentForConversation(
       org_id: string | null;
       app_status: 'active' | 'complete';
       archived: boolean;
+      concierge_enabled: boolean;
       sentiment_answers_message_id: string | null;
     };
     if (c.archived || c.app_status !== 'active') return;
+
+    // Per-conversation kill switch: the operator is running this thread by hand.
+    if (c.concierge_enabled === false) return;
 
     // Per-org master switch (autonomous path only).
     if (!(await loadSentimentSummaryEnabled(c.org_id))) return;

@@ -241,6 +241,7 @@ export async function runConciergeTest(
     app_status: 'active',
     unread: false,
     archived: false,
+    concierge_enabled: true,
     proposed_reply: null,
     proposed_reply_answers_message_id: null,
     proposed_reply_declined_message_id: null,
