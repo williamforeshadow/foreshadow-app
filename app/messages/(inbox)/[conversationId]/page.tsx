@@ -10,6 +10,7 @@ import { ConciergeToggleIcon } from '@/components/messages/ConciergeToggleIcon';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { useMessages } from '@/components/messages/MessagesProvider';
+import { toast } from '@/components/ui/toast';
 import { ConversationThread } from '@/components/messages/ConversationThread';
 import { ConversationDetailPanel } from '@/components/messages/ConversationDetailPanel';
 import { ConversationOverflowMenu } from '@/components/messages/ConversationOverflowMenu';
@@ -134,6 +135,38 @@ export default function ConversationPage() {
       });
       await load();
       reload();
+    },
+    [conversationId, load, reload],
+  );
+
+  // Send a host reply through the PMS. Returns true on success so the composer /
+  // proposed-reply can clear themselves; surfaces a toast on failure. Refetches
+  // the thread (the sent message appears) and the inbox list (last-message row).
+  const sendMessage = useCallback(
+    async (text: string): Promise<boolean> => {
+      const trimmed = text.trim();
+      if (!trimmed) return false;
+      try {
+        const res = await fetch(`/api/messages/${conversationId}/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body: trimmed }),
+        });
+        if (!res.ok) {
+          const msg = await res
+            .json()
+            .then((d) => (typeof d?.error === 'string' ? d.error : ''))
+            .catch(() => '');
+          toast.error(msg || 'Could not send the message.');
+          return false;
+        }
+        await load();
+        reload();
+        return true;
+      } catch {
+        toast.error('Could not send the message.');
+        return false;
+      }
     },
     [conversationId, load, reload],
   );
@@ -280,6 +313,7 @@ export default function ConversationPage() {
             }
             replyProposalEnabled={replyProposalEnabled}
             conciergeEnabled={conversation?.concierge_enabled ?? true}
+            onSendMessage={sendMessage}
             onProposedReplyChange={load}
             proposedTasks={proposedTasks}
             onProposedTaskChange={handleProposedTaskChange}
@@ -347,6 +381,7 @@ export default function ConversationPage() {
           proposedReplyDeclinedMessageId={conversation?.proposed_reply_declined_message_id ?? null}
           replyProposalEnabled={replyProposalEnabled}
           conciergeEnabled={conversation?.concierge_enabled ?? true}
+          onSendMessage={sendMessage}
           onProposedReplyChange={load}
           proposedTasks={proposedTasks}
           onProposedTaskChange={handleProposedTaskChange}

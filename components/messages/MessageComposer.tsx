@@ -21,16 +21,21 @@ export function MessageComposer({
   conversationId,
   value,
   onChange,
+  onSend,
   focusSignal,
 }: {
   guestName?: string | null;
   conversationId?: string;
   value: string;
   onChange: (value: string) => void;
+  /** Send the composed text through the PMS; resolves true on success (we then
+   *  clear the box). Absent ⇒ send surfaces an honest "not wired" note. */
+  onSend?: (text: string) => Promise<boolean>;
   focusSignal?: number;
 }) {
   const [note, setNote] = useState<string | null>(null);
   const [drafting, setDrafting] = useState(false);
+  const [sending, setSending] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   const firstName = guestName?.trim().split(/\s+/)[0];
@@ -58,10 +63,20 @@ export function MessageComposer({
     el.setSelectionRange(el.value.length, el.value.length);
   }, [focusSignal]);
 
-  const handleSend = useCallback(() => {
-    if (!trimmed) return;
-    setNote('Sending isn’t available yet. Your draft is kept here.');
-  }, [trimmed]);
+  const handleSend = useCallback(async () => {
+    if (!trimmed || sending) return;
+    if (!onSend) {
+      setNote('Sending isn’t available for this conversation.');
+      return;
+    }
+    setSending(true);
+    setNote(null);
+    const ok = await onSend(trimmed);
+    // Clear only on success; on failure the parent has toasted and we keep the
+    // text so it isn't lost.
+    if (ok) onChange('');
+    setSending(false);
+  }, [trimmed, sending, onSend, onChange]);
 
   const handleDraft = useCallback(async () => {
     if (!conversationId || drafting) return;
@@ -148,18 +163,22 @@ export function MessageComposer({
           onKeyDown={handleKeyDown}
           placeholder={drafting ? 'Drafting a reply…' : placeholder}
           aria-label="Write a message"
-          disabled={drafting}
+          disabled={drafting || sending}
           className="max-h-40 min-h-[1.5rem] flex-1 resize-none bg-transparent py-1 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-70"
         />
 
         <button
           type="button"
           onClick={handleSend}
-          disabled={!trimmed}
+          disabled={!trimmed || sending}
           aria-label="Send message"
           className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--accent-3)] text-white transition-[opacity,transform] hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 motion-reduce:transition-none motion-reduce:active:scale-100"
         >
-          <SendHorizontal className="h-4 w-4" aria-hidden />
+          {sending ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <SendHorizontal className="h-4 w-4" aria-hidden />
+          )}
         </button>
       </div>
     </div>

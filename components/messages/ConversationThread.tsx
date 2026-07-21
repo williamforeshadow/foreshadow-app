@@ -75,6 +75,7 @@ export function ConversationThread({
   proposedReplyDeclinedMessageId = null,
   replyProposalEnabled = true,
   conciergeEnabled = true,
+  onSendMessage,
   onProposedReplyChange,
   proposedTasks = [],
   onProposedTaskChange,
@@ -109,6 +110,9 @@ export function ConversationThread({
   /** Per-conversation concierge switch. Off ⇒ no proposal bubble at all (the
    *  operator is running this thread by hand). */
   conciergeEnabled?: boolean;
+  /** Send a host reply through the PMS. Resolves true on success (the composer /
+   *  proposed reply then clears). Absent ⇒ send controls stay inert. */
+  onSendMessage?: (text: string) => Promise<boolean>;
   onProposedReplyChange?: () => void;
   /** The conversation's pending proposed tasks (multiple can coexist). */
   proposedTasks?: ProposedTaskData[];
@@ -469,6 +473,7 @@ export function ConversationThread({
                   stale={proposalStale}
                   declined={proposalDeclined}
                   onEdit={handleEditProposed}
+                  onSend={onSendMessage}
                   onChanged={onProposedReplyChange}
                 />
               ) : null}
@@ -542,6 +547,7 @@ export function ConversationThread({
           conversationId={conversationId}
           value={composerText}
           onChange={setComposerText}
+          onSend={onSendMessage}
           focusSignal={focusSignal}
         />
       ) : null}

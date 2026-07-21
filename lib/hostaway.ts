@@ -285,3 +285,38 @@ export async function fetchConversationMessages(
 
   return all;
 }
+
+/**
+ * Send a message into a Hostaway conversation.
+ * `POST /v1/conversations/{id}/messages` with `{ body, communicationType }`.
+ * communicationType is the gateway: 'channel' replies through the OTA
+ * (Airbnb/VRBO/Booking), 'email' for direct/email guests (Hostaway's default).
+ * Returns the created ConversationMessage object — its `id` becomes our
+ * `hostaway_message_id`, `date` is a naive-UTC timestamp (normalize before store).
+ */
+export async function sendHostawayMessage(
+  creds: HostawayCreds,
+  conversationId: string | number,
+  body: string,
+  communicationType: 'channel' | 'email' = 'channel',
+): Promise<Record<string, unknown>> {
+  const token = await getToken(creds);
+  const res = await fetch(
+    `https://api.hostaway.com/v1/conversations/${conversationId}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Cache-control': 'no-cache',
+      },
+      body: JSON.stringify({ body, communicationType }),
+    },
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Hostaway send failed (${res.status}): ${text}`);
+  }
+  const { result } = await res.json();
+  return (result ?? {}) as Record<string, unknown>;
+}
