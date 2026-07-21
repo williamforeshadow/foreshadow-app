@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Capacitor } from '@capacitor/core';
 import { GraduationCap, ArrowUpRight, MessageSquare } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
@@ -37,10 +39,26 @@ const SETTINGS_TOOLS_HREF = '/messages/concierge-training/settings#tools';
 
 export function TrainingReferences({ sources }: { sources: ConciergeSourcesRecord | null }) {
   const [open, setOpen] = useState(false);
+  const router = useRouter();
+  // In the native shell, target="_blank" hands the URL to Safari — jarring, and
+  // it drops the operator out of the app. There we navigate in-app instead
+  // (both destinations have a MobileRouteShell with a back button). On the web,
+  // a new tab is the point: it keeps the operator's place in the thread. The
+  // platform never changes, so read it once; the window guard keeps SSR false,
+  // which is moot anyway since these rows only render once the dialog is open.
+  const [native] = useState(
+    () => typeof window !== 'undefined' && !!Capacitor?.isNativePlatform?.(),
+  );
 
   if (!sources || !Array.isArray(sources.sources)) return null;
 
   const rows = toRows(sources.sources);
+
+  // Native: navigate within the webview and close the popup behind us.
+  const openInApp = (href: string) => {
+    setOpen(false);
+    router.push(href);
+  };
 
   return (
     <>
@@ -80,14 +98,9 @@ export function TrainingReferences({ sources }: { sources: ConciergeSourcesRecor
               </div>
             ) : (
               <ul className="flex flex-col">
-                {rows.map((r) => (
-                  <li key={r.key}>
-                    <a
-                      href={r.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group flex items-start justify-between gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-foreground/[0.04]"
-                    >
+                {rows.map((r) => {
+                  const inner = (
+                    <>
                       <div className="min-w-0">
                         <p
                           className={`text-sm leading-snug ${
@@ -100,13 +113,36 @@ export function TrainingReferences({ sources }: { sources: ConciergeSourcesRecor
                           <p className="text-xs leading-snug text-muted-foreground">{r.caption}</p>
                         ) : null}
                       </div>
-                      <ArrowUpRight
-                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
-                        aria-hidden
-                      />
-                    </a>
-                  </li>
-                ))}
+                      {/* On native the row navigates in-app (no new "tab" to hint at). */}
+                      {native ? null : (
+                        <ArrowUpRight
+                          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
+                          aria-hidden
+                        />
+                      )}
+                    </>
+                  );
+                  const rowClass =
+                    'group flex w-full items-start justify-between gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-foreground/[0.04]';
+                  return (
+                    <li key={r.key}>
+                      {native ? (
+                        <button type="button" onClick={() => openInApp(r.href)} className={rowClass}>
+                          {inner}
+                        </button>
+                      ) : (
+                        <a
+                          href={r.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={rowClass}
+                        >
+                          {inner}
+                        </a>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
