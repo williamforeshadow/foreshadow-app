@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
+import { GraduationCap, FlaskConical, Settings } from 'lucide-react';
 import { useAuth } from '@/lib/authContext';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
@@ -47,7 +48,11 @@ export function MobileMenuView() {
     router.push('/login');
   };
 
-  const destinations = [
+  // The menu is grouped: an ungrouped top block for the broad destinations, then
+  // a "Concierge" section for its config surfaces (these have no bottom tab and
+  // otherwise aren't reachable on mobile). `show` gates a row; concierge is
+  // ungated for now — role gating can be layered on later per row.
+  const generalItems = [
     {
       label: 'Tasks',
       description: 'The full task ledger',
@@ -70,7 +75,38 @@ export function MobileMenuView() {
         </MenuRowIcon>
       ),
     },
-  ].filter((d) => d.show);
+  ];
+
+  const conciergeItems = [
+    {
+      label: 'Concierge Training',
+      description: 'Teach the concierge how to reply',
+      href: '/messages/concierge-training',
+      show: true,
+      icon: <GraduationCap className="h-5 w-5" aria-hidden />,
+    },
+    {
+      label: 'Concierge Testing',
+      description: 'Try it on sample conversations',
+      href: '/messages/concierge-testing',
+      show: true,
+      icon: <FlaskConical className="h-5 w-5" aria-hidden />,
+    },
+    {
+      label: 'Concierge Settings',
+      description: 'Proposals, tools, and sensitivity',
+      href: '/messages/concierge-training/settings',
+      show: true,
+      icon: <Settings className="h-5 w-5" aria-hidden />,
+    },
+  ];
+
+  const sections = [
+    { heading: null as string | null, items: generalItems },
+    { heading: 'Concierge', items: conciergeItems },
+  ]
+    .map((s) => ({ ...s, items: s.items.filter((i) => i.show) }))
+    .filter((s) => s.items.length > 0);
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-white dark:bg-card">
@@ -169,21 +205,35 @@ export function MobileMenuView() {
       {/* Destinations */}
       <div className="pb-mobile-nav min-h-0 flex-1 overflow-y-auto hide-scrollbar px-[22px]">
         <div className="flex flex-col gap-3 pt-1">
-          {destinations.map((d) => (
-            <button key={d.href} type="button" onClick={() => router.push(d.href)} className={rowCard}>
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-neutral-200/60 dark:bg-[rgba(255,255,255,0.04)]">
-                <span className="text-neutral-500 dark:text-[#a09e9a]">{d.icon}</span>
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-neutral-900 dark:text-[#f0efed]">{d.label}</p>
-                <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-[#66645f]">
-                  {d.description}
+          {sections.map((section) => (
+            <div key={section.heading ?? 'general'} className="flex flex-col gap-3">
+              {section.heading ? (
+                <p className="px-1 pb-0.5 pt-3 text-[11px] font-semibold uppercase tracking-wide text-neutral-400 dark:text-[#66645f]">
+                  {section.heading}
                 </p>
-              </div>
-              <svg className="h-4 w-4 shrink-0 text-neutral-400 dark:text-[#66645f]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
+              ) : null}
+              {section.items.map((d) => (
+                <button
+                  key={d.href}
+                  type="button"
+                  onClick={() => router.push(d.href)}
+                  className={rowCard}
+                >
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-neutral-200/60 dark:bg-[rgba(255,255,255,0.04)]">
+                    <span className="text-neutral-500 dark:text-[#a09e9a]">{d.icon}</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-neutral-900 dark:text-[#f0efed]">{d.label}</p>
+                    <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-[#66645f]">
+                      {d.description}
+                    </p>
+                  </div>
+                  <svg className="h-4 w-4 shrink-0 text-neutral-400 dark:text-[#66645f]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              ))}
+            </div>
           ))}
         </div>
       </div>
