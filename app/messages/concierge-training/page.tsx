@@ -15,9 +15,9 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { TaskSheet, TaskOptionRow } from '@/components/tasks/detail/primitives/TaskSheet';
 import { TranscriptScript } from '@/components/messages/TranscriptScript';
 import { ExampleTranscriptField } from '@/components/messages/ExampleTranscriptField';
 import InfoTooltip from '@/components/templates/InfoTooltip';
@@ -541,6 +541,10 @@ function RuleEditorDialog({
   const allSelected = properties.length > 0 && selected.size === properties.length;
   const canSave = title.trim().length > 0 && selected.size > 0;
 
+  // On mobile the editor takes over the whole screen (like the task-detail
+  // panel) instead of floating in a cramped dialog; desktop keeps the dialog.
+  const isMobile = useIsMobile();
+
   const handleAiDraft = async () => {
     const note = aiNote.trim();
     if (!note) return;
@@ -679,24 +683,10 @@ function RuleEditorDialog({
     }
   };
 
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent
-        aria-describedby={undefined}
-        showCloseButton={false}
-        className="flex h-[min(90svh,640px)] flex-col gap-0 overflow-hidden border-[var(--surface-elevated-line)] bg-[var(--surface-elevated)] p-0 shadow-[var(--glass-shadow)] sm:max-w-4xl"
-      >
-        {/* Frosted grey-blue sheen over the solid surface. On a NON-transformed
-            layer (Radix transforms the content, which would drop the blur); the
-            solid bg-popover under it keeps the dialog opaque, not see-through. */}
-        <div
-          className="liquid-glass-surface pointer-events-none absolute inset-0 -z-10 rounded-[inherit]"
-          aria-hidden
-        />
-        <DialogHeader className="sr-only">
-          <DialogTitle>{existing ? 'Edit training block' : 'New training block'}</DialogTitle>
-        </DialogHeader>
-
+  // Shared editor body — the scroll region, error line, and action footer. The
+  // shell around it differs by platform (full-page on mobile, dialog on desktop).
+  const inner = (
+    <>
         {/* Doc-editor layout: title + a wide instructions field, with the
             settings as compact pills at the bottom. */}
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-7 pt-6 pb-4 overlay-scrollbar">
@@ -902,7 +892,10 @@ function RuleEditorDialog({
         {/* While drafting, the note page has its own Cancel/Draft actions — the
             footer's Cancel/Create aren't usable yet, so hide the whole bar. */}
         {!aiOpen && (
-          <DialogFooter className="border-t border-border px-7 py-4 sm:justify-between">
+          <div
+            className="flex items-center justify-between gap-2 border-t border-border px-7 py-4"
+            style={isMobile ? { paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' } : undefined}
+          >
             {existing ? (
               <Button
                 type="button"
@@ -923,8 +916,57 @@ function RuleEditorDialog({
                 {saving ? 'Saving…' : existing ? 'Save changes' : 'Create training block'}
               </Button>
             </div>
-          </DialogFooter>
+          </div>
         )}
+    </>
+  );
+
+  // Mobile: a full-screen takeover (like the task-detail panel) with a back
+  // header, instead of a cramped floating dialog.
+  if (isMobile) {
+    return (
+      <div className="safe-area-top fixed inset-0 z-50 flex flex-col bg-[var(--surface-elevated)]">
+        <div
+          className="liquid-glass-surface pointer-events-none absolute inset-0 -z-10"
+          aria-hidden
+        />
+        <div className="flex h-12 shrink-0 items-center gap-1 px-2">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Back"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.05]"
+          >
+            <ArrowLeft className="h-[22px] w-[22px]" />
+          </button>
+          <h2 className="truncate text-[17px] font-semibold tracking-tight text-foreground">
+            {existing ? 'Edit training block' : 'New training block'}
+          </h2>
+        </div>
+        {inner}
+      </div>
+    );
+  }
+
+  // Desktop: the floating dialog, unchanged.
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        aria-describedby={undefined}
+        showCloseButton={false}
+        className="flex h-[min(90svh,640px)] flex-col gap-0 overflow-hidden border-[var(--surface-elevated-line)] bg-[var(--surface-elevated)] p-0 shadow-[var(--glass-shadow)] sm:max-w-4xl"
+      >
+        {/* Frosted grey-blue sheen over the solid surface. On a NON-transformed
+            layer (Radix transforms the content, which would drop the blur); the
+            solid bg-popover under it keeps the dialog opaque, not see-through. */}
+        <div
+          className="liquid-glass-surface pointer-events-none absolute inset-0 -z-10 rounded-[inherit]"
+          aria-hidden
+        />
+        <DialogHeader className="sr-only">
+          <DialogTitle>{existing ? 'Edit training block' : 'New training block'}</DialogTitle>
+        </DialogHeader>
+        {inner}
       </DialogContent>
     </Dialog>
   );
@@ -1103,6 +1145,7 @@ function PropertyPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const isMobile = useIsMobile();
 
   const total = properties.length;
   const allSelected = total > 0 && selected.size === total;
@@ -1122,6 +1165,72 @@ function PropertyPicker({
     else next.add(id);
     onChange(next);
   };
+
+  // Mobile: a bottom drawer with search + select-all, matching the task-detail
+  // pickers. Multi-select — tapping a row toggles it and leaves the drawer open.
+  if (isMobile) {
+    return (
+      <>
+        <button
+          type="button"
+          aria-expanded={open}
+          disabled={disabled}
+          onClick={() => setOpen(true)}
+          className={cn(PILL_CLASS, selected.size === 0 && 'text-muted-foreground')}
+        >
+          <Home className="h-3.5 w-3.5 opacity-70" />
+          <span className="max-w-[12rem] truncate">{summary}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
+        </button>
+        <TaskSheet
+          open={open}
+          onOpenChange={(o) => {
+            setOpen(o);
+            if (!o) setQuery('');
+          }}
+          title="Properties"
+        >
+          <div className="pb-2">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search properties…"
+              className="h-10"
+            />
+          </div>
+          <div className="flex items-center justify-between px-1 pb-1 text-[13px]">
+            <button
+              type="button"
+              onClick={() => onChange(new Set(properties.map((p) => p.id)))}
+              className="font-medium"
+              style={{ color: 'var(--task-accent)' }}
+            >
+              Select all
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange(new Set())}
+              className="font-medium"
+              style={{ color: 'var(--task-ink-3)' }}
+            >
+              Clear
+            </button>
+          </div>
+          {filtered.length === 0 ? (
+            <p className="px-1 py-6 text-center text-sm" style={{ color: 'var(--task-ink-3)' }}>
+              {total === 0 ? 'No properties yet.' : 'No matches.'}
+            </p>
+          ) : (
+            filtered.map((p) => (
+              <TaskOptionRow key={p.id} selected={selected.has(p.id)} onSelect={() => toggle(p.id)}>
+                {p.name}
+              </TaskOptionRow>
+            ))
+          )}
+        </TaskSheet>
+      </>
+    );
+  }
 
   return (
     <Popover
@@ -1228,7 +1337,42 @@ function ExposurePill({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const isMobile = useIsMobile();
   const label = TIER_OPTIONS.find((o) => o.value === tier)?.title ?? 'Always in context';
+
+  // Mobile: a bottom drawer like the task-detail pickers. Desktop: popover.
+  if (isMobile) {
+    return (
+      <>
+        <button
+          type="button"
+          aria-expanded={open}
+          disabled={disabled}
+          onClick={() => setOpen(true)}
+          className={PILL_CLASS}
+        >
+          <Layers className="h-3.5 w-3.5 opacity-70" />
+          <span className="truncate">{label}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
+        </button>
+        <TaskSheet open={open} onOpenChange={setOpen} title="Agent exposure">
+          {TIER_OPTIONS.map((opt) => (
+            <TaskOptionRow
+              key={opt.value}
+              selected={tier === opt.value}
+              onSelect={() => {
+                onChange(opt.value);
+                setOpen(false);
+              }}
+            >
+              {opt.title}
+            </TaskOptionRow>
+          ))}
+        </TaskSheet>
+      </>
+    );
+  }
+
   return (
     <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
