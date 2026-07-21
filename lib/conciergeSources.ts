@@ -41,9 +41,12 @@ export const CONCIERGE_SOURCES_VERSION = 1 as const;
  * humanized form rather than rendering a snake_case identifier at a user.
  */
 const TOOL_LABELS: Record<string, string> = {
-  get_property_knowledge_for_guest: 'Property knowledge',
-  check_property_availability: 'Availability',
-  find_available_properties: 'Other properties',
+  // Kept verbatim in sync with TOOL_COPY[*].title on the concierge settings page
+  // (app/messages/concierge-training/settings) — a tool row links there, and a
+  // guest reading two different names for the same toggle would be a papercut.
+  get_property_knowledge_for_guest: 'Property knowledge lookup',
+  check_property_availability: 'Availability check',
+  find_available_properties: 'Alternative property search',
   get_concierge_procedure: 'Procedure',
 };
 

@@ -252,6 +252,7 @@ export default function ConciergeSettingsPage() {
 
       {/* Tools */}
       <Section
+        id="tools"
         icon={<Wrench className="h-4 w-4 text-[var(--accent-3)]" aria-hidden />}
         title="Tools"
         blurb="The read-only abilities the concierge can reach for while drafting a guest reply. Turn one off and the concierge simply won’t use it."
@@ -327,18 +328,22 @@ export default function ConciergeSettingsPage() {
 }
 
 function Section({
+  id,
   icon,
   title,
   blurb,
   children,
 }: {
+  /** Anchor target (e.g. #tools, linked from the inbox's referenced-tools rows). */
+  id?: string;
   icon: ReactNode;
   title: string;
   blurb?: string;
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-3">
+    // scroll-mt keeps the heading clear of the top edge when jumped to via #anchor.
+    <section id={id} className="scroll-mt-6 space-y-3">
       <div className="flex items-center gap-2">
         {icon}
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>

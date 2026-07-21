@@ -185,6 +185,34 @@ export default function ConciergeTrainingPage() {
     };
   }, [loadRules]);
 
+  // Deep link from the inbox's "Referenced Training Blocks" popup: ?rule=<id>
+  // opens straight to that block's editor. Read from window.location rather than
+  // useSearchParams so the page needs no Suspense boundary, and strip the param
+  // immediately so a refresh or back-nav doesn't reopen the dialog.
+  const [pendingRuleId, setPendingRuleId] = useState<string | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('rule');
+    if (!id) return;
+    setPendingRuleId(id);
+    params.delete('rule');
+    const qs = params.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+  }, []);
+
+  // Once the rules have loaded, open the deep-linked block (switching to its tab
+  // so the list behind the dialog matches). If it was since deleted, we just
+  // land on the page — the param is already cleared either way.
+  useEffect(() => {
+    if (!pendingRuleId || loading) return;
+    const rule = rules.find((r) => r.id === pendingRuleId);
+    setPendingRuleId(null);
+    if (rule) {
+      setActiveTab(rule.category);
+      setEditor({ mode: 'edit', rule });
+    }
+  }, [pendingRuleId, loading, rules]);
+
   const trainingPanel = (
     <>
       <div className="flex items-center justify-between gap-3">
