@@ -159,6 +159,53 @@ export function hostawayDateToUtcIso(raw: string | null): string | null {
 }
 
 /**
+ * Hostaway returns message bodies as HTML when the message went out over the
+ * **email** gateway (communicationType 'email' — direct guests), and as plain
+ * text over the OTA channel gateway (Airbnb/VRBO/Booking). So a host reply
+ * arrives as "<p>Hi Sarah,</p>\n<p>...</p>" while the guest's own messages, and
+ * everything on an OTA thread, are already plain. Nothing downstream expects
+ * markup: the thread renders `body` as text (React escapes it, so the tags show
+ * literally), the inbox preview is a substring of it, and the concierge is fed
+ * these bodies as examples of how the host writes — HTML there teaches it to
+ * emit HTML back.
+ *
+ * Normalize on the way in, at the single mapper, rather than at each render:
+ * one place, and the AI context and previews are fixed for free.
+ *
+ * Structure is preserved, not merely stripped — most of these bodies are
+ * multi-paragraph, so a blind tag-strip would run separate paragraphs together
+ * into one run-on line. `</p>` becomes a blank line, `<br>` a single newline,
+ * and only then are the remaining tags (`<span>` is the only other one Hostaway
+ * emits) dropped. Left alone entirely when there's no markup, which is the
+ * common case.
+ */
+export function normalizeMessageBody(raw: string): string {
+  if (!raw.includes('<')) return raw;
+
+  const text = raw
+    // Block boundaries -> newlines, before any tag is dropped.
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p\s*>/gi, '\n\n')
+    .replace(/<\/(div|li|tr|h[1-6])\s*>/gi, '\n')
+    // Everything else (<p>, <span>, ...) carries no text of its own.
+    .replace(/<[^>]*>/g, '')
+    // Hostaway's HTML bodies carry no entities today, but decoding is cheap and
+    // an escaped body is worse than a stripped one. &amp; last so "&amp;lt;"
+    // doesn't decode twice into a stray "<".
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0?39;|&apos;/gi, "'")
+    .replace(/&amp;/gi, '&');
+
+  return text
+    .replace(/[ \t]+\n/g, '\n') // trailing spaces the tags left behind
+    .replace(/\n{3,}/g, '\n\n') // a blank line is the most separation we keep
+    .trim();
+}
+
+/**
  * Pull the message object out of a Hostaway webhook envelope. Unified webhooks
  * typically wrap the entity under `data` (sometimes `result`); fall back to the
  * payload itself if it's already the bare object.
@@ -187,7 +234,7 @@ export function mapHostawayMessagePayload(
     hostawayMessageId: messageId,
     hostawayConversationId: conversationId,
     hostawayReservationId: toNumberOrNull(m[FIELD.reservationId]),
-    body: firstString(m[FIELD.body]) ?? '',
+    body: normalizeMessageBody(firstString(m[FIELD.body]) ?? ''),
     sentAt: hostawayDateToUtcIso(firstString(m[FIELD.sentAt], m.insertedOn)),
     direction: m[FIELD.isIncoming] ? 'inbound' : 'outbound',
   };

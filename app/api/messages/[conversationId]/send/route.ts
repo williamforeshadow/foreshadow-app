@@ -110,7 +110,11 @@ export async function POST(
         property_name: c.property_name,
         guest_name: c.guest_name,
         direction: 'outbound',
-        body: typeof created.body === 'string' && created.body ? created.body : text,
+        // The typed text, not `created.body` — Hostaway echoes an email-gateway
+        // send back as HTML ("<p>...</p>"), which would render as literal tags
+        // until the re-ingest below replaced it. What the operator wrote is
+        // already the plain form of exactly this message.
+        body: text,
         sent_at: sentAt,
       },
       { onConflict: 'org_id,hostaway_message_id' },
