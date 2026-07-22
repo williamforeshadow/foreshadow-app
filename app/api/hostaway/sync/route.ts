@@ -4,7 +4,12 @@ import { after } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { fetchListingsDetailed, fetchReservations, type ListingDetail } from '@/lib/hostaway';
 import { runAutomationsForRowChange } from '@/src/server/automations/run';
-import { getPrimaryHostawayIntegration, hostawayCredsFor } from '@/lib/pmsIntegrations';
+import {
+  getPrimaryHostawayIntegration,
+  hostawayCredsFor,
+  listActiveIntegrations,
+} from '@/lib/pmsIntegrations';
+import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // Columns selected back from the reservation insert, fed into the
 // automations engine's row-change hook.
@@ -23,14 +28,35 @@ type InsertedReservation = {
 export const maxDuration = 120;
 
 export async function POST(request: Request) {
+  // Two legitimate callers, authenticating two different ways:
+  //
+  //   the Vercel cron          — shared secret, no session; syncs the primary org
+  //   "Sync with Hostaway"     — a signed-in operator on the Properties page
+  //
+  // The button used to POST here with no credentials at all, which has 401'd
+  // since the cron guard landed. It can't send CRON_SECRET — that's a server
+  // secret, and shipping it to a browser would defeat the guard entirely — so
+  // it authenticates by session instead.
+  //
+  // A session run is scoped to the CALLER'S org, not the primary integration:
+  // whoever clicks the button syncs their own org and only their own.
   const denied = requireCronAuth(request);
-  if (denied) return denied;
+  let sessionOrgId: string | null = null;
+  if (denied) {
+    const ctx = await requireAuthContext();
+    // Neither a valid cron secret nor a valid session — answer as the cron
+    // guard would, so this doesn't become a probe for whether a session exists.
+    if (ctx instanceof NextResponse) return denied;
+    sessionOrgId = ctx.orgId;
+  }
 
   try {
     console.log('[Hostaway Sync] Starting…');
     const supabase = getSupabaseServer();
 
-    const integration = await getPrimaryHostawayIntegration();
+    const integration = sessionOrgId
+      ? (await listActiveIntegrations('hostaway')).find((i) => i.org_id === sessionOrgId) ?? null
+      : await getPrimaryHostawayIntegration();
     if (!integration) {
       console.log('[Hostaway Sync] no active Hostaway integration; skipping');
       return NextResponse.json({ success: true, skipped: 'no_integration' });
@@ -493,7 +519,15 @@ export async function POST(request: Request) {
   }
 }
 
-// GET for easy browser/testing access
+// GET for easy browser/testing access — cron secret ONLY, never a session.
+//
+// POST accepts a session so the Properties page button can work, but that must
+// not extend to GET: this URL is destructive (it deletes reservations), and a
+// GET fires from anything that merely follows a link — a prefetch, a crawler, a
+// chat unfurl. Those carry the signed-in user's cookies, so a session-authorized
+// GET would hand exactly the drive-by trigger the cron guard exists to prevent.
 export async function GET(request: Request) {
+  const denied = requireCronAuth(request);
+  if (denied) return denied;
   return POST(request);
 }

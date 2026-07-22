@@ -428,8 +428,22 @@ function AddPropertyModal({
   }, [onClose]);
 
   // Lazy-load available listings on entering the hostaway tab.
+  //
+  // `listingsLoading` must stay OUT of both the guard and the deps. It's set
+  // inside the effect, so listing it as a dependency made the effect re-run
+  // immediately — and React fires the previous cleanup before a re-run, which
+  // flipped `cancelled` to true while the fetch was still in flight. Every
+  // callback below is behind `if (!cancelled)`, so the response was discarded:
+  // no listings, no error, and `listingsLoading` never cleared, leaving the
+  // picker spinning forever no matter what the endpoint returned.
+  //
+  // `listings` is safe to depend on: it only changes once the fetch resolves,
+  // and the `!== null` guard then stops the effect from refetching (including
+  // when the user tabs away to Manual and back). On failure `listings` stays
+  // null while `listingsError` renders, and since the error isn't a dependency
+  // the effect doesn't retry in a loop.
   useEffect(() => {
-    if (tab !== 'hostaway' || listings !== null || listingsLoading) return;
+    if (tab !== 'hostaway' || listings !== null) return;
     let cancelled = false;
     setListingsLoading(true);
     setListingsError(null);
@@ -448,7 +462,7 @@ function AddPropertyModal({
     return () => {
       cancelled = true;
     };
-  }, [tab, listings, listingsLoading]);
+  }, [tab, listings]);
 
   useEffect(() => {
     if (tab === 'manual') manualInputRef.current?.focus();

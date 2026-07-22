@@ -35,12 +35,30 @@ export async function GET(req: NextRequest) {
 
     const onlyAvailable = req.nextUrl.searchParams.get('available') === 'true';
 
+    // These two failures mean opposite things and must not share a handler.
+    // Collapsing them (one try/catch returning an empty list) made a broken
+    // integration or an unreachable Hostaway indistinguishable from "you've
+    // already imported everything" — the picker just showed nothing, with no
+    // way to tell that a fetch had failed at all.
+    let creds;
+    try {
+      creds = await getHostawayCredsForOrg(orgId);
+    } catch {
+      // Genuinely empty: this org has no Hostaway integration, so there is
+      // nothing to import and that isn't an error worth surfacing.
+      return NextResponse.json({ listings: [], hostaway_connected: false });
+    }
+
     let listingsMap: Map<number, string>;
     try {
-      listingsMap = await fetchListings(await getHostawayCredsForOrg(orgId));
-    } catch {
-      // No Hostaway integration for this org → nothing to import.
-      return NextResponse.json({ listings: [] });
+      listingsMap = await fetchListings(creds);
+    } catch (err) {
+      // Credentials exist but Hostaway didn't answer — a real failure.
+      console.error('[Hostaway Listings] fetch failed:', err);
+      return NextResponse.json(
+        { error: "Couldn't reach Hostaway. Check the integration credentials and try again." },
+        { status: 502 },
+      );
     }
 
     const propsRes = await supabase
