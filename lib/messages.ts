@@ -176,11 +176,13 @@ export function hostawayDateToUtcIso(raw: string | null): string | null {
  * multi-paragraph, so a blind tag-strip would run separate paragraphs together
  * into one run-on line. `</p>` becomes a blank line, `<br>` a single newline,
  * and only then are the remaining tags (`<span>` is the only other one Hostaway
- * emits) dropped. Left alone entirely when there's no markup, which is the
- * common case.
+ * emits) dropped. A body with no markup at all — the common case — skips the
+ * rewriting and is only trimmed: plain-text bodies routinely carry a trailing
+ * newline or two after a signature block, which renders as an empty line in the
+ * bubble.
  */
 export function normalizeMessageBody(raw: string): string {
-  if (!raw.includes('<')) return raw;
+  if (!raw.includes('<')) return raw.trim();
 
   const text = raw
     // Block boundaries -> newlines, before any tag is dropped.

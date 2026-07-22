@@ -437,8 +437,13 @@ export function ConversationThread({
                     }`}
                   >
                     <div className="whitespace-pre-wrap break-words">
+                      {/* Trimmed: bodies routinely arrive with a trailing
+                          newline or two (Hostaway keeps whatever whitespace
+                          followed a signature block), and under
+                          whitespace-pre-wrap that renders as an empty line
+                          padding the bottom of the bubble. */}
                       {m.body?.trim() ? (
-                        m.body
+                        m.body.trim()
                       ) : (
                         <span className="italic opacity-70">(no text)</span>
                       )}
