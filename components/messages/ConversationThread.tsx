@@ -57,6 +57,14 @@ function clockTime(iso: string): string {
   return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
+// A message only counts as a scheduled Hostaway automation when it's genuinely
+// in the future by more than this slack. The buffer absorbs the seconds of clock
+// skew between Hostaway's server (which stamps sent_at) and the browser clock, so
+// a reply you just sent — or one synced in from the Hostaway app — isn't briefly
+// mis-rendered as "Scheduled" while the two clocks disagree. Real automations are
+// scheduled minutes-to-hours out, well past this threshold.
+const SCHEDULED_SKEW_MS = 30_000;
+
 export function ConversationThread({
   messages,
   conversationId,
@@ -131,8 +139,19 @@ export function ConversationThread({
    *  value is ignored — only a change starts a selection. */
   startSelectionSignal?: number;
 }) {
-  // Render-stable "now" for the scheduled-vs-sent check (one value per mount).
-  const [nowMs] = useState(() => Date.now());
+  // "Now" for the scheduled-vs-sent check. Computed fresh every render (NOT
+  // frozen at mount) so a message sent or synced after the thread was opened is
+  // compared against the current time, not a stale mount-time value — otherwise
+  // its real timestamp reads as "in the future" and it mis-renders as a
+  // "Scheduled" automation until a manual refresh. The interval below forces a
+  // periodic re-render so a genuinely-scheduled message flips to sent on its own
+  // once its time passes, even with no other activity.
+  const [, setNowTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setNowTick((n) => n + 1), 15_000);
+    return () => clearInterval(id);
+  }, []);
+  const nowMs = Date.now();
   const [composerText, setComposerText] = useState('');
   const [focusSignal, setFocusSignal] = useState(0);
   const [prevConvId, setPrevConvId] = useState(conversationId);
@@ -181,7 +200,12 @@ export function ConversationThread({
   // When it's from the guest, the conversation is awaiting a host reply — that's
   // where the persisted proposed reply is anchored.
   const sentMessages = messages.filter(
-    (m) => !(m.direction === 'outbound' && m.sent_at && new Date(m.sent_at).getTime() > nowMs),
+    (m) =>
+      !(
+        m.direction === 'outbound' &&
+        m.sent_at &&
+        new Date(m.sent_at).getTime() > nowMs + SCHEDULED_SKEW_MS
+      ),
   );
   const lastSent = sentMessages.length ? sentMessages[sentMessages.length - 1] : undefined;
   const awaitingReply = lastSent?.direction === 'inbound';
@@ -367,7 +391,8 @@ export function ConversationThread({
           // Only an OUTBOUND message with a future send time is scheduled (a
           // Hostaway automation). A guest's inbound message is always already
           // sent, so it can never be scheduled regardless of its timestamp.
-          const scheduled = outbound && !!ts && new Date(ts).getTime() > nowMs;
+          const scheduled =
+            outbound && !!ts && new Date(ts).getTime() > nowMs + SCHEDULED_SKEW_MS;
 
           const newDay = !prev || dayKey(whenOf(prev)) !== dayKey(ts);
           const firstOfRun = newDay || !prev || prev.direction !== m.direction;
