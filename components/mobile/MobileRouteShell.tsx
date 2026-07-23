@@ -17,6 +17,13 @@ interface MobileRouteShellProps {
    */
   title?: string;
   /**
+   * Optional secondary line rendered under the title (e.g. a conversation's
+   * property + stay dates). When present the title shrinks a touch so both lines
+   * sit within the top bar. Accepts a node so callers can pin part of it (a date
+   * range) against a truncating part (a property name).
+   */
+  subtitle?: React.ReactNode;
+  /**
    * Optional right-aligned content for the top bar (e.g. an overflow menu).
    */
   rightSlot?: React.ReactNode;
@@ -37,12 +44,13 @@ const MobileRouteShell = memo(function MobileRouteShell({
   children,
   backHref,
   title,
+  subtitle,
   rightSlot,
 }: MobileRouteShellProps) {
   return (
     <div className="h-dvh bg-white dark:bg-card overflow-hidden flex flex-col safe-area-top">
         {/* Top bar */}
-        <div className="flex-shrink-0 h-11 px-2 flex items-center gap-2">
+        <div className="flex-shrink-0 min-h-11 px-2 flex items-center gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             {backHref ? (
               <Link
@@ -62,9 +70,20 @@ const MobileRouteShell = memo(function MobileRouteShell({
               </Link>
             ) : null}
             {title && (
-              <h1 className="text-[20px] font-semibold tracking-tight leading-normal text-neutral-900 dark:text-[#f0efed] truncate">
-                {title}
-              </h1>
+              <div className="min-w-0 flex-1">
+                <h1
+                  className={`font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed] truncate ${
+                    subtitle ? 'text-[17px] leading-tight' : 'text-[20px] leading-normal'
+                  }`}
+                >
+                  {title}
+                </h1>
+                {subtitle ? (
+                  <div className="mt-px flex min-w-0 items-center gap-1.5 text-[12px] leading-tight text-muted-foreground">
+                    {subtitle}
+                  </div>
+                ) : null}
+              </div>
             )}
           </div>
 

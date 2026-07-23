@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { qk } from '@/lib/queries/keys';
 import { fetchJson } from '@/lib/queries/fetchJson';
-import { CheckCircle2, RotateCcw, Mail, PanelTopOpen } from 'lucide-react';
+import { CheckCircle2, RotateCcw, Mail, Info } from 'lucide-react';
 import { ConciergeToggleIcon } from '@/components/messages/ConciergeToggleIcon';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -41,6 +41,29 @@ const HEADER_ICON_BTN =
 const EMPTY_MESSAGES: GuestMessageRecord[] = [];
 const EMPTY_PROPOSED_TASKS: ProposedTaskData[] = [];
 const EMPTY_PROPOSED_KNOWLEDGE: ProposedKnowledgeData[] = [];
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// Compact stay-date range for the mobile header subtitle. Parses the YYYY-MM-DD
+// strings positionally (no timezone shift) and collapses a same-month range to a
+// single month label: "Jul 24–28", or "Jul 28 – Aug 2" across months. One-sided
+// ranges (inquiries with only a requested date) degrade gracefully.
+function fmtStayRange(ci: string | null, co: string | null): string | null {
+  const parse = (d: string) => {
+    const [y, m, day] = d.slice(0, 10).split('-').map(Number);
+    return y && m && day ? { m, day } : null;
+  };
+  const a = ci ? parse(ci) : null;
+  const b = co ? parse(co) : null;
+  if (a && b) {
+    return a.m === b.m
+      ? `${MONTHS[a.m - 1]} ${a.day}–${b.day}`
+      : `${MONTHS[a.m - 1]} ${a.day} – ${MONTHS[b.m - 1]} ${b.day}`;
+  }
+  if (a) return `${MONTHS[a.m - 1]} ${a.day}`;
+  if (b) return `→ ${MONTHS[b.m - 1]} ${b.day}`;
+  return null;
+}
 
 // /messages/[conversationId] — one conversation (uuid). Fetches the thread, marks
 // it read on open, and exposes complete/reopen + mark-unread actions.
@@ -263,7 +286,7 @@ export default function ConversationPage() {
           title="Details"
           className="flex h-10 w-10 items-center justify-center rounded-lg text-neutral-700 transition-colors hover:bg-[rgba(30,25,20,0.04)] dark:text-[#a09e9a] dark:hover:bg-[rgba(255,255,255,0.04)]"
         >
-          <PanelTopOpen className="h-[21px] w-[21px]" strokeWidth={1.75} />
+          <Info className="h-[21px] w-[21px]" strokeWidth={1.75} />
         </button>
         <ConversationOverflowMenu
           isComplete={conversation.app_status === 'complete'}
@@ -284,10 +307,31 @@ export default function ConversationPage() {
       </div>
     ) : null;
 
+    // Secondary header line: property (truncates) · stay dates (pinned). Only
+    // rendered once we have a conversation with a property and/or dates to show.
+    const stayRange = conversation
+      ? fmtStayRange(conversation.check_in, conversation.check_out)
+      : null;
+    const headerSubtitle =
+      conversation && (conversation.property_name || stayRange) ? (
+        <>
+          {conversation.property_name ? (
+            <span className="truncate">{conversation.property_name}</span>
+          ) : null}
+          {conversation.property_name && stayRange ? (
+            <span aria-hidden>·</span>
+          ) : null}
+          {stayRange ? (
+            <span className="shrink-0 tabular-nums">{stayRange}</span>
+          ) : null}
+        </>
+      ) : null;
+
     return (
       <MobileRouteShell
         backHref="/messages"
         title={conversation?.guest_name ?? 'Conversation'}
+        subtitle={headerSubtitle}
         rightSlot={topBarActions}
       >
         <div className="flex h-full flex-col">
