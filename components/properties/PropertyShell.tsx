@@ -205,19 +205,19 @@ function ShellBody({
               {property.hostaway_listing_id != null ? (
                 <>
                   <span className="tabular-nums">
-                    Hostaway ID · {property.hostaway_listing_id}
+                    PMS ID · {property.hostaway_listing_id}
                   </span>
                   {property.hostaway_name && property.hostaway_name !== property.name && (
                     <>
                       <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a]" />
                       <span className="normal-case tracking-normal text-neutral-500 dark:text-[#66645f]">
-                        Hostaway: {property.hostaway_name}
+                        {property.hostaway_name}
                       </span>
                     </>
                   )}
                 </>
               ) : (
-                <span>Not linked to Hostaway</span>
+                <span>Not linked to a PMS</span>
               )}
             </div>
           </div>

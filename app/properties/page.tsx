@@ -80,7 +80,7 @@ export default function PropertiesPage() {
     if (linkedActive.length > 0) {
       result.push({
         key: 'linked',
-        label: 'Linked to Hostaway',
+        label: 'Linked',
         sublabel: `${linkedActive.length}`,
         items: linkedActive,
       });
@@ -167,10 +167,10 @@ export default function PropertiesPage() {
       if (resRemoved) parts.push(`${resRemoved} cancelled`);
 
       const summary = parts.length > 0 ? parts.join(' · ') : 'Already up to date';
-      showToast('success', `Hostaway synced — ${summary}`);
+      showToast('success', `PMS synced — ${summary}`);
       await fetchProperties();
     } catch (err: any) {
-      showToast('error', err.message || 'Hostaway sync failed');
+      showToast('error', err.message || 'PMS sync failed');
     } finally {
       setSyncing(false);
     }
@@ -214,7 +214,7 @@ export default function PropertiesPage() {
               <button
                 onClick={handleSync}
                 disabled={syncing}
-                title="Pull latest listings and reservations from Hostaway"
+                title="Pull latest listings and reservations from your PMS"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-neutral-700 dark:text-[#a09e9a] border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] rounded-md hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors disabled:opacity-50"
               >
                 {syncing ? (
@@ -226,7 +226,7 @@ export default function PropertiesPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M20 9A8 8 0 006.5 6.5M4 15a8 8 0 0013.5 2.5" />
                   </svg>
                 )}
-                <span className="hidden sm:inline">{syncing ? 'Syncing…' : 'Sync Hostaway'}</span>
+                <span className="hidden sm:inline">{syncing ? 'Syncing…' : 'Sync with PMS'}</span>
                 <span className="sm:hidden">{syncing ? 'Syncing' : 'Sync'}</span>
               </button>
               <button
@@ -291,8 +291,6 @@ export default function PropertiesPage() {
                     {!isCollapsed && (
                       <div className="flex flex-col">
                         {group.items.map((item, idx) => {
-                          const showHostawayName =
-                            item.hostaway_name && item.hostaway_name !== item.name;
                           const dim = group.dimmed;
                           const isLinked = item.hostaway_listing_id != null;
                           return (
@@ -310,11 +308,6 @@ export default function PropertiesPage() {
                                   <div className="text-[14px] font-medium text-neutral-800 dark:text-[#f0efed] leading-snug tracking-tight mb-0.5 truncate">
                                     {item.name}
                                   </div>
-                                  {showHostawayName && (
-                                    <div className="text-[12px] text-neutral-500 dark:text-[#66645f] leading-snug truncate">
-                                      Hostaway: {item.hostaway_name}
-                                    </div>
-                                  )}
                                 </div>
                                 <div className="shrink-0 text-right">
                                   {isLinked ? (
@@ -324,7 +317,7 @@ export default function PropertiesPage() {
                                   ) : (
                                     <div
                                       className="text-[10px] font-medium text-neutral-400 dark:text-[#66645f] tracking-[0.04em] uppercase whitespace-nowrap"
-                                      title="Not linked to a Hostaway listing. Open the property to link it."
+                                      title="Not linked to a PMS listing. Open the property to link it."
                                     >
                                       Not linked
                                     </div>
@@ -450,11 +443,11 @@ function AddPropertyModal({
     fetch('/api/hostaway/listings?available=true')
       .then(async (res) => {
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to load Hostaway listings');
+        if (!res.ok) throw new Error(data.error || 'Failed to load listings');
         if (!cancelled) setListings((data.listings || []) as AvailableListing[]);
       })
       .catch((err) => {
-        if (!cancelled) setListingsError(err.message || 'Failed to load Hostaway listings');
+        if (!cancelled) setListingsError(err.message || 'Failed to load listings');
       })
       .finally(() => {
         if (!cancelled) setListingsLoading(false);
@@ -501,10 +494,10 @@ function AddPropertyModal({
         body: JSON.stringify({ hostaway_listing_id: listing.hostaway_listing_id }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to import from Hostaway');
+      if (!res.ok) throw new Error(data.error || 'Failed to import from your PMS');
       onCreated(data.property);
     } catch (err: any) {
-      setError(err.message || 'Failed to import from Hostaway');
+      setError(err.message || 'Failed to import from your PMS');
       setSubmitting(false);
     }
   };
@@ -556,14 +549,11 @@ function AddPropertyModal({
             <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-[#f0efed] tracking-tight">
               Add Property
             </h2>
-            <p className="text-[12px] text-neutral-500 dark:text-[#66645f] mt-1">
-              Import a listing from Hostaway, or create a property manually.
-            </p>
 
             <div className="mt-4 flex items-center gap-1 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] -mx-5 px-5">
               {(
                 [
-                  { id: 'hostaway' as AddTab, label: 'From Hostaway' },
+                  { id: 'hostaway' as AddTab, label: 'From PMS' },
                   { id: 'manual' as AddTab, label: 'Manual' },
                 ]
               ).map((t) => (
@@ -599,7 +589,7 @@ function AddPropertyModal({
                   <input
                     value={listingQuery}
                     onChange={(e) => setListingQuery(e.target.value)}
-                    placeholder="Search available Hostaway listings…"
+                    placeholder="Search available listings…"
                     className="w-full pl-8 pr-3 py-2 text-[13px] bg-white dark:bg-[rgba(255,255,255,0.02)] text-neutral-900 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f] border border-neutral-200 dark:border-[rgba(255,255,255,0.07)] rounded-md focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:focus:ring-[rgba(255,255,255,0.15)] focus:border-transparent transition-colors"
                     disabled={submitting}
                   />
@@ -619,12 +609,12 @@ function AddPropertyModal({
                   <div className="py-8 text-center">
                     <p className="text-[13px] text-neutral-600 dark:text-[#a09e9a]">
                       {listings && listings.length === 0
-                        ? 'No available Hostaway listings.'
+                        ? 'No available listings.'
                         : 'No matches.'}
                     </p>
                     {listings && listings.length === 0 && (
                       <p className="text-[12px] text-neutral-500 dark:text-[#66645f] mt-1">
-                        Every listing in your Hostaway account is already imported.
+                        Every listing in your PMS is already imported.
                       </p>
                     )}
                   </div>
@@ -678,7 +668,7 @@ function AddPropertyModal({
             <form onSubmit={createManual}>
               <div className="px-5 pt-4 pb-3">
                 <p className="text-[12px] text-neutral-500 dark:text-[#66645f] mb-3">
-                  Creates an unlinked property. You can link it to a Hostaway
+                  Creates an unlinked property. You can link it to a PMS
                   listing later from the property's page once the listing exists.
                 </p>
                 <label className="block">
