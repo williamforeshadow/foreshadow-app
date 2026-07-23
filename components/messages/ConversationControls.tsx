@@ -9,15 +9,12 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, ArrowDown, ArrowUp, Filter as FilterIcon, X } from 'lucide-react';
-import {
-  MultiSelect,
-  DateRangeChip,
-  type FilterOption,
-} from '@/components/tasks/TaskFilterBar';
+import { FilterSelect, type FilterSelectOption } from '@/components/ui/FilterSelect';
+import { FilterDateRange } from '@/components/ui/FilterDateRange';
 import { canonicalChannelLabel } from '@/lib/bookingChannel';
 import { useMessages } from '@/components/messages/MessagesProvider';
 
-const STATUS_OPTIONS: FilterOption[] = [
+const STATUS_OPTIONS: FilterSelectOption[] = [
   { value: 'inquiry', label: 'Inquiry' },
   { value: 'upcoming', label: 'Upcoming' },
   { value: 'current', label: 'Current' },
@@ -25,7 +22,7 @@ const STATUS_OPTIONS: FilterOption[] = [
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
-const DIRECTION_OPTIONS: FilterOption[] = [
+const DIRECTION_OPTIONS: FilterSelectOption[] = [
   { value: 'inbound', label: 'Guest (inbound)' },
   { value: 'outbound', label: 'You (outbound)' },
 ];
@@ -98,13 +95,13 @@ export function ConversationHeaderActions() {
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
-  const propertyOptions = useMemo<FilterOption[]>(() => {
+  const propertyOptions = useMemo<FilterSelectOption[]>(() => {
     const names = new Set<string>();
     for (const c of conversations) if (c.property_name) names.add(c.property_name);
     return [...names].sort().map((n) => ({ value: n, label: n }));
   }, [conversations]);
 
-  const channelOptions = useMemo<FilterOption[]>(() => {
+  const channelOptions = useMemo<FilterSelectOption[]>(() => {
     const keys = new Set<string>();
     for (const c of conversations) if (c.channel) keys.add(c.channel);
     return [...keys].sort().map((k) => ({ value: k, label: canonicalChannelLabel(k) }));
@@ -169,53 +166,70 @@ export function ConversationHeaderActions() {
         ? createPortal(
             <div
               ref={panelRef}
-              style={{ position: 'fixed', left: pos.left, top: pos.top, zIndex: 50 }}
-              className="liquid-glass-surface w-[min(560px,calc(100vw-16px))] rounded-xl border border-[var(--surface-elevated-line)] p-3 shadow-xl"
+              style={{
+                position: 'fixed',
+                left: pos.left,
+                top: pos.top,
+                zIndex: 50,
+                background: 'var(--task-surface-1)',
+                borderColor: 'var(--task-line)',
+              }}
+              className="task-detail w-[min(280px,calc(100vw-16px))] rounded-xl border p-1.5 shadow-xl"
             >
-              <div className="flex flex-wrap items-center gap-2">
-                <MultiSelect
+              <div className="flex flex-col">
+                <FilterSelect
+                  block
                   label="Status"
                   options={STATUS_OPTIONS}
                   selected={filters.status}
                   onChange={(s) => setFilter('status', s)}
                 />
-                <MultiSelect
+                <FilterSelect
+                  block
                   label="Direction"
                   options={DIRECTION_OPTIONS}
                   selected={filters.direction}
                   onChange={(s) => setFilter('direction', s)}
                 />
-                <MultiSelect
+                <FilterSelect
+                  block
                   label="Property"
                   options={propertyOptions}
                   selected={filters.property}
                   onChange={(s) => setFilter('property', s)}
                   searchable
                 />
-                <MultiSelect
+                <FilterSelect
+                  block
                   label="Channel"
                   options={channelOptions}
                   selected={filters.channel}
                   onChange={(s) => setFilter('channel', s)}
                 />
-                <DateRangeChip
+                <FilterDateRange
+                  block
                   label="Check-in"
                   range={filters.checkIn}
                   onChange={(r) => setFilter('checkIn', r)}
                 />
-                <DateRangeChip
+                <FilterDateRange
+                  block
                   label="Check-out"
                   range={filters.checkOut}
                   onChange={(r) => setFilter('checkOut', r)}
                 />
                 {activeFilterCount > 0 ? (
-                  <button
-                    type="button"
-                    onClick={clearFilters}
-                    className="text-xs font-medium text-muted-foreground hover:text-foreground"
-                  >
-                    Clear ({activeFilterCount})
-                  </button>
+                  <>
+                    <div className="my-1 h-px" style={{ background: 'var(--task-line)' }} />
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="rounded-lg px-2.5 py-2 text-left text-[13px] font-medium transition-colors hover:bg-[var(--task-surface-2)]"
+                      style={{ color: 'var(--task-ink-3)' }}
+                    >
+                      Clear filters ({activeFilterCount})
+                    </button>
+                  </>
                 ) : null}
               </div>
             </div>,
