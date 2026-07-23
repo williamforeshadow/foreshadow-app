@@ -444,10 +444,12 @@ export default function MobileTimelineView({
       {/* Grid */}
       <div className="flex-1 overflow-auto hide-scrollbar overscroll-none pb-mobile-nav">
         <div className="min-w-max overflow-x-clip">
-          {/* Date header row */}
-          <div className="flex sticky top-0 z-30">
+          {/* Date header row — z-40 so the pinned header (and its sticky
+              corner cell) stays above the z-30 sticky property column when the
+              grid is scrolled vertically. */}
+          <div className="flex sticky top-0 z-40">
             <div
-              className="sticky left-0 z-30 bg-white dark:bg-card border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] px-1.5 py-2 text-xs font-semibold text-[#6b6963] dark:text-[#9a9893] flex items-center"
+              className="sticky left-0 z-40 bg-white dark:bg-card border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] px-1.5 py-2 text-xs font-semibold text-[#6b6963] dark:text-[#9a9893] flex items-center justify-center"
               style={{ width: propertyCellWidth, minWidth: propertyCellWidth }}
             >
               Property
@@ -535,7 +537,7 @@ export default function MobileTimelineView({
                       key={idx}
                       className={cn(
                         'border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] relative overflow-visible cursor-pointer',
-                        blockForCell ? 'bg-[#f0eff2] dark:bg-[#212126]' : todayDate ? 'today-tint' : 'bg-white dark:bg-card'
+                        todayDate ? 'today-tint' : blockForCell ? 'bg-[#f0eff2] dark:bg-[#212126]' : 'bg-white dark:bg-card'
                       )}
                       style={{ width: cellWidth, minWidth: cellWidth, height: rowHeight }}
                       onClick={() => {

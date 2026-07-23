@@ -28,6 +28,10 @@ interface ScheduledItemsCellProps {
 // (Month renders nothing in the collapsed main row — see early return below.)
 const WEEK_ICON_CAP = 3;
 
+// Month: status dots share a SINGLE row; past this many total slots the last
+// one becomes a trailing "+N" (so cap-1 dots + the overflow count).
+const MONTH_DOT_CAP = 3;
+
 // Stable left-to-right order: timed tasks first (ascending), untimed last,
 // then by title — so the same cell always renders in the same sequence.
 const byScheduleThenTitle = (a: Task, b: Task) => {
@@ -153,9 +157,14 @@ export function ScheduledItemsCell({
   // Dots are individually clickable to open the task; the cell itself opens
   // the reservation, so stop propagation.
   if (viewMode === 'month') {
+    const overflowing = scheduledTasks.length > MONTH_DOT_CAP;
+    const visible = overflowing
+      ? scheduledTasks.slice(0, MONTH_DOT_CAP - 1)
+      : scheduledTasks;
+    const overflow = scheduledTasks.length - visible.length;
     return (
-      <div className="absolute bottom-0.5 left-0.5 right-0.5 flex flex-wrap items-end gap-0.5 z-[16]">
-        {scheduledTasks.map((task) => {
+      <div className="absolute bottom-0.5 left-0.5 right-0.5 flex items-end gap-0.5 overflow-hidden z-[16]">
+        {visible.map((task) => {
           const isContingent = task.status === 'contingent';
           return (
             <DraggableTask
@@ -186,6 +195,11 @@ export function ScheduledItemsCell({
             </DraggableTask>
           );
         })}
+        {overflow > 0 && (
+          <span className="shrink-0 self-center leading-none text-[9px] font-semibold text-[#6b6963] dark:text-[#9a9893]">
+            +{overflow}
+          </span>
+        )}
       </div>
     );
   }

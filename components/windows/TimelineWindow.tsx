@@ -1505,7 +1505,7 @@ export default function TimelineWindow({
                         key={idx}
                         property={property}
                         dateStr={cellDateStr}
-                        className={`group border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] h-[44px] relative overflow-visible ${blockForCell ? 'bg-[#f0eff2] dark:bg-[#212126]' : isTodayDate ? 'today-tint' : 'bg-white dark:bg-[var(--timeline-surface-2)]'}`}
+                        className={`group border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] h-[44px] relative overflow-visible ${isTodayDate ? 'today-tint' : blockForCell ? 'bg-[#f0eff2] dark:bg-[#212126]' : 'bg-white dark:bg-[var(--timeline-surface-2)]'}`}
                         onClick={() => {
                           const res = propertyReservations.find(r => {
                             const pos = getBlockPosition(r.check_in, r.check_out);
