@@ -94,7 +94,7 @@ function TaskIcon({
   const dept = departments.find((d) => d.id === task.department_id);
   const Icon = getDepartmentIcon(dept?.icon);
   const isContingent = task.status === 'contingent';
-  const box = size === 'week' ? 'w-6 h-6' : 'w-5 h-5';
+  const box = size === 'week' ? 'w-[22px] h-[22px]' : 'w-[18px] h-[18px]';
   const glyph = size === 'week' ? 'w-3.5 h-3.5' : 'w-3 h-3';
 
   return (
@@ -107,7 +107,7 @@ function TaskIcon({
         onClick?.(task);
       }}
       className={cn(
-        'flex items-center justify-center rounded shadow-sm transition-all cursor-pointer hover:brightness-110 hover:scale-110 relative overflow-hidden text-[#1a1a18]',
+        'flex items-center justify-center rounded shadow-sm transition-all cursor-pointer hover:brightness-110 hover:scale-110 relative overflow-hidden text-white',
         box,
         isContingent &&
           'border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[rgba(255,255,255,0.35)] bg-white dark:bg-[var(--timeline-surface-3)] text-[#1a1a18] dark:text-white',
@@ -211,7 +211,7 @@ export function ScheduledItemsCell({
           className={cn(
             'flex items-center justify-center rounded px-1 font-medium text-[10px] shadow-sm',
             'bg-white/90 dark:bg-[var(--timeline-surface-3)] text-[#1a1a18] dark:text-white border border-[rgba(30,25,20,0.12)] dark:border-[var(--timeline-border-strong)]',
-            viewMode === 'week' ? 'h-6 min-w-5' : 'h-5 min-w-4',
+            viewMode === 'week' ? 'h-[22px] min-w-5' : 'h-[18px] min-w-4',
           )}
         >
           +{overflow}

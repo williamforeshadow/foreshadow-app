@@ -9,7 +9,6 @@ import {
   useReservationViewer,
 } from '@/lib/reservationViewerContext';
 import { cn } from '@/lib/utils';
-import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useDepartments } from '@/lib/departmentsContext';
 import { useProperties } from '@/lib/queries';
 import type { Task } from '@/lib/types';
@@ -25,9 +24,12 @@ const marbleBackground: Record<string, string> = {
   complete: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.25) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.15) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.12) 10%, transparent 40%, rgba(255,255,255,0.08) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.1) 0%, transparent 55%), #4C4869`,
 };
 
-// How many task icons fit before collapsing the rest into a "+N" chip.
-// Week-only cap (month renders all tasks as wrapped status dots, no cap).
-const WEEK_ICON_CAP = 2;
+// Mobile task dots are kept to a SINGLE row per cell; any remainder collapses
+// into a trailing "+N" circle. Week cells (72px) fit more dots than month
+// cells (38px), so the caps differ. These are the total slots in the row —
+// when the count exceeds the cap, the last slot becomes the "+N" bubble
+// (so cap-1 dots + the overflow circle). Tune per view here.
+const DOT_ROW_CAP = { week: 4, month: 3 } as const;
 
 // Stable left-to-right order: timed first (asc), untimed last, then title.
 const byScheduleThenTitle = (a: Task, b: Task) => {
@@ -629,76 +631,49 @@ export default function MobileTimelineView({
                         </div>
                       )}
 
-                      {hasItems && view === 'month' && (
-                        // Month: status dots (all tasks, wrap). No hover on
-                        // mobile — the cell's onClick opens the bottom sheet
-                        // (full list); dots are pure indicators.
-                        <div className="absolute bottom-0.5 left-0.5 right-0.5 flex flex-wrap items-end gap-0.5 z-[16]">
-                          {cellTasks.map((task) => {
-                            const isContingent = task.status === 'contingent';
-                            return (
-                              <span
-                                key={task.task_id}
-                                className={cn(
-                                  'w-1.5 h-1.5 rounded-full shrink-0',
-                                  isContingent &&
-                                    'border border-dashed border-[rgba(30,25,20,0.4)] dark:border-[rgba(255,255,255,0.4)]',
-                                )}
-                                style={
-                                  isContingent
-                                    ? undefined
-                                    : { background: marbleBackground[task.status] || marbleBackground.not_started }
-                                }
-                              />
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {hasItems && view === 'week' && (() => {
-                        const visible = cellTasks.slice(0, WEEK_ICON_CAP);
+                      {hasItems && (() => {
+                        // Mobile (both week + month): status dots on a SINGLE
+                        // row, colored by status. No hover on mobile: the cell's
+                        // onClick opens the bottom sheet (full list), so dots are
+                        // pure indicators. Desktop week view keeps the
+                        // department-icon chips (ScheduledItemsCell); on mobile
+                        // both views show circles. Overflow past the per-view cap
+                        // collapses into a trailing "+N" bubble.
+                        const cap = DOT_ROW_CAP[view];
+                        const overflowing = cellTasks.length > cap;
+                        const visible = overflowing
+                          ? cellTasks.slice(0, cap - 1)
+                          : cellTasks;
                         const overflow = cellTasks.length - visible.length;
-                        const box = 'w-[22px] h-[22px]';
-                        const glyph = 'w-3 h-3';
                         return (
-                          <div className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 z-[16]">
+                          <div className="absolute bottom-0.5 left-0.5 right-0.5 flex items-end gap-0.5 overflow-hidden z-[16]">
                             {visible.map((task) => {
-                              const dept = departments.find((d) => d.id === task.department_id);
-                              const Icon = getDepartmentIcon(dept?.icon);
                               const isContingent = task.status === 'contingent';
                               return (
-                                <div
+                                <span
                                   key={task.task_id}
                                   className={cn(
-                                    'flex items-center justify-center rounded shadow-sm transition-all overflow-hidden text-white',
-                                    box,
+                                    'w-1.5 h-1.5 rounded-full shrink-0',
                                     isContingent &&
-                                      'border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[rgba(255,255,255,0.35)] bg-white dark:bg-[#1a1a1d] text-[#1a1a18] dark:text-white',
+                                      'border border-dashed border-[rgba(30,25,20,0.4)] dark:border-[rgba(255,255,255,0.4)]',
                                   )}
                                   style={
                                     isContingent
                                       ? undefined
                                       : { background: marbleBackground[task.status] || marbleBackground.not_started }
                                   }
-                                >
-                                  <Icon className={glyph} />
-                                </div>
+                                />
                               );
                             })}
                             {overflow > 0 && (
-                              <div
-                                className={cn(
-                                  'flex items-center justify-center rounded px-0.5 font-medium text-[8px] shadow-sm',
-                                  'bg-white/90 dark:bg-[#1a1a1d] text-[#1a1a18] dark:text-white border border-[rgba(30,25,20,0.12)] dark:border-[rgba(255,255,255,0.12)]',
-                                  box,
-                                )}
-                              >
+                              <span className="shrink-0 self-center leading-none text-[6px] font-semibold text-[#6b6963] dark:text-[#9a9893]">
                                 +{overflow}
-                              </div>
+                              </span>
                             )}
                           </div>
                         );
                       })()}
+
                     </div>
                   );
                 })}

@@ -1527,12 +1527,17 @@ export default function TimelineWindow({
                           // in-cell fraction for every bar, independent of span.
                           // (Cell-relative % drifts because span*100% of one cell
                           // ≠ the summed width of N rounded 1fr tracks.)
-                          // Check-in start and check-out end both sit at the cell
-                          // midpoint so a same-day turnover's outgoing and incoming
-                          // bars meet on the same point (only the diagonal slant
-                          // separates them) — matches the property Schedule grid.
-                          const START_FRAC = 0.50; // into the check-in cell
-                          const END_FRAC = 0.50;   // into the check-out cell
+                          // Check-in sits further into its cell than check-out so
+                          // the leading (check-in) slant clears the task-chip row in
+                          // the cell's bottom-left (up to 3 chips + a "+N" overflow).
+                          // Check-out stays at the cell midpoint. This intentionally
+                          // decouples the two: on a same-day turnover the outgoing
+                          // (check-out @ END_FRAC) and incoming (check-in @ START_FRAC)
+                          // bars no longer meet flush — a deliberate trade so the
+                          // chips can't cover the check-in edge. Tune START_FRAC if
+                          // wider chip rows still reach it.
+                          const START_FRAC = 0.65; // into the check-in cell (chip clearance)
+                          const END_FRAC = 0.50;   // into the check-out cell (midpoint)
                           const cw = colWidth;
                           let leftStyle: string;
                           let widthStyle: string;
