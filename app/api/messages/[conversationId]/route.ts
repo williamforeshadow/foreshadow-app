@@ -1,7 +1,44 @@
 import { NextResponse } from 'next/server';
 import { requireAuthContext } from '@/lib/requireAuthContext';
 import { loadConciergeProposalFlags } from '@/src/server/messages/conciergeCapabilities';
+import { GUEST_MESSAGE_ATTACHMENT_BUCKET } from '@/src/server/messages/attachments';
+import { getSupabaseServer } from '@/lib/supabaseServer';
+import type { MessageAttachment } from '@/lib/messages';
 import { taskUrl } from '@/src/lib/links';
+
+// The attachment bucket is private, so stored rows hold a path, not a URL. Mint
+// a short-lived signed URL per attachment at read time (one batched call for the
+// whole thread) via the service client — RLS already authorized the conversation
+// read above, and storage has no per-object policy. An attachment whose signing
+// fails still returns (as a named file with no url) rather than vanishing.
+async function attachSignedUrls(
+  service: ReturnType<typeof getSupabaseServer>,
+  messages: Array<Record<string, unknown>>,
+): Promise<Array<Record<string, unknown>>> {
+  const paths: string[] = [];
+  for (const m of messages) {
+    const atts = (m.attachments as MessageAttachment[] | null) ?? [];
+    for (const a of atts) if (a?.storage_path) paths.push(a.storage_path);
+  }
+  if (paths.length === 0) return messages;
+
+  const signed = new Map<string, string>();
+  const { data } = await service.storage
+    .from(GUEST_MESSAGE_ATTACHMENT_BUCKET)
+    .createSignedUrls(paths, 60 * 60);
+  for (const row of data ?? []) {
+    if (row.signedUrl && row.path) signed.set(row.path, row.signedUrl);
+  }
+
+  return messages.map((m) => {
+    const atts = (m.attachments as MessageAttachment[] | null) ?? [];
+    if (atts.length === 0) return m;
+    return {
+      ...m,
+      attachments: atts.map((a) => ({ ...a, url: signed.get(a.storage_path) })),
+    };
+  });
+}
 
 // Thread for one conversation: the conversation header + its messages (oldest
 // first), for the detail view.
@@ -11,7 +48,7 @@ export async function GET(
 ) {
   const ctx = await requireAuthContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase } = ctx;
+  const { supabase, service } = ctx;
 
   const { conversationId } = await context.params;
 
@@ -147,9 +184,14 @@ export async function GET(
   // flipping the switch off shouldn't hide work already done.
   const { reply: reply_proposal_enabled } = await loadConciergeProposalFlags(ctx.orgId);
 
+  const messagesWithUrls = await attachSignedUrls(
+    service,
+    (messages ?? []) as Array<Record<string, unknown>>,
+  );
+
   return NextResponse.json({
     conversation,
-    messages: messages ?? [],
+    messages: messagesWithUrls,
     proposed_tasks,
     proposed_knowledge,
     reply_proposal_enabled,

@@ -9,6 +9,7 @@ import { ProposedReply } from '@/components/messages/ProposedReply';
 import { ProposedTask, type ProposedTaskData } from '@/components/messages/ProposedTask';
 import { ProposedKnowledge, type ProposedKnowledgeData } from '@/components/messages/ProposedKnowledge';
 import { TurnIntoTrainingDialog } from '@/components/messages/TurnIntoTrainingDialog';
+import { MessageAttachments } from '@/components/messages/MessageAttachments';
 import { canonicalChannelLabel } from '@/lib/bookingChannel';
 import type { ConciergeSourcesRecord } from '@/lib/conciergeSources';
 import type { GuestMessageRecord } from '@/lib/messages';
@@ -441,13 +442,17 @@ export function ConversationThread({
                           newline or two (Hostaway keeps whatever whitespace
                           followed a signature block), and under
                           whitespace-pre-wrap that renders as an empty line
-                          padding the bottom of the bubble. */}
+                          padding the bottom of the bubble. A photo-only message
+                          has no body — show its attachments, not "(no text)". */}
                       {m.body?.trim() ? (
                         m.body.trim()
-                      ) : (
+                      ) : m.attachments && m.attachments.length > 0 ? null : (
                         <span className="italic opacity-70">(no text)</span>
                       )}
                     </div>
+                    {m.attachments && m.attachments.length > 0 && (
+                      <MessageAttachments attachments={m.attachments} />
+                    )}
                   </div>
                   {lastOfRun ? (
                     <div

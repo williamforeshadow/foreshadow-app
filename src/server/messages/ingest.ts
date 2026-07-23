@@ -5,6 +5,7 @@ import {
   fetchConversationsList,
 } from '@/lib/hostaway';
 import { mapHostawayMessagePayload, type RawGuestMessage } from '@/lib/messages';
+import { captureMessageAttachments } from '@/src/server/messages/attachments';
 import { getMapper } from '@/src/server/messages/pms';
 import { maybeGenerateSentimentForConversation } from '@/src/server/messages/conversationSentiment';
 import type { HostawayCreds } from '@/lib/pmsIntegrations';
@@ -249,6 +250,25 @@ export async function ingestConversation(
   // The upsert above seeded last_* from the JS rollup, which can't tell future
   // (scheduled) messages from sent ones. Correct it against the DB clock.
   await recomputeSentRollup(supabase, convId);
+
+  // Re-host any photos/files on these messages before Hostaway's presigned URLs
+  // expire. Idempotent (skips already-captured) so it's safe on every re-pull,
+  // and best-effort — a download failure must never fail the thread sync. The
+  // webhook realtime path relies on this too, via its after() re-ingest.
+  try {
+    await captureMessageAttachments(
+      ctx.orgId,
+      mapped
+        .filter((m) => m.attachments.length > 0)
+        .map((m) => ({
+          hostawayMessageId: m.hostawayMessageId,
+          hostawayConversationId: m.hostawayConversationId,
+          attachments: m.attachments,
+        })),
+    );
+  } catch (err) {
+    console.error('[ingest] attachment capture failed', err);
+  }
 
   // Eager guest-sentiment summary — only on the realtime (webhook) path, so bulk
   // syncs/backfills don't spend a model call per conversation. PMS-agnostic:

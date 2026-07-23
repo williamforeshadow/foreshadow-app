@@ -11,6 +11,22 @@
 
 export type MessageDirection = 'inbound' | 'outbound';
 
+export type AttachmentFileType = 'image' | 'video' | 'document' | 'other';
+
+// One re-hosted attachment as it's stored in guest_messages.attachments (jsonb)
+// and returned by the read API. `storage_path` is the private-bucket key we own;
+// `url`, when present, is a short-lived signed URL the read route mints per view
+// (never persisted — a stored URL would expire).
+export interface MessageAttachment {
+  hostaway_attachment_id: string;
+  name: string;
+  mime_type: string | null;
+  file_type: AttachmentFileType;
+  size_bytes: number | null;
+  storage_path: string;
+  url?: string;
+}
+
 export interface GuestMessageRecord {
   id: string;
   reservation_id: string | null;
@@ -22,6 +38,7 @@ export interface GuestMessageRecord {
   body: string;
   sent_at: string | null;
   created_at: string;
+  attachments?: MessageAttachment[];
 }
 
 // One conversation thread = one inbox row. Built by grouping guest_messages on
@@ -104,6 +121,19 @@ export function groupMessagesIntoConversations(
 // guest_name / property_name are intentionally NOT here — they aren't on the
 // message object (they're on the parent conversation), so the webhook route
 // derives them from the matched reservation instead.
+// One attachment as Hostaway hands it to us, before re-hosting. `url` is the
+// presigned S3 link that works now but expires within the hour — capture must
+// download it promptly. We read the richer `attachments[]` field, not
+// `imagesUrls` (those point at a different, permanently-403 bucket).
+export interface RawMessageAttachment {
+  hostawayAttachmentId: string;
+  name: string;
+  url: string;
+  mimeType: string | null;
+  extension: string | null;
+  sizeBytes: number | null;
+}
+
 export interface RawGuestMessage {
   hostawayMessageId: string;
   hostawayConversationId: string;
@@ -111,6 +141,7 @@ export interface RawGuestMessage {
   body: string;
   sentAt: string | null;
   direction: MessageDirection;
+  attachments: RawMessageAttachment[];
 }
 
 // === HOSTAWAY MESSAGE FIELD-MAP — verified against a live conversationMessage ==
@@ -124,6 +155,9 @@ const FIELD = {
   sentAt: 'date',
   // 1 => from the guest (inbound); 0 => host/automation reply (outbound).
   isIncoming: 'isIncoming',
+  // Array of { id, name, url (presigned, ~1h), mimeType, extension, ... }. The
+  // sibling `imagesUrls` array is deliberately ignored — those URLs 403.
+  attachments: 'attachments',
 } as const;
 // =============================================================================
 
@@ -239,5 +273,33 @@ export function mapHostawayMessagePayload(
     body: normalizeMessageBody(firstString(m[FIELD.body]) ?? ''),
     sentAt: hostawayDateToUtcIso(firstString(m[FIELD.sentAt], m.insertedOn)),
     direction: m[FIELD.isIncoming] ? 'inbound' : 'outbound',
+    attachments: extractAttachments(m[FIELD.attachments]),
   };
+}
+
+// Pull the usable attachments off a raw Hostaway message. Each needs an id (our
+// dedupe key) and a url (the presigned link to download); anything missing
+// either is skipped rather than stored half-formed. `extension` falls back to
+// the filename so file-type classification has something to work with when
+// mimeType is absent.
+function extractAttachments(raw: unknown): RawMessageAttachment[] {
+  if (!Array.isArray(raw)) return [];
+  const out: RawMessageAttachment[] = [];
+  for (const a of raw) {
+    if (!a || typeof a !== 'object') continue;
+    const obj = a as Record<string, unknown>;
+    const id = firstString(obj.id);
+    const url = firstString(obj.url);
+    if (!id || !url) continue;
+    const name = firstString(obj.name) ?? `attachment-${id}`;
+    out.push({
+      hostawayAttachmentId: id,
+      name,
+      url,
+      mimeType: firstString(obj.mimeType),
+      extension: firstString(obj.extension) ?? name.split('.').pop()?.toLowerCase() ?? null,
+      sizeBytes: toNumberOrNull(obj.size ?? obj.sizeBytes),
+    });
+  }
+  return out;
 }
