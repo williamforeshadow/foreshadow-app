@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '@/lib/apiFetch';
 import { Button } from '@/components/ui/button';
+import { RESERVATION_BAR_DIAGONAL_PX } from '@/components/properties/schedule/scheduleDates';
 
 interface TimelineProps {
   onCardClick?: (card: any) => void; // Optional - for external handling
@@ -317,7 +318,7 @@ export default function Timeline({ onCardClick }: TimelineProps) {
                           const totalWidth = (span * 100) - leftOffset - rightOffset;
                           
                           // Fixed pixel diagonal for consistent rhombus shape across all reservations
-                          const diagonalPx = 12; // Fixed 12px diagonal - same angle for all
+                          const diagonalPx = RESERVATION_BAR_DIAGONAL_PX; // shared slant — keeps every bar renderer in lockstep
                           const leftDiagonal = startsBeforeRange ? '0px' : `${diagonalPx}px`;
                           const rightDiagonal = endsAfterRange ? '0px' : `${diagonalPx}px`;
                           const clipPath = `polygon(${leftDiagonal} 0%, 100% 0%, calc(100% - ${rightDiagonal}) 100%, 0% 100%)`;

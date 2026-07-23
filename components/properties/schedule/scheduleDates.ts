@@ -1,5 +1,12 @@
 import { parseISO } from 'date-fns';
 
+// Parallelogram slant (px) applied to reservation/turnover bars so two bookings
+// sharing a same-day turnover interlock like a handover. This is the SINGLE
+// source of truth — every bar renderer (property Schedule MonthGrid, Timeline,
+// TimelineWindow) imports it so the slant stays in lockstep across surfaces and
+// week/month views. Tune here, not in the individual components.
+export const RESERVATION_BAR_DIAGONAL_PX = 8;
+
 // Reservation dates come as YYYY-MM-DD strings or ISO timestamps. We always
 // want the local-day, so slice + parse explicitly to dodge timezone shifts.
 export function toDateOnly(raw: string): Date {

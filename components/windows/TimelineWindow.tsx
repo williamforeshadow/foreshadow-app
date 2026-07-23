@@ -25,6 +25,7 @@ import { ScheduledItemsCell, DayKanban } from './timeline';
 import { TimelineNavBar } from './timeline/TimelineNavBar';
 import { WeatherWidgetTrigger } from './timeline/WeatherWidgetTrigger';
 import { marbleBackground } from './timeline/timelineStatus';
+import { RESERVATION_BAR_DIAGONAL_PX } from '@/components/properties/schedule/scheduleDates';
 import { TaskRowList } from './timeline/TaskRowList';
 import { TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
@@ -686,7 +687,8 @@ export default function TimelineWindow({
     // viewMode is included so the observer re-attaches when the grid <div>
     // remounts after switching back from Kanban view — without this, colWidth
     // would stay stale and reservation bars would fall back to the old
-    // span-dependent percentage geometry.
+    // span-dependent percentage geometry. A week↔month toggle already changes
+    // dateRange.length (7↔30), so this re-runs and remeasures on every toggle.
   }, [dateRange.length, viewMode]);
 
   // Lock the drag to the horizontal axis and snap the overlay to whole
@@ -1525,8 +1527,12 @@ export default function TimelineWindow({
                           // in-cell fraction for every bar, independent of span.
                           // (Cell-relative % drifts because span*100% of one cell
                           // ≠ the summed width of N rounded 1fr tracks.)
-                          const START_FRAC = 0.60; // into the check-in cell
-                          const END_FRAC = 0.40;   // into the check-out cell
+                          // Check-in start and check-out end both sit at the cell
+                          // midpoint so a same-day turnover's outgoing and incoming
+                          // bars meet on the same point (only the diagonal slant
+                          // separates them) — matches the property Schedule grid.
+                          const START_FRAC = 0.50; // into the check-in cell
+                          const END_FRAC = 0.50;   // into the check-out cell
                           const cw = colWidth;
                           let leftStyle: string;
                           let widthStyle: string;
@@ -1538,15 +1544,23 @@ export default function TimelineWindow({
                             leftStyle = `${left}px`;
                             widthStyle = `${Math.max(8, rightEdge - left)}px`;
                           } else {
-                            // First paint / SSR before the observer fires.
-                            const lo = startsBeforeRange ? 0 : 50;
-                            const ro = flushRight ? 0 : 50;
-                            const tw = (span * 100) - lo - ro;
-                            leftStyle = `${lo}%`;
-                            widthStyle = flushRight ? `${tw + 20}%` : `${tw}%`;
+                            // colWidth not yet measured — first paint / SSR, and
+                            // the recovery frame if a week↔month toggle transiently
+                            // drops the measurement. Mirror the measured branch's
+                            // 60/40 fractions in cell-relative % so the bar keeps
+                            // the same geometry. (Previously this was a legacy
+                            // 50/50 model; the mismatch made bars visibly snap back
+                            // to the old geometry and stay there until the next
+                            // remeasure — i.e. the week/month "it reverted" bug.)
+                            const leftPct = startsBeforeRange ? 0 : START_FRAC * 100;
+                            const rightPct = flushRight
+                              ? span * 100
+                              : (span - 1) * 100 + END_FRAC * 100;
+                            leftStyle = `${leftPct}%`;
+                            widthStyle = `${Math.max(4, rightPct - leftPct)}%`;
                           }
 
-                          const diagonalPx = 12;
+                          const diagonalPx = RESERVATION_BAR_DIAGONAL_PX;
                           const leftDiagonal = startsBeforeRange ? '0px' : `${diagonalPx}px`;
                           const rightDiagonal = flushRight ? '0px' : `${diagonalPx}px`;
                           const clipPath = `polygon(${leftDiagonal} 0%, 100% 0%, calc(100% - ${rightDiagonal}) 100%, 0% 100%)`;

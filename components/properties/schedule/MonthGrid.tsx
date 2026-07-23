@@ -15,7 +15,10 @@ import { ClipboardCheck } from 'lucide-react';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { marbleBackground } from '@/components/windows/timeline/timelineStatus';
 import { useIsMobile } from '@/lib/useIsMobile';
-import { toDateOnly } from '@/components/properties/schedule/scheduleDates';
+import {
+  toDateOnly,
+  RESERVATION_BAR_DIAGONAL_PX,
+} from '@/components/properties/schedule/scheduleDates';
 
 // ---- Types ---------------------------------------------------------------
 
@@ -192,7 +195,7 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const BAR_HEIGHT = 24; // px — matches Timeline's bar feel, compressed for month density
 const BAR_GAP = 3; // px
 const BAR_TRACK_OFFSET = 28; // px from top of cell (leaves room for day number)
-const BAR_DIAGONAL_PX = 12; // px — parallelogram slant, same as Timeline
+const BAR_DIAGONAL_PX = RESERVATION_BAR_DIAGONAL_PX; // parallelogram slant — shared across all bar renderers
 const MAX_BARS_PER_WEEK = 3;
 const MAX_TASKS_PER_CELL = 2;
 const TASK_CARD_HEIGHT = 22; // px — matches tighter calendar task card
