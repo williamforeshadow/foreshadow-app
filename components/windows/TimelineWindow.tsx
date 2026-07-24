@@ -1519,8 +1519,14 @@ export default function TimelineWindow({
                         {startingReservation && (() => {
                           const { span, startsBeforeRange, endsAfterRange } = getBlockPosition(startingReservation.check_in, startingReservation.check_out);
 
-                          const reachesLastColumn = idx + span >= dateRange.length;
-                          const flushRight = endsAfterRange || reachesLastColumn;
+                          // Flush right ONLY when the reservation continues past
+                          // the visible window (endsAfterRange). A check-out that
+                          // lands on the last visible column is NOT flush — it
+                          // renders its slant at the cell midpoint like any other
+                          // check-out. (Previously `reachesLastColumn` forced flush
+                          // for anything reaching the last column, which erased the
+                          // slant on last-column check-outs.)
+                          const flushRight = endsAfterRange;
 
                           // Pixel geometry off the measured column width so the
                           // check-in start and check-out end land at the same

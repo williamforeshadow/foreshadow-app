@@ -562,8 +562,11 @@ export default function MobileTimelineView({
                     >
                       {startingRes && (() => {
                         const { span, startsBeforeRange, endsAfterRange } = getBlockPosition(startingRes.check_in, startingRes.check_out);
-                        const reachesLastColumn = idx + span >= dateRange.length;
-                        const flushRight = endsAfterRange || reachesLastColumn;
+                        // Flush right ONLY when the reservation continues past
+                        // the visible window (endsAfterRange). A check-out on the
+                        // last visible column is NOT flush — it renders its slant
+                        // at the cell midpoint like any other check-out.
+                        const flushRight = endsAfterRange;
 
                         const leftOffset = startsBeforeRange ? 0 : 50;
                         const rightOffset = flushRight ? 0 : 50;
