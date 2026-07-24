@@ -1368,7 +1368,7 @@ export default function TimelineWindow({
             }}
           >
             {/* Header Row - will stick when scrolling */}
-            <div className="bg-white dark:bg-[var(--timeline-surface-2)] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] px-2 py-1 text-xs font-semibold text-[#6b6963] dark:text-[#9a9893] uppercase tracking-[0.06em] sticky left-0 top-0 z-30 flex items-center gap-1.5">
+            <div className="bg-white dark:bg-[var(--timeline-surface-2)] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] px-2 py-1 text-xs font-semibold text-[#6b6963] dark:text-[#9a9893] uppercase tracking-[0.06em] sticky left-0 top-0 z-50 flex items-center gap-1.5">
               {view !== 'month' && (
                 <button
                   onClick={toggleAllExpanded}
@@ -1413,7 +1413,7 @@ export default function TimelineWindow({
                   className="contents"
                 >
                   {/* Property Name with Status Indicator */}
-                  <div className={`relative overflow-hidden px-2 text-[12px] font-medium text-[#1a1a18] dark:text-[#e8e7e3] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] sticky left-0 z-10 h-[44px] ${propertyCellBg} flex items-center gap-1.5`}>
+                  <div className={`relative overflow-hidden px-2 text-[12px] font-medium text-[#1a1a18] dark:text-[#e8e7e3] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] sticky left-0 z-40 h-[44px] ${propertyCellBg} flex items-center gap-1.5`}>
                     {view !== 'month' && (
                       <button
                         onClick={() => togglePropertyExpanded(property)}
@@ -1685,7 +1685,7 @@ export default function TimelineWindow({
                   {view !== 'month' && expandedProperties.has(property) && (
                     <>
                       {/* Property column for expanded row — empty */}
-                      <div className={`sticky left-0 z-10 border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] ${propertyCellBg}`} />
+                      <div className={`sticky left-0 z-40 border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] ${propertyCellBg}`} />
 
                       {/* Date columns for expanded row */}
                       {dateRange.map((date, idx) => {
