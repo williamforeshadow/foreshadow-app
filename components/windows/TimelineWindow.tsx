@@ -677,7 +677,14 @@ export default function TimelineWindow({
     const el = gridRef.current;
     if (!el) return;
     const measure = () => {
-      const w = (el.clientWidth - 200) / Math.max(1, dateRange.length);
+      // Read the *resolved* day-column width straight from the grid's computed
+      // track sizes ("200px 240px 240px …"), rather than deriving it from
+      // clientWidth. In week view columns have a 240px minimum and can overflow
+      // the visible box (the grid scrolls horizontally), so a clientWidth-based
+      // estimate understates the real per-column width and mis-sizes the
+      // reservation bars. Track [0] is the 200px property column; [1] is a day.
+      const tracks = getComputedStyle(el).gridTemplateColumns.split(' ');
+      const w = tracks.length > 1 ? parseFloat(tracks[1]) : 0;
       setColWidth(w > 0 ? w : 0);
       cellWidthRef.current = w > 0 ? w : 0;
     };
@@ -1349,9 +1356,15 @@ export default function TimelineWindow({
       <div ref={scrollLockRef} className="flex-1 overflow-auto pb-4">
           <div
             ref={gridRef}
-            className="grid border border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] w-full overflow-x-clip"
+            className="grid border border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] min-w-full"
             style={{
-              gridTemplateColumns: `200px repeat(${dateRange.length}, minmax(0, 1fr))`
+              // Week: clamp each day column to a 240px minimum so the cards keep
+              // the same proportions on a laptop as on a big monitor — the grid
+              // grows past the viewport and the parent scrolls horizontally (the
+              // property column is sticky-left, so it stays pinned) instead of
+              // squishing columns until card content wraps. Month: no minimum, so
+              // all 30 days stay compact and visible without scrolling.
+              gridTemplateColumns: `200px repeat(${dateRange.length}, minmax(${view === 'month' ? '0px' : '240px'}, 1fr))`
             }}
           >
             {/* Header Row - will stick when scrolling */}
