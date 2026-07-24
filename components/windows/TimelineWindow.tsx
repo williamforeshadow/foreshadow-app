@@ -1582,7 +1582,17 @@ export default function TimelineWindow({
                               ? span * 100
                               : (span - 1) * 100 + END_FRAC * 100;
                             leftStyle = `${leftPct}%`;
-                            widthStyle = `${Math.max(4, rightPct - leftPct)}%`;
+                            const widthPct = Math.max(4, rightPct - leftPct);
+                            // A %-width bar resolves against the cell's padding box
+                            // (240px track − 1px right border = 239px), so a
+                            // multi-cell bar lands ~1px per spanned cell short. For a
+                            // flush (multi-week / continuing) reservation that must
+                            // reach the grid's right edge to read as "continues next
+                            // week," add the spanned right-borders back so it sits
+                            // flush instead of stopping a few px short of the edge.
+                            widthStyle = flushRight
+                              ? `calc(${widthPct}% + ${span}px)`
+                              : `${widthPct}%`;
                           }
 
                           const diagonalPx = RESERVATION_BAR_DIAGONAL_PX;
