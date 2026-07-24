@@ -16,6 +16,7 @@ import {
   MouseSensor,
   useSensor,
   useSensors,
+  useDraggable,
   useDroppable,
   closestCenter,
   type DragStartEvent,
@@ -132,19 +133,66 @@ function DroppableDateCell({
   className,
   onClick,
   children,
+  idSuffix = '',
 }: {
   property: string;
   dateStr: string;
   className: string;
-  onClick: () => void;
+  onClick?: () => void;
   children: React.ReactNode;
+  // Distinct droppable id per usage so the collapsed main-row cell and the
+  // expanded-row cell for the same day don't collide (dnd-kit ids must be
+  // unique). Both carry the same {property, dateStr} data, so the drop handler
+  // reschedules identically regardless of which one a drag lands on.
+  idSuffix?: string;
 }) {
   const { setNodeRef } = useDroppable({
-    id: `${property}__${dateStr}`,
+    id: `${property}__${dateStr}${idSuffix}`,
     data: { property, dateStr },
   });
   return (
     <div ref={setNodeRef} className={className} onClick={onClick}>
+      {children}
+    </div>
+  );
+}
+
+// Makes an expanded-row ProjectCard draggable to reschedule it onto another
+// day, reusing the grid-level DndContext + drop handler that the task chips
+// use. The `card-` id prefix avoids colliding with the same task's chip in the
+// collapsed row above; the data shape matches what handleTaskDragEnd reads.
+function DraggableCard({
+  task,
+  property,
+  cellDateStr,
+  children,
+}: {
+  task: Parameters<typeof scheduleTaskToCardItem>[0];
+  property: string;
+  cellDateStr: string;
+  children: React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `card-${task.task_id}`,
+    data: {
+      taskId: task.task_id,
+      property,
+      scheduledTime: task.scheduled_time ?? null,
+      currentDate: cellDateStr,
+      status: task.status,
+      // Marks this as a card drag (vs a chip) and carries the task so the
+      // DragOverlay can render the actual card while it moves.
+      kind: 'card' as const,
+      task,
+    },
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      className={isDragging ? 'opacity-50' : undefined}
+    >
       {children}
     </div>
   );
@@ -664,6 +712,11 @@ export default function TimelineWindow({
     scheduledTime: string | null;
     currentDate: string;
     status: string;
+    // When dragging an expanded-row card (not a chip), the mapped card item +
+    // the width to render it at, so the DragOverlay shows the actual card
+    // moving instead of the small status square.
+    card?: ReturnType<typeof scheduleTaskToCardItem> | null;
+    cardWidth?: number;
   } | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const cellWidthRef = useRef(0);
@@ -716,20 +769,39 @@ export default function TimelineWindow({
 
   const handleTaskDragStart = useCallback((e: DragStartEvent) => {
     // Width is stable for the duration of a drag — measure once here instead
-    // of wiring a ResizeObserver. 200 = the sticky property column.
+    // of wiring a ResizeObserver. Read the *resolved* day-column track width
+    // (layout is settled at drag start, unlike the mount effect): once week
+    // columns hit their 240px minimum and the grid overflows, clientWidth
+    // understates the real column width and the snap step lands off by a cell.
     const el = gridRef.current;
-    cellWidthRef.current = el
-      ? (el.clientWidth - 200) / Math.max(1, dateRange.length)
-      : 0;
+    let cw = 0;
+    if (el) {
+      const tracks = getComputedStyle(el).gridTemplateColumns.split(' ');
+      cw = tracks.length > 1 ? parseFloat(tracks[1]) : 0;
+      if (!(cw > 0)) cw = (el.clientWidth - 200) / Math.max(1, dateRange.length);
+    }
+    cellWidthRef.current = cw;
     const d = e.active.data.current as
-      | { property: string; scheduledTime: string | null; currentDate: string; status: string }
+      | {
+          property: string;
+          scheduledTime: string | null;
+          currentDate: string;
+          status: string;
+          kind?: 'card';
+          task?: Parameters<typeof scheduleTaskToCardItem>[0];
+        }
       | undefined;
     if (d) {
+      const isCard = d.kind === 'card' && !!d.task;
       setDraggingTask({
         property: d.property,
         scheduledTime: d.scheduledTime ?? null,
         currentDate: d.currentDate,
         status: d.status,
+        // Card drag → render the real card in the overlay, sized to the day
+        // column (minus the cell's p-1.5 padding) so it matches its resting size.
+        card: isCard ? scheduleTaskToCardItem(d.task!) : null,
+        cardWidth: isCard && cw > 0 ? Math.round(cw) - 12 : undefined,
       });
     }
   }, [dateRange.length]);
@@ -1707,8 +1779,11 @@ export default function TimelineWindow({
                         const hasItems = dateTasks.length > 0;
 
                         return (
-                          <div
+                          <DroppableDateCell
                             key={`expanded-${idx}`}
+                            property={property}
+                            dateStr={cellDateStr}
+                            idSuffix="__exp"
                             className={`border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] p-1.5 ${
                               isTodayDate ? 'today-tint' : 'bg-white dark:bg-[var(--timeline-surface-2)]'
                             }`}
@@ -1716,42 +1791,48 @@ export default function TimelineWindow({
                             {hasItems && (
                               <div className="flex flex-col gap-1.5">
                                 {dateTasks.map((task) => (
-                                  <div
+                                  <DraggableCard
                                     key={task.task_id}
-                                    role="button"
-                                    tabIndex={0}
-                                    className="cursor-pointer [&>div]:!cursor-pointer"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      closeGlobals();
-                                      setFloatingData({
-                                        type: 'task',
-                                        item: task,
-                                        propertyName: property,
-                                      });
-                                    }}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter' || e.key === ' ') {
-                                        e.preventDefault();
+                                    task={task}
+                                    property={property}
+                                    cellDateStr={cellDateStr}
+                                  >
+                                    <div
+                                      role="button"
+                                      tabIndex={0}
+                                      className="cursor-pointer [&>div]:!cursor-pointer"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         closeGlobals();
                                         setFloatingData({
                                           type: 'task',
                                           item: task,
                                           propertyName: property,
                                         });
-                                      }
-                                    }}
-                                  >
-                                    <ProjectCard
-                                      item={scheduleTaskToCardItem(task)}
-                                      viewMode="property"
-                                      isDragging={false}
-                                    />
-                                  </div>
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                          e.preventDefault();
+                                          closeGlobals();
+                                          setFloatingData({
+                                            type: 'task',
+                                            item: task,
+                                            propertyName: property,
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      <ProjectCard
+                                        item={scheduleTaskToCardItem(task)}
+                                        viewMode="property"
+                                        isDragging={false}
+                                      />
+                                    </div>
+                                  </DraggableCard>
                                 ))}
                               </div>
                             )}
-                          </div>
+                          </DroppableDateCell>
                         );
                       })}
                     </>
@@ -1763,10 +1844,21 @@ export default function TimelineWindow({
       </div>
       <DragOverlay dropAnimation={null}>
         {draggingTask ? (
-          <div
-            className="w-6 h-6 rounded shadow-lg"
-            style={{ background: marbleBackground[draggingTask.status] || marbleBackground.not_started }}
-          />
+          draggingTask.card ? (
+            // Dragging an expanded-row card → move the real card.
+            <div
+              style={{ width: draggingTask.cardWidth }}
+              className="pointer-events-none opacity-90 shadow-xl cursor-grabbing"
+            >
+              <ProjectCard item={draggingTask.card} viewMode="property" isDragging />
+            </div>
+          ) : (
+            // Dragging a chip → the small status square.
+            <div
+              className="w-6 h-6 rounded shadow-lg"
+              style={{ background: marbleBackground[draggingTask.status] || marbleBackground.not_started }}
+            />
+          )
         ) : null}
       </DragOverlay>
       </DndContext>
