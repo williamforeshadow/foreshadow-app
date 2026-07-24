@@ -26,7 +26,8 @@ import { TimelineNavBar } from './timeline/TimelineNavBar';
 import { WeatherWidgetTrigger } from './timeline/WeatherWidgetTrigger';
 import { marbleBackground } from './timeline/timelineStatus';
 import { RESERVATION_BAR_DIAGONAL_PX } from '@/components/properties/schedule/scheduleDates';
-import { TaskRowList } from './timeline/TaskRowList';
+import { ProjectCard } from './projects/ProjectCard';
+import { scheduleTaskToCardItem } from './timeline/scheduleTaskCardMapping';
 import { TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
 import type { TaskDetailInput } from '@/components/tasks/detail/taskInput';
@@ -1690,17 +1691,42 @@ export default function TimelineWindow({
                             }`}
                           >
                             {hasItems && (
-                              <TaskRowList
-                                tasks={dateTasks}
-                                onTaskClick={(task) => {
-                                  closeGlobals();
-                                  setFloatingData({
-                                    type: 'task',
-                                    item: task,
-                                    propertyName: property,
-                                  });
-                                }}
-                              />
+                              <div className="flex flex-col gap-1.5">
+                                {dateTasks.map((task) => (
+                                  <div
+                                    key={task.task_id}
+                                    role="button"
+                                    tabIndex={0}
+                                    className="cursor-pointer [&>div]:!cursor-pointer"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      closeGlobals();
+                                      setFloatingData({
+                                        type: 'task',
+                                        item: task,
+                                        propertyName: property,
+                                      });
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        closeGlobals();
+                                        setFloatingData({
+                                          type: 'task',
+                                          item: task,
+                                          propertyName: property,
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    <ProjectCard
+                                      item={scheduleTaskToCardItem(task)}
+                                      viewMode="property"
+                                      isDragging={false}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
                             )}
                           </div>
                         );
