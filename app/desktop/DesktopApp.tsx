@@ -93,7 +93,7 @@ export default function DesktopApp() {
         onWorkspaceViewChange={handleViewChange}
       />
 
-      <div className="flex-1 relative overflow-hidden bg-background">
+      <div className="flex-1 relative overflow-hidden bg-background isolate">
         <div className={`absolute inset-0 ${activeView === 'turnovers' ? '' : 'hidden'}`}>
           <TurnoversWindow users={users} currentUser={currentUser} />
         </div>
