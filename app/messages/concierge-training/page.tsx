@@ -89,33 +89,22 @@ const TIER_OPTIONS: { value: TrainingTier; title: string; description: string }[
 const PILL_CLASS =
   'inline-flex h-9 items-center gap-2 rounded-full border border-border bg-transparent px-3.5 text-sm font-medium text-foreground outline-none transition-colors hover:bg-black/[0.04] focus-visible:ring-2 focus-visible:ring-[var(--accent-3)]/40 disabled:pointer-events-none disabled:opacity-50 dark:hover:bg-white/[0.06]';
 
-// Rough, tunable context-load estimate for one category's active rules. An
-// injected (always) block costs its full token weight on EVERY message; an
-// on-demand (situational/Tool) block costs little — a menu entry plus a small
-// "one more thing to choose between" tax. Quiet guardrail + reassurance, not a
-// precise budget; the ceiling and bands are heuristics, kept here to retune.
-// Both categories load situational rules on demand (replies via draftReply, tasks
-// via draftTask), so the same tier split applies to each.
+// Where standing instruction starts to feel heavy. The token COUNT is now measured
+// exactly (see /api/concierge-training/context-load); this ceiling is still a
+// judgment call about how much is too much, kept here to retune.
+//
+// Note the numbers moved when counting became exact: the old client-side estimate
+// divided characters by 4 and ignored the "### " headings, the blank lines between
+// blocks, and the ~70-character preamble on every block carrying worked examples.
+// It undercounted. A bar that reads higher than it used to is the fix working, not
+// the load growing.
 const LOAD_CEILING = 8000; // effective tokens where standing instruction turns heavy
-const TOOL_EFFECTIVE_TOKENS = 50; // per on-demand block: menu line + selection tax
 
-function estimateContextLoad(rules: TrainingRule[]) {
-  const active = rules.filter((r) => r.is_active);
-  const injected = active.filter((r) => r.tier !== 'situational');
-  const toolCount = active.filter((r) => r.tier === 'situational').length;
-  // Always-tier blocks ride in every prompt — count their title, instructions,
-  // AND their worked-example transcripts, since examples are injected too.
-  const injectedTokens = injected.reduce((sum, r) => {
-    const exampleChars = r.examples.reduce(
-      (s, e) => s + e.transcript.length + (e.label?.length ?? 0),
-      0,
-    );
-    return sum + Math.ceil((r.instructions.length + r.title.length + exampleChars) / 4);
-  }, 0);
-  const effective = injectedTokens + toolCount * TOOL_EFFECTIVE_TOKENS;
-  const pct = Math.min(100, Math.round((effective / LOAD_CEILING) * 100));
-  const level: 'light' | 'moderate' | 'heavy' = pct < 55 ? 'light' : pct < 85 ? 'moderate' : 'heavy';
-  return { injectedTokens, toolCount, pct, level };
+interface ContextLoad {
+  always_tokens: number;
+  index_tokens: number;
+  total_tokens: number;
+  situational_count: number;
 }
 
 // Tab chrome for the two CRUD categories.
@@ -238,7 +227,7 @@ export default function ConciergeTrainingPage() {
         </div>
       ) : (
         <>
-          <ContextLoadBar rules={visibleRules} />
+          <ContextLoadBar category={activeTab} rules={visibleRules} />
           {TIER_OPTIONS.map((opt) => (
             <ExposureGroup
               key={opt.value}
@@ -357,33 +346,68 @@ function CategoryTabs({
 // time (light); only speaks up with advice once it's getting full. It's a
 // ceiling guardrail, NOT a per-block recommendation — which block to inject vs.
 // keep on demand is a frequency/criticality call the operator makes per block.
-function ContextLoadBar({ rules }: { rules: TrainingRule[] }) {
-  const { injectedTokens, toolCount, pct, level } = useMemo(
-    () => estimateContextLoad(rules),
-    [rules],
-  );
+function ContextLoadBar({
+  category,
+  rules,
+}: {
+  category: TrainingCategory;
+  rules: TrainingRule[];
+}) {
+  const [load, setLoad] = useState<ContextLoad | null>(null);
+
+  // Re-measure whenever the tab changes or the rules themselves change (a save,
+  // delete, or activation toggle). `rules` is memoized upstream, so its identity is
+  // stable between those events and this doesn't refetch on every render.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/concierge-training/context-load?category=${category}`,
+          { cache: 'no-store' },
+        );
+        if (!res.ok) throw new Error('count failed');
+        const data = (await res.json()) as ContextLoad;
+        if (active) setLoad(data);
+      } catch {
+        // A guardrail, not a gate: on failure keep the page usable and show nothing
+        // rather than a number we can't stand behind.
+        if (active) setLoad(null);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [category, rules]);
+
+  if (!load) return null;
+
+  const pct = Math.min(100, Math.round((load.total_tokens / LOAD_CEILING) * 100));
+  const level: 'light' | 'moderate' | 'heavy' = pct < 55 ? 'light' : pct < 85 ? 'moderate' : 'heavy';
   const META = {
     light: { label: 'Light', bar: 'bg-emerald-500', advice: '' },
     moderate: {
       label: 'Moderate',
       bar: 'bg-amber-500',
-      advice: 'Getting fuller — consider moving rarely-used blocks to “on demand”.',
+      advice: 'Getting fuller \u2014 consider moving rarely-used blocks to \u201Con demand\u201D.',
     },
     heavy: {
       label: 'Heavy',
       bar: 'bg-[var(--destructive)]',
       advice:
-        'A lot of standing instruction. Audit for overlap, trim, or move rarely-used blocks to “on demand”.',
+        'A lot of standing instruction. Audit for overlap, trim, or move rarely-used blocks to \u201Con demand\u201D.',
     },
   } as const;
   const meta = META[level];
   return (
     <div className="msg-well space-y-2 rounded-xl p-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-medium text-foreground">Context load · {meta.label}</p>
+        <p className="text-sm font-medium text-foreground">Context load \u00B7 {meta.label}</p>
         <span className="text-xs tabular-nums text-muted-foreground">
-          ~{injectedTokens.toLocaleString()} always-on tokens
-          {toolCount > 0 ? ` · ${toolCount} on demand` : ''}
+          {load.total_tokens.toLocaleString()} always-on tokens
+          {load.situational_count > 0
+            ? ` \u00B7 ${load.situational_count} on demand (${load.index_tokens.toLocaleString()})`
+            : ''}
         </span>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/[0.08] dark:bg-white/[0.1]">
