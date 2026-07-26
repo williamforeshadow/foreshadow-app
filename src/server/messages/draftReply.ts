@@ -1,4 +1,5 @@
 import type {
+  ImageBlockParam,
   MessageParam,
   TextBlock,
   TextBlockParam,
@@ -7,6 +8,7 @@ import type {
   Tool,
 } from '@anthropic-ai/sdk/resources/messages';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { loadConciergeImages } from './attachmentImages';
 import { getAnthropic, MODEL } from '@/src/agent/anthropic';
 import { dispatchTool, type ToolCallTrace } from '@/src/agent/dispatchTool';
 import { getPropertyKnowledgeForGuest } from '@/src/agent/tools/getPropertyKnowledgeForGuest';
@@ -80,6 +82,7 @@ Grounding (critical — this text may be sent to a real customer):
 - NEVER invent or guess specifics: dates, times, prices, codes, wifi passwords, addresses, amenities, or availability.
 - Do not confirm, promise, deny, or rule on anything — policies, permissions, rules, what is or isn't allowed — unless a provided fact states it. The guest asking about or mentioning something is never license to affirm or deny it. When you don't have the fact, warmly say you'll confirm with the team and follow up; do not reassure or refuse on your own.
 - If the guest asked a direct question you CAN answer from the given facts, answer it directly.
+- Photos: when the guest sent one it is attached above as "Image N", and the transcript marks which message carried it. Treat it as something you can SEE, not something you can conclude from — describe only what is actually visible, and never diagnose a cause, promise a repair, quote a cost, or assign blame from a photo alone. Acknowledge specifically what you see (that is what tells the guest they were understood), then handle it the same way you would any fact you don't have: say the team will take a look and follow up. If the transcript says a photo couldn't be displayed, don't pretend to have seen it — acknowledge they sent one and ask for a resend or a description.
 - "Concierge training" (when present) is operating guidance from the host's team: procedures to follow when the situation matches. Follow the applicable steps and use any specifics it states (e.g. phone numbers, sequences). It is instruction, not license to invent — never fabricate a code, date, price, or fact that neither the training, the facts, nor the conversation provides.
 
 Looking things up:
@@ -309,9 +312,23 @@ export async function generateGuestReplyDraftFromContext(
   if (stay.nights != null) facts.push(`Nights: ${stay.nights}`);
   facts.push(describeBooking(stay, today));
 
+  // Photos the guest sent, as real image blocks. Without this a photo-only
+  // message renders as "(no text)" and the reply reads as though nothing arrived
+  // — which is precisely how operators notice the gap. Never throws; a failure
+  // degrades to a transcript note so the model still knows something was sent.
+  const { images, notesByMessageId } = await loadConciergeImages(recent);
+
   const transcript = recent.length
     ? recent
-        .map((m) => `${m.direction === 'outbound' ? 'Host' : 'Guest'}: ${(m.body ?? '').trim() || '(no text)'}`)
+        .map((m) => {
+          const who = m.direction === 'outbound' ? 'Host' : 'Guest';
+          const note = notesByMessageId.get(m.id);
+          const body = (m.body ?? '').trim();
+          // The note carries the message when there's no caption, so a bare photo
+          // never reads as an empty turn.
+          const text = body || (note ? '' : '(no text)');
+          return `${who}: ${[note ? `[${note}]` : '', text].filter(Boolean).join(' ')}`;
+        })
         .join('\n')
     : '(no prior messages)';
 
@@ -406,7 +423,20 @@ export async function generateGuestReplyDraftFromContext(
       category: 'reply',
     },
   };
-  const conversation: MessageParam[] = [{ role: 'user', content: userParts.join('\n') }];
+  // Images lead, each behind its own label, then the whole text block. Anthropic's
+  // guidance is that images before text outperform images after or interleaved,
+  // and that multiple images each want a short introducing label — the labels are
+  // what let the transcript below say "[sent Image 2]" and have it mean something.
+  // These sit after the cached system breakpoint, so they cost nothing in cache
+  // terms: images invalidate the messages cache only, never tools + system.
+  const userContent: Array<TextBlockParam | ImageBlockParam> = [];
+  for (const img of images) {
+    userContent.push({ type: 'text', text: `Image ${img.label}:` });
+    userContent.push(img.block);
+  }
+  userContent.push({ type: 'text', text: userParts.join('\n') });
+
+  const conversation: MessageParam[] = [{ role: 'user', content: userContent }];
   const trace: ToolCallTrace[] = [];
 
   for (let i = 0; i < MAX_DRAFT_ITERATIONS; i++) {
