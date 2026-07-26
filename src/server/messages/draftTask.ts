@@ -1,4 +1,5 @@
 import type {
+  ImageBlockParam,
   MessageParam,
   TextBlock,
   TextBlockParam,
@@ -8,6 +9,7 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages';
 import { getAnthropic, MODEL } from '@/src/agent/anthropic';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { loadConciergeImages } from './attachmentImages';
 import { dispatchTool, type ToolCallTrace } from '@/src/agent/dispatchTool';
 import { getConciergeProcedure } from '@/src/agent/tools/getConciergeProcedure';
 import type { ToolContext, ToolDefinition } from '@/src/agent/tools/types';
@@ -68,6 +70,7 @@ How to decide WHAT qualifies:
 - Apply the "Sensitivity" calibration provided below — it sets the threshold for how much warrants a task at this organization. Do not impose your own assumptions about what counts; follow the calibrated level.
 - Also follow the team's "Task rules" when provided — they add organization- and property-specific guidance and concrete examples.
 - Create a SEPARATE task for EACH distinct issue or request that meets the threshold. If one message reports several unrelated problems (e.g. a broken appliance AND a cleanliness issue), that is multiple tasks, not one. Only combine things that are genuinely the same piece of work.
+- Photos count as content. When the guest sent one it is attached above as "Image N", and the transcript marks which message carried it. A wordless photo is often a complete report on its own — judge it on what it shows, exactly as you would the same thing described in words, and let visible severity inform priority (a photo showing the space is unusable or unsafe justifies "urgent" the same way the words would). Ground the description in what is actually visible; never infer a cause, a repair, a responsible party, or a cost the image doesn't show. If the transcript says a photo couldn't be displayed, do not guess at its contents — judge only the words you have.
 - When nothing in the latest message meets the threshold, or you are unsure, return an empty list.
 - Do NOT include any task that is already covered by the "Already raised" list (when provided) — those are handled. But DO include new, distinct issues even when other issues in the same conversation were already raised.
 
@@ -398,11 +401,22 @@ export async function generateProposedTaskDraftFromContext(
     })
     .join('\n');
 
+  // Photos the guest sent. This matters more here than on the reply path: triage
+  // judges what "the latest guest message warrants", and a wordless photo used to
+  // arrive as "(no text)" — nothing to weigh, so it could not clear ANY
+  // sensitivity level and no task was ever proposed. A silent photo is one of the
+  // commonest ways a guest reports damage, so that was a whole class of missed
+  // work, not merely a thinner description.
+  const { images, notesByMessageId } = await loadConciergeImages(recent);
+
   const transcript = recent
-    .map(
-      (m) =>
-        `${m.direction === 'outbound' ? 'Host' : 'Guest'}: ${(m.body ?? '').trim() || '(no text)'}`,
-    )
+    .map((m) => {
+      const who = m.direction === 'outbound' ? 'Host' : 'Guest';
+      const note = notesByMessageId.get(m.id);
+      const body = (m.body ?? '').trim();
+      const text = body || (note ? '' : '(no text)');
+      return `${who}: ${[note ? `[${note}]` : '', text].filter(Boolean).join(' ')}`;
+    })
     .join('\n');
 
   const userParts = [
@@ -488,7 +502,19 @@ export async function generateProposedTaskDraftFromContext(
   };
 
   const client = getAnthropic();
-  const conversation: MessageParam[] = [{ role: 'user', content: userParts.join('\n') }];
+  // Images lead, each behind its own label, then the text block — images before
+  // text outperform images placed after or interleaved, and the labels are what
+  // let the transcript's "[sent Image 2]" refer to something. They sit after the
+  // cached system breakpoint, so the cached rules prefix is unaffected: images
+  // invalidate the messages cache only, never tools + system.
+  const userContent: Array<TextBlockParam | ImageBlockParam> = [];
+  for (const img of images) {
+    userContent.push({ type: 'text', text: `Image ${img.label}:` });
+    userContent.push(img.block);
+  }
+  userContent.push({ type: 'text', text: userParts.join('\n') });
+
+  const conversation: MessageParam[] = [{ role: 'user', content: userContent }];
   const trace: ToolCallTrace[] = [];
 
   // The triage loop. The model may load a situational task rule before deciding;
