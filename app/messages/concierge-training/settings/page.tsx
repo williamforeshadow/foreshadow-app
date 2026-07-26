@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Check, GraduationCap, SlidersHorizontal, Wrench, Zap } from 'lucide-react';
+import { ArrowLeft, Check, GraduationCap, Send, SlidersHorizontal, Wrench, Zap } from 'lucide-react';
 import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -98,6 +98,17 @@ interface SettingsState {
   replySensitivity: number;
   taskSensitivity: number;
   tools: Record<ToolKey, boolean>;
+  autoSendEnabled: boolean;
+  autoSendDelayMinutes: number;
+}
+
+// Offered delays. 1 minute is the floor: the cron ticks every minute, so
+// anything shorter would be a number the system cannot honour.
+const AUTO_SEND_DELAY_OPTIONS = [1, 5, 10, 15, 30, 60] as const;
+
+function formatDelay(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  return minutes === 60 ? '1 hour' : `${minutes / 60} hours`;
 }
 
 // Parse the API settings payload into our local shape, defaulting every control
@@ -117,6 +128,11 @@ function parseSettings(s: Record<string, unknown> | undefined | null): SettingsS
       check_property_availability: toolMap.check_property_availability !== false,
       find_available_properties: toolMap.find_available_properties !== false,
     },
+    // Unlike every other control here, auto-send defaults OFF. An absent or
+    // unreadable value must never render as "on" for the one switch that
+    // messages guests without a human in the loop.
+    autoSendEnabled: s?.auto_send_enabled === true,
+    autoSendDelayMinutes: clampLevel(s?.auto_send_delay_minutes, 1, 1440, 10),
   };
 }
 
@@ -198,6 +214,14 @@ export default function ConciergeSettingsPage() {
       task_proposal_sensitivity: next,
     });
 
+  const setAutoSendEnabled = (next: boolean) =>
+    patch('auto-send', (s) => ({ ...s, autoSendEnabled: next }), { auto_send_enabled: next });
+
+  const setAutoSendDelay = (next: number) =>
+    patch('auto-send-delay', (s) => ({ ...s, autoSendDelayMinutes: next }), {
+      auto_send_delay_minutes: next,
+    });
+
   const setTool = (tool: ToolKey, next: boolean) =>
     patch(
       `tool:${tool}`,
@@ -247,6 +271,51 @@ export default function ConciergeSettingsPage() {
               onChange={(next) => setCapability(cap, next)}
             />
           ))}
+        </div>
+      </Section>
+
+      {/* Auto-send */}
+      <Section
+        icon={<Send className="h-4 w-4 text-[var(--accent-3)]" aria-hidden />}
+        title="Auto-send"
+        blurb="Send the concierge's proposed reply to the guest on its own, unless someone steps in first. Off unless you turn it on. Only new guest messages start a timer — switching this on never sends replies already waiting in the inbox."
+      >
+        <div className="flex flex-col items-start gap-3">
+          <SelectCard
+            title="Send replies automatically"
+            enabled={state ? state.autoSendEnabled : null}
+            saving={savingKey === 'auto-send'}
+            onChange={setAutoSendEnabled}
+          />
+
+          {state?.autoSendEnabled ? (
+            <div className="w-full">
+              <p className="mb-2 text-sm text-muted-foreground">
+                How long to wait before sending. The countdown shows on the proposed reply, and
+                anyone can cancel or edit it until it fires.
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {AUTO_SEND_DELAY_OPTIONS.map((minutes) => {
+                  const active = state.autoSendDelayMinutes === minutes;
+                  return (
+                    <button
+                      key={minutes}
+                      type="button"
+                      disabled={savingKey === 'auto-send-delay'}
+                      onClick={() => setAutoSendDelay(minutes)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                        active
+                          ? 'border-transparent bg-foreground text-background'
+                          : 'border-border text-muted-foreground hover:bg-foreground/5 hover:text-foreground'
+                      }`}
+                    >
+                      {formatDelay(minutes)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
         </div>
       </Section>
 

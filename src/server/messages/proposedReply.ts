@@ -1,4 +1,6 @@
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { getLatestSentMessage } from './latestMessage';
+import { armAutoSend, cancelAutoSend } from './autoSend';
 import { generateGuestReplyDraft } from './draftReply';
 import { CONCIERGE_SOURCES_VERSION, type ConciergeSource } from './conciergeSources';
 import { loadConciergeProposalFlags, loadReplyProposalSensitivity } from './conciergeCapabilities';
@@ -33,26 +35,12 @@ import { notifyProposedReply } from '@/src/server/notifications/notifyProposal';
 
 export type ProposedReplySource = 'auto' | 'assistant';
 
-interface LatestSent {
-  id: string;
-  direction: 'inbound' | 'outbound';
-}
-
-/** The latest actually-sent message in a conversation (future-dated automations excluded). */
-export async function getLatestSentMessage(conversationId: string): Promise<LatestSent | null> {
-  const nowIso = new Date().toISOString();
-  const { data, error } = await getSupabaseServer()
-    .from('guest_messages')
-    .select('id, direction, sent_at')
-    .eq('conversation_id', conversationId)
-    .or(`sent_at.is.null,sent_at.lte.${nowIso}`)
-    .order('sent_at', { ascending: false, nullsFirst: false })
-    .order('created_at', { ascending: false })
-    .limit(1);
-  if (error) throw new Error(error.message);
-  const row = (data ?? [])[0] as { id: string; direction: 'inbound' | 'outbound' } | undefined;
-  return row ? { id: row.id, direction: row.direction } : null;
-}
+// Moved to ./latestMessage so autoSend can use it without closing an import
+// cycle (proposedReply imports autoSend to arm the timer). Re-exported here
+// because proposedTask, proposedKnowledge and conversationSentiment all import
+// it from this module.
+export { getLatestSentMessage } from './latestMessage';
+export type { LatestSent } from './latestMessage';
 
 export interface StoredProposedReply {
   draft: string;
@@ -83,23 +71,33 @@ export async function generateAndStoreProposedReply(
      * path sets this; manual "Regenerate" and the ops-agent tool always draft.
      */
     gate?: boolean;
+    /**
+     * Arm an auto-send timer for the resulting draft (if the org has auto-send
+     * on). Set ONLY by the webhook path — a timer should exist because a guest
+     * just spoke, not because an operator opened a thread and the inbox
+     * backfilled a draft. See invariant 2 in autoSend.ts.
+     */
+    arm?: boolean;
   },
 ): Promise<StoredProposedReply> {
   const supabase = getSupabaseServer();
   const latest = await getLatestSentMessage(conversationId);
 
   // On the autonomous path, gate drafting by THIS conversation's org's
-  // reply-sensitivity level (operations_settings is per-org).
-  let replySensitivity: number | undefined;
-  if (opts.gate) {
+  // reply-sensitivity level (operations_settings is per-org). The org id is also
+  // what auto-send keys its settings off, so resolve it whenever either needs it.
+  let orgId: string | null = null;
+  if (opts.gate || opts.arm) {
     const { data: orgRow } = await supabase
       .from('conversations')
       .select('org_id')
       .eq('id', conversationId)
       .maybeSingle();
-    replySensitivity = await loadReplyProposalSensitivity(
-      ((orgRow as { org_id?: string | null } | null)?.org_id as string | null) ?? null,
-    );
+    orgId = ((orgRow as { org_id?: string | null } | null)?.org_id as string | null) ?? null;
+  }
+  let replySensitivity: number | undefined;
+  if (opts.gate) {
+    replySensitivity = await loadReplyProposalSensitivity(orgId);
   }
   const { draft, warranted, sources } = await generateGuestReplyDraft({
     conversationId,
@@ -120,6 +118,10 @@ export async function generateAndStoreProposedReply(
   //    genuinely done and the old draft answers a resolved question. Leaving it
   //    on screen invites sending a reply the guest has moved past.
   if (!warranted) {
+    // The stored draft is about to be cleared, so any timer still holding it must
+    // go too — otherwise a decline on a newer message would leave a pending send
+    // carrying text the inbox no longer shows.
+    await cancelAutoSend(conversationId, 'draft_cleared');
     if (latest) {
       const { error } = await supabase
         .from('conversations')
@@ -157,6 +159,18 @@ export async function generateAndStoreProposedReply(
     })
     .eq('id', conversationId);
   if (error) throw new Error(error.message);
+
+  // Arm the send timer for this draft. No-op unless the org opted in; never
+  // throws. Runs after the draft is safely persisted so a timer can never
+  // reference a draft that failed to store.
+  if (opts.arm) {
+    await armAutoSend({
+      conversationId,
+      orgId,
+      draft,
+      answersMessageId: latest?.id ?? null,
+    });
+  }
 
   // Notify only on the eager path, and only when we're actually answering a
   // guest (inbound) message — not a host follow-up nudge.
@@ -218,7 +232,7 @@ export type AutoDraftOutcome =
  */
 export async function maybeGenerateProposedReplyForConversation(
   conversationId: string,
-  opts: { notify?: boolean } = {},
+  opts: { notify?: boolean; arm?: boolean } = {},
 ): Promise<AutoDraftOutcome> {
   const supabase = getSupabaseServer();
   const { data: conv, error: convError } = await supabase
@@ -272,6 +286,7 @@ export async function maybeGenerateProposedReplyForConversation(
     source: 'auto',
     notify: opts.notify,
     gate: true,
+    arm: opts.arm,
   });
   if (res.skipped) return { status: 'skipped', reason: 'not_warranted' };
   return {
@@ -300,7 +315,13 @@ export async function maybeGenerateProposedReplyForExternal(
       .eq('external_conversation_id', externalConversationId)
       .maybeSingle();
     if (!conv) return;
-    await maybeGenerateProposedReplyForConversation((conv as { id: string }).id, { notify: true });
+    // `arm: true` lives HERE and nowhere else. This is the one path that means
+    // "a guest just sent a message", which is the only event that should ever
+    // start a countdown to an unattended reply.
+    await maybeGenerateProposedReplyForConversation((conv as { id: string }).id, {
+      notify: true,
+      arm: true,
+    });
   } catch (err) {
     console.error('[proposed reply] eager generation failed', {
       externalConversationId,

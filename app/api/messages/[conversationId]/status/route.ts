@@ -1,6 +1,7 @@
 import { NextResponse, after } from 'next/server';
 import { requireAuthContext } from '@/lib/requireAuthContext';
 import { maybeGenerateProposedKnowledgeForConversation } from '@/src/server/messages/proposedKnowledge';
+import { cancelAutoSend } from '@/src/server/messages/autoSend';
 
 // Update a conversation's app state: app_status (active/complete), unread, or
 // archived. Used by: open conversation -> mark read; Mark complete / Reopen;
@@ -11,7 +12,7 @@ export async function POST(
 ) {
   const ctx = await requireAuthContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase } = ctx;
+  const { supabase, appUser } = ctx;
 
   const { conversationId } = await context.params;
 
@@ -59,6 +60,25 @@ export async function POST(
     .eq('id', conversationId);
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  // Any of these mean an armed auto-send must not fire: the concierge was turned
+  // off here (and the draft it was holding just got cleared above), the thread was
+  // marked complete, or it was archived. The tick re-checks all three itself, but
+  // cancelling now records WHY against the operator's actual action rather than
+  // leaving the tick to infer it a minute later.
+  const cancelReason =
+    patch.concierge_enabled === false
+      ? ('concierge_disabled' as const)
+      : patch.app_status === 'complete' || patch.archived === true
+        ? ('conversation_inactive' as const)
+        : null;
+  if (cancelReason) {
+    try {
+      await cancelAutoSend(conversationId, cancelReason, appUser.id);
+    } catch (err) {
+      console.error('[conversation status] auto-send cancel failed', { conversationId, err });
+    }
   }
 
   // Marking a conversation complete is a "settled" signal — run knowledge triage

@@ -189,11 +189,26 @@ export async function GET(
     (messages ?? []) as Array<Record<string, unknown>>,
   );
 
+  // The armed auto-send, if this thread has one. Rides along with the thread so
+  // the countdown appears in the same paint as the draft it belongs to — fetching
+  // it separately would flash a proposal with no timer on it, which reads as
+  // "this won't send" at exactly the moment it is about to.
+  const { data: autoSendRow } = await service
+    .from('concierge_auto_sends')
+    .select('id, due_at')
+    .eq('conversation_id', conversationId)
+    .eq('status', 'pending')
+    .maybeSingle();
+  const auto_send = autoSendRow
+    ? { id: (autoSendRow as { id: string }).id, due_at: (autoSendRow as { due_at: string }).due_at }
+    : null;
+
   return NextResponse.json({
     conversation,
     messages: messagesWithUrls,
     proposed_tasks,
     proposed_knowledge,
     reply_proposal_enabled,
+    auto_send,
   });
 }

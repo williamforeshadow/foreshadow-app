@@ -1,13 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Sparkles, SendHorizontal, Pencil, RotateCw, AlertCircle } from 'lucide-react';
+import { Sparkles, SendHorizontal, Pencil, RotateCw, AlertCircle, Clock } from 'lucide-react';
 import { TrainingReferences } from '@/components/messages/TrainingReferences';
 import {
   CONCIERGE_SOURCES_VERSION,
   type ConciergeSource,
   type ConciergeSourcesRecord,
 } from '@/lib/conciergeSources';
+
+// mm:ss, rounded UP so the label never reads 0:00 while a second still remains.
+function formatCountdown(ms: number): string {
+  const total = Math.ceil(ms / 1000);
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
 
 /**
  * The conversation's proposed reply, rendered beneath the guest message it
@@ -40,6 +48,7 @@ export function ProposedReply({
   sources: persistedSources,
   stale,
   declined,
+  autoSendDueAt,
   onEdit,
   onSend,
   onChanged,
@@ -57,6 +66,11 @@ export function ProposedReply({
   stale: boolean;
   /** True when the sensitivity gate ruled this message doesn't warrant a reply. */
   declined: boolean;
+  /**
+   * When an armed auto-send will fire, ISO. null when the org has auto-send off,
+   * or nothing is armed for this thread. Drives the countdown row.
+   */
+  autoSendDueAt?: string | null;
   onEdit: (text: string) => void;
   /** Send this draft through the PMS; resolves true on success. Absent ⇒ Send is inert. */
   onSend?: (text: string) => Promise<boolean>;
@@ -152,6 +166,49 @@ export function ProposedReply({
     }
   }, [persistedDraft, stale, declined, generate]);
 
+  // ---- Auto-send countdown --------------------------------------------------
+  // Mirrored into state so Cancel and Edit can clear it instantly. Waiting for
+  // the parent's refetch would leave "sending in 0:04" on screen after the
+  // operator already stood it down, which is the one moment the UI must not lie.
+  const [dueAt, setDueAt] = useState<string | null>(autoSendDueAt ?? null);
+  const [remainingMs, setRemainingMs] = useState<number | null>(null);
+  useEffect(() => setDueAt(autoSendDueAt ?? null), [autoSendDueAt]);
+
+  useEffect(() => {
+    if (!dueAt) {
+      setRemainingMs(null);
+      return;
+    }
+    const target = new Date(dueAt).getTime();
+    const tick = () => setRemainingMs(Math.max(0, target - Date.now()));
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [dueAt]);
+
+  const cancelAutoSend = useCallback(
+    async (reason: 'edited' | 'operator_cancelled') => {
+      setDueAt(null);
+      try {
+        await fetch(`/api/messages/${conversationId}/auto-send?reason=${reason}`, {
+          method: 'DELETE',
+        });
+      } catch {
+        // Best-effort. The tick re-validates before sending, and a human who just
+        // took the thread will have changed something it checks.
+      }
+      onChanged?.();
+    },
+    [conversationId, onChanged],
+  );
+
+  // Editing means the operator has the wheel — stand the timer down before the
+  // draft lands in the composer.
+  const handleEdit = useCallback(() => {
+    if (dueAt) void cancelAutoSend('edited');
+    onEdit(draft);
+  }, [dueAt, cancelAutoSend, onEdit, draft]);
+
   const handleSend = useCallback(async () => {
     if (sending) return;
     if (!onSend) {
@@ -172,6 +229,9 @@ export function ProposedReply({
   const showDeclined = (declined || justDeclined) && !draft && !loading && !error;
   const showSkeleton = loading || (!draft && !error);
   const showActions = !!draft && !loading && !error;
+  // Only alongside a draft the operator can actually read — a countdown over a
+  // skeleton would be a deadline on text nobody has seen.
+  const showCountdown = showActions && remainingMs !== null;
 
   // Deliberately quiet: muted, one line, no amber. Amber means "a draft is
   // waiting for you" — this is the opposite, and reads as noise if it shouts.
@@ -242,6 +302,33 @@ export function ProposedReply({
           </p>
         ) : null}
 
+        {showCountdown ? (
+          <div className="mx-3 mb-2 flex items-center gap-2 rounded-xl bg-foreground/[0.06] px-2.5 py-1.5 text-[11px]">
+            <Clock className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+            {remainingMs && remainingMs > 0 ? (
+              <span className="text-muted-foreground">
+                Sending automatically in{' '}
+                <span className="font-medium tabular-nums text-foreground">
+                  {formatCountdown(remainingMs)}
+                </span>
+              </span>
+            ) : (
+              // The clock ran out. The cron fires within the minute, so promising
+              // a cancel here would be a button that might quietly lose its race.
+              <span className="text-muted-foreground">Sending now…</span>
+            )}
+            {remainingMs && remainingMs > 0 ? (
+              <button
+                type="button"
+                onClick={() => void cancelAutoSend('operator_cancelled')}
+                className="ml-auto shrink-0 rounded-full px-2 py-0.5 font-medium text-foreground transition-colors hover:bg-foreground/10"
+              >
+                Cancel
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         {showActions ? (
           <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-2.5">
             {/* Bottom-left: the references pill (only with a sources record —
@@ -251,7 +338,7 @@ export function ProposedReply({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => onEdit(draft)}
+                onClick={handleEdit}
                 disabled={sending}
                 className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-foreground/5 disabled:opacity-50"
               >

@@ -16,6 +16,11 @@ import { requireAuthContext } from '@/lib/requireAuthContext';
 // the daily Slack digest and overdue-task resolution.
 
 import { DEFAULT_TIMEZONE } from '@/src/lib/dates';
+import {
+  DEFAULT_AUTO_SEND_DELAY_MINUTES,
+  MAX_AUTO_SEND_DELAY_MINUTES,
+  MIN_AUTO_SEND_DELAY_MINUTES,
+} from '@/src/server/messages/autoSend';
 
 const FALLBACK_CHECK_IN = '15:00';
 const FALLBACK_CHECK_OUT = '11:00';
@@ -71,6 +76,31 @@ const CAPABILITY_FLAG_KEYS = [
   'knowledge_proposal_enabled',
 ] as const;
 type CapabilityFlagKey = (typeof CAPABILITY_FLAG_KEYS)[number];
+
+// Auto-send. Deliberately NOT in CAPABILITY_FLAG_KEYS: those default to true
+// when absent, which is right for drafting and wrong for a switch that messages
+// guests unattended. This one defaults to FALSE everywhere, and flipping it on
+// also stamps auto_send_enabled_at so arming stays forward-only.
+const AUTO_SEND_DEFAULTS = {
+  auto_send_enabled: false,
+  auto_send_delay_minutes: DEFAULT_AUTO_SEND_DELAY_MINUTES,
+  auto_send_enabled_at: null as string | null,
+};
+
+// Read the configured delay off a row, clamped to the supported range.
+function readAutoSendDelay(value: unknown): number {
+  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  if (!Number.isFinite(n)) return DEFAULT_AUTO_SEND_DELAY_MINUTES;
+  return Math.min(MAX_AUTO_SEND_DELAY_MINUTES, Math.max(MIN_AUTO_SEND_DELAY_MINUTES, Math.round(n)));
+}
+
+// Validate an incoming delay; returns the minutes or null when out of range.
+function normalizeAutoSendDelay(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  if (!Number.isFinite(n)) return null;
+  const r = Math.round(n);
+  return r >= MIN_AUTO_SEND_DELAY_MINUTES && r <= MAX_AUTO_SEND_DELAY_MINUTES ? r : null;
+}
 
 function readBool(value: unknown, fallback: boolean): boolean {
   if (typeof value === 'boolean') return value;
@@ -165,6 +195,8 @@ function isMissingColumnError(error: unknown): boolean {
     e.message.includes('task_proposal_sensitivity') ||
     e.message.includes('reply_proposal_sensitivity') ||
     e.message.includes('concierge_tool_settings') ||
+    e.message.includes('auto_send_enabled') ||
+    e.message.includes('auto_send_delay_minutes') ||
     CAPABILITY_FLAG_KEYS.some((k) => e.message!.includes(k))
   );
 }
@@ -199,6 +231,7 @@ export async function GET() {
             task_proposal_enabled: true,
             knowledge_proposal_enabled: true,
             concierge_tool_settings: {},
+            ...AUTO_SEND_DEFAULTS,
             updated_at: null,
           },
           migration_pending: true,
@@ -222,6 +255,7 @@ export async function GET() {
           task_proposal_enabled: true,
           knowledge_proposal_enabled: true,
           concierge_tool_settings: {},
+          ...AUTO_SEND_DEFAULTS,
           updated_at: null,
         },
       });
@@ -238,6 +272,10 @@ export async function GET() {
         task_proposal_enabled: readBool(data.task_proposal_enabled, true),
         knowledge_proposal_enabled: readBool(data.knowledge_proposal_enabled, true),
         concierge_tool_settings: readToolSettings(data.concierge_tool_settings),
+        // Off unless explicitly true — a null/absent column must never read as on.
+        auto_send_enabled: data.auto_send_enabled === true,
+        auto_send_delay_minutes: readAutoSendDelay(data.auto_send_delay_minutes),
+        auto_send_enabled_at: data.auto_send_enabled_at ?? null,
         updated_at: data.updated_at,
       },
     });
@@ -399,6 +437,29 @@ export async function PATCH(request: NextRequest) {
       patch.concierge_tool_settings = toolSettings;
     }
 
+    if (body?.auto_send_delay_minutes !== undefined) {
+      const minutes = normalizeAutoSendDelay(body.auto_send_delay_minutes);
+      if (minutes === null) {
+        return NextResponse.json(
+          {
+            error: `auto_send_delay_minutes must be an integer between ${MIN_AUTO_SEND_DELAY_MINUTES} and ${MAX_AUTO_SEND_DELAY_MINUTES}`,
+          },
+          { status: 400 },
+        );
+      }
+      patch.auto_send_delay_minutes = minutes;
+    }
+
+    let autoSendTurningOn = false;
+    if (body?.auto_send_enabled !== undefined) {
+      const flag = normalizeBool(body.auto_send_enabled);
+      if (flag === null) {
+        return NextResponse.json({ error: 'auto_send_enabled must be a boolean' }, { status: 400 });
+      }
+      patch.auto_send_enabled = flag;
+      autoSendTurningOn = flag;
+    }
+
     if (Object.keys(patch).length === 0) {
       return NextResponse.json({ error: 'No supported fields to update' }, { status: 400 });
     }
@@ -410,7 +471,7 @@ export async function PATCH(request: NextRequest) {
 
     const { data: existing, error: readErr } = await supabase
       .from('operations_settings')
-      .select('id')
+      .select('id, auto_send_enabled')
       .eq('org_id', orgId)
       .maybeSingle();
     if (readErr && isMissingTableError(readErr)) {
@@ -421,6 +482,16 @@ export async function PATCH(request: NextRequest) {
         },
         { status: 503 },
       );
+    }
+
+    // Stamp the moment auto-send goes OFF → ON. Everything the arm path sees as
+    // "generated before this instant" is excluded, which is what keeps enabling
+    // the feature from firing a backlog of already-drafted replies. Only stamp on
+    // a genuine transition — re-saving while already on must not move the line
+    // forward and silently disarm timers that are legitimately counting down.
+    const wasEnabled = (existing as { auto_send_enabled?: unknown } | null)?.auto_send_enabled === true;
+    if (autoSendTurningOn && !wasEnabled) {
+      patch.auto_send_enabled_at = now;
     }
 
     const writeErr = existing

@@ -30,6 +30,8 @@ type ThreadData = {
   proposedTasks: ProposedTaskData[];
   proposedKnowledge: ProposedKnowledgeData[];
   replyProposalEnabled: boolean;
+  /** When this thread's armed auto-send fires, ISO. null when nothing is armed. */
+  autoSendDueAt: string | null;
 };
 
 // Shared style for the thread-header icon buttons — an explicit neutral hover
@@ -103,6 +105,7 @@ export default function ConversationPage() {
         proposed_tasks?: ProposedTaskData[];
         proposed_knowledge?: ProposedKnowledgeData[];
         reply_proposal_enabled?: boolean;
+        auto_send?: { id: string; due_at: string } | null;
       }>(`/api/messages/${conversationId}`);
       return {
         conversation: data.conversation ?? undefined,
@@ -112,6 +115,8 @@ export default function ConversationPage() {
         // The org's autonomous reply-drafting master switch. Defaults to true
         // so a stale/failed read never hides the proposal.
         replyProposalEnabled: data.reply_proposal_enabled !== false,
+        // Null unless this thread has a timer armed right now.
+        autoSendDueAt: data.auto_send?.due_at ?? null,
       };
     },
   });
@@ -120,6 +125,7 @@ export default function ConversationPage() {
   const proposedTasks = threadQuery.data?.proposedTasks ?? EMPTY_PROPOSED_TASKS;
   const proposedKnowledge = threadQuery.data?.proposedKnowledge ?? EMPTY_PROPOSED_KNOWLEDGE;
   const replyProposalEnabled = threadQuery.data?.replyProposalEnabled ?? true;
+  const autoSendDueAt = threadQuery.data?.autoSendDueAt ?? null;
   const loading = threadQuery.isLoading;
   const error = threadQuery.isError;
 
@@ -355,6 +361,7 @@ export default function ConversationPage() {
             proposedReplyDeclinedMessageId={
               conversation?.proposed_reply_declined_message_id ?? null
             }
+            autoSendDueAt={autoSendDueAt}
             replyProposalEnabled={replyProposalEnabled}
             conciergeEnabled={conversation?.concierge_enabled ?? true}
             onSendMessage={sendMessage}
@@ -423,6 +430,7 @@ export default function ConversationPage() {
           proposedReplySources={conversation?.proposed_reply_sources ?? null}
           proposedReplyAnswersMessageId={conversation?.proposed_reply_answers_message_id ?? null}
           proposedReplyDeclinedMessageId={conversation?.proposed_reply_declined_message_id ?? null}
+          autoSendDueAt={autoSendDueAt}
           replyProposalEnabled={replyProposalEnabled}
           conciergeEnabled={conversation?.concierge_enabled ?? true}
           onSendMessage={sendMessage}

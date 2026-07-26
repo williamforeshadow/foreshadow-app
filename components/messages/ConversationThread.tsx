@@ -82,6 +82,7 @@ export function ConversationThread({
   proposedReplySources = null,
   proposedReplyAnswersMessageId = null,
   proposedReplyDeclinedMessageId = null,
+  autoSendDueAt = null,
   replyProposalEnabled = true,
   conciergeEnabled = true,
   onSendMessage,
@@ -124,6 +125,11 @@ export function ConversationThread({
   onSendMessage?: (text: string) => Promise<boolean>;
   onProposedReplyChange?: () => void;
   /** The conversation's pending proposed tasks (multiple can coexist). */
+  /**
+   * When this thread's armed auto-send fires, ISO — null when nothing is armed.
+   * Passed straight through to the proposal bubble's countdown.
+   */
+  autoSendDueAt?: string | null;
   proposedTasks?: ProposedTaskData[];
   onProposedTaskChange?: () => void;
   /** Open the full task editor for a proposal (rendered at the page level). */
@@ -507,6 +513,7 @@ export function ConversationThread({
                   sources={proposedReplySources}
                   stale={proposalStale}
                   declined={proposalDeclined}
+                  autoSendDueAt={autoSendDueAt}
                   onEdit={handleEditProposed}
                   onSend={onSendMessage}
                   onChanged={onProposedReplyChange}

@@ -1,24 +1,38 @@
-import { NextResponse, after } from 'next/server';
+import { NextResponse } from 'next/server';
 import { requireAuthContext } from '@/lib/requireAuthContext';
-import { getHostawayCredsForOrg } from '@/lib/pmsIntegrations';
-import { sendHostawayMessage } from '@/lib/hostaway';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { ingestConversation } from '@/src/server/messages/ingest';
-import { hostawayDateToUtcIso } from '@/lib/messages';
-import { canonicalChannelKey } from '@/lib/bookingChannel';
+import {
+  sendGuestMessage,
+  type SendFailureCode,
+} from '@/src/server/messages/sendGuestMessage';
+import { cancelAutoSend } from '@/src/server/messages/autoSend';
 
 export const maxDuration = 60;
 
+// HTTP status per failure code. Keeps the wire contract identical to the
+// pre-extraction handler — the send mechanics moved to sendGuestMessage.ts, the
+// status mapping stayed here where it belongs.
+const STATUS_BY_CODE: Record<SendFailureCode, number> = {
+  invalid_body: 400,
+  not_found: 404,
+  unsupported_source: 400,
+  not_linked: 400,
+  no_integration: 400,
+  lookup_failed: 500,
+  send_failed: 502,
+};
+
 // POST /api/messages/[conversationId]/send — send a host reply to the guest
-// through the PMS (Hostaway only for now), then reflect it locally so the thread
-// shows it. Drafting is elsewhere; this is the actual, human-confirmed send.
+// through the PMS. Drafting is elsewhere; this is the actual, human-confirmed
+// send. The mechanics live in sendGuestMessage() so the auto-send cron reaches
+// the guest by the exact same path; this route is the human half — session auth,
+// RLS authorization, and HTTP shape.
 export async function POST(
   request: Request,
   context: { params: Promise<{ conversationId: string }> },
 ) {
   const ctx = await requireAuthContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase } = ctx;
+  const { supabase, appUser } = ctx;
 
   const { conversationId } = await context.params;
 
@@ -34,12 +48,11 @@ export async function POST(
   }
 
   // Authorize via the RLS-governed user client — another org's id reads as
-  // absent (404). The send + local reflection then run on the service client.
+  // absent (404). The send itself then runs on the service client inside
+  // sendGuestMessage.
   const { data: conv, error: convErr } = await supabase
     .from('conversations')
-    .select(
-      'id, source, external_conversation_id, org_id, channel, guest_name, property_name, reservation_id',
-    )
+    .select('id')
     .eq('id', conversationId)
     .maybeSingle();
   if (convErr) {
@@ -48,100 +61,25 @@ export async function POST(
   if (!conv) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
-  const c = conv as {
-    id: string;
-    source: string | null;
-    external_conversation_id: string | null;
-    org_id: string | null;
-    channel: string | null;
-    guest_name: string | null;
-    property_name: string | null;
-    reservation_id: string | null;
-  };
 
-  // Hostaway-only for now; Hospitable send is a fast-follow.
-  if (c.source !== 'hostaway') {
-    return NextResponse.json(
-      { error: 'Sending is only available for Hostaway conversations right now.' },
-      { status: 400 },
-    );
-  }
-  if (!c.external_conversation_id || !c.org_id) {
-    return NextResponse.json({ error: 'Conversation is not linked to Hostaway.' }, { status: 400 });
-  }
-
-  const creds = await getHostawayCredsForOrg(c.org_id);
-  if (!creds) {
-    return NextResponse.json(
-      { error: 'No Hostaway integration is configured for this conversation.' },
-      { status: 400 },
-    );
-  }
-
-  // Reply through the guest's own gateway: OTA reservations (Airbnb/VRBO/Booking)
-  // send as 'channel'; direct/email guests as 'email'.
-  const communicationType = canonicalChannelKey(c.channel) === 'direct' ? 'email' : 'channel';
-
-  let created: Record<string, unknown>;
-  try {
-    created = await sendHostawayMessage(creds, c.external_conversation_id, text, communicationType);
-  } catch (err) {
-    console.error('[messages send] Hostaway send failed', { conversationId, err });
-    const message = err instanceof Error ? err.message : 'Failed to send the message.';
-    return NextResponse.json({ error: message }, { status: 502 });
-  }
-
-  // Reflect the sent message locally from the send RESPONSE so the id matches
-  // what the next thread re-pull returns (dedupe on org_id,hostaway_message_id).
-  const service = getSupabaseServer();
-  const createdId = created.id != null ? String(created.id) : null;
-  const sentAt =
-    hostawayDateToUtcIso(typeof created.date === 'string' ? created.date : null) ??
-    new Date().toISOString();
-
-  if (createdId) {
-    const { error: insErr } = await service.from('guest_messages').upsert(
-      {
-        org_id: c.org_id,
-        reservation_id: c.reservation_id,
-        conversation_id: c.id,
-        hostaway_conversation_id: c.external_conversation_id,
-        hostaway_message_id: createdId,
-        property_name: c.property_name,
-        guest_name: c.guest_name,
-        direction: 'outbound',
-        // The typed text, not `created.body` — Hostaway echoes an email-gateway
-        // send back as HTML ("<p>...</p>"), which would render as literal tags
-        // until the re-ingest below replaced it. What the operator wrote is
-        // already the plain form of exactly this message.
-        body: text,
-        sent_at: sentAt,
-      },
-      { onConflict: 'org_id,hostaway_message_id' },
-    );
-    if (insErr) console.error('[messages send] local echo insert failed', insErr);
-
-    // Inbox rollup: this sent message is now the latest in the thread.
-    await service
-      .from('conversations')
-      .update({
-        last_message_at: sentAt,
-        last_direction: 'outbound',
-        last_message_preview: text.slice(0, 300),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', c.id);
-  }
-
-  // Re-pull the whole thread off the response path for full correctness
-  // (message_count, any channel-side normalization). Idempotent; dedupes on id.
-  after(async () => {
-    try {
-      await ingestConversation({ creds, orgId: c.org_id! }, c.external_conversation_id!);
-    } catch (err) {
-      console.error('[messages send] post-send re-ingest failed', { conversationId, err });
-    }
+  const result = await sendGuestMessage({
+    conversationId,
+    text,
+    actor: { type: 'human', userId: appUser.id },
   });
 
-  return NextResponse.json({ ok: true, message_id: createdId, sent_at: sentAt });
+  if (!result.ok) {
+    return NextResponse.json({ error: result.message }, { status: STATUS_BY_CODE[result.code] });
+  }
+
+  // A human just answered this thread, so any armed auto-send is moot — the
+  // reply it was going to send has been superseded by this one. Best-effort:
+  // never fail a delivered send on bookkeeping.
+  try {
+    await cancelAutoSend(conversationId, 'human_sent');
+  } catch (err) {
+    console.error('[messages send] auto-send cancel failed', { conversationId, err });
+  }
+
+  return NextResponse.json({ ok: true, message_id: result.messageId, sent_at: result.sentAt });
 }
