@@ -87,7 +87,7 @@ async function runStructuring(userContent: string): Promise<
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: STRUCTURE_MAX_TOKENS,
-    temperature: 0,
+    thinking: { type: 'disabled' },
     system: SYSTEM_PROMPT,
     messages,
   });

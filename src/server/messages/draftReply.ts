@@ -60,9 +60,12 @@ const MAX_DRAFT_ITERATIONS = 6;
 // human-confirmed step that doesn't exist yet.
 //
 // Voice lives here (not in the main ops agent's system prompt) so the agent
-// stays terse/internal while guest-facing prose is warm. Temperature stays 0 —
-// warmth comes from instruction, not sampling randomness (higher temp has been
-// a reliable source of confabulation in this codebase).
+// stays terse/internal while guest-facing prose is warm. Warmth comes from
+// instruction, not sampling: this model rejects non-default sampling parameters,
+// so the temperature 0 this path used to pin is gone and can't be restored.
+// Grounding now rests entirely on the rules in SYSTEM_PROMPT. Thinking is pinned
+// off to match the previous model (omitting it would run adaptive thinking, which
+// shares the DRAFT_MAX_TOKENS budget with the reply itself and would truncate it).
 
 const DRAFT_MAX_TOKENS = 700; // headroom for a tool-call turn + the final reply
 const MAX_THREAD_MESSAGES = 30; // recent context is enough; threads are short
@@ -443,7 +446,7 @@ export async function generateGuestReplyDraftFromContext(
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: DRAFT_MAX_TOKENS,
-      temperature: 0,
+      thinking: { type: 'disabled' },
       system: systemBlocks,
       tools,
       messages: conversation,

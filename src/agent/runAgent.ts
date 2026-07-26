@@ -60,11 +60,13 @@ export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set([
 // find_tasks call) never get truncated mid-enumeration. Truncation pushes the
 // model toward summarizing/inferring instead of citing what it received.
 const MAX_TOKENS = 2048;
-// Deterministic decoding for ops data. Anthropic defaults to 1.0 which is
-// far too creative for tool-grounded answers and a major contributor to
-// confabulation. We want the model to reproduce tool output verbatim, not
-// remix it.
-const TEMPERATURE = 0;
+// NOTE: this model rejects non-default sampling parameters, so the temperature 0
+// we relied on for tool-grounded answers is gone and cannot be restored. Grounding
+// now rests entirely on the prompt's identifier/linking rules and on the write-claim
+// backstop. Thinking is pinned off to match the previous model's behavior (this
+// model runs adaptive thinking when the parameter is omitted, which would also eat
+// into MAX_TOKENS); turn it on deliberately, with a raised budget, if tool
+// selection needs the help.
 // Hard ceiling on iterations. A well-behaved tool catalog should never need
 // more than 3-4 round-trips for a single user question; this is a safety net.
 const MAX_ITERATIONS = 10;
@@ -368,7 +370,7 @@ export async function runAgent({
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS,
-      temperature: TEMPERATURE,
+      thinking: { type: 'disabled' },
       system: systemPrompt,
       tools: toAnthropicTools(),
       messages: conversation,

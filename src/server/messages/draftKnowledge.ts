@@ -25,7 +25,7 @@ import type { GuestMessageRecord } from '@/lib/messages';
 // compounds: an accepted, guest-visible
 // fact later informs the concierge's replies.
 //
-// Single structured call, temp 0. Domain-agnostic; what qualifies is judged from
+// Single structured call, thinking off. Domain-agnostic; what qualifies is judged from
 // the conversation, not assumptions.
 
 const TRIAGE_MAX_TOKENS = 900;
@@ -447,7 +447,7 @@ export async function generateProposedKnowledgeFromContext(
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: TRIAGE_MAX_TOKENS,
-    temperature: 0,
+    thinking: { type: 'disabled' },
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userParts.join('\n') }],
   });

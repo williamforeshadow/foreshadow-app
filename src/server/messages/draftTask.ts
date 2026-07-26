@@ -38,7 +38,10 @@ import type { GuestMessageRecord } from '@/lib/messages';
 //   - It carries OPS context (the property's department list) the guest-facing
 //     Concierge intentionally lacks, so it can tag a real department_id.
 //
-// Temperature stays 0: we want a conservative, repeatable gate, not creativity.
+// We want a conservative, repeatable gate, not creativity — but this model rejects
+// non-default sampling parameters, so that can no longer be pinned with temperature.
+// The sensitivity ladder and the "return an empty list when unsure" rule carry it
+// instead. Thinking is off so the JSON turn keeps the whole token budget.
 
 const TRIAGE_MAX_TOKENS = 900; // per-turn headroom so the final JSON isn't truncated
 const MAX_THREAD_MESSAGES = 30;
@@ -526,7 +529,7 @@ export async function generateProposedTaskDraftFromContext(
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: TRIAGE_MAX_TOKENS,
-      temperature: 0,
+      thinking: { type: 'disabled' },
       system: systemBlocks,
       tools,
       messages: conversation,

@@ -31,4 +31,4 @@ export function getAnthropic(): Anthropic {
 // Sonnet 4.6 — the production model for tool-grounded ops chat: fast, cheap,
 // tight on instruction-following and structured tool use. Shared so the agent
 // loop and the draft generator stay on the same model.
-export const MODEL = 'claude-sonnet-4-6';
+export const MODEL = 'claude-sonnet-5';

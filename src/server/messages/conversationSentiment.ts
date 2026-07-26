@@ -20,8 +20,9 @@ import type { GuestMessageRecord } from '@/lib/messages';
 //
 // Generated eagerly on the realtime ingest path, keyed by the internal
 // conversation id — so it's PMS-agnostic: any PMS whose ingest resolves a
-// canonical conversation id gets it for free. Temperature 0: a stable read of
-// the same thread, not a creative one.
+// canonical conversation id gets it for free. We want a stable read of the same
+// thread rather than a creative one; this model rejects non-default sampling
+// parameters, so that now rests on the prompt alone.
 
 export type Sentiment = 'positive' | 'neutral' | 'negative';
 const SENTIMENTS: readonly Sentiment[] = ['positive', 'neutral', 'negative'];
@@ -152,7 +153,7 @@ export async function generateConversationSentimentFromContext(
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: SENTIMENT_MAX_TOKENS,
-    temperature: 0,
+    thinking: { type: 'disabled' },
     system: SYSTEM_PROMPT,
     messages,
   });

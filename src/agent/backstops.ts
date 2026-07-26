@@ -8,11 +8,13 @@ import { WRITE_TOOL_NAMES } from './runAgent';
 // write tool is unambiguously bad.
 //
 // The read-claim mask was removed: it predated `temperature: 0` and the
-// identifier/linking rules, both of which now do the heavy lifting at the
-// model level. In practice the read mask was masking legitimate answers
+// identifier/linking rules. NOTE: temperature 0 is no longer available — the
+// current model rejects non-default sampling parameters — so the identifier/
+// linking rules now carry that load alone. If fabricated read-claims reappear,
+// this is the first place to look. In practice the read mask was masking legitimate answers
 // (formatted enumerations from real tool results, meta-conversation
 // recall from history) more often than it caught fabrication. If we ever
-// see the model fabricate factual lists without tool calls at temp 0,
+// see the model fabricate factual lists without tool calls,
 // we'll add a tighter, evidence-driven defense back here — but the
 // catch-all heuristic was over-engineering.
 
