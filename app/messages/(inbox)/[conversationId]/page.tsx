@@ -119,6 +119,11 @@ export default function ConversationPage() {
         autoSendDueAt: data.auto_send?.due_at ?? null,
       };
     },
+    // An open thread is the one place staleness is most visible — a reply sent
+    // from the Hostaway app now reaches the database within a minute, so the
+    // window that would otherwise show a stale thread indefinitely (staleTime +
+    // window-focus refetch only) is closed on the same order.
+    refetchInterval: 15_000,
   });
   const conversation = threadQuery.data?.conversation;
   const messages = threadQuery.data?.messages ?? EMPTY_MESSAGES;

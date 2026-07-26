@@ -9,8 +9,12 @@
       "schedule": "30 */3 * * *"
     },
     {
+      "path": "/api/hostaway/messages/poll",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/hostaway/messages/backfill",
-      "schedule": "*/30 * * * *"
+      "schedule": "15 * * * *"
     },
     {
       "path": "/api/hospitable/sync",

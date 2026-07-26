@@ -4,7 +4,11 @@ import {
   fetchConversationMessages,
   fetchConversationsList,
 } from '@/lib/hostaway';
-import { mapHostawayMessagePayload, type RawGuestMessage } from '@/lib/messages';
+import {
+  hostawayDateToUtcIso,
+  mapHostawayMessagePayload,
+  type RawGuestMessage,
+} from '@/lib/messages';
 import { captureMessageAttachments } from '@/src/server/messages/attachments';
 import { getMapper } from '@/src/server/messages/pms';
 import { maybeGenerateSentimentForConversation } from '@/src/server/messages/conversationSentiment';
@@ -220,6 +224,12 @@ export async function ingestConversation(
         app_status: appStatus,
         unread,
         source_status_raw: rawStatus,
+        // PMS-side activity markers, mirrored so the outbound poll can diff this
+        // thread without pulling it. Written on EVERY ingest path (webhook,
+        // poll, backfill, post-send) so the marker can never drift behind what
+        // we've actually stored and re-trigger an ingest we already did.
+        external_last_sent_at: hostawayDateToUtcIso(str(conv?.messageSentOn)),
+        external_last_received_at: hostawayDateToUtcIso(str(conv?.messageReceivedOn)),
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'org_id,source,external_conversation_id' },
