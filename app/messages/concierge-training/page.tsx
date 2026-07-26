@@ -389,24 +389,24 @@ function ContextLoadBar({
     moderate: {
       label: 'Moderate',
       bar: 'bg-amber-500',
-      advice: 'Getting fuller \u2014 consider moving rarely-used blocks to \u201Con demand\u201D.',
+      advice: 'Getting fuller — consider moving rarely-used blocks to “on demand”.',
     },
     heavy: {
       label: 'Heavy',
       bar: 'bg-[var(--destructive)]',
       advice:
-        'A lot of standing instruction. Audit for overlap, trim, or move rarely-used blocks to \u201Con demand\u201D.',
+        'A lot of standing instruction. Audit for overlap, trim, or move rarely-used blocks to “on demand”.',
     },
   } as const;
   const meta = META[level];
   return (
     <div className="msg-well space-y-2 rounded-xl p-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-medium text-foreground">Context load \u00B7 {meta.label}</p>
+        <p className="text-sm font-medium text-foreground">Context load · {meta.label}</p>
         <span className="text-xs tabular-nums text-muted-foreground">
           {load.total_tokens.toLocaleString()} always-on tokens
           {load.situational_count > 0
-            ? ` \u00B7 ${load.situational_count} on demand (${load.index_tokens.toLocaleString()})`
+            ? ` · ${load.situational_count} on demand (${load.index_tokens.toLocaleString()})`
             : ''}
         </span>
       </div>
