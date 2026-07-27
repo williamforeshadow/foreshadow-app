@@ -41,7 +41,7 @@ function StatusChip({
   const pill = (interactive: boolean) => (
     <button
       type="button"
-      className="flex h-[30px] shrink-0 items-center gap-1.5 rounded-lg px-[11px] font-mono text-[11px] transition-transform active:scale-95"
+      className="flex h-[var(--task-ctl-h)] shrink-0 items-center gap-1.5 rounded-lg px-[11px] font-mono text-[length:var(--task-fs-chip)] transition-transform active:scale-95"
       style={{ background: 'var(--task-surface-2)', cursor: interactive ? 'pointer' : 'default' }}
     >
       <Icon size={13} className={colorCls} />
@@ -119,7 +119,7 @@ const Chip = React.forwardRef<
       type="button"
       disabled={disabled}
       {...rest}
-      className={`flex h-[30px] ${flexible && set ? 'min-w-[3.5rem]' : 'shrink-0'} items-center gap-1.5 rounded-lg px-[11px] font-mono text-[11px] transition-transform active:scale-95 disabled:active:scale-100`}
+      className={`flex h-[var(--task-ctl-h)] ${flexible && set ? 'min-w-[3.5rem]' : 'shrink-0'} items-center gap-1.5 rounded-lg px-[11px] font-mono text-[length:var(--task-fs-chip)] transition-transform active:scale-95 disabled:active:scale-100`}
       style={{
         background: set ? 'var(--task-surface-2)' : 'transparent',
         border: `1px ${set ? 'solid transparent' : 'dashed var(--task-line)'}`,
@@ -132,7 +132,7 @@ const Chip = React.forwardRef<
       {/* Unset pills collapse to the icon alone (dashed placeholder); only a
           chosen value — or a labeled meta row — shows a label. */}
       {(set || forceLabel) && (
-        <span className={flexible ? 'truncate' : 'max-w-[130px] truncate'}>{children}</span>
+        <span className={flexible ? 'truncate' : 'max-w-[130px] truncate md:max-w-[165px]'}>{children}</span>
       )}
       {locked && (
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" opacity={0.6}>
@@ -280,8 +280,9 @@ function MetaRow({ label, children }: { label: string; children: React.ReactNode
     <div className="flex items-center justify-between gap-3">
       <MonoLabel className="shrink-0">{label}</MonoLabel>
       {/* Fixed-width value column on the right, left-aligned inside — both pills
-          share one left edge (first letters flush) and grow rightward. */}
-      <div className="flex w-[180px] shrink-0 justify-start">{children}</div>
+          share one left edge (first letters flush) and grow rightward. Wider on
+          desktop, where the chip text is a step up the scale. */}
+      <div className="flex w-[180px] shrink-0 justify-start md:w-[215px]">{children}</div>
     </div>
   );
 }
@@ -436,7 +437,7 @@ export function StepsSection({
         </svg>
       </div>
       {templateName && (
-        <div className="mt-1.5 truncate text-[13px]" style={{ color: 'var(--task-ink-2)' }}>
+        <div className="mt-1.5 truncate text-[length:var(--task-fs-body-sm)]" style={{ color: 'var(--task-ink-2)' }}>
           {templateName}
         </div>
       )}
@@ -477,7 +478,7 @@ export function CrewSection({
         {assigned.map((u, i) => (
           <div
             key={u.id}
-            className="flex h-7 w-7 items-center justify-center rounded-full font-mono text-[10px] font-medium"
+            className="flex h-7 w-7 items-center justify-center rounded-full font-mono text-[10px] font-medium md:h-8 md:w-8 md:text-[11px]"
             style={{
               marginLeft: i ? -8 : 0,
               background: AVATAR_TONES[i % AVATAR_TONES.length],
@@ -497,7 +498,7 @@ export function CrewSection({
               <button
                 type="button"
                 aria-label="Edit assignees"
-                className="flex h-7 w-7 items-center justify-center rounded-full transition-transform active:scale-95"
+                className="flex h-7 w-7 items-center justify-center rounded-full transition-transform active:scale-95 md:h-8 md:w-8"
                 style={{
                   marginLeft: assigned.length ? -8 : 0,
                   background: 'var(--task-surface-0)',
@@ -531,7 +532,7 @@ export function CrewSection({
           </AdaptivePicker>
         )}
         {assigned.length > 0 && (
-          <span className="ml-3 font-mono text-[11px]" style={{ color: 'var(--task-ink-3)' }}>
+          <span className="ml-3 font-mono text-[length:var(--task-fs-meta)]" style={{ color: 'var(--task-ink-3)' }}>
             {assigned.map((u) => u.name.split(' ')[0]).join(' · ')}
           </span>
         )}
@@ -591,7 +592,7 @@ export function AttachmentsSection({
                     <path d="M7 3h7l5 5v13H7z" />
                     <path d="M14 3v5h5" />
                   </svg>
-                  <span className="max-w-full truncate font-mono text-[9px] tracking-[0.06em]">
+                  <span className="max-w-full truncate font-mono text-[9px] tracking-[0.06em] md:text-[10px]">
                     {a.file_name?.split('.').pop()?.toUpperCase() || 'FILE'}
                   </span>
                 </span>
@@ -606,7 +607,7 @@ export function AttachmentsSection({
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={uploading}
-            className="flex h-[52px] w-full items-center justify-center gap-2 rounded-[10px] font-mono text-[11.5px] tracking-[0.04em] transition-transform active:scale-[0.99] disabled:opacity-50"
+            className="flex h-[52px] w-full items-center justify-center gap-2 rounded-[10px] font-mono text-[length:var(--task-fs-chip)] tracking-[0.04em] transition-transform active:scale-[0.99] disabled:opacity-50"
             style={{ border: '1.5px dashed var(--task-line)', color: 'var(--task-ink-3)' }}
           >
             {/* paperclip — general attachment, not just photos */}

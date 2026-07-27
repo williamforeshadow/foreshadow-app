@@ -49,12 +49,12 @@ export function TimerRail({
       </button>
       <div className="min-w-0 flex-1">
         <div
-          className="font-mono text-[15px] leading-[1.2] tracking-[0.03em]"
+          className="font-mono text-[length:var(--task-fs-timer)] leading-[1.2] tracking-[0.03em]"
           style={{ color: running ? 'var(--task-ink-1)' : 'var(--task-ink-3)' }}
         >
           {formatTime(displaySeconds)}
         </div>
-        <MonoLabel className="mt-0.5 !text-[9px]">{running ? 'Tracking' : 'Paused'}</MonoLabel>
+        <MonoLabel className="mt-0.5 !text-[9px] md:!text-[10.5px]">{running ? 'Tracking' : 'Paused'}</MonoLabel>
       </div>
     </div>
   );
@@ -89,13 +89,13 @@ export function ActionBar({
   onWriteStatus: (s: string) => void;
 }) {
   const ctaBase =
-    'flex-1 h-[46px] rounded-xl font-mono text-[12px] uppercase tracking-[0.1em] transition-all active:scale-[0.98] disabled:opacity-50';
+    'flex-1 h-[46px] rounded-xl font-mono text-[length:var(--task-fs-cta)] uppercase tracking-[0.1em] transition-all active:scale-[0.98] disabled:opacity-50';
 
   let cta: React.ReactNode = null;
   if (isContingent) {
     cta = (
       <div
-        className="flex h-[46px] flex-1 items-center justify-center rounded-xl font-mono text-[11px] uppercase tracking-[0.1em]"
+        className="flex h-[46px] flex-1 items-center justify-center rounded-xl font-mono text-[length:var(--task-fs-chip)] uppercase tracking-[0.1em]"
         style={{ background: 'var(--task-surface-2)', color: 'var(--task-ink-3)' }}
       >
         Awaiting approval
@@ -118,7 +118,7 @@ export function ActionBar({
           <button
             type="button"
             onClick={pause}
-            className="h-[46px] rounded-xl border px-5 font-mono text-[12px] uppercase tracking-[0.1em] transition-all active:scale-[0.98]"
+            className="h-[46px] rounded-xl border px-5 font-mono text-[length:var(--task-fs-cta)] uppercase tracking-[0.1em] transition-all active:scale-[0.98]"
             style={{ background: 'var(--task-surface-2)', borderColor: 'var(--task-line)', color: 'var(--task-ink-2)' }}
           >
             Pause
@@ -145,7 +145,7 @@ export function ActionBar({
           <button
             type="button"
             onClick={complete}
-            className="h-[46px] rounded-xl border px-5 font-mono text-[12px] uppercase tracking-[0.1em] transition-all active:scale-[0.98]"
+            className="h-[46px] rounded-xl border px-5 font-mono text-[length:var(--task-fs-cta)] uppercase tracking-[0.1em] transition-all active:scale-[0.98]"
             style={{ background: 'var(--task-surface-2)', borderColor: 'var(--task-line)', color: 'var(--task-ink-2)' }}
           >
             Complete

@@ -16,7 +16,7 @@ export function MonoLabel({
 }) {
   return (
     <div
-      className={`font-mono text-[10px] uppercase tracking-[0.14em] ${className}`}
+      className={`font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em] ${className}`}
       style={{ color: 'var(--task-ink-3)', ...style }}
     >
       {children}
@@ -88,8 +88,10 @@ export function HeaderBar({
 
 // Editable title (blur-save). Auto-grows up to 3 lines so the full title is
 // visible; past that it scrolls internally.
-const TITLE_LINE_HEIGHT = 26.25; // 21px * 1.25
 const TITLE_MAX_LINES = 3;
+// Font size comes from --task-fs-title (mobile vs desktop), so the max height
+// is measured off the rendered line box rather than a hardcoded constant.
+const TITLE_LINE_HEIGHT_FALLBACK = 26.25;
 
 export function TitleSection({
   title,
@@ -107,11 +109,19 @@ export function TitleSection({
     const el = ref.current;
     if (!el) return;
     el.style.height = 'auto';
-    const max = TITLE_LINE_HEIGHT * TITLE_MAX_LINES;
+    const lineHeight =
+      parseFloat(getComputedStyle(el).lineHeight) || TITLE_LINE_HEIGHT_FALLBACK;
+    const max = lineHeight * TITLE_MAX_LINES;
     el.style.height = `${Math.min(el.scrollHeight, max)}px`;
     el.style.overflowY = el.scrollHeight > max + 1 ? 'auto' : 'hidden';
   }, []);
   useLayoutEffect(resize, [title, resize]);
+  // The title's font size changes across the 768px breakpoint, so re-measure
+  // on viewport resize — the explicit pixel height would otherwise clip.
+  useLayoutEffect(() => {
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, [resize]);
 
   return (
     <textarea
@@ -125,7 +135,7 @@ export function TitleSection({
       onBlur={onTitleBlur}
       readOnly={readOnly}
       placeholder="Task title"
-      className="mt-2 w-full resize-none bg-transparent text-[21px] font-medium leading-[1.25] tracking-[-0.02em] outline-none [scrollbar-width:none]"
+      className="mt-2 w-full resize-none bg-transparent text-[length:var(--task-fs-title)] font-medium leading-[1.25] tracking-[-0.02em] outline-none [scrollbar-width:none]"
       style={{ color: 'var(--task-ink-1)' }}
     />
   );
@@ -153,7 +163,7 @@ export function DescriptionSection({
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        className="mt-1 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] transition-colors hover:text-[var(--task-ink-2)]"
+        className="mt-1 flex items-center gap-2 font-mono text-[length:var(--task-fs-chip)] uppercase tracking-[0.1em] transition-colors hover:text-[var(--task-ink-2)]"
         style={{ color: 'var(--task-ink-3)' }}
       >
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -176,7 +186,7 @@ export function DescriptionSection({
         onBlur={onBlur}
         editable={!readOnly}
         placeholder="Add details…"
-        className="text-[14px]"
+        className="text-[length:var(--task-fs-body)]"
       />
     </div>
   );

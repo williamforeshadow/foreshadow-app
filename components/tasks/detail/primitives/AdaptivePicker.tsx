@@ -59,7 +59,7 @@ export function AdaptivePicker({
         }}
       >
         <div
-          className="px-2.5 pt-1.5 pb-2 font-mono text-[10px] uppercase tracking-[0.14em]"
+          className="px-2.5 pt-1.5 pb-2 font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
           style={{ color: 'var(--task-ink-3)' }}
         >
           {title}

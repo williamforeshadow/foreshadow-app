@@ -78,10 +78,10 @@ export function CommentsView({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-[13px] font-medium" style={{ color: 'var(--task-ink-1)' }}>
+                    <span className="text-[length:var(--task-fs-body-sm)] font-medium" style={{ color: 'var(--task-ink-1)' }}>
                       {c.user_name ?? 'Unknown'}
                     </span>
-                    <span className="font-mono text-[10px]" style={{ color: 'var(--task-ink-3)' }}>
+                    <span className="font-mono text-[length:var(--task-fs-label)]" style={{ color: 'var(--task-ink-3)' }}>
                       {new Date(c.created_at).toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',
@@ -91,7 +91,7 @@ export function CommentsView({
                     </span>
                   </div>
                   <div
-                    className="mt-1 rounded-lg rounded-tl-sm px-3 py-2 text-[14px] leading-relaxed"
+                    className="mt-1 rounded-lg rounded-tl-sm px-3 py-2 text-[length:var(--task-fs-body)] leading-relaxed"
                     style={{ background: 'var(--task-surface-1)', color: 'var(--task-ink-1)' }}
                   >
                     {c.comment_content}
@@ -124,7 +124,7 @@ export function CommentsView({
           }}
           rows={1}
           placeholder="Add a comment…"
-          className="max-h-28 min-h-[46px] flex-1 resize-none rounded-xl border px-3.5 py-3 text-[14px] outline-none"
+          className="max-h-28 min-h-[46px] flex-1 resize-none rounded-xl border px-3.5 py-3 text-[length:var(--task-fs-body)] outline-none"
           style={{
             background: 'var(--task-surface-2)',
             borderColor: 'var(--task-line)',

@@ -33,7 +33,7 @@ export function TaskSheet({
         />
         <SheetTitle asChild>
           <div
-            className="px-[18px] pt-3 pb-3 font-mono text-[10px] uppercase tracking-[0.14em]"
+            className="px-[18px] pt-3 pb-3 font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
             style={{ color: 'var(--task-ink-3)' }}
           >
             {title}

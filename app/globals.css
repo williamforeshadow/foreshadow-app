@@ -206,8 +206,11 @@
    steps). Light values derive from the standard light theme.
    Amber/green here are STATUS SEMANTICS (paused / complete), not accents —
    violet remains the only "live" signal per DESIGN.md.
+   `.panel-form` is an alias for non-task surfaces built from the same
+   primitives (components/ui/panel) — e.g. Configure Automation.
    ========================================================================= */
-.task-detail {
+.task-detail,
+.panel-form {
   --task-surface-0: oklch(0.9774 0.0042 236.4961); /* panel base (card) */
   --task-surface-1: oklch(0.9581 0 0);             /* inset cards (bg) */
   --task-surface-2: oklch(0.9219 0 0);             /* controls / chips */
@@ -223,8 +226,44 @@
   --task-accent-soft: rgba(99, 102, 241, 0.1);
   --task-amber-soft: rgba(180, 83, 9, 0.1);
   --task-green-soft: rgba(4, 120, 87, 0.1);
+
+  /* Type scale. These are the MOBILE reference sizes — a phone is held ~35cm
+     away, so 10px mono labels are legible there. On desktop the same panel is
+     ~65cm away on a much larger surface, where those sizes read as fine print,
+     so the media query below steps the whole scale up (and grows the control
+     heights that hold it) rather than tuning sizes per component. */
+  --task-fs-label: 10px;      /* mono micro-labels (MonoLabel, picker titles) */
+  --task-fs-chip: 11px;       /* pill / chip mono text */
+  --task-fs-meta: 11px;       /* inline mono meta (assignee name list) */
+  --task-fs-body-sm: 13px;    /* secondary body (template name, comment author) */
+  --task-fs-body: 14px;       /* description, comments, inputs */
+  /* Row value text (field rows, picker options). Already comfortable at 15px
+     on both form factors, so the desktop step below leaves it alone. */
+  --task-fs-option: 15px;
+  --task-fs-title: 21px;
+  --task-fs-timer: 15px;
+  --task-fs-cta: 12px;        /* action bar buttons */
+  --task-ctl-h: 30px;         /* chip / pill height */
 }
-.dark .task-detail {
+/* Matches useIsMobile's 768px breakpoint, so the type scale flips on exactly
+   the same viewports that swap the mobile full-screen layout for the desktop
+   card. */
+@media (min-width: 768px) {
+  .task-detail,
+  .panel-form {
+    --task-fs-label: 11.5px;
+    --task-fs-chip: 12.5px;
+    --task-fs-meta: 12px;
+    --task-fs-body-sm: 14px;
+    --task-fs-body: 15px;
+    --task-fs-title: 23px;
+    --task-fs-timer: 17px;
+    --task-fs-cta: 13px;
+    --task-ctl-h: 34px;
+  }
+}
+.dark .task-detail,
+.dark .panel-form {
   --task-surface-0: #131315;
   --task-surface-1: #191919;
   --task-surface-2: #1f1f22;
@@ -240,6 +279,13 @@
   --task-accent-soft: rgba(127, 119, 221, 0.14);
   --task-amber-soft: rgba(217, 158, 74, 0.12);
   --task-green-soft: rgba(74, 217, 145, 0.12);
+}
+/* Native date/time inputs render their own popup + spinner chrome from the
+   UA's color-scheme, not from our tokens. Scoped here (rather than on :root)
+   so the rest of the app's scrollbars/controls are untouched. */
+.dark .task-detail,
+.dark .panel-form {
+  color-scheme: dark;
 }
 
 @theme inline {
