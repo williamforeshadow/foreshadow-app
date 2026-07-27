@@ -16,6 +16,7 @@ import { Field, FieldLabel } from '@/components/ui/field';
 import {
   type AutomationConfig,
   type AutomationPreset,
+  type PropertyTemplateAssignment,
   type User,
   createDefaultAutomationConfig,
 } from '@/lib/types';
@@ -69,8 +70,8 @@ export default function AutomationConfigEditor({
       setTemplateName(templateData.template?.name || 'Unknown Template');
 
       // Find the assignment for this property + template
-      const assignment = (assignmentsData.assignments || []).find(
-        (a: any) => a.property_name === propertyName && a.template_id === templateId
+      const assignment = ((assignmentsData.assignments ?? []) as PropertyTemplateAssignment[]).find(
+        (a) => a.property_name === propertyName && a.template_id === templateId
       );
 
       if (assignment) {
@@ -225,64 +226,84 @@ export default function AutomationConfigEditor({
 
   if (loading) {
     return (
-      <div className="h-screen bg-neutral-50 dark:bg-background flex items-center justify-center">
-        <p className="text-neutral-500">Loading automation configuration...</p>
+      <div className="panel-form flex h-screen items-center justify-center" style={{ background: 'var(--task-surface-0)' }}>
+        <p className="font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]" style={{ color: 'var(--task-ink-3)' }}>
+          Loading automation configuration…
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-neutral-50 dark:bg-background flex flex-col items-center">
-      {/* Scrollable content */}
-      <div
-        style={{ width: '100%', maxWidth: '48rem' }}
-        className="px-8 py-10 flex-1 overflow-y-auto"
-      >
-        <div className="pb-4">
-          <h1 className="text-2xl font-semibold text-neutral-900 dark:text-white">
-            Configure Automation
-          </h1>
+    <div className="panel-form flex h-screen flex-col items-center" style={{ background: 'var(--task-surface-0)' }}>
+      {/* Header — close affordance, centred title, mono context micro-label. */}
+      <div className="w-full shrink-0 border-b" style={{ borderColor: 'var(--task-line-soft)' }}>
+        <div className="mx-auto flex h-14 w-full max-w-[46rem] items-center justify-between gap-3 px-[18px]">
+          <button
+            type="button"
+            onClick={() => router.push('/automations')}
+            className="-ml-2 flex h-9 w-9 items-center justify-center rounded-lg transition-transform active:scale-95"
+            style={{ color: 'var(--task-ink-2)' }}
+            aria-label="Back to Automations"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 5l-7 7 7 7" />
+            </svg>
+          </button>
+          <div className="min-w-0 flex-1 text-center">
+            <div className="truncate text-[length:var(--task-fs-option)] font-medium" style={{ color: 'var(--task-ink-1)' }}>
+              Configure Automation
+            </div>
+            <div
+              className="truncate font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
+              style={{ color: 'var(--task-ink-3)' }}
+            >
+              {propertyName} · {templateName}
+            </div>
+          </div>
+          <div className="h-9 w-9" />
         </div>
-        <div className="pb-2">
-          <p className="text-base text-neutral-500">
-            {propertyName} — {templateName}
-          </p>
-        </div>
-
-        <hr className="border-neutral-200 dark:border-neutral-800 my-6" />
-
-        <div className="pt-4" />
-
-        {automationConfig && (
-          <AutomationConfigForm
-            config={automationConfig}
-            onChange={setAutomationConfig}
-            users={users}
-            presets={presets}
-            isNew={false}
-            onSavePreset={() => setShowPresetDialog(true)}
-          />
-        )}
       </div>
 
-      {/* Bottom bar */}
-      <div className="w-full border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-card flex-shrink-0 flex justify-center">
-        <div
-          style={{ width: '100%', maxWidth: '48rem' }}
-          className="px-8 py-4 flex items-center justify-between"
-        >
+      {/* Scrollable content */}
+      <div className="w-full flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[46rem] pb-6">
+          {automationConfig && (
+            <AutomationConfigForm
+              config={automationConfig}
+              onChange={setAutomationConfig}
+              users={users}
+              presets={presets}
+              isNew={false}
+              onSavePreset={() => setShowPresetDialog(true)}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Action bar */}
+      <div
+        className="w-full shrink-0 border-t"
+        style={{ borderColor: 'var(--task-line-soft)', background: 'var(--task-surface-1)' }}
+      >
+        <div className="mx-auto flex w-full max-w-[46rem] items-center gap-2 px-[18px] py-3">
           <button
+            type="button"
             onClick={() => router.push('/automations')}
-            className="flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
+            className="h-[46px] shrink-0 rounded-xl border px-5 font-mono text-[length:var(--task-fs-cta)] uppercase tracking-[0.1em] transition-all active:scale-[0.98]"
+            style={{ background: 'var(--task-surface-2)', borderColor: 'var(--task-line)', color: 'var(--task-ink-2)' }}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back to Automations
+            Cancel
           </button>
-          <Button size="sm" onClick={saveAutomationConfig} disabled={saving}>
-            {saving ? 'Saving...' : 'Save Configuration'}
-          </Button>
+          <button
+            type="button"
+            onClick={saveAutomationConfig}
+            disabled={saving}
+            className="h-[46px] flex-1 rounded-xl font-mono text-[length:var(--task-fs-cta)] uppercase tracking-[0.1em] transition-all active:scale-[0.98] disabled:opacity-50"
+            style={{ background: 'var(--task-accent)', color: '#fff' }}
+          >
+            {saving ? 'Saving…' : 'Save Configuration'}
+          </button>
         </div>
       </div>
 

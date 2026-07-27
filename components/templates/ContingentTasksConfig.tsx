@@ -1,30 +1,14 @@
 'use client';
 
-import { Input } from '@/components/ui/input';
+import {
+  SectionLabel,
+  SentenceRow,
+  SentenceText,
+  TokenNumber,
+  ToggleRow,
+} from '@/components/ui/panel/PanelForm';
 import type { ContingentTasksConfig as ContingentConfig } from '@/lib/types';
 import InfoTooltip from './InfoTooltip';
-
-// ============================================================================
-// Reusable Toggle (matching AutomationConfigForm style)
-// ============================================================================
-
-function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={onChange}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-        checked ? 'bg-neutral-900 dark:bg-neutral-400' : 'bg-neutral-300 dark:bg-neutral-600'
-      }`}
-    >
-      <span className={`inline-block h-4 w-4 transform rounded-full bg-white dark:bg-card transition-transform ${
-        checked ? 'translate-x-6' : 'translate-x-1'
-      }`} />
-    </button>
-  );
-}
 
 // ============================================================================
 // Props
@@ -37,6 +21,9 @@ interface ContingentTasksConfigProps {
 
 // ============================================================================
 // Component
+//
+// Renders as a labelled band of rows in the parent form's flow (not a card) —
+// see components/ui/panel/PanelForm.
 // ============================================================================
 
 export default function ContingentTasksConfig({ config, onChange }: ContingentTasksConfigProps) {
@@ -45,48 +32,39 @@ export default function ContingentTasksConfig({ config, onChange }: ContingentTa
   };
 
   return (
-    <div className="border rounded-lg p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="font-medium text-sm">Generate as Contingent</div>
-          <InfoTooltip text="Tasks are created as drafts and must be approved before becoming active" />
-        </div>
-        <Toggle checked={config.enabled} onChange={() => update('enabled', !config.enabled)} />
-      </div>
+    <>
+      <SectionLabel>Approval</SectionLabel>
+
+      <ToggleRow
+        label="Generate as Contingent"
+        hint={<InfoTooltip text="Tasks are created as drafts and must be approved before becoming active" />}
+        checked={config.enabled}
+        onChange={() => update('enabled', !config.enabled)}
+      />
 
       {config.enabled && (
         <>
-          <div className="py-3">
-            <hr className="border-neutral-200 dark:border-neutral-800" />
-          </div>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="font-medium text-sm">Auto-Approve</div>
-                <InfoTooltip text="Automatically approve contingent tasks as they approach their scheduled date" />
-              </div>
-              <Toggle
-                checked={config.auto_approve_enabled}
-                onChange={() => update('auto_approve_enabled', !config.auto_approve_enabled)}
-              />
-            </div>
+          <ToggleRow
+            label="Auto-Approve"
+            hint={<InfoTooltip text="Automatically approve contingent tasks as they approach their scheduled date" />}
+            checked={config.auto_approve_enabled}
+            onChange={() => update('auto_approve_enabled', !config.auto_approve_enabled)}
+          />
 
-            {config.auto_approve_enabled && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm text-neutral-600 dark:text-neutral-400">Approve</span>
-                <Input
-                  type="number"
-                  min={0}
-                  value={config.auto_approve_days}
-                  onChange={(e) => update('auto_approve_days', parseInt(e.target.value) || 0)}
-                  className="w-20 h-9"
-                />
-                <span className="text-sm text-neutral-600 dark:text-neutral-400">day(s) before scheduled date</span>
-              </div>
-            )}
-          </div>
+          {config.auto_approve_enabled && (
+            <SentenceRow>
+              <SentenceText>Approve</SentenceText>
+              <TokenNumber
+                ariaLabel="Auto-approve days"
+                min={0}
+                value={config.auto_approve_days}
+                onChange={(next) => update('auto_approve_days', next || 0)}
+              />
+              <SentenceText>day(s) before scheduled date</SentenceText>
+            </SentenceRow>
+          )}
         </>
       )}
-    </div>
+    </>
   );
 }

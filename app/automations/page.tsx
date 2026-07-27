@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import DesktopSidebarShell from '@/components/DesktopSidebarShell';
-import { Button } from '@/components/ui/button';
+import { ChipButton } from '@/components/ui/panel/PanelForm';
 import AutomationsView from '@/components/templates/AutomationsView';
 
 interface Template {
@@ -62,28 +62,23 @@ export default function AutomationsPage() {
 
   return (
     <DesktopSidebarShell>
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Tab bar */}
-        <div className="flex-shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-6 py-4 flex items-center justify-between">
-          <div className="flex gap-2">
-            <Button
-              variant="default"
-              size="sm"
-            >
-              Task Automations
-            </Button>
-            <Button
-              onClick={() => router.push('/automations/new-engine')}
-              variant="outline"
-              size="sm"
-            >
-              Slack Automations
-            </Button>
-          </div>
+      <div className="panel-form flex flex-1 flex-col overflow-hidden" style={{ background: 'var(--task-surface-0)' }}>
+        {/* Tab bar — a real segmented control; the active tab is inert because
+            you are already on it. */}
+        <div
+          className="flex shrink-0 items-center gap-1.5 border-b px-[18px] py-3"
+          style={{ borderColor: 'var(--task-line-soft)' }}
+        >
+          <ChipButton set aria-current="page">
+            Task Automations
+          </ChipButton>
+          <ChipButton set={false} onClick={() => router.push('/automations/new-engine')}>
+            Slack Automations
+          </ChipButton>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-auto p-6">
+        {/* Content — the view owns its own padding and scrolling. */}
+        <div className="flex-1 overflow-hidden">
           <AutomationsView templates={templates} properties={properties} />
         </div>
       </div>

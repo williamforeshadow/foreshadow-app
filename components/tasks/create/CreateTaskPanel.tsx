@@ -16,6 +16,7 @@ import { TaskScheduledDatePicker } from '@/components/windows/projects/TaskSched
 import { TaskScheduledTimePicker } from '@/components/windows/projects/TaskScheduledTimePicker';
 import { AdaptivePicker } from '../detail/primitives/AdaptivePicker';
 import { TaskOptionRow } from '../detail/primitives/TaskSheet';
+import { FieldRow, SectionLabel } from '@/components/ui/panel/PanelForm';
 import { useTaskCreate, type CreatedTaskRow, type TaskCreateSeed } from './useTaskCreate';
 
 // The one create-task interface, used everywhere a task can be made. Unlike
@@ -70,63 +71,6 @@ const ICONS = {
     </svg>
   ),
 };
-
-const CHEVRON = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 6l6 6-6 6" />
-  </svg>
-);
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      className="px-[18px] pb-1.5 pt-4 font-mono text-[10px] uppercase tracking-[0.14em]"
-      style={{ color: 'var(--task-ink-3)' }}
-    >
-      {children}
-    </div>
-  );
-}
-
-/** One list row: leading icon, value (or muted placeholder), trailing chevron.
- *  `asChild` lets a picker own the click via its own trigger. */
-const FieldRow = React.forwardRef<
-  HTMLButtonElement,
-  {
-    icon: React.ReactNode;
-    value?: string | null;
-    placeholder: string;
-    error?: string;
-    chevron?: boolean;
-    children?: React.ReactNode;
-    // `value` here is the row's display text, not the button's HTML value.
-  } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'value'>
->(function FieldRow({ icon, value, placeholder, error, chevron = true, children, ...rest }, ref) {
-  return (
-    <div className="border-b" style={{ borderColor: 'var(--task-line-soft)' }}>
-      <button
-        ref={ref}
-        type="button"
-        {...rest}
-        className="flex w-full items-center gap-3 px-[18px] py-3.5 text-left transition-colors hover:bg-[var(--task-surface-1)] active:bg-[var(--task-surface-2)]"
-      >
-        <span className="shrink-0" style={{ color: error ? '#d97757' : 'var(--task-ink-3)' }}>
-          {error ? ICONS.alert : icon}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[15px]" style={{ color: value ? 'var(--task-ink-1)' : 'var(--task-ink-3)' }}>
-          {value || placeholder}
-        </span>
-        {children}
-        {chevron && <span className="shrink-0" style={{ color: 'var(--task-ink-3)' }}>{CHEVRON}</span>}
-      </button>
-      {error && (
-        <div className="px-[18px] pb-2.5 -mt-1 text-[13px]" style={{ color: '#d97757' }}>
-          {error}
-        </div>
-      )}
-    </div>
-  );
-});
 
 export interface CreateTaskPanelProps {
   seed?: TaskCreateSeed;
@@ -377,7 +321,7 @@ export function CreateTaskPanel({
 
         {/* Priority — options laid out inline so the scale is visible */}
         <div className="border-b px-[18px] py-3" style={{ borderColor: 'var(--task-line-soft)' }}>
-          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em]" style={{ color: 'var(--task-ink-3)' }}>
+          <div className="mb-2 font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]" style={{ color: 'var(--task-ink-3)' }}>
             Priority
           </div>
           <div className="flex gap-1.5">

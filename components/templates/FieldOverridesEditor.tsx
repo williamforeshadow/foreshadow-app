@@ -1,25 +1,30 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { AdaptivePicker } from '@/components/tasks/detail/primitives/AdaptivePicker';
+import { TaskOptionRow } from '@/components/tasks/detail/primitives/TaskSheet';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  ChipButton,
+  FieldRow,
+  InlineEditText,
+  MetaChip,
+  RowIconButton,
+  SectionLabel,
+  ToggleSwitch,
+} from '@/components/ui/panel/PanelForm';
 import type { FieldOverrides, FieldOverrideEntry, FieldModification } from '@/lib/types';
+import {
+  FieldTypeGlyph,
+  FIELD_TYPE_OPTIONS,
+  fieldTypeShortLabel,
+  type FieldType,
+} from './FieldTypeGlyph';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-type FieldType = 'rating' | 'yes-no' | 'text' | 'checkbox' | 'photo' | 'photos' | 'separator';
-
-interface BaseField {
+export interface BaseField {
   id: string;
   type: FieldType;
   label: string;
@@ -35,15 +40,101 @@ interface FieldOverridesEditorProps {
   onChange: (overrides: FieldOverrides) => void;
 }
 
-const FIELD_TYPE_OPTIONS: { value: FieldType; label: string }[] = [
-  { value: 'rating', label: 'Rating (1-5)' },
-  { value: 'yes-no', label: 'Yes/No' },
-  { value: 'text', label: 'Text' },
-  { value: 'checkbox', label: 'Checkbox' },
-  { value: 'photo', label: 'Photo (Single)' },
-  { value: 'photos', label: 'Photos (Multiple)' },
-  { value: 'separator', label: 'Section Separator' },
-];
+const ICONS = {
+  plus: (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  ),
+  reset: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 12a8 8 0 1 0 2.5-5.8" /><path d="M4 4v4h4" />
+    </svg>
+  ),
+  trash: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l.9 12.1A2 2 0 008.9 21h6.2a2 2 0 002-1.9L18 7" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  ),
+};
+
+const ROW_CLASS = 'flex items-center gap-2.5 border-b px-[18px] py-2.5';
+
+// ============================================================================
+// One property-specific field (own picker state, so it lives in its own row)
+// ============================================================================
+
+function AdditionalFieldRow({
+  field,
+  index,
+  onUpdate,
+  onRemove,
+}: {
+  field: FieldOverrideEntry;
+  index: number;
+  onUpdate: (index: number, updates: Partial<FieldOverrideEntry>) => void;
+  onRemove: (index: number) => void;
+}) {
+  const [typeOpen, setTypeOpen] = useState(false);
+
+  return (
+    <div className={ROW_CLASS} style={{ borderColor: 'var(--task-line-soft)' }}>
+      <span className="shrink-0" style={{ color: 'var(--task-ink-3)' }}>
+        <FieldTypeGlyph type={field.type as FieldType} />
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <InlineEditText
+          value={field.label}
+          placeholder="Field label"
+          ariaLabel={`Rename ${field.label || 'field'}`}
+          onChange={(next) => onUpdate(index, { label: next })}
+        />
+      </div>
+
+      <AdaptivePicker
+        open={typeOpen}
+        onOpenChange={setTypeOpen}
+        title="Field type"
+        align="end"
+        trigger={
+          <ChipButton set aria-label="Field type">
+            {fieldTypeShortLabel(field.type as FieldType)}
+          </ChipButton>
+        }
+      >
+        {FIELD_TYPE_OPTIONS.map((opt) => (
+          <TaskOptionRow
+            key={opt.value}
+            selected={opt.value === field.type}
+            onSelect={() => {
+              onUpdate(index, { type: opt.value });
+              setTypeOpen(false);
+            }}
+            leading={<FieldTypeGlyph type={opt.value} size={16} />}
+          >
+            {opt.label}
+          </TaskOptionRow>
+        ))}
+      </AdaptivePicker>
+
+      {field.type !== 'separator' && (
+        <ChipButton
+          set={field.required}
+          onClick={() => onUpdate(index, { required: !field.required })}
+          aria-label={field.required ? 'Required' : 'Optional'}
+        >
+          {field.required ? 'Required' : 'Optional'}
+        </ChipButton>
+      )}
+
+      <RowIconButton danger label="Delete field" onClick={() => onRemove(index)}>
+        {ICONS.trash}
+      </RowIconButton>
+    </div>
+  );
+}
 
 // ============================================================================
 // Component
@@ -64,6 +155,7 @@ export default function FieldOverridesEditor({
   const [additionalFields, setAdditionalFields] = useState<FieldOverrideEntry[]>(
     overrides?.additional_fields ?? []
   );
+  const [addOpen, setAddOpen] = useState(false);
 
   // Sync local state back to parent whenever anything changes
   useEffect(() => {
@@ -153,194 +245,123 @@ export default function FieldOverridesEditor({
     Object.keys(modifications).length > 0 ||
     additionalFields.length > 0;
 
+  const summary = [
+    removedIds.size > 0 ? `${removedIds.size} hidden` : null,
+    Object.keys(modifications).length > 0 ? `${Object.keys(modifications).length} edited` : null,
+    additionalFields.length > 0 ? `${additionalFields.length} added` : null,
+  ].filter(Boolean);
+
   return (
-    <div className="space-y-6">
+    <>
       {/* ── Base Template Fields ── */}
-      <div>
-        <h4 className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">
-          Base Template Fields
-        </h4>
-        <p className="text-xs text-neutral-500 mb-3">
-          Toggle fields off to hide them for this property, or click the label to rename it.
-        </p>
-
-        <div className="space-y-2">
-          {baseFields.map((field) => {
-            const isRemoved = removedIds.has(field.id);
-            const mod = modifications[field.id];
-            const displayLabel = mod?.label ?? field.label;
-            const isModified = !!mod;
-
-            return (
-              <div
-                key={field.id}
-                className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
-                  isRemoved
-                    ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800 opacity-60'
-                    : isModified
-                    ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800'
-                    : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
-                }`}
-              >
-                {/* Toggle visibility */}
-                <button
-                  type="button"
-                  onClick={() => toggleRemoveField(field.id)}
-                  className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                    isRemoved
-                      ? 'border-red-400 bg-red-100 dark:bg-red-900'
-                      : 'border-emerald-400 bg-emerald-100 dark:bg-emerald-900'
-                  }`}
-                  title={isRemoved ? 'Re-enable this field' : 'Hide this field for this property'}
-                >
-                  {!isRemoved && (
-                    <svg className="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                  {isRemoved && (
-                    <svg className="w-3 h-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  )}
-                </button>
-
-                {/* Field info & editable label */}
-                <div className="flex-1 min-w-0">
-                  {!isRemoved ? (
-                    <Input
-                      value={displayLabel}
-                      onChange={(e) => updateModification(field.id, 'label', e.target.value)}
-                      className="h-8 text-sm"
-                      placeholder={field.label}
-                    />
-                  ) : (
-                    <span className="text-sm line-through text-neutral-400">{field.label}</span>
-                  )}
-                </div>
-
-                {/* Type badge */}
-                <Badge variant="outline" className="text-xs shrink-0">
-                  {field.type}
-                </Badge>
-
-                {/* Reset button for modified fields */}
-                {isModified && !isRemoved && (
-                  <button
-                    type="button"
-                    onClick={() => clearModification(field.id)}
-                    className="text-xs text-amber-600 hover:text-amber-700 shrink-0"
-                    title="Reset to base template value"
-                  >
-                    Reset
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
+      <SectionLabel>Base template fields</SectionLabel>
+      <div
+        className="px-[18px] pb-2 text-[length:var(--task-fs-body-sm)]"
+        style={{ color: 'var(--task-ink-3)' }}
+      >
+        Toggle fields off to hide them for this property, or click the label to rename it.
       </div>
+
+      {baseFields.map((field) => {
+        const isRemoved = removedIds.has(field.id);
+        const mod = modifications[field.id];
+        const displayLabel = mod?.label ?? field.label;
+        const isModified = !!mod;
+
+        return (
+          <div key={field.id} className={ROW_CLASS} style={{ borderColor: 'var(--task-line-soft)' }}>
+            <span className="shrink-0" style={{ color: 'var(--task-ink-3)' }}>
+              <FieldTypeGlyph type={field.type} />
+            </span>
+
+            {/* Field label — struck through when hidden, renameable otherwise */}
+            <div className="min-w-0 flex-1">
+              {isRemoved ? (
+                <span
+                  className="block truncate px-1 py-0.5 text-[length:var(--task-fs-option)] line-through"
+                  style={{ color: 'var(--task-ink-3)' }}
+                >
+                  {field.label}
+                </span>
+              ) : (
+                <InlineEditText
+                  value={displayLabel}
+                  placeholder={field.label}
+                  ariaLabel={`Rename ${field.label}`}
+                  onChange={(next) => updateModification(field.id, 'label', next)}
+                />
+              )}
+            </div>
+
+            {isModified && !isRemoved && (
+              <>
+                <MetaChip tone="accent">Edited</MetaChip>
+                <RowIconButton
+                  label="Reset to base template value"
+                  onClick={() => clearModification(field.id)}
+                >
+                  {ICONS.reset}
+                </RowIconButton>
+              </>
+            )}
+
+            {/* The leading glyph already carries the type, so the label chip
+                yields its width to long field names on narrow screens. */}
+            <MetaChip className="hidden sm:flex">{fieldTypeShortLabel(field.type)}</MetaChip>
+
+            <ToggleSwitch
+              checked={!isRemoved}
+              onChange={() => toggleRemoveField(field.id)}
+              label={isRemoved ? 'Re-enable this field' : 'Hide this field for this property'}
+            />
+          </div>
+        );
+      })}
 
       {/* ── Additional Fields (property-specific) ── */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h4 className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-            Additional Fields for this Property
-          </h4>
-        </div>
+      <SectionLabel>Additional fields</SectionLabel>
 
-        {additionalFields.length > 0 && (
-          <div className="space-y-2 mb-3">
-            {additionalFields.map((field, index) => (
-              <div
-                key={field.id}
-                className="flex items-center gap-3 p-3 rounded-lg border bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700"
-              >
-                {/* Label input */}
-                <div className="flex-1 min-w-0">
-                  <Input
-                    value={field.label}
-                    onChange={(e) => updateAdditionalField(index, { label: e.target.value })}
-                    className="h-8 text-sm"
-                    placeholder="Field label"
-                  />
-                </div>
+      {additionalFields.map((field, index) => (
+        <AdditionalFieldRow
+          key={field.id}
+          field={field}
+          index={index}
+          onUpdate={updateAdditionalField}
+          onRemove={removeAdditionalField}
+        />
+      ))}
 
-                {/* Type selector */}
-                <Select
-                  value={field.type}
-                  onValueChange={(value) => updateAdditionalField(index, { type: value as FieldType })}
-                >
-                  <SelectTrigger className="w-[140px] h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FIELD_TYPE_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {/* Required toggle */}
-                {field.type !== 'separator' && (
-                  <button
-                    type="button"
-                    onClick={() => updateAdditionalField(index, { required: !field.required })}
-                    className={`text-xs px-2 py-1 rounded border ${
-                      field.required
-                        ? 'bg-red-100 dark:bg-red-900/30 border-red-300 text-red-700'
-                        : 'bg-neutral-100 dark:bg-neutral-800 border-neutral-300 text-neutral-500'
-                    }`}
-                  >
-                    {field.required ? 'Required' : 'Optional'}
-                  </button>
-                )}
-
-                {/* Delete */}
-                <button
-                  type="button"
-                  onClick={() => removeAdditionalField(index)}
-                  className="text-red-500 hover:text-red-700 p-1"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Add field dropdown */}
-        <Select onValueChange={(value) => addField(value as FieldType)}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="+ Add a property-specific field..." />
-          </SelectTrigger>
-          <SelectContent>
-            {FIELD_TYPE_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <AdaptivePicker
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        title="Add field"
+        trigger={
+          <FieldRow icon={ICONS.plus} placeholder="Add a property-specific field" chevron={false} />
+        }
+      >
+        {FIELD_TYPE_OPTIONS.map((opt) => (
+          <TaskOptionRow
+            key={opt.value}
+            onSelect={() => {
+              addField(opt.value);
+              setAddOpen(false);
+            }}
+            leading={<FieldTypeGlyph type={opt.value} size={16} />}
+          >
+            {opt.label}
+          </TaskOptionRow>
+        ))}
+      </AdaptivePicker>
 
       {/* Summary */}
       {hasAnyOverrides && (
-        <div className="text-xs text-neutral-500 p-3 bg-neutral-50 dark:bg-neutral-800 rounded-lg">
-          <span className="font-medium">Summary:</span>{' '}
-          {removedIds.size > 0 && <span>{removedIds.size} field{removedIds.size !== 1 ? 's' : ''} hidden. </span>}
-          {Object.keys(modifications).length > 0 && (
-            <span>{Object.keys(modifications).length} field{Object.keys(modifications).length !== 1 ? 's' : ''} modified. </span>
-          )}
-          {additionalFields.length > 0 && (
-            <span>{additionalFields.length} field{additionalFields.length !== 1 ? 's' : ''} added.</span>
-          )}
+        <div
+          className="px-[18px] py-3 font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
+          style={{ color: 'var(--task-ink-3)' }}
+        >
+          {summary.join(' · ')}
         </div>
       )}
-    </div>
+    </>
   );
 }

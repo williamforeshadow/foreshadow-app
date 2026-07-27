@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
 import {
   type FieldOverrides,
+  type PropertyTemplateAssignment,
   createDefaultFieldOverrides,
 } from '@/lib/types';
-import FieldOverridesEditor from './FieldOverridesEditor';
+import FieldOverridesEditor, { type BaseField } from './FieldOverridesEditor';
 
 interface PropertyFieldsEditorProps {
   propertyName: string;
@@ -21,7 +21,7 @@ export default function PropertyFieldsEditor({
   const router = useRouter();
 
   const [templateName, setTemplateName] = useState<string>('');
-  const [baseTemplateFields, setBaseTemplateFields] = useState<any[]>([]);
+  const [baseTemplateFields, setBaseTemplateFields] = useState<BaseField[]>([]);
   const [fieldOverrides, setFieldOverrides] = useState<FieldOverrides>(createDefaultFieldOverrides());
   const [loading, setLoading] = useState(true);
   const [loadingBaseFields, setLoadingBaseFields] = useState(false);
@@ -49,8 +49,8 @@ export default function PropertyFieldsEditor({
       setBaseTemplateFields(templateData.template?.fields ?? []);
 
       // Find the assignment for this property + template
-      const assignment = (assignmentsData.assignments || []).find(
-        (a: any) => a.property_name === propertyName && a.template_id === templateId
+      const assignment = ((assignmentsData.assignments ?? []) as PropertyTemplateAssignment[]).find(
+        (a) => a.property_name === propertyName && a.template_id === templateId
       );
 
       if (assignment?.field_overrides) {
@@ -104,65 +104,101 @@ export default function PropertyFieldsEditor({
 
   if (loading) {
     return (
-      <div className="h-screen bg-neutral-50 dark:bg-background flex items-center justify-center">
-        <p className="text-neutral-500">Loading template fields...</p>
+      <div className="panel-form flex h-screen items-center justify-center" style={{ background: 'var(--task-surface-0)' }}>
+        <p className="font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]" style={{ color: 'var(--task-ink-3)' }}>
+          Loading template fields…
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-neutral-50 dark:bg-background flex flex-col items-center">
-      {/* Scrollable content */}
-      <div
-        style={{ width: '100%', maxWidth: '48rem' }}
-        className="px-8 py-10 flex-1 overflow-y-auto"
-      >
-        <h1 className="text-2xl font-semibold text-neutral-900 dark:text-white mb-2">
-          Customize Template for this Property
-        </h1>
-        <p className="text-sm text-neutral-500 mb-2">
-          {propertyName} → {templateName}
-        </p>
-        <p className="text-xs text-neutral-400 mb-10">
-          Hide, rename, or add fields specific to this property. Changes here only affect this property — the base template stays the same for all other properties.
-        </p>
-
-        {loadingBaseFields ? (
-          <div className="flex items-center justify-center py-8">
-            <p className="text-neutral-500">Loading template fields...</p>
+    <div className="panel-form flex h-screen flex-col items-center" style={{ background: 'var(--task-surface-0)' }}>
+      {/* Header — matches the automation editors. */}
+      <div className="w-full shrink-0 border-b" style={{ borderColor: 'var(--task-line-soft)' }}>
+        <div className="mx-auto flex h-14 w-full max-w-[46rem] items-center justify-between gap-3 px-[18px]">
+          <button
+            type="button"
+            onClick={() => router.push('/automations')}
+            className="-ml-2 flex h-9 w-9 items-center justify-center rounded-lg transition-transform active:scale-95"
+            style={{ color: 'var(--task-ink-2)' }}
+            aria-label="Back to Automations"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 5l-7 7 7 7" />
+            </svg>
+          </button>
+          <div className="min-w-0 flex-1 text-center">
+            <div className="truncate text-[length:var(--task-fs-option)] font-medium" style={{ color: 'var(--task-ink-1)' }}>
+              Customize Template
+            </div>
+            <div
+              className="truncate font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
+              style={{ color: 'var(--task-ink-3)' }}
+            >
+              {propertyName} · {templateName}
+            </div>
           </div>
-        ) : baseTemplateFields.length === 0 ? (
-          <div className="text-center py-12 border-2 border-dashed border-neutral-300 dark:border-neutral-600 rounded-lg">
-            <p className="text-neutral-500">This template has no fields defined yet.</p>
-            <p className="text-xs text-neutral-400 mt-1">Add fields to the base template first, then customize per-property here.</p>
-          </div>
-        ) : (
-          <FieldOverridesEditor
-            baseFields={baseTemplateFields}
-            overrides={fieldOverrides}
-            onChange={setFieldOverrides}
-          />
-        )}
+          <div className="h-9 w-9" />
+        </div>
       </div>
 
-      {/* Bottom bar */}
-      <div className="w-full border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-card flex-shrink-0 flex justify-center">
-        <div
-          style={{ width: '100%', maxWidth: '48rem' }}
-          className="px-8 py-4 flex items-center justify-between"
-        >
-          <button
-            onClick={() => router.push('/automations')}
-            className="flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
+      {/* Scrollable content */}
+      <div className="w-full flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[46rem] pb-6">
+          <div
+            className="border-b px-[18px] py-3 text-[length:var(--task-fs-body-sm)]"
+            style={{ borderColor: 'var(--task-line-soft)', color: 'var(--task-ink-3)' }}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back to Automations
+            Hide, rename, or add fields specific to this property. Changes here only affect this property — the base template stays the same for all other properties.
+          </div>
+
+          {loadingBaseFields ? (
+            <div className="px-[18px] py-8 text-center font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]" style={{ color: 'var(--task-ink-3)' }}>
+              Loading template fields…
+            </div>
+          ) : baseTemplateFields.length === 0 ? (
+            <div className="px-[18px] py-10 text-center">
+              <p className="text-[length:var(--task-fs-option)]" style={{ color: 'var(--task-ink-2)' }}>
+                This template has no fields defined yet.
+              </p>
+              <p className="mt-1.5 text-[length:var(--task-fs-body-sm)]" style={{ color: 'var(--task-ink-3)' }}>
+                Add fields to the base template first, then customize per-property here.
+              </p>
+            </div>
+          ) : (
+            <FieldOverridesEditor
+              baseFields={baseTemplateFields}
+              overrides={fieldOverrides}
+              onChange={setFieldOverrides}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Action bar */}
+      <div
+        className="w-full shrink-0 border-t"
+        style={{ borderColor: 'var(--task-line-soft)', background: 'var(--task-surface-1)' }}
+      >
+        <div className="mx-auto flex w-full max-w-[46rem] items-center gap-2 px-[18px] py-3">
+          <button
+            type="button"
+            onClick={() => router.push('/automations')}
+            className="h-[46px] shrink-0 rounded-xl border px-5 font-mono text-[length:var(--task-fs-cta)] uppercase tracking-[0.1em] transition-all active:scale-[0.98]"
+            style={{ background: 'var(--task-surface-2)', borderColor: 'var(--task-line)', color: 'var(--task-ink-2)' }}
+          >
+            Cancel
           </button>
-          <Button size="sm" onClick={saveFieldOverrides} disabled={saving}>
-            {saving ? 'Saving...' : 'Save Customizations'}
-          </Button>
+          <button
+            type="button"
+            onClick={saveFieldOverrides}
+            disabled={saving}
+            className="h-[46px] flex-1 rounded-xl font-mono text-[length:var(--task-fs-cta)] uppercase tracking-[0.1em] transition-all active:scale-[0.98] disabled:opacity-50"
+            style={{ background: 'var(--task-accent)', color: '#fff' }}
+          >
+            {saving ? 'Saving…' : 'Save Customizations'}
+          </button>
         </div>
       </div>
     </div>

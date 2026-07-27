@@ -1,20 +1,22 @@
 'use client';
 
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import * as React from 'react';
+import { useState } from 'react';
+import { AdaptivePicker } from '@/components/tasks/detail/primitives/AdaptivePicker';
+import { TaskOptionRow } from '@/components/tasks/detail/primitives/TaskSheet';
 import {
-  Field,
-  FieldDescription,
-  FieldLabel,
-} from '@/components/ui/field';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  FieldRow,
+  PersonRow,
+  SectionLabel,
+  SegmentedRow,
+  SentenceRow,
+  SentenceText,
+  TokenDateTime,
+  TokenNumber,
+  TokenSelect,
+  ToggleRow,
+  personTone,
+} from '@/components/ui/panel/PanelForm';
 import {
   type AutomationConfig,
   type AutomationTriggerType,
@@ -42,24 +44,93 @@ interface AutomationConfigFormProps {
 }
 
 // ============================================================================
-// Reusable Toggle Component
+// Option tables — wording preserved verbatim from the original selects.
 // ============================================================================
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+const TRIGGER_OPTIONS: { value: AutomationTriggerType; label: string }[] = [
+  { value: 'turnover', label: 'Turnover' },
+  { value: 'occupancy', label: 'Occupancy' },
+  { value: 'vacancy', label: 'Vacancy' },
+  { value: 'recurring', label: 'Recurring' },
+];
+
+const SCHEDULE_TYPE_OPTIONS: { value: AutomationScheduleType; label: string }[] = [
+  { value: 'on', label: 'On' },
+  { value: 'before', label: 'Before' },
+  { value: 'after', label: 'After' },
+];
+
+const RELATIVE_TO_OPTIONS: { value: AutomationScheduleRelativeTo; label: string }[] = [
+  { value: 'check_out', label: 'Check-out' },
+  { value: 'next_check_in', label: 'Next Check-in' },
+];
+
+const OPERATOR_OPTIONS: { value: OccupancyDurationOperator; label: string }[] = [
+  { value: 'gte', label: 'greater than or equal to' },
+  { value: 'eq', label: 'equal to' },
+  { value: 'gt', label: 'greater than' },
+  { value: 'lt', label: 'less than' },
+  { value: 'lte', label: 'less than or equal to' },
+  { value: 'between', label: 'between' },
+];
+
+const INTERVAL_UNIT_OPTIONS: { value: RecurringIntervalUnit; label: string }[] = [
+  { value: 'days', label: 'day(s)' },
+  { value: 'weeks', label: 'week(s)' },
+  { value: 'months', label: 'month(s)' },
+  { value: 'years', label: 'year(s)' },
+];
+
+const ICONS = {
+  bookmark: (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 4h12v16l-6-4-6 4z" />
+    </svg>
+  ),
+  stack: (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l9 5-9 5-9-5 9-5z" /><path d="M3 13l9 5 9-5" />
+    </svg>
+  ),
+};
+
+// ============================================================================
+// A choice inside a sentence: chip trigger, picker list with the full labels.
+// ============================================================================
+
+function SelectToken<T extends string>({
+  value,
+  options,
+  onChange,
+  title,
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (next: T) => void;
+  title: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = options.find((o) => o.value === value);
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={onChange}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-        checked ? 'bg-neutral-900 dark:bg-neutral-400' : 'bg-neutral-300 dark:bg-neutral-600'
-      }`}
+    <AdaptivePicker
+      open={open}
+      onOpenChange={setOpen}
+      title={title}
+      trigger={<TokenSelect aria-label={title}>{current?.label ?? value}</TokenSelect>}
     >
-      <span className={`inline-block h-4 w-4 transform rounded-full bg-white dark:bg-card transition-transform ${
-        checked ? 'translate-x-6' : 'translate-x-1'
-      }`} />
-    </button>
+      {options.map((o) => (
+        <TaskOptionRow
+          key={o.value}
+          selected={o.value === value}
+          onSelect={() => {
+            onChange(o.value);
+            setOpen(false);
+          }}
+        >
+          {o.label}
+        </TaskOptionRow>
+      ))}
+    </AdaptivePicker>
   );
 }
 
@@ -77,45 +148,33 @@ function DurationConditionUI({
   onUpdate: (field: string, value: unknown) => void;
 }) {
   return (
-    <div className="flex items-center gap-2 flex-wrap pt-2">
-      <span className="text-sm text-neutral-600 dark:text-neutral-400">If {label} is</span>
-      <Select
+    <SentenceRow>
+      <SentenceText>If {label} is</SentenceText>
+      <SelectToken
+        title="Condition"
         value={condition.operator}
-        onValueChange={(value) => onUpdate('operator', value as OccupancyDurationOperator)}
-      >
-        <SelectTrigger className="w-44 h-9">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="gte">greater than or equal to</SelectItem>
-          <SelectItem value="eq">equal to</SelectItem>
-          <SelectItem value="gt">greater than</SelectItem>
-          <SelectItem value="lt">less than</SelectItem>
-          <SelectItem value="lte">less than or equal to</SelectItem>
-          <SelectItem value="between">between</SelectItem>
-        </SelectContent>
-      </Select>
-      <Input
-        type="number"
+        options={OPERATOR_OPTIONS}
+        onChange={(value) => onUpdate('operator', value)}
+      />
+      <TokenNumber
+        ariaLabel={`${label} days`}
         min={1}
         value={condition.days}
-        onChange={(e) => onUpdate('days', parseInt(e.target.value) || 1)}
-        className="w-20 h-9"
+        onChange={(next) => onUpdate('days', next || 1)}
       />
       {condition.operator === 'between' && (
         <>
-          <span className="text-sm text-neutral-600 dark:text-neutral-400">and</span>
-          <Input
-            type="number"
+          <SentenceText>and</SentenceText>
+          <TokenNumber
+            ariaLabel={`${label} days end`}
             min={1}
             value={condition.days_end || condition.days + 1}
-            onChange={(e) => onUpdate('days_end', parseInt(e.target.value) || 1)}
-            className="w-20 h-9"
+            onChange={(next) => onUpdate('days_end', next || 1)}
           />
         </>
       )}
-      <span className="text-sm text-neutral-600 dark:text-neutral-400">days</span>
-    </div>
+      <SentenceText>days</SentenceText>
+    </SentenceRow>
   );
 }
 
@@ -142,59 +201,51 @@ function PeriodScheduleUI({
   // every auto-generated task must carry a scheduled date for the panel to
   // associate it with a reservation's turnover window.
   return (
-    <div className="border rounded-lg p-4 space-y-4">
-      <div className="flex items-center gap-2">
-        <div className="font-medium text-sm">Schedule</div>
-        <InfoTooltip text={`When tasks are scheduled during the ${label} period`} />
-      </div>
+    <>
+      <SectionLabel>
+        <span className="inline-flex items-center gap-1.5">
+          Schedule
+          <InfoTooltip text={`When tasks are scheduled during the ${label} period`} />
+        </span>
+      </SectionLabel>
 
-      <div className="space-y-4 pt-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm text-neutral-600 dark:text-neutral-400">Schedule task on day</span>
-          <Input
-            type="number"
+      <SentenceRow>
+        <SentenceText>Schedule task on day</SentenceText>
+        <TokenNumber
+          ariaLabel={`Day of ${label}`}
+          min={1}
+          value={schedule.day_of_period}
+          onChange={(next) => onUpdateField('day_of_period', next || 1)}
+        />
+        <SentenceText>of {label} at</SentenceText>
+        <TokenDateTime
+          type="time"
+          ariaLabel={`${label} schedule time`}
+          value={schedule.time || '10:00'}
+          onChange={(next) => onUpdateField('time', next)}
+        />
+      </SentenceRow>
+
+      <ToggleRow
+        label="Repeat Scheduling"
+        hint={<InfoTooltip text={`Create recurring tasks during the ${label}`} />}
+        checked={schedule.repeat.enabled}
+        onChange={() => onUpdateRepeat('enabled', !schedule.repeat.enabled)}
+      />
+
+      {schedule.repeat.enabled && (
+        <SentenceRow>
+          <SentenceText>Repeats every</SentenceText>
+          <TokenNumber
+            ariaLabel="Repeat interval days"
             min={1}
-            value={schedule.day_of_period}
-            onChange={(e) => onUpdateField('day_of_period', parseInt(e.target.value) || 1)}
-            className="w-20 h-9"
+            value={schedule.repeat.interval_days}
+            onChange={(next) => onUpdateRepeat('interval_days', next || 1)}
           />
-          <span className="text-sm text-neutral-600 dark:text-neutral-400">of {label} at</span>
-          <Input
-            type="time"
-            value={schedule.time || '10:00'}
-            onChange={(e) => onUpdateField('time', e.target.value)}
-            className="w-32 h-9"
-          />
-        </div>
-
-        <div className="py-3">
-          <hr className="border-neutral-200 dark:border-neutral-800" />
-        </div>
-        <div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="font-medium text-sm">Repeat Scheduling</div>
-              <InfoTooltip text={`Create recurring tasks during the ${label}`} />
-            </div>
-            <Toggle checked={schedule.repeat.enabled} onChange={() => onUpdateRepeat('enabled', !schedule.repeat.enabled)} />
-          </div>
-
-          {schedule.repeat.enabled && (
-            <div className="flex items-center gap-2 flex-wrap pt-3">
-              <span className="text-sm text-neutral-600 dark:text-neutral-400">Repeats every</span>
-              <Input
-                type="number"
-                min={1}
-                value={schedule.repeat.interval_days}
-                onChange={(e) => onUpdateRepeat('interval_days', parseInt(e.target.value) || 1)}
-                className="w-20 h-9"
-              />
-              <span className="text-sm text-neutral-600 dark:text-neutral-400">day(s)</span>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+          <SentenceText>day(s)</SentenceText>
+        </SentenceRow>
+      )}
+    </>
   );
 }
 
@@ -210,6 +261,8 @@ export default function AutomationConfigForm({
   isNew,
   onSavePreset,
 }: AutomationConfigFormProps) {
+  const [loadPresetOpen, setLoadPresetOpen] = useState(false);
+
   // ---- Generic update helpers ----
   const updateConfig = <K extends keyof AutomationConfig>(key: K, value: AutomationConfig[K]) => {
     onChange({ ...config, [key]: value });
@@ -299,95 +352,66 @@ export default function AutomationConfigForm({
     updateAutoAssign('user_ids', newIds);
   };
 
+  const presetPicker = (
+    <AdaptivePicker
+      open={loadPresetOpen}
+      onOpenChange={setLoadPresetOpen}
+      title="Load preset"
+      align="end"
+      trigger={<FieldRow icon={ICONS.stack} placeholder="Load preset…" />}
+    >
+      {presets.map((preset) => (
+        <TaskOptionRow
+          key={preset.id}
+          selected={preset.id === config.preset_id}
+          onSelect={() => {
+            handleLoadPreset(preset);
+            setLoadPresetOpen(false);
+          }}
+        >
+          {preset.name}
+        </TaskOptionRow>
+      ))}
+    </AdaptivePicker>
+  );
+
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col">
       {/* ================================================================
           Trigger Type
           ================================================================ */}
-      <Field>
-        <FieldLabel>Trigger Type</FieldLabel>
-        <Select
-          value={config.trigger_type}
-          onValueChange={(value) => updateConfig('trigger_type', value as AutomationTriggerType)}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="turnover">Turnover Association</SelectItem>
-            <SelectItem value="occupancy">Occupancy Period</SelectItem>
-            <SelectItem value="vacancy">Vacancy Period</SelectItem>
-            <SelectItem value="recurring">Recurring</SelectItem>
-          </SelectContent>
-        </Select>
-      </Field>
+      <SectionLabel>Trigger</SectionLabel>
+      <SegmentedRow
+        options={TRIGGER_OPTIONS}
+        value={config.trigger_type}
+        onChange={(value) => updateConfig('trigger_type', value)}
+      />
 
       {/* ================================================================
-          Enable Auto-generation — Turnover
+          Enable Auto-generation — all trigger types. Occupancy and vacancy
+          additionally gate on a duration condition.
           ================================================================ */}
-      {config.trigger_type === 'turnover' && (
-        <div className="flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-800 rounded-lg">
-          <div>
-            <div className="font-medium text-sm">Enable Auto-generation</div>
-          </div>
-          <Toggle checked={config.enabled} onChange={() => updateConfig('enabled', !config.enabled)} />
-        </div>
+      <SectionLabel>Activation</SectionLabel>
+      <ToggleRow
+        label="Enable Auto-generation"
+        checked={config.enabled}
+        onChange={() => updateConfig('enabled', !config.enabled)}
+      />
+
+      {config.trigger_type === 'occupancy' && config.enabled && config.occupancy_condition && (
+        <DurationConditionUI
+          label="occupancy period"
+          condition={config.occupancy_condition}
+          onUpdate={updateOccupancyCondition}
+        />
       )}
 
-      {/* ================================================================
-          Enable Auto-generation — Occupancy (with condition)
-          ================================================================ */}
-      {config.trigger_type === 'occupancy' && (
-        <div className="border rounded-lg p-4 space-y-4 bg-neutral-50 dark:bg-neutral-800">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="font-medium text-sm">Enable Auto-generation</div>
-            </div>
-            <Toggle checked={config.enabled} onChange={() => updateConfig('enabled', !config.enabled)} />
-          </div>
-
-          {config.enabled && config.occupancy_condition && (
-            <DurationConditionUI
-              label="occupancy period"
-              condition={config.occupancy_condition}
-              onUpdate={updateOccupancyCondition}
-            />
-          )}
-        </div>
-      )}
-
-      {/* ================================================================
-          Enable Auto-generation — Vacancy (with condition)
-          ================================================================ */}
-      {config.trigger_type === 'vacancy' && (
-        <div className="border rounded-lg p-4 space-y-4 bg-neutral-50 dark:bg-neutral-800">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="font-medium text-sm">Enable Auto-generation</div>
-            </div>
-            <Toggle checked={config.enabled} onChange={() => updateConfig('enabled', !config.enabled)} />
-          </div>
-
-          {config.enabled && config.vacancy_condition && (
-            <DurationConditionUI
-              label="vacancy period"
-              condition={config.vacancy_condition}
-              onUpdate={updateVacancyCondition}
-            />
-          )}
-        </div>
-      )}
-
-      {/* ================================================================
-          Enable Auto-generation — Recurring (with schedule)
-          ================================================================ */}
-      {config.trigger_type === 'recurring' && (
-        <div className="flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-800 rounded-lg">
-          <div>
-            <div className="font-medium text-sm">Enable Auto-generation</div>
-          </div>
-          <Toggle checked={config.enabled} onChange={() => updateConfig('enabled', !config.enabled)} />
-        </div>
+      {config.trigger_type === 'vacancy' && config.enabled && config.vacancy_condition && (
+        <DurationConditionUI
+          label="vacancy period"
+          condition={config.vacancy_condition}
+          onUpdate={updateVacancyCondition}
+        />
       )}
 
       {/* ================================================================
@@ -402,137 +426,101 @@ export default function AutomationConfigForm({
               scheduled_date in the turnover window). The toggle that
               previously gated this block was removed. */}
           {config.trigger_type === 'turnover' && (
-            <div className="border rounded-lg p-4 space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="font-medium text-sm">Schedule</div>
-                <InfoTooltip text="When auto-generated tasks are scheduled relative to the reservation" />
-              </div>
+            <>
+              <SectionLabel>
+                <span className="inline-flex items-center gap-1.5">
+                  Schedule
+                  <InfoTooltip text="When auto-generated tasks are scheduled relative to the reservation" />
+                </span>
+              </SectionLabel>
 
-              <div className="space-y-4 pt-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Select
-                    value={config.schedule.type}
-                    onValueChange={(value) => updateSchedule('type', value as AutomationScheduleType)}
-                  >
-                    <SelectTrigger className="w-32 h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="on">On</SelectItem>
-                      <SelectItem value="before">Before</SelectItem>
-                      <SelectItem value="after">After</SelectItem>
-                    </SelectContent>
-                  </Select>
+              <SentenceRow>
+                <SentenceText>Schedule task</SentenceText>
+                <SelectToken
+                  title="Schedule"
+                  value={config.schedule.type}
+                  options={SCHEDULE_TYPE_OPTIONS}
+                  onChange={(value) => updateSchedule('type', value)}
+                />
 
-                  {config.schedule.type !== 'on' && (
-                    <Input
-                      type="number"
+                {config.schedule.type !== 'on' && (
+                  <>
+                    <TokenNumber
+                      ariaLabel="Days offset"
                       min={0}
                       value={config.schedule.days_offset}
-                      onChange={(e) => updateSchedule('days_offset', parseInt(e.target.value) || 0)}
-                      className="w-20 h-9"
+                      onChange={(next) => updateSchedule('days_offset', next || 0)}
                     />
-                  )}
+                    <SentenceText>day(s)</SentenceText>
+                  </>
+                )}
 
-                  {config.schedule.type !== 'on' && (
-                    <span className="text-sm text-neutral-600 dark:text-neutral-400">day(s)</span>
-                  )}
+                <SelectToken
+                  title="Relative to"
+                  value={config.schedule.relative_to}
+                  options={RELATIVE_TO_OPTIONS}
+                  onChange={(value) => updateSchedule('relative_to', value)}
+                />
 
-                  <Select
-                    value={config.schedule.relative_to}
-                    onValueChange={(value) => updateSchedule('relative_to', value as AutomationScheduleRelativeTo)}
-                  >
-                    <SelectTrigger className="w-40 h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="check_out">Check-out</SelectItem>
-                      <SelectItem value="next_check_in">Next Check-in</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <SentenceText>at</SentenceText>
+                <TokenDateTime
+                  type="time"
+                  ariaLabel="Schedule time"
+                  value={config.schedule.time}
+                  onChange={(next) => updateSchedule('time', next)}
+                />
+              </SentenceRow>
 
-                  <span className="text-sm text-neutral-600 dark:text-neutral-400">at</span>
-                  <Input
-                    type="time"
-                    value={config.schedule.time}
-                    onChange={(e) => updateSchedule('time', e.target.value)}
-                    className="w-32 h-9"
+              {/* Same-day override */}
+              <ToggleRow
+                label="Same-Day Turnover Override"
+                hint={<InfoTooltip text="Different schedule when checkout & next check-in are same day" />}
+                checked={config.same_day_override.enabled}
+                onChange={() => updateConfig('same_day_override', {
+                  ...config.same_day_override,
+                  enabled: !config.same_day_override.enabled,
+                })}
+              />
+
+              {config.same_day_override.enabled && (
+                <SentenceRow>
+                  <SentenceText>Schedule task</SentenceText>
+                  <SelectToken
+                    title="Schedule"
+                    value={config.same_day_override.schedule.type}
+                    options={SCHEDULE_TYPE_OPTIONS}
+                    onChange={(value) => updateSameDaySchedule('type', value)}
                   />
-                </div>
 
-                {/* Same-day override */}
-                <div className="py-3">
-                  <hr className="border-neutral-200 dark:border-neutral-800" />
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="font-medium text-sm">Same-Day Turnover Override</div>
-                      <InfoTooltip text="Different schedule when checkout & next check-in are same day" />
-                    </div>
-                    <Toggle
-                      checked={config.same_day_override.enabled}
-                      onChange={() => updateConfig('same_day_override', {
-                        ...config.same_day_override,
-                        enabled: !config.same_day_override.enabled,
-                      })}
-                    />
-                  </div>
-
-                  {config.same_day_override.enabled && (
-                    <div className="flex items-center gap-2 flex-wrap pt-2">
-                      <Select
-                        value={config.same_day_override.schedule.type}
-                        onValueChange={(value) => updateSameDaySchedule('type', value as AutomationScheduleType)}
-                      >
-                        <SelectTrigger className="w-32 h-9">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="on">On</SelectItem>
-                          <SelectItem value="before">Before</SelectItem>
-                          <SelectItem value="after">After</SelectItem>
-                        </SelectContent>
-                      </Select>
-
-                      {config.same_day_override.schedule.type !== 'on' && (
-                        <>
-                          <Input
-                            type="number"
-                            min={0}
-                            value={config.same_day_override.schedule.days_offset}
-                            onChange={(e) => updateSameDaySchedule('days_offset', parseInt(e.target.value) || 0)}
-                            className="w-20 h-9"
-                          />
-                          <span className="text-sm text-neutral-600 dark:text-neutral-400">day(s)</span>
-                        </>
-                      )}
-
-                      <Select
-                        value={config.same_day_override.schedule.relative_to}
-                        onValueChange={(value) => updateSameDaySchedule('relative_to', value as AutomationScheduleRelativeTo)}
-                      >
-                        <SelectTrigger className="w-40 h-9">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="check_out">Check-out</SelectItem>
-                          <SelectItem value="next_check_in">Next Check-in</SelectItem>
-                        </SelectContent>
-                      </Select>
-
-                      <span className="text-sm text-neutral-600 dark:text-neutral-400">at</span>
-                      <Input
-                        type="time"
-                        value={config.same_day_override.schedule.time}
-                        onChange={(e) => updateSameDaySchedule('time', e.target.value)}
-                        className="w-32 h-9"
+                  {config.same_day_override.schedule.type !== 'on' && (
+                    <>
+                      <TokenNumber
+                        ariaLabel="Same-day days offset"
+                        min={0}
+                        value={config.same_day_override.schedule.days_offset}
+                        onChange={(next) => updateSameDaySchedule('days_offset', next || 0)}
                       />
-                    </div>
+                      <SentenceText>day(s)</SentenceText>
+                    </>
                   )}
-                </div>
-              </div>
-            </div>
+
+                  <SelectToken
+                    title="Relative to"
+                    value={config.same_day_override.schedule.relative_to}
+                    options={RELATIVE_TO_OPTIONS}
+                    onChange={(value) => updateSameDaySchedule('relative_to', value)}
+                  />
+
+                  <SentenceText>at</SentenceText>
+                  <TokenDateTime
+                    type="time"
+                    ariaLabel="Same-day schedule time"
+                    value={config.same_day_override.schedule.time}
+                    onChange={(next) => updateSameDaySchedule('time', next)}
+                  />
+                </SentenceRow>
+              )}
+            </>
           )}
 
           {/* OCCUPANCY: Schedule Configuration */}
@@ -571,80 +559,68 @@ export default function AutomationConfigForm({
                 onUpdateRepeat={updateVacancyRepeat}
               />
 
-              <div className="border rounded-lg p-4 space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="font-medium text-sm">Task Generation Limit</div>
+              <SectionLabel>
+                <span className="inline-flex items-center gap-1.5">
+                  Task Generation Limit
                   <InfoTooltip text="When there is no upcoming booking, limit how far ahead tasks are generated" />
-                </div>
-                <div className="flex items-center gap-2 flex-wrap pt-2">
-                  <span className="text-sm text-neutral-600 dark:text-neutral-400">Generate tasks up to</span>
-                  <Input
-                    type="number"
-                    min={7}
-                    value={config.vacancy_schedule.max_days_ahead}
-                    onChange={(e) => updateVacancySchedule('max_days_ahead', parseInt(e.target.value) || 90)}
-                    className="w-20 h-9"
-                  />
-                  <span className="text-sm text-neutral-600 dark:text-neutral-400">days ahead when no next booking exists</span>
-                </div>
-              </div>
+                </span>
+              </SectionLabel>
+              <SentenceRow>
+                <SentenceText>Generate tasks up to</SentenceText>
+                <TokenNumber
+                  ariaLabel="Max days ahead"
+                  min={7}
+                  value={config.vacancy_schedule.max_days_ahead}
+                  onChange={(next) => updateVacancySchedule('max_days_ahead', next || 90)}
+                />
+                <SentenceText>days ahead when no next booking exists</SentenceText>
+              </SentenceRow>
             </>
           )}
 
           {/* RECURRING: Schedule Configuration */}
           {config.trigger_type === 'recurring' && config.recurring_schedule && (
-            <div className="border rounded-lg p-4 space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="font-medium text-sm">Recurring Schedule</div>
-                <InfoTooltip text="Configure when this task starts and how often it repeats" />
-              </div>
+            <>
+              <SectionLabel>
+                <span className="inline-flex items-center gap-1.5">
+                  Recurring Schedule
+                  <InfoTooltip text="Configure when this task starts and how often it repeats" />
+                </span>
+              </SectionLabel>
 
-              <div className="flex flex-col gap-6 pt-2">
-                {/* Start date and time */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm text-neutral-600 dark:text-neutral-400">Starting on</span>
-                  <Input
-                    type="date"
-                    value={config.recurring_schedule.start_date}
-                    onChange={(e) => updateRecurringSchedule('start_date', e.target.value)}
-                    className="w-44 h-9"
-                  />
-                  <span className="text-sm text-neutral-600 dark:text-neutral-400">at</span>
-                  <Input
-                    type="time"
-                    value={config.recurring_schedule.time}
-                    onChange={(e) => updateRecurringSchedule('time', e.target.value)}
-                    className="w-32 h-9"
-                  />
-                </div>
+              <SentenceRow>
+                <SentenceText>Starting on</SentenceText>
+                <TokenDateTime
+                  type="date"
+                  ariaLabel="Start date"
+                  value={config.recurring_schedule.start_date}
+                  onChange={(next) => updateRecurringSchedule('start_date', next)}
+                />
+                <SentenceText>at</SentenceText>
+                <TokenDateTime
+                  type="time"
+                  ariaLabel="Start time"
+                  value={config.recurring_schedule.time}
+                  onChange={(next) => updateRecurringSchedule('time', next)}
+                />
+              </SentenceRow>
 
-                {/* Repeat interval */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm text-neutral-600 dark:text-neutral-400">Repeats every</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={config.recurring_schedule.interval_value}
-                    onChange={(e) => updateRecurringSchedule('interval_value', parseInt(e.target.value) || 1)}
-                    className="w-20 h-9"
-                  />
-                  <Select
-                    value={config.recurring_schedule.interval_unit}
-                    onValueChange={(value) => updateRecurringSchedule('interval_unit', value as RecurringIntervalUnit)}
-                  >
-                    <SelectTrigger className="w-32 h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="days">day(s)</SelectItem>
-                      <SelectItem value="weeks">week(s)</SelectItem>
-                      <SelectItem value="months">month(s)</SelectItem>
-                      <SelectItem value="years">year(s)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
+              <SentenceRow>
+                <SentenceText>Repeats every</SentenceText>
+                <TokenNumber
+                  ariaLabel="Repeat interval"
+                  min={1}
+                  value={config.recurring_schedule.interval_value}
+                  onChange={(next) => updateRecurringSchedule('interval_value', next || 1)}
+                />
+                <SelectToken
+                  title="Interval"
+                  value={config.recurring_schedule.interval_unit}
+                  options={INTERVAL_UNIT_OPTIONS}
+                  onChange={(value) => updateRecurringSchedule('interval_unit', value)}
+                />
+              </SentenceRow>
+            </>
           )}
 
           {/* ================================================================
@@ -660,103 +636,58 @@ export default function AutomationConfigForm({
           {/* ================================================================
               Auto-Assign (shared for all trigger types)
               ================================================================ */}
-          <div className="border rounded-lg p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="font-medium text-sm">Auto-Assign Users</div>
-                <InfoTooltip text="Automatically assign users to generated tasks" />
-              </div>
-              <Toggle checked={config.auto_assign.enabled} onChange={() => updateAutoAssign('enabled', !config.auto_assign.enabled)} />
-            </div>
+          <SectionLabel>Assignment</SectionLabel>
+          <ToggleRow
+            label="Auto-Assign Users"
+            hint={<InfoTooltip text="Automatically assign users to generated tasks" />}
+            checked={config.auto_assign.enabled}
+            onChange={() => updateAutoAssign('enabled', !config.auto_assign.enabled)}
+          />
 
-            {config.auto_assign.enabled && (
-              <div className="space-y-2 pt-2">
-                {users.length > 0 ? (
-                  users.map((user) => (
-                    <label
-                      key={user.id}
-                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-800 cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={config.auto_assign.user_ids.includes(user.id)}
-                        onChange={() => toggleUserAssignment(user.id)}
-                        className="w-4 h-4 rounded border-neutral-300"
-                      />
-                      {user.avatar ? (
-                        <img
-                          src={user.avatar}
-                          alt={user.name}
-                          className="w-8 h-8 rounded-full object-cover"
-                        />
-                      ) : (
-                        <span className="w-8 h-8 rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-xs font-medium text-neutral-600 dark:text-neutral-300">
-                          {user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                        </span>
-                      )}
-                      <div>
-                        <div className="text-sm font-medium">{user.name}</div>
-                        <div className="text-xs text-neutral-500">{user.role}</div>
-                      </div>
-                    </label>
-                  ))
-                ) : (
-                  <p className="text-sm text-neutral-500">No users available.</p>
-                )}
+          {config.auto_assign.enabled && (
+            users.length > 0 ? (
+              users.map((user, i) => (
+                <PersonRow
+                  key={user.id}
+                  name={user.name}
+                  role={user.role}
+                  avatarUrl={user.avatar}
+                  tone={personTone(i)}
+                  selected={config.auto_assign.user_ids.includes(user.id)}
+                  onToggle={() => toggleUserAssignment(user.id)}
+                />
+              ))
+            ) : (
+              <div
+                className="border-b px-[18px] py-3 text-[length:var(--task-fs-body-sm)]"
+                style={{ borderColor: 'var(--task-line-soft)', color: 'var(--task-ink-3)' }}
+              >
+                No users available.
               </div>
-            )}
-          </div>
+            )
+          )}
 
           {/* ================================================================
               Preset Actions
               ================================================================ */}
           {!isNew && onSavePreset && (
-            <div className="flex items-center gap-2 pt-4 border-t">
-              <Button
-                variant="outline"
-                size="sm"
+            <>
+              <SectionLabel>Presets</SectionLabel>
+              <FieldRow
+                icon={ICONS.bookmark}
+                placeholder="Save as preset"
+                chevron={false}
                 onClick={onSavePreset}
-              >
-                Save as Preset
-              </Button>
-              {presets.length > 0 && (
-                <Select onValueChange={(presetId) => {
-                  const preset = presets.find(p => p.id === presetId);
-                  if (preset) handleLoadPreset(preset);
-                }}>
-                  <SelectTrigger className="w-48 h-9">
-                    <SelectValue placeholder="Load preset..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {presets.map((preset) => (
-                      <SelectItem key={preset.id} value={preset.id}>
-                        {preset.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
+              />
+              {presets.length > 0 && presetPicker}
+            </>
           )}
 
           {isNew && presets.length > 0 && (
-            <div className="flex items-center gap-2 pt-4 border-t">
-              <Select onValueChange={(presetId) => {
-                const preset = presets.find(p => p.id === presetId);
-                if (preset) handleLoadPreset(preset);
-              }}>
-                <SelectTrigger className="w-48 h-9">
-                  <SelectValue placeholder="Load preset..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {presets.map((preset) => (
-                    <SelectItem key={preset.id} value={preset.id}>
-                      {preset.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <>
+              <SectionLabel>Presets</SectionLabel>
+              {presetPicker}
+            </>
           )}
         </>
       )}
