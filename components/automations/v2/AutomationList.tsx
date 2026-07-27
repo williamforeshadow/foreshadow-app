@@ -1,11 +1,43 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import {
+  ChipButton,
+  MetaChip,
+  RowIconButton,
+  SectionLabel,
+  ToggleSwitch,
+} from '@/components/ui/panel/PanelForm';
+import { TriggerGlyph } from '@/components/automations/v2/TriggerGlyph';
+import { summarizeTriggerShort } from '@/lib/automations/summarize';
 import type { Automation } from '@/lib/automations/types';
+
+const ICONS = {
+  trash: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l.9 12.1A2 2 0 008.9 21h6.2a2 2 0 002-1.9L18 7" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  ),
+  chevron: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  ),
+};
+
+/** Matched to AutomationsView's detail column so the two tabs line up. */
+const DETAIL_COL = 'mx-auto w-full max-w-[46rem]';
+
+/** The property scope as a chip-length phrase. The full name list belongs in
+ *  the editor — a row of per-property badges was the old list's worst crowding. */
+function scopeLabel(automation: Automation, propertyNames: Record<string, string>): string {
+  const ids = automation.property_ids ?? [];
+  if (ids.length === 0) return 'All properties';
+  if (ids.length === 1) return propertyNames[ids[0]] ?? '1 property';
+  return `${ids.length} properties`;
+}
 
 export default function AutomationList() {
   const router = useRouter();
@@ -14,8 +46,10 @@ export default function AutomationList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchAutomations = useCallback(async () => {
-    setLoading(true);
+  // `silent` keeps a post-mutation refetch from flashing the list back to its
+  // loading state — the row controls mutate in place.
+  const fetchAutomations = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const [aRes, pRes] = await Promise.all([
@@ -36,7 +70,7 @@ export default function AutomationList() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'load failed');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -44,139 +78,172 @@ export default function AutomationList() {
     fetchAutomations();
   }, [fetchAutomations]);
 
+  // Optimistic: the switch is the state, so it has to move on the click and
+  // roll back only if the write actually fails.
   const toggle = async (automation: Automation) => {
-    await fetch(`/api/automations/${automation.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...automation, enabled: !automation.enabled }),
-    });
-    fetchAutomations();
+    const next = !automation.enabled;
+    const apply = (enabled: boolean) =>
+      setAutomations((prev) =>
+        prev.map((a) => (a.id === automation.id ? { ...a, enabled } : a)),
+      );
+    apply(next);
+    try {
+      const res = await fetch(`/api/automations/${automation.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...automation, enabled: next }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      apply(!next);
+      setError(`Could not ${next ? 'enable' : 'disable'} "${automation.name}".`);
+    }
   };
 
   const remove = async (automation: Automation) => {
     if (!confirm(`Delete "${automation.name}"?`)) return;
-    await fetch(`/api/automations/${automation.id}`, { method: 'DELETE' });
-    fetchAutomations();
+    try {
+      const res = await fetch(`/api/automations/${automation.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      fetchAutomations(true);
+    } catch {
+      setError(`Could not delete "${automation.name}".`);
+    }
   };
 
-  return (
-    <div className="p-6">
-      <div className="mb-6 flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Automations</h1>
-          <p className="text-sm text-neutral-500">
-            Compose Slack workflows from real DB events, conditions, and actions.
-          </p>
-        </div>
-        <Button onClick={() => router.push('/automations/new-engine/new')}>
-          + New Automation
-        </Button>
-      </div>
+  const missingTable = useMemo(
+    () => !!error && error.toLowerCase().includes('does not exist'),
+    [error],
+  );
 
-      {error && (
-        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
-          {error}
-          {error.toLowerCase().includes('does not exist') && (
-            <p className="mt-2 text-xs">
-              The <code>automations</code> table doesn't exist yet — apply
-              the migration at{' '}
-              <code>supabase/migrations/20260512120000_automations_rebuild.sql</code>
-              {' '}before the new engine can save anything.
-            </p>
+  return (
+    <div className="panel-form flex h-full flex-col" style={{ background: 'var(--task-surface-0)' }}>
+      <div className="flex-1 overflow-y-auto">
+        <div className={DETAIL_COL}>
+          <div
+            className="flex items-center justify-between gap-3 border-b px-[18px] py-3"
+            style={{ borderColor: 'var(--task-line-soft)' }}
+          >
+            <SectionLabel className="!px-0 !pb-0 !pt-0">
+              {loading ? 'Automations' : `${automations.length} automations`}
+            </SectionLabel>
+            <ChipButton set onClick={() => router.push('/automations/new-engine/new')}>
+              + New automation
+            </ChipButton>
+          </div>
+
+          {error && (
+            <div
+              className="mx-[18px] mt-3 rounded-lg border px-3 py-2.5 text-[length:var(--task-fs-body-sm)]"
+              style={{
+                borderColor: 'var(--task-amber)',
+                background: 'var(--task-amber-soft)',
+                color: 'var(--task-amber)',
+              }}
+            >
+              {error}
+              {missingTable && (
+                <p className="mt-1.5" style={{ color: 'var(--task-ink-2)' }}>
+                  The <code>automations</code> table doesn&apos;t exist yet — apply the migration at{' '}
+                  <code>supabase/migrations/20260512120000_automations_rebuild.sql</code> before the
+                  new engine can save anything.
+                </p>
+              )}
+            </div>
+          )}
+
+          {loading ? (
+            <div className="px-[18px] py-12 text-center">
+              <p
+                className="font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
+                style={{ color: 'var(--task-ink-3)' }}
+              >
+                Loading automations…
+              </p>
+            </div>
+          ) : automations.length === 0 ? (
+            <div className="px-[18px] py-12 text-center">
+              <p className="text-[length:var(--task-fs-option)]" style={{ color: 'var(--task-ink-2)' }}>
+                No Slack automations yet.
+              </p>
+              <p
+                className="mt-1.5 text-[length:var(--task-fs-body-sm)]"
+                style={{ color: 'var(--task-ink-3)' }}
+              >
+                Compose one from a trigger, conditions, and a Slack message.
+              </p>
+              <div className="mt-4 flex justify-center">
+                <ChipButton set onClick={() => router.push('/automations/new-engine/new')}>
+                  + New automation
+                </ChipButton>
+              </div>
+            </div>
+          ) : (
+            <>
+              <SectionLabel>Slack automations</SectionLabel>
+              {automations.map((automation) => {
+                const actionCount = automation.actions?.length ?? 0;
+                const live = automation.enabled;
+
+                return (
+                  <div
+                    key={automation.id}
+                    className="group flex items-center gap-2.5 border-b px-[18px] py-2.5 transition-colors hover:bg-[var(--task-surface-1)]"
+                    style={{ borderColor: 'var(--task-line-soft)' }}
+                  >
+                    {/* The row itself opens the editor; the switch and the
+                        delete affordance are siblings, not nested buttons. */}
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/automations/new-engine/${automation.id}`)}
+                      aria-label={`Edit ${automation.name || 'untitled automation'}`}
+                      className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                    >
+                      <span className="shrink-0">
+                        <TriggerGlyph kind={automation.trigger?.kind ?? 'schedule'} muted={!live} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className="block truncate text-[length:var(--task-fs-option)]"
+                          style={{ color: live ? 'var(--task-ink-1)' : 'var(--task-ink-2)' }}
+                        >
+                          {automation.name || 'Untitled automation'}
+                        </span>
+                        <span
+                          className="block truncate font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.1em]"
+                          style={{ color: 'var(--task-ink-3)' }}
+                        >
+                          {summarizeTriggerShort(automation.trigger)}
+                        </span>
+                      </span>
+                      <MetaChip>{scopeLabel(automation, propertyNames)}</MetaChip>
+                      <MetaChip tone={actionCount > 0 ? 'neutral' : 'warn'}>
+                        {actionCount === 0 ? 'No actions' : `${actionCount} action${actionCount === 1 ? '' : 's'}`}
+                      </MetaChip>
+                    </button>
+
+                    <ToggleSwitch
+                      checked={live}
+                      onChange={() => toggle(automation)}
+                      label={`${live ? 'Disable' : 'Enable'} ${automation.name}`}
+                    />
+                    <RowIconButton
+                      danger
+                      label="Delete automation"
+                      onClick={() => remove(automation)}
+                    >
+                      {ICONS.trash}
+                    </RowIconButton>
+                    <span className="shrink-0" style={{ color: 'var(--task-ink-3)' }}>
+                      {ICONS.chevron}
+                    </span>
+                  </div>
+                );
+              })}
+            </>
           )}
         </div>
-      )}
-
-      {loading ? (
-        <p className="text-neutral-500">Loading…</p>
-      ) : automations.length === 0 ? (
-        <div className="rounded-lg border-2 border-dashed border-neutral-200 p-12 text-center dark:border-neutral-700">
-          <p className="font-medium text-neutral-500">No automations yet</p>
-          <Button
-            className="mt-4"
-            onClick={() => router.push('/automations/new-engine/new')}
-          >
-            Create your first automation
-          </Button>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {automations.map((automation) => (
-            <Card
-              key={automation.id}
-              className={`cursor-pointer transition-colors hover:border-neutral-400 dark:hover:border-neutral-500 ${
-                !automation.enabled ? 'opacity-60' : ''
-              }`}
-              onClick={() => router.push(`/automations/new-engine/${automation.id}`)}
-            >
-              <CardHeader>
-                <div className="flex items-center justify-between gap-4">
-                  <CardTitle className="text-base flex flex-wrap items-center gap-2">
-                    {automation.name}
-                    <Badge variant="secondary">
-                      {automation.trigger.kind === 'schedule'
-                        ? `Schedule · ${automation.trigger.schedule.frequency}`
-                        : `Row change · ${automation.trigger.entity}`}
-                    </Badge>
-                    <Badge variant="outline" className="text-xs">
-                      {automation.actions.length} action
-                      {automation.actions.length === 1 ? '' : 's'}
-                    </Badge>
-                    {(automation.property_ids?.length ?? 0) === 0 ? (
-                      <Badge variant="outline" className="text-xs text-neutral-500">
-                        All properties
-                      </Badge>
-                    ) : (
-                      automation.property_ids.slice(0, 3).map((id) => (
-                        <Badge
-                          key={id}
-                          variant="outline"
-                          className="border-indigo-300 bg-indigo-50 text-xs text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300"
-                        >
-                          {propertyNames[id] ?? id.slice(0, 8)}
-                        </Badge>
-                      ))
-                    )}
-                    {automation.property_ids?.length > 3 && (
-                      <Badge variant="outline" className="text-xs text-neutral-500">
-                        +{automation.property_ids.length - 3} more
-                      </Badge>
-                    )}
-                    {!automation.enabled && (
-                      <Badge variant="outline" className="text-xs text-neutral-400">
-                        Disabled
-                      </Badge>
-                    )}
-                  </CardTitle>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggle(automation);
-                      }}
-                    >
-                      {automation.enabled ? 'Disable' : 'Enable'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-900/20"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        remove(automation);
-                      }}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-            </Card>
-          ))}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

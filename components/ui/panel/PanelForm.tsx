@@ -300,24 +300,28 @@ export function TokenDateTime({
 
 /* ---------- chips ---------- */
 
-/** A small read-only marker (field type, "Edited"). */
+/** A small read-only marker (field type, "Edited").
+ *  `accent` reads as live/positive, `warn` as needs-attention — don't spend
+ *  the accent on a problem, or "Live" stops meaning anything. */
+const CHIP_TONES: Record<'neutral' | 'accent' | 'warn', React.CSSProperties> = {
+  neutral: { background: 'var(--task-surface-2)', color: 'var(--task-ink-3)' },
+  accent: { background: 'var(--task-accent-soft)', color: 'var(--task-accent)' },
+  warn: { background: 'var(--task-amber-soft)', color: 'var(--task-amber)' },
+};
+
 export function MetaChip({
   children,
   tone = 'neutral',
   className = '',
 }: {
   children: React.ReactNode;
-  tone?: 'neutral' | 'accent';
+  tone?: 'neutral' | 'accent' | 'warn';
   className?: string;
 }) {
   return (
     <span
       className={`flex h-[22px] shrink-0 items-center rounded-md px-[7px] font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.1em] ${className}`}
-      style={
-        tone === 'accent'
-          ? { background: 'var(--task-accent-soft)', color: 'var(--task-accent)' }
-          : { background: 'var(--task-surface-2)', color: 'var(--task-ink-3)' }
-      }
+      style={CHIP_TONES[tone]}
     >
       {children}
     </span>

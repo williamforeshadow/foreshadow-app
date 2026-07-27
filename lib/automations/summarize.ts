@@ -130,6 +130,24 @@ function summarizeTrigger(trigger: AutomationTrigger): string {
   return `When a ${ent} is ${verbList}`;
 }
 
+/**
+ * A short phrasing of the trigger alone, for list rows. `summarizeTrigger`
+ * carries timezone and iteration wording that is too long to sit as a
+ * secondary line under an automation's name.
+ */
+export function summarizeTriggerShort(trigger: AutomationTrigger): string {
+  if (trigger.kind === 'schedule') {
+    const cadence = describeCadence(trigger.schedule ?? ({} as ScheduleConfig));
+    return trigger.for_each
+      ? `${cadence} · each ${entityLabel(trigger.for_each.entity).toLowerCase()}`
+      : cadence;
+  }
+  const ent = entityLabel(trigger.entity).toLowerCase();
+  const verbs = (trigger.on ?? []).map((kind) => ROW_CHANGE_LABELS[kind]).filter(Boolean);
+  if (verbs.length === 0) return `When a ${ent} changes`;
+  return `When a ${ent} is ${listJoin(verbs, 'or')}`;
+}
+
 function describeCadence(schedule: ScheduleConfig): string {
   const interval = schedule.interval ?? 1;
   const time = schedule.time || '07:00';

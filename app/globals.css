@@ -245,6 +245,16 @@
   --task-fs-cta: 12px;        /* action bar buttons */
   --task-ctl-h: 30px;         /* chip / pill height */
 }
+/* Light-mode base surface for .panel-form only. The shared value above is a
+   very pale blue-cyan (hue 236) — deliberate on .task-detail, which is its own
+   focused surface, but on the full-page automations screens it reads as a
+   teal cast next to the rest of the app's white pages. Hairline neutralised
+   to match; both are overridden again by `.dark .panel-form` below, which
+   wins on specificity regardless of order. */
+.panel-form {
+  --task-surface-0: #fff;
+  --task-line: oklch(0.884 0 0);
+}
 /* Matches useIsMobile's 768px breakpoint, so the type scale flips on exactly
    the same viewports that swap the mobile full-screen layout for the desktop
    card. */

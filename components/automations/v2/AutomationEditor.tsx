@@ -428,9 +428,22 @@ export default function AutomationEditor({
 
   return (
     <TooltipProvider>
-    <div className="flex h-full flex-col overflow-hidden bg-white dark:bg-card">
+    {/* `panel-form` puts the editor on the same --task-* ramp as the two
+        automations lists: page = surface-0, card = surface-1, field =
+        surface-2. Before this the three greys came from three unrelated
+        scales (--card, neutral-800, neutral-700). */}
+    <div
+      className="panel-form flex h-full flex-col overflow-hidden"
+      style={{ background: 'var(--task-surface-0)' }}
+    >
       {/* Sticky header */}
-      <div className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-4 border-b bg-white/80 px-6 py-3 backdrop-blur dark:bg-card/80">
+      <div
+        className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-4 border-b px-6 py-3 backdrop-blur"
+        style={{
+          background: 'color-mix(in oklab, var(--task-surface-0) 80%, transparent)',
+          borderColor: 'var(--task-line)',
+        }}
+      >
         <div className="flex min-w-0 items-center gap-4">
           <Button
             variant="ghost"
@@ -508,7 +521,14 @@ export default function AutomationEditor({
         </div>
       )}
       {loading && (
-        <div className="border-b bg-muted px-6 py-2 text-sm text-muted-foreground">
+        <div
+          className="border-b px-6 py-2 text-sm"
+          style={{
+            background: 'var(--task-surface-1)',
+            borderColor: 'var(--task-line)',
+            color: 'var(--task-ink-3)',
+          }}
+        >
           Loading automation…
         </div>
       )}
@@ -566,7 +586,7 @@ export default function AutomationEditor({
 
           {/* Live natural-language summary — flush, trails everything */}
           <div className="pl-14 pt-5">
-            <div className="rounded-xl border border-l-2 border-l-[#a78bfa] bg-white p-7 shadow-md dark:border-neutral-700 dark:bg-neutral-800">
+            <div className="rounded-xl border p-7 shadow-md" style={CARD_SURFACE}>
               <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#a78bfa]">
                 Automation in natural language
               </p>
@@ -617,7 +637,7 @@ function RailStep({
         {num}
       </div>
       <div className="flex gap-4">
-      <div className="min-w-0 flex-1 rounded-xl border bg-white p-5 shadow-md dark:border-neutral-700 dark:bg-neutral-800">
+      <div className="min-w-0 flex-1 rounded-xl border p-5 shadow-md" style={CARD_SURFACE}>
         <div className="mb-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-1.5">
             <h3 className="text-sm font-semibold text-foreground">{title}</h3>
@@ -678,7 +698,10 @@ function TriggerBlock({
 
   return (
     <div className="space-y-4">
-      <div className="inline-flex rounded-lg border bg-secondary p-1">
+      <div
+        className="inline-flex rounded-lg border p-1"
+        style={{ background: 'var(--task-surface-2)', borderColor: 'var(--task-line)' }}
+      >
         <button
           type="button"
           onClick={() => onChange(byReservationEvent())}
@@ -1118,10 +1141,20 @@ const INLINE_TRIGGER =
 const INLINE_INPUT =
   'h-auto w-16 border-0 bg-transparent px-1 py-0.5 text-center shadow-none underline decoration-dotted decoration-[var(--turnover-purple-border)] underline-offset-4 focus-visible:ring-0';
 
-// Boxed grid fields sit *raised* above the card: in dark, one step lighter
-// than the card (#262626) with a clearer border. Light keeps shadcn's
-// neutral-100 + border (already legible on white).
-const RAISED_FIELD = 'dark:bg-neutral-700 dark:border-neutral-600';
+// The three surfaces of this page are one ramp, not three: page =
+// surface-0, card = surface-1, boxed field = surface-2. Each is exactly one
+// step above the last, so a field reads as raised inside its card without the
+// jump the old neutral-800 / neutral-700 pairing produced.
+const CARD_SURFACE: React.CSSProperties = {
+  background: 'var(--task-surface-1)',
+  borderColor: 'var(--task-line)',
+};
+
+// Both variants are spelled out so tailwind-merge drops the shadcn field's
+// own `bg-neutral-100` / `dark:bg-neutral-800/80` pair rather than racing it
+// on source order.
+const RAISED_FIELD =
+  'bg-[var(--task-surface-2)] dark:bg-[var(--task-surface-2)] border-[var(--task-line)] dark:border-[var(--task-line)]';
 
 const DEFAULT_TIMING: TimingValue = {
   anchor: 'check_in',
@@ -1345,11 +1378,11 @@ function ScheduleConditionsEditor({
         <div key={index}>
           {index > 0 && (
             <div className="my-1.5 flex items-center gap-2">
-              <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-700" />
+              <span className="h-px flex-1" style={{ background: 'var(--task-line)' }} />
               <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
                 and
               </span>
-              <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-700" />
+              <span className="h-px flex-1" style={{ background: 'var(--task-line)' }} />
             </div>
           )}
           <ScheduleConditionRow
@@ -1515,7 +1548,7 @@ function VariablesCard({
 }) {
   const grouped = groupVariableOptions(variableOptions);
   return (
-    <div className="rounded-xl border bg-white p-4 shadow-md dark:border-neutral-700 dark:bg-neutral-800">
+    <div className="rounded-xl border p-4 shadow-md" style={CARD_SURFACE}>
       <h3 className="mb-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
         Variables
       </h3>
@@ -1714,7 +1747,8 @@ function AttachmentsBlock({
           {attachments.map((a) => (
             <li
               key={a.id}
-              className="flex items-center justify-between rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-700"
+              className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+              style={{ background: 'var(--task-surface-2)', borderColor: 'var(--task-line)' }}
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{a.name}</p>
@@ -1814,9 +1848,10 @@ function PropertyScopePicker({
 
   return (
     <div
-      className={`overflow-hidden rounded-xl border bg-white shadow-md dark:border-neutral-700 dark:bg-neutral-800 ${
+      className={`overflow-hidden rounded-xl border shadow-md ${
         disabled ? 'pointer-events-none opacity-50' : ''
       }`}
+      style={CARD_SURFACE}
       aria-disabled={disabled || undefined}
     >
       <button

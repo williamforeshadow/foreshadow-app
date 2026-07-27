@@ -180,7 +180,7 @@ export default function AutomationConfigEditor({
         throw new Error(errData.error || 'Failed to save automation config');
       }
 
-      router.push('/automations');
+      router.push('/automations/tasks');
     } catch (err) {
       console.error('Error saving automation config:', err);
       alert(err instanceof Error ? err.message : 'Failed to save automation configuration');
@@ -241,7 +241,7 @@ export default function AutomationConfigEditor({
         <div className="mx-auto flex h-14 w-full max-w-[46rem] items-center justify-between gap-3 px-[18px]">
           <button
             type="button"
-            onClick={() => router.push('/automations')}
+            onClick={() => router.push('/automations/tasks')}
             className="-ml-2 flex h-9 w-9 items-center justify-center rounded-lg transition-transform active:scale-95"
             style={{ color: 'var(--task-ink-2)' }}
             aria-label="Back to Automations"
@@ -289,7 +289,7 @@ export default function AutomationConfigEditor({
         <div className="mx-auto flex w-full max-w-[46rem] items-center gap-2 px-[18px] py-3">
           <button
             type="button"
-            onClick={() => router.push('/automations')}
+            onClick={() => router.push('/automations/tasks')}
             className="h-[46px] shrink-0 rounded-xl border px-5 font-mono text-[length:var(--task-fs-cta)] uppercase tracking-[0.1em] transition-all active:scale-[0.98]"
             style={{ background: 'var(--task-surface-2)', borderColor: 'var(--task-line)', color: 'var(--task-ink-2)' }}
           >

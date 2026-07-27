@@ -73,8 +73,9 @@ const ICONS = {
 };
 
 /** The detail column's width — matched to the Configure Automation and
- *  Property Fields pages so the three line up as you move between them. */
-const DETAIL_COL = 'w-full max-w-[46rem]';
+ *  Property Fields pages so the three line up as you move between them.
+ *  Centred in the pane it's given; the property rail keeps its own edge. */
+const DETAIL_COL = 'mx-auto w-full max-w-[46rem]';
 
 export default function AutomationsView({ templates, properties }: AutomationsViewProps) {
   const router = useRouter();
@@ -321,11 +322,9 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                 className="flex w-full items-center gap-2.5 border-b py-2.5 pr-[18px] text-left transition-colors hover:bg-[var(--task-surface-1)]"
                 style={{
                   borderColor: 'var(--task-line-soft)',
+                  // Fill alone marks the current row.
                   background: active ? 'var(--task-surface-1)' : undefined,
-                  // 2px accent rule marks the current row; transparent keeps
-                  // every label on the same left edge.
-                  borderLeft: `2px solid ${active ? 'var(--task-accent)' : 'transparent'}`,
-                  paddingLeft: 16,
+                  paddingLeft: 18,
                 }}
               >
                 {bulkEditMode && (
@@ -346,9 +345,9 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                 >
                   {property}
                 </span>
-                {/* Accent = live automations; neutral = configured but all off. */}
+                {/* Live count when there is one, else the configured-but-off count. */}
                 {automationCount > 0 ? (
-                  <MetaChip tone="accent">{automationCount}</MetaChip>
+                  <MetaChip>{automationCount}</MetaChip>
                 ) : totalAssignments > 0 ? (
                   <MetaChip>{totalAssignments}</MetaChip>
                 ) : null}
@@ -496,7 +495,7 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
                             {template?.department_name || 'Uncategorized'}
                           </span>
                         </span>
-                        {isLive && <MetaChip tone="accent">Live</MetaChip>}
+                        {isLive && <MetaChip>Live</MetaChip>}
                         {hasOverrides && <MetaChip>Customized</MetaChip>}
                       </button>
 
