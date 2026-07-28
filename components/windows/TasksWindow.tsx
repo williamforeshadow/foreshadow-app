@@ -15,7 +15,12 @@ import type { User } from '@/lib/types';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
 import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
 import { type TaskDetailInput } from '@/components/tasks/detail/taskInput';
-import { TaskRow, TaskListHeader, type TaskRowItem } from '@/components/tasks/TaskRow';
+import {
+  TaskRow,
+  TaskListHeader,
+  taskRowMinWidth,
+  type TaskRowItem,
+} from '@/components/tasks/TaskRow';
 import { TaskFilterBar, SortSelect } from '@/components/tasks/TaskFilterBar';
 import { CompactSearch } from '@/components/ui/compact-search';
 import { Filter as FilterIcon } from 'lucide-react';
@@ -84,6 +89,7 @@ function toRowItem(task: TaskRowData): TaskRowItem {
     is_automated: task.is_automated,
     reservation_id: task.reservation_id,
     comment_count: task.comment_count,
+    occupancy: task.occupancy ?? null,
   };
 }
 
@@ -219,9 +225,13 @@ function TasksWindowContent({ isActive = true }: TasksWindowProps) {
       else later.push(t);
     }
 
+    // Overdue / No date / Completed carry no sublabel: a bare count renders
+    // right-aligned in the section header, which puts it directly under the
+    // `comments` column label and reads as a comment total. The "N scheduled"
+    // sublabels below say what they are, so they stay.
     const out: DateGroup[] = [];
     if (overdue.length)
-      out.push({ id: 'overdue', label: 'Overdue', sublabel: `${overdue.length}`, items: overdue });
+      out.push({ id: 'overdue', label: 'Overdue', items: overdue });
     if (todayBucket.length)
       out.push({
         id: 'today',
@@ -239,12 +249,11 @@ function TasksWindowContent({ isActive = true }: TasksWindowProps) {
     if (later.length)
       out.push({ id: 'later', label: 'Later', sublabel: `${later.length} scheduled`, items: later });
     if (unscheduled.length)
-      out.push({ id: 'noDate', label: 'No date', sublabel: `${unscheduled.length}`, items: unscheduled });
+      out.push({ id: 'noDate', label: 'No date', items: unscheduled });
     if (completed.length)
       out.push({
         id: 'completed',
         label: 'Completed',
-        sublabel: `${completed.length}`,
         items: completed,
         defaultCollapsed: true,
       });
@@ -395,9 +404,19 @@ function TasksWindowContent({ isActive = true }: TasksWindowProps) {
               </button>
             </div>
           ) : (
-            <div className="px-8 pb-8">
+            // Locked column widths + a min-width here: the list keeps its
+            // proportions on a small laptop and the parent scrolls horizontally
+            // instead of squeezing every column. The min-width lives on this
+            // wrapper so the column header and section headers span the same
+            // scrollable width as the rows. 4rem accounts for the px-8 pair.
+            <div
+              className="px-8 pb-8"
+              style={{
+                minWidth: `calc(${taskRowMinWidth({ showOccupancy: true })}px + 4rem)`,
+              }}
+            >
               <div className="pt-5">
-                <TaskListHeader />
+                <TaskListHeader showOccupancy lockColumnWidths />
               </div>
               {groups.map((group) => {
                 const isCollapsed = collapsedSections.has(group.id);
@@ -457,6 +476,8 @@ function TasksWindowContent({ isActive = true }: TasksWindowProps) {
                                 }
                               }}
                               showBinPill
+                              showOccupancy
+                              lockColumnWidths
                               departmentIcon={DeptIcon}
                             />
                           );

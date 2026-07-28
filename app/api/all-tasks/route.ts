@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAuthContext } from '@/lib/requireAuthContext';
+import { attachOccupancy } from '@/src/server/availability/occupancySnapshot';
 
 // GET /api/all-tasks
 //
@@ -17,7 +18,7 @@ export async function GET(request: Request) {
   try {
     const ctx = await requireAuthContext();
     if (ctx instanceof NextResponse) return ctx;
-    const { supabase } = ctx;
+    const { supabase, orgId } = ctx;
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
@@ -124,6 +125,11 @@ export async function GET(request: Request) {
         t.property_name.toLowerCase().includes(propertyName.toLowerCase())
       );
     }
+
+    // Live occupancy per property, attached inline so the list column paints in
+    // the same frame as the rest of the row. Applied AFTER the property filter
+    // so we only resolve properties actually being returned.
+    filteredTasks = await attachOccupancy(filteredTasks, supabase, { orgId });
 
     const byDepartment: Record<string, number> = {};
     filteredTasks.forEach((t: any) => {

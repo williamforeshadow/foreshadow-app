@@ -4,8 +4,11 @@ import React from 'react';
 import { KeyAffordance } from './KeyAffordance';
 import {
   formatTimeCol,
+  formatOccupancy,
   getDayLabel,
   getShortDate,
+  occupancyTitle,
+  OCCUPANCY_TEXT_CLASS,
   PRIORITY_LABELS,
   STATUS_COLORS,
   STATUS_LABELS,
@@ -14,6 +17,7 @@ import {
 } from './TaskRow';
 import { STATUS_ICONS, STATUS_TITLE } from '@/lib/taskStatusIcons';
 import { PRIORITY_ICONS, PRIORITY_TITLE } from '@/lib/taskPriorityIcons';
+import type { PropertyOccupancy } from '@/lib/types';
 
 // Mobile counterpart to <TaskRow>. Same props (TaskRowItem) — different
 // visual layout:
@@ -59,6 +63,42 @@ function PriorityTag({ priority }: { priority: string }) {
       <PriorityIcon size={12} strokeWidth={2} aria-hidden />
       {PRIORITY_LABELS[priority] || priority}
     </span>
+  );
+}
+
+/**
+ * Occupancy as the last line of a mobile task row — italic, so it reads as an
+ * annotation about the PROPERTY rather than another attribute of the task.
+ * Mobile has no room for the desktop column, so the same fact lands here.
+ *
+ * Exported because MobileMyAssignmentsView renders its own row markup but must
+ * show this identically; keeping one component means the two can't drift.
+ */
+export function OccupancyFootnote({
+  occupancy,
+}: {
+  occupancy?: PropertyOccupancy | null;
+}) {
+  const formatted = formatOccupancy(occupancy);
+  if (!formatted || !occupancy) return null;
+  return (
+    <div
+      className="flex items-center gap-1.5 mt-2 text-[12px] italic tracking-[0.01em] min-w-0"
+      title={occupancyTitle(occupancy)}
+    >
+      <span
+        className={`shrink-0 ${
+          OCCUPANCY_TEXT_CLASS[occupancy.status] ?? OCCUPANCY_TEXT_CLASS.vacant
+        }`}
+      >
+        {formatted.label}
+      </span>
+      {formatted.detail && (
+        <span className="text-neutral-400 dark:text-[#66645f] truncate">
+          · {formatted.detail}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -205,6 +245,8 @@ export function MobileTaskRow({
           <PriorityTag priority={item.priority} />
           <AssigneeStack assignees={item.assignees} />
         </div>
+
+        <OccupancyFootnote occupancy={item.occupancy} />
       </div>
     </div>
   );

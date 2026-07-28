@@ -74,6 +74,7 @@ function toRowItem(task: TaskRowData): TaskRowItem {
     is_automated: task.is_automated,
     reservation_id: task.reservation_id,
     comment_count: task.comment_count,
+    occupancy: task.occupancy ?? null,
   };
 }
 

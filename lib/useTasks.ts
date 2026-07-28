@@ -10,6 +10,7 @@ import type {
   AssignedUser,
   TiptapJSON,
   ProjectFormFields,
+  PropertyOccupancy,
 } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 
@@ -50,6 +51,8 @@ export interface TaskRow {
   check_out: string | null;
   assigned_users: AssignedUser[];
   comment_count: number;
+  /** Live occupancy of this task's property; null when the task has none. */
+  occupancy: PropertyOccupancy | null;
 }
 
 export interface TaskSummary {

@@ -264,3 +264,39 @@ export async function getOccupancySnapshot(
 
   return result;
 }
+
+/**
+ * Attach an `occupancy` field to every row of a task payload, keyed off each
+ * row's `property_id`. Rows without a property carry null — there's nothing to
+ * be occupied.
+ *
+ * Non-fatal by design: occupancy is a display affordance, so a failure here
+ * leaves every row with `occupancy: null` (an empty column) rather than failing
+ * the whole request. Shared by the list endpoints so they can't drift.
+ */
+export async function attachOccupancy<T extends { property_id?: string | null }>(
+  rows: T[],
+  supabase: SupabaseClient,
+  opts: OccupancySnapshotOptions = {},
+): Promise<Array<T & { occupancy: PropertyOccupancy | null }>> {
+  const propertyIds = Array.from(
+    new Set(rows.map((r) => r.property_id).filter((id): id is string => !!id)),
+  );
+
+  let snapshot = new Map<string, PropertyOccupancy>();
+  if (propertyIds.length > 0) {
+    try {
+      snapshot = await getOccupancySnapshot(propertyIds, supabase, opts);
+    } catch (err) {
+      console.error(
+        '[attachOccupancy] failed; rendering without occupancy',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    occupancy: row.property_id ? snapshot.get(row.property_id) ?? null : null,
+  }));
+}
