@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { requireAuthContext } from '@/lib/requireAuthContext';
+import { getOccupancySnapshot } from '@/src/server/availability/occupancySnapshot';
 
 // GET - Fetch all tasks assigned to a specific user
 export async function GET(request: Request) {
   try {
     const ctx = await requireAuthContext();
     if (ctx instanceof NextResponse) return ctx;
-    const { supabase } = ctx;
+    const { supabase, orgId } = ctx;
 
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('user_id');
@@ -157,6 +158,46 @@ export async function GET(request: Request) {
           comment_count: commentCount,
         };
       }) || [];
+
+      // Live occupancy for every property represented in this payload, attached
+      // inline so the list column paints in the same frame as the rest of the
+      // row (a second client fetch would make it pop in late). Tasks with no
+      // property_id carry null — there's nothing to be occupied.
+      //
+      // Non-fatal by design: occupancy is a display affordance, so a failure
+      // here degrades to an empty column rather than a failed assignments load.
+      type TaskWithProperty = Record<string, unknown> & { property_id?: string | null };
+      const withOccupancy = (
+        resolve: (propertyId: string) => unknown
+      ) =>
+        (tasks as TaskWithProperty[]).map((t) => ({
+          ...t,
+          occupancy: t.property_id ? resolve(t.property_id) : null,
+        }));
+
+      const occupancyPropertyIds = Array.from(
+        new Set(
+          (tasks as TaskWithProperty[])
+            .map((t) => t.property_id)
+            .filter((id): id is string => !!id)
+        )
+      );
+      if (occupancyPropertyIds.length > 0) {
+        try {
+          const occupancy = await getOccupancySnapshot(occupancyPropertyIds, supabase, {
+            orgId,
+          });
+          tasks = withOccupancy((id) => occupancy.get(id) ?? null);
+        } catch (occErr: unknown) {
+          console.error(
+            'Error computing occupancy snapshot:',
+            occErr instanceof Error ? occErr.message : occErr
+          );
+          tasks = withOccupancy(() => null);
+        }
+      } else {
+        tasks = withOccupancy(() => null);
+      }
     }
 
     return NextResponse.json({

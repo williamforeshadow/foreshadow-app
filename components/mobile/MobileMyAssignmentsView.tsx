@@ -10,7 +10,12 @@ import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { STATUS_ICONS, STATUS_TITLE } from '@/lib/taskStatusIcons';
 import { PRIORITY_ICONS, PRIORITY_TITLE } from '@/lib/taskPriorityIcons';
-import type { Project, Task } from '@/lib/types';
+import type { Project, Task, PropertyOccupancy } from '@/lib/types';
+import {
+  formatOccupancy,
+  occupancyTitle,
+  OCCUPANCY_TEXT_CLASS,
+} from '@/components/tasks/TaskRow';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
 import type {
   FilterOption,
@@ -52,6 +57,7 @@ interface RawTask {
   scheduled_time?: string | null;
   assigned_users?: RawAssignedUser[];
   reservation_id?: string | null;
+  occupancy?: PropertyOccupancy | null;
 }
 
 interface RawProject {
@@ -87,6 +93,10 @@ interface UnifiedItem {
   // Always null for projects (they live in tasks-for-bin land which filters
   // out reservation-bound rows).
   reservation_id?: string | null;
+  // Live occupancy of the row's property, from the same payload as every other
+  // field. Null for property-less rows and for projects (which carry no
+  // property_id for the server to resolve).
+  occupancy?: PropertyOccupancy | null;
   raw: AssignmentRaw;
 }
 
@@ -257,6 +267,7 @@ export default function MobileMyAssignmentsView({
           avatar: u.avatar || null,
         })),
         reservation_id: task.reservation_id || null,
+        occupancy: task.occupancy || null,
         raw: task,
       });
     }
@@ -782,6 +793,33 @@ export default function MobileMyAssignmentsView({
                             </div>
                           )}
                         </div>
+                        {/* Occupancy footer — last line of the row, italic, so
+                            it reads as an annotation about the property rather
+                            than another attribute of the task itself. */}
+                        {(() => {
+                          const occ = formatOccupancy(item.occupancy);
+                          if (!occ || !item.occupancy) return null;
+                          return (
+                            <div
+                              className="flex items-center gap-1.5 mt-2 text-[12px] italic tracking-[0.01em] min-w-0"
+                              title={occupancyTitle(item.occupancy)}
+                            >
+                              <span
+                                className={`shrink-0 ${
+                                  OCCUPANCY_TEXT_CLASS[item.occupancy.status] ??
+                                  OCCUPANCY_TEXT_CLASS.vacant
+                                }`}
+                              >
+                                {occ.label}
+                              </span>
+                              {occ.detail && (
+                                <span className="text-neutral-400 dark:text-[#66645f] truncate">
+                                  · {occ.detail}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   );

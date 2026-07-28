@@ -114,6 +114,50 @@ export interface TaskTemplateField {
 export type TurnoverStatus = 'not_started' | 'in_progress' | 'complete' | 'no_tasks';
 export type OccupancyStatus = 'occupied' | 'vacant';
 
+// ============================================================================
+// Property Occupancy
+// ============================================================================
+// Live "who is in the unit right now" state for a property, computed server
+// side and shipped inline with task payloads so list rows can render it in the
+// same paint as every other field.
+//
+// Distinct from `OccupancyStatus` above, which is a per-RESERVATION flag on the
+// Turnovers/Timeline surfaces ("has this booking's guest checked out yet"). This
+// one is per-PROPERTY and knows nothing about which reservation you're looking
+// at — it answers "is someone in there today, and when does that change".
+
+/**
+ * `blocked` is a calendar block with no reservation behind it (maintenance,
+ * owner hold). Kept separate from `occupied` because they mean different things
+ * to someone about to walk into the unit: occupied = a person is inside;
+ * blocked = nobody's inside, it just can't be booked.
+ */
+export type PropertyOccupancyState = 'occupied' | 'blocked' | 'vacant';
+
+/** What the property flips TO on `until`. */
+export type PropertyOccupancyFlip = 'free' | 'booked' | 'blocked';
+
+export interface PropertyOccupancy {
+  status: PropertyOccupancyState;
+  /**
+   * The wall-clock moment `status` stops being true — "YYYY-MM-DDTHH:MM" in
+   * `timezone`. Minute precision is the point: a same-day flip leaves the unit
+   * empty from checkout (10am) to the next arrival (4pm), and that window is
+   * exactly when the turnover work happens. A date alone would erase it.
+   *
+   * When busy this is the moment the unit empties; when vacant it's the moment
+   * the next guest or block arrives. `null` means nothing changes within the
+   * lookahead horizon.
+   */
+  until: string | null;
+  /** What `until` flips to. `null` exactly when `until` is null. */
+  until_kind: PropertyOccupancyFlip | null;
+  /** The wall-clock moment this snapshot describes, same format as `until`. */
+  as_of: string;
+  /** IANA timezone the wall-clock values above are expressed in. */
+  timezone: string;
+}
+
 export interface Turnover {
   id: string;
   property_id?: string | null;

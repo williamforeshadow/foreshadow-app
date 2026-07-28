@@ -11,6 +11,11 @@ import {
   DEMO_DEPARTMENTS,
   DEMO_PROPERTY_OPTIONS,
 } from '../schedule/demoScheduleData';
+import type {
+  PropertyOccupancy,
+  PropertyOccupancyState,
+  PropertyOccupancyFlip,
+} from '@/lib/types';
 
 // The user whose queue this demo renders (a "random" teammate).
 export const DEMO_ASSIGNMENTS_USER = DEMO_USERS[3]; // Maya Singh
@@ -72,6 +77,40 @@ const SPECS: Spec[] = [
   { title: 'Follow up on damaged-blinds claim', propIdx: 12, dept: 'Admin', status: 'in_progress', priority: 'medium', dueOff: null },
 ];
 
+// Occupancy fixtures. Cycled across the rows that have a property so the demo
+// exercises every state the column can render — including the two "nothing
+// scheduled" tails. Property-less rows get null, same as production.
+// Times mirror the stock org clock (check-out 10:00, check-in 16:00), so the
+// demo shows the same-day-flip shape the real column is built around: a stay
+// ending at 10am today, with the next arrival at 4pm.
+type OccSpec = {
+  status: PropertyOccupancyState;
+  untilOff: number | null; // offset from today, or null for "nothing ahead"
+  untilTime: string;
+  kind: PropertyOccupancyFlip | null;
+};
+
+const OCC_CYCLE: OccSpec[] = [
+  { status: 'occupied', untilOff: 0, untilTime: '10:00', kind: 'free' },
+  { status: 'vacant', untilOff: 0, untilTime: '16:00', kind: 'booked' },
+  { status: 'occupied', untilOff: 2, untilTime: '10:00', kind: 'free' },
+  { status: 'blocked', untilOff: 9, untilTime: '00:00', kind: 'free' },
+  { status: 'vacant', untilOff: null, untilTime: '00:00', kind: null },
+  { status: 'vacant', untilOff: 1, untilTime: '16:00', kind: 'blocked' },
+  { status: 'occupied', untilOff: 12, untilTime: '10:00', kind: 'free' },
+];
+
+function demoOccupancy(index: number): PropertyOccupancy {
+  const spec = OCC_CYCLE[index % OCC_CYCLE.length];
+  return {
+    status: spec.status,
+    until: spec.untilOff != null ? `${localDate(spec.untilOff)}T${spec.untilTime}` : null,
+    until_kind: spec.kind,
+    as_of: `${localDate(0)}T09:00`,
+    timezone: 'America/Los_Angeles',
+  };
+}
+
 function assignee(u: (typeof DEMO_USERS)[number]) {
   return {
     user_id: u.id,
@@ -111,6 +150,7 @@ export function getDemoAssignments() {
       reservation_id: null,
       property_name: p?.name ?? '',
       property_id: p?.id ?? null,
+      occupancy: p ? demoOccupancy(i) : null,
       template_id: null,
       form_metadata: null,
       created_at: noonISO(-15 - (i % 8)),

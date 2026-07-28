@@ -26,6 +26,39 @@ export function todayInTz(tz: string | undefined): { date: string; tz: string } 
 }
 
 /**
+ * The current wall-clock moment in `tz` as a sortable "YYYY-MM-DDTHH:MM" key.
+ *
+ * Same wall-clock convention as `todayInTz`, extended to the minute. Because
+ * every value in a comparison is a wall-clock key in the SAME timezone, plain
+ * string ordering is exact — no instant arithmetic, no DST offset math. This
+ * mirrors how get_property_turnovers builds its to_char() ordering keys in SQL.
+ *
+ * Falls back to UTC when `tz` is undefined, empty, or invalid.
+ */
+export function wallClockInTz(tz: string | undefined, at: Date = new Date()): string {
+  if (tz) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        // h23 rather than hour12:false — the latter renders midnight as "24"
+        // in some ICU builds, which would sort after every other hour.
+        hourCycle: 'h23',
+      }).formatToParts(at);
+      const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+      return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+    } catch {
+      // Invalid IANA string — fall through to UTC.
+    }
+  }
+  return at.toISOString().slice(0, 16);
+}
+
+/**
  * Add (or subtract, with a negative `days`) whole calendar days to a bare
  * YYYY-MM-DD string, returning the resulting YYYY-MM-DD. Pure calendar
  * arithmetic anchored at noon UTC so it can never drift across a day boundary

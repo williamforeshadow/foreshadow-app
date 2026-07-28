@@ -4,10 +4,10 @@ import { memo, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useMyAssignments } from '@/lib/queries';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
-import type { User, Project } from '@/lib/types';
+import type { User, Project, PropertyOccupancy } from '@/lib/types';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
 import type { TaskDetailInput } from '@/components/tasks/detail/taskInput';
-import { TaskRow, TaskListHeader } from '@/components/tasks/TaskRow';
+import { TaskRow, TaskListHeader, taskRowMinWidth } from '@/components/tasks/TaskRow';
 import {
   TaskFilterBar,
   SortSelect,
@@ -55,6 +55,7 @@ interface RawAssignmentTask extends Record<string, unknown> {
   form_metadata?: Record<string, unknown> | null;
   created_at?: string | null;
   updated_at?: string | null;
+  occupancy?: PropertyOccupancy | null;
 }
 
 interface UnifiedItem {
@@ -76,6 +77,10 @@ interface UnifiedItem {
   // FK to the linked reservation when present. Drives the small "key"
   // badge next to the row title in <TaskRow> via KeyAffordance.
   reservation_id: string | null;
+  // Live occupancy of this task's property, computed server side and delivered
+  // in the same payload so the column paints with the rest of the row. Null for
+  // property-less tasks.
+  occupancy: PropertyOccupancy | null;
   raw: RawAssignmentTask;
 }
 
@@ -281,6 +286,7 @@ function MyAssignmentsWindowContent({ currentUser }: MyAssignmentsWindowProps) {
         is_binned: !!task.is_binned,
         comment_count: Number(task.comment_count ?? 0),
         reservation_id: task.reservation_id ?? null,
+        occupancy: task.occupancy ?? null,
         raw: task,
       });
     }
@@ -535,12 +541,16 @@ function MyAssignmentsWindowContent({ currentUser }: MyAssignmentsWindowProps) {
       return compareItems(a, b);
     });
 
+    // Overdue and No Date carry no sublabel: a bare count renders right-aligned
+    // in the section header, which puts it directly under the `comments` column
+    // label and reads as a comment total. The "N scheduled" sublabels below say
+    // what they are, so they stay.
     const result: DateGroup[] = [];
-    if (overdue.length > 0) result.push({ label: 'Overdue', sublabel: `${overdue.length}`, items: overdue });
+    if (overdue.length > 0) result.push({ label: 'Overdue', items: overdue });
     if (today.length > 0) result.push({ label: 'Today', sublabel: `${today.length} scheduled`, items: today });
     if (thisWeek.length > 0) result.push({ label: 'This week', sublabel: `${thisWeek.length} scheduled`, items: thisWeek });
     if (later.length > 0) result.push({ label: 'Later', sublabel: `${later.length} scheduled`, items: later });
-    if (unscheduled.length > 0) result.push({ label: 'No Date', sublabel: `${unscheduled.length}`, items: unscheduled });
+    if (unscheduled.length > 0) result.push({ label: 'No Date', items: unscheduled });
 
     return { groups: result, openCount: open };
   }, [filteredItems, sortKey, sortDir]);
@@ -668,9 +678,21 @@ function MyAssignmentsWindowContent({ currentUser }: MyAssignmentsWindowProps) {
               <p className="text-sm text-neutral-500 dark:text-[#66645f] mt-1">You&apos;re all caught up</p>
             </div>
           ) : (
-            <div className="px-8 pb-8">
+            // Locked column widths + a min-width on this wrapper: the list keeps
+            // its proportions on a small laptop and the parent scrolls
+            // horizontally instead of squeezing every column. The min-width
+            // lives here (not just on the rows) so the column header and the
+            // section headers span the same scrollable width as the rows —
+            // otherwise their right-aligned counts would strand at the viewport
+            // edge once scrolled. 4rem accounts for this element's px-8 pair.
+            <div
+              className="px-8 pb-8"
+              style={{
+                minWidth: `calc(${taskRowMinWidth({ showOccupancy: true })}px + 4rem)`,
+              }}
+            >
               <div className="pt-5">
-                <TaskListHeader />
+                <TaskListHeader showOccupancy lockColumnWidths />
               </div>
               {groups.map((group) => {
                 const isCollapsed = collapsedSections.has(group.label);
@@ -725,6 +747,8 @@ function MyAssignmentsWindowContent({ currentUser }: MyAssignmentsWindowProps) {
                                 }
                               }}
                               showBinPill
+                              showOccupancy
+                              lockColumnWidths
                               departmentIcon={DeptIcon}
                             />
                           );

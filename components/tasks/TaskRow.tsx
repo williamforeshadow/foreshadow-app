@@ -4,6 +4,7 @@ import React from 'react';
 import { KeyAffordance } from './KeyAffordance';
 import { STATUS_ICONS, STATUS_TITLE } from '@/lib/taskStatusIcons';
 import { PRIORITY_ICONS, PRIORITY_TITLE } from '@/lib/taskPriorityIcons';
+import type { PropertyOccupancy } from '@/lib/types';
 
 // Shared row + visual constants used across task-list surfaces (My Assignments,
 // Property Tasks, and anywhere else we render the "status marble" list design).
@@ -49,6 +50,10 @@ export interface TaskRowItem {
   reservation_id?: string | null;
   // Total number of comments on this task. Rendered in the comments column.
   comment_count?: number;
+  // Live occupancy of this task's property, as of now. Null when the task has
+  // no property (nothing to be occupied) or when the surface doesn't supply it.
+  // Rendered only when the consumer passes `showOccupancy`.
+  occupancy?: PropertyOccupancy | null;
 }
 
 // ---- Status + priority visual constants ------------------------------------
@@ -106,6 +111,102 @@ export function PriorityTag({ priority }: { priority: string }) {
       {PRIORITY_LABELS[priority] || priority}
     </span>
   );
+}
+
+// ---- Occupancy -------------------------------------------------------------
+
+/**
+ * Tailwind text color per occupancy state. Shared by desktop + mobile rows.
+ *
+ * Only the exceptional state carries color. Occupied and vacant are both
+ * routine — every property is one or the other at all times — so they read in
+ * the row's neutral text and let the word do the work.
+ */
+export const OCCUPANCY_TEXT_CLASS: Record<string, string> = {
+  occupied: 'text-neutral-500 dark:text-[#a09e9a]',
+  // Blocked matches the urgent-priority red used elsewhere in the row — it's
+  // the state most likely to derail a scheduled visit.
+  blocked: 'text-red-500 dark:text-[#d97757]',
+  vacant: 'text-neutral-500 dark:text-[#a09e9a]',
+};
+
+export const OCCUPANCY_LABELS: Record<string, string> = {
+  occupied: 'Occupied',
+  blocked: 'Blocked',
+  vacant: 'Vacant',
+};
+
+/**
+ * Render a wall-clock "HH:MM" as a compact clock label: 10:00 → "10am",
+ * 16:00 → "4pm", 15:30 → "3:30pm". The on-the-hour case drops ":00" because
+ * check-in/check-out times almost always land there and the minutes are noise.
+ */
+export function formatClock(time: string): string {
+  const [h, m] = time.split(':').map(Number);
+  if (!Number.isFinite(h)) return time;
+  const meridiem = h >= 12 ? 'pm' : 'am';
+  const hour12 = h % 12 || 12;
+  return m ? `${hour12}:${String(m).padStart(2, '0')}${meridiem}` : `${hour12}${meridiem}`;
+}
+
+/**
+ * Turn an occupancy snapshot into the two strings a row renders. Shared so the
+ * desktop column and the mobile footer line can never drift in wording.
+ *
+ * `detail` states how long the CURRENT state holds — "until 10am Aug 1" — with
+ * the time carried all the way through. On a same-day flip the unit empties at
+ * checkout and refills that afternoon, so a date alone ("until Aug 1") would be
+ * ambiguous about the only window anyone can actually work in.
+ */
+export function formatOccupancy(
+  occupancy: PropertyOccupancy | null | undefined
+): { label: string; detail: string | null } | null {
+  if (!occupancy) return null;
+  const label = OCCUPANCY_LABELS[occupancy.status] ?? occupancy.status;
+  if (!occupancy.until) {
+    // Nothing scheduled inside the horizon. Only worth saying out loud when the
+    // property is free — "occupied with no end in sight" is a data smell, not a
+    // fact worth surfacing on a task row.
+    return {
+      label,
+      detail: occupancy.status === 'vacant' ? 'No future bookings' : null,
+    };
+  }
+  const [date, time] = occupancy.until.split('T');
+  const d = getShortDate(date);
+  if (!d) return { label, detail: null };
+  // Midnight is a whole-day boundary (calendar blocks), not a real clock time —
+  // "until 12am Sep 27" is noise, "until Sep 27" is the fact.
+  const clock = time && time !== '00:00' ? `${formatClock(time)} ` : '';
+  return { label, detail: `Until ${clock}${d.month} ${d.day}` };
+}
+
+/** Tooltip text spelling out the same fact in a full sentence. */
+export function occupancyTitle(
+  occupancy: PropertyOccupancy | null | undefined
+): string | undefined {
+  if (!occupancy) return undefined;
+  const base =
+    occupancy.status === 'occupied'
+      ? 'Someone is in the unit'
+      : occupancy.status === 'blocked'
+      ? 'Blocked on the calendar — no guest'
+      : 'Nobody in the unit';
+  if (!occupancy.until) {
+    return `${base} — nothing scheduled in the next few months.`;
+  }
+  const [date, time] = occupancy.until.split('T');
+  const d = getShortDate(date);
+  const when = `${time && time !== '00:00' ? `${formatClock(time)} ` : ''}${
+    d ? `${d.month} ${d.day}` : date
+  }`;
+  const verb =
+    occupancy.until_kind === 'free'
+      ? 'Free from'
+      : occupancy.until_kind === 'booked'
+      ? 'Next guest arrives'
+      : 'Blocked from';
+  return `${base}. ${verb} ${when} (${occupancy.timezone}).`;
 }
 
 // Archive-drawer icon — matches the bin iconography in
@@ -189,33 +290,89 @@ export function getShortDate(
 // class names from runtime-built strings.
 const TASK_ROW_GRID_CLASS = 'grid gap-4 px-3 -mx-3';
 
-export function taskRowGridTemplateColumns(opts: {
-  hideDepartment?: boolean;
-  hideBin?: boolean;
-  hideComments?: boolean;
-} = {}): string {
-  return [
-    '56px',                                // when (date)
-    'minmax(0,1fr)',                       // task (title + status + priority)
-    '96px',                                // assignee
-    opts.hideDepartment ? null : '120px',  // department
-    opts.hideBin ? null : '128px',         // bin
-    opts.hideComments ? null : '56px',     // comments
-  ]
-    .filter(Boolean)
-    .join(' ');
-}
+// Single source of truth for column geometry, in px. Every entry but `task` is
+// a fixed width; `task` is a FLOOR the flexible column may grow above.
+const TASK_ROW_COLUMNS = {
+  when: 56,
+  task: 280,
+  occupancy: 132,
+  assignee: 96,
+  department: 120,
+  bin: 128,
+  comments: 56,
+} as const;
+
+/** Tailwind `gap-4`, needed to compute the row's total minimum width. */
+const TASK_ROW_GAP = 16;
 
 interface TaskListColumnOpts {
   hideDepartment?: boolean;
   hideBin?: boolean;
   hideComments?: boolean;
+  // Occupancy is opt-in rather than opt-out: only surfaces whose payload
+  // actually carries an occupancy snapshot should reserve the column, so every
+  // other task list keeps its current layout untouched.
+  showOccupancy?: boolean;
+  // Give the task column a minimum width so the row keeps its proportions on a
+  // narrow viewport instead of compressing until content wraps — the grid grows
+  // past the container and the list scrolls horizontally.
+  //
+  // Opt-in, because it only works if the CONSUMER also supplies a horizontally
+  // scrollable container (see MyAssignmentsWindow); switching it on without one
+  // would just clip. Consumers that opt in should size their content wrapper
+  // with `taskRowMinWidth()` so section headers span the scrollable width too.
+  lockColumnWidths?: boolean;
+}
+
+/** Widths of the columns actually rendered for `opts`, in grid order. */
+function activeColumnWidths(opts: TaskListColumnOpts): number[] {
+  return [
+    TASK_ROW_COLUMNS.when,
+    TASK_ROW_COLUMNS.task,
+    opts.showOccupancy ? TASK_ROW_COLUMNS.occupancy : 0,
+    TASK_ROW_COLUMNS.assignee,
+    opts.hideDepartment ? 0 : TASK_ROW_COLUMNS.department,
+    opts.hideBin ? 0 : TASK_ROW_COLUMNS.bin,
+    opts.hideComments ? 0 : TASK_ROW_COLUMNS.comments,
+  ].filter((w) => w > 0);
+}
+
+export function taskRowGridTemplateColumns(opts: TaskListColumnOpts = {}): string {
+  return [
+    `${TASK_ROW_COLUMNS.when}px`,
+    opts.lockColumnWidths
+      ? `minmax(${TASK_ROW_COLUMNS.task}px,1fr)`
+      : 'minmax(0,1fr)',
+    opts.showOccupancy ? `${TASK_ROW_COLUMNS.occupancy}px` : null,
+    `${TASK_ROW_COLUMNS.assignee}px`,
+    opts.hideDepartment ? null : `${TASK_ROW_COLUMNS.department}px`,
+    opts.hideBin ? null : `${TASK_ROW_COLUMNS.bin}px`,
+    opts.hideComments ? null : `${TASK_ROW_COLUMNS.comments}px`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+/**
+ * The narrowest a locked row can be, in px — every column at its floor plus the
+ * gaps between them. Consumers apply this to the wrapper holding the header,
+ * section headers and rows so all three span the same scrollable width.
+ *
+ * Deliberately NOT `w-max`: the task column is a `1fr` track, and under
+ * max-content sizing a single long title would blow the whole list out to that
+ * title's width instead of truncating.
+ */
+export function taskRowMinWidth(opts: TaskListColumnOpts = {}): number {
+  const widths = activeColumnWidths(opts);
+  return widths.reduce((sum, w) => sum + w, 0) + (widths.length - 1) * TASK_ROW_GAP;
 }
 
 export function TaskListHeader({
   hideDepartment = false,
   hideBin = false,
   hideComments = false,
+  showOccupancy = false,
+  lockColumnWidths = false,
 }: TaskListColumnOpts = {}) {
   return (
     <div
@@ -225,11 +382,14 @@ export function TaskListHeader({
           hideDepartment,
           hideBin,
           hideComments,
+          showOccupancy,
+          lockColumnWidths,
         }),
       }}
     >
       <div className="text-right">when</div>
       <div>task</div>
+      {showOccupancy && <div>occupancy</div>}
       <div>assignee</div>
       {!hideDepartment && <div>department</div>}
       {!hideBin && <div>bin</div>}
@@ -255,6 +415,12 @@ interface TaskRowProps {
   hideDepartment?: boolean;
   hideBin?: boolean;
   hideComments?: boolean;
+  // Opt in to the occupancy column. Must match the <TaskListHeader> above the
+  // list, since both derive their columns from the same grid template.
+  showOccupancy?: boolean;
+  // Floor the task column's width — see TaskListColumnOpts. Must also match the
+  // <TaskListHeader> above the list.
+  lockColumnWidths?: boolean;
   // Optional department icon (rendered at the row's top-right).
   departmentIcon?: React.ComponentType<{ className?: string }>;
 }
@@ -307,6 +473,36 @@ function AssigneeStack({ assignees }: { assignees: TaskRowAssignee[] }) {
   );
 }
 
+// Occupancy column — state on top, what-happens-next underneath in italics,
+// matching the annotative treatment the mobile row uses. Sized to the property
+// sub-label (12px) so the two read as the same class of information, and
+// vertically centred with the columns to its right rather than pinned to the
+// title's baseline.
+function OccupancyCell({ occupancy }: { occupancy?: PropertyOccupancy | null }) {
+  const formatted = formatOccupancy(occupancy);
+  if (!formatted || !occupancy) return <EmDash />;
+  return (
+    // The detail line is positioned OUT of flow so the cell's measured height is
+    // just the state label. The grid's items-center then puts that label on the
+    // same line as the single-line department and bin columns, instead of
+    // centring the two-line block and leaving the label riding above them.
+    <div className="min-w-0 w-full relative" title={occupancyTitle(occupancy)}>
+      <div
+        className={`text-[12px] font-medium tracking-[0.02em] truncate ${
+          OCCUPANCY_TEXT_CLASS[occupancy.status] ?? OCCUPANCY_TEXT_CLASS.vacant
+        }`}
+      >
+        {formatted.label}
+      </div>
+      {formatted.detail && (
+        <div className="absolute left-0 top-full w-full text-[12px] italic text-neutral-400 dark:text-[#66645f] leading-snug tracking-tight truncate mt-0.5">
+          {formatted.detail}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Empty placeholder used when a column has no value to show.
 function EmDash() {
   return (
@@ -326,6 +522,8 @@ export function TaskRow({
   hideDepartment = false,
   hideBin = false,
   hideComments = false,
+  showOccupancy = false,
+  lockColumnWidths = false,
   departmentIcon: DeptIcon,
 }: TaskRowProps) {
   const timeInfo = formatTimeCol(item.scheduled_time);
@@ -358,6 +556,8 @@ export function TaskRow({
           hideDepartment,
           hideBin,
           hideComments,
+          showOccupancy,
+          lockColumnWidths,
         }),
       }}
     >
@@ -425,6 +625,13 @@ export function TaskRow({
           <PriorityTag priority={item.priority} />
         </div>
       </div>
+
+      {/* Occupancy column */}
+      {showOccupancy && (
+        <div className="min-w-0 flex items-center">
+          <OccupancyCell occupancy={item.occupancy} />
+        </div>
+      )}
 
       {/* Assignee column */}
       <div className="min-w-0 flex items-center">
