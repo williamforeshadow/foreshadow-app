@@ -5,17 +5,17 @@
 
 import Link from 'next/link';
 import { Slack } from 'lucide-react';
-import AssignmentIcon from '@/components/icons/AssignmentIcon';
+import TasksIcon from '@/components/icons/TasksIcon';
 
-// Rendered nodes rather than component refs — AssignmentIcon takes `size`,
-// lucide takes `className`, and they don't share a prop shape.
+// Rendered nodes rather than component refs, so each icon can take the props
+// its own source expects.
 const DESTINATIONS = [
   {
     href: '/automations/tasks',
     label: 'Tasks',
     description: 'Generate tasks from templates on reservation events.',
     // The sidebar's Tasks glyph, so the two agree.
-    icon: <AssignmentIcon size={20} />,
+    icon: <TasksIcon className="h-5 w-5" />,
   },
   {
     href: '/automations/new-engine',

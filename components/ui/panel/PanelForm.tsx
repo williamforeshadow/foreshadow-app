@@ -279,21 +279,24 @@ export function TokenDateTime({
   onChange,
   ariaLabel,
   width,
+  disabled,
 }: {
   type: 'time' | 'date';
   value: string;
   onChange: (next: string) => void;
   ariaLabel: string;
   width?: string;
+  disabled?: boolean;
 }) {
   return (
     <input
       type={type}
       value={value}
       aria-label={ariaLabel}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
-      className={`${TOKEN_CLASS} outline-none`}
-      style={{ ...tokenStyle(true), width: width ?? (type === 'date' ? '9.5rem' : '7.5rem') }}
+      className={`${TOKEN_CLASS} outline-none disabled:opacity-45`}
+      style={{ ...tokenStyle(!disabled), width: width ?? (type === 'date' ? '9.5rem' : '7.5rem') }}
     />
   );
 }

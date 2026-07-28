@@ -3,10 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import DesktopSidebarShell from '@/components/DesktopSidebarShell';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -15,16 +11,33 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
-import { Pencil, Trash2, Plus } from 'lucide-react';
-import { getDepartmentIcon, DEPARTMENT_ICON_OPTIONS, DEPARTMENT_ICON_MAP } from '@/lib/departmentIcons';
+import { ChipButton, RowIconButton, SectionLabel } from '@/components/ui/panel/PanelForm';
+import { DeptGlyph } from '@/components/tasks/DeptGlyph';
+import DeptIconPicker from '@/components/departments/DeptIconPicker';
 import { useDepartments } from '@/lib/departmentsContext';
 import type { Department } from '@/lib/types';
+
+/** Matched to the other index pages so the section lines up. */
+const DETAIL_COL = 'mx-auto w-full max-w-[46rem]';
+
+const ICONS = {
+  pencil: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 20h4l10-10a2.5 2.5 0 10-3.5-3.5L4.5 16.5 4 20z" />
+    </svg>
+  ),
+  trash: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l.9 12.1A2 2 0 008.9 21h6.2a2 2 0 002-1.9L18 7" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  ),
+  chevron: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  ),
+};
 
 export default function DepartmentsPage() {
   const router = useRouter();
@@ -129,281 +142,243 @@ export default function DepartmentsPage() {
     }
   };
 
-  const IconPickerGrid = ({
-    selectedIcon,
-    onSelect,
-    pickerId,
-  }: {
-    selectedIcon: string;
-    onSelect: (key: string) => void;
-    pickerId: string;
-  }) => (
-    <Popover open={iconPickerOpen === pickerId} onOpenChange={(open) => setIconPickerOpen(open ? pickerId : null)}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="flex items-center justify-center w-10 h-10 rounded-lg border border-neutral-200 dark:border-neutral-700 hover:border-neutral-400 dark:hover:border-neutral-500 transition-colors bg-white dark:bg-neutral-800"
-          title="Choose icon"
-        >
-          {(() => {
-            const IconComp = getDepartmentIcon(selectedIcon);
-            return <IconComp className="w-5 h-5 text-neutral-700 dark:text-neutral-300" />;
-          })()}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[320px] p-3" align="start">
-        <p className="text-sm font-medium text-muted-foreground mb-2">Choose an icon</p>
-        <div className="grid grid-cols-7 gap-1">
-          {DEPARTMENT_ICON_OPTIONS.map((opt) => {
-            const IconComp = DEPARTMENT_ICON_MAP[opt.key];
-            if (!IconComp) return null;
-            return (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => {
-                  onSelect(opt.key);
-                  setIconPickerOpen(null);
-                }}
-                className={cn(
-                  'flex items-center justify-center w-9 h-9 rounded-md transition-colors',
-                  selectedIcon === opt.key
-                    ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900'
-                    : 'hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-400'
-                )}
-                title={opt.label}
-              >
-                <IconComp className="w-4 h-4" />
-              </button>
-            );
-          })}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-
   return (
     <DesktopSidebarShell>
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Sub-header: description + actions */}
-        <div className="flex-shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-6 pt-6 pb-4">
-          <p className="text-sm text-muted-foreground">
-            Manage departments for templates, tasks, and projects.
-          </p>
-
-          <div className="flex items-center justify-between mt-4">
-            <Badge variant="secondary" className="text-xs">
-              {departments.length} department{departments.length !== 1 ? 's' : ''}
-            </Badge>
-            <Button onClick={() => setShowCreateDialog(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              New Department
-            </Button>
-          </div>
-        </div>
-
-        {/* Error banner */}
-        {error && (
-          <div className="mx-6 mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300 flex items-center justify-between">
-            <span>{error}</span>
-            <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 ml-2">✕</button>
-          </div>
-        )}
-
-        {/* Content */}
-        <div className="flex-1 overflow-auto p-6">
-          {loading ? (
-            <div className="text-center py-12 text-neutral-500">
-              Loading departments...
+      <div
+        className="panel-form flex flex-1 flex-col overflow-hidden"
+        style={{ background: 'var(--task-surface-0)' }}
+      >
+        <div className="flex-1 overflow-y-auto">
+          <div className={DETAIL_COL}>
+            <div
+              className="flex items-center justify-between gap-3 border-b px-[18px] py-3"
+              style={{ borderColor: 'var(--task-line-soft)' }}
+            >
+              <SectionLabel className="!px-0 !pb-0 !pt-0">
+                {loading
+                  ? 'Departments'
+                  : `${departments.length} department${departments.length === 1 ? '' : 's'}`}
+              </SectionLabel>
+              <ChipButton set onClick={() => setShowCreateDialog(true)}>
+                + New department
+              </ChipButton>
             </div>
-          ) : departments.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-neutral-500 dark:text-neutral-400 mb-4">
-                No departments yet. Create your first department to organize templates and tasks.
-              </p>
-              <Button onClick={() => setShowCreateDialog(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Create First Department
-              </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              {departments.map((dept) => {
+
+            {(error || deleteError) && (
+              <div
+                className="mx-[18px] mt-3 flex items-start justify-between gap-3 rounded-lg border px-3 py-2.5 text-[length:var(--task-fs-body-sm)]"
+                style={{
+                  borderColor: 'var(--task-amber)',
+                  background: 'var(--task-amber-soft)',
+                  color: 'var(--task-amber)',
+                }}
+              >
+                <span>{error || deleteError}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    setDeleteError(null);
+                    setDeletingId(null);
+                  }}
+                  aria-label="Dismiss"
+                  className="shrink-0"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {loading ? (
+              <div className="px-[18px] py-12 text-center">
+                <p
+                  className="font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
+                  style={{ color: 'var(--task-ink-3)' }}
+                >
+                  Loading departments…
+                </p>
+              </div>
+            ) : departments.length === 0 ? (
+              <div className="px-[18px] py-12 text-center">
+                <p className="text-[length:var(--task-fs-option)]" style={{ color: 'var(--task-ink-2)' }}>
+                  No departments yet.
+                </p>
+                <p
+                  className="mt-1.5 text-[length:var(--task-fs-body-sm)]"
+                  style={{ color: 'var(--task-ink-3)' }}
+                >
+                  Departments organize templates, tasks, and projects.
+                </p>
+                <div className="mt-4 flex justify-center">
+                  <ChipButton set onClick={() => setShowCreateDialog(true)}>
+                    + New department
+                  </ChipButton>
+                </div>
+              </div>
+            ) : (
+              departments.map((dept) => {
                 const isEditing = editingId === dept.id;
-                const IconComp = getDepartmentIcon(isEditing ? editIcon : dept.icon);
+
+                if (isEditing) {
+                  return (
+                    <div
+                      key={dept.id}
+                      className="flex items-center gap-2.5 border-b px-[18px] py-2.5"
+                      style={{
+                        borderColor: 'var(--task-line-soft)',
+                        background: 'var(--task-surface-1)',
+                      }}
+                    >
+                      <DeptIconPicker
+                        open={iconPickerOpen === 'edit'}
+                        onOpenChange={(open) => setIconPickerOpen(open ? 'edit' : null)}
+                        value={editIcon}
+                        onSelect={setEditIcon}
+                      />
+                      <input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder="Department name"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveEdit();
+                          if (e.key === 'Escape') cancelEdit();
+                        }}
+                        className="min-w-0 flex-1 bg-transparent text-[length:var(--task-fs-option)] outline-none placeholder:text-[var(--task-ink-3)]"
+                        style={{ color: 'var(--task-ink-1)' }}
+                      />
+                      <ChipButton set={false} onClick={cancelEdit}>
+                        Cancel
+                      </ChipButton>
+                      <ChipButton
+                        set
+                        onClick={handleSaveEdit}
+                        disabled={saving || !editName.trim()}
+                        style={
+                          saving || !editName.trim()
+                            ? { opacity: 0.45 }
+                            : { background: 'var(--task-accent)', color: '#fff' }
+                        }
+                      >
+                        {saving ? 'Saving…' : 'Save'}
+                      </ChipButton>
+                    </div>
+                  );
+                }
 
                 return (
-                  <Card
+                  <div
                     key={dept.id}
-                    className={cn(
-                      'group relative transition-all duration-150',
-                      isEditing
-                        ? 'ring-2 ring-neutral-400 dark:ring-neutral-500'
-                        : 'hover:border-neutral-400 dark:hover:border-neutral-500'
-                    )}
+                    className="flex items-center gap-2.5 border-b px-[18px] py-2.5 transition-colors hover:bg-[var(--task-surface-1)]"
+                    style={{ borderColor: 'var(--task-line-soft)' }}
                   >
-                    <CardContent className="p-4">
-                      {isEditing ? (
-                        /* Edit mode */
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-3">
-                            <IconPickerGrid
-                              selectedIcon={editIcon}
-                              onSelect={setEditIcon}
-                              pickerId="edit"
-                            />
-                            <Input
-                              value={editName}
-                              onChange={(e) => setEditName(e.target.value)}
-                              placeholder="Department name"
-                              className="flex-1"
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSaveEdit();
-                                if (e.key === 'Escape') cancelEdit();
-                              }}
-                            />
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              onClick={handleSaveEdit}
-                              disabled={saving || !editName.trim()}
-                              className="flex-1"
-                            >
-                              {saving ? 'Saving...' : 'Save'}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={cancelEdit}
-                              className="flex-1"
-                            >
-                              Cancel
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        /* Display mode — clicking the card opens the detail page */
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => router.push(`/departments/${dept.id}`)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              router.push(`/departments/${dept.id}`);
-                            }
-                          }}
-                          className="flex items-center gap-3 cursor-pointer"
-                        >
-                          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex-shrink-0">
-                            <IconComp className="w-5 h-5 text-neutral-700 dark:text-neutral-300" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-neutral-900 dark:text-white truncate">
-                              {dept.name}
-                            </p>
-                          </div>
-                          {/* Action buttons - show on hover */}
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                startEdit(dept);
-                              }}
-                              className="p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-                              title="Edit department"
-                            >
-                              <Pencil className="w-3.5 h-3.5 text-neutral-500" />
-                            </button>
-                            <button
-                              disabled={deletingId === dept.id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (confirm(`Delete "${dept.name}"? This cannot be undone.`)) {
-                                  handleDelete(dept.id);
-                                }
-                              }}
-                              className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
-                              title="Delete department"
-                            >
-                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                    {/* The row opens the detail page; the two affordances on
+                        the right are siblings, not nested buttons. */}
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/departments/${dept.id}`)}
+                      aria-label={`Open ${dept.name}`}
+                      className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                    >
+                      <span className="shrink-0">
+                        <DeptGlyph iconKey={dept.icon} size={17} />
+                      </span>
+                      <span
+                        className="min-w-0 flex-1 truncate text-[length:var(--task-fs-option)]"
+                        style={{ color: 'var(--task-ink-1)' }}
+                      >
+                        {dept.name}
+                      </span>
+                    </button>
 
-          {/* Delete error toast */}
-          {deleteError && (
-            <div className="fixed bottom-6 right-6 max-w-md p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg shadow-lg text-sm text-red-700 dark:text-red-300 z-50">
-              <div className="flex items-start justify-between gap-3">
-                <span>{deleteError}</span>
-                <button onClick={() => { setDeleteError(null); setDeletingId(null); }} className="text-red-500 hover:text-red-700 flex-shrink-0">✕</button>
-              </div>
-            </div>
-          )}
+                    <RowIconButton label="Edit department" onClick={() => startEdit(dept)}>
+                      {ICONS.pencil}
+                    </RowIconButton>
+                    <RowIconButton
+                      danger
+                      label="Delete department"
+                      onClick={() => {
+                        if (deletingId === dept.id) return;
+                        if (confirm(`Delete "${dept.name}"? This cannot be undone.`)) {
+                          handleDelete(dept.id);
+                        }
+                      }}
+                    >
+                      {ICONS.trash}
+                    </RowIconButton>
+                    <span className="shrink-0" style={{ color: 'var(--task-ink-3)' }}>
+                      {ICONS.chevron}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Create Department Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>New Department</DialogTitle>
-            <DialogDescription>
-              Create a new department to organize templates, tasks, and projects.
+        <DialogContent className="panel-form max-w-md p-0" style={{ background: 'var(--task-surface-0)' }}>
+          <DialogHeader className="px-[18px] pt-4">
+            <DialogTitle
+              className="text-[length:var(--task-fs-option)]"
+              style={{ color: 'var(--task-ink-1)' }}
+            >
+              New Department
+            </DialogTitle>
+            <DialogDescription
+              className="text-[length:var(--task-fs-body-sm)]"
+              style={{ color: 'var(--task-ink-3)' }}
+            >
+              Departments organize templates, tasks, and projects.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div className="flex items-center gap-3">
-              <IconPickerGrid
-                selectedIcon={newIcon}
+          <div>
+            <SectionLabel>Icon and name</SectionLabel>
+            <div
+              className="flex items-center gap-2.5 border-y px-[18px] py-2.5"
+              style={{ borderColor: 'var(--task-line-soft)' }}
+            >
+              <DeptIconPicker
+                open={iconPickerOpen === 'create'}
+                onOpenChange={(open) => setIconPickerOpen(open ? 'create' : null)}
+                value={newIcon}
                 onSelect={setNewIcon}
-                pickerId="create"
               />
-              <Input
+              <input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="Department name"
-                className="flex-1"
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && newName.trim()) handleCreate();
                 }}
+                className="min-w-0 flex-1 bg-transparent text-[length:var(--task-fs-option)] outline-none placeholder:text-[var(--task-ink-3)]"
+                style={{ color: 'var(--task-ink-1)' }}
               />
             </div>
-
-            {/* Preview */}
-            {newName.trim() && (
-              <div className="flex items-center gap-3 p-3 bg-neutral-50 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                {(() => {
-                  const PreviewIcon = getDepartmentIcon(newIcon);
-                  return (
-                    <div className="flex items-center justify-center w-8 h-8 rounded-md bg-white dark:bg-neutral-700">
-                      <PreviewIcon className="w-4 h-4 text-neutral-700 dark:text-neutral-300" />
-                    </div>
-                  );
-                })()}
-                <span className="text-sm font-medium text-neutral-900 dark:text-white">{newName.trim()}</span>
-              </div>
-            )}
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+          <DialogFooter className="flex-row gap-2 px-[18px] pb-4">
+            <button
+              type="button"
+              onClick={() => setShowCreateDialog(false)}
+              className="h-[46px] shrink-0 rounded-xl border px-5 font-mono text-[length:var(--task-fs-cta)] uppercase tracking-[0.1em] transition-all active:scale-[0.98]"
+              style={{ background: 'var(--task-surface-2)', borderColor: 'var(--task-line)', color: 'var(--task-ink-2)' }}
+            >
               Cancel
-            </Button>
-            <Button onClick={handleCreate} disabled={creating || !newName.trim()}>
-              {creating ? 'Creating...' : 'Create'}
-            </Button>
+            </button>
+            <button
+              type="button"
+              onClick={handleCreate}
+              disabled={creating || !newName.trim()}
+              className="h-[46px] flex-1 rounded-xl font-mono text-[length:var(--task-fs-cta)] uppercase tracking-[0.1em] transition-all active:scale-[0.98] disabled:opacity-50"
+              style={{ background: 'var(--task-accent)', color: '#fff' }}
+            >
+              {creating ? 'Creating…' : 'Create'}
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

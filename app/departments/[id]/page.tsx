@@ -3,22 +3,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Pencil, Plus, Trash2, Check, X } from 'lucide-react';
 import DesktopSidebarShell from '@/components/DesktopSidebarShell';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { AdaptivePicker } from '@/components/tasks/detail/primitives/AdaptivePicker';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+  ChipButton,
+  MetaChip,
+  RowIconButton,
+  SectionLabel,
+} from '@/components/ui/panel/PanelForm';
+import { DeptGlyph } from '@/components/tasks/DeptGlyph';
+import DeptIconPicker from '@/components/departments/DeptIconPicker';
 import { cn } from '@/lib/utils';
-import { getDepartmentIcon, DEPARTMENT_ICON_OPTIONS, DEPARTMENT_ICON_MAP } from '@/lib/departmentIcons';
 import { useDepartments } from '@/lib/departmentsContext';
 import { useAuth } from '@/lib/authContext';
 import type { Department, DepartmentMember } from '@/lib/types';
@@ -29,6 +24,27 @@ const ROLE_COLORS: Record<string, string> = {
   manager: 'bg-blue-500',
   staff: 'bg-emerald-500',
   vendor: 'bg-amber-500',
+};
+
+/** Matched to the other index pages so the section lines up. */
+const DETAIL_COL = 'mx-auto w-full max-w-[46rem]';
+
+const ICONS = {
+  back: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M15 6l-6 6 6 6" />
+    </svg>
+  ),
+  search: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+      <circle cx="11" cy="11" r="6.5" /><path d="M16 16l4 4" />
+    </svg>
+  ),
+  close: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  ),
 };
 
 export default function DepartmentDetailPage() {
@@ -45,8 +61,8 @@ export default function DepartmentDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Edit dialog state
-  const [showEdit, setShowEdit] = useState(false);
+  // Edit state — inline on the header row rather than a dialog.
+  const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [editIcon, setEditIcon] = useState('folder');
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
@@ -96,7 +112,13 @@ export default function DepartmentDetailPage() {
     if (!department) return;
     setEditName(department.name);
     setEditIcon(department.icon || 'folder');
-    setShowEdit(true);
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setEditName('');
+    setEditIcon('folder');
   };
 
   const handleSaveEdit = async () => {
@@ -113,7 +135,7 @@ export default function DepartmentDetailPage() {
       if (!res.ok) throw new Error(data?.error || 'Failed to update department');
       setDepartment(data.department as Department);
       await refreshDepartments();
-      setShowEdit(false);
+      setEditing(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update department');
     } finally {
@@ -180,300 +202,287 @@ export default function DepartmentDetailPage() {
     }
   };
 
-  const HeaderIcon = getDepartmentIcon(department?.icon ?? 'folder');
-
   return (
     <DesktopSidebarShell>
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Sub-header: back link */}
-        <div className="flex-shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-6 py-4">
+      <div
+        className="panel-form flex flex-1 flex-col overflow-hidden"
+        style={{ background: 'var(--task-surface-0)' }}
+      >
+        {/* Back to the list */}
+        <div
+          className="flex shrink-0 items-center border-b px-3 py-2"
+          style={{ borderColor: 'var(--task-line-soft)' }}
+        >
           <Link
             href="/departments"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            className="flex items-center gap-1 rounded-lg px-2 py-1 font-mono text-[length:var(--task-fs-chip)] transition-colors hover:bg-[var(--task-surface-1)] hover:text-[var(--task-ink-1)]"
+            style={{ color: 'var(--task-ink-3)' }}
           >
-            <ArrowLeft className="w-4 h-4" />
-            All departments
+            {ICONS.back}
+            Departments
           </Link>
         </div>
 
-        {error && (
-          <div className="mx-6 mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300 flex items-center justify-between">
-            <span>{error}</span>
-            <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 ml-2">✕</button>
-          </div>
-        )}
-
-        <div className="flex-1 overflow-auto p-6">
-          {loading ? (
-            <div className="text-center py-12 text-neutral-500">Loading department…</div>
-          ) : notFound ? (
-            <div className="text-center py-12">
-              <p className="text-neutral-500 dark:text-neutral-400 mb-4">Department not found.</p>
-              <Button onClick={() => router.push('/departments')}>Back to departments</Button>
-            </div>
-          ) : department ? (
-            <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-              {/* Department header */}
-              <div className="flex items-center gap-4">
-                <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex-shrink-0">
-                  <HeaderIcon className="w-6 h-6 text-neutral-700 dark:text-neutral-300" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h1 className="text-xl font-semibold tracking-tight text-neutral-900 dark:text-white truncate">
-                    {department.name}
-                  </h1>
-                  <p className="text-sm text-muted-foreground">
-                    {members.length} member{members.length !== 1 ? 's' : ''}
-                  </p>
-                </div>
-                {canManageMembers && (
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={openEdit}>
-                      <Pencil className="w-3.5 h-3.5 mr-2" />
-                      Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleDeleteDepartment}
-                      className="text-red-600 hover:text-red-700 dark:text-red-400"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 mr-2" />
-                      Delete
-                    </Button>
-                  </div>
-                )}
+        <div className="flex-1 overflow-y-auto">
+          <div className={DETAIL_COL}>
+            {error && (
+              <div
+                className="mx-[18px] mt-3 flex items-start justify-between gap-3 rounded-lg border px-3 py-2.5 text-[length:var(--task-fs-body-sm)]"
+                style={{
+                  borderColor: 'var(--task-amber)',
+                  background: 'var(--task-amber-soft)',
+                  color: 'var(--task-amber)',
+                }}
+              >
+                <span>{error}</span>
+                <button type="button" onClick={() => setError(null)} aria-label="Dismiss" className="shrink-0">
+                  ✕
+                </button>
               </div>
+            )}
 
-              {/* Members */}
-              <section className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">Members</h2>
+            {loading ? (
+              <div className="px-[18px] py-12 text-center">
+                <p
+                  className="font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
+                  style={{ color: 'var(--task-ink-3)' }}
+                >
+                  Loading department…
+                </p>
+              </div>
+            ) : notFound ? (
+              <div className="px-[18px] py-12 text-center">
+                <p className="text-[length:var(--task-fs-option)]" style={{ color: 'var(--task-ink-2)' }}>
+                  Department not found.
+                </p>
+                <div className="mt-4 flex justify-center">
+                  <ChipButton set onClick={() => router.push('/departments')}>
+                    Back to departments
+                  </ChipButton>
+                </div>
+              </div>
+            ) : department ? (
+              <>
+                {/* Department header — doubles as the edit surface. */}
+                <div
+                  className="flex items-center gap-2.5 border-b px-[18px] py-3"
+                  style={{ borderColor: 'var(--task-line-soft)' }}
+                >
+                  {editing ? (
+                    <>
+                      <DeptIconPicker
+                        open={iconPickerOpen}
+                        onOpenChange={setIconPickerOpen}
+                        value={editIcon}
+                        onSelect={setEditIcon}
+                      />
+                      <input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder="Department name"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && editName.trim()) handleSaveEdit();
+                          if (e.key === 'Escape') cancelEdit();
+                        }}
+                        className="min-w-0 flex-1 bg-transparent text-[length:var(--task-fs-option)] outline-none placeholder:text-[var(--task-ink-3)]"
+                        style={{ color: 'var(--task-ink-1)' }}
+                      />
+                      <ChipButton set={false} onClick={cancelEdit}>
+                        Cancel
+                      </ChipButton>
+                      <ChipButton
+                        set
+                        onClick={handleSaveEdit}
+                        disabled={saving || !editName.trim()}
+                        style={
+                          saving || !editName.trim()
+                            ? { opacity: 0.45 }
+                            : { background: 'var(--task-accent)', color: '#fff' }
+                        }
+                      >
+                        {saving ? 'Saving…' : 'Save'}
+                      </ChipButton>
+                    </>
+                  ) : (
+                    <>
+                      <span className="shrink-0">
+                        <DeptGlyph iconKey={department.icon} size={20} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className="block truncate text-[length:var(--task-fs-option)] font-medium"
+                          style={{ color: 'var(--task-ink-1)' }}
+                        >
+                          {department.name}
+                        </span>
+                        <span
+                          className="block truncate font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
+                          style={{ color: 'var(--task-ink-3)' }}
+                        >
+                          {members.length} member{members.length === 1 ? '' : 's'}
+                        </span>
+                      </span>
+                      {canManageMembers && (
+                        <>
+                          <ChipButton set={false} onClick={openEdit}>
+                            Edit
+                          </ChipButton>
+                          <RowIconButton
+                            danger
+                            label="Delete department"
+                            onClick={handleDeleteDepartment}
+                          >
+                            {ICONS.close}
+                          </RowIconButton>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Members */}
+                <div className="flex items-center justify-between gap-3 px-[18px] pb-1.5 pt-4">
+                  <SectionLabel className="!px-0 !pb-0 !pt-0">Members</SectionLabel>
                   {canManageMembers && (
-                    <AddMemberPicker
+                    <AdaptivePicker
                       open={addOpen}
                       onOpenChange={(o) => {
                         setAddOpen(o);
                         if (!o) setAddQuery('');
                       }}
-                      query={addQuery}
-                      onQueryChange={setAddQuery}
-                      users={addableUsers}
-                      busyUserId={busyUserId}
-                      onAdd={handleAddMember}
-                    />
+                      title="Add member"
+                      align="end"
+                      trigger={<ChipButton set>+ Add member</ChipButton>}
+                    >
+                      <div className="px-1 pb-1.5">
+                        <div
+                          className="flex h-[34px] items-center gap-2 rounded-lg px-2.5"
+                          style={{ background: 'var(--task-surface-2)' }}
+                        >
+                          <span className="shrink-0" style={{ color: 'var(--task-ink-3)' }}>
+                            {ICONS.search}
+                          </span>
+                          <input
+                            autoFocus
+                            value={addQuery}
+                            onChange={(e) => setAddQuery(e.target.value)}
+                            placeholder="Search people…"
+                            className="min-w-0 flex-1 bg-transparent text-[length:var(--task-fs-body-sm)] outline-none placeholder:text-[var(--task-ink-3)]"
+                            style={{ color: 'var(--task-ink-1)' }}
+                          />
+                        </div>
+                      </div>
+                      {addableUsers.length === 0 ? (
+                        <p
+                          className="px-3 py-6 text-center text-[length:var(--task-fs-body-sm)]"
+                          style={{ color: 'var(--task-ink-3)' }}
+                        >
+                          {addQuery ? 'No matches.' : 'Everyone is already a member.'}
+                        </p>
+                      ) : (
+                        addableUsers.map((u) => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            disabled={busyUserId === u.id}
+                            onClick={() => handleAddMember(u.id)}
+                            className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--task-surface-2)] disabled:opacity-50"
+                          >
+                            <span
+                              className={cn(
+                                'h-2 w-2 shrink-0 rounded-full',
+                                ROLE_COLORS[u.role || 'staff'] ?? 'bg-neutral-400',
+                              )}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span
+                                className="block truncate text-[length:var(--task-fs-body-sm)]"
+                                style={{ color: 'var(--task-ink-1)' }}
+                              >
+                                {u.name}
+                              </span>
+                              {u.email && (
+                                <span
+                                  className="block truncate font-mono text-[length:var(--task-fs-label)]"
+                                  style={{ color: 'var(--task-ink-3)' }}
+                                >
+                                  {u.email}
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </AdaptivePicker>
                   )}
                 </div>
 
                 {members.length === 0 ? (
-                  <Card>
-                    <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                  <div className="px-[18px] py-10 text-center">
+                    <p className="text-[length:var(--task-fs-option)]" style={{ color: 'var(--task-ink-2)' }}>
                       No members yet.
-                      {canManageMembers ? ' Add team members or vendors to this department.' : ''}
-                    </CardContent>
-                  </Card>
+                    </p>
+                    {canManageMembers && (
+                      <p
+                        className="mt-1.5 text-[length:var(--task-fs-body-sm)]"
+                        style={{ color: 'var(--task-ink-3)' }}
+                      >
+                        Add team members or vendors to this department.
+                      </p>
+                    )}
+                  </div>
                 ) : (
-                  <Card>
-                    <CardContent className="p-0">
-                      {members.map((m, idx) => (
-                        <div
-                          key={m.id}
-                          className={cn(
-                            'flex items-center gap-3 px-4 py-3',
-                            idx !== members.length - 1 && 'border-b border-neutral-100 dark:border-neutral-800',
-                          )}
+                  members.map((m) => (
+                    <div
+                      key={m.id}
+                      className="flex items-center gap-2.5 border-b px-[18px] py-2.5 transition-colors hover:bg-[var(--task-surface-1)]"
+                      style={{ borderColor: 'var(--task-line-soft)' }}
+                    >
+                      <span
+                        className={cn(
+                          'h-2 w-2 shrink-0 rounded-full',
+                          ROLE_COLORS[m.role || 'staff'] ?? 'bg-neutral-400',
+                        )}
+                        title={m.role || 'staff'}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className="block truncate text-[length:var(--task-fs-option)]"
+                          style={{ color: 'var(--task-ink-1)' }}
                         >
+                          {m.name}
+                        </span>
+                        {m.email && (
                           <span
-                            className={cn(
-                              'w-2 h-2 rounded-full flex-shrink-0',
-                              ROLE_COLORS[m.role || 'staff'] ?? 'bg-neutral-400',
-                            )}
-                            title={m.role || 'staff'}
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-neutral-900 dark:text-white truncate">
-                              {m.name}
-                            </p>
-                            {m.email && (
-                              <p className="text-xs text-muted-foreground truncate">{m.email}</p>
-                            )}
-                          </div>
-                          <span className="text-xs capitalize text-muted-foreground">{m.role || 'staff'}</span>
-                          {canManageMembers && (
-                            <button
-                              type="button"
-                              disabled={busyUserId === m.id}
-                              onClick={() => handleRemoveMember(m.id)}
-                              className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
-                              title={`Remove ${m.name}`}
-                            >
-                              <X className="w-4 h-4 text-neutral-400 hover:text-red-500" />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
+                            className="block truncate font-mono text-[length:var(--task-fs-label)]"
+                            style={{ color: 'var(--task-ink-3)' }}
+                          >
+                            {m.email}
+                          </span>
+                        )}
+                      </span>
+                      <MetaChip>{m.role || 'staff'}</MetaChip>
+                      {canManageMembers && (
+                        <RowIconButton
+                          danger
+                          label={`Remove ${m.name}`}
+                          onClick={() => {
+                            if (busyUserId === m.id) return;
+                            handleRemoveMember(m.id);
+                          }}
+                        >
+                          {ICONS.close}
+                        </RowIconButton>
+                      )}
+                    </div>
+                  ))
                 )}
-              </section>
-            </div>
-          ) : null}
+              </>
+            ) : null}
+          </div>
         </div>
       </div>
-
-      {/* Edit Department Dialog */}
-      <Dialog open={showEdit} onOpenChange={setShowEdit}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Edit Department</DialogTitle>
-            <DialogDescription>Update the department name and icon.</DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="flex items-center gap-3">
-              <Popover open={iconPickerOpen} onOpenChange={setIconPickerOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex items-center justify-center w-10 h-10 rounded-lg border border-neutral-200 dark:border-neutral-700 hover:border-neutral-400 dark:hover:border-neutral-500 transition-colors bg-white dark:bg-neutral-800"
-                    title="Choose icon"
-                  >
-                    {(() => {
-                      const IconComp = getDepartmentIcon(editIcon);
-                      return <IconComp className="w-5 h-5 text-neutral-700 dark:text-neutral-300" />;
-                    })()}
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[320px] p-3" align="start">
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Choose an icon</p>
-                  <div className="grid grid-cols-7 gap-1">
-                    {DEPARTMENT_ICON_OPTIONS.map((opt) => {
-                      const IconComp = DEPARTMENT_ICON_MAP[opt.key];
-                      if (!IconComp) return null;
-                      return (
-                        <button
-                          key={opt.key}
-                          type="button"
-                          onClick={() => {
-                            setEditIcon(opt.key);
-                            setIconPickerOpen(false);
-                          }}
-                          className={cn(
-                            'flex items-center justify-center w-9 h-9 rounded-md transition-colors',
-                            editIcon === opt.key
-                              ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900'
-                              : 'hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-400',
-                          )}
-                          title={opt.label}
-                        >
-                          <IconComp className="w-4 h-4" />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </PopoverContent>
-              </Popover>
-              <Input
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                placeholder="Department name"
-                className="flex-1"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && editName.trim()) handleSaveEdit();
-                }}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEdit(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveEdit} disabled={saving || !editName.trim()}>
-              {saving ? 'Saving…' : 'Save'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </DesktopSidebarShell>
-  );
-}
-
-// Add-member popover: search the (non-member) users and click one to add it.
-function AddMemberPicker({
-  open,
-  onOpenChange,
-  query,
-  onQueryChange,
-  users,
-  busyUserId,
-  onAdd,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  query: string;
-  onQueryChange: (q: string) => void;
-  users: { id: string; name: string; email?: string; role?: string }[];
-  busyUserId: string | null;
-  onAdd: (userId: string) => void;
-}) {
-  return (
-    <Popover open={open} onOpenChange={onOpenChange} modal>
-      <PopoverTrigger asChild>
-        <Button size="sm">
-          <Plus className="w-4 h-4 mr-2" />
-          Add member
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        className="w-72 p-0 overflow-hidden"
-        collisionPadding={12}
-      >
-        <div className="border-b border-border p-2">
-          <Input
-            autoFocus
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Search people…"
-            className="h-9"
-          />
-        </div>
-        <div className="max-h-[300px] overflow-y-auto py-1">
-          {users.length === 0 ? (
-            <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-              {query ? 'No matches.' : 'Everyone is already a member.'}
-            </p>
-          ) : (
-            users.map((u) => (
-              <button
-                key={u.id}
-                type="button"
-                disabled={busyUserId === u.id}
-                onClick={() => onAdd(u.id)}
-                className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-accent disabled:opacity-50"
-              >
-                <span
-                  className={cn(
-                    'w-2 h-2 rounded-full flex-shrink-0',
-                    ROLE_COLORS[u.role || 'staff'] ?? 'bg-neutral-400',
-                  )}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-foreground">{u.name}</span>
-                  {u.email && <span className="block truncate text-xs text-muted-foreground">{u.email}</span>}
-                </span>
-                {busyUserId === u.id ? (
-                  <span className="text-xs text-muted-foreground">…</span>
-                ) : (
-                  <Check className="w-4 h-4 opacity-0" />
-                )}
-              </button>
-            ))
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
   );
 }

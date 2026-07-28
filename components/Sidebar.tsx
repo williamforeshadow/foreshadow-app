@@ -14,6 +14,7 @@ import { ModeToggle } from '@/components/mode-toggle';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { RowsIcon } from '@/components/windows/timeline/TimelineViewIcons';
+import TasksIcon from '@/components/icons/TasksIcon';
 import { useAiChat } from '@/components/ai-chat/AiChatProvider';
 import {
   DropdownMenu,
@@ -104,14 +105,6 @@ function BinIcon() {
   return (
     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-    </svg>
-  );
-}
-
-function AssignmentIcon() {
-  return (
-    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
     </svg>
   );
 }
@@ -374,7 +367,7 @@ export default function Sidebar({
                       ) : view === 'projects' ? (
                         <BinIcon />
                       ) : (
-                        <AssignmentIcon />
+                        <TasksIcon />
                       )}
                     </span>
                     <span className="min-w-0 flex-1 truncate">
