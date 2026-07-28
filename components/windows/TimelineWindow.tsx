@@ -250,9 +250,21 @@ function ReservationHoverBar({
   const checkInMs = new Date(reservation.check_in).getTime();
   const checkOutMs = new Date(reservation.check_out).getTime();
   const nights = Math.max(1, Math.round((checkOutMs - checkInMs) / (1000 * 60 * 60 * 24)));
+  // "Next in" = the soonest reservation that starts on or after this one's
+  // checkout DAY. Two things matter here:
+  //   - ON OR AFTER, not after: a same-day flip (guest out and next guest in
+  //     on the same date) is the common turnover case. Excluding it silently
+  //     skipped to the reservation AFTER the real one.
+  //   - Compared by DATE, not timestamp: check_in / check_out carry
+  //     inconsistent time components (some midnight, some real check-in
+  //     times), so a 10:00 checkout would sort after a midnight-stored
+  //     check-in on the same day and reintroduce the skip.
+  // Self-exclusion guards a zero-night row, which would otherwise match itself.
+  const dayOf = (value: string) => String(value).slice(0, 10);
+  const checkOutDay = dayOf(reservation.check_out);
   const nextRes = propertyReservations
-    .filter((r) => new Date(r.check_in).getTime() > checkOutMs)
-    .sort((a, b) => new Date(a.check_in).getTime() - new Date(b.check_in).getTime())[0];
+    .filter((r) => r.id !== reservation.id && dayOf(r.check_in) >= checkOutDay)
+    .sort((a, b) => dayOf(a.check_in).localeCompare(dayOf(b.check_in)))[0];
   const fmt = (d: Date) => formatDate(d);
 
   // Position popover with a small offset from cursor so the mouse leaving the
