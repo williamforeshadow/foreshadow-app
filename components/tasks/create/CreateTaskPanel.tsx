@@ -301,58 +301,6 @@ export function CreateTaskPanel({
           ))}
         </AdaptivePicker>
 
-        <SectionLabel>Scheduling</SectionLabel>
-
-        {/* Schedule */}
-        <AdaptivePicker
-          open={schedOpen}
-          onOpenChange={setSchedOpen}
-          title="Scheduled"
-          contentClassName="w-auto"
-          trigger={<FieldRow icon={ICONS.cal} value={schedLabel} placeholder="Schedule" />}
-        >
-          <div className="flex flex-col gap-2 p-1">
-            <TaskScheduledDatePicker
-              propertyId={c.draft.property_id}
-              value={c.draft.scheduled_date ?? ''}
-              onChange={(next) => c.updateField('scheduled_date', next || null)}
-            />
-            <TaskScheduledTimePicker
-              value={c.draft.scheduled_time ?? ''}
-              onChange={(next) => c.updateField('scheduled_time', next || null)}
-            />
-          </div>
-        </AdaptivePicker>
-
-        {/* Priority — options laid out inline so the scale is visible */}
-        <div className="border-b px-[18px] py-3" style={{ borderColor: 'var(--task-line-soft)' }}>
-          <div className="mb-2 font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]" style={{ color: 'var(--task-ink-3)' }}>
-            Priority
-          </div>
-          <div className="flex gap-1.5">
-            {PRIORITY_ORDER.map((p) => {
-              const Icon = PRIORITY_ICONS[p] ?? PRIORITY_ICONS.medium;
-              const active = c.draft.priority === p;
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => c.updateField('priority', p)}
-                  className="flex h-[32px] flex-1 items-center justify-center gap-1.5 rounded-lg font-mono text-[11px] transition-transform active:scale-95"
-                  style={{
-                    background: active ? 'var(--task-surface-2)' : 'transparent',
-                    border: `1px ${active ? 'solid transparent' : 'dashed var(--task-line)'}`,
-                    color: active ? 'var(--task-ink-1)' : 'var(--task-ink-3)',
-                  }}
-                >
-                  <Icon size={13} strokeWidth={2} aria-hidden />
-                  {PRIORITY_LABELS[p]}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         <SectionLabel>Location</SectionLabel>
 
         {/* Property — locked once seeded by the opening surface */}
@@ -424,6 +372,58 @@ export function CreateTaskPanel({
             </TaskOptionRow>
           ))}
         </AdaptivePicker>
+
+        <SectionLabel>Scheduling</SectionLabel>
+
+        {/* Schedule */}
+        <AdaptivePicker
+          open={schedOpen}
+          onOpenChange={setSchedOpen}
+          title="Scheduled"
+          contentClassName="w-auto"
+          trigger={<FieldRow icon={ICONS.cal} value={schedLabel} placeholder="Schedule" />}
+        >
+          <div className="flex flex-col gap-2 p-1">
+            <TaskScheduledDatePicker
+              propertyId={c.draft.property_id}
+              value={c.draft.scheduled_date ?? ''}
+              onChange={(next) => c.updateField('scheduled_date', next || null)}
+            />
+            <TaskScheduledTimePicker
+              value={c.draft.scheduled_time ?? ''}
+              onChange={(next) => c.updateField('scheduled_time', next || null)}
+            />
+          </div>
+        </AdaptivePicker>
+
+        {/* Priority — options laid out inline so the scale is visible */}
+        <div className="border-b px-[18px] py-3" style={{ borderColor: 'var(--task-line-soft)' }}>
+          <div className="mb-2 font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]" style={{ color: 'var(--task-ink-3)' }}>
+            Priority
+          </div>
+          <div className="flex gap-1.5">
+            {PRIORITY_ORDER.map((p) => {
+              const Icon = PRIORITY_ICONS[p] ?? PRIORITY_ICONS.medium;
+              const active = c.draft.priority === p;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => c.updateField('priority', p)}
+                  className="flex h-[32px] flex-1 items-center justify-center gap-1.5 rounded-lg font-mono text-[11px] transition-transform active:scale-95"
+                  style={{
+                    background: active ? 'var(--task-surface-2)' : 'transparent',
+                    border: `1px ${active ? 'solid transparent' : 'dashed var(--task-line)'}`,
+                    color: active ? 'var(--task-ink-1)' : 'var(--task-ink-3)',
+                  }}
+                >
+                  <Icon size={13} strokeWidth={2} aria-hidden />
+                  {PRIORITY_LABELS[p]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         <SectionLabel>Attachments</SectionLabel>
 
