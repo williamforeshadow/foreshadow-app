@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import { useDepartments } from '@/lib/departmentsContext';
 import type { Task } from '@/lib/types';
-import { marbleBackground } from './timelineStatus';
+import { statusBackground } from './timelineStatus';
 import { TaskRowList } from './TaskRowList';
 
 interface ScheduledItemsCellProps {
@@ -84,7 +84,7 @@ function DraggableTask({
   );
 }
 
-/** One task = one icon: department glyph on a status-marble background. */
+/** One task = one icon: department glyph on a flat status-coloured chip. */
 function TaskIcon({
   task,
   size,
@@ -111,15 +111,18 @@ function TaskIcon({
         onClick?.(task);
       }}
       className={cn(
-        'flex items-center justify-center rounded shadow-sm transition-all cursor-pointer hover:brightness-110 hover:scale-110 relative overflow-hidden text-white',
+        // Glyph is a light grey rather than pure white so it sits IN the
+        // chip instead of punching a hole through it — the chip's colour
+        // carries the status, the icon just names the department.
+        'flex items-center justify-center rounded shadow-sm transition-all cursor-pointer hover:brightness-110 hover:scale-110 relative overflow-hidden text-[#d4d4d8]',
         box,
         isContingent &&
-          'border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[rgba(255,255,255,0.35)] bg-white dark:bg-[var(--timeline-surface-3)] text-[#1a1a18] dark:text-white',
+          'border-[1.5px] border-dashed border-[rgba(30,25,20,0.25)] dark:border-[rgba(255,255,255,0.35)] bg-white dark:bg-[var(--timeline-surface-3)] text-[#1a1a18] dark:text-[#d4d4d8]',
       )}
       style={
         isContingent
           ? undefined
-          : { background: marbleBackground[task.status] || marbleBackground.not_started }
+          : { background: statusBackground[task.status] || statusBackground.not_started }
       }
     >
       <Icon className={glyph} />
@@ -189,7 +192,7 @@ export function ScheduledItemsCell({
                 style={
                   isContingent
                     ? undefined
-                    : { background: marbleBackground[task.status] || marbleBackground.not_started }
+                    : { background: statusBackground[task.status] || statusBackground.not_started }
                 }
               />
             </DraggableTask>

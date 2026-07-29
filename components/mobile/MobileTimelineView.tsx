@@ -16,13 +16,9 @@ import { DayDetailPanel, type DayDetailReservation } from '@/components/tasks/Da
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
 import type { FilterOption } from '@/components/tasks/TaskFilterBar';
-
-const marbleBackground: Record<string, string> = {
-  not_started: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.35) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.18) 10%, transparent 40%, rgba(255,255,255,0.12) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #A78BFA`,
-  in_progress: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.3) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.18) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.15) 10%, transparent 40%, rgba(255,255,255,0.1) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.1) 0%, transparent 55%), #6366F1`,
-  paused: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.3) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.15) 10%, transparent 40%, rgba(255,255,255,0.1) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #8B7FA8`,
-  complete: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.25) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.15) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.12) 10%, transparent 40%, rgba(255,255,255,0.08) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.1) 0%, transparent 55%), #4C4869`,
-};
+// Same flat status ramp the desktop Schedule uses — mobile kept a private
+// copy of the old marble map, which is exactly how the two drifted apart.
+import { statusBackground } from '@/components/windows/timeline/timelineStatus';
 
 // Mobile task dots are kept to a SINGLE row per cell; any remainder collapses
 // into a trailing "+N" circle. Week cells (72px) fit more dots than month
@@ -325,10 +321,11 @@ export default function MobileTimelineView({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header region — one continuous neutral gradient behind the title +
-          fine print + toolbar row, capped with a hairline where it meets the
-          flat grid below. */}
-      <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
+      {/* Header region — one continuous gradient behind the title + fine print
+          + toolbar row, fading to transparent over the --timeline-header base
+          and capped with a hairline where it meets the grid below. Mirrors the
+          desktop Schedule header. */}
+      <div className="flex-shrink-0 bg-[var(--timeline-header)] bg-[linear-gradient(to_bottom,#E4E4EA,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
       {/* Title row — matches the Tasks / My Assignments mobile pattern:
           hamburger + page title, then a single controls row underneath. */}
       <div
@@ -449,7 +446,7 @@ export default function MobileTimelineView({
               grid is scrolled vertically. */}
           <div className="flex sticky top-0 z-40">
             <div
-              className="sticky left-0 z-40 bg-white dark:bg-card border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] px-1.5 py-2 text-xs font-semibold text-[#6b6963] dark:text-[#9a9893] flex items-center justify-center"
+              className="sticky left-0 z-40 bg-[var(--timeline-header)] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] px-1.5 py-2 text-xs font-semibold text-[#6b6963] dark:text-[#9a9893] flex items-center justify-center"
               style={{ width: propertyCellWidth, minWidth: propertyCellWidth }}
             >
               Property
@@ -463,7 +460,7 @@ export default function MobileTimelineView({
                     'border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] text-center py-1.5',
                     todayDate
                       ? 'today-tint'
-                      : 'bg-white dark:bg-card'
+                      : 'bg-[var(--timeline-axis)]'
                   )}
                   style={{ width: cellWidth, minWidth: cellWidth }}
                 >
@@ -493,7 +490,7 @@ export default function MobileTimelineView({
               <div key={property}>
               <div className="flex">
                 <div
-                  className="sticky left-0 z-30 bg-white dark:bg-card border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)]"
+                  className="sticky left-0 z-30 bg-[var(--timeline-header)] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)]"
                   style={{ width: propertyCellWidth, minWidth: propertyCellWidth, height: rowHeight }}
                 >
                   <div
@@ -537,7 +534,7 @@ export default function MobileTimelineView({
                       key={idx}
                       className={cn(
                         'border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[rgba(255,255,255,0.06)] relative overflow-visible cursor-pointer',
-                        todayDate ? 'today-tint' : blockForCell ? 'bg-[#f0eff2] dark:bg-[#212126]' : 'bg-white dark:bg-card'
+                        todayDate ? 'today-tint' : blockForCell ? 'bg-[var(--timeline-cell-blocked)]' : 'bg-[var(--timeline-cell)]'
                       )}
                       style={{ width: cellWidth, minWidth: cellWidth, height: rowHeight }}
                       onClick={() => {
@@ -590,8 +587,10 @@ export default function MobileTimelineView({
                         const isOwnerStay = startingRes.kind === 'owner_stay';
                         const resLabel = isOwnerStay ? 'Owner Stay' : (startingRes.guest_name || 'No guest');
                         const bgClass = isOwnerStay
-                          ? 'bg-[#e9d5a8] border-[rgba(180,130,60,0.55)] dark:bg-[#43391f] dark:border-[rgba(214,158,74,0.45)]'
-                          : 'bg-[#d9d7d6] border-[rgba(120,113,108,0.55)] dark:bg-[#343234] dark:border-[rgba(168,158,150,0.45)]';
+                          // Top border is a rim light in both themes — lighter
+                          // than the fill. See TimelineWindow for the rationale.
+                          ? 'bg-[#e9d5a8] border-[rgba(255,255,255,0.5)] dark:bg-[#43391f] dark:border-[rgba(214,158,74,0.45)]'
+                          : 'bg-[#d9d7d6] border-[rgba(255,255,255,0.55)] dark:bg-[#343234] dark:border-[rgba(168,158,150,0.45)]';
 
                         return (
                           <div
@@ -665,7 +664,7 @@ export default function MobileTimelineView({
                                   style={
                                     isContingent
                                       ? undefined
-                                      : { background: marbleBackground[task.status] || marbleBackground.not_started }
+                                      : { background: statusBackground[task.status] || statusBackground.not_started }
                                   }
                                 />
                               );

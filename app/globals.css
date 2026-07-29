@@ -101,6 +101,26 @@
   --timeline-border-subtle: rgba(255, 255, 255, 0.075);
   --timeline-border-strong: rgba(255, 255, 255, 0.14);
   --timeline-hover: rgba(255, 255, 255, 0.08);
+  /* Schedule depth. Three tiers, ordered the same way in both themes:
+       --timeline-cell    interior cells, the data field
+       --timeline-axis    property column + date header row, the frame
+       --timeline-header  the band holding title / filters / CTA
+     The CELL is the extreme in each theme (pure white here, near-black in
+     dark) and the frame + header step AWAY from it, so the grid always reads
+     as paper held in a frame rather than one flat plane. Light values are
+     cool greys a few points apart — enough to separate the tiers without the
+     page turning grey. Dark counterparts live in .dark below. */
+  --timeline-cell: #FFFFFF;
+  --timeline-cell-blocked: #E8E8EE;
+  --timeline-axis: #F4F4F7;
+  --timeline-axis-hover: #EBEBF0;
+  --timeline-header: #EDEDF1;
+  /* Today column — the one tinted surface in the grid, and the only place
+     chroma is load-bearing rather than decorative. Light is --accent-1
+     (#a78bfa) at ~30% over white, which lands it darker than the axis so the
+     column reads as a purple band THROUGH the frame, not a pale wash on top
+     of it. Dark stays a deep violet lift off the near-black cells. */
+  --timeline-today: #EAE3FE;
 
   /* Turnover / reservation purple — single source of truth for the
      "active turnover" surfaces: TurnoverCards (active card), Timeline
@@ -197,6 +217,16 @@
 
   --msg-sent-bg:              rgba(158, 178, 210, 0.15);
   --msg-sent-border:          rgba(158, 178, 210, 0.34);
+
+  /* Schedule depth (see :root for the tier rationale). Steps here are ~15 and
+     ~10 points: down near black a 6-point gap is invisible, so the header
+     lifts well clear of --card (#1A1A1F) to buy the range back. */
+  --timeline-cell: #0D0D10;
+  --timeline-cell-blocked: #18181D;
+  --timeline-axis: #1C1C22;
+  --timeline-axis-hover: #24242B;
+  --timeline-header: #26262D;
+  --timeline-today: #141222;
 }
 
 /* ============================================================================
@@ -488,11 +518,7 @@ a {
 
 /* Today column tint — lilac wash */
 .today-tint {
-  background-color: #fbfaff !important;
-  background-image: none !important;
-}
-.dark .today-tint {
-  background-color: #141222 !important;
+  background-color: var(--timeline-today) !important;
   background-image: none !important;
 }
 

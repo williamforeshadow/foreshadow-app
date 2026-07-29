@@ -25,7 +25,7 @@ import {
 import { ScheduledItemsCell, DayKanban } from './timeline';
 import { TimelineNavBar } from './timeline/TimelineNavBar';
 import { WeatherWidgetTrigger } from './timeline/WeatherWidgetTrigger';
-import { marbleBackground } from './timeline/timelineStatus';
+import { statusBackground } from './timeline/timelineStatus';
 import { RESERVATION_BAR_DIAGONAL_PX } from '@/components/properties/schedule/scheduleDates';
 import { ProjectCard } from './projects/ProjectCard';
 import { scheduleTaskToCardItem } from './timeline/scheduleTaskCardMapping';
@@ -1047,11 +1047,12 @@ export default function TimelineWindow({
 
   return (
     <div className="h-full flex flex-col relative bg-white dark:bg-card">
-      {/* Header region — title + fine print + controls row. The gradient
-          fades to transparent over the content background (bg-white /
-          dark:bg-card base), so the header blends seamlessly into the grid
-          below — no divider. */}
-      <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
+      {/* Header region — title + fine print + controls row. Each mode fades its
+          own gradient to transparent over the header base, so the band lightens
+          toward the top and settles into --timeline-header where it meets the
+          grid. Dark's #30303a top now sits over a lighter base than it
+          originally did (--card), so it reads as a gentler lift. */}
+      <div className="flex-shrink-0 bg-[var(--timeline-header)] bg-[linear-gradient(to_bottom,#E4E4EA,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
         {/* Title + fine print (current date range) */}
         <div className="px-8 pt-6 pb-1">
           <h1 className="text-[24px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed]">
@@ -1200,7 +1201,7 @@ export default function TimelineWindow({
             }}
           >
             {/* Header Row - will stick when scrolling */}
-            <div className="bg-white dark:bg-[var(--timeline-surface-2)] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] px-2 py-1 text-xs font-semibold text-[#6b6963] dark:text-[#9a9893] uppercase tracking-[0.06em] sticky left-0 top-0 z-50 flex items-center gap-1.5">
+            <div className="bg-[var(--timeline-header)] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] px-2 py-1 text-xs font-semibold text-[#6b6963] dark:text-[#9a9893] uppercase tracking-[0.06em] sticky left-0 top-0 z-50 flex items-center gap-1.5">
               {view !== 'month' && (
                 <button
                   onClick={toggleAllExpanded}
@@ -1222,7 +1223,7 @@ export default function TimelineWindow({
                   className={`px-3 py-2.5 border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] sticky top-0 z-20 cursor-pointer transition-colors ${
                     isTodayDate 
                       ? 'today-tint'
-                      : 'bg-white dark:bg-[var(--timeline-surface-2)] hover:bg-[#f4f3f1] dark:hover:bg-[#222228]'
+                      : 'bg-[var(--timeline-axis)] hover:bg-[var(--timeline-axis-hover)]'
                   }`}
                   onClick={() => { closeGlobals(); setSelectedDay(date); }}
                 >
@@ -1237,7 +1238,12 @@ export default function TimelineWindow({
               const propertyBlocks = getBlocksForProperty(property);
               const activeTurnover = getActiveTurnoverForProperty(propertyReservations);
 
-              const propertyCellBg = 'bg-white dark:bg-[var(--timeline-surface-2)]';
+              // Y axis carries the HEADER tone, not the axis tone, so the
+              // property column reads as one continuous band running down from
+              // the header (corner cell included). The X axis stays on
+              // --timeline-axis, so the two axes are deliberately different
+              // tiers rather than a matched frame.
+              const propertyCellBg = 'bg-[var(--timeline-header)]';
 
               return (
                 <div
@@ -1351,7 +1357,7 @@ export default function TimelineWindow({
                         key={idx}
                         property={property}
                         dateStr={cellDateStr}
-                        className={`group border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] h-[44px] relative overflow-visible ${isTodayDate ? 'today-tint' : blockForCell ? 'bg-[#f0eff2] dark:bg-[#212126]' : 'bg-white dark:bg-[var(--timeline-surface-2)]'}`}
+                        className={`group border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] h-[44px] relative overflow-visible ${isTodayDate ? 'today-tint' : blockForCell ? 'bg-[var(--timeline-cell-blocked)]' : 'bg-[var(--timeline-cell)]'}`}
                         onClick={() => {
                           const res = propertyReservations.find(r => {
                             const pos = getBlockPosition(r.check_in, r.check_out);
@@ -1446,9 +1452,17 @@ export default function TimelineWindow({
                           // inset keeps it off the horizontal borders, so those
                           // stay visible as before.
                           const isOwnerStay = startingReservation.kind === 'owner_stay';
+                          // The top border is a RIM LIGHT, not an outline: in
+                          // both themes it must be lighter than the fill so the
+                          // bar reads as lit from above. Dark already did this
+                          // (pale line on a deep fill); light was inverted — a
+                          // darker line on a pale fill, which flattened the bar
+                          // into a sticker. Light now uses white at partial
+                          // alpha, landing between the fill and the white cell
+                          // so the edge still registers against both.
                           const barColorClass = isOwnerStay
-                            ? 'bg-[#e9d5a8] border-[rgba(180,130,60,0.55)] dark:bg-[#43391f] dark:border-[rgba(214,158,74,0.45)]'
-                            : 'bg-[#d9d7d6] border-[rgba(120,113,108,0.55)] dark:bg-[#343234] dark:border-[rgba(168,158,150,0.45)]';
+                            ? 'bg-[#e9d5a8] border-[rgba(255,255,255,0.5)] dark:bg-[#43391f] dark:border-[rgba(214,158,74,0.45)]'
+                            : 'bg-[#d9d7d6] border-[rgba(255,255,255,0.55)] dark:bg-[#343234] dark:border-[rgba(168,158,150,0.45)]';
 
                           const barClassName =`absolute cursor-pointer transition-all duration-150 text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium flex items-center overflow-hidden border-t ${barColorClass} ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-[rgba(120,113,108,0.6)] dark:ring-[rgba(168,158,150,0.6)] shadow-lg z-30' : ''}`;
                           const barStyle: React.CSSProperties = {
@@ -1545,7 +1559,7 @@ export default function TimelineWindow({
                             dateStr={cellDateStr}
                             idSuffix="__exp"
                             className={`border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] p-1.5 ${
-                              isTodayDate ? 'today-tint' : 'bg-white dark:bg-[var(--timeline-surface-2)]'
+                              isTodayDate ? 'today-tint' : 'bg-[var(--timeline-cell)]'
                             }`}
                           >
                             {hasItems && (
@@ -1616,7 +1630,7 @@ export default function TimelineWindow({
             // Dragging a chip → the small status square.
             <div
               className="w-6 h-6 rounded shadow-lg"
-              style={{ background: marbleBackground[draggingTask.status] || marbleBackground.not_started }}
+              style={{ background: statusBackground[draggingTask.status] || statusBackground.not_started }}
             />
           )
         ) : null}

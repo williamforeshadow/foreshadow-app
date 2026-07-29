@@ -267,8 +267,13 @@ export default function Sidebar({
     '--sidebar-dark-active': SIDEBAR_DARK_ACTIVE,
   } as CSSProperties;
 
+  // The sidebar wears --timeline-header on EVERY page — same tone as the
+  // Schedule header band and property column, so the left edge is one
+  // continuous run of chrome and the rail doesn't re-tone as you switch
+  // views. It tracks that token deliberately: tuning the Schedule header
+  // moves the sidebar with it.
   const panelSurfaceClass =
-    'dark:bg-[var(--sidebar-dark-surface)] dark:border-[var(--sidebar-dark-border)]';
+    'bg-[var(--timeline-header)] dark:border-[var(--sidebar-dark-border)]';
   const activeRowClass =
     'bg-neutral-100 text-neutral-900 dark:bg-[var(--sidebar-dark-active)] dark:text-white';
   const inactiveRowClass =
@@ -301,7 +306,7 @@ export default function Sidebar({
       } ${isVisible ? 'translate-x-0' : '-translate-x-full'}`}
     >
       <div
-        className={`w-64 h-full bg-white border-r border-neutral-200 flex flex-col ${panelSurfaceClass} ${
+        className={`w-64 h-full border-r border-neutral-200 flex flex-col ${panelSurfaceClass} ${
           isPeeking && !isPinned ? 'shadow-2xl' : ''
         }`}
         style={sidebarVars}

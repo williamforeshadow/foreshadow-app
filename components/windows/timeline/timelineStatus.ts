@@ -1,10 +1,21 @@
-// Shared status → marble-gradient map for Timeline surfaces (grid cell icons,
+// Shared status → background map for Timeline surfaces (grid cell icons,
 // task-row status dots, MonthGrid). Kept in its own module so both
 // ScheduledItemsCell and TaskRowList can use it without an import cycle.
-
-export const marbleBackground: Record<string, string> = {
-  not_started: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.35) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.18) 10%, transparent 40%, rgba(255,255,255,0.12) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #A78BFA`,
-  in_progress: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.3) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.18) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.15) 10%, transparent 40%, rgba(255,255,255,0.1) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.1) 0%, transparent 55%), #6366F1`,
-  paused: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.3) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.15) 10%, transparent 40%, rgba(255,255,255,0.1) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #8B7FA8`,
-  complete: `radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.25) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.15) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.12) 10%, transparent 40%, rgba(255,255,255,0.08) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.1) 0%, transparent 55%), #4C4869`,
+//
+// These were previously "marble" stacks — four gradient highlights layered
+// over the base hue. At chip size (18–22px) the frosting never resolved into
+// a texture; it just lit the top-left corner and washed the hue out, which in
+// dark mode left the four statuses harder to tell apart than a flat fill
+// makes them.
+//
+// The four then came down as a set against the darkened grid: every channel
+// scaled by 0.87, which drops lightness uniformly while leaving hue and the
+// relative spacing between rungs exactly where they were. not_started took an
+// extra step first (from the ramp's #A78BFA), since flat fill had left the
+// lightest rung reading as a bright lilac slab.
+export const statusBackground: Record<string, string> = {
+  not_started: '#795DC3',
+  in_progress: '#5659D2',
+  paused: '#796E92',
+  complete: '#423F5B',
 };

@@ -13,7 +13,7 @@ import {
 } from 'date-fns';
 import { ClipboardCheck } from 'lucide-react';
 import { UserAvatar } from '@/components/ui/user-avatar';
-import { marbleBackground } from '@/components/windows/timeline/timelineStatus';
+import { statusBackground } from '@/components/windows/timeline/timelineStatus';
 import { useIsMobile } from '@/lib/useIsMobile';
 import {
   toDateOnly,
@@ -381,7 +381,7 @@ export function MonthGrid({
                     </div>
 
                     {/* Task region.
-                        Desktop: up to MAX_TASKS_PER_CELL marble pills with
+                        Desktop: up to MAX_TASKS_PER_CELL status pills with
                                  title + assignee, "+N more" overflow. Each
                                  pill is its own click target → opens the
                                  task overlay directly.
@@ -421,8 +421,8 @@ export function MonthGrid({
                                 hasActive
                                   ? {
                                       background:
-                                        marbleBackground[folderStatus] ||
-                                        marbleBackground.not_started,
+                                        statusBackground[folderStatus] ||
+                                        statusBackground.not_started,
                                     }
                                   : undefined
                               }
@@ -444,9 +444,9 @@ export function MonthGrid({
                       >
                         {cellTasks.slice(0, MAX_TASKS_PER_CELL).map((t) => {
                           const isContingent = t.status === 'contingent';
-                          const marble =
-                            marbleBackground[t.status] ||
-                            marbleBackground.not_started;
+                          const statusFill =
+                            statusBackground[t.status] ||
+                            statusBackground.not_started;
                           const firstUser = t.assigned_users?.[0];
                           const overflowAssignees =
                             (t.assigned_users?.length ?? 0) - 1;
@@ -461,7 +461,7 @@ export function MonthGrid({
                               style={
                                 isContingent
                                   ? undefined
-                                  : { background: marble }
+                                  : { background: statusFill }
                               }
                               className={`flex items-center justify-between gap-1.5 py-1 px-1.5 rounded-md text-[11px] leading-tight font-medium text-left relative overflow-hidden shadow-sm transition-all duration-150 hover:shadow-md ${
                                 isContingent
