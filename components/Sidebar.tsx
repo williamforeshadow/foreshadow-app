@@ -1,15 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-} from 'react';
-import { ArrowRightToLine, FlaskConical, GraduationCap, PanelLeft, Settings, Sparkles } from 'lucide-react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState, type CSSProperties } from 'react';
+import { FlaskConical, GraduationCap, Settings, Sparkles } from 'lucide-react';
 import { ModeToggle } from '@/components/mode-toggle';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { UserAvatar } from '@/components/ui/user-avatar';
@@ -26,16 +20,9 @@ import {
 import {
   DASHBOARD_VIEW_LABELS,
   DASHBOARD_VIEWS,
-  type DashboardView,
+  isDashboardView,
 } from '@/lib/dashboardViews';
 import { useAuth } from '@/lib/authContext';
-import { useSidebar } from '@/lib/sidebarContext';
-
-type SidebarProps = {
-  surface?: 'default' | 'timeline';
-  activeWorkspaceView?: DashboardView;
-  onWorkspaceViewChange?: (view: DashboardView) => void;
-};
 
 const SIDEBAR_DARK_SURFACE = '#111114';
 const SIDEBAR_DARK_BORDER = 'rgba(255,255,255,0.065)';
@@ -125,13 +112,10 @@ function MessageIcon() {
   );
 }
 
-export default function Sidebar({
-  activeWorkspaceView,
-  onWorkspaceViewChange,
-}: SidebarProps) {
+export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { isPinned, isReady, pin, unpin } = useSidebar();
+  const searchParams = useSearchParams();
   const { user, role, loading, canEditTemplates, signOut } = useAuth();
   const { open: openAiChat, isOpen: isAiChatOpen } = useAiChat();
 
@@ -141,77 +125,12 @@ export default function Sidebar({
     setIsMac(/mac/i.test(navigator.platform));
   }, []);
 
-  // Hover-peek: the sidebar slides out as an overlay while the cursor is over
-  // the flap or the panel, and retreats when it leaves. Pinning is a separate,
-  // persisted state; while pinned the peek logic is inert.
-  const [isPeeking, setIsPeeking] = useState(false);
-  // While the notification dropdown is open, the sidebar stays out (locked)
-  // even though the cursor has moved off the panel onto the portaled dropdown.
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const openTimerRef = useRef<number | null>(null);
-  const closeTimerRef = useRef<number | null>(null);
-  const suppressRef = useRef(false);
-  const isVisible = isPinned || isPeeking || notificationsOpen;
-
-  const clearHoverTimers = useCallback(() => {
-    if (openTimerRef.current !== null) {
-      window.clearTimeout(openTimerRef.current);
-      openTimerRef.current = null;
-    }
-    if (closeTimerRef.current !== null) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => clearHoverTimers, [clearHoverTimers]);
-
-  // Hovering the flap or the panel opens the peek (after a short hover-intent
-  // delay); leaving schedules a close. The flap and panel share these so
-  // travelling between them doesn't flicker.
-  const handlePeekEnter = useCallback(() => {
-    if (isPinned || suppressRef.current) return;
-    if (closeTimerRef.current !== null) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-    if (openTimerRef.current !== null) return;
-    openTimerRef.current = window.setTimeout(() => {
-      openTimerRef.current = null;
-      setIsPeeking(true);
-    }, 120);
-  }, [isPinned]);
-
-  const handlePeekLeave = useCallback(() => {
-    if (isPinned) return;
-    if (openTimerRef.current !== null) {
-      window.clearTimeout(openTimerRef.current);
-      openTimerRef.current = null;
-    }
-    if (closeTimerRef.current !== null) return;
-    closeTimerRef.current = window.setTimeout(() => {
-      closeTimerRef.current = null;
-      setIsPeeking(false);
-    }, 200);
-  }, [isPinned]);
-
-  const handlePin = useCallback(() => {
-    clearHoverTimers();
-    setIsPeeking(false);
-    pin();
-  }, [clearHoverTimers, pin]);
-
-  const handleUnpin = useCallback(() => {
-    clearHoverTimers();
-    setIsPeeking(false);
-    unpin();
-    // The retreating panel passes under the cursor; briefly suppress re-peek
-    // so it doesn't immediately pop back out.
-    suppressRef.current = true;
-    window.setTimeout(() => {
-      suppressRef.current = false;
-    }, 600);
-  }, [clearHoverTimers, unpin]);
+  // The sidebar mounts once, above the router (see AppShell), so it can't be
+  // handed the dashboard's view state as a prop any more. It reads the same
+  // source of truth DesktopApp does — the `?view=` param — and navigating
+  // there is what moves the dashboard, via its own effect on that param.
+  const viewParam = searchParams?.get('view');
+  const activeWorkspaceView = isDashboardView(viewParam) ? viewParam : null;
 
   const roleColors: Record<string, string> = {
     superadmin: 'bg-purple-500',
@@ -267,13 +186,11 @@ export default function Sidebar({
     '--sidebar-dark-active': SIDEBAR_DARK_ACTIVE,
   } as CSSProperties;
 
-  // The sidebar wears --timeline-header on EVERY page — same tone as the
-  // Schedule header band and property column, so the left edge is one
-  // continuous run of chrome and the rail doesn't re-tone as you switch
-  // views. It tracks that token deliberately: tuning the Schedule header
-  // moves the sidebar with it.
-  const panelSurfaceClass =
-    'bg-[var(--timeline-header)] dark:border-[var(--sidebar-dark-border)]';
+  // The sidebar wears --app-shell-bg, the same tone AppShell paints behind
+  // the content card, so the two are one continuous surface with the page
+  // floating on it. In light mode this is the only toned plane in the window;
+  // everything inside the card is white.
+  const panelSurfaceClass = 'bg-[var(--app-shell-bg)]';
   const activeRowClass =
     'bg-neutral-100 text-neutral-900 dark:bg-[var(--sidebar-dark-active)] dark:text-white';
   const inactiveRowClass =
@@ -285,33 +202,11 @@ export default function Sidebar({
   };
 
   return (
-    <>
-    {/* Flow spacer — reserves layout width only when the sidebar is pinned. */}
     <div
-      aria-hidden
-      className={`h-full shrink-0 ${
-        isReady ? 'transition-[width] duration-300 ease-in-out' : ''
-      } ${isPinned ? 'w-64' : 'w-0'}`}
-    />
-
-    {/* Sidebar panel — a fixed overlay that slides in whenever the sidebar is
-        pinned or being peeked. When pinned, the spacer above reserves matching
-        layout width so page content isn't covered. */}
-    <div
-      onMouseEnter={handlePeekEnter}
-      onMouseLeave={handlePeekLeave}
-      aria-hidden={!isVisible}
-      className={`fixed left-0 top-0 z-40 h-full w-64 ${
-        isReady ? 'transition-transform duration-300 ease-in-out' : ''
-      } ${isVisible ? 'translate-x-0' : '-translate-x-full'}`}
+      className={`flex h-full w-64 shrink-0 flex-col ${panelSurfaceClass}`}
+      style={sidebarVars}
     >
-      <div
-        className={`w-64 h-full border-r border-neutral-200 flex flex-col ${panelSurfaceClass} ${
-          isPeeking && !isPinned ? 'shadow-2xl' : ''
-        }`}
-        style={sidebarVars}
-      >
-        <div className="flex items-center justify-between gap-2 border-b border-neutral-200 px-3 py-2.5 dark:border-[var(--sidebar-dark-border)]">
+        <div className="flex items-center justify-between gap-2 px-3 py-2.5">
           <div className="min-w-0">
             <p className="truncate text-[13px] font-semibold leading-5 text-neutral-900 dark:text-white">
               Foreshadow
@@ -321,21 +216,7 @@ export default function Sidebar({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <NotificationBell onOpenChange={setNotificationsOpen} />
-            <button
-              type="button"
-              onClick={isPinned ? handleUnpin : handlePin}
-              tabIndex={isVisible ? 0 : -1}
-              aria-label={isPinned ? 'Unpin sidebar' : 'Pin sidebar'}
-              title={isPinned ? 'Unpin sidebar' : 'Pin sidebar'}
-              className="inline-flex items-center justify-center rounded-md p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-[var(--sidebar-dark-hover)] dark:hover:text-white"
-            >
-              {isPinned ? (
-                <PanelLeft className="h-4 w-4" />
-              ) : (
-                <ArrowRightToLine className="h-4 w-4" />
-              )}
-            </button>
+            <NotificationBell />
           </div>
         </div>
 
@@ -353,13 +234,15 @@ export default function Sidebar({
                     key={view}
                     type="button"
                     onClick={() => {
-                      if (onWorkspaceViewChange) {
-                        onWorkspaceViewChange(view);
+                      // Already on the dashboard: swap the view in place so the
+                      // four keep-mounted windows aren't torn down. Coming from
+                      // another route, push so Back returns there.
+                      if (pathname === '/') {
+                        router.replace(`/?view=${view}`, { scroll: false });
                       } else {
                         router.push(`/?view=${view}`);
                       }
                     }}
-                    tabIndex={isVisible ? 0 : -1}
                     className={`flex w-full min-w-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] font-medium transition-colors ${
                       isActive ? activeRowClass : inactiveRowClass
                     }`}
@@ -384,7 +267,6 @@ export default function Sidebar({
               <button
                 type="button"
                 onClick={() => openAiChat()}
-                tabIndex={isVisible ? 0 : -1}
                 className={`flex w-full min-w-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] font-medium transition-colors ${
                   isAiChatOpen ? activeRowClass : inactiveRowClass
                 }`}
@@ -400,7 +282,6 @@ export default function Sidebar({
 
               <Link
                 href="/messages"
-                tabIndex={isVisible ? 0 : -1}
                 className={`flex min-w-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
                   onMessagesInbox ? activeRowClass : inactiveRowClass
                 }`}
@@ -414,7 +295,6 @@ export default function Sidebar({
                 <Link
                   key={sub.path}
                   href={sub.path}
-                  tabIndex={isVisible ? 0 : -1}
                   className={`flex min-w-0 items-center gap-2 rounded-md py-1.5 pl-8 pr-2.5 text-[13px] font-medium transition-colors ${
                     sub.active ? activeRowClass : inactiveRowClass
                   }`}
@@ -428,7 +308,6 @@ export default function Sidebar({
             <div className="min-w-0">
               <Link
                 href="/assignments"
-                tabIndex={isVisible ? 0 : -1}
                 className={`flex min-w-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
                   pathname === '/assignments' ? activeRowClass : inactiveRowClass
                 }`}
@@ -454,7 +333,6 @@ export default function Sidebar({
                   <Link
                     key={item.path}
                     href={item.path}
-                    tabIndex={isVisible ? 0 : -1}
                     className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
                       isActive ? activeRowClass : inactiveRowClass
                     }`}
@@ -474,7 +352,6 @@ export default function Sidebar({
               <DropdownMenuTrigger asChild>
                 <button
                   className="w-full flex items-center gap-3 px-3 py-3 hover:bg-neutral-50 transition-colors dark:hover:bg-[var(--sidebar-dark-hover)]"
-                  tabIndex={isVisible ? 0 : -1}
                 >
                   <UserAvatar src={user.avatar} name={user.name} size="md" />
                   <div className="flex-1 text-left min-w-0">
@@ -542,7 +419,6 @@ export default function Sidebar({
                 type="button"
                 onClick={() => router.push('/login')}
                 className="rounded-md px-2.5 py-1.5 text-[13px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-300 dark:hover:bg-[var(--sidebar-dark-hover)] dark:hover:text-white"
-                tabIndex={isVisible ? 0 : -1}
               >
                 Sign in
               </button>
@@ -552,19 +428,6 @@ export default function Sidebar({
             </div>
           )}
         </div>
-      </div>
     </div>
-
-    {/* Left-edge hot zone — an invisible full-height strip; moving the cursor
-        to the screen's left edge pops the sidebar out. Hidden once visible. */}
-    {!isVisible && (
-      <div
-        aria-hidden
-        onMouseEnter={handlePeekEnter}
-        onMouseLeave={handlePeekLeave}
-        className="fixed left-0 top-0 z-40 h-full w-1.5"
-      />
-    )}
-    </>
   );
 }

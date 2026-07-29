@@ -1,6 +1,5 @@
 // List view for the rebuilt automations engine.
 
-import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import AutomationsBackLink from '@/components/automations/AutomationsBackLink';
 import AutomationList from '@/components/automations/v2/AutomationList';
 
@@ -8,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export default function NewEngineListPage() {
   return (
-    <DesktopSidebarShell>
+    <>
       <div
         className="panel-form flex flex-1 flex-col overflow-hidden"
         style={{ background: 'var(--task-surface-0)' }}
@@ -20,6 +19,6 @@ export default function NewEngineListPage() {
           <AutomationList />
         </div>
       </div>
-    </DesktopSidebarShell>
+    </>
   );
 }

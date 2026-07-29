@@ -1,7 +1,6 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { ReservationDetailOverlay } from '@/components/reservations/ReservationDetailOverlay';
@@ -30,10 +29,10 @@ export default function PropertiesLayout({ children }: { children: React.ReactNo
   }
 
   return (
-    <DesktopSidebarShell>
+    <>
       {children}
       <ReservationDetailOverlay />
       <ContextTaskDetailOverlay />
-    </DesktopSidebarShell>
+    </>
   );
 }

@@ -3,9 +3,8 @@
 // Demo fixtures for the departments list. Public (/demo is auth-exempt) so the
 // layout is browser-verifiable without a session.
 //
-// The page reads useDepartments() and renders inside DesktopSidebarShell, whose
-// sidebar needs auth — so both contexts are mocked here, the same way the other
-// /demo pages do. Create/edit/delete still hit the real API and will 401; this
+// The page reads useDepartments() and the app sidebar needs auth — so both
+// contexts are mocked here, the same way the other /demo pages do. Create/edit/delete still hit the real API and will 401; this
 // fixture is for layout only. Demo-only.
 
 import { DepartmentsContext } from '@/lib/departmentsContext';

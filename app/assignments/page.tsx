@@ -2,7 +2,6 @@
 
 import { Suspense } from 'react';
 import { useRouter } from 'next/navigation';
-import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import MyAssignmentsWindow from '@/components/windows/MyAssignmentsWindow';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { MobileMyAssignmentsView } from '@/components/mobile';
@@ -44,12 +43,12 @@ export default function AssignmentsPage() {
   }
 
   return (
-    <DesktopSidebarShell>
+    <>
       <Suspense fallback={null}>
         <MyAssignmentsWindow users={users} currentUser={currentUser} />
       </Suspense>
       <ReservationDetailOverlay />
       <ContextTaskDetailOverlay />
-    </DesktopSidebarShell>
+    </>
   );
 }

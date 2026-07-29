@@ -1,8 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Sidebar from '@/components/Sidebar';
 import { useUsers } from '@/lib/useUsers';
 import { useAuth } from '@/lib/authContext';
 import {
@@ -73,50 +72,33 @@ export default function DesktopApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleViewChange = useCallback(
-    (next: DashboardView) => {
-      setActiveView(next);
-      const params = new URLSearchParams();
-      params.set('view', next);
-      router.replace(`/?${params.toString()}`, { scroll: false });
-    },
-    [router]
-  );
-
-  const isTimelineView = activeView === 'timeline';
-
+  // View switching now happens in the sidebar, which lives above the router
+  // and writes `?view=` directly; the effect on `urlView` above is what pulls
+  // the change back down into `activeView`.
   return (
-    <div className="flex h-screen bg-neutral-50 dark:bg-background overflow-hidden">
-      <Sidebar
-        surface={isTimelineView ? 'timeline' : 'default'}
-        activeWorkspaceView={activeView}
-        onWorkspaceViewChange={handleViewChange}
-      />
-
-      <div className="flex-1 relative overflow-hidden bg-background isolate">
-        <div className={`absolute inset-0 ${activeView === 'turnovers' ? '' : 'hidden'}`}>
-          <TurnoversWindow users={users} currentUser={currentUser} />
-        </div>
-
-        <div className={`absolute inset-0 ${activeView === 'timeline' ? '' : 'hidden'}`}>
-          <TimelineWindow users={users} />
-        </div>
-
-        <div className={`absolute inset-0 ${activeView === 'projects' ? '' : 'hidden'}`}>
-          <ProjectsWindow users={users} currentUser={currentUser} />
-        </div>
-
-        <div className={`absolute inset-0 ${activeView === 'tasks' ? '' : 'hidden'}`}>
-          <TasksWindow
-            currentUser={currentUser}
-            users={users}
-            isActive={activeView === 'tasks'}
-          />
-        </div>
-
-        <ReservationDetailOverlay />
-        <ContextTaskDetailOverlay />
+    <div className="relative h-full overflow-hidden isolate">
+      <div className={`absolute inset-0 ${activeView === 'turnovers' ? '' : 'hidden'}`}>
+        <TurnoversWindow users={users} currentUser={currentUser} />
       </div>
+
+      <div className={`absolute inset-0 ${activeView === 'timeline' ? '' : 'hidden'}`}>
+        <TimelineWindow users={users} />
+      </div>
+
+      <div className={`absolute inset-0 ${activeView === 'projects' ? '' : 'hidden'}`}>
+        <ProjectsWindow users={users} currentUser={currentUser} />
+      </div>
+
+      <div className={`absolute inset-0 ${activeView === 'tasks' ? '' : 'hidden'}`}>
+        <TasksWindow
+          currentUser={currentUser}
+          users={users}
+          isActive={activeView === 'tasks'}
+        />
+      </div>
+
+      <ReservationDetailOverlay />
+      <ContextTaskDetailOverlay />
     </div>
   );
 }

@@ -1,4 +1,3 @@
-import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import AutomationEditor from '@/components/automations/v2/AutomationEditor';
 
 export const dynamic = 'force-dynamic';
@@ -10,8 +9,8 @@ export default async function NewEngineEditPage({
 }) {
   const { id } = await params;
   return (
-    <DesktopSidebarShell>
+    <>
       <AutomationEditor automationId={id} />
-    </DesktopSidebarShell>
+    </>
   );
 }

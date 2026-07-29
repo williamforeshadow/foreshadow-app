@@ -46,13 +46,15 @@
   border-radius: 0.875rem;
 }
 
-/* Full-screen (desktop): fills the content area; sidebar stays visible. */
+/* Full-screen (desktop): lands on exactly the content card's rectangle, so it
+   replaces the page in place rather than covering the shell. The sidebar
+   stays visible to its left. */
 .fullscreen {
-  top: 0;
-  left: var(--app-sidebar-width, 0px);
-  right: 0;
-  bottom: 0;
-  border-radius: 0;
+  top: var(--app-shell-gap);
+  left: calc(var(--app-sidebar-width, 0px) + var(--app-shell-gap));
+  right: var(--app-shell-gap);
+  bottom: var(--app-shell-gap);
+  border-radius: var(--app-shell-radius);
 }
 
 /* Mobile: always covers the viewport. The padding-top keeps the header

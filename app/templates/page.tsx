@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import TemplatesList, { type TemplateListItem } from '@/components/templates/TemplatesList';
 
 export default function TemplatesPage() {
@@ -28,10 +27,10 @@ export default function TemplatesPage() {
   }, []);
 
   return (
-    <DesktopSidebarShell>
+    <>
       <div className="flex flex-1 flex-col overflow-hidden">
         <TemplatesList templates={templates} loading={loading} />
       </div>
-    </DesktopSidebarShell>
+    </>
   );
 }

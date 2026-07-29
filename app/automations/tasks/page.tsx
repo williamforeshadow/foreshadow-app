@@ -5,7 +5,6 @@
 // already under /automations/tasks.
 
 import { useEffect, useState } from 'react';
-import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import AutomationsBackLink from '@/components/automations/AutomationsBackLink';
 import AutomationsView from '@/components/templates/AutomationsView';
 
@@ -56,7 +55,7 @@ export default function TaskAutomationsPage() {
   }, []);
 
   return (
-    <DesktopSidebarShell>
+    <>
       <div className="panel-form flex flex-1 flex-col overflow-hidden" style={{ background: 'var(--task-surface-0)' }}>
         <AutomationsBackLink />
 
@@ -64,6 +63,6 @@ export default function TaskAutomationsPage() {
           <AutomationsView templates={templates} properties={properties} />
         </div>
       </div>
-    </DesktopSidebarShell>
+    </>
   );
 }

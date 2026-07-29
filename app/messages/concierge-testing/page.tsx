@@ -10,7 +10,6 @@ import {
   CalendarClock,
   Globe,
 } from 'lucide-react';
-import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { Input } from '@/components/ui/input';
@@ -108,11 +107,11 @@ export default function ConciergeTestingPage() {
       {console_}
     </MobileRouteShell>
   ) : (
-    <DesktopSidebarShell>
+    <>
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         {console_}
       </div>
-    </DesktopSidebarShell>
+    </>
   );
 }
 

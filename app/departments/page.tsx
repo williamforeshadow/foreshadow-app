@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import {
   Dialog,
   DialogContent,
@@ -143,7 +142,7 @@ export default function DepartmentsPage() {
   };
 
   return (
-    <DesktopSidebarShell>
+    <>
       <div
         className="panel-form flex flex-1 flex-col overflow-hidden"
         style={{ background: 'var(--task-surface-0)' }}
@@ -382,6 +381,6 @@ export default function DepartmentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DesktopSidebarShell>
+    </>
   );
 }

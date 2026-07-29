@@ -4,7 +4,6 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import AutomationsHub from '@/components/automations/AutomationsHub';
 
 export default function AutomationsPage() {
@@ -19,10 +18,10 @@ export default function AutomationsPage() {
   }, [router]);
 
   return (
-    <DesktopSidebarShell>
+    <>
       <div className="flex flex-1 flex-col overflow-hidden">
         <AutomationsHub />
       </div>
-    </DesktopSidebarShell>
+    </>
   );
 }

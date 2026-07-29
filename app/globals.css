@@ -7,10 +7,25 @@
 :root {
   --sidebar-width: 256px;
   --sidebar-width-collapsed: 64px;
-  /* --app-sidebar-width is updated live by SidebarProvider (256px open /
-     0px collapsed) so the full-screen AI chat panel aligns to the
-     content area. */
+  /* The sidebar is always visible on desktop, so its width is a constant —
+     the full-screen AI chat panel reads it to align with the content card. */
   --app-sidebar-width: 256px;
+  /* App shell. The sidebar is the window's permanent backdrop; the routed
+     page rides on top of it as an inset card, with the backdrop showing as a
+     thin margin on the card's other three sides. Gap and radius are shared
+     with the full-screen chat panel so it lands on the same rectangle.
+
+     --app-shell-bg is the ONLY toned surface in light mode. Everything inside
+     the card is white — that contrast is what the shell is for, and it only
+     reads if the card stays a single uninterrupted plane. Page chrome that
+     wants to separate itself (grid axes, headers, list dividers) does it with
+     hairline borders, not with a fill. Do not reach for a light grey here;
+     that is the exact mud this design replaced. */
+  --app-shell-gap: 0.5rem;
+  --app-shell-radius: 0.75rem;
+  --app-shell-bg: #EDEDF1;
+  --app-shell-card: #FFFFFF;
+  --app-shell-card-border: rgba(30, 25, 20, 0.10);
   --background: oklch(0.9581 0 0);
   --foreground: oklch(0.3134 0.0234 253.6270);
   --card: oklch(0.9774 0.0042 236.4961);
@@ -101,20 +116,22 @@
   --timeline-border-subtle: rgba(255, 255, 255, 0.075);
   --timeline-border-strong: rgba(255, 255, 255, 0.14);
   --timeline-hover: rgba(255, 255, 255, 0.08);
-  /* Schedule depth. Three tiers, ordered the same way in both themes:
+  /* Schedule depth. Three tiers:
        --timeline-cell    interior cells, the data field
        --timeline-axis    property column + date header row, the frame
        --timeline-header  the band holding title / filters / CTA
-     The CELL is the extreme in each theme (pure white here, near-black in
-     dark) and the frame + header step AWAY from it, so the grid always reads
-     as paper held in a frame rather than one flat plane. Light values are
-     cool greys a few points apart — enough to separate the tiers without the
-     page turning grey. Dark counterparts live in .dark below. */
+     In DARK these are three distinct tones and the grid reads as paper held
+     in a frame. In LIGHT they are all white and the frame is drawn purely
+     with hairline borders — the app shell already supplies the figure/ground
+     step (toned sidebar, white card), so re-staging it inside the card just
+     put grey back on the page and made the grid muddy against the pages that
+     are plain white. Depth in light mode is the shell's job, not the grid's.
+     Dark counterparts live in .dark below. */
   --timeline-cell: #FFFFFF;
   --timeline-cell-blocked: #E8E8EE;
-  --timeline-axis: #F4F4F7;
-  --timeline-axis-hover: #EBEBF0;
-  --timeline-header: #EDEDF1;
+  --timeline-axis: #FFFFFF;
+  --timeline-axis-hover: #F4F4F7;
+  --timeline-header: #FFFFFF;
   /* Today column — the one tinted surface in the grid, and the only place
      chroma is load-bearing rather than decorative. Light is --accent-1
      (#a78bfa) at ~30% over white, which lands it darker than the axis so the
@@ -221,6 +238,9 @@
   /* Schedule depth (see :root for the tier rationale). Steps here are ~15 and
      ~10 points: down near black a 6-point gap is invisible, so the header
      lifts well clear of --card (#1A1A1F) to buy the range back. */
+  --app-shell-bg: #26262D;
+  --app-shell-card: #0F0F12;
+  --app-shell-card-border: rgba(255, 255, 255, 0.07);
   --timeline-cell: #0D0D10;
   --timeline-cell-blocked: #18181D;
   --timeline-axis: #1C1C22;

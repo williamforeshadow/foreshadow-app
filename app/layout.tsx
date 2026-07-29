@@ -7,7 +7,6 @@ import { QueryProvider } from "@/lib/queries/QueryProvider";
 import { DepartmentsProvider } from "@/lib/departmentsContext";
 import { OperationsSettingsProvider } from "@/lib/operationsSettingsContext";
 import { ReservationViewerProvider } from "@/lib/reservationViewerContext";
-import { SidebarProvider } from "@/lib/sidebarContext";
 import { AiChatProvider } from "@/components/ai-chat/AiChatProvider";
 import { AppChrome } from "@/components/AppChrome";
 import { Toaster } from "@/components/ui/toast";
@@ -68,12 +67,10 @@ export default function RootLayout({
             <DepartmentsProvider>
               <OperationsSettingsProvider>
                 <ReservationViewerProvider>
-                  <SidebarProvider>
-                    <AiChatProvider>
-                      <AppChrome>{children}</AppChrome>
-                      <Toaster />
-                    </AiChatProvider>
-                  </SidebarProvider>
+                  <AiChatProvider>
+                    <AppChrome>{children}</AppChrome>
+                    <Toaster />
+                  </AiChatProvider>
                 </ReservationViewerProvider>
               </OperationsSettingsProvider>
             </DepartmentsProvider>

@@ -3,6 +3,7 @@
 import { Suspense, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { AiChatPanel } from './ai-chat/AiChatPanel';
+import { AppShell } from './AppShell';
 import { MobileBottomNav } from './mobile/MobileBottomNav';
 import { MobileAgentChat } from './mobile/MobileAgentChat';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -20,14 +21,20 @@ export function AppChrome({ children }: { children: ReactNode }) {
   const isMobile = useIsMobile();
 
   // The public /demo/* marketing routes render their own (mocked) chrome and
-  // must not mount the global agent panel / push bridge.
-  if (pathname === '/login' || pathname.startsWith('/demo')) {
+  // must not mount the global agent panel / push bridge. /update-password is
+  // reached from a signed-out email link, so it gets the same bare treatment
+  // as /login rather than a sidebar it can't navigate with.
+  if (
+    pathname === '/login' ||
+    pathname === '/update-password' ||
+    pathname.startsWith('/demo')
+  ) {
     return <>{children}</>;
   }
 
   return (
     <>
-      {children}
+      <AppShell>{children}</AppShell>
       <Suspense fallback={null}>
         <MobileBottomNav />
       </Suspense>

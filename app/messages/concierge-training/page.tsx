@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, Check, Home, Layers, Sparkles, X } from 'lucide-react';
-import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { Button } from '@/components/ui/button';
@@ -274,7 +273,7 @@ export default function ConciergeTrainingPage() {
           <div className="h-full overflow-y-auto overscroll-contain hide-scrollbar">{content}</div>
         </MobileRouteShell>
       ) : (
-        <DesktopSidebarShell>
+        <>
           <div className="flex h-full min-h-0 flex-col overflow-hidden">
             <div className="msg-divider shrink-0 border-b px-4 py-2.5">
               <Link
@@ -287,7 +286,7 @@ export default function ConciergeTrainingPage() {
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar [scrollbar-gutter:stable]">{content}</div>
           </div>
-        </DesktopSidebarShell>
+        </>
       )}
 
       {editor && (

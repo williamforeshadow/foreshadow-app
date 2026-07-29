@@ -1,6 +1,5 @@
 'use client';
 
-import Sidebar from '@/components/Sidebar';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
 
@@ -47,12 +46,11 @@ export default function TaskDetailLayout({
     );
   }
 
+  // Desktop chrome (sidebar + card) now comes from AppShell, above the
+  // router — this layout only has to supply the page's own layout box.
   return (
-    <div className="flex h-screen overflow-hidden bg-white dark:bg-card">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden relative">
-        {children}
-      </div>
+    <div className="relative flex h-full flex-col overflow-hidden">
+      {children}
     </div>
   );
 }

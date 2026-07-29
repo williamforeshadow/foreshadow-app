@@ -3,7 +3,6 @@
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Check, GraduationCap, Send, SlidersHorizontal, Wrench, Zap } from 'lucide-react';
-import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { cn } from '@/lib/utils';
@@ -381,7 +380,7 @@ export default function ConciergeSettingsPage() {
       <div className="h-full overflow-y-auto overscroll-contain hide-scrollbar">{content}</div>
     </MobileRouteShell>
   ) : (
-    <DesktopSidebarShell>
+    <>
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <div className="msg-divider shrink-0 border-b px-4 py-2.5">
           <Link
@@ -394,7 +393,7 @@ export default function ConciergeSettingsPage() {
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar">{content}</div>
       </div>
-    </DesktopSidebarShell>
+    </>
   );
 }
 

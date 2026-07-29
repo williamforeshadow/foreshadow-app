@@ -1,7 +1,6 @@
 'use client';
 
 import { useSelectedLayoutSegment } from 'next/navigation';
-import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { MessagesProvider, useMessages } from '@/components/messages/MessagesProvider';
@@ -60,7 +59,7 @@ function MessagesChrome({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <DesktopSidebarShell>
+    <>
       {/* One flush surface (no floating panes) matching the rest of the app —
           columns are separated by hairline dividers, not gaps. `relative` so the
           conversation page's task-editor panel anchors here, spanning the full
@@ -80,7 +79,7 @@ function MessagesChrome({ children }: { children: React.ReactNode }) {
         </aside>
         <main className="min-w-0 flex-1">{children}</main>
       </div>
-    </DesktopSidebarShell>
+    </>
   );
 }
 

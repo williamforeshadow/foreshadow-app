@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import { AdaptivePicker } from '@/components/tasks/detail/primitives/AdaptivePicker';
 import {
   ChipButton,
@@ -203,7 +202,7 @@ export default function DepartmentDetailPage() {
   };
 
   return (
-    <DesktopSidebarShell>
+    <>
       <div
         className="panel-form flex flex-1 flex-col overflow-hidden"
         style={{ background: 'var(--task-surface-0)' }}
@@ -483,6 +482,6 @@ export default function DepartmentDetailPage() {
           </div>
         </div>
       </div>
-    </DesktopSidebarShell>
+    </>
   );
 }

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import DesktopSidebarShell from '@/components/DesktopSidebarShell';
 import { AdaptivePicker } from '@/components/tasks/detail/primitives/AdaptivePicker';
 import { TaskOptionRow } from '@/components/tasks/detail/primitives/TaskSheet';
 import { FieldRow, SectionLabel, TokenDateTime } from '@/components/ui/panel/PanelForm';
@@ -121,7 +120,7 @@ export default function OperationsSettingsPage() {
   const disabled = loading || saving;
 
   return (
-    <DesktopSidebarShell>
+    <>
       <div
         className="panel-form flex flex-1 flex-col overflow-hidden"
         style={{ background: 'var(--task-surface-0)' }}
@@ -265,6 +264,6 @@ export default function OperationsSettingsPage() {
           </div>
         </div>
       </div>
-    </DesktopSidebarShell>
+    </>
   );
 }
