@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/authContext';
 import { useDepartments } from '@/lib/departmentsContext';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
 import { useProperties, useTaskTemplates } from '@/lib/queries';
+import { useWarmPropertyAvailability } from '@/lib/queries/usePropertyAvailability';
 import { PRIORITY_LABELS, PRIORITY_ORDER, type User } from '@/lib/types';
 import { PRIORITY_ICONS } from '@/lib/taskPriorityIcons';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
@@ -99,6 +100,10 @@ export function CreateTaskPanel({
   const binsHook = useProjectBins({ currentUser: authUser as unknown as User | null });
 
   const c = useTaskCreate({ seed, onCreated, submitOverride });
+
+  // Warm the picked property's occupancy as soon as it's chosen, so the date
+  // picker's purple is on screen with the grid instead of a beat behind it.
+  useWarmPropertyAvailability(c.draft.property_id, c.draft.scheduled_date);
 
   const [templateOpen, setTemplateOpen] = useState(false);
   const [propertyOpen, setPropertyOpen] = useState(false);

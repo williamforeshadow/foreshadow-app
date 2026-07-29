@@ -5,16 +5,11 @@ import { parseISO } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toDateOnly } from '@/components/properties/schedule/scheduleDates';
-
-interface Reservation {
-  id: string;
-  check_in: string;
-  check_out: string;
-}
-
-interface ScheduleResponse {
-  reservations?: Reservation[];
-}
+import {
+  usePropertyAvailabilityMonth,
+  type AvailabilityBlock,
+  type AvailabilityReservation,
+} from '@/lib/queries/usePropertyAvailability';
 
 interface TaskScheduledDatePickerProps {
   propertyId: string | null;
@@ -36,6 +31,23 @@ function formatDisplay(value: string): string {
   return d.toLocaleDateString();
 }
 
+// Fill per occupancy kind. Values mirror the property Schedule month grid so a
+// day reads the same whichever surface you meet it on:
+//   guest booking → purple (the picker's long-standing occupied color)
+//   owner stay    → amber
+//   calendar block→ slate
+//
+// Slate for blocks is deliberate: the task row's occupancy column already
+// spends red on "blocked", and red is now the current-day ring. Two different
+// meanings in one calendar cell would be worse than a quieter block.
+type OccupancyKind = 'guest' | 'owner' | 'block';
+
+const FILL_CLASS: Record<OccupancyKind, string> = {
+  guest: 'bg-[rgba(167,139,250,0.18)] dark:bg-[rgba(167,139,250,0.22)]',
+  owner: 'bg-[rgba(180,130,60,0.26)] dark:bg-[rgba(214,158,74,0.22)]',
+  block: 'bg-[rgba(88,90,102,0.30)] dark:bg-[rgba(138,140,152,0.24)]',
+};
+
 // Shape overlay painted inside each day cell. Diagonal corner cuts:
 //
 //   check-in  → top-left corner cut out, purple fills the bottom-right
@@ -51,12 +63,27 @@ function formatDisplay(value: string): string {
 // When a single cell carries BOTH check-in and check-out (a same-day
 // turnover), splitGap pulls each diagonal 20% off the corner so the
 // two triangles sit apart with a constant-width gap between them.
+//
+// Calendar blocks always use the 'reserved' full rectangle — a block has no
+// check-in/check-out ceremony, and a one-day block should read as a solid
+// cell rather than a collapsed sliver (same call the month grid makes).
 function DayShape({
   variant,
+  kind,
   splitGap,
+  elevated,
 }: {
   variant: 'reserved' | 'check-in' | 'check-out';
+  kind: OccupancyKind;
   splitGap?: boolean;
+  /**
+   * Paint above the day button instead of behind it. Used on the selected day,
+   * whose button carries a solid fill that would otherwise hide the occupancy
+   * underneath it entirely. These fills are translucent (0.18–0.30), so riding
+   * on top tints the selection rather than replacing it — you can still read
+   * both "this is the scheduled date" and "someone is in the unit".
+   */
+  elevated?: boolean;
 }) {
   let clipPath: string | undefined;
   if (variant === 'check-in') {
@@ -72,20 +99,134 @@ function DayShape({
   return (
     <span
       aria-hidden
-      className="pointer-events-none absolute inset-0"
-      style={{
-        backgroundColor: 'rgba(167, 139, 250, 0.18)',
-        clipPath,
-        zIndex: 0,
-      }}
+      className={`pointer-events-none absolute inset-0 ${FILL_CLASS[kind]}`}
+      style={{ clipPath, zIndex: elevated ? 1 : 0 }}
     />
   );
 }
 
+// Per-day occupancy. checkIn/checkOut/reserved carry the reservation kind that
+// produced them (null = absent) so each band can be colored independently — a
+// guest checking out the morning an owner checks in paints purple and amber in
+// the same cell.
 interface DayMarks {
-  checkIn: boolean;
-  checkOut: boolean;
-  reserved: boolean;
+  checkIn: OccupancyKind | null;
+  checkOut: OccupancyKind | null;
+  reserved: OccupancyKind | null;
+  blocked: boolean;
+}
+
+function emptyMarks(): DayMarks {
+  return { checkIn: null, checkOut: null, reserved: null, blocked: false };
+}
+
+/**
+ * Index reservations and blocks into a Map<YYYY-MM-DD, DayMarks>.
+ *
+ * A single day can carry several flags at once — most importantly a same-day
+ * turnover (one reservation's checkOut on the same day as another's checkIn)
+ * gets BOTH checkIn and checkOut so the cell renders two half-cell
+ * parallelograms with a gap between them.
+ */
+function buildDayMarks(
+  reservations: AvailabilityReservation[],
+  blocks: AvailabilityBlock[]
+): Map<string, DayMarks> {
+  const map = new Map<string, DayMarks>();
+  const getOrInit = (key: string): DayMarks => {
+    let m = map.get(key);
+    if (!m) {
+      m = emptyMarks();
+      map.set(key, m);
+    }
+    return m;
+  };
+
+  for (const r of reservations) {
+    const kind: OccupancyKind = r.kind === 'owner_stay' ? 'owner' : 'guest';
+    const start = toDateOnly(r.check_in);
+    const end = toDateOnly(r.check_out);
+    getOrInit(toYMD(start)).checkIn = kind;
+    getOrInit(toYMD(end)).checkOut = kind;
+    const cursor = new Date(start);
+    cursor.setDate(cursor.getDate() + 1);
+    while (cursor < end) {
+      getOrInit(toYMD(cursor)).reserved = kind;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  }
+
+  // Blocks span start_date .. end_date INCLUSIVE — unlike a reservation, the
+  // last day is still unavailable (nobody checks out of a maintenance hold).
+  for (const b of blocks) {
+    const start = toDateOnly(b.start_date);
+    const end = toDateOnly(b.end_date);
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      getOrInit(toYMD(cursor)).blocked = true;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  }
+
+  return map;
+}
+
+// Custom Day cell. Wraps the normal day button in a <td> with our shape
+// overlay siblings. react-day-picker forwards day + style + className + ARIA
+// props here; we keep them all (so selection, focus, today, outside-month
+// dimming, etc. still work) and add the occupancy backdrop.
+//
+// Built by a factory rather than declared inside the picker body: a component
+// defined inline would be a fresh type on every render, remounting all 42
+// cells each time. This identity only changes when the marks do.
+function makeDayCell(dayMarks: Map<string, DayMarks>) {
+  return function DayCell(props: {
+    day: { date: Date };
+    modifiers: Record<string, boolean>;
+    className?: string;
+    style?: React.CSSProperties;
+    children?: ReactNode;
+    [k: string]: unknown;
+  }) {
+    const { day, modifiers, className, style, children, ...rest } = props;
+    const marks = dayMarks.get(toYMD(day.date));
+    const showShapes = !!marks;
+    // The selected day's button paints a solid fill. Occupancy still shows on
+    // it — the bands just move above the button so they tint that fill instead
+    // of being buried under it. Picking an occupied date shouldn't erase the
+    // reason you might not want to.
+    const elevated = !!modifiers.selected;
+    // Same-day turnover: this cell is both a check-out and a check-in.
+    // Only then do the diagonals offset to leave a gap between them.
+    const splitGap = !!marks && !!marks.checkIn && !!marks.checkOut;
+    return (
+      <td className={className} style={style} {...rest}>
+        {showShapes && marks!.blocked && (
+          <DayShape variant="reserved" kind="block" elevated={elevated} />
+        )}
+        {showShapes && marks!.reserved && (
+          <DayShape variant="reserved" kind={marks!.reserved} elevated={elevated} />
+        )}
+        {showShapes && marks!.checkOut && (
+          <DayShape
+            variant="check-out"
+            kind={marks!.checkOut}
+            splitGap={splitGap}
+            elevated={elevated}
+          />
+        )}
+        {showShapes && marks!.checkIn && (
+          <DayShape
+            variant="check-in"
+            kind={marks!.checkIn}
+            splitGap={splitGap}
+            elevated={elevated}
+          />
+        )}
+        {children}
+      </td>
+    );
+  };
 }
 
 export function TaskScheduledDatePicker({
@@ -101,92 +242,21 @@ export function TaskScheduledDatePicker({
 
   const [open, setOpen] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState<Date>(selectedDate ?? new Date());
-  const [reservations, setReservations] = useState<Reservation[]>([]);
 
   useEffect(() => {
     if (selectedDate) setVisibleMonth(selectedDate);
   }, [selectedDate]);
 
-  useEffect(() => {
-    if (!propertyId || !open) return;
-    const year = visibleMonth.getFullYear();
-    const month = visibleMonth.getMonth() + 1;
-    const controller = new AbortController();
-    fetch(`/api/properties/${propertyId}/schedule?year=${year}&month=${month}`, {
-      signal: controller.signal,
-    })
-      .then((r) => (r.ok ? (r.json() as Promise<ScheduleResponse>) : { reservations: [] }))
-      .then((data) => setReservations(data.reservations ?? []))
-      .catch((err) => {
-        if (err?.name !== 'AbortError') setReservations([]);
-      });
-    return () => controller.abort();
-  }, [propertyId, open, visibleMonth]);
+  // Not gated on `open`. The surface that owns the Schedule chip warms this
+  // same cache key on mount, so the first paint is normally a cache hit and
+  // the occupancy is there with the grid rather than a beat after it.
+  const { availability } = usePropertyAvailabilityMonth(propertyId, visibleMonth);
 
-  // Index reservations into a Map<YYYY-MM-DD, DayMarks>. A single day
-  // can carry multiple flags — most importantly, a same-day turnover
-  // (one reservation's checkOut on the same day as another's checkIn)
-  // gets BOTH the checkIn and checkOut flags so DayCell can render
-  // both half-cell parallelograms with a gap between them.
-  const dayMarks = useMemo(() => {
-    const map = new Map<string, DayMarks>();
-    const getOrInit = (key: string): DayMarks => {
-      let m = map.get(key);
-      if (!m) {
-        m = { checkIn: false, checkOut: false, reserved: false };
-        map.set(key, m);
-      }
-      return m;
-    };
-    for (const r of reservations) {
-      const start = toDateOnly(r.check_in);
-      const end = toDateOnly(r.check_out);
-      getOrInit(toYMD(start)).checkIn = true;
-      getOrInit(toYMD(end)).checkOut = true;
-      const cursor = new Date(start);
-      cursor.setDate(cursor.getDate() + 1);
-      while (cursor < end) {
-        getOrInit(toYMD(cursor)).reserved = true;
-        cursor.setDate(cursor.getDate() + 1);
-      }
-    }
-    return map;
-  }, [reservations]);
-
-  // Custom Day cell. Wraps the normal day button in a <td> with our
-  // shape overlay sibling. react-day-picker forwards day + style +
-  // className + ARIA props here; we keep them all (so selection,
-  // focus, today, outside-month dimming, etc. still work) and add
-  // the reservation backdrop.
-  function DayCell(props: {
-    day: { date: Date };
-    modifiers: Record<string, boolean>;
-    className?: string;
-    style?: React.CSSProperties;
-    children?: ReactNode;
-    [k: string]: unknown;
-  }) {
-    const { day, modifiers, className, style, children, ...rest } = props;
-    const marks = dayMarks.get(toYMD(day.date));
-    // Don't paint reservation overlays on the selected day — the
-    // button's primary background should read cleanly.
-    const showShapes = !!marks && !modifiers.selected;
-    // Same-day turnover: this cell is both a check-out and a check-in.
-    // Only then do the diagonals offset to leave a gap between them.
-    const splitGap = !!marks && marks.checkIn && marks.checkOut;
-    return (
-      <td className={className} style={style} {...rest}>
-        {showShapes && marks!.reserved && <DayShape variant="reserved" />}
-        {showShapes && marks!.checkOut && (
-          <DayShape variant="check-out" splitGap={splitGap} />
-        )}
-        {showShapes && marks!.checkIn && (
-          <DayShape variant="check-in" splitGap={splitGap} />
-        )}
-        {children}
-      </td>
-    );
-  }
+  const dayMarks = useMemo(
+    () => buildDayMarks(availability.reservations, availability.blocks),
+    [availability]
+  );
+  const DayCell = useMemo(() => makeDayCell(dayMarks), [dayMarks]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

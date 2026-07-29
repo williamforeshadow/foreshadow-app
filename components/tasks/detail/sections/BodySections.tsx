@@ -10,6 +10,7 @@ import { DeptGlyph } from '../../DeptGlyph';
 import { toast } from '@/components/ui/toast';
 import { TaskScheduledDatePicker } from '@/components/windows/projects/TaskScheduledDatePicker';
 import { TaskScheduledTimePicker } from '@/components/windows/projects/TaskScheduledTimePicker';
+import { useWarmPropertyAvailability } from '@/lib/queries/usePropertyAvailability';
 import { AdaptivePicker } from '../primitives/AdaptivePicker';
 import { TaskOptionRow } from '../primitives/TaskSheet';
 import {
@@ -209,6 +210,12 @@ export function ContextChips({
   const PriorityIcon = PRIORITY_ICONS[priority] ?? PRIORITY_ICONS.medium;
 
   const disabled = readOnly;
+
+  // Warm this property's occupancy while the panel is merely open. The date
+  // picker lives two popovers deep and is unmounted until both are open, so a
+  // fetch started there can't begin until the user is already staring at an
+  // empty calendar. Same cache key, so the picker paints on first frame.
+  useWarmPropertyAvailability(disabled ? null : propertyId, scheduledDate);
 
   return (
     // Status · schedule · priority only — these three always fit one row. Bin

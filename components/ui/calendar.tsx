@@ -116,8 +116,12 @@ function Calendar({
         ),
         range_middle: cn("rounded-none", defaultClassNames.range_middle),
         range_end: cn("rounded-r-md bg-accent", defaultClassNames.range_end),
+        // No background fill here — today is marked by the hollow ring drawn
+        // in CalendarDayButton. The old `bg-accent` was invisible in dark
+        // mode: --accent and --popover are both #1A1A1F, so the "highlight"
+        // painted the exact color it sat on.
         today: cn(
-          "bg-accent text-accent-foreground rounded-md data-[selected=true]:rounded-none",
+          "rounded-md data-[selected=true]:rounded-none",
           defaultClassNames.today
         ),
         outside: cn(
@@ -192,6 +196,16 @@ function CalendarDayButton({
     if (modifiers.focused) ref.current?.focus()
   }, [modifiers.focused])
 
+  // Today = a hollow ring in the urgent-priority color (see PriorityTag in
+  // components/tasks/TaskRow.tsx). Drawn as an ::after outline rather than a
+  // fill so it layers over whatever the cell already shows: pick today as the
+  // scheduled date and you get the selection fill AND the ring, both legible.
+  // An ::after also sidesteps the parent's `[&>span]:opacity-70`
+  // rule, which would otherwise dim a real element down to 70%.
+  const todayRing = modifiers.today
+    ? "after:pointer-events-none after:absolute after:inset-[2px] after:rounded-full after:border-2 after:content-[''] after:border-red-500 dark:after:border-[#d97757]"
+    : ""
+
   return (
     <Button
       ref={ref}
@@ -208,7 +222,12 @@ function CalendarDayButton({
       data-range-end={modifiers.range_end}
       data-range-middle={modifiers.range_middle}
       className={cn(
-        "data-[selected-single=true]:bg-primary data-[selected-single=true]:text-primary-foreground data-[range-middle=true]:bg-accent data-[range-middle=true]:text-accent-foreground data-[range-start=true]:bg-primary data-[range-start=true]:text-primary-foreground data-[range-end=true]:bg-primary data-[range-end=true]:text-primary-foreground group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-ring/50 dark:hover:text-accent-foreground flex aspect-square size-auto w-full min-w-(--cell-size) flex-col gap-1 leading-none font-normal group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:ring-[3px] data-[range-end=true]:rounded-md data-[range-end=true]:rounded-r-md data-[range-middle=true]:rounded-none data-[range-start=true]:rounded-md data-[range-start=true]:rounded-l-md [&>span]:text-xs [&>span]:opacity-70",
+        "relative",
+        todayRing,
+        // Selection is translucent so an occupancy band underneath still
+        // reads. A solid fill turned an occupied day into a blank chip and
+        // hid the one thing you'd want to know before scheduling work there.
+        "data-[selected-single=true]:bg-primary/55 data-[selected-single=true]:text-primary-foreground data-[range-middle=true]:bg-accent data-[range-middle=true]:text-accent-foreground data-[range-start=true]:bg-primary data-[range-start=true]:text-primary-foreground data-[range-end=true]:bg-primary data-[range-end=true]:text-primary-foreground group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-ring/50 dark:hover:text-accent-foreground flex aspect-square size-auto w-full min-w-(--cell-size) flex-col gap-1 leading-none font-normal group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:ring-[3px] data-[range-end=true]:rounded-md data-[range-end=true]:rounded-r-md data-[range-middle=true]:rounded-none data-[range-start=true]:rounded-md data-[range-start=true]:rounded-l-md [&>span]:text-xs [&>span]:opacity-70",
         defaultClassNames.day,
         className
       )}

@@ -10,6 +10,13 @@ import { requireAuthContext } from '@/lib/requireAuthContext';
 //
 // We actually widen the window by ±7 days so events that spill into the
 // adjacent-month rows of a 6-week grid are visible without a second fetch.
+//
+// `?include=availability` narrows the response to reservations + blocks and
+// skips the turnover_tasks query entirely (tasks comes back []). The task
+// date picker only paints occupancy behind day cells, so making it pay for
+// four task joins it never reads was the bulk of its open latency. Omitting
+// the param keeps the full payload, so the property Schedule view is
+// unaffected.
 export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> }
@@ -24,6 +31,7 @@ export async function GET(
   }
 
   const { searchParams } = new URL(request.url);
+  const availabilityOnly = searchParams.get('include') === 'availability';
   const yearParam = Number(searchParams.get('year'));
   const monthParam = Number(searchParams.get('month')); // 1-indexed: 1 = Jan
   const now = new Date();
@@ -92,40 +100,43 @@ export async function GET(
   }
 
   // Tasks scheduled in the window. Same property filter. We pull enough to
-  // render a task pill + open the task detail panel on click.
-  const { data: tasks, error: tasksError } = await supabase
-    .from('turnover_tasks')
-    .select(
-      `
-      id,
-      reservation_id,
-      property_id,
-      property_name,
-      template_id,
-      title,
-      description,
-      priority,
-      bin_id,
-      is_binned,
-      department_id,
-      status,
-      scheduled_date,
-      scheduled_time,
-      form_metadata,
-      completed_at,
-      created_at,
-      updated_at,
-      templates(id, name, department_id),
-      departments(id, name),
-      project_bins(id, name, is_system),
-      task_assignments(user_id, users(id, name, email, role, avatar))
-    `
-    )
-    .eq('property_id', propertyId)
-    .not('scheduled_date', 'is', null)
-    .gte('scheduled_date', windowStart)
-    .lte('scheduled_date', windowEnd)
-    .order('scheduled_date', { ascending: true });
+  // render a task pill + open the task detail panel on click. Skipped wholesale
+  // for availability-only callers.
+  const { data: tasks, error: tasksError } = availabilityOnly
+    ? { data: [] as never[], error: null }
+    : await supabase
+        .from('turnover_tasks')
+        .select(
+          `
+          id,
+          reservation_id,
+          property_id,
+          property_name,
+          template_id,
+          title,
+          description,
+          priority,
+          bin_id,
+          is_binned,
+          department_id,
+          status,
+          scheduled_date,
+          scheduled_time,
+          form_metadata,
+          completed_at,
+          created_at,
+          updated_at,
+          templates(id, name, department_id),
+          departments(id, name),
+          project_bins(id, name, is_system),
+          task_assignments(user_id, users(id, name, email, role, avatar))
+        `
+        )
+        .eq('property_id', propertyId)
+        .not('scheduled_date', 'is', null)
+        .gte('scheduled_date', windowStart)
+        .lte('scheduled_date', windowEnd)
+        .order('scheduled_date', { ascending: true });
 
   if (tasksError) {
     return NextResponse.json({ error: tasksError.message }, { status: 500 });

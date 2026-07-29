@@ -29,4 +29,11 @@ export const qk = {
     ['property', id, 'knowledge', section] as const,
   // The per-property task ledger (GET /api/properties/[id]/tasks).
   propertyTasks: (id: string) => ['property', id, 'tasks'] as const,
+  // One month of occupancy for a property — reservations + calendar blocks,
+  // no tasks (GET /api/properties/[id]/schedule?include=availability). Keyed
+  // per month because that's the fetch granularity the date picker pages
+  // through. Shares the ['property', id] prefix so a property-wide
+  // invalidate sweeps it.
+  propertyAvailabilityMonth: (id: string, year: number, month: number) =>
+    ['property', id, 'availability', year, month] as const,
 };
