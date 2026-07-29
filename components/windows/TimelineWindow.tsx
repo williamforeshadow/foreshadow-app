@@ -3,8 +3,8 @@
 import { apiFetch } from '@/lib/apiFetch';
 import { toast } from '@/components/ui/toast';
 import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ensureTemplateDetail, fetchJson, qk, useProperties } from '@/lib/queries';
+import { useQueryClient } from '@tanstack/react-query';
+import { qk, useProperties } from '@/lib/queries';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger, PopoverClose } from '@/components/ui/popover';
@@ -29,7 +29,6 @@ import { marbleBackground } from './timeline/timelineStatus';
 import { RESERVATION_BAR_DIAGONAL_PX } from '@/components/properties/schedule/scheduleDates';
 import { ProjectCard } from './projects/ProjectCard';
 import { scheduleTaskToCardItem } from './timeline/scheduleTaskCardMapping';
-import { TurnoverTaskList, TurnoverProjectsPanel } from './turnovers';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
 import type { TaskDetailInput } from '@/components/tasks/detail/taskInput';
 import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
@@ -47,8 +46,7 @@ import {
 import { ClipboardCheck, Filter as FilterIcon } from 'lucide-react';
 import { CompactSearch } from '@/components/ui/compact-search';
 import { RowsIcon, KanbanColumnsIcon } from './timeline/TimelineViewIcons';
-import type { Project, Task, User, Turnover, TaskTemplate } from '@/lib/types';
-import type { Template } from '@/components/DynamicCleaningForm';
+import type { Task, User } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { useExclusiveDetailPanelHost, useReservationViewer } from '@/lib/reservationViewerContext';
@@ -111,17 +109,18 @@ function taskToTaskDetailInput(task: Task, propertyName: string): TaskDetailInpu
 
 interface TimelineWindowProps {
   users: User[];
-  currentUser: User | null;
 }
 
-// Type for what's being viewed in the floating window
+// Type for what's being viewed in the floating window. Tasks only: the
+// 'project' and 'turnover' variants were never constructed once property
+// projects and tasks merged into the one task panel, so the branches keyed on
+// them were unreachable. Keeping the union honest makes the compiler reject
+// any attempt to revive half of it.
 type FloatingWindowData = {
-  type: 'task' | 'project' | 'turnover';
-  item: Task | Project | Turnover;
+  type: 'task';
+  item: Task;
   propertyName: string;
 } | null;
-
-const EMPTY_PROJECTS: Project[] = [];
 
 // Droppable date cell: a task icon/dot dragged onto it reschedules the task
 // to this day (same-property only — see handleTaskDragEnd). Forwards the
@@ -415,7 +414,6 @@ function BlockedDayMarker({ note, propertyName }: { note: string | null; propert
 
 export default function TimelineWindow({
   users,
-  currentUser,
 }: TimelineWindowProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -462,29 +460,7 @@ export default function TimelineWindow({
   // day in the grid now pops this shared panel instead of navigating away.
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
 
-  // ============================================================================
-  // LOCAL project data (fetched from tasks-for-bin API)
-  // ============================================================================
-  const projectsQuery = useQuery({
-    queryKey: qk.tasksForBin('__all__', currentUser?.id ?? null),
-    queryFn: async () => {
-      const params = new URLSearchParams({ bin_id: '__all__' });
-      if (currentUser?.id) params.set('viewer_user_id', currentUser.id);
-      const result = await fetchJson<{ data?: Project[] }>(`/api/tasks-for-bin?${params.toString()}`);
-      return result.data ?? [];
-    },
-  });
-  // Old fetch had no loading state — don't introduce one here.
-  const projects = projectsQuery.data ?? EMPTY_PROJECTS;
   const { properties: allProperties } = useProperties();
-
-  // fetchProjects remains as a refetch shim for existing callers.
-  const { refetch: refetchProjects } = projectsQuery;
-  const fetchProjects = useCallback(async () => {
-    await refetchProjects();
-  }, [refetchProjects]);
-
-  useEffect(() => { fetchProjects(); }, [fetchProjects]);
 
   // Property name → id lookup. Powers the clickable property labels in the
   // y-axis column: clicking a property opens its detail page in a new tab
@@ -565,97 +541,10 @@ export default function TimelineWindow({
   // ============================================================================
   // Task state
   // ============================================================================
-  // taskTemplates/fetchTaskTemplate still feed TurnoverTaskList's template
-  // labels — TaskDetailPanel loads its own template internally and no longer
-  // needs this cache.
-  const [taskTemplates, setTaskTemplates] = useState<Record<string, Template>>({});
   const [creatingOpen, setCreatingOpen] = useState(false);
   const [createSeed, setCreateSeed] = useState<{ property_name?: string | null; scheduled_date?: string | null }>({});
 
 
-  // ============================================================================
-  // Turnover detail state
-  // ============================================================================
-  const [turnoverRightPanelView, setTurnoverRightPanelView] = useState<'tasks' | 'projects'>('tasks');
-  const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
-  const [availableTemplates, setAvailableTemplates] = useState<TaskTemplate[]>([]);
-
-  // ============================================================================
-  // Task functions
-  // ============================================================================
-  const fetchTaskTemplate = useCallback(async (templateId: string, propertyName?: string): Promise<any> => {
-    const cacheKey = propertyName ? `${templateId}__${propertyName}` : templateId;
-
-    if (taskTemplates[cacheKey]) {
-      return taskTemplates[cacheKey];
-    }
-
-    try {
-      const template = await ensureTemplateDetail(queryClient, templateId, propertyName);
-
-      setTaskTemplates(prev => ({ ...prev, [cacheKey]: template }));
-      return template;
-    } catch (err) {
-      console.error('Error fetching template:', err);
-      toast.error("Couldn't load the task template");
-      return null;
-    }
-  }, [taskTemplates, queryClient]);
-
-  // ============================================================================
-  // Turnover task handlers
-  // ============================================================================
-  const updateTurnoverTaskAssignment = useCallback(async (taskId: string, userIds: string[]) => {
-    try {
-      const res = await apiFetch('/api/update-task-assignment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId, userIds })
-      });
-
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Failed to update task assignment');
-
-      // Update task in reservations
-      const assignedUsers = (result.data?.task_assignments || []).map((ta: { user_id: string; users?: { name?: string; avatar?: string; role?: string } }) => ({
-        user_id: ta.user_id,
-        name: ta.users?.name || '',
-        avatar: ta.users?.avatar || '',
-        role: ta.users?.role || ''
-      }));
-
-      setReservations(prev => prev.map(reservation => ({
-        ...reservation,
-        tasks: (reservation.tasks || []).map((task: Task) =>
-          task.task_id === taskId ? { ...task, assigned_users: assignedUsers } : task
-        )
-      })));
-
-      // Update floatingData if it's the same task (turnover, or the open task panel)
-      setFloatingData(prev => {
-        if (!prev) return prev;
-        if (prev.type === 'turnover') {
-          const turnover = prev.item as Turnover;
-          return {
-            ...prev,
-            item: {
-              ...turnover,
-              tasks: turnover.tasks.map(task =>
-                task.task_id === taskId ? { ...task, assigned_users: assignedUsers } : task
-              )
-            }
-          };
-        }
-        if (prev.type === 'task' && (prev.item as Task).task_id === taskId) {
-          return { ...prev, item: { ...(prev.item as Task), assigned_users: assignedUsers } };
-        }
-        return prev;
-      });
-    } catch (err) {
-      console.error('Error updating task assignment:', err);
-      toast.error("Couldn't update the task assignment");
-    }
-  }, [setReservations]);
 
   const updateTurnoverTaskSchedule = useCallback(async (taskId: string, scheduledDate: string | null, scheduledTime: string | null) => {
     // Optimistic-first: move the task in local state immediately so the grid
@@ -672,26 +561,10 @@ export default function TimelineWindow({
       t.task_id === taskId ? { ...t, scheduled_date: scheduledDate, scheduled_time: scheduledTime } : t
     ));
 
-    if (floatingData?.type === 'task' && (floatingData.item as Task).task_id === taskId) {
+    if (floatingData?.item.task_id === taskId) {
       setFloatingData(prev => {
-        if (!prev || prev.type !== 'task') return prev;
-        return { ...prev, item: { ...(prev.item as Task), scheduled_date: scheduledDate, scheduled_time: scheduledTime } };
-      });
-    }
-
-    if (floatingData?.type === 'turnover') {
-      setFloatingData(prev => {
-        if (!prev || prev.type !== 'turnover') return prev;
-        const turnover = prev.item as Turnover;
-        return {
-          ...prev,
-          item: {
-            ...turnover,
-            tasks: turnover.tasks.map(task =>
-              task.task_id === taskId ? { ...task, scheduled_date: scheduledDate, scheduled_time: scheduledTime } : task
-            )
-          }
-        };
+        if (!prev) return prev;
+        return { ...prev, item: { ...prev.item, scheduled_date: scheduledDate, scheduled_time: scheduledTime } };
       });
     }
 
@@ -877,133 +750,8 @@ export default function TimelineWindow({
     };
   }, [draggingTask]);
 
-  const fetchAvailableTemplates = useCallback(async () => {
-    try {
-      const res = await fetch('/api/tasks');
-      const result = await res.json();
-      if (res.ok && result.data) {
-        setAvailableTemplates(result.data);
-      }
-    } catch (err) {
-      console.error('Error fetching templates:', err);
-      toast.error("Couldn't load task templates");
-    }
-  }, []);
-
-  const addTaskToTurnover = useCallback(async (templateId: string) => {
-    if (floatingData?.type !== 'turnover') return;
-    const turnover = floatingData.item as Turnover;
-
-    try {
-      const res = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reservation_id: turnover.id,
-          template_id: templateId
-        })
-      });
-
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Failed to add task');
-
-      const newTask = result.data as Task;
-
-      // Update reservations
-      setReservations(prev => prev.map(reservation => {
-        if (reservation.id === turnover.id) {
-          const updatedTasks = [...(reservation.tasks || []), newTask];
-          return {
-            ...reservation,
-            tasks: updatedTasks,
-            total_tasks: updatedTasks.length,
-            completed_tasks: updatedTasks.filter((t: Task) => t.status === 'complete').length,
-          };
-        }
-        return reservation;
-      }));
-
-      // Update floatingData
-      setFloatingData(prev => {
-        if (!prev || prev.type !== 'turnover') return prev;
-        const t = prev.item as Turnover;
-        const updatedTasks = [...t.tasks, newTask];
-        return {
-          ...prev,
-          item: {
-            ...t,
-            tasks: updatedTasks,
-            total_tasks: updatedTasks.length,
-            completed_tasks: updatedTasks.filter(task => task.status === 'complete').length,
-          }
-        };
-      });
-
-      setShowAddTaskDialog(false);
-    } catch (err) {
-      console.error('Error adding task:', err);
-      toast.error("Couldn't add the task");
-    }
-  }, [floatingData, setReservations]);
-
-  const deleteTaskFromTurnover = useCallback(async (taskId: string) => {
-    if (floatingData?.type !== 'turnover') return;
-    const turnover = floatingData.item as Turnover;
-
-    try {
-      const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Failed to delete task');
-
-      // Update reservations
-      setReservations(prev => prev.map(reservation => {
-        if (reservation.id === turnover.id) {
-          const updatedTasks = (reservation.tasks || []).filter((t: Task) => t.task_id !== taskId);
-          return {
-            ...reservation,
-            tasks: updatedTasks,
-            total_tasks: updatedTasks.length,
-            completed_tasks: updatedTasks.filter((t: Task) => t.status === 'complete').length,
-          };
-        }
-        return reservation;
-      }));
-
-      // Update floatingData
-      setFloatingData(prev => {
-        if (!prev || prev.type !== 'turnover') return prev;
-        const t = prev.item as Turnover;
-        const updatedTasks = t.tasks.filter(task => task.task_id !== taskId);
-        return {
-          ...prev,
-          item: {
-            ...t,
-            tasks: updatedTasks,
-            total_tasks: updatedTasks.length,
-            completed_tasks: updatedTasks.filter(task => task.status === 'complete').length,
-          }
-        };
-      });
-    } catch (err) {
-      console.error('Error deleting task:', err);
-      toast.error("Couldn't delete the task");
-    }
-  }, [floatingData, setReservations]);
-
-  const handleTurnoverTaskClick = useCallback((task: Task) => {
-    if (floatingData?.type !== 'turnover') return;
-    // Switch to task view within the same panel — TaskDetailPanel loads its
-    // own template/comments/attachments/time entries once mounted.
-    setFloatingData({
-      type: 'task',
-      item: task,
-      propertyName: floatingData.propertyName,
-    });
-  }, [floatingData]);
-
   const handleCloseFloatingWindow = useCallback(() => {
     setFloatingData(null);
-    setTurnoverRightPanelView('tasks');
   }, []);
 
   // Draft placeholders are gone — creation opens CreateTaskPanel directly.
@@ -1951,117 +1699,7 @@ export default function TimelineWindow({
                 }}
               />
             );
-          })() : floatingData.type === 'turnover' ? (
-            /* Turnover Detail Panel */
-            <div className="flex flex-col h-full">
-              {/* Sticky Header - Property Info + Toggle */}
-              <div className="sticky top-0 bg-white/40 dark:bg-white/[0.04] backdrop-blur-2xl z-10 border-b border-white/20 dark:border-white/10">
-                {/* Top Row: Property name, Guest, Dates, Occupancy, Close button */}
-                <div className="p-4 pb-3">
-                  <div className="flex items-start justify-between gap-4">
-                    {/* Property & Guest */}
-                    <div className="flex-1 min-w-0">
-                      <h2 className="text-lg font-semibold truncate">{(floatingData.item as Turnover).property_name}</h2>
-                      {(floatingData.item as Turnover).guest_name && (
-                        <div className="flex items-center gap-1.5 mt-0.5 text-sm text-neutral-500">
-                          <svg className="w-3.5 h-3.5 text-purple-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                          <span className="truncate">{(floatingData.item as Turnover).guest_name}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Dates & Occupancy - Compact */}
-                    <div className="flex items-center gap-3 text-xs">
-                      <div className="text-center">
-                        <div className="text-neutral-500 dark:text-neutral-400">In</div>
-                        <div className="font-medium text-blue-600 dark:text-blue-400">
-                          {(floatingData.item as Turnover).check_in ? new Date((floatingData.item as Turnover).check_in!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
-                        </div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-neutral-500 dark:text-neutral-400">Out</div>
-                        <div className="font-medium text-red-600 dark:text-red-400">
-                          {(floatingData.item as Turnover).check_out ? new Date((floatingData.item as Turnover).check_out!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
-                        </div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-neutral-500 dark:text-neutral-400">Next In</div>
-                        <div className="font-medium text-green-600 dark:text-green-400">
-                          {(floatingData.item as Turnover).next_check_in ? new Date((floatingData.item as Turnover).next_check_in!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Close Button */}
-                    <button
-                      onClick={handleCloseFloatingWindow}
-                      className="p-1.5 hover:bg-white/40 dark:hover:bg-white/10 rounded-lg transition-colors shrink-0"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Toggle Button Row */}
-                <div className="px-4 pb-3">
-                  <div className="flex rounded-xl bg-white/20 dark:bg-white/[0.05] backdrop-blur-sm border border-white/20 dark:border-white/10 p-1">
-                    <button
-                      onClick={() => setTurnoverRightPanelView('tasks')}
-                      className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-                        turnoverRightPanelView === 'tasks'
-                          ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
-                          : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/20 dark:hover:bg-white/10'
-                      }`}
-                    >
-                      Turnover Tasks ({(floatingData.item as Turnover).completed_tasks || 0}/{(floatingData.item as Turnover).total_tasks || 0})
-                    </button>
-                    <button
-                      onClick={() => setTurnoverRightPanelView('projects')}
-                      className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-                        turnoverRightPanelView === 'projects'
-                          ? 'bg-white/60 dark:bg-white/15 text-neutral-900 dark:text-white shadow-sm'
-                          : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/20 dark:hover:bg-white/10'
-                      }`}
-                    >
-                      Property Projects ({projects.filter(p => p.property_name === (floatingData.item as Turnover).property_name).length})
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Scrollable Content */}
-              <div className={`flex-1 overflow-y-auto hide-scrollbar ${turnoverRightPanelView === 'tasks' ? 'p-4 space-y-3' : ''}`}>
-                {turnoverRightPanelView === 'tasks' ? (
-                  <TurnoverTaskList
-                    selectedCard={floatingData.item as Turnover}
-                    users={users}
-                    taskTemplates={taskTemplates as Record<string, Template>}
-                    availableTemplates={availableTemplates}
-                    showAddTaskDialog={showAddTaskDialog}
-                    setShowAddTaskDialog={setShowAddTaskDialog}
-                    onTaskClick={handleTurnoverTaskClick}
-                    onDeleteTask={deleteTaskFromTurnover}
-                    onUpdateSchedule={updateTurnoverTaskSchedule}
-                    onUpdateAssignment={updateTurnoverTaskAssignment}
-                    onAddTask={addTaskToTurnover}
-                    onFetchTemplates={fetchAvailableTemplates}
-                    fetchTaskTemplate={fetchTaskTemplate}
-                  />
-                ) : (
-                  <TurnoverProjectsPanel
-                    propertyName={(floatingData.item as Turnover).property_name}
-                    projects={projects}
-                    users={users}
-                    onOpenProjectInWindow={() => {}}
-                  />
-                )}
-              </div>
-            </div>
-          ) : null}
+          })() : null}
         </div>
       )}
 

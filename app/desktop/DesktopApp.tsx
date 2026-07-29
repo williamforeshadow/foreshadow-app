@@ -99,7 +99,7 @@ export default function DesktopApp() {
         </div>
 
         <div className={`absolute inset-0 ${activeView === 'timeline' ? '' : 'hidden'}`}>
-          <TimelineWindow users={users} currentUser={currentUser} />
+          <TimelineWindow users={users} />
         </div>
 
         <div className={`absolute inset-0 ${activeView === 'projects' ? '' : 'hidden'}`}>

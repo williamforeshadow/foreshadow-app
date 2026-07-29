@@ -199,7 +199,7 @@ export default function DemoSchedulePage() {
                 {isMobile === null ? null : isMobile ? (
                   <MobileTimelineView />
                 ) : (
-                  <TimelineWindow users={DEMO_USERS} currentUser={DEMO_USER} />
+                  <TimelineWindow users={DEMO_USERS} />
                 )}
               </div>
               {/* Real agent — opens via the launcher or Cmd/Ctrl+K, replies
