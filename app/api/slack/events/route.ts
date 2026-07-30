@@ -572,11 +572,10 @@ async function handleSlackMessage(
   });
 
   // Slack runs the same agent loop as the in-app chat — same tools, same
-  // preview/confirm dance for writes, same backstops. Surface-specific
-  // bits: the formatting hint (Slack mrkdwn vs. full markdown) and the
-  // resolved actor (we know exactly who's typing because email matched a
-  // users row; in-app chat doesn't have real auth yet so it can't pass
-  // an actor with the same confidence).
+  // preview/confirm dance for writes, same backstops. The only surface-
+  // specific bit is the formatting hint (Slack mrkdwn vs. full markdown);
+  // identity is equally solid on both sides, since web resolves its actor
+  // from the verified Supabase session.
   // RLS-governed client acting as the resolved Slack user — the database
   // scopes every tool query to their org. Falls back to the service client
   // (tools' explicit org filters still apply) if minting isn't possible.

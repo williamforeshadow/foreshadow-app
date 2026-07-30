@@ -87,13 +87,13 @@ function buildSystemPrompt(
       ? '- You are answering inside Slack. Keep replies short, plain text. Use bold sparingly with single-asterisk syntax (*bold*). Do not use markdown headings (#, ##) — Slack does not render them.'
       : '- You are answering inside the Foreshadow web app chat panel. Replies render as full markdown. When ANY write previews this turn register pending actions, the chat panel shows a SINGLE Confirm/Cancel pair directly below your message — one click commits (or cancels) every preview from this turn atomically. Present the plan once and tell the user to use those buttons; do NOT tell them to "confirm each one" or to type "yes".';
 
-  // Identity grounding. When the caller knows who's asking — Slack route
-  // resolves Slack user → Foreshadow user via email; in-app chat will
-  // pass the logged-in user once we have real auth — feed that into the
-  // prompt so "me" / "my" / "I" / "mine" resolve to the right user_id
-  // without the model having to call find_users by name (which would be
-  // both slower and ambiguous when names collide). Falls back to a
-  // permissive line when actor is unknown so the prompt stays valid.
+  // Identity grounding. Both surfaces resolve the caller before the run —
+  // Slack matches slack user → email → users row; web takes the verified
+  // Supabase session via requireAuthContext — so this block feeds a real
+  // user_id into the prompt and "me" / "my" / "I" / "mine" resolve without
+  // the model having to call find_users by name (which would be both slower
+  // and ambiguous when names collide). The permissive fallback is kept for
+  // type-safety only; no surface ships without an actor today.
   const actorBlock = actor
     ? `- The user you are talking to is ${actor.name} (user_id: ${actor.appUserId}). When they say "me", "my", "I", or otherwise refer to themselves, use this user_id directly — do NOT call find_users to look themselves up. Their role is "${actor.role}".`
     : `- The current user's identity is not resolved. If they refer to themselves ("me", "my"), ask which user they mean before calling tools that filter by user.`;
@@ -125,6 +125,13 @@ ${
 }
 
 You answer questions about the user's properties, reservations, and tasks by calling the read-only tools provided. You never write SQL. When a question requires data, call the appropriate tool, then answer using the structured data the tool returns.
+
+Finding tasks vs. reading one (critical):
+- find_tasks FINDS tasks. It filters and lists, and it deliberately carries only a thin projection: it returns comment_count and attachment_count as NUMBERS, and it does not return the description or the checklist at all.
+- get_task READS one task. Given a single task_id it returns the full description, every checklist field with its recorded answer plus completed/total progress, the comment bodies with their authors, and attachment metadata.
+- So: never answer a question about a task's CONTENT from find_tasks. If the user asks what the comments say, what the note or description is, how far along the checklist is, what's left to do, or what someone wrote — call find_tasks to resolve the task, then call get_task on the task_id it returned. Reporting "this task has 4 comments" when the user asked what the comments SAY is a wrong answer; read them.
+- Do not call get_task on every row of a list. It is a single-task deep read; use it when the conversation has narrowed to one task.
+- Tasks have NO activity or audit history — nothing records who changed what and when. If asked, say it isn't tracked yet. Do not infer a history from created_at/updated_at/completed_at.
 
 Availability vs. bookings (critical — three distinct things):
 - Guest bookings and OWNER STAYS both live in reservations: use find_reservations. An owner stay is dates the owner reserved for themselves (kind='owner_stay', no guest revenue) — still a reservation, still found there.
@@ -193,7 +200,7 @@ Write protocol (critical):
   * Delete is HARD today (the task row is removed; comments and assignments cascade away with it). preview_task_delete surfaces the comment count and assignment count so you can warn the user before they confirm.
   * After a successful delete_task, confirm using the snapshot returned in the result. Do NOT try to construct a task_url for a deleted task — the row no longer exists.
 - Comment specifics:
-  * Comments are authored as the talking-to user (the actor identified in this prompt). You don't pass a user_id — there is no input field for it; the binding happens server-side. If preview_comment returns a "Cannot author a comment without a resolved actor" error, the current surface doesn't have a verified author (in-app web chat without auth, today). Tell the user that comments can only be posted from a surface where their identity is verified (currently Slack), and suggest they post the comment from there instead.
+  * Comments are authored as the talking-to user (the actor identified in this prompt). You don't pass a user_id — there is no input field for it; the binding happens server-side. Commenting works on every surface: both Slack and the in-app web chat resolve a verified author before the run. Never tell the user that comments are Slack-only or that they need to post from somewhere else.
 - Locked fields (critical, applies to update_task):
   * property_id and property_name CANNOT be changed after a task is created. If the user asks to "move task X to property Y", explain that property is locked at creation and offer to delete the task and create a new one in the right property.
   * template_id CANNOT be changed after a task is created. Same workaround: delete + recreate.
@@ -229,13 +236,12 @@ export type AgentSurface = 'web' | 'slack';
 /**
  * The Foreshadow user the agent is talking to right now.
  *
- * Resolved before the run by the caller — Slack route does Slack user →
- * email → users row; in-app chat will pass the logged-in user once we
- * have real auth (currently just the AuthProvider's `appUser`). When set,
- * the system prompt grounds "me" / "my" / "I" to this user_id so the
- * model doesn't have to round-trip through find_users on every self-
- * referencing message (which is both slower and ambiguous when names
- * collide — two "Billy"s in the same table is a real possibility).
+ * Resolved before the run by the caller — Slack does slack user → email →
+ * users row; web takes the verified Supabase session (requireAuthContext).
+ * The system prompt grounds "me" / "my" / "I" to this user_id so the model
+ * doesn't have to round-trip through find_users on every self-referencing
+ * message (which is both slower and ambiguous when names collide — two
+ * "Billy"s in the same table is a real possibility).
  */
 export interface AgentActor {
   /** Foreshadow users.id UUID. */
@@ -265,11 +271,13 @@ export interface RunAgentInput {
    */
   surface?: AgentSurface;
   /**
-   * Identity of the user the agent is talking to. Optional today because
-   * the in-app chat surface doesn't have real auth yet (any logged-in
-   * user is just whoever's selected in the AuthProvider dropdown). When
-   * omitted, the prompt falls back to a permissive line that asks the
-   * user to disambiguate before any user-scoped tool call.
+   * Identity of the user the agent is talking to. Every surface in the tree
+   * passes one — Slack and web both resolve a verified user before calling.
+   * Kept optional so a new caller is forced to think about identity rather
+   * than inherit someone else's; when omitted, the prompt falls back to a
+   * permissive line that asks the user to disambiguate before any
+   * user-scoped tool call, and identity-bound tools (preview_comment)
+   * refuse outright.
    */
   actor?: AgentActor;
   /**

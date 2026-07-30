@@ -18,15 +18,16 @@ import { requireOrgId, type ToolDefinition, type ToolContext, type ToolResult } 
 //   prevents the model from authoring as anyone other than the talking-
 //   to user, even on prompt injection / fabrication paths.
 //
-// Surface where this matters:
-//   - Slack: the Slack route resolves the slack user → app user via
-//     email match before runAgent fires. Comments authored from Slack
-//     are reliably attributed to the right person.
-//   - In-app web chat: the actor binding is currently weak (any logged-
-//     in user is whoever's selected in the AuthProvider dropdown — see
-//     runAgent.ts). When ctx.actor is missing, we refuse to author the
-//     comment and return a clear error so the model can tell the user
-//     why.
+// Surface support: BOTH surfaces attribute comments correctly.
+//   - Slack resolves the slack user → app user via email match before
+//     runAgent fires.
+//   - In-app web chat takes the verified Supabase session via
+//     requireAuthContext (see app/api/agent/route.ts), which also rejects
+//     the request outright when there's no signed-in, org-linked user.
+// The actor guard below is therefore unreachable from either surface
+// today. It stays because ToolContext.actor is optional — a future
+// surface that forgets to resolve identity should fail loudly here
+// rather than silently author a comment as nobody.
 
 const inputSchema = z.object({
   task_id: z
@@ -66,9 +67,9 @@ async function handler(
       error: {
         code: 'invalid_input',
         message:
-          'Cannot author a comment without a resolved actor. Comments are authored as the talking-to user; this surface does not have one.',
+          'Cannot author a comment without a resolved actor. Comments are authored as the talking-to user; this surface did not resolve one.',
         hint:
-          'Tell the user that comment-adding is only available where the conversation has a verified author (currently Slack). Suggest they post the comment from Slack instead.',
+          'This is a server-side configuration fault, not something the user can work around by switching surfaces — both Slack and the web chat normally resolve a verified author. Tell the user commenting is temporarily unavailable and report it.',
       },
     };
   }

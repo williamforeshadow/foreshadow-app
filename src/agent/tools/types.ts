@@ -65,11 +65,11 @@ export type ToolResult<T> =
  * the comment as the talking-to user without trusting the model to pass
  * a user_id. Handlers that don't need this can ignore the parameter.
  *
- * The actor is the same `AgentActor` runAgent() received: Slack resolves
- * it via email match, in-app chat doesn't have real auth yet so it may
- * be undefined. Tools that REQUIRE an actor (the comment tools) must
- * fail loudly with a clear error code when ctx.actor is missing rather
- * than silently picking a stand-in.
+ * The actor is the same `AgentActor` runAgent() received: Slack resolves it
+ * via email match, web via the verified Supabase session. Both surfaces
+ * always supply one, but the field stays optional so tools that REQUIRE an
+ * actor (the comment tools) fail loudly with a clear error code rather than
+ * silently picking a stand-in if a future surface forgets.
  */
 export interface ToolContext {
   /**

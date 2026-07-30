@@ -19,8 +19,11 @@ import {
 // structured filters instead of relying on client-side filtering.
 //
 // JSON-heavy fields (description, form_metadata, template fields) are
-// intentionally omitted; a future get_task tool will return the full record
-// for a single id when needed.
+// intentionally omitted, and comments/attachments appear only as counts —
+// this is the breadth half of the task read surface. get_task is the depth
+// half: pass it one task_id and it returns the description, the resolved
+// checklist, and the actual comment bodies. Keep it that way; widening this
+// projection would make every list query pay for detail it doesn't show.
 
 const STATUS_ENUM = z.enum([
   'not_started',

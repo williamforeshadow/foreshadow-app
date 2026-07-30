@@ -2,6 +2,7 @@ import type { ToolDefinition } from './types';
 import { findProperties } from './findProperties';
 import { getPropertyKnowledge } from './getPropertyKnowledge';
 import { findTasks } from './findTasks';
+import { getTask } from './getTask';
 import { findReservations } from './findReservations';
 import { findCalendarBlocks } from './findCalendarBlocks';
 import { checkAvailability } from './checkAvailability';
@@ -48,6 +49,7 @@ export const TOOLS: ReadonlyArray<ToolDefinition<unknown, unknown>> = [
   findProperties as unknown as ToolDefinition<unknown, unknown>,
   getPropertyKnowledge as unknown as ToolDefinition<unknown, unknown>,
   findTasks as unknown as ToolDefinition<unknown, unknown>,
+  getTask as unknown as ToolDefinition<unknown, unknown>,
   findReservations as unknown as ToolDefinition<unknown, unknown>,
   findCalendarBlocks as unknown as ToolDefinition<unknown, unknown>,
   checkAvailability as unknown as ToolDefinition<unknown, unknown>,
