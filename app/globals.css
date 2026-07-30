@@ -80,16 +80,25 @@
      so they read as grid lines rather than as the bar's own outline. */
   --schedule-bar-top: calc((var(--schedule-row-h) - var(--schedule-bar-h)) / 2);
   /* Expanded-row task cards. `zoom` rather than a smaller type scale, because
-     zoom rescales the layout coordinate space: the card lays out at the width
-     it had BEFORE the column shrank and is then drawn at 80%, so its title
-     wraps to the same lines and it keeps the exact proportions it always had,
-     only smaller. Restyling it instead would flatten it — the column got 20%
-     narrower while the type, padding and gaps stayed put, which squares the
-     card off. ProjectCard is shared with the bins board, Messages and the
-     agent panel, so this is applied at the Schedule's call site, never to the
-     component. Several of the card's font sizes are inline rem values that a
-     stylesheet couldn't override anyway. */
-  --schedule-card-zoom: 0.8;
+     zoom rescales the layout coordinate space: the card lays out at
+     column-width / zoom and is only then drawn down, so it keeps the exact
+     proportions it always had, just smaller. Restyling it instead would
+     flatten it — the column got 20% narrower while the type, padding and gaps
+     stayed put, which squares the card off. ProjectCard is shared with the
+     bins board, Messages and the agent panel, so this is applied at the
+     Schedule's call site, never to the component. Several of the card's font
+     sizes are inline rem values that a stylesheet couldn't override anyway.
+
+     Tuned 0.8 → 0.9: at 0.8 the 14px title rendered at 11.2px and the
+     date/time row at 8.5px, which was past legible. This is the only knob for
+     card text size, so it moves the whole card with it — the layout box goes
+     240px → 213px, which costs some title-wrap headroom against .cardTitle's
+     2-line clamp, and the taller cards push the auto-height expanded row down.
+     That's the trade being made deliberately; don't push it to 1.0, where the
+     card lays out at the bare 192px column with unscaled padding and squares
+     off. Both call sites in TimelineWindow (resting card + drag preview) read
+     this, so they can't drift apart. */
+  --schedule-card-zoom: 0.9;
   --background: oklch(0.9581 0 0);
   --foreground: oklch(0.3134 0.0234 253.6270);
   --card: oklch(0.9774 0.0042 236.4961);

@@ -485,7 +485,10 @@
   margin-top: 0.4375rem;
   padding-top: 0.4375rem;
   border-top: 1px dashed rgba(30, 25, 20, 0.08);
-  font-size: 0.6875rem;
+  /* Matches .cardSubtitle and the footer's date/time. The card's secondary
+     text used to sit at three near-identical sizes (0.6625 / 0.6875 / 0.75);
+     one size reads as deliberate, and it survives the Schedule's 0.9 zoom. */
+  font-size: 0.75rem;
   font-style: italic;
   color: rgba(30, 25, 20, 0.45);
   min-width: 0;

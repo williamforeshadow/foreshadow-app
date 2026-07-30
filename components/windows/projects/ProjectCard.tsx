@@ -221,7 +221,7 @@ export function ProjectCard({
             </span>
           )}
           {project.scheduled_date && (
-            <span style={{ fontSize: '0.6625rem', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: 'rgba(30, 25, 20, 0.35)' }} className="dark:!text-[#66645f]">
+            <span style={{ fontSize: '0.75rem', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: 'rgba(30, 25, 20, 0.35)' }} className="dark:!text-[#66645f]">
               {new Date(`${project.scheduled_date}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
             </span>
           )}
@@ -230,7 +230,7 @@ export function ProjectCard({
             const ampm = h >= 12 ? 'PM' : 'AM';
             const h12 = h % 12 || 12;
             return (
-              <span style={{ fontSize: '0.6625rem', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: 'rgba(30, 25, 20, 0.35)' }} className="dark:!text-[#66645f]">
+              <span style={{ fontSize: '0.75rem', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: 'rgba(30, 25, 20, 0.35)' }} className="dark:!text-[#66645f]">
                 {h12}:{String(m).padStart(2, '0')} {ampm}
               </span>
             );
