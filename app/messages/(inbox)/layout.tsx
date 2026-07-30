@@ -10,16 +10,25 @@ import {
   ConversationSearchField,
 } from '@/components/messages/ConversationControls';
 import { ConversationTabs } from '@/components/messages/ConversationTabs';
+import { WindowHeader } from '@/components/ui/window-header';
 
 // Master-detail chrome for /messages. The conversation list + its tabs/filters/
 // sort live here (state in MessagesProvider) so they persist while the selected
 // conversation (the child route) changes.
+// The list column's control row: tabs on the left, the search / sort / filter
+// affordances pushed right. The search FIELD is not here — it renders below
+// the header band (see the aside), because it is collapsible and putting it
+// inline would make the band's height depend on whether search is open. The
+// band has to stay exactly 115px to line up with the conversation header
+// beside it and with every other page in the app.
 function ListControls() {
   const { tab, setTab } = useMessages();
   return (
     <>
-      <ConversationSearchField />
       <ConversationTabs tab={tab} onChange={setTab} />
+      <div className="ml-auto shrink-0">
+        <ConversationHeaderActions />
+      </div>
     </>
   );
 }
@@ -66,13 +75,12 @@ function MessagesChrome({ children }: { children: React.ReactNode }) {
           content row (list + conversation). */}
       <div className="relative flex h-full min-h-0">
         <aside className="msg-divider flex w-80 shrink-0 flex-col overflow-hidden border-r">
-          <div className="flex shrink-0 items-center justify-between gap-2 px-4 pb-2 pt-3.5">
-            <h1 className="text-lg font-semibold tracking-tight text-foreground">
-              Messages
-            </h1>
-            <ConversationHeaderActions />
-          </div>
-          <ListControls />
+          <WindowHeader title="Messages" inset="column">
+            <ListControls />
+          </WindowHeader>
+          {/* Collapsed to nothing until the search affordance is toggled, so
+              it costs no height in the default state. */}
+          <ConversationSearchField />
           <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar">
             <ListBody activeId={activeId} />
           </div>

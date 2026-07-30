@@ -87,19 +87,21 @@ function DraggableTask({
 /** One task = one icon: department glyph on a flat status-coloured chip. */
 function TaskIcon({
   task,
-  size,
   onClick,
 }: {
   task: Task;
-  size: 'week' | 'month';
   onClick?: (task: Task) => void;
 }) {
   const { departments } = useDepartments();
   const dept = departments.find((d) => d.id === task.department_id);
   const Icon = getDepartmentIcon(dept?.icon);
   const isContingent = task.status === 'contingent';
-  const box = size === 'week' ? 'w-[22px] h-[22px]' : 'w-[18px] h-[18px]';
-  const glyph = size === 'week' ? 'w-3.5 h-3.5' : 'w-3 h-3';
+  // One size for both views now. Week chips were 22px against a 44px row; the
+  // row is --schedule-row-h (35px) and 0.8 of 22 is 18 — which is what month
+  // already used, so the two collapsed onto the same value rather than week
+  // keeping a size that would fill nearly the whole row.
+  const box = 'w-[18px] h-[18px]';
+  const glyph = 'w-3 h-3';
 
   return (
     <div
@@ -220,7 +222,7 @@ export function ScheduledItemsCell({
           propertyName={propertyName}
           cellDateStr={cellDateStr}
         >
-          <TaskIcon task={task} size={viewMode} onClick={onTaskClick} />
+          <TaskIcon task={task} onClick={onTaskClick} />
         </DraggableTask>
       ))}
       {overflow > 0 && (
@@ -228,7 +230,7 @@ export function ScheduledItemsCell({
           className={cn(
             'flex items-center justify-center rounded px-1 font-medium text-[10px] shadow-sm',
             'bg-white/90 dark:bg-[var(--timeline-surface-3)] text-[#1a1a18] dark:text-white border border-[rgba(30,25,20,0.12)] dark:border-[var(--timeline-border-strong)]',
-            viewMode === 'week' ? 'h-[22px] min-w-5' : 'h-[18px] min-w-4',
+            'h-[18px] min-w-4',
           )}
         >
           +{overflow}

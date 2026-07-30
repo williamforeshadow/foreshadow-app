@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import TemplatesList, { type TemplateListItem } from '@/components/templates/TemplatesList';
+import { WindowHeader } from '@/components/ui/window-header';
 
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState<TemplateListItem[]>([]);
@@ -28,7 +29,8 @@ export default function TemplatesPage() {
 
   return (
     <>
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <WindowHeader title="Templates" />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <TemplatesList templates={templates} loading={loading} />
       </div>
     </>

@@ -5,6 +5,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import AutomationsHub from '@/components/automations/AutomationsHub';
+import { WindowHeader } from '@/components/ui/window-header';
 
 export default function AutomationsPage() {
   const router = useRouter();
@@ -19,7 +20,8 @@ export default function AutomationsPage() {
 
   return (
     <>
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <WindowHeader title="Automations" />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <AutomationsHub />
       </div>
     </>

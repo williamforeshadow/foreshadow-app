@@ -1,6 +1,7 @@
 // List view for the rebuilt automations engine.
 
 import AutomationsBackLink from '@/components/automations/AutomationsBackLink';
+import { WindowHeader } from '@/components/ui/window-header';
 import AutomationList from '@/components/automations/v2/AutomationList';
 
 export const dynamic = 'force-dynamic';
@@ -8,6 +9,7 @@ export const dynamic = 'force-dynamic';
 export default function NewEngineListPage() {
   return (
     <>
+      <WindowHeader title="Slack Automations" />
       <div
         className="panel-form flex flex-1 flex-col overflow-hidden"
         style={{ background: 'var(--task-surface-0)' }}

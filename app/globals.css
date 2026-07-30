@@ -26,6 +26,66 @@
   --app-shell-bg: #EDEDF1;
   --app-shell-card: #FFFFFF;
   --app-shell-card-border: rgba(30, 25, 20, 0.10);
+
+  /* Window-header scrim. Every window header fades this into transparent
+     down its own height, over whatever surface it sits on, so the title band
+     has weight at the top and dissolves into the content below it.
+
+     The light value is deliberately ~11% off white. The headers used to run
+     #f4f4f6 (~4% off) everywhere except Schedule, and at that depth the fade
+     doesn't resolve as a gradient — it reads as a rendering artifact, and the
+     band it's meant to define reads as flat. Schedule's deeper stop was the
+     one that worked, so it is now the value for all of them. Anything
+     shallower than this is not worth drawing. */
+  --header-scrim: #E4E4EA;
+
+  /* Window-header geometry. Every workspace header is a 24px-padded title
+     block (a 36px h1, no fine print under it) over a control row of exactly
+     this height, so they all measure 115px and stay that way.
+
+     They drifted before because each window sized its own control row to
+     whatever it happened to contain — 46px on My Assignments, 48 on Bins, 50
+     on Schedule — and because Schedule and Bins each carried a 24px fine-print
+     line the others didn't. 34px is the tallest control in any of the rows
+     (Schedule's Today / Week / Month group); rows shorter than it centre
+     inside it rather than setting their own height. Nothing clips if a
+     control grows past it — the row just overflows visibly — but that is a
+     sign this value needs raising, not that the control needs shrinking. */
+  --window-header-row-h: 34px;
+
+  /* Schedule grid geometry. Every one of these was hard-coded in
+     TimelineWindow, which is why they could never be retuned together — and
+     they HAVE to move together. The reservation bar is inset inside the row
+     and its 8px slant is a fixed horizontal offset (see
+     RESERVATION_BAR_DIAGONAL_PX), so shortening the row without shortening
+     the bar steepens every slant on the page.
+
+     These are the originals (200 / 240 / 44 / 28) scaled by 0.8, which holds
+     the cell's aspect ratio to within 0.6% of what it was: 192/35 = 5.49
+     against 240/44 = 5.45. That matters because an expanded row is
+     auto-height — the task cards inside it are sized by the COLUMN, so the
+     column is what decides whether they still read as rectangles.
+
+     The payoff is horizontal: at 1440 the content card is ~1166px wide, and
+     176 + 5x192 = 1136 fits five day columns where 200 + 240 fit four. */
+  --schedule-property-col: 176px;
+  --schedule-day-col: 192px;
+  --schedule-row-h: 35px;
+  --schedule-bar-h: 22px;
+  /* Centres the bar in the row, keeping it clear of both horizontal borders
+     so they read as grid lines rather than as the bar's own outline. */
+  --schedule-bar-top: calc((var(--schedule-row-h) - var(--schedule-bar-h)) / 2);
+  /* Expanded-row task cards. `zoom` rather than a smaller type scale, because
+     zoom rescales the layout coordinate space: the card lays out at the width
+     it had BEFORE the column shrank and is then drawn at 80%, so its title
+     wraps to the same lines and it keeps the exact proportions it always had,
+     only smaller. Restyling it instead would flatten it — the column got 20%
+     narrower while the type, padding and gaps stayed put, which squares the
+     card off. ProjectCard is shared with the bins board, Messages and the
+     agent panel, so this is applied at the Schedule's call site, never to the
+     component. Several of the card's font sizes are inline rem values that a
+     stylesheet couldn't override anyway. */
+  --schedule-card-zoom: 0.8;
   --background: oklch(0.9581 0 0);
   --foreground: oklch(0.3134 0.0234 253.6270);
   --card: oklch(0.9774 0.0042 236.4961);
@@ -170,6 +230,28 @@
   --msg-sent-border:          rgba(145, 165, 198, 0.44);
 }
 
+/* Full-screen mode — set on <html> by AppShell.
+   Nearly the whole implementation is variable overrides, because the shell's
+   geometry already reads from these: the card's margin, radius and border
+   collapse on their own, and the full-screen agent panel realigns because it
+   positions off --app-sidebar-width. Only hiding the sidebar and dropping the
+   card's border width need explicit rules.
+   Deliberately NOT scoped to a media query: below `md` the sidebar is already
+   hidden and the card is already full-bleed, so on mobile this is a no-op. */
+.app-fullscreen {
+  --app-sidebar-width: 0px;
+  --app-shell-gap: 0px;
+  --app-shell-radius: 0px;
+}
+
+.app-fullscreen [data-app-sidebar] {
+  display: none;
+}
+
+.app-fullscreen [data-app-card] {
+  border-width: 0;
+}
+
 .dark {
   --background: #0F0F12;
   --foreground: #f0efed;
@@ -241,6 +323,9 @@
   --app-shell-bg: #26262D;
   --app-shell-card: #0F0F12;
   --app-shell-card-border: rgba(255, 255, 255, 0.07);
+  /* Unchanged from what every header already ran in dark — only the light
+     counterpart was inconsistent. */
+  --header-scrim: #30303A;
   --timeline-cell: #0D0D10;
   --timeline-cell-blocked: #18181D;
   --timeline-axis: #1C1C22;

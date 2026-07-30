@@ -5,6 +5,7 @@ import { AdaptivePicker } from '@/components/tasks/detail/primitives/AdaptivePic
 import { TaskOptionRow } from '@/components/tasks/detail/primitives/TaskSheet';
 import { FieldRow, SectionLabel, TokenDateTime } from '@/components/ui/panel/PanelForm';
 import { useOperationsSettings } from '@/lib/operationsSettingsContext';
+import { WindowHeader } from '@/components/ui/window-header';
 import { TIMEZONE_OPTIONS, TIMEZONE_GROUPS } from '@/src/lib/timezones';
 
 // Operations Settings page
@@ -121,8 +122,9 @@ export default function OperationsSettingsPage() {
 
   return (
     <>
+      <WindowHeader title="Operations Settings" />
       <div
-        className="panel-form flex flex-1 flex-col overflow-hidden"
+        className="panel-form flex min-h-0 flex-1 flex-col overflow-hidden"
         style={{ background: 'var(--task-surface-0)' }}
       >
         <div className="flex-1 overflow-y-auto">

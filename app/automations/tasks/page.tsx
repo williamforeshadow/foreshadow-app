@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import AutomationsBackLink from '@/components/automations/AutomationsBackLink';
+import { WindowHeader } from '@/components/ui/window-header';
 import AutomationsView from '@/components/templates/AutomationsView';
 
 interface Template {
@@ -56,6 +57,7 @@ export default function TaskAutomationsPage() {
 
   return (
     <>
+      <WindowHeader title="Task Automations" />
       <div className="panel-form flex flex-1 flex-col overflow-hidden" style={{ background: 'var(--task-surface-0)' }}>
         <AutomationsBackLink />
 

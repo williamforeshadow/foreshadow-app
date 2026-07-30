@@ -1052,24 +1052,20 @@ export default function TimelineWindow({
           toward the top and settles into --timeline-header where it meets the
           grid. Dark's #30303a top now sits over a lighter base than it
           originally did (--card), so it reads as a gentler lift. */}
-      <div className="flex-shrink-0 bg-[var(--timeline-header)] bg-[linear-gradient(to_bottom,#E4E4EA,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
-        {/* Title + fine print (current date range) */}
-        <div className="px-8 pt-6 pb-1">
+      <div className="flex-shrink-0 bg-[var(--timeline-header)] bg-[linear-gradient(to_bottom,var(--header-scrim),transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
+        {/* Title only — no fine print. The date range it used to carry is
+            already spelled out by the date axis directly below it, and the
+            extra line made this the one header in the workspace that stood
+            24px taller than the rest. */}
+        <div className="pb-1 pl-8 pr-12 pt-6">
           <h1 className="text-[24px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed]">
             Schedule
           </h1>
-          {dateRange.length > 0 && (
-            <div className="flex items-center gap-3 mt-1.5 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
-              <span>
-                {formatDate(dateRange[0])} – {formatDate(dateRange[dateRange.length - 1])}
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Controls row */}
         <div className="px-8 pb-4">
-        <div className="flex items-center gap-3 flex-nowrap min-w-0">
+        <div className="h-[var(--window-header-row-h)] flex items-center gap-3 flex-nowrap min-w-0">
           {/* View Mode Icons */}
           <div className="flex items-center gap-1">
             <button
@@ -1191,13 +1187,15 @@ export default function TimelineWindow({
             ref={gridRef}
             className="grid border border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] min-w-full"
             style={{
-              // Week: clamp each day column to a 240px minimum so the cards keep
-              // the same proportions on a laptop as on a big monitor — the grid
-              // grows past the viewport and the parent scrolls horizontally (the
-              // property column is sticky-left, so it stays pinned) instead of
-              // squishing columns until card content wraps. Month: no minimum, so
-              // all 30 days stay compact and visible without scrolling.
-              gridTemplateColumns: `200px repeat(${dateRange.length}, minmax(${view === 'month' ? '0px' : '240px'}, 1fr))`
+              // Week: clamp each day column to --schedule-day-col so the cards
+              // keep the same proportions on a laptop as on a big monitor — the
+              // grid grows past the viewport and the parent scrolls horizontally
+              // (the property column is sticky-left, so it stays pinned) instead
+              // of squishing columns until card content wraps. Month: no
+              // minimum, so all 30 days stay compact and visible without
+              // scrolling. Tune the widths in globals.css, not here — the row
+              // height and bar inset are derived from the same set.
+              gridTemplateColumns: `var(--schedule-property-col) repeat(${dateRange.length}, minmax(${view === 'month' ? '0px' : 'var(--schedule-day-col)'}, 1fr))`
             }}
           >
             {/* Header Row - will stick when scrolling */}
@@ -1251,7 +1249,7 @@ export default function TimelineWindow({
                   className="contents"
                 >
                   {/* Property Name with Status Indicator */}
-                  <div className={`relative overflow-hidden px-2 text-[12px] font-medium text-[#1a1a18] dark:text-[#e8e7e3] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] sticky left-0 z-40 h-[44px] ${propertyCellBg} flex items-center gap-1.5`}>
+                  <div className={`relative overflow-hidden px-2 text-[12px] font-medium text-[#1a1a18] dark:text-[#e8e7e3] border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] sticky left-0 z-40 h-[var(--schedule-row-h)] ${propertyCellBg} flex items-center gap-1.5`}>
                     {view !== 'month' && (
                       <button
                         onClick={() => togglePropertyExpanded(property)}
@@ -1357,7 +1355,7 @@ export default function TimelineWindow({
                         key={idx}
                         property={property}
                         dateStr={cellDateStr}
-                        className={`group border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] h-[44px] relative overflow-visible ${isTodayDate ? 'today-tint' : blockForCell ? 'bg-[var(--timeline-cell-blocked)]' : 'bg-[var(--timeline-cell)]'}`}
+                        className={`group border-b border-r border-[rgba(30,25,20,0.06)] dark:border-[var(--timeline-border-subtle)] h-[var(--schedule-row-h)] relative overflow-visible ${isTodayDate ? 'today-tint' : blockForCell ? 'bg-[var(--timeline-cell-blocked)]' : 'bg-[var(--timeline-cell)]'}`}
                         onClick={() => {
                           const res = propertyReservations.find(r => {
                             const pos = getBlockPosition(r.check_in, r.check_out);
@@ -1448,9 +1446,11 @@ export default function TimelineWindow({
                           // Opaque fill (the exact blend of the translucent
                           // gray over the cell surface) so the faint vertical
                           // gridlines beneath the bar are fully occluded rather
-                          // than bleeding through. The bar's top:8/height:28
-                          // inset keeps it off the horizontal borders, so those
-                          // stay visible as before.
+                          // than bleeding through. The bar's inset keeps it off
+                          // the horizontal borders, so those stay visible as
+                          // before; it tracks the row height so the slant angle
+                          // (a fixed 8px horizontal offset over the bar's
+                          // height) doesn't steepen when the row is retuned.
                           const isOwnerStay = startingReservation.kind === 'owner_stay';
                           // The top border is a RIM LIGHT, not an outline: in
                           // both themes it must be lighter than the fill so the
@@ -1467,8 +1467,8 @@ export default function TimelineWindow({
                           const barClassName =`absolute cursor-pointer transition-all duration-150 text-[#1a1a18] dark:text-[#e8e7e3] text-[11px] font-medium flex items-center overflow-hidden border-t ${barColorClass} ${selectedReservation?.id === startingReservation.id ? 'ring-2 ring-[rgba(120,113,108,0.6)] dark:ring-[rgba(168,158,150,0.6)] shadow-lg z-30' : ''}`;
                           const barStyle: React.CSSProperties = {
                             left: leftStyle,
-                            top: '8px',
-                            height: '28px',
+                            top: 'var(--schedule-bar-top)',
+                            height: 'var(--schedule-bar-h)',
                             width: widthStyle,
                             zIndex: 15,
                             clipPath,
@@ -1574,6 +1574,12 @@ export default function TimelineWindow({
                                     <div
                                       role="button"
                                       tabIndex={0}
+                                      // Zoom sits INSIDE the draggable, never on
+                                      // it: dnd-kit measures this node's rect and
+                                      // applies drag transforms to it, and both
+                                      // must stay in unzoomed pixels or the card
+                                      // drifts from the cursor.
+                                      style={{ zoom: 'var(--schedule-card-zoom)' }}
                                       className="cursor-pointer [&>div]:!cursor-pointer"
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -1619,12 +1625,18 @@ export default function TimelineWindow({
       <DragOverlay dropAnimation={null}>
         {draggingTask ? (
           draggingTask.card ? (
-            // Dragging an expanded-row card → move the real card.
+            // Dragging an expanded-row card → move the real card. The zoom
+            // matches the resting card's, so the preview lifts off at exactly
+            // the size it had in the cell. It goes on an inner element: the
+            // outer div keeps cardWidth in real pixels, and the zoomed child
+            // fills it by laying out at cardWidth / zoom.
             <div
               style={{ width: draggingTask.cardWidth }}
               className="pointer-events-none opacity-90 shadow-xl cursor-grabbing"
             >
-              <ProjectCard item={draggingTask.card} viewMode="property" isDragging />
+              <div style={{ zoom: 'var(--schedule-card-zoom)' }}>
+                <ProjectCard item={draggingTask.card} viewMode="property" isDragging />
+              </div>
             </div>
           ) : (
             // Dragging a chip → the small status square.

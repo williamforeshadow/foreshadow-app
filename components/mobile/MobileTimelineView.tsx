@@ -325,7 +325,7 @@ export default function MobileTimelineView({
           + toolbar row, fading to transparent over the --timeline-header base
           and capped with a hairline where it meets the grid below. Mirrors the
           desktop Schedule header. */}
-      <div className="flex-shrink-0 bg-[var(--timeline-header)] bg-[linear-gradient(to_bottom,#E4E4EA,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
+      <div className="flex-shrink-0 bg-[var(--timeline-header)] bg-[linear-gradient(to_bottom,var(--header-scrim),transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
       {/* Title row — matches the Tasks / My Assignments mobile pattern:
           hamburger + page title, then a single controls row underneath. */}
       <div

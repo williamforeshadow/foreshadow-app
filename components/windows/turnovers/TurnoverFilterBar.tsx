@@ -60,7 +60,7 @@ export function TurnoverFilterBar({
   const anyFilterActive = getActiveFilterCount() > 0;
 
   return (
-    <div className="flex items-center gap-2 min-w-0 flex-nowrap">
+    <div className="flex h-[var(--window-header-row-h)] items-center gap-2 min-w-0 flex-nowrap">
       <CompactSearch
         value={filters.search}
         onChange={setSearch}

@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'reac
 import Link from 'next/link';
 import { ArrowLeft, Check, GraduationCap, Send, SlidersHorizontal, Wrench, Zap } from 'lucide-react';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
+import { WindowHeader } from '@/components/ui/window-header';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { cn } from '@/lib/utils';
 
@@ -236,17 +237,15 @@ export default function ConciergeSettingsPage() {
 
   const content = (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6 sm:px-8">
-      <header className="flex items-start gap-3">
+      {/* Title lives in the WindowHeader now; this is just the standfirst. */}
+      <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-bg-soft)] text-[var(--accent-3)]">
           <GraduationCap className="h-5 w-5" aria-hidden />
         </div>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-lg font-semibold tracking-tight text-foreground">Concierge Settings</h1>
-          <p className="text-sm text-muted-foreground">
-            Control what the concierge does on its own and the tools it can use.
-          </p>
-        </div>
-      </header>
+        <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+          Control what the concierge does on its own and the tools it can use.
+        </p>
+      </div>
 
       {error && (
         <div className="flex items-center justify-between rounded-xl border border-red-500/25 bg-red-500/[0.07] p-3 text-sm text-red-700 dark:border-red-400/25 dark:bg-red-400/[0.08] dark:text-red-300">
@@ -381,18 +380,16 @@ export default function ConciergeSettingsPage() {
     </MobileRouteShell>
   ) : (
     <>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <div className="msg-divider shrink-0 border-b px-4 py-2.5">
-          <Link
-            href="/messages/concierge-training"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden />
-            Back to Concierge Training
-          </Link>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar">{content}</div>
-      </div>
+      <WindowHeader title="Concierge Settings">
+        <Link
+          href="/messages/concierge-training"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden />
+          Back to Concierge Training
+        </Link>
+      </WindowHeader>
+      <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar">{content}</div>
     </>
   );
 }

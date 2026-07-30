@@ -33,14 +33,8 @@ export default function AutomationsHub() {
     >
       {/* Centred in the pane, matching the lists' 46rem column. */}
       <div className="mx-auto flex w-full max-w-[46rem] flex-1 flex-col justify-center px-[18px] py-12">
-        <h1
-          className="font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
-          style={{ color: 'var(--task-ink-3)' }}
-        >
-          Automations
-        </h1>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        {/* No title here — the page's WindowHeader owns it now. */}
+        <div className="grid gap-3 sm:grid-cols-2">
           {DESTINATIONS.map(({ href, label, description, icon }) => (
             <Link
               key={href}

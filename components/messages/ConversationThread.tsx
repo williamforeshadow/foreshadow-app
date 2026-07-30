@@ -13,6 +13,7 @@ import { MessageAttachments } from '@/components/messages/MessageAttachments';
 import { canonicalChannelLabel } from '@/lib/bookingChannel';
 import type { ConciergeSourcesRecord } from '@/lib/conciergeSources';
 import type { GuestMessageRecord } from '@/lib/messages';
+import { WindowHeader } from '@/components/ui/window-header';
 
 /**
  * The full conversation as chat bubbles (guest left, host right). Used as the
@@ -322,28 +323,35 @@ export function ConversationThread({
     )
   ) : null;
 
+  // The same 115px band the conversation list wears beside it, and every other
+  // page in the app: guest name as the title, everything else in the control
+  // row. The avatar is `md` (32px) deliberately — it has to fit inside the
+  // title's 36px line box or the block stops being 64px and the two columns
+  // stop lining up.
   const header = showHeader ? (
-    <div className="msg-divider flex shrink-0 items-center gap-3 border-b px-4 py-3">
-      <UserAvatar name={guestName ?? 'Guest'} size="md" />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-semibold text-foreground">
-          {guestName ?? 'Guest'}
+    <WindowHeader
+      inset="column"
+      title={
+        <span className="flex min-w-0 items-center gap-3">
+          <UserAvatar name={guestName ?? 'Guest'} size="md" />
+          <span className="truncate">{guestName ?? 'Guest'}</span>
+        </span>
+      }
+    >
+      {propertyName || channel ? (
+        <div className="flex min-w-0 items-center gap-1.5 truncate text-xs text-muted-foreground">
+          {propertyName ? <span className="truncate">{propertyName}</span> : null}
+          {propertyName && channel ? <span aria-hidden>·</span> : null}
+          {channel ? <span className="shrink-0">{canonicalChannelLabel(channel)}</span> : null}
         </div>
-        {propertyName || channel ? (
-          <div className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-            {propertyName ? <span className="truncate">{propertyName}</span> : null}
-            {propertyName && channel ? <span aria-hidden>·</span> : null}
-            {channel ? <span className="shrink-0">{canonicalChannelLabel(channel)}</span> : null}
-          </div>
-        ) : null}
-      </div>
+      ) : null}
       {actions || selectionControls ? (
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {actions}
           {selectionControls}
         </div>
       ) : null}
-    </div>
+    </WindowHeader>
   ) : actions || selectionControls ? (
     <div className="msg-divider flex shrink-0 items-center justify-end gap-2 border-b px-4 py-2">
       {actions}

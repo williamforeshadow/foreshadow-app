@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { qk } from '@/lib/queries/keys';
 import { fetchJson } from '@/lib/queries/fetchJson';
+import { WindowHeader } from '@/components/ui/window-header';
 
 interface PropertyRow {
   id: string;
@@ -179,16 +180,11 @@ export default function PropertiesPage() {
   return (
     <div className="flex h-full overflow-hidden">
       <div className="w-full flex flex-col min-w-0">
-        {/* Header */}
-        <div className="flex-shrink-0 px-5 sm:px-8 pt-1 sm:pt-6 pb-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              {/* Title is rendered by MobileRouteShell on mobile; show it
-                  inline only on desktop. */}
-              <h1 className="hidden sm:block text-[24px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed]">
-                Properties
-              </h1>
-              <div className="flex items-center gap-3 sm:mt-1.5 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium flex-wrap">
+        {/* Title is rendered by MobileRouteShell on mobile, so the node passed
+            to WindowHeader hides itself there — the empty h1 collapses and the
+            header shrinks to just the control row. */}
+        <WindowHeader title={<span className="hidden sm:inline">Properties</span>}>
+              <div className="flex items-center gap-3 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium flex-wrap">
                 <span>{activeCount} active</span>
                 {linkedCount > 0 && (
                   <>
@@ -209,8 +205,7 @@ export default function PropertiesPage() {
                   </>
                 )}
               </div>
-            </div>
-            <div className="shrink-0 flex items-center gap-2">
+            <div className="ml-auto shrink-0 flex items-center gap-2">
               <button
                 onClick={handleSync}
                 disabled={syncing}
@@ -240,8 +235,7 @@ export default function PropertiesPage() {
                 <span className="sm:hidden">Add</span>
               </button>
             </div>
-          </div>
-        </div>
+        </WindowHeader>
 
         {/* Content */}
         <div className="flex-1 overflow-auto pb-mobile-bubble">

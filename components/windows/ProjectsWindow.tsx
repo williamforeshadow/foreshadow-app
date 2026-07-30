@@ -22,6 +22,7 @@ import { taskPath } from '@/src/lib/links';
 import type { User, Project } from '@/lib/types';
 import { Filter as FilterIcon } from 'lucide-react';
 import { CompactSearch } from '@/components/ui/compact-search';
+import { WindowHeader } from '@/components/ui/window-header';
 import { TaskFilterBar, type FilterOption } from '@/components/tasks/TaskFilterBar';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
 import { projectToTaskInput, type TaskDetailInput } from '@/components/tasks/detail/taskInput';
@@ -602,17 +603,25 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   // ============================================================================
   // RENDER
   // ============================================================================
+  // The bin menu is a page in its own right, so it wears the same header as
+  // the board you reach from it — without one it was the only workspace view
+  // whose content started at the very top of the card.
   if (!showKanban) {
     return (
-      <BinPicker
-        bins={binsHook.bins}
-        loadingBins={binsHook.loadingBins}
-        totalProjects={binsHook.totalProjects}
-        onSelectBin={handleSelectBin}
-        onCreateBin={handleCreateBin}
-        onDeleteBin={handleDeleteBin}
-        onUpdateBin={handleUpdateBin}
-      />
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        <WindowHeader title="Bins" />
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <BinPicker
+            bins={binsHook.bins}
+            loadingBins={binsHook.loadingBins}
+            totalProjects={binsHook.totalProjects}
+            onSelectBin={handleSelectBin}
+            onCreateBin={handleCreateBin}
+            onDeleteBin={handleDeleteBin}
+            onUpdateBin={handleUpdateBin}
+          />
+        </div>
+      </div>
     );
   }
 
@@ -623,11 +632,11 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     <div className="relative h-full overflow-hidden bg-white dark:bg-card">
       {/* Left Panel - Kanban Board */}
       <div className="w-full h-full flex flex-col">
-        <div className="flex-shrink-0 relative z-20 bg-white dark:bg-card bg-[linear-gradient(to_bottom,#f4f4f6,transparent)] dark:bg-[linear-gradient(to_bottom,#30303a,transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
+        <div className="flex-shrink-0 relative z-20 bg-white dark:bg-card bg-[linear-gradient(to_bottom,var(--header-scrim),transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
           {/* Title block — back-to-bins breadcrumb + bin name as the page
               title, Global scope toggle, and a fine-print line (task count +
               current board orientation). */}
-          <div className="px-8 pt-6 pb-1">
+          <div className="pb-1 pl-8 pr-12 pt-6">
             <div className="flex items-center gap-3 min-w-0">
               <button
                 onClick={handleBackToBins}
@@ -665,21 +674,11 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
                 </button>
               )}
             </div>
-            {/* Fine print — task count + current board orientation. */}
-            <div className="flex items-center gap-3 mt-1.5 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
-              <span>
-                {anyTaskFilterActive
-                  ? `${filteredTasks.length} of ${tasks.length} tasks`
-                  : `${tasks.length} task${tasks.length === 1 ? '' : 's'}`}
-              </span>
-              <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a]" />
-              <span>By {VIEW_MODE_LABELS[viewMode]}</span>
-            </div>
           </div>
 
           {/* Controls row */}
           <div className="px-8 pb-4">
-          <div className="flex items-center gap-3 min-w-0 flex-nowrap">
+          <div className="h-[var(--window-header-row-h)] flex items-center gap-3 min-w-0 flex-nowrap">
             {/* Task search + filter pills (matches the Schedule page UX) */}
             <CompactSearch value={search} onChange={setSearch} placeholder="Search tasks…" />
 

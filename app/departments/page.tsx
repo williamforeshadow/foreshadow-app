@@ -14,6 +14,7 @@ import { ChipButton, RowIconButton, SectionLabel } from '@/components/ui/panel/P
 import { DeptGlyph } from '@/components/tasks/DeptGlyph';
 import DeptIconPicker from '@/components/departments/DeptIconPicker';
 import { useDepartments } from '@/lib/departmentsContext';
+import { WindowHeader } from '@/components/ui/window-header';
 import type { Department } from '@/lib/types';
 
 /** Matched to the other index pages so the section lines up. */
@@ -143,8 +144,9 @@ export default function DepartmentsPage() {
 
   return (
     <>
+      <WindowHeader title="Departments" />
       <div
-        className="panel-form flex flex-1 flex-col overflow-hidden"
+        className="panel-form flex min-h-0 flex-1 flex-col overflow-hidden"
         style={{ background: 'var(--task-surface-0)' }}
       >
         <div className="flex-1 overflow-y-auto">

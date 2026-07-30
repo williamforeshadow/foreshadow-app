@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, Check, Home, Layers, Sparkles, X } from 'lucide-react';
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
+import { WindowHeader } from '@/components/ui/window-header';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -244,13 +245,11 @@ export default function ConciergeTrainingPage() {
 
   const content = (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-6 sm:px-8">
-      <header>
-        <h1 className="text-lg font-semibold tracking-tight text-foreground">Concierge Training</h1>
-        <p className="mt-3 text-sm text-muted-foreground">
-          Teach the Concierge Agent how to reply to guests, handle situations, and execute task
-          generation.
-        </p>
-      </header>
+      {/* Title lives in the WindowHeader now; this is just the standfirst. */}
+      <p className="text-sm text-muted-foreground">
+        Teach the Concierge Agent how to reply to guests, handle situations, and execute task
+        generation.
+      </p>
 
       {error && (
         <div className="flex items-center justify-between rounded-xl border border-red-500/25 bg-red-500/[0.07] p-3 text-sm text-red-700 dark:border-red-400/25 dark:bg-red-400/[0.08] dark:text-red-300">
@@ -274,18 +273,16 @@ export default function ConciergeTrainingPage() {
         </MobileRouteShell>
       ) : (
         <>
-          <div className="flex h-full min-h-0 flex-col overflow-hidden">
-            <div className="msg-divider shrink-0 border-b px-4 py-2.5">
-              <Link
-                href="/messages"
-                className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <ArrowLeft className="h-4 w-4" aria-hidden />
-                Back to Messages
-              </Link>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar [scrollbar-gutter:stable]">{content}</div>
-          </div>
+          <WindowHeader title="Concierge Training">
+            <Link
+              href="/messages"
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden />
+              Back to Messages
+            </Link>
+          </WindowHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar [scrollbar-gutter:stable]">{content}</div>
         </>
       )}
 
