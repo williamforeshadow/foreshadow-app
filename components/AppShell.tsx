@@ -100,7 +100,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex h-screen overflow-hidden bg-[var(--app-shell-bg)]">
       {/* useSearchParams needs a Suspense boundary this high in the tree. */}
       <Suspense fallback={<div data-app-sidebar className="hidden h-full w-64 shrink-0 md:block" />}>
-        <div data-app-sidebar className="hidden h-full shrink-0 md:block">
+        {/* w-64 has to be on this wrapper, not just on the panel inside it:
+            the full-screen transition animates THIS element's width to 0, and
+            a width can only animate from an explicit value, not from `auto`.
+            `inert` keeps tab focus out of the panel once it's collapsed — it's
+            clipped rather than display:none, so it would still be focusable. */}
+        <div
+          data-app-sidebar
+          inert={isFullscreen}
+          className="hidden h-full w-64 shrink-0 md:block"
+        >
           <Sidebar />
         </div>
       </Suspense>

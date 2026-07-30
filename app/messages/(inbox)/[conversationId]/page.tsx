@@ -445,18 +445,20 @@ export default function ConversationPage() {
           onOpenTaskEditor={openProposalEditor}
           proposedKnowledge={proposedKnowledge}
           onProposedKnowledgeChange={load}
+          aside={
+            <aside className="msg-divider hidden w-80 shrink-0 overflow-hidden border-l lg:block">
+              <ConversationDetailPanel
+                conversation={conversation}
+                onOpenTask={openTaskDetail}
+                tasksRefreshKey={tasksRefreshKey}
+                proposedTasks={proposedTasks}
+                onOpenProposal={openProposalEditor}
+                onProposedTaskChange={handleProposedTaskChange}
+              />
+            </aside>
+          }
         />
       </div>
-      <aside className="msg-divider hidden w-80 shrink-0 overflow-hidden border-l lg:block">
-        <ConversationDetailPanel
-          conversation={conversation}
-          onOpenTask={openTaskDetail}
-          tasksRefreshKey={tasksRefreshKey}
-          proposedTasks={proposedTasks}
-          onOpenProposal={openProposalEditor}
-          onProposedTaskChange={handleProposedTaskChange}
-        />
-      </aside>
       {editorProposal ? (
         <ProposedTaskEditorOverlay
           proposal={editorProposal}

@@ -78,6 +78,7 @@ export function ConversationThread({
   onRetry,
   showHeader = true,
   actions,
+  aside,
   proposedReply = null,
   proposedReplySource = null,
   proposedReplySources = null,
@@ -107,6 +108,9 @@ export function ConversationThread({
   onRetry?: () => void;
   showHeader?: boolean;
   actions?: React.ReactNode;
+  /** Detail rail, rendered beside the transcript and BELOW the header so the
+   *  header runs the full width of both. Desktop inbox only. */
+  aside?: React.ReactNode;
   /** The conversation's persisted proposed reply (read, not regenerated here). */
   proposedReply?: string | null;
   proposedReplySource?: 'auto' | 'assistant' | null;
@@ -585,22 +589,33 @@ export function ConversationThread({
   // Hide the composer only when there's nothing to reply to (failed load).
   const showComposer = !(error && messages.length === 0);
 
+  // `aside` renders BELOW the header and beside the transcript, which is the
+  // whole reason it's a slot rather than a sibling of this component: the
+  // header spans the full width of both columns, and the aside starts under
+  // it. Passing it in also keeps the selection controls where they are —
+  // they're built from this component's own state, so lifting the header out
+  // to the page in order to span it would have meant lifting that too.
   return (
     <div className="flex h-full flex-col">
       {header}
-      <div ref={scrollRef} className="overlay-scrollbar min-h-0 flex-1 overflow-y-auto">
-        {body}
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div ref={scrollRef} className="overlay-scrollbar min-h-0 flex-1 overflow-y-auto">
+            {body}
+          </div>
+          {showComposer ? (
+            <MessageComposer
+              guestName={guestName}
+              conversationId={conversationId}
+              value={composerText}
+              onChange={setComposerText}
+              onSend={onSendMessage}
+              focusSignal={focusSignal}
+            />
+          ) : null}
+        </div>
+        {aside}
       </div>
-      {showComposer ? (
-        <MessageComposer
-          guestName={guestName}
-          conversationId={conversationId}
-          value={composerText}
-          onChange={setComposerText}
-          onSend={onSendMessage}
-          focusSignal={focusSignal}
-        />
-      ) : null}
       {turnIntoOpen && conversationId ? (
         <TurnIntoTrainingDialog
           conversationId={conversationId}

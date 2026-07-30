@@ -26,6 +26,10 @@
   --app-shell-bg: #EDEDF1;
   --app-shell-card: #FFFFFF;
   --app-shell-card-border: rgba(30, 25, 20, 0.10);
+  /* Windowed ⇄ full-screen motion. Slow enough to read as the card growing
+     into the sidebar's space rather than the sidebar vanishing. */
+  --app-shell-motion: 260ms;
+  --app-shell-ease: cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Window-header scrim. Every window header fades this into transparent
      down its own height, over whatever surface it sits on, so the title band
@@ -245,11 +249,43 @@
 }
 
 .app-fullscreen [data-app-sidebar] {
-  display: none;
+  width: 0;
 }
 
 .app-fullscreen [data-app-card] {
   border-width: 0;
+}
+
+/* Windowed ⇄ full-screen transition.
+   The card's margin, radius and border-width are all driven by the variables
+   .app-fullscreen overrides above. A transition on those PROPERTIES still
+   fires when the variable behind them changes — the custom property itself
+   isn't interpolated, but the property animates from its old computed value
+   to its new one, which is exactly what's wanted here. */
+[data-app-card] {
+  transition:
+    margin var(--app-shell-motion) var(--app-shell-ease),
+    border-radius var(--app-shell-motion) var(--app-shell-ease),
+    border-width var(--app-shell-motion) var(--app-shell-ease);
+}
+
+/* The sidebar collapses its WIDTH rather than switching to display:none.
+   `display` can't be animated, and its instant disappearance — with the card
+   snapping left to fill the hole — was what made the toggle feel harsh. The
+   panel inside stays 256px wide and is clipped, so it reads as the card
+   growing over the sidebar rather than the sidebar shrinking its contents.
+   AppShell marks it `inert` while collapsed so keyboard focus can't land on
+   links that are no longer visible. */
+[data-app-sidebar] {
+  overflow: hidden;
+  transition: width var(--app-shell-motion) var(--app-shell-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-app-card],
+  [data-app-sidebar] {
+    transition: none;
+  }
 }
 
 .dark {

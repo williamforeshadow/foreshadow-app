@@ -2,16 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { UserAvatar } from '@/components/ui/user-avatar';
 import { canonicalChannelLabel } from '@/lib/bookingChannel';
-import { stageMeta } from '@/components/messages/stage';
 import { ProjectCard, type DraggableProjectItem } from '@/components/windows/projects/ProjectCard';
 import { ProposedTask, type ProposedTaskData } from '@/components/messages/ProposedTask';
 import { filterTasksInTurnoverWindow } from '@/components/properties/schedule/scheduleDates';
 import { useOperationsSettings } from '@/lib/operationsSettingsContext';
-import { deriveReservationStatus, type ConversationRow } from '@/lib/conversations';
+import type { ConversationRow } from '@/lib/conversations';
 import type { ProjectStatus, ProjectPriority, User } from '@/lib/types';
-import { todayInTz, DEFAULT_TIMEZONE } from '@/src/lib/dates';
 import {
   useReservationContext,
   type ReservationContextTask,
@@ -226,25 +223,12 @@ export function ConversationDetailPanel({
   const isInquiry = conversation.booking_state === 'inquiry';
   const isCancelled = conversation.booking_state === 'cancelled';
   const hasReservation = !!reservationId;
-  const guestName =
-    reservation?.guest_name ?? conversation.guest_name ?? 'Guest';
   const propertyName =
     reservation?.property_name ?? conversation.property_name ?? null;
   const channel = conversation.channel ? canonicalChannelLabel(conversation.channel) : null;
   const checkIn = reservation?.check_in ?? conversation.check_in ?? null;
   const checkOut = reservation?.check_out ?? conversation.check_out ?? null;
   const nights = reservation?.nights ?? nightsBetween(checkIn, checkOut);
-  // The detail API returns the raw conversation row (no derived
-  // reservation_status, unlike the list API) — derive it here the same way.
-  const reservationStatus =
-    conversation.reservation_status ??
-    deriveReservationStatus(
-      conversation.booking_state,
-      checkIn,
-      checkOut,
-      todayInTz(DEFAULT_TIMEZONE).date,
-    );
-  const stage = stageMeta(reservationStatus);
   const { primary: propPrimary, sub: propSub } = splitPropertyName(propertyName);
 
   // Guest contact + party size come from the linked reservation (booked threads
@@ -267,24 +251,13 @@ export function ConversationDetailPanel({
 
   return (
     <div className="flex h-full flex-col overflow-y-auto overlay-scrollbar">
-      {/* Reservation */}
+      {/* Reservation. No section label, no status pill and no guest hero: the
+          conversation header now spans this column too and already names the
+          guest, so all three were repeating it directly below itself. The
+          panel opens on the property instead. */}
       <div className="msg-divider border-b">
-        <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-3">
-          <h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Reservation
-          </h2>
-          {stage ? (
-            <span
-              className={`shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium ${stage.className}`}
-            >
-              {stage.label}
-            </span>
-          ) : null}
-        </div>
-
         {isInquiry ? (
-          <div className="space-y-3 px-4 pb-4">
-            <Field label="Guest" value={guestName} />
+          <div className="space-y-3 px-4 pb-4 pt-4">
             <Field label="Property" value={propertyName ?? '—'} />
             {conversation.check_in || conversation.check_out ? (
               <div className="grid grid-cols-2 gap-3">
@@ -299,21 +272,15 @@ export function ConversationDetailPanel({
             </div>
           </div>
         ) : hasReservation && loading && !reservation ? (
-          <div className="px-4 pb-4">
+          <div className="px-4 pb-4 pt-4">
             <DetailSkeleton />
           </div>
         ) : (
           <>
-            {/* Guest hero */}
-            <div className="flex items-center gap-3 px-4 pb-4">
-              <UserAvatar name={guestName} size="xl" />
-              <div className="min-w-0 truncate text-lg font-semibold text-foreground">
-                {guestName}
-              </div>
-            </div>
-
-            {/* Property — same house icon as the app sidebar's Properties nav. */}
-            <div className="msg-divider flex items-center gap-3 border-t px-4 py-3.5">
+            {/* Property — same house icon as the app sidebar's Properties nav.
+                First row in the panel now, so no top border: the header above
+                already closes the gap. */}
+            <div className="flex items-center gap-3 px-4 py-3.5">
               <PropertyIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-foreground">{propPrimary}</div>
