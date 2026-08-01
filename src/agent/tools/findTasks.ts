@@ -265,6 +265,17 @@ export interface TaskRow {
    * than guess at what matched from the title.
    */
   matched_in?: string;
+  /**
+   * Only present on results from a free-text `search`. Relevance x recency,
+   * roughly 0-1, same number the rows are sorted by.
+   *
+   * Exposed because without it the model treats every returned row as equally
+   * "found" and narrates a weak tail with the same confidence as a direct hit.
+   * That is how a search for "trash" once presented tasks matching only on
+   * "track" as though they were results. The scores are meant to be compared
+   * to EACH OTHER, not to a fixed bar — see the tool description.
+   */
+  match_score?: number;
 }
 
 const SELECT = `
@@ -999,7 +1010,14 @@ async function handler(
       completed_at: task.completed_at ?? null,
       task_url: taskUrl(task.id),
       ...(searchRank
-        ? { matched_in: searchRank.get(task.id)?.matched_in }
+        ? {
+            matched_in: searchRank.get(task.id)?.matched_in,
+            // Two decimals: enough to compare rows against each other, not so
+            // much precision that it invites the model to read meaning into
+            // a difference of 0.003.
+            match_score:
+              Math.round((searchRank.get(task.id)?.score ?? 0) * 100) / 100,
+          }
         : {}),
     };
   });
@@ -1032,7 +1050,7 @@ async function handler(
 export const findTasks: ToolDefinition<Input, TaskRow[]> = {
   name: 'find_tasks',
   description:
-    "Find operational tasks (cleanings, inspections, recurring jobs, manual to-dos) with structured filters. Filter by property, template (id or name), department (id or name), status, priority, schedule, assignee, or free-text. The `search` filter is fuzzy and RANKED: it covers descriptions and COMMENT BODIES as well as titles and names, tolerates typos and partial words, and returns results best-match-first weighted toward recently-active tasks. So it can find a task by something written only in a note (a vendor, an order, a person who isn't assigned, a confirmed time) — when the user's phrasing doesn't name a task, property, or category, try `search` with their own wording before concluding nothing exists. When search is used, meta.search_ranked is true and the FIRST result is the best candidate, not merely the earliest-scheduled. For category questions like 'show me all cleaning tasks' or 'maintenance work today', prefer department_name over search — it's more precise. For template-shaped questions ('turnover cleanings this week'), prefer template_name. Assignee filters: use assignee_name for a single-person substring match; use assigned_user_ids when the user names multiple specific people and means 'tasks all of them share' (resolve names to user_ids with find_users first). Resolve other references first when the user names something rather than ids: call find_properties for a property name, and call find_reservations for a specific stay or guest (then pass the resulting reservation_id). ORDERING: `sort` controls direction — 'soonest' (default) = earliest scheduled_date first; 'latest' = most recent scheduled_date first. The resolved order is echoed in meta.sort. Note scheduled_date can be in the future: turnovers are auto-spawned and 'contingent' tasks are dated months/years ahead, so the latest-dated task is frequently not the last one actually performed. JSON-heavy fields (description, form_metadata) are not returned, and comments/attachments come back only as counts — a comment can MATCH a search here, but reading its text requires get_task.",
+    "Find operational tasks (cleanings, inspections, recurring jobs, manual to-dos) with structured filters. Filter by property, template (id or name), department (id or name), status, priority, schedule, assignee, or free-text. The `search` filter is fuzzy and RANKED: it covers descriptions and COMMENT BODIES as well as titles and names, tolerates typos and partial words, and returns results best-match-first weighted toward recently-active tasks. So it can find a task by something written only in a note (a vendor, an order, a person who isn't assigned, a confirmed time) — when the user's phrasing doesn't name a task, property, or category, try `search` with their own wording before concluding nothing exists. When search is used, meta.search_ranked is true and the FIRST result is the best candidate, not merely the earliest-scheduled. Each searched row also carries match_score (relevance x recency, roughly 0-1). COMPARE SCORES TO EACH OTHER, not to a fixed bar: if the top score is far above the rest, that one task is the answer and the others are at most 'also mentions it' — say so rather than presenting the whole list as equally relevant. If the scores are close together, several tasks genuinely match. Never narrate a low-scoring tail with the same confidence as the leader. For category questions like 'show me all cleaning tasks' or 'maintenance work today', prefer department_name over search — it's more precise. For template-shaped questions ('turnover cleanings this week'), prefer template_name. Assignee filters: use assignee_name for a single-person substring match; use assigned_user_ids when the user names multiple specific people and means 'tasks all of them share' (resolve names to user_ids with find_users first). Resolve other references first when the user names something rather than ids: call find_properties for a property name, and call find_reservations for a specific stay or guest (then pass the resulting reservation_id). ORDERING: `sort` controls direction — 'soonest' (default) = earliest scheduled_date first; 'latest' = most recent scheduled_date first. The resolved order is echoed in meta.sort. Note scheduled_date can be in the future: turnovers are auto-spawned and 'contingent' tasks are dated months/years ahead, so the latest-dated task is frequently not the last one actually performed. JSON-heavy fields (description, form_metadata) are not returned, and comments/attachments come back only as counts — a comment can MATCH a search here, but reading its text requires get_task.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,

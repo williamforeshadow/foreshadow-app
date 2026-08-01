@@ -53,12 +53,24 @@ const ATTACHMENT_CAP = 25;
 // budget is 2048 tokens; a runaway description would crowd out the answer.
 const DESCRIPTION_CAP = 4000;
 
+// Up to five tasks per call. The cap exists because this is a DEEP read —
+// five tasks with twenty comments each is a lot of context for a 2048-token
+// answer budget — and because past five, the conversation hasn't actually
+// narrowed and the model should be filtering with find_tasks instead.
+const MAX_TASKS_PER_CALL = 5;
+// Reading several at once is nearly always disambiguation ("which of these
+// three is the one about the gate code?"), which needs the gist of each
+// thread rather than all of it. Dropping the per-task comment window keeps a
+// five-task read from crowding out the answer itself.
+const MULTI_TASK_COMMENT_LIMIT = 8;
+
 const inputSchema = z.object({
-  task_id: z
-    .string()
-    .uuid()
+  task_ids: z
+    .array(z.string().uuid())
+    .min(1)
+    .max(MAX_TASKS_PER_CALL)
     .describe(
-      'UUID of the task to open. Resolve a task by name/property/schedule with find_tasks first and pass the task_id it returns.',
+      `UUIDs of the tasks to open, 1 to ${MAX_TASKS_PER_CALL}. Resolve them with find_tasks first and pass the task_id values it returned. Pass several at once when find_tasks left more than one plausible candidate — reading them together is one round trip instead of several.`,
     ),
   comment_limit: z
     .number()
@@ -67,7 +79,7 @@ const inputSchema = z.object({
     .max(MAX_COMMENT_LIMIT)
     .optional()
     .describe(
-      `Max comments to return. Default ${DEFAULT_COMMENT_LIMIT}, hard cap ${MAX_COMMENT_LIMIT}. When a task has more, the MOST RECENT ones are kept and comments.truncated is true.`,
+      `Max comments per task. Default ${DEFAULT_COMMENT_LIMIT} for a single task, ${MULTI_TASK_COMMENT_LIMIT} when several are requested; hard cap ${MAX_COMMENT_LIMIT}. When a task has more, the MOST RECENT are kept and comments.truncated is true.`,
     ),
 });
 
@@ -261,99 +273,57 @@ function buildChecklist(
   return { completed, total, fraction, items };
 }
 
-async function handler(
-  input: Input,
-  ctx: ToolContext,
-): Promise<ToolResult<TaskDetailView>> {
-  const org = requireOrgId(ctx);
-  if (typeof org !== 'string') return org;
-
-  const supabase = ctx.db;
-  const commentLimit = input.comment_limit ?? DEFAULT_COMMENT_LIMIT;
-
-  // Org-filtered read. task_id is model-supplied, so the org filter is the
-  // gate, not a nicety — src/server/tasks/getTaskById.ts is org-blind by
-  // design and explicitly warns that any caller taking an id from a model
-  // must verify org itself. We query directly rather than reuse it.
-  const { data: row, error } = await supabase
-    .from('turnover_tasks')
-    .select(TASK_SELECT)
-    .eq('id', input.task_id)
-    .eq('org_id', org)
-    .maybeSingle();
-
-  if (error) {
-    return { ok: false, error: { code: 'db_error', message: error.message } };
-  }
-  if (!row) {
-    return {
-      ok: false,
-      error: {
-        code: 'not_found',
-        message: `No task with id ${input.task_id}.`,
-        hint: 'Call find_tasks to resolve a task by title, template, property, or schedule, then pass the task_id it returns.',
-      },
-    };
-  }
-
-  // Cast via unknown: the generic client types to-one embeds as arrays, but
-  // PostgREST returns objects for them at runtime (same as find_tasks).
-  const task = row as unknown as {
+/** Shape PostgREST actually returns for TASK_SELECT. */
+interface TaskQueryRow {
+  id: string;
+  reservation_id: string | null;
+  property_id: string | null;
+  property_name: string | null;
+  template_id: string | null;
+  title: string | null;
+  description: unknown;
+  priority: string | null;
+  department_id: string | null;
+  status: string | null;
+  scheduled_date: string | null;
+  scheduled_time: string | null;
+  bin_id: string | null;
+  is_binned: boolean | null;
+  form_metadata: unknown;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  templates: { id: string; name: string } | null;
+  departments: { id: string; name: string } | null;
+  project_bins: { id: string; name: string; is_system: boolean } | null;
+  reservations: {
     id: string;
-    reservation_id: string | null;
-    property_id: string | null;
-    property_name: string | null;
-    template_id: string | null;
-    title: string | null;
-    description: unknown;
-    priority: string | null;
-    department_id: string | null;
-    status: string | null;
-    scheduled_date: string | null;
-    scheduled_time: string | null;
-    bin_id: string | null;
-    is_binned: boolean | null;
-    form_metadata: unknown;
-    completed_at: string | null;
-    created_at: string;
-    updated_at: string;
-    templates: { id: string; name: string } | null;
-    departments: { id: string; name: string } | null;
-    project_bins: { id: string; name: string; is_system: boolean } | null;
-    reservations: {
-      id: string;
-      guest_name: string | null;
-      check_in: string | null;
-      check_out: string | null;
-    } | null;
-    task_assignments: Array<{
-      user_id: string;
-      users: { id: string; name: string; role: string } | null;
-    }> | null;
-  };
+    guest_name: string | null;
+    check_in: string | null;
+    check_out: string | null;
+  } | null;
+  task_assignments: Array<{
+    user_id: string;
+    users: { id: string; name: string; role: string } | null;
+  }> | null;
+}
 
-  // The checklist definition lives on the template, the answers on the task.
-  // Neither half is meaningful alone, so fetch the template's fields whenever
-  // the task is templated. find_templates deliberately omits this column
-  // (it's heavy), which is why we go direct.
-  let templateFields: FieldDefinition[] | null = null;
-  if (task.template_id) {
-    const { data: tmpl, error: tmplErr } = await supabase
-      .from('templates')
-      .select('fields')
-      .eq('id', task.template_id)
-      .eq('org_id', org)
-      .maybeSingle();
-    if (tmplErr) {
-      return {
-        ok: false,
-        error: { code: 'db_error', message: tmplErr.message },
-      };
-    }
-    const raw = (tmpl as { fields?: unknown } | null)?.fields;
-    if (Array.isArray(raw)) templateFields = raw as FieldDefinition[];
-  }
-
+/**
+ * Fetch the comment + attachment tails for one task and assemble its view.
+ *
+ * Kept per-task rather than folded into one batched query: a per-task LIMIT
+ * needs a window function, which PostgREST can't express. At a cap of five
+ * tasks these run concurrently and the extra round trips are free, whereas
+ * fetching every comment for five tasks and slicing in memory would pull an
+ * unbounded amount of text to throw most of it away.
+ */
+async function buildTaskView(
+  supabase: ToolContext['db'],
+  task: TaskQueryRow,
+  org: string,
+  templateFields: FieldDefinition[] | null,
+  commentLimit: number,
+): Promise<{ ok: true; view: TaskDetailView } | { ok: false; message: string }> {
   // Newest-first + limit so a capped read keeps the RECENT comments (the
   // useful end of a thread); we reverse to oldest-first for presentation,
   // matching read_conversation_thread. `count: 'exact'` reports the true
@@ -364,7 +334,7 @@ async function handler(
       .select('id, user_id, comment_content, created_at, users(id, name)', {
         count: 'exact',
       })
-      .eq('task_id', input.task_id)
+      .eq('task_id', task.id)
       .eq('org_id', org)
       .order('created_at', { ascending: false })
       .limit(commentLimit),
@@ -374,23 +344,15 @@ async function handler(
         'id, file_name, file_type, mime_type, file_size, url, created_at, users(id, name)',
         { count: 'exact' },
       )
-      .eq('task_id', input.task_id)
+      .eq('task_id', task.id)
       .eq('org_id', org)
       .order('created_at', { ascending: false })
       .limit(ATTACHMENT_CAP),
   ]);
 
-  if (commentsRes.error) {
-    return {
-      ok: false,
-      error: { code: 'db_error', message: commentsRes.error.message },
-    };
-  }
+  if (commentsRes.error) return { ok: false, message: commentsRes.error.message };
   if (attachmentsRes.error) {
-    return {
-      ok: false,
-      error: { code: 'db_error', message: attachmentsRes.error.message },
-    };
+    return { ok: false, message: attachmentsRes.error.message };
   }
 
   const commentRows = (commentsRes.data ?? []) as unknown as Array<{
@@ -500,37 +462,156 @@ async function handler(
     },
   };
 
-  const meta: ToolMeta = {
-    returned: 1,
-    limit: 1,
-    truncated: false,
-    comment_limit: commentLimit,
-  };
-
-  return { ok: true, data: view, meta };
+  return { ok: true, view };
 }
 
-export const getTask: ToolDefinition<Input, TaskDetailView> = {
+async function handler(
+  input: Input,
+  ctx: ToolContext,
+): Promise<ToolResult<TaskDetailView[]>> {
+  const org = requireOrgId(ctx);
+  if (typeof org !== 'string') return org;
+
+  const supabase = ctx.db;
+  // Dedupe first: the model occasionally passes the same id twice when it has
+  // seen a task in two different find_tasks results, and reading it twice
+  // would double its weight in the answer for no reason.
+  const taskIds = Array.from(new Set(input.task_ids));
+  const commentLimit =
+    input.comment_limit ??
+    (taskIds.length > 1 ? MULTI_TASK_COMMENT_LIMIT : DEFAULT_COMMENT_LIMIT);
+
+  // Org-filtered read. The ids are model-supplied, so the org filter is the
+  // gate, not a nicety — src/server/tasks/getTaskById.ts is org-blind by
+  // design and explicitly warns that any caller taking an id from a model
+  // must verify org itself. We query directly rather than reuse it.
+  const { data, error } = await supabase
+    .from('turnover_tasks')
+    .select(TASK_SELECT)
+    .in('id', taskIds)
+    .eq('org_id', org);
+
+  if (error) {
+    return { ok: false, error: { code: 'db_error', message: error.message } };
+  }
+
+  // Cast via unknown: the generic client types to-one embeds as arrays, but
+  // PostgREST returns objects for them at runtime (same as find_tasks).
+  const tasks = (data ?? []) as unknown as TaskQueryRow[];
+
+  if (tasks.length === 0) {
+    return {
+      ok: false,
+      error: {
+        code: 'not_found',
+        message:
+          taskIds.length === 1
+            ? `No task with id ${taskIds[0]}.`
+            : `None of the ${taskIds.length} ids matched a task in this organization.`,
+        hint: 'Call find_tasks to resolve a task by title, template, property, or schedule, then pass the task_id values it returns.',
+      },
+    };
+  }
+
+  // The checklist definition lives on the template, the answers on the task.
+  // Neither half is meaningful alone, so fetch fields for every template in
+  // play — in ONE query rather than per task, since a batch of tasks very
+  // often shares a template (five turnovers, one Turnover Cleaning). Note
+  // find_templates deliberately omits this column (it's heavy), which is why
+  // we go direct.
+  const templateIds = Array.from(
+    new Set(tasks.map((t) => t.template_id).filter((id): id is string => !!id)),
+  );
+  const fieldsByTemplate = new Map<string, FieldDefinition[]>();
+  if (templateIds.length > 0) {
+    const { data: tmpls, error: tmplErr } = await supabase
+      .from('templates')
+      .select('id, fields')
+      .in('id', templateIds)
+      .eq('org_id', org);
+    if (tmplErr) {
+      return {
+        ok: false,
+        error: { code: 'db_error', message: tmplErr.message },
+      };
+    }
+    for (const row of (tmpls ?? []) as Array<{ id: string; fields?: unknown }>) {
+      if (Array.isArray(row.fields)) {
+        fieldsByTemplate.set(row.id, row.fields as FieldDefinition[]);
+      }
+    }
+  }
+
+  // Concurrent: five tasks' comment and attachment tails fetched at once
+  // rather than in sequence.
+  const built = await Promise.all(
+    tasks.map((t) =>
+      buildTaskView(
+        supabase,
+        t,
+        org,
+        t.template_id ? fieldsByTemplate.get(t.template_id) ?? null : null,
+        commentLimit,
+      ),
+    ),
+  );
+
+  const failed = built.find((b) => !b.ok);
+  if (failed && !failed.ok) {
+    return { ok: false, error: { code: 'db_error', message: failed.message } };
+  }
+
+  // Return in the order the caller asked for, not the order PostgREST
+  // happened to return rows — the model usually passes its best candidate
+  // first and reads the results the same way.
+  const byId = new Map(
+    built
+      .filter((b): b is { ok: true; view: TaskDetailView } => b.ok)
+      .map((b) => [b.view.task_id, b.view]),
+  );
+  const views = taskIds
+    .map((id) => byId.get(id))
+    .filter((v): v is TaskDetailView => !!v);
+
+  // Ids that matched no row. Surfaced rather than silently dropped so the
+  // model reports "I couldn't find one of those" instead of quietly answering
+  // about a smaller set than it was asked about.
+  const notFound = taskIds.filter((id) => !byId.has(id));
+
+  const meta: ToolMeta = {
+    returned: views.length,
+    limit: MAX_TASKS_PER_CALL,
+    truncated: false,
+    comment_limit: commentLimit,
+    ...(notFound.length > 0 ? { not_found_task_ids: notFound } : {}),
+  };
+
+  return { ok: true, data: views, meta };
+}
+
+export const getTask: ToolDefinition<Input, TaskDetailView[]> = {
   name: 'get_task',
   description:
-    "Open ONE task and read everything on it: the full description, the template checklist (every field with its label and recorded answer, plus completed/total progress), all comments with their authors, attachment metadata, assignees, bin, department, and the linked reservation. Use this whenever the user asks about the CONTENT or history of a specific task — 'what do the comments say', 'what's the note on this one', 'how far along is the checklist', 'what did they write', 'what's left to do on it' — or any time you need detail that find_tasks does not carry. find_tasks is for FINDING tasks (filters, lists) and returns only comment_count/attachment_count as numbers; get_task is for reading one. Resolve the task with find_tasks first and pass the task_id it returned. Comments come back oldest-first; when a task has more than comment_limit, the most recent are kept and comments.truncated is true. NOTE: tasks do not have an activity/audit history — if the user asks who changed what and when, say that isn't tracked yet rather than inferring it from timestamps.",
+    "Open one to five tasks and read everything on them: the full description, the template checklist (every field with its label and recorded answer, plus completed/total progress), all comments with their authors, attachment metadata, assignees, bin, department, and the linked reservation. Returns an ARRAY, in the order you passed the ids. Use this whenever the user asks about the CONTENT of a specific task — 'what do the comments say', 'what's the note on this one', 'how far along is the checklist', 'what did they write', 'what's left to do' — or any time you need detail find_tasks does not carry. find_tasks FINDS tasks (filters, lists) and returns comment_count/attachment_count only as numbers; get_task READS them. Resolve with find_tasks first and pass the task_id values it returned. IMPORTANT: when find_tasks leaves more than one plausible candidate, pass them ALL in a single call rather than opening one, finding it wrong, and opening the next — reading three at once is one round trip instead of three. Do not, however, call this on a whole list; if you have more than five candidates the conversation hasn't narrowed and you should filter with find_tasks instead. Comments come back oldest-first; when a task has more than comment_limit, the most recent are kept and comments.truncated is true. Any id that matched nothing is reported in meta.not_found_task_ids — mention it rather than quietly answering about fewer tasks than you were asked about. NOTE: tasks do not have an activity/audit history — if the user asks who changed what and when, say that isn't tracked yet rather than inferring it from timestamps.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
     properties: {
-      task_id: {
-        type: 'string',
-        description:
-          'Task UUID. Resolve it with find_tasks first — never construct one.',
+      task_ids: {
+        type: 'array',
+        items: { type: 'string' },
+        minItems: 1,
+        maxItems: MAX_TASKS_PER_CALL,
+        description: `Task UUIDs, 1 to ${MAX_TASKS_PER_CALL}. Resolve them with find_tasks first — never construct one. Pass every plausible candidate at once when the conversation hasn't narrowed to a single task.`,
       },
       comment_limit: {
         type: 'integer',
         minimum: 1,
         maximum: MAX_COMMENT_LIMIT,
-        description: `Max comments to return. Default ${DEFAULT_COMMENT_LIMIT}, hard cap ${MAX_COMMENT_LIMIT}. The most recent are kept when a task has more.`,
+        description: `Max comments per task. Defaults to ${DEFAULT_COMMENT_LIMIT} for one task and ${MULTI_TASK_COMMENT_LIMIT} when several are requested; hard cap ${MAX_COMMENT_LIMIT}. The most recent are kept when a task has more.`,
       },
     },
-    required: ['task_id'],
+    required: ['task_ids'],
     additionalProperties: false,
   },
   handler,
