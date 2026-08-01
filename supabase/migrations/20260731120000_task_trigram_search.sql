@@ -113,7 +113,22 @@ create or replace function public.search_tasks(
   p_query text,
   p_limit integer default 50,
   p_apply_recency boolean default true,
-  p_threshold real default 0.3,
+  -- Minimum trigram similarity for a field to count as a match, applied to the
+  -- RAW score before recency decay.
+  --
+  -- Tuned against real data, not picked by feel. Measured word_similarity:
+  --   trash -> trash          1.00   keep
+  --   trash -> trashcan       0.83   keep
+  --   dishwaser -> dishwasher 0.70   keep (the typo case)
+  --   yard -> backyard        0.60   keep (the casual-phrasing case)
+  --   trash -> track          0.50   REJECT (shares only the "tra" trigram)
+  --
+  -- So the usable band is (0.50, 0.60]. 0.55 sits in it. The first cut at 0.30
+  -- returned 25 tasks for "trash", of which roughly two thirds were junk on
+  -- exactly the trash/track pattern; 0.55 returns 8, all genuine. Going to 0.65
+  -- would break "yard" -> "backyard", which is the phrasing tolerance this
+  -- whole design was chosen for.
+  p_threshold real default 0.55,
   p_half_life_days real default 180
 )
 returns table (task_id uuid, score real, matched_in text)
