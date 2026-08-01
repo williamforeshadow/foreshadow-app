@@ -24,6 +24,33 @@ import {
 // half: pass it one task_id and it returns the description, the resolved
 // checklist, and the actual comment bodies. Keep it that way; widening this
 // projection would make every list query pay for detail it doesn't show.
+//
+// Searching and returning are separate concerns, though, and the `search`
+// filter deliberately reaches further than the projection does: it matches
+// against comment BODIES even though it never returns them. A note is often
+// the only place a fact was ever written down ("Patricia confirmed Thursday
+// 9-10am"), so excluding comments from the search made those tasks
+// unreachable by the words their owner would actually type. Matching a
+// comment surfaces the task; reading the comment is still get_task's job.
+//
+// Free-text `search` is delegated to the search_tasks() database function
+// (see supabase/migrations/*_task_trigram_search.sql). It trigram-matches the
+// query against title, the flattened description, property_name, template and
+// department names, and comment bodies, then orders by match quality times a
+// recency decay. Two consequences worth knowing here:
+//
+//   - Searched results come back in RELEVANCE order, not schedule order. The
+//     rows are re-sorted in this file after the query returns, because
+//     PostgREST cannot sort by the RPC's score.
+//   - Matching is fuzzy. "dishwaser" finds "dishwasher" and "yard" finds
+//     "backyard" — deliberately, since the product's whole premise is that
+//     users talk casually instead of phrasing queries precisely.
+//
+// The honest boundary: this is still lexical. No character-level technique
+// connects "landscaping" to a task titled "Get a gardener". That needs
+// embeddings fused into search_tasks()' ORDER BY — pgvector is already
+// installed. The RPC exists partly to make that a change with no blast
+// radius above it: the tool contract stays find_tasks(search) -> ranked ids.
 
 const STATUS_ENUM = z.enum([
   'not_started',
@@ -147,7 +174,7 @@ const inputSchema = z
       .min(2)
       .optional()
       .describe(
-        'Case-insensitive substring match against task title, property_name, template_name, and department_name. Prefer department_name or template_name when the user is asking about a category they can name precisely.',
+        "Fuzzy, RANKED free-text search across task title, description, property_name, template_name, department_name, and COMMENT BODIES. Results come back best-match-first, weighted toward recently-active tasks. Matching is forgiving: typos ('dishwaser' finds 'dishwasher') and partial words ('yard' finds 'backyard') both work, so pass the user's own wording rather than cleaning it up. Because comments and descriptions are covered, this finds tasks by text written only in a note or a note body — a person who isn't an assignee, a vendor, an order, a confirmed time. Reach for it whenever the user's phrasing doesn't name a task, property, or category ('did Patricia get back to us', 'what did I order'). Prefer department_name or template_name when they name a category precisely. Each row carries matched_in — when it says 'comment' or 'description', the matching text is NOT in the row, so call get_task to read it.",
       ),
     limit: z
       .number()
@@ -227,6 +254,17 @@ export interface TaskRow {
    * overlay.
    */
   task_url: string;
+  /**
+   * Only present on results from a free-text `search`. Which field produced
+   * the match: 'title' | 'description' | 'property' | 'template_or_department'
+   * | 'comment'.
+   *
+   * Worth surfacing to the model because 'comment' and 'description' mean the
+   * matching text is NOT anywhere in this row — the projection doesn't carry
+   * either. Seeing it, the model knows to open the task with get_task rather
+   * than guess at what matched from the title.
+   */
+  matched_in?: string;
 }
 
 const SELECT = `
@@ -256,6 +294,13 @@ const SELECT = `
 `;
 
 const DEFAULT_LIMIT = 25;
+// How many ranked candidates search_tasks() returns before the tool's own
+// structured filters (status, date, property, bin...) narrow them further.
+// Deliberately larger than the row limit: a search for "cleaning" scoped to
+// "this week" has to have enough ranked candidates left after filtering to
+// still fill a page. Bounded because the ids travel back as a PostgREST
+// `in.()` filter, ~37 characters each.
+const SEARCH_CANDIDATE_CAP = 200;
 const BIN_NONE = '__none__';
 const BIN_TASK_BIN = '__task_bin__';
 const BIN_ANY = '__any__';
@@ -363,6 +408,49 @@ async function resolveIdsByName(
     .limit(50);
   if (error) return { ok: false, message: error.message };
   return { ok: true, rows: (data ?? []) as Array<{ id: string; name: string }> };
+}
+
+/** One ranked candidate from the search_tasks() database function. */
+interface RankedMatch {
+  task_id: string;
+  /** match quality x recency decay. Higher is better. */
+  score: number;
+  /** Which field won: 'title' | 'description' | 'property' | 'comment'. */
+  matched_in: string;
+}
+
+// Free-text search, delegated to the search_tasks() database function.
+//
+// The function trigram-matches the query against task title, the flattened
+// description, property_name, and comment bodies, then orders by match quality
+// times a recency decay. See the migration for why trigram beat full-text
+// search here (short version: FTS matches whole tokens, so it would have
+// broken "yard" -> "backyard door", and it can't survive a typo).
+//
+// Ranking has to happen in the database because PostgREST can express "rows
+// where X matches" but has no syntax for "ordered by how well they matched".
+// This RPC is also the seam that keeps the agent stable as retrieval improves:
+// when embeddings land, the vector score is fused into the function's ORDER BY
+// and nothing above it changes — not this tool, not the prompt, not the agent.
+//
+// Note the term is passed as an RPC parameter rather than interpolated into a
+// PostgREST filter string, so it no longer needs sanitizing for `%`/`,`/`(`.
+async function rankedSearch(
+  supabase: Supabase,
+  rawTerm: string,
+  org: string,
+  applyRecency: boolean,
+): Promise<{ ok: true; matches: RankedMatch[] } | { ok: false; message: string }> {
+  const term = rawTerm.trim();
+  if (term.length < 2) return { ok: true, matches: [] };
+  const { data, error } = await supabase.rpc('search_tasks', {
+    p_org: org,
+    p_query: term,
+    p_limit: SEARCH_CANDIDATE_CAP,
+    p_apply_recency: applyRecency,
+  });
+  if (error) return { ok: false, message: error.message };
+  return { ok: true, matches: (data ?? []) as RankedMatch[] };
 }
 
 async function resolveTaskIdsForUsers(
@@ -704,6 +792,50 @@ async function handler(
     templateIdsFilter = r.rows.map((row) => row.id);
   }
 
+  // Ranked free-text search. Runs before the main query so its ordered
+  // candidate list can both filter the query and re-sort what comes back.
+  let searchRank: Map<string, RankedMatch> | undefined;
+  if (input.search && !input.ids) {
+    // Recency decay is DEFEATED when the user named an explicit time window.
+    // Without this, "what did we do about the pool heater last spring?" would
+    // rank its own answers last for the crime of being old — the system would
+    // be structurally unable to answer historical questions. The model already
+    // converts relative language ("last year", "in March") into concrete dates
+    // before calling tools, so the presence of a date filter IS the signal.
+    const hasExplicitDateFilter = !!(
+      input.scheduled_between?.from ||
+      input.scheduled_between?.to ||
+      input.unscheduled === true ||
+      input.overdue === true
+    );
+    const ranked = await rankedSearch(
+      supabase,
+      input.search,
+      org,
+      !hasExplicitDateFilter,
+    );
+    if (!ranked.ok) {
+      return { ok: false, error: { code: 'db_error', message: ranked.message } };
+    }
+    if (ranked.matches.length === 0) {
+      // Nothing scored above the similarity threshold. Short-circuit with a
+      // loud empty rather than letting the main query return every task in
+      // the org because no id filter got applied.
+      return {
+        ok: true,
+        data: [],
+        meta: {
+          returned: 0,
+          limit,
+          truncated: false,
+          search_matches: 0,
+          search_ranked: true,
+        },
+      };
+    }
+    searchRank = new Map(ranked.matches.map((m) => [m.task_id, m]));
+  }
+
   // Ordering by intent. A single hard-coded direction can't serve both "the
   // next/soonest task" and "the last/most recent task" — so we default to
   // soonest (the forward-looking work queue) and let the caller override with
@@ -723,7 +855,11 @@ async function handler(
       .order('scheduled_time', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false });
   }
-  q = q.limit(limit + 1);
+  // When searching we pull the whole ranked candidate set rather than limit+1,
+  // because the rows have to be re-sorted by relevance before they're trimmed.
+  // Taking limit+1 here would hand back the earliest-SCHEDULED matches and
+  // then "rank" those — which is the exact bug ranking exists to fix.
+  q = q.limit(searchRank ? SEARCH_CANDIDATE_CAP : limit + 1);
 
   if (input.ids && input.ids.length > 0) {
     q = q.in('id', input.ids);
@@ -770,39 +906,11 @@ async function handler(
     if (departmentIdsFilter) q = q.in('department_id', departmentIdsFilter);
     if (templateIdsFilter) q = q.in('template_id', templateIdsFilter);
 
-    if (input.search) {
-      const term = sanitizeSearchTerm(input.search);
-      if (term.length > 0) {
-        // Free-text search fans out across the task's own columns plus the
-        // joined template/department names. Auto-spawned tasks frequently
-        // had a null title with the searchable text only living on the
-        // template name, which made the prior title-only search miss most
-        // matches. We resolve template/department ids separately and OR
-        // them into the row-level filter so PostgREST can do the whole
-        // match in one query.
-        const orParts = [
-          `title.ilike.%${term}%`,
-          `property_name.ilike.%${term}%`,
-        ];
-        const [tmpl, dept] = await Promise.all([
-          resolveIdsByName(supabase, 'templates', term, org),
-          resolveIdsByName(supabase, 'departments', term, org),
-        ]);
-        if (!tmpl.ok) {
-          return { ok: false, error: { code: 'db_error', message: tmpl.message } };
-        }
-        if (!dept.ok) {
-          return { ok: false, error: { code: 'db_error', message: dept.message } };
-        }
-        if (tmpl.rows.length > 0) {
-          orParts.push(`template_id.in.(${tmpl.rows.map((r) => r.id).join(',')})`);
-        }
-        if (dept.rows.length > 0) {
-          orParts.push(`department_id.in.(${dept.rows.map((r) => r.id).join(',')})`);
-        }
-        q = q.or(orParts.join(','));
-      }
-    }
+    // Ranked candidates from search_tasks(), already ordered by relevance x
+    // recency. Restricting the query to them lets every structured filter
+    // below compose with the search normally; the rank order is re-applied
+    // after the rows come back, since PostgREST can't sort by it.
+    if (searchRank) q = q.in('id', Array.from(searchRank.keys()));
 
     if (assigneeTaskIds) q = q.in('id', assigneeTaskIds);
   }
@@ -815,6 +923,16 @@ async function handler(
   // Cast via unknown: the generic SupabaseClient types to-one embeds as arrays,
   // but PostgREST returns objects for them at runtime (shape unchanged).
   const rows = (data ?? []) as unknown as TaskQueryRow[];
+  // Re-apply relevance order. The database returned these in schedule order
+  // (PostgREST has no way to sort by the RPC's score), so without this the
+  // trim below would keep the earliest-scheduled matches instead of the
+  // best-matching ones.
+  if (searchRank) {
+    rows.sort(
+      (a, b) =>
+        (searchRank.get(b.id)?.score ?? 0) - (searchRank.get(a.id)?.score ?? 0),
+    );
+  }
   const truncated = rows.length > limit;
   const trimmed = truncated ? rows.slice(0, limit) : rows;
 
@@ -880,6 +998,9 @@ async function handler(
       updated_at: task.updated_at,
       completed_at: task.completed_at ?? null,
       task_url: taskUrl(task.id),
+      ...(searchRank
+        ? { matched_in: searchRank.get(task.id)?.matched_in }
+        : {}),
     };
   });
 
@@ -894,6 +1015,15 @@ async function handler(
     ...(resolvedAssignees ? { resolved_assignees: resolvedAssignees } : {}),
     ...(resolvedDepartments ? { resolved_departments: resolvedDepartments } : {}),
     ...(resolvedTemplates ? { resolved_templates: resolvedTemplates } : {}),
+    // Present only on searched calls. search_ranked tells the model these rows
+    // are in relevance order (not schedule order), so the first one really is
+    // the best guess. search_candidates is how many tasks cleared the
+    // similarity threshold before structured filters narrowed them — useful
+    // for telling "nothing matched" apart from "lots matched, your filters
+    // excluded them".
+    ...(searchRank
+      ? { search_ranked: true, search_candidates: searchRank.size }
+      : {}),
   };
 
   return { ok: true, data: transformed, meta };
@@ -902,7 +1032,7 @@ async function handler(
 export const findTasks: ToolDefinition<Input, TaskRow[]> = {
   name: 'find_tasks',
   description:
-    "Find operational tasks (cleanings, inspections, recurring jobs, manual to-dos) with structured filters. Filter by property, template (id or name), department (id or name), status, priority, schedule, assignee, or free-text. For category questions like 'show me all cleaning tasks' or 'maintenance work today', prefer department_name over search — it's more precise. For template-shaped questions ('turnover cleanings this week'), prefer template_name. Assignee filters: use assignee_name for a single-person substring match; use assigned_user_ids when the user names multiple specific people and means 'tasks all of them share' (resolve names to user_ids with find_users first). Resolve other references first when the user names something rather than ids: call find_properties for a property name, and call find_reservations for a specific stay or guest (then pass the resulting reservation_id). ORDERING: `sort` controls direction — 'soonest' (default) = earliest scheduled_date first; 'latest' = most recent scheduled_date first. The resolved order is echoed in meta.sort. Note scheduled_date can be in the future: turnovers are auto-spawned and 'contingent' tasks are dated months/years ahead, so the latest-dated task is frequently not the last one actually performed. JSON-heavy fields (description, form_metadata) are not returned.",
+    "Find operational tasks (cleanings, inspections, recurring jobs, manual to-dos) with structured filters. Filter by property, template (id or name), department (id or name), status, priority, schedule, assignee, or free-text. The `search` filter is fuzzy and RANKED: it covers descriptions and COMMENT BODIES as well as titles and names, tolerates typos and partial words, and returns results best-match-first weighted toward recently-active tasks. So it can find a task by something written only in a note (a vendor, an order, a person who isn't assigned, a confirmed time) — when the user's phrasing doesn't name a task, property, or category, try `search` with their own wording before concluding nothing exists. When search is used, meta.search_ranked is true and the FIRST result is the best candidate, not merely the earliest-scheduled. For category questions like 'show me all cleaning tasks' or 'maintenance work today', prefer department_name over search — it's more precise. For template-shaped questions ('turnover cleanings this week'), prefer template_name. Assignee filters: use assignee_name for a single-person substring match; use assigned_user_ids when the user names multiple specific people and means 'tasks all of them share' (resolve names to user_ids with find_users first). Resolve other references first when the user names something rather than ids: call find_properties for a property name, and call find_reservations for a specific stay or guest (then pass the resulting reservation_id). ORDERING: `sort` controls direction — 'soonest' (default) = earliest scheduled_date first; 'latest' = most recent scheduled_date first. The resolved order is echoed in meta.sort. Note scheduled_date can be in the future: turnovers are auto-spawned and 'contingent' tasks are dated months/years ahead, so the latest-dated task is frequently not the last one actually performed. JSON-heavy fields (description, form_metadata) are not returned, and comments/attachments come back only as counts — a comment can MATCH a search here, but reading its text requires get_task.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -1006,7 +1136,7 @@ export const findTasks: ToolDefinition<Input, TaskRow[]> = {
         type: 'string',
         minLength: 2,
         description:
-          "Case-insensitive substring search across task title, property_name, template_name, and department_name. Prefer department_name or template_name when the user is asking about a category they can name precisely.",
+          "Fuzzy, RANKED free-text search across task title, description, property_name, template_name, department_name, and COMMENT BODIES. Results are ordered best-match-first and weighted toward recently-active tasks. Matching tolerates typos ('dishwaser' finds 'dishwasher') and partial words ('yard' finds 'backyard'), so pass the user's own wording rather than tidying it up. Finds tasks by text written only in a note or description — a vendor, an order, a person who isn't assigned, a confirmed time ('did Patricia get back to us', 'what did I order on Amazon'). Prefer department_name or template_name when they name a category precisely. Each row's matched_in says where it hit; 'comment' or 'description' means the text is NOT in the row and get_task is required to read it.",
       },
       limit: {
         type: 'integer',
