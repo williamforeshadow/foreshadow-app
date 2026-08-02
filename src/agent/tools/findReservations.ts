@@ -31,6 +31,25 @@ const dateString = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
 
+// Candidates pulled from the fuzzy resolver before this tool's own date,
+// property and stay-type filters narrow them. Generous, because a guest with
+// a common name may have many stays and the date filter does the real work.
+const FUZZY_CANDIDATE_CAP = 100;
+
+/** One ranked candidate from the search_reservations() database function. */
+interface RankedReservation {
+  reservation_id: string;
+  score: number;
+  matched_in: string;
+}
+
+/**
+ * Which tier produced the returned rows. Surfaced in meta so the model can
+ * tell a real match from a spelling guess — hiding that would trade a
+ * "can't find it" failure for a worse one: confidently naming the wrong stay.
+ */
+type MatchMode = 'exact' | 'fuzzy';
+
 const inputSchema = z
   .object({
     property_id: z
@@ -325,21 +344,29 @@ async function handler(
   const sort: 'most_recent' | 'earliest' =
     input.sort ?? (input.past === true ? 'most_recent' : 'earliest');
 
-  let q = supabase.from('reservations').select(SELECT).eq('org_id', org);
-  if (sort === 'most_recent') {
-    q = q
-      .order('check_out', { ascending: false, nullsFirst: false })
-      .order('check_in', { ascending: false, nullsFirst: false });
-  } else {
-    q = q
-      .order('check_in', { ascending: true, nullsFirst: false })
-      .order('check_out', { ascending: true, nullsFirst: false });
-  }
-  q = q.order('created_at', { ascending: false }).limit(limit + 1);
+  // Built as a closure so the identical filter set can run twice: once with
+  // the caller's guest_name as a substring match, and again restricted to the
+  // ids the fuzzy resolver found. Rebuilding the second pass by hand would
+  // risk the two drifting apart — a fallback that silently applies different
+  // date or property filters than the primary path is worse than no fallback.
+  const buildQuery = (fuzzyIds?: string[]) => {
+    let q = supabase.from('reservations').select(SELECT).eq('org_id', org);
+    if (sort === 'most_recent') {
+      q = q
+        .order('check_out', { ascending: false, nullsFirst: false })
+        .order('check_in', { ascending: false, nullsFirst: false });
+    } else {
+      q = q
+        .order('check_in', { ascending: true, nullsFirst: false })
+        .order('check_out', { ascending: true, nullsFirst: false });
+    }
+    q = q.order('created_at', { ascending: false }).limit(limit + 1);
 
-  if (input.ids && input.ids.length > 0) {
-    q = q.in('id', input.ids);
-  } else {
+    if (input.ids && input.ids.length > 0) {
+      q = q.in('id', input.ids);
+      return q;
+    }
+
     if (resolvedProperty) {
       q = q.eq('property_id', resolvedProperty.id);
     } else if (resolvedProperties) {
@@ -349,7 +376,12 @@ async function handler(
       );
     }
 
-    if (input.guest_name) {
+    // On the fuzzy pass the id restriction REPLACES the substring match —
+    // the resolver already decided which guests are plausible, and re-applying
+    // the ilike would just exclude everything it found.
+    if (fuzzyIds) {
+      q = q.in('id', fuzzyIds);
+    } else if (input.guest_name) {
       const term = sanitizeSearchTerm(input.guest_name);
       if (term.length > 0) {
         q = q.ilike('guest_name', `%${term}%`);
@@ -408,14 +440,71 @@ async function handler(
         q = q.lte('check_out', input.check_out_between.to);
       }
     }
+
+    return q;
+  };
+
+  // Tier 1: exact substring, exactly as before.
+  const firstPass = await buildQuery();
+  if (firstPass.error) {
+    return {
+      ok: false,
+      error: { code: 'db_error', message: firstPass.error.message },
+    };
   }
 
-  const { data, error } = await q;
-  if (error) {
-    return { ok: false, error: { code: 'db_error', message: error.message } };
+  let rows = (firstPass.data ?? []) as Array<Record<string, unknown>>;
+  let matchMode: MatchMode = 'exact';
+  let fuzzyNote: string | undefined;
+
+  // Tier 2: the guest name matched nothing as a substring. Guest names arrive
+  // from booking channels in whatever form the guest typed them, then get
+  // shortened, anglicised or misremembered in conversation — so an exact miss
+  // is more often a spelling problem than a real absence. Retry fuzzily.
+  //
+  // There is no tier 3 here, unlike find_properties. A portfolio is a small
+  // stable set worth listing in full when nothing matches; reservations run to
+  // the hundreds and grow without bound, so dumping them would be noise.
+  //
+  // Skipped for `ids` lookups: an id matching nothing means it does not exist,
+  // and offering approximate substitutes for a specific id is exactly the
+  // fabrication the identifier rules exist to prevent.
+  if (rows.length === 0 && input.guest_name && !input.ids) {
+    const { data: ranked, error: rankErr } = await supabase.rpc(
+      'search_reservations',
+      {
+        p_org: org,
+        p_query: input.guest_name.trim(),
+        p_limit: FUZZY_CANDIDATE_CAP,
+      },
+    );
+    if (rankErr) {
+      return { ok: false, error: { code: 'db_error', message: rankErr.message } };
+    }
+
+    const matches = (ranked ?? []) as RankedReservation[];
+    if (matches.length > 0) {
+      const secondPass = await buildQuery(matches.map((m) => m.reservation_id));
+      if (secondPass.error) {
+        return {
+          ok: false,
+          error: { code: 'db_error', message: secondPass.error.message },
+        };
+      }
+      const secondRows = (secondPass.data ?? []) as Array<Record<string, unknown>>;
+      matchMode = 'fuzzy';
+      if (secondRows.length > 0) {
+        rows = secondRows;
+        fuzzyNote = `No guest name contains "${input.guest_name}" exactly. These are the closest matches by spelling, best first. Confirm with the user before treating one as certain.`;
+      } else {
+        // The name resolved, but the caller's other filters excluded every
+        // hit. That is a materially different answer from "no such guest",
+        // and saying which half failed saves the user guessing.
+        fuzzyNote = `A guest whose name resembles "${input.guest_name}" does have reservations (${matches.length} found), but none of them match the other filters applied here — the dates, property, or stay type. The guest exists; that combination does not. Consider relaxing the date range before telling the user there is no such guest.`;
+      }
+    }
   }
 
-  const rows = (data ?? []) as Array<Record<string, unknown>>;
   const truncated = rows.length > limit;
   const trimmed = truncated ? rows.slice(0, limit) : rows;
 
@@ -466,6 +555,8 @@ async function handler(
           })),
         }
       : {}),
+    ...(input.guest_name ? { match_mode: matchMode } : {}),
+    ...(fuzzyNote ? { note: fuzzyNote } : {}),
   };
 
   return { ok: true, data: transformed, meta };
@@ -474,7 +565,7 @@ async function handler(
 export const findReservations: ToolDefinition<Input, ReservationRow[]> = {
   name: 'find_reservations',
   description:
-    "Find guest reservations (stays) by property, guest name, Hostaway id, or date range. Use convenience flags current_only/upcoming/past for relative-time questions ('who's there now', 'this week's arrivals'); pass reference_date in the user's local timezone so 'today' aligns with their clock. Property filtering: use property_id for one property; use property_ids for multiple (e.g. 'check-ins this week at these N properties') — always prefer the batched call + a date range over looping property_id one ID at a time. Resolve names with find_properties first. ORDERING: `sort` controls direction — 'most_recent' = latest stays first (by check_out), 'earliest' = oldest stays first (by check_in); it defaults to 'most_recent' when past=true and 'earliest' otherwise. The resolved order is returned in meta.sort. Returns slim rows with computed nights and is_back_to_back fields. Each row has a `kind`: 'guest_booking' (a paying guest) or 'owner_stay' (dates the owner reserved for themselves, no guest revenue) — pass `kind` to filter to one, or omit to get both. There is no status column — cancellations are deletions, so you cannot ask for cancelled stays.",
+    "Find guest reservations (stays) by property, guest name, Hostaway id, or date range. Use convenience flags current_only/upcoming/past for relative-time questions ('who's there now', 'this week's arrivals'); pass reference_date in the user's local timezone so 'today' aligns with their clock. Property filtering: use property_id for one property; use property_ids for multiple (e.g. 'check-ins this week at these N properties') — always prefer the batched call + a date range over looping property_id one ID at a time. Resolve names with find_properties first. ORDERING: `sort` controls direction — 'most_recent' = latest stays first (by check_out), 'earliest' = oldest stays first (by check_in); it defaults to 'most_recent' when past=true and 'earliest' otherwise. The resolved order is returned in meta.sort. Returns slim rows with computed nights and is_back_to_back fields. Each row has a `kind`: 'guest_booking' (a paying guest) or 'owner_stay' (dates the owner reserved for themselves, no guest revenue) — pass `kind` to filter to one, or omit to get both. There is no status column — cancellations are deletions, so you cannot ask for cancelled stays. GUEST NAME LOOKUPS DEGRADE INSTEAD OF FAILING, and meta.match_mode says how: 'exact' means real substring matches; 'fuzzy' means nothing matched exactly and these are the closest spellings — good candidates, but confirm before acting. When a fuzzy retry finds the guest yet your OTHER filters exclude every one of their stays, the rows come back empty with an explanatory meta.note; read it, because 'this guest has no stays in that date range' and 'there is no such guest' are different answers and only one of them means you should stop looking. Never report a guest as not found without checking meta.note first.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -495,7 +586,7 @@ export const findReservations: ToolDefinition<Input, ReservationRow[]> = {
         type: 'string',
         minLength: 2,
         description:
-          'Case-insensitive substring match on guest_name. Minimum 2 characters.',
+          "Guest name lookup, minimum 2 characters. Substring match first; if that finds nothing it automatically retries with fuzzy matching against guest name, email and property name, so misspellings and half-remembered names still resolve. Pass the user's own wording rather than guessing at the correct spelling. Check meta.match_mode and meta.note before reporting a guest as missing.",
       },
       hostaway_reservation_id: {
         type: 'integer',
