@@ -107,6 +107,12 @@ The feel is an operator's desk, not a marketing page. Density is welcome where m
 
 This system explicitly rejects four things, drawn from the product's anti-references: the **generic SaaS dashboard** (hero-metric templates, identical icon+heading+text card grids, decorative gradients); the **cluttered legacy PMS** (cramped, overwhelming, dated property software); the **toy-like consumer app** (over-rounded, over-colorful, not serious for daily operations); and **cold enterprise software** (sterile gray with no warmth or craft). Warmth here comes from material and motion, not from corporate minimalism.
 
+> **The app ships light-mode only.** There is no theme picker and nothing ever
+> sets `.dark`, so every dark value described below is currently inactive. The
+> dark palette and its rationale are kept on record here (and in `globals.css`)
+> because the tokens are still in the tree — read the dark halves of this
+> document as the reference for what dark mode *would* be, not as what users see.
+
 **Key Characteristics:**
 - Cool-neutral canvas, near-black in dark mode, near-white in light.
 - One accent — Signal Violet — used sparingly as the system's only "on" state.

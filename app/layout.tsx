@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/lib/authContext";
 import { QueryProvider } from "@/lib/queries/QueryProvider";
 import { DepartmentsProvider } from "@/lib/departmentsContext";
@@ -38,7 +37,7 @@ export const metadata: Metadata = {
   description: "Property Management System",
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'black-translucent',
+    statusBarStyle: 'default',
     title: 'Foreshadow',
   },
   formatDetection: {
@@ -52,31 +51,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <AuthProvider>
-            <QueryProvider>
-            <DepartmentsProvider>
-              <OperationsSettingsProvider>
-                <ReservationViewerProvider>
-                  <AiChatProvider>
-                    <AppChrome>{children}</AppChrome>
-                    <Toaster />
-                  </AiChatProvider>
-                </ReservationViewerProvider>
-              </OperationsSettingsProvider>
-            </DepartmentsProvider>
-            </QueryProvider>
-          </AuthProvider>
-        </ThemeProvider>
+        <AuthProvider>
+          <QueryProvider>
+          <DepartmentsProvider>
+            <OperationsSettingsProvider>
+              <ReservationViewerProvider>
+                <AiChatProvider>
+                  <AppChrome>{children}</AppChrome>
+                  <Toaster />
+                </AiChatProvider>
+              </ReservationViewerProvider>
+            </OperationsSettingsProvider>
+          </DepartmentsProvider>
+          </QueryProvider>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -2,14 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTheme } from 'next-themes';
 import { GraduationCap, FlaskConical, Settings } from 'lucide-react';
 import { useAuth } from '@/lib/authContext';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 // The "Menu" tab-root screen. A hub that gathers the nav items that don't earn
-// their own bottom tab: the account (avatar → Edit Profile / Theme / Sign Out),
+// their own bottom tab: the account (avatar → Edit Profile / Sign Out),
 // notifications (top-right bell), and the remaining destinations (Tasks, and
 // Properties for admins). The bottom tab bar (from AppChrome) stays visible
 // here; tapping a destination drills in with its own back arrow.
@@ -29,7 +28,6 @@ const rowCard =
 export function MobileMenuView() {
   const router = useRouter();
   const { user, role, canEditTemplates, signOut } = useAuth();
-  const { theme, setTheme } = useTheme();
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement | null>(null);
 
@@ -165,30 +163,6 @@ export function MobileMenuView() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     }
                   />
-
-                  {/* Theme toggle */}
-                  <div className="flex items-center justify-between px-4 py-2.5">
-                    <span className="flex items-center gap-2.5 text-[14px] text-neutral-700 dark:text-[#a09e9a]">
-                      <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                      </svg>
-                      Theme
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                      aria-label="Toggle theme"
-                      className={`relative inline-flex h-[22px] w-[40px] items-center rounded-full transition-colors ${
-                        theme === 'dark' ? 'bg-neutral-200 dark:bg-[#f0efed]' : 'bg-neutral-300'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 rounded-full bg-white transition-transform dark:bg-background ${
-                          theme === 'dark' ? 'translate-x-[20px]' : 'translate-x-[3px]'
-                        }`}
-                      />
-                    </button>
-                  </div>
 
                   <AccountItem label="Sign Out" onClick={handleSignOut} icon={
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6A2.25 2.25 0 005.25 5.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />

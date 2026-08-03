@@ -61,7 +61,7 @@ foreshadow-app/
 
 - ⚡ Lightning-fast performance with Next.js 16
 - 🎨 Modern, responsive UI with Tailwind CSS v4
-- 🌙 Dark mode support out of the box
+- ☀️ Light-mode UI — a single fixed theme, no per-user toggle
 - 🔐 Pre-configured Supabase integration
 - 📱 Mobile-friendly responsive design
 - 🎯 TypeScript for type safety

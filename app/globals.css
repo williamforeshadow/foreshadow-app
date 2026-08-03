@@ -2,6 +2,11 @@
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
 
+/* The app is light-mode only — nothing ever puts `.dark` on <html>, so every
+   `dark:` utility and `.dark`-scoped rule left in the tree is inert. Keep this
+   line anyway: without it Tailwind's built-in `dark:` variant falls back to
+   `@media (prefers-color-scheme: dark)`, and all of that dead styling would
+   switch itself back on for anyone whose OS is set to dark. */
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -99,6 +104,9 @@
      off. Both call sites in TimelineWindow (resting card + drag preview) read
      this, so they can't drift apart. */
   --schedule-card-zoom: 0.9;
+  /* Pin UA-rendered chrome (form controls, date pickers, scrollbars) to light
+     so they don't render dark for users whose OS is in dark mode. */
+  color-scheme: light;
   --background: oklch(0.9581 0 0);
   --foreground: oklch(0.3134 0.0234 253.6270);
   --card: oklch(0.9774 0.0042 236.4961);

@@ -13,24 +13,28 @@ const config: CapacitorConfig = {
     // cleartext: true,
     androidScheme: 'https',
   },
+  // The web view is light-mode only, so the native chrome around it is pinned
+  // light too: #EDEDF1 is --app-shell-bg, the tone the app shell actually
+  // paints behind the card. StatusBar `style: 'dark'` means dark *content*
+  // (dark text) — the correct pairing for a light background.
   ios: {
     contentInset: 'never',
     preferredContentMode: 'mobile',
-    backgroundColor: '#0a0a0a',
+    backgroundColor: '#EDEDF1',
   },
   android: {
-    backgroundColor: '#0a0a0a',
+    backgroundColor: '#EDEDF1',
   },
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,
       launchAutoHide: true,
-      backgroundColor: '#0a0a0a',
+      backgroundColor: '#EDEDF1',
       showSpinner: false,
     },
     StatusBar: {
-      style: 'light',
-      backgroundColor: '#0a0a0a',
+      style: 'dark',
+      backgroundColor: '#EDEDF1',
       overlaysWebView: true,
     },
   },
