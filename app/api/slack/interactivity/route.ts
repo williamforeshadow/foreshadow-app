@@ -10,7 +10,9 @@ import {
   setPendingActionMessageTs,
 } from '@/src/server/agent/pendingActions';
 import {
+  blocksWithoutConfirmation,
   buildConfirmationBlocks,
+  buildResultAttachments,
   decodePendingActionIds,
 } from '@/src/server/agent/slackConfirmationBlocks';
 import { maybeRunContinuation } from '@/src/server/agent/continuation';
@@ -33,7 +35,7 @@ interface SlackInteractionPayload {
   type?: string;
   user?: { id?: string };
   channel?: { id?: string };
-  message?: { ts?: string; thread_ts?: string };
+  message?: { ts?: string; thread_ts?: string; blocks?: unknown[] };
   actions?: Array<{ action_id?: string; value?: string }>;
 }
 
@@ -118,6 +120,27 @@ async function handleInteraction(
     return;
   }
 
+  // Retire the buttons first, before any commit work: the click is already
+  // irreversible at this point, and commits can take seconds. Leaving the pair
+  // live in the meantime invites a second click and reads as "still waiting on
+  // you". Best-effort — a failed update must not stop the commit.
+  const web = new WebClient(botToken);
+  const sourceTs = payload.message?.ts;
+  if (sourceTs) {
+    try {
+      await web.chat.update({
+        channel: channelId,
+        ts: sourceTs,
+        blocks: blocksWithoutConfirmation(
+          payload.message?.blocks as never,
+          actionId === AGENT_CONFIRM_ACTION_ID ? 'confirmed' : 'cancelled',
+        ) as never,
+      });
+    } catch (err) {
+      console.warn('[slack/interactivity] could not retire the buttons', { err });
+    }
+  }
+
   // Read the bundle BEFORE committing — the rows carry any follow-up the agent
   // registered and this turn's continuation depth, both stamped at preview time.
   const rows = await loadPendingActionsByIds(pendingActionIds);
@@ -145,7 +168,6 @@ async function handleInteraction(
 
   // Single-action: behavior unchanged (pass the raw text through; if it
   // was forbidden, post ephemeral as before). Multi-action: aggregate.
-  const web = new WebClient(botToken);
   const messageTs = payload.message?.thread_ts ?? payload.message?.ts;
   const threadTs = channelId.startsWith('D') ? undefined : messageTs;
 
@@ -164,6 +186,14 @@ async function handleInteraction(
       await web.chat.postMessage({
         channel: channelId,
         text: only.text,
+        attachments: buildResultAttachments(
+          only.text,
+          actionId === AGENT_CANCEL_ACTION_ID
+            ? 'cancelled'
+            : only.ok
+              ? 'committed'
+              : 'failed',
+        ) as never,
         ...(threadTs ? { thread_ts: threadTs } : {}),
         unfurl_links: false,
         unfurl_media: false,
@@ -205,6 +235,14 @@ async function handleInteraction(
     await web.chat.postMessage({
       channel: channelId,
       text: combined,
+      attachments: buildResultAttachments(
+        combined,
+        actionId === AGENT_CANCEL_ACTION_ID
+          ? 'cancelled'
+          : failed.length > 0
+            ? 'failed'
+            : 'committed',
+      ) as never,
       ...(threadTs ? { thread_ts: threadTs } : {}),
       unfurl_links: false,
       unfurl_media: false,

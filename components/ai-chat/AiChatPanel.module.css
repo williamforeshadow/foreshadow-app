@@ -434,3 +434,45 @@
   color: var(--muted-foreground);
   cursor: default;
 }
+
+/* ── Confirmation result status ──────────────────────────────────────────
+ * The message posted after a Confirm/Cancel is status output, not prose:
+ * "Done - created X", "Committed 3 of 3", "Failed 1". Colour it so the
+ * outcome is readable at a glance without re-reading the sentence.
+ *
+ * Green carries the same single meaning it does in the task panel
+ * (--task-green: complete), not a decorative accent. Those tokens are
+ * scoped to .task-detail/.panel-form, so the values are restated here
+ * rather than widening that scope.
+ *
+ * `.prose` is Tailwind's global class, so it needs :global() — a bare
+ * .prose here would be hashed by CSS Modules and match nothing.
+ *
+ * Links keep their own colour: a green task link would read as a status
+ * rather than a link, and these results routinely contain them. */
+.resultSuccess {
+  --chat-result: #047857;
+}
+
+.resultError {
+  --chat-result: var(--destructive);
+}
+
+.resultSuccess .messageContent :global(.prose),
+.resultError .messageContent :global(.prose) {
+  color: var(--chat-result);
+}
+
+.resultSuccess .messageContent :global(.prose) strong,
+.resultError .messageContent :global(.prose) strong {
+  color: inherit;
+}
+
+.resultSuccess .messageContent :global(.prose) a,
+.resultError .messageContent :global(.prose) a {
+  color: var(--primary);
+}
+
+:global(.dark) .resultSuccess {
+  --chat-result: #4ad991;
+}

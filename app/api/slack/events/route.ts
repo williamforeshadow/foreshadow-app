@@ -40,12 +40,16 @@ import {
 } from '@/src/server/agent/pendingActions';
 import { maybeRunContinuation } from '@/src/server/agent/continuation';
 import {
+  blocksWithoutConfirmation,
   buildConfirmationBlocks,
+  buildResultAttachments,
   extractPendingActionIds,
 } from '@/src/server/agent/slackConfirmationBlocks';
 
 interface MessageExtras {
   blocks?: Block[];
+  /** Slack has no coloured text; an attachment's left bar carries the outcome. */
+  attachments?: unknown[];
 }
 
 // POST /api/slack/events
@@ -490,7 +494,17 @@ async function handleSlackMessage(
           })),
         },
       });
-      await postReply(web, event.channel, threadTs, combinedText);
+      // The user typed "yes" instead of clicking, so the buttons on the
+      // original preview message are still sitting there live. Retire them the
+      // same way the button path does, or the thread reads as still waiting.
+      await retireConfirmationButtons(web, event.channel, active, 'confirmed');
+
+      await postReply(web, event.channel, threadTs, combinedText, {
+        attachments: buildResultAttachments(
+          combinedText,
+          perActionResults.every((r) => r.ok) ? 'committed' : 'failed',
+        ),
+      });
 
       // Same continuation the button path gets — typing "yes" and clicking
       // Confirm must behave identically.
@@ -736,6 +750,57 @@ async function handleLinkShared(
   });
 }
 
+/**
+ * Strip the Confirm/Cancel pair from the messages a bundle was posted under.
+ *
+ * Only needed on the typed-confirmation path: the button path already has the
+ * message's blocks in its interaction payload, but here we have to go and read
+ * them back. Best-effort throughout — a failure to tidy the buttons must never
+ * affect the commit that already happened. Requires the *:history scopes the
+ * thread reader already depends on.
+ */
+async function retireConfirmationButtons(
+  web: WebClient,
+  channel: string,
+  rows: Array<{ slack_message_ts: string | null; slack_thread_ts: string | null }>,
+  resolution: 'confirmed' | 'cancelled',
+): Promise<void> {
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const ts = row.slack_message_ts;
+    if (!ts || seen.has(ts)) continue;
+    seen.add(ts);
+    try {
+      // Thread replies aren't returned by conversations.history, so read the
+      // thread when we have one and pick the matching reply out of it.
+      const found = row.slack_thread_ts
+        ? (
+            await web.conversations.replies({
+              channel,
+              ts: row.slack_thread_ts,
+              limit: 200,
+            })
+          ).messages?.find((m) => m.ts === ts)
+        : (
+            await web.conversations.history({
+              channel,
+              latest: ts,
+              oldest: ts,
+              inclusive: true,
+              limit: 1,
+            })
+          ).messages?.[0];
+      const blocks = found?.blocks as Block[] | undefined;
+      if (!blocks?.length) continue;
+      const rewritten = blocksWithoutConfirmation(blocks, resolution);
+      if (rewritten === blocks) continue;
+      await web.chat.update({ channel, ts, blocks: rewritten as never });
+    } catch (err) {
+      console.warn('[slack] could not retire confirmation buttons', { ts, err });
+    }
+  }
+}
+
 async function loadHistory(appUserId: string): Promise<MessageParam[]> {
   const supabase = getSupabaseServer();
   const { data, error } = await supabase
@@ -786,6 +851,7 @@ async function postReply(
       ...(threadTs ? { thread_ts: threadTs } : {}),
       text,
       ...(blocks ? { blocks } : {}),
+      ...(extras.attachments ? { attachments: extras.attachments as never } : {}),
       // Disable Slack's auto-link unfurling so unrelated URLs the agent
       // might surface (wifi networks, doc links from property knowledge,
       // etc.) don't get generic OG-tag previews stacked under the

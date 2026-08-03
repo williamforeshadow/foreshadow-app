@@ -22,6 +22,12 @@ export interface AgentMessage {
   // every id in this array together via /api/agent/confirm.
   pendingActionIds?: string[];
   confirmation?: 'pending' | 'confirming' | 'done' | 'cancelled' | 'error';
+  /**
+   * Status colouring for a committed/cancelled/failed result message.
+   * Green means the write landed — the same meaning --task-green carries
+   * in the task panel, not a decorative accent.
+   */
+  variant?: 'success' | 'error';
   // Structured task rows from any find_tasks call this turn. The tasks the
   // answer actually links to render as cards below the text.
   tasks?: TaskRow[];
@@ -246,6 +252,7 @@ export function useAgentChat(): UseAgentChat {
             id: `assistant-${Date.now()}`,
             role: 'assistant',
             content: resultText,
+            variant: state === 'done' ? 'success' : state === 'error' ? 'error' : undefined,
           },
           // Its own message, carrying its own Confirm/Cancel pair when the
           // continuation previewed further writes.
@@ -255,8 +262,14 @@ export function useAgentChat(): UseAgentChat {
                   id: `assistant-${Date.now()}-cont`,
                   role: 'assistant' as const,
                   content: continuation.text,
+                  // 'pending' is what gates the Confirm/Cancel pair in the
+                  // renderer; without it a continuation that previewed further
+                  // writes would show no buttons at all.
                   ...(continuation.pending_action_ids?.length
-                    ? { pendingActionIds: continuation.pending_action_ids }
+                    ? {
+                        pendingActionIds: continuation.pending_action_ids,
+                        confirmation: 'pending' as const,
+                      }
                     : {}),
                 },
               ]

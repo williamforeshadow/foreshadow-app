@@ -39,6 +39,79 @@ export function decodePendingActionIds(value: string | undefined | null): string
     .filter((s) => s.length > 0);
 }
 
+/**
+ * Rebuild a posted message's blocks with the Confirm/Cancel pair removed and a
+ * note of what was chosen in its place.
+ *
+ * Slack leaves buttons live and clickable forever; the pending-action claim
+ * already stops a second click committing twice, but the buttons sitting there
+ * afterwards read as "still waiting on you". Swapping them for a context line
+ * makes the message show its own outcome.
+ *
+ * Returns the original blocks unchanged when there is nothing to strip.
+ */
+export function blocksWithoutConfirmation(
+  blocks: Block[] | undefined,
+  resolution: 'confirmed' | 'cancelled',
+): Block[] {
+  if (!blocks?.length) return [];
+  const kept = blocks.filter(
+    (b) => !isAgentConfirmationActions(b as unknown as Record<string, unknown>),
+  );
+  if (kept.length === blocks.length) return blocks;
+  return [
+    ...kept,
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: resolution === 'confirmed' ? '_Confirmed._' : '_Cancelled._',
+        },
+      ],
+    } as unknown as Block,
+  ];
+}
+
+/** True for the actions block this module builds — not any actions block. */
+function isAgentConfirmationActions(block: Record<string, unknown>): boolean {
+  if (block?.type !== 'actions') return false;
+  const elements = (block.elements ?? []) as Array<{ action_id?: string }>;
+  return elements.some(
+    (e) =>
+      e?.action_id === AGENT_CONFIRM_ACTION_ID ||
+      e?.action_id === AGENT_CANCEL_ACTION_ID,
+  );
+}
+
+/**
+ * Slack has no coloured text, so an outcome is signalled with an attachment's
+ * left bar. Green means the write landed and terracotta means it didn't —
+ * the same two signals the web chat uses, and the same values as the design
+ * system's --task-green and --destructive.
+ *
+ * Emoji markers are deliberately not used: the agent is instructed never to
+ * emit them (src/agent/skills/no-emojis.md), and result text is read as part
+ * of the same conversation.
+ */
+export function buildResultAttachments(
+  text: string,
+  outcome: 'committed' | 'failed' | 'cancelled',
+) {
+  const color =
+    outcome === 'committed'
+      ? '#047857'
+      : outcome === 'failed'
+        ? '#d97757'
+        : '#8a8a8a';
+  return [
+    {
+      color,
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }],
+    },
+  ];
+}
+
 export function buildConfirmationBlocks(pendingActionIds: string[]): Block[] {
   const value = encodePendingActionIds(pendingActionIds);
   return [

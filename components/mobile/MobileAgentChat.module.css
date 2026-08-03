@@ -377,3 +377,38 @@
   opacity: 0.3;
   cursor: default;
 }
+
+/* ── Confirmation result status ──────────────────────────────────────────
+ * Mirrors the desktop panel: the message posted after Confirm/Cancel is
+ * status output, so colour the outcome. Green means the write landed —
+ * the same meaning --task-green carries in the task panel, restated here
+ * because those tokens are scoped to .task-detail/.panel-form.
+ *
+ * `.prose` is Tailwind's global class, hence :global(). Links keep their
+ * own colour so a task link never reads as a status. */
+.resultSuccess {
+  --chat-result: #047857;
+}
+
+.resultError {
+  --chat-result: var(--destructive);
+}
+
+.resultSuccess :global(.prose),
+.resultError :global(.prose) {
+  color: var(--chat-result);
+}
+
+.resultSuccess :global(.prose) strong,
+.resultError :global(.prose) strong {
+  color: inherit;
+}
+
+.resultSuccess :global(.prose) a,
+.resultError :global(.prose) a {
+  color: var(--primary);
+}
+
+:global(.dark) .resultSuccess {
+  --chat-result: #4ad991;
+}

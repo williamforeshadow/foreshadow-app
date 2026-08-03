@@ -356,7 +356,15 @@ export function MobileAgentChat() {
                   {msg.role === 'user' ? (
                     <div className={styles.userBubble}>{msg.content}</div>
                   ) : (
-                    <div className={styles.assistant}>
+                    <div
+                      className={`${styles.assistant}${
+                        msg.variant === 'success'
+                          ? ` ${styles.resultSuccess}`
+                          : msg.variant === 'error'
+                            ? ` ${styles.resultError}`
+                            : ''
+                      }`}
+                    >
                       <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-3 prose-ul:my-2 prose-li:my-0.5">
                         <ReactMarkdown components={markdownComponents}>
                           {msg.content}
