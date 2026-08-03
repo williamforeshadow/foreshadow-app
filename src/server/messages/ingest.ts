@@ -158,19 +158,30 @@ export async function ingestConversation(
       .maybeSingle();
     if (data) {
       propertyId = data.id;
-      propertyName = data.hostaway_name ?? data.name ?? null;
+      // properties.name (the internal code) is canonical — NOT hostaway_name.
+      // The PMS listing title is retitled over time and differs per channel, so
+      // mirroring it here gave one property several names across its threads.
+      // conversations is force-corrected by trg_mirror_property_name anyway;
+      // this still governs guest_messages, which has no property_id to mirror from.
+      propertyName = data.name ?? data.hostaway_name ?? null;
     }
   }
   let reservationId: string | null = null;
   if (reservationHostawayId != null) {
     const { data } = await supabase
       .from('reservations')
-      .select('id, property_name')
+      .select('id, property_id, property_name')
       .eq('org_id', ctx.orgId)
       .eq('hostaway_reservation_id', reservationHostawayId)
       .maybeSingle();
     if (data) {
       reservationId = data.id;
+      // Second chance at the property. The listing lookup above misses whenever
+      // the Hostaway payload omits listingMapId or the listing isn't in
+      // properties yet (a new listing not synced). If we matched the reservation
+      // we already know its property, and a conversation with no property_id
+      // gets no property-scoped training and no property facts — so take it.
+      propertyId = propertyId ?? data.property_id ?? null;
       propertyName = propertyName ?? data.property_name ?? null;
     }
   }
