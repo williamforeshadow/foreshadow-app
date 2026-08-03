@@ -234,6 +234,9 @@ export function useAgentChat(): UseAgentChat {
       const settle = (
         state: NonNullable<AgentMessage['confirmation']>,
         resultText: string,
+        // Present when the agent had registered a dependent next step
+        // (declare_followup) and the server ran it after the commit landed.
+        continuation?: { text: string; pending_action_ids?: string[] },
       ) => {
         setMessages((prev) => [
           ...prev.map((m) =>
@@ -244,6 +247,20 @@ export function useAgentChat(): UseAgentChat {
             role: 'assistant',
             content: resultText,
           },
+          // Its own message, carrying its own Confirm/Cancel pair when the
+          // continuation previewed further writes.
+          ...(continuation
+            ? [
+                {
+                  id: `assistant-${Date.now()}-cont`,
+                  role: 'assistant' as const,
+                  content: continuation.text,
+                  ...(continuation.pending_action_ids?.length
+                    ? { pendingActionIds: continuation.pending_action_ids }
+                    : {}),
+                },
+              ]
+            : []),
         ]);
       };
 
@@ -268,7 +285,7 @@ export function useAgentChat(): UseAgentChat {
             : data.status === 'cancelled'
               ? 'cancelled'
               : 'error';
-        settle(resolved, data.text);
+        settle(resolved, data.text, data.continuation);
       } catch (err) {
         settle(
           'error',

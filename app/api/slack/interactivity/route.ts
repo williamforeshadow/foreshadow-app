@@ -6,8 +6,15 @@ import {
   AGENT_CONFIRM_ACTION_ID,
   cancelPendingAction,
   confirmPendingAction,
+  loadPendingActionsByIds,
+  setPendingActionMessageTs,
 } from '@/src/server/agent/pendingActions';
-import { decodePendingActionIds } from '@/src/server/agent/slackConfirmationBlocks';
+import {
+  buildConfirmationBlocks,
+  decodePendingActionIds,
+} from '@/src/server/agent/slackConfirmationBlocks';
+import { maybeRunContinuation } from '@/src/server/agent/continuation';
+import { markdownToMrkdwn } from '@/src/slack/format';
 import {
   deleteNotificationSlackMessage,
   markNotificationRead,
@@ -111,6 +118,10 @@ async function handleInteraction(
     return;
   }
 
+  // Read the bundle BEFORE committing — the rows carry any follow-up the agent
+  // registered and this turn's continuation depth, both stamped at preview time.
+  const rows = await loadPendingActionsByIds(pendingActionIds);
+
   // Loop in registration order; continue on failure so a single bad
   // apple doesn't strand the rest of the bundle.
   const results: Array<{
@@ -164,6 +175,9 @@ async function handleInteraction(
         err,
       });
     }
+    if (actionId === AGENT_CONFIRM_ACTION_ID) {
+      await postContinuation(web, channelId, threadTs, rows, results);
+    }
     return;
   }
 
@@ -201,5 +215,62 @@ async function handleInteraction(
       pendingActionIds,
       err,
     });
+  }
+
+  if (actionId === AGENT_CONFIRM_ACTION_ID) {
+    await postContinuation(web, channelId, threadTs, rows, results);
+  }
+}
+
+/**
+ * Finish the plan when the agent registered a dependent next step and the whole
+ * bundle committed. maybeRunContinuation returns null in every other case
+ * (cancel, any failure, no follow-up, depth cap), so this is a no-op on the
+ * ordinary confirm — one in-memory check, no model call.
+ *
+ * A continuation that previews further writes gets its own Confirm/Cancel pair,
+ * exactly like a normal agent turn: continuing never skips the confirm gate.
+ */
+async function postContinuation(
+  web: WebClient,
+  channelId: string,
+  threadTs: string | undefined,
+  rows: Awaited<ReturnType<typeof loadPendingActionsByIds>>,
+  results: Array<{ ok: boolean; text: string }>,
+): Promise<void> {
+  let continuation;
+  try {
+    continuation = await maybeRunContinuation({ rows, results, surface: 'slack' });
+  } catch (err) {
+    console.error('[slack/interactivity] continuation failed', { channelId, err });
+    return;
+  }
+  if (!continuation) return;
+
+  try {
+    const blocks =
+      continuation.pendingActionIds.length > 0
+        ? [
+            {
+              type: 'section',
+              text: { type: 'mrkdwn', text: markdownToMrkdwn(continuation.text) },
+            },
+            ...buildConfirmationBlocks(continuation.pendingActionIds),
+          ]
+        : undefined;
+    const posted = await web.chat.postMessage({
+      channel: channelId,
+      text: markdownToMrkdwn(continuation.text),
+      ...(threadTs ? { thread_ts: threadTs } : {}),
+      ...(blocks ? { blocks: blocks as never } : {}),
+      unfurl_links: false,
+      unfurl_media: false,
+    });
+    await setPendingActionMessageTs(
+      continuation.pendingActionIds,
+      typeof posted.ts === 'string' ? posted.ts : undefined,
+    );
+  } catch (err) {
+    console.error('[slack/interactivity] failed to post continuation', { channelId, err });
   }
 }

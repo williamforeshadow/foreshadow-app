@@ -4,7 +4,9 @@ import { requireAuthContext } from '@/lib/requireAuthContext';
 import {
   confirmPendingAction,
   cancelPendingAction,
+  loadPendingActionsByIds,
 } from '@/src/server/agent/pendingActions';
+import { maybeRunContinuation } from '@/src/server/agent/continuation';
 
 // POST /api/agent/confirm
 //
@@ -131,6 +133,10 @@ export async function POST(req: NextRequest) {
 
   const supabase = getSupabaseServer();
 
+  // Read the bundle BEFORE committing: the rows carry any follow-up the agent
+  // registered and the turn's continuation depth, both stamped at preview time.
+  const rows = await loadPendingActionsByIds(actionIds);
+
   // Loop through the actions in the order the previews were registered.
   // Continue past failures so a single bad apple doesn't strand the rest
   // (the user OK'd the bundle, not each one individually).
@@ -173,10 +179,42 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // Finish the plan if the agent registered a dependent next step and the whole
+  // bundle committed. Returns null in every other case (cancel, any failure, no
+  // follow-up, depth cap), which is the overwhelmingly common path.
+  const continuation =
+    action === 'confirm'
+      ? await maybeRunContinuation({ rows, results, surface: 'web' })
+      : null;
+
+  if (continuation) {
+    await supabase.from('ai_chat_messages').insert({
+      user_id: userId,
+      role: 'assistant',
+      content: continuation.text,
+      metadata: {
+        continuation_of: actionIds,
+        ...(continuation.pendingActionIds.length > 0
+          ? { pending_action_ids: continuation.pendingActionIds }
+          : {}),
+      },
+    });
+  }
+
   return NextResponse.json({
     ok: combined.ok,
     status: combined.status,
     text: combined.text,
     results,
+    // Rendered as a second assistant message, with its own Confirm/Cancel pair
+    // when the continuation previewed further writes.
+    ...(continuation
+      ? {
+          continuation: {
+            text: continuation.text,
+            pending_action_ids: continuation.pendingActionIds,
+          },
+        }
+      : {}),
   });
 }

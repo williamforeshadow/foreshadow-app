@@ -11,6 +11,18 @@ import {
   commitPropertyKnowledgeWrite,
   type PropertyKnowledgeWriteInput,
 } from '@/src/server/properties/propertyKnowledgeWrite';
+import {
+  commitPropertyKnowledgeBatch,
+  type PropertyKnowledgeBatchInput,
+} from '@/src/server/properties/propertyKnowledgeWriteBatch';
+import {
+  commitPropertyContactBatch,
+  type PropertyContactBatchInput,
+} from '@/src/server/properties/propertyContactBatch';
+import {
+  commitAddCommentsBatch,
+  type AddCommentsBatchInput,
+} from '@/src/server/comments/addCommentsBatch';
 import { upsertPropertyContact } from '@/src/server/properties/upsertPropertyContact';
 import { deletePropertyContact } from '@/src/server/properties/deletePropertyContact';
 import {
@@ -32,7 +44,10 @@ export type PendingActionKind =
   | 'update_tasks_batch'
   | 'create_bin'
   | 'add_comment'
+  | 'add_comments_batch'
   | 'property_knowledge_write'
+  | 'property_knowledge_batch'
+  | 'property_contact_batch'
   | 'property_contact_upsert'
   | 'property_contact_delete'
   | 'slack_file_attachment';
@@ -54,6 +69,18 @@ interface PropertyKnowledgePendingInput {
   input: PropertyKnowledgeWriteInput;
   attachment_inbound_file_ids?: string[];
   attachment_caption?: string | null;
+}
+
+interface PropertyKnowledgeBatchPendingInput {
+  input: PropertyKnowledgeBatchInput;
+}
+
+interface PropertyContactBatchPendingInput {
+  input: PropertyContactBatchInput;
+}
+
+interface AddCommentsBatchPendingInput {
+  input: AddCommentsBatchInput;
 }
 
 interface SlackFilePendingInput {
@@ -89,6 +116,18 @@ export interface PendingActionRow {
   created_at: string;
   expires_at: string;
   resolved_at: string | null;
+  /**
+   * Dependent step to replay once this whole bundle commits, declared by the
+   * agent via declare_followup during the preview turn. Null for the ordinary
+   * case where confirming finishes the job.
+   */
+  followup_instruction: string | null;
+  /**
+   * How many confirm-triggered continuations preceded this row. 0 for actions
+   * previewed from a real user message. Bounded in continuation.ts so a plan
+   * that keeps declaring follow-ups cannot cycle forever.
+   */
+  continuation_depth: number;
 }
 
 export interface CreatePendingActionArgs {
@@ -215,6 +254,38 @@ function isAuthorizedActor(
   );
 }
 
+/**
+ * Attach a declared follow-up (and this turn's continuation depth) to every
+ * action in the bundle the user is about to confirm.
+ *
+ * Stamped after the fact — like setPendingActionMessageTs — because the preview
+ * tools that create these rows run before the model has finished the turn, so
+ * neither the follow-up nor the depth is known at insert time. Denormalizing
+ * across the bundle keeps the confirm handler a single read: it commits the
+ * rows it was given and finds the instruction already on them.
+ */
+export async function setPendingActionFollowup(
+  actionIds: string[],
+  followupInstruction: string | null,
+  continuationDepth: number,
+): Promise<void> {
+  if (actionIds.length === 0) return;
+  if (!followupInstruction && continuationDepth === 0) return;
+  const { error } = await getSupabaseServer()
+    .from('agent_pending_actions')
+    .update({
+      followup_instruction: followupInstruction,
+      continuation_depth: continuationDepth,
+    })
+    .in('id', actionIds);
+  if (error) {
+    console.warn('[agent pending actions] followup update failed', {
+      actionIds,
+      error,
+    });
+  }
+}
+
 export async function setPendingActionMessageTs(
   actionIds: string[],
   messageTs: string | undefined,
@@ -263,6 +334,28 @@ export async function listActivePendingActions(args: {
     return [];
   }
   return asRows(data);
+}
+
+/**
+ * Load a bundle by id, in the caller's order, skipping ids that no longer
+ * exist. Read before confirming: the confirm handlers need each row's declared
+ * follow-up and continuation depth, and those are stamped at preview time and
+ * unchanged by the commit.
+ */
+export async function loadPendingActionsByIds(
+  ids: string[],
+): Promise<PendingActionRow[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await getSupabaseServer()
+    .from('agent_pending_actions')
+    .select('*')
+    .in('id', ids);
+  if (error) {
+    console.error('[agent pending actions] bundle load failed', { ids, error });
+    return [];
+  }
+  const byId = new Map(asRows(data).map((r) => [r.id, r]));
+  return ids.map((id) => byId.get(id)).filter((r): r is PendingActionRow => !!r);
 }
 
 export function isBareConfirmation(text: string): boolean {
@@ -520,6 +613,15 @@ async function executePendingAction(
   }
   if (row.action_kind === 'property_knowledge_write') {
     return executePropertyKnowledgeWrite(row);
+  }
+  if (row.action_kind === 'property_knowledge_batch') {
+    return executePropertyKnowledgeBatch(row);
+  }
+  if (row.action_kind === 'property_contact_batch') {
+    return executePropertyContactBatch(row);
+  }
+  if (row.action_kind === 'add_comments_batch') {
+    return executeAddCommentsBatch(row);
   }
   if (row.action_kind === 'property_contact_upsert') {
     return executePropertyContactUpsert(row);
@@ -825,6 +927,140 @@ async function executePropertyKnowledgeWrite(
     text,
     error: failed[0]?.error,
     result: { write: result, attachments },
+  };
+}
+
+async function executePropertyKnowledgeBatch(
+  row: PendingActionRow,
+): Promise<PendingExecutionResult> {
+  const stored = row.canonical_input as PropertyKnowledgeBatchPendingInput;
+  const result = await commitPropertyKnowledgeBatch(stored.input);
+  if (!result.ok) {
+    return {
+      ok: false,
+      status: 'failed',
+      text: `I could not update Property Knowledge: ${result.error.message}`,
+      error: result.error.message,
+      result,
+    };
+  }
+
+  // Each property commits independently, so report the split rather than a
+  // single verb. Naming the properties that failed matters more than the count
+  // — the operator needs to know which ones to go fix.
+  const created = result.results.filter((r) => r.created_room).length;
+  const roomText =
+    created > 0
+      ? ` (created ${formatCount(created, 'room')} along the way)`
+      : '';
+  // Deletes must not report as "updated" — the operator is being told what
+  // happened to their data, and the two are not interchangeable.
+  const verb = stored.input.action.startsWith('delete_') ? 'cleared' : 'updated';
+  if (result.failures.length > 0) {
+    const names = result.failures.map((f) => f.property_name).join(', ');
+    return {
+      ok: false,
+      status: 'failed',
+      text:
+        `${verb === 'cleared' ? 'Cleared' : 'Updated'} ` +
+        `${formatCount(result.results.length, 'property', 'properties')}${roomText}, ` +
+        `but ${formatCount(result.failures.length, 'property', 'properties')} failed: ${names}. ` +
+        `${result.failures[0].error?.message ?? ''}`.trim(),
+      error: result.failures[0].error?.message,
+      result,
+    };
+  }
+
+  return {
+    ok: true,
+    status: 'committed',
+    text: `Done - ${verb} ${formatCount(result.results.length, 'property', 'properties')}${roomText}.`,
+    result,
+  };
+}
+
+async function executePropertyContactBatch(
+  row: PendingActionRow,
+): Promise<PendingExecutionResult> {
+  const stored = row.canonical_input as PropertyContactBatchPendingInput;
+  const result = await commitPropertyContactBatch(stored.input);
+  if (!result.ok) {
+    return {
+      ok: false,
+      status: 'failed',
+      text: `I could not save the contact: ${result.error.message}`,
+      error: result.error.message,
+      result,
+    };
+  }
+
+  const name = stored.input.name;
+  const changed = result.results.filter((r) => r.mode !== 'noop');
+  const noops = result.results.length - changed.length;
+  const verb = stored.input.action === 'delete' ? 'removed' : 'saved';
+  const noopText = noops > 0
+    ? ` ${formatCount(noops, 'property', 'properties')} needed no change.`
+    : '';
+
+  if (result.failures.length > 0) {
+    const names = result.failures.map((f) => f.property_name).join(', ');
+    return {
+      ok: false,
+      status: 'failed',
+      text:
+        `${verb === 'removed' ? 'Removed' : 'Saved'} "${name}" on ` +
+        `${formatCount(changed.length, 'property', 'properties')}, but ` +
+        `${formatCount(result.failures.length, 'property', 'properties')} failed: ${names}. ` +
+        `${result.failures[0].error?.message ?? ''}`.trim(),
+      error: result.failures[0].error?.message,
+      result,
+    };
+  }
+
+  return {
+    ok: true,
+    status: 'committed',
+    text: `Done - ${verb} "${name}" on ${formatCount(changed.length, 'property', 'properties')}.${noopText}`,
+    result,
+  };
+}
+
+async function executeAddCommentsBatch(
+  row: PendingActionRow,
+): Promise<PendingExecutionResult> {
+  const org = requireRowOrg(row, 'add the comments');
+  if (!org.ok) return org.result;
+  const stored = row.canonical_input as AddCommentsBatchPendingInput;
+  const result = await commitAddCommentsBatch(stored.input, org.orgId);
+  if (!result.ok) {
+    return {
+      ok: false,
+      status: 'failed',
+      text: `I could not add the comments: ${result.error.message}`,
+      error: result.error.message,
+      result,
+    };
+  }
+
+  if (result.failures.length > 0) {
+    const titles = result.failures.map((f) => f.task_title ?? f.task_id).join(', ');
+    return {
+      ok: false,
+      status: 'failed',
+      text:
+        `Commented on ${formatCount(result.results.length, 'task')}, but ` +
+        `${formatCount(result.failures.length, 'task')} failed: ${titles}. ` +
+        `${result.failures[0].error?.message ?? ''}`.trim(),
+      error: result.failures[0].error?.message,
+      result,
+    };
+  }
+
+  return {
+    ok: true,
+    status: 'committed',
+    text: `Done - commented on ${formatCount(result.results.length, 'task')}.`,
+    result,
   };
 }
 

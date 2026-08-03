@@ -30,6 +30,13 @@ import { previewPropertyContactDelete } from './previewPropertyContactDelete';
 import { commitPropertyContactDelete } from './commitPropertyContactDelete';
 import { previewPropertyKnowledgeWriteTool } from './previewPropertyKnowledgeWrite';
 import { commitPropertyKnowledgeWriteTool } from './commitPropertyKnowledgeWrite';
+import { previewPropertyKnowledgeBatchTool } from './previewPropertyKnowledgeBatch';
+import { commitPropertyKnowledgeBatchTool } from './commitPropertyKnowledgeBatch';
+import { previewPropertyContactBatchTool } from './previewPropertyContactBatch';
+import { commitPropertyContactBatchTool } from './commitPropertyContactBatch';
+import { previewCommentsBatch } from './previewCommentsBatch';
+import { addCommentsBatch } from './addCommentsBatch';
+import { declareFollowup } from './declareFollowup';
 import { previewSlackFileAttachmentTool } from './previewSlackFileAttachment';
 import { commitSlackFileAttachmentTool } from './commitSlackFileAttachment';
 import { findConversations } from './findConversations';
@@ -77,6 +84,13 @@ export const TOOLS: ReadonlyArray<ToolDefinition<unknown, unknown>> = [
   commitPropertyContactDelete as unknown as ToolDefinition<unknown, unknown>,
   previewPropertyKnowledgeWriteTool as unknown as ToolDefinition<unknown, unknown>,
   commitPropertyKnowledgeWriteTool as unknown as ToolDefinition<unknown, unknown>,
+  previewPropertyKnowledgeBatchTool as unknown as ToolDefinition<unknown, unknown>,
+  commitPropertyKnowledgeBatchTool as unknown as ToolDefinition<unknown, unknown>,
+  previewPropertyContactBatchTool as unknown as ToolDefinition<unknown, unknown>,
+  commitPropertyContactBatchTool as unknown as ToolDefinition<unknown, unknown>,
+  previewCommentsBatch as unknown as ToolDefinition<unknown, unknown>,
+  addCommentsBatch as unknown as ToolDefinition<unknown, unknown>,
+  declareFollowup as unknown as ToolDefinition<unknown, unknown>,
   previewSlackFileAttachmentTool as unknown as ToolDefinition<unknown, unknown>,
   commitSlackFileAttachmentTool as unknown as ToolDefinition<unknown, unknown>,
   findConversations as unknown as ToolDefinition<unknown, unknown>,

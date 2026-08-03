@@ -117,6 +117,16 @@ export interface ToolContext {
     userId: string;
   };
   /**
+   * Mutable holder the declare_followup tool writes into, so a turn can say
+   * "there is a dependent second step after this commit". runAgent creates it,
+   * reads it back after the loop, and returns it as RunAgentOutput.followup;
+   * the confirm handlers replay it once every action in the bundle commits.
+   *
+   * Absent on surfaces that have no confirm step to continue from (e.g. the
+   * Concierge sub-agent), which makes declare_followup a no-op there.
+   */
+  followup?: { instruction: string | null };
+  /**
    * Set only when running inside the Concierge guest-reply sub-agent. Binds the
    * one property the draft is for, so guest-facing tools
    * (get_property_knowledge_for_guest) read the property from context rather

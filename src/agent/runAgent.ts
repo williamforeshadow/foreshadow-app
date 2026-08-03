@@ -1,8 +1,10 @@
 import type {
   MessageParam,
+  Tool,
   ToolUseBlock,
   ToolResultBlockParam,
   TextBlock,
+  TextBlockParam,
 } from '@anthropic-ai/sdk/resources/messages';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseServer } from '@/lib/supabaseServer';
@@ -36,12 +38,18 @@ export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set([
   'delete_task',
   'preview_comment',
   'add_comment',
+  'preview_comments_batch',
+  'add_comments_batch',
   'preview_property_contact_upsert',
   'commit_property_contact_upsert',
+  'preview_property_contact_batch',
+  'commit_property_contact_batch',
   'preview_property_contact_delete',
   'commit_property_contact_delete',
   'preview_property_knowledge_write',
   'commit_property_knowledge_write',
+  'preview_property_knowledge_batch',
+  'commit_property_knowledge_batch',
   'preview_slack_file_attachment',
   'commit_slack_file_attachment',
 ]);
@@ -70,6 +78,74 @@ const MAX_TOKENS = 2048;
 // Hard ceiling on iterations. A well-behaved tool catalog should never need
 // more than 3-4 round-trips for a single user question; this is a safety net.
 const MAX_ITERATIONS = 10;
+
+// Prompt caching (see also src/server/messages/draftReply.ts, which does the
+// same for the Concierge). This loop re-sends a large fixed prefix on EVERY
+// iteration: the 38 tool schemas serialize to ~16.5k tokens and the system
+// prompt is another ~6.5k. A four-iteration turn was paying full input price
+// for ~23k tokens four times over. Caching that prefix makes iterations 2..N
+// read it at a fraction of the cost and trims time-to-first-token.
+//
+// Breakpoints, in the canonical request order (tools → system → messages):
+//   1. the last tool     — closes the tool block
+//   2. the system prompt — closes tools + system as one contiguous prefix
+//   3. the last message  — rolling; see withRollingCacheBreakpoint
+// Three of the four allowed breakpoints, so there's headroom.
+const CACHE_CONTROL = { type: 'ephemeral' } as const;
+
+/**
+ * Serialize the registry and mark the final tool as a cache breakpoint.
+ *
+ * The registry is static per process, so this is hoisted out of the loop and
+ * the resulting array is reused across every iteration of a run.
+ */
+function buildCachedTools(): Tool[] {
+  const tools = toAnthropicTools() as Tool[];
+  if (tools.length > 0) {
+    tools[tools.length - 1] = {
+      ...tools[tools.length - 1],
+      cache_control: CACHE_CONTROL,
+    };
+  }
+  return tools;
+}
+
+/**
+ * Return `messages` with a cache breakpoint on the last content block of the
+ * final message, WITHOUT mutating the input.
+ *
+ * The breakpoint rolls forward one message per iteration. Each request reads
+ * the entry the previous iteration wrote (its prompt is an exact prefix of
+ * this one) and writes a new entry covering the delta — so accumulated tool
+ * results are paid for at full price exactly once, no matter how many more
+ * iterations the loop runs. This matters most on tool-heavy turns: three
+ * get_property_knowledge dossiers are far larger than the prompt itself.
+ *
+ * Not mutating `conversation` is deliberate — it keeps stale breakpoints from
+ * piling up past the four-per-request limit as the loop advances, and leaves
+ * the caller's `history` objects untouched.
+ */
+function withRollingCacheBreakpoint(messages: MessageParam[]): MessageParam[] {
+  const last = messages[messages.length - 1];
+  if (!last) return messages;
+
+  // History arrives as plain strings; promote to a one-block array so the
+  // breakpoint has somewhere to attach. Semantically identical to the string.
+  const blocks: unknown[] =
+    typeof last.content === 'string'
+      ? [{ type: 'text', text: last.content }]
+      : [...last.content];
+  if (blocks.length === 0) return messages;
+
+  blocks[blocks.length - 1] = {
+    ...(blocks[blocks.length - 1] as object),
+    cache_control: CACHE_CONTROL,
+  };
+  return [
+    ...messages.slice(0, -1),
+    { ...last, content: blocks } as MessageParam,
+  ];
+}
 
 function buildSystemPrompt(
   clientTz: string | undefined,
@@ -180,18 +256,25 @@ Write protocol (critical):
   - Modify multiple existing tasks in one confirmation: preview_tasks_update_batch → update_tasks_batch
   - Delete a task: preview_task_delete → delete_task
   - Add a comment to a task: preview_comment → add_comment
-  - Property contact (multi-tag: cleaning / maintenance / contractors / owners / stakeholders / emergency / other), create OR update: preview_property_contact_upsert → commit_property_contact_upsert
+  - The SAME comment on several tasks at once: preview_comments_batch → add_comments_batch
+  - Property contact (multi-tag: cleaning / maintenance / contractors / owners / stakeholders / emergency / other), create OR update, on ONE property: preview_property_contact_upsert → commit_property_contact_upsert
+  - The SAME contact across MANY properties (add/update or remove): preview_property_contact_batch → commit_property_contact_batch
   - Delete a property contact: preview_property_contact_delete → commit_property_contact_delete
-  - Property Knowledge sections Access, Connectivity, Interior/Exterior rooms, Interior/Exterior attributes, and existing Document metadata/deletes: preview_property_knowledge_write → commit_property_knowledge_write
+  - Property Knowledge sections Access, Connectivity, Interior/Exterior rooms, Interior/Exterior attributes, and existing Document metadata/deletes, for ONE property: preview_property_knowledge_write → commit_property_knowledge_write
+  - The SAME Property Knowledge write across MANY properties: preview_property_knowledge_batch → commit_property_knowledge_batch
 - Slack-uploaded file writes use preview_slack_file_attachment followed by commit_slack_file_attachment. Use inbound_file_id values only from the current Slack uploaded-files context block. Destinations can be task attachments, Property Knowledge documents, room photos, attribute photos, or tech account photos.
 - Slack confirmation buttons: on Slack, every write preview should return pending_action_id unless the preview is a no-op. When any previews this turn return pending_action_ids, the message shows a SINGLE Confirm/Cancel pair below — one click commits (or cancels) every preview from this turn atomically. Present the plan once and tell the user to press Confirm or Cancel below; do NOT tell them to "confirm each one" or to type "yes", "go", or provide internal ids.
 - Multi-preview turns commit atomically: if you run several preview tools in one turn (e.g. preview_task + preview_comment + preview_task_update), all of them register against the SAME Confirm button. There is no per-action button on either surface — never write "Confirm or Cancel each below"; write "Confirm or Cancel below" (singular click).
+- Never promise post-Confirm work you have not registered (critical): pressing Confirm commits the previewed writes and posts the result. By default it does NOT hand control back to you. The ONLY way a next step actually runs is if you called declare_followup in the same turn. So: if you did not call declare_followup, never write "this is step 1 of 2", "then I'll add X to each", or "after you confirm I'll ..." — nothing would run and the user would be left waiting. Promising a step you did not register is the same class of error as claiming a write that never happened.
+- When work genuinely depends on ids the commit will create, call declare_followup with the remaining step and then you MAY tell the user it will happen automatically after they confirm. Prefer doing everything in one turn where the tools allow it: multiple previews in one turn already commit together under a single Confirm, and the batch tools cover multi-property and multi-task work. declare_followup is for ordering dependencies those cannot express, not for splitting work out of convenience.
 - Slack compound attachments: if the user asks to create a task and attach uploaded files in the same request, pass attachment_inbound_file_ids on preview_task. If the user asks to create/update a Property Knowledge room or attribute and attach uploaded photos in the same request, pass attachment_inbound_file_ids on preview_property_knowledge_write. That lets one Confirm button commit the write and attachments without a second model turn.
 - Never ask the user to confirm or provide inbound_file_id values. They are internal ids visible only in your tool/context block. If a Slack uploaded-files context block is present, use those ids directly.
 - ALWAYS call the preview tool first. preview tools validate fields, resolve display labels (property names, bin names, assignee names), surface conflicts (duplicate sub-bin name, missing FKs, locked fields, empty diffs), and return a plan + a single-use confirmation_token. Present the plan to the user in plain English and ask for explicit confirmation. On Slack, explicit confirmation means the Confirm/Cancel buttons, so do not ask the user to type confirmation. On web chat, typed confirmation still uses the confirmation_token flow. ONLY after the user agrees, call the matching commit tool with the returned confirmation_token.
 - Commit tools (create_task, update_task, delete_task, add_comment, commit_property_contact_upsert, etc.) accept ONLY a confirmation_token. They will refuse to act without one. Don't try to call them with field inputs directly; that interface does not exist.
 - The confirmation_token is a UUID returned by the matching preview tool — copy it verbatim from THIS turn's preview result. Do NOT invent tokens that look like "preview_<timestamp>" or any other custom format; only the exact UUID is accepted. Tokens from one preview type are not interchangeable with another commit tool's; e.g. a preview_task_update token cannot be used against delete_task, and a preview_property_contact_upsert token cannot be used against commit_property_knowledge_write.
 - Tool-pair selection: use preview_task / create_task for ONE NEW task. Use preview_tasks_batch / create_tasks_batch when the user asks to create more than one task in one breath OR asks to create a sub-bin and add tasks to it. Use preview_task_update / update_task to change ANY field on ONE existing task — title, description, status, priority, schedule, department, bin/is_binned, or assignees. Use preview_tasks_update_batch / update_tasks_batch when the user asks to update MORE THAN ONE existing task in one breath, especially the same department, priority, status, schedule, bin, or assignee change across a list. Do NOT loop preview_task_update for multiple tasks on Slack; multiple single-task previews create multiple pending actions but Slack can only make one clean Confirm plan. Use preview_task_delete / delete_task to remove a task. Use preview_comment / add_comment to leave a note on a task. Never loop preview_task N times when the batch tool would do, and never use the create tool when the user is asking to modify an existing task — the update tool exists for that exact reason.
+- Batch-first rule (critical): whenever the user says "all", "every", "each", or names more than one target, reach for the batch pair before the single one. Batches exist for tasks (preview_tasks_batch, preview_tasks_update_batch), Property Knowledge (preview_property_knowledge_batch), property contacts (preview_property_contact_batch), and comments (preview_comments_batch). One plan, one token, one Confirm — instead of N plans for one intent. The batch tools resolve their per-target ids themselves (by name, or from ids you pass), so you usually do NOT need a get_* call per target first. If no batch pair covers what's being asked, looping the single tool is still correct — several previews in one turn commit together under one Confirm — just say the plan plainly.
+- Batch plans report per-target mode including "noop" (nothing would change) and a failures array. Report both: say how many will actually change, note the ones already correct, and name the ones that are blocked. Never present a batch as if every target changed.
 - Upsert pattern (contacts): a SINGLE preview/commit pair handles both create and update. Disambiguation is by id presence in the input — omit contact_id to create, pass the existing row's id to update. Do NOT look for separate "add" vs "edit" tools; they don't exist. Use get_property_knowledge first to look up an existing contact_id when the user is editing.
 - Sub-bin destination on tasks: pass a real bin_id (resolved via find_bins) for an existing sub-bin; pass is_binned=true with no bin_id for the default Task Bin; omit both for free-floating tasks. The batch tool uses the same vocabulary inside its shared_bin field, plus a new_sub_bin shorthand. update_task accepts the same vocabulary for moving tasks between bins.
 - Update specifics:
@@ -216,7 +299,11 @@ Write protocol (critical):
   * For contacts: omit contact_id to CREATE, pass the existing id to UPDATE. There are no separate add/edit tools.
   * Use get_property_knowledge first when editing — it returns the full rooms[] (with attributes) and contacts[] for a property, including ids, so you can pick the right row before previewing the write.
   * Empty-diff rule: if a preview comes back with an empty changes array on update, tell the user nothing would change and DO NOT commit. The token still exists but using it on a no-op is wasted motion.
-  * Use preview_property_knowledge_write for Access (codes, parking, lockbox/key details), Connectivity (wifi/router details), Interior and Exterior rooms/attributes, and existing document metadata/deletes.
+  * Use preview_property_knowledge_write for Access (codes, parking, lockbox/key details), Connectivity (wifi/router details), Interior and Exterior rooms/attributes, and existing document metadata/deletes — for ONE property.
+  * MANY properties at once (critical): when the user says "all", "every", "each", or names more than one property, use preview_property_knowledge_batch — ONE plan, ONE token, ONE Confirm covering the whole list. Never loop preview_property_knowledge_write per property; that produces N plans for one intent and reads as busywork.
+  * The batch matches targets BY NAME per property (access item by type, room by title+scope, attribute by title within its room), so you do NOT need to call get_property_knowledge for each property first just to find ids. Resolve the property_ids with find_properties and go. Reach for get_property_knowledge only when the user is asking what a property currently HAS, or when editing one specific existing row by id.
+  * Attribute batches take \`room\` { title, scope } instead of fields.room_id. If a property has no such room, the batch CREATES it and writes the attribute into it inside the same confirmation. This is how you do "add a gate-code attribute under an exterior Gate room at all three" in one round — do NOT create the rooms first and ask the user to come back.
+  * The batch plan lists every property with mode create/update/noop, plus rooms_to_create and a failures array. Report it faithfully: say how many will actually change, mention any property that already has the value (noop), and name any property in failures. commit_property_knowledge_batch can return ok:true with a non-empty failures array — that is a PARTIAL success and must be narrated as one.
   * If the Slack context includes inbound_file_id values, use preview_slack_file_attachment for binary uploads. It can attach Slack files to tasks, Property Knowledge documents, room photos, attribute photos, or tech account photos. For photo destinations, first call get_property_knowledge to resolve the room/attribute/tech account id.
   * Use the specialized contact tool for Vendor/contact information. Do not use preview_property_knowledge_write for Vendor contacts.
 - Partial-failure rule: create_tasks_batch may return ok:true with a non-empty failures array (some tasks landed, some didn't). When that happens, narrate the partial outcome honestly — list the created tasks and explicitly mention which ones failed and why. Do not claim full success.
@@ -329,6 +416,12 @@ export type { ToolCallTrace };
 export interface RunAgentOutput {
   text: string;
   toolCalls: ToolCallTrace[];
+  /**
+   * Set when the model called declare_followup this turn: a dependent step to
+   * replay once every pending action from this turn commits. The confirm
+   * handlers own that replay; runAgent only reports the declaration.
+   */
+  followup: string | null;
 }
 
 export async function runAgent({
@@ -361,8 +454,18 @@ export async function runAgent({
   ];
 
   // Built once per request so the date stays fresh and the user's tz is
-  // baked in. Cheap to recompute.
-  const systemPrompt = buildSystemPrompt(clientTz, surface, actor);
+  // baked in. Cheap to recompute. It varies by date/actor/surface, so each
+  // combination gets its own cache entry — which is what we want; the entry
+  // that matters is the one this run reuses across its own iterations.
+  const systemPrompt: TextBlockParam[] = [
+    {
+      type: 'text',
+      text: buildSystemPrompt(clientTz, surface, actor),
+      cache_control: CACHE_CONTROL,
+    },
+  ];
+  // Static across the run; marked once rather than re-serialized per iteration.
+  const tools = buildCachedTools();
   const toolCalls: ToolCallTrace[] = [];
 
   // Per-run execution context. Tools that bind to identity (e.g.
@@ -370,12 +473,16 @@ export async function runAgent({
   // side instead of trusting the model to pass a user_id. Tools that
   // write to the property knowledge activity ledger read `surface` to
   // tag the source column. Read-only tools simply ignore the arg.
+  // Mutable holder declare_followup writes into; read back after the loop.
+  const followup: { instruction: string | null } = { instruction: null };
+
   const ctx: ToolContext = {
     actor,
     surface,
     slack,
     orgId: orgId ?? null,
     db: db ?? getSupabaseServer(),
+    followup,
   };
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -384,8 +491,8 @@ export async function runAgent({
       max_tokens: MAX_TOKENS,
       thinking: { type: 'disabled' },
       system: systemPrompt,
-      tools: toAnthropicTools(),
-      messages: conversation,
+      tools,
+      messages: withRollingCacheBreakpoint(conversation),
     });
 
     // Echo the assistant turn back into the conversation. Anthropic requires
@@ -399,7 +506,7 @@ export async function runAgent({
         .map((b) => b.text)
         .join('\n')
         .trim();
-      return { text, toolCalls };
+      return { text, toolCalls, followup: followup.instruction };
     }
 
     const toolUses = response.content.filter(
@@ -416,6 +523,7 @@ export async function runAgent({
   return {
     text: 'I had to stop after too many tool calls without finishing. Try a simpler or more specific question.',
     toolCalls,
+    followup: followup.instruction,
   };
 }
 

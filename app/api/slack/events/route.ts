@@ -35,8 +35,10 @@ import {
   confirmPendingAction,
   isBareConfirmation,
   listActivePendingActions,
+  setPendingActionFollowup,
   setPendingActionMessageTs,
 } from '@/src/server/agent/pendingActions';
+import { maybeRunContinuation } from '@/src/server/agent/continuation';
 import {
   buildConfirmationBlocks,
   extractPendingActionIds,
@@ -489,6 +491,39 @@ async function handleSlackMessage(
         },
       });
       await postReply(web, event.channel, threadTs, combinedText);
+
+      // Same continuation the button path gets — typing "yes" and clicking
+      // Confirm must behave identically.
+      const continuation = await maybeRunContinuation({
+        rows: active,
+        results: perActionResults,
+        surface: 'slack',
+      });
+      if (continuation) {
+        const extras: MessageExtras = {};
+        if (continuation.pendingActionIds.length > 0) {
+          extras.blocks = buildConfirmationBlocks(continuation.pendingActionIds);
+        }
+        const ts = await postReply(
+          web,
+          event.channel,
+          threadTs,
+          markdownToMrkdwn(continuation.text),
+          extras,
+        );
+        await setPendingActionMessageTs(continuation.pendingActionIds, ts);
+        await supabase.from('ai_chat_messages').insert({
+          user_id: identity.appUserId,
+          role: 'assistant',
+          content: continuation.text,
+          metadata: {
+            surface: 'slack',
+            slack_channel: event.channel,
+            ...(threadTs ? { slack_thread_ts: threadTs } : {}),
+            continuation_of: activeIds,
+          },
+        });
+      }
       return;
     }
   }
@@ -663,6 +698,10 @@ async function handleSlackMessage(
   const taskUrls = extractTaskUrlsFromText(mrkdwnText).map((url) => ({ url }));
   const extras = taskUrls.length > 0 ? await buildTaskMessageExtras(taskUrls) : {};
   const pendingActionIds = extractPendingActionIds(result.toolCalls);
+  // Attach any follow-up the model registered (declare_followup) so the
+  // Confirm button can finish the plan without another user message. Depth 0:
+  // this turn came from a real Slack message.
+  await setPendingActionFollowup(pendingActionIds, result.followup, 0);
   if (pendingActionIds.length > 0) {
     // Single Confirm/Cancel pair that commits (or cancels) every preview
     // from this turn at once — the ids ride together in the button value

@@ -5,6 +5,7 @@ import { requireAuthContext } from '@/lib/requireAuthContext';
 import { runAgent, type AgentActor, WRITE_TOOL_NAMES } from '@/src/agent/runAgent';
 import { applyBackstops } from '@/src/agent/backstops';
 import { extractPendingActionIds } from '@/src/server/agent/slackConfirmationBlocks';
+import { setPendingActionFollowup } from '@/src/server/agent/pendingActions';
 import type { TaskRow } from '@/src/agent/tools/findTasks';
 
 // POST /api/agent
@@ -133,6 +134,12 @@ export async function POST(req: NextRequest) {
     );
     const allPendingActionIds = extractPendingActionIds(result.toolCalls);
     const pendingActionIds = committedThisTurn ? [] : allPendingActionIds;
+
+    // Attach any follow-up the model registered (declare_followup) to the
+    // bundle, so /api/agent/confirm can finish the plan on the same click
+    // instead of making the user ask again. Depth 0: this turn came from a
+    // real user message.
+    await setPendingActionFollowup(pendingActionIds, result.followup, 0);
 
     if (userId) {
       await supabase.from('ai_chat_messages').insert({

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { UpsertContactInput } from './upsertPropertyContact';
 import type { DeleteContactInput } from './deletePropertyContact';
+import type { PropertyContactBatchInput } from './propertyContactBatch';
 
 // In-memory confirmation-token stores for property contact write tools.
 // Two independent stores; same TTL/single-use semantics as the note
@@ -18,8 +19,16 @@ interface DeleteEntry {
   expiresAtMs: number;
 }
 
+interface BatchEntry {
+  input: PropertyContactBatchInput;
+  expiresAtMs: number;
+}
+
 const UPSERT_TOKENS = new Map<string, UpsertEntry>();
 const DELETE_TOKENS = new Map<string, DeleteEntry>();
+// Separate store so a single-contact token can never be redeemed against the
+// batch commit tool, or vice versa — they carry different input shapes.
+const BATCH_TOKENS = new Map<string, BatchEntry>();
 
 export interface MintedToken {
   token: string;
@@ -77,6 +86,29 @@ export function consumeDeleteContactToken(
   const entry = DELETE_TOKENS.get(token);
   if (!entry) return { ok: false, reason: 'unknown' };
   DELETE_TOKENS.delete(token);
+  if (entry.expiresAtMs <= now) return { ok: false, reason: 'expired' };
+  return { ok: true, input: entry.input };
+}
+
+export function mintPropertyContactBatchToken(
+  input: PropertyContactBatchInput,
+): MintedToken {
+  const now = Date.now();
+  pruneExpired(BATCH_TOKENS, now);
+  const token = crypto.randomUUID();
+  const expiresAtMs = now + TOKEN_TTL_MS;
+  BATCH_TOKENS.set(token, { input, expiresAtMs });
+  return { token, expires_at: new Date(expiresAtMs).toISOString() };
+}
+
+export function consumePropertyContactBatchToken(
+  token: string,
+): ConsumeOutcome<PropertyContactBatchInput> {
+  const now = Date.now();
+  pruneExpired(BATCH_TOKENS, now);
+  const entry = BATCH_TOKENS.get(token);
+  if (!entry) return { ok: false, reason: 'unknown' };
+  BATCH_TOKENS.delete(token);
   if (entry.expiresAtMs <= now) return { ok: false, reason: 'expired' };
   return { ok: true, input: entry.input };
 }

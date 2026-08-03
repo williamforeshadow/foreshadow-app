@@ -387,12 +387,29 @@ export function AiChatPanel() {
       const settle = (
         state: NonNullable<Message['confirmation']>,
         resultText: string,
+        // Present when the agent had registered a dependent next step
+        // (declare_followup) and the server ran it after the commit landed.
+        continuation?: { text: string; pending_action_ids?: string[] },
       ) => {
         setMessages((prev) => [
           ...prev.map((m) =>
             m.id === messageId ? { ...m, confirmation: state } : m,
           ),
           { id: `assistant-${Date.now()}`, role: 'assistant', content: resultText },
+          // Its own message, carrying its own Confirm/Cancel pair when the
+          // continuation previewed further writes.
+          ...(continuation
+            ? [
+                {
+                  id: `assistant-${Date.now()}-cont`,
+                  role: 'assistant' as const,
+                  content: continuation.text,
+                  ...(continuation.pending_action_ids?.length
+                    ? { pendingActionIds: continuation.pending_action_ids }
+                    : {}),
+                },
+              ]
+            : []),
         ]);
       };
 
@@ -417,7 +434,7 @@ export function AiChatPanel() {
             : data.status === 'cancelled'
               ? 'cancelled'
               : 'error';
-        settle(resolved, data.text);
+        settle(resolved, data.text, data.continuation);
       } catch (err) {
         settle(
           'error',
