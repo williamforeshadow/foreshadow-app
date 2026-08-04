@@ -463,6 +463,13 @@
   color: var(--chat-result);
 }
 
+/* Bold the landed-write line so the outcome carries at a glance. Links get
+ * the weight too, otherwise prose's own link weight breaks up the line. */
+.resultSuccess .messageContent :global(.prose),
+.resultSuccess .messageContent :global(.prose) a {
+  font-weight: 600;
+}
+
 .resultSuccess .messageContent :global(.prose) strong,
 .resultError .messageContent :global(.prose) strong {
   color: inherit;
