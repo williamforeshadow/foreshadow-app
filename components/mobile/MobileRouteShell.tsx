@@ -2,13 +2,20 @@
 
 import { memo } from 'react';
 import Link from 'next/link';
+import { useBackNavigation } from '@/lib/navigationHistoryTracker';
 
 interface MobileRouteShellProps {
   children: React.ReactNode;
   /**
-   * When provided, renders a back-arrow button linking to this href. When
-   * omitted, no left button renders — tab-root pages rely on the global bottom
-   * tab bar for navigation instead.
+   * When provided, renders a back-arrow button. When omitted, no left button
+   * renders — tab-root pages rely on the global bottom tab bar for navigation
+   * instead.
+   *
+   * The arrow pops in-app history rather than navigating here, so it returns to
+   * whichever screen the user actually came from. This href is the *fallback*,
+   * used only on a cold entry with no history to pop (a Slack link, a push
+   * notification, a bookmark) — so it should name the page's hierarchical
+   * parent, which is exactly what it meant before.
    */
   backHref?: string;
   /**
@@ -39,6 +46,9 @@ interface MobileRouteShellProps {
  * omits it and shows just the title, since navigation lives in the bottom tab
  * bar. Pages own their internal scroll container; this shell's <main> is
  * `overflow-hidden` and lets children own the scroll region.
+ *
+ * Every routed mobile page shares this one back arrow, so making it
+ * history-aware here is what makes it history-aware everywhere.
  */
 const MobileRouteShell = memo(function MobileRouteShell({
   children,
@@ -47,14 +57,26 @@ const MobileRouteShell = memo(function MobileRouteShell({
   subtitle,
   rightSlot,
 }: MobileRouteShellProps) {
+  const goBack = useBackNavigation();
+
   return (
     <div className="h-dvh bg-white dark:bg-card overflow-hidden flex flex-col safe-area-top">
         {/* Top bar */}
         <div className="flex-shrink-0 min-h-11 px-2 flex items-center gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             {backHref ? (
+              // Still a real <Link>: it keeps the href in the accessibility tree
+              // and in the webview's long-press menu, and lets a modified click
+              // open the parent page in a new tab. A plain click is intercepted
+              // and popped instead.
               <Link
-                href={backHref}
+                href={backHref as never}
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                  if (e.button !== 0) return;
+                  e.preventDefault();
+                  goBack(backHref);
+                }}
                 className="w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors shrink-0"
                 aria-label="Back"
               >

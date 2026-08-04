@@ -24,6 +24,7 @@ import { projectToTaskInput } from '@/components/tasks/detail/taskInput';
 import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
+import { useBackNavigation } from '@/lib/navigationHistoryTracker';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 // Mobile-tailored Tasks view. Shares the same useTasks hook + filter bar as
@@ -138,6 +139,7 @@ function MobileTasksViewContent() {
   // create flow). Fires once, then strips the param so a refresh doesn't
   // re-open it.
   const router = useRouter();
+  const goBack = useBackNavigation();
   const searchParams = useSearchParams();
   const newTaskSentinel = searchParams?.get('newTask');
   const handledNewTaskRef = useRef(false);
@@ -261,8 +263,12 @@ function MobileTasksViewContent() {
         style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
       >
         <div className="flex items-center gap-2 min-w-0">
+          {/* This view renders its own chrome rather than MobileRouteShell (so
+              the header gradient runs unbroken from the title through the
+              toolbar), so it needs the history-aware back wired up by hand.
+              /menu is the fallback for a cold entry only. */}
           <button
-            onClick={() => router.push('/menu')}
+            onClick={() => goBack('/menu')}
             className="-ml-2 w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
             aria-label="Back"
           >

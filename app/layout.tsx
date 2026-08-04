@@ -7,6 +7,7 @@ import { DepartmentsProvider } from "@/lib/departmentsContext";
 import { OperationsSettingsProvider } from "@/lib/operationsSettingsContext";
 import { ReservationViewerProvider } from "@/lib/reservationViewerContext";
 import { AiChatProvider } from "@/components/ai-chat/AiChatProvider";
+import { NavigationHistoryTracker } from "@/lib/navigationHistoryTracker";
 import { AppChrome } from "@/components/AppChrome";
 import { Toaster } from "@/components/ui/toast";
 
@@ -61,6 +62,10 @@ export default function RootLayout({
             <OperationsSettingsProvider>
               <ReservationViewerProvider>
                 <AiChatProvider>
+                  {/* Above AppChrome deliberately: AppChrome renders bare
+                      children on /login, /update-password and /demo/*, and a
+                      tracking gap there would desynchronise the back depth. */}
+                  <NavigationHistoryTracker />
                   <AppChrome>{children}</AppChrome>
                   <Toaster />
                 </AiChatProvider>
