@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult, type ToolMeta } from './types';
+import { embedQueryCached, toVectorLiteral } from '@/src/server/search/embeddingClient';
 
 // find_conversations — resolve a guest conversation (the messaging inbox row) by
 // guest name, property, what was SAID in it, status, or recency. The entry point
@@ -123,12 +124,16 @@ async function handler(
   if (input.search) {
     // Passed as an RPC parameter rather than interpolated into a PostgREST
     // filter string, so no sanitizing is needed here.
+    // Semantic channel. Null (unconfigured key, provider down) makes the RPC
+    // skip its vector CTE, degrading to exactly the previous trigram behaviour.
+    const embedding = await embedQueryCached(input.search.trim());
     const { data: ranked, error: rankErr } = await supabase.rpc(
       'search_conversations',
       {
         p_org: org,
         p_query: input.search.trim(),
         p_limit: SEARCH_CANDIDATE_CAP,
+        p_query_embedding: embedding ? toVectorLiteral(embedding) : null,
       },
     );
     if (rankErr) {

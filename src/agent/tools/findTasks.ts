@@ -9,6 +9,7 @@ import {
   type ToolMeta,
   type ToolResult,
 } from './types';
+import { embedQueryCached, toVectorLiteral } from '@/src/server/search/embeddingClient';
 
 // find_tasks — discover/list operational tasks.
 //
@@ -454,11 +455,17 @@ async function rankedSearch(
 ): Promise<{ ok: true; matches: RankedMatch[] } | { ok: false; message: string }> {
   const term = rawTerm.trim();
   if (term.length < 2) return { ok: true, matches: [] };
+  // Semantic channel. embedQueryCached never throws and returns null when
+  // embeddings are unconfigured or the provider is unreachable — the RPC then
+  // skips its vector CTE and behaves exactly as it did before embeddings
+  // existed. So this is additive: it can improve a result, never break one.
+  const embedding = await embedQueryCached(term);
   const { data, error } = await supabase.rpc('search_tasks', {
     p_org: org,
     p_query: term,
     p_limit: SEARCH_CANDIDATE_CAP,
     p_apply_recency: applyRecency,
+    p_query_embedding: embedding ? toVectorLiteral(embedding) : null,
   });
   if (error) return { ok: false, message: error.message };
   return { ok: true, matches: (data ?? []) as RankedMatch[] };

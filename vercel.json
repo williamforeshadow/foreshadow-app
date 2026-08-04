@@ -31,6 +31,14 @@
     {
       "path": "/api/cron/auto-send",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/embeddings",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/embeddings?mode=full",
+      "schedule": "40 * * * *"
     }
   ]
 }
