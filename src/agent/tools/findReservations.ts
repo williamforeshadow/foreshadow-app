@@ -78,7 +78,7 @@ const inputSchema = z
       .int()
       .optional()
       .describe(
-        'Exact match on the upstream Hostaway reservation id. Useful when the user pastes a Hostaway link or number.',
+        'Exact match on the upstream Hostaway reservation id. Useful when the user pastes a Hostaway link or number. Hostaway only — reservations synced from another PMS cannot be looked up by this field.',
       ),
     ids: z
       .array(z.string().uuid())
@@ -133,13 +133,13 @@ const inputSchema = z
     source: SOURCE_ENUM
       .optional()
       .describe(
-        "'hostaway' → reservations synced from Hostaway. 'manual' → reservations created directly in Foreshadow. Maps to hostaway_reservation_id IS/IS NOT NULL.",
+        "'hostaway' → reservations synced from Hostaway. 'manual' → everything WITHOUT a Hostaway id. CAUTION: this is derived from hostaway_reservation_id alone, so reservations synced from other PMSs (e.g. Hospitable) currently fall into 'manual' too. Do NOT tell the user a 'manual' reservation was created by hand unless you have other evidence — say it has no Hostaway id.",
       ),
     kind: z
       .enum(['guest_booking', 'owner_stay'])
       .optional()
       .describe(
-        "Filter by occupancy type. 'guest_booking' = a paying guest stay; 'owner_stay' = dates the property owner reserved for themselves (synced from Hostaway, no guest revenue). Omit to return both.",
+        "Filter by occupancy type. 'guest_booking' = a paying guest stay; 'owner_stay' = dates the property owner reserved for themselves (no guest revenue). Both are normalized from whichever PMS the property syncs from. Omit to return both.",
       ),
     has_next_check_in: z
       .boolean()
@@ -565,7 +565,7 @@ async function handler(
 export const findReservations: ToolDefinition<Input, ReservationRow[]> = {
   name: 'find_reservations',
   description:
-    "Find guest reservations (stays) by property, guest name, Hostaway id, or date range. Use convenience flags current_only/upcoming/past for relative-time questions ('who's there now', 'this week's arrivals'); pass reference_date in the user's local timezone so 'today' aligns with their clock. Property filtering: use property_id for one property; use property_ids for multiple (e.g. 'check-ins this week at these N properties') — always prefer the batched call + a date range over looping property_id one ID at a time. Resolve names with find_properties first. ORDERING: `sort` controls direction — 'most_recent' = latest stays first (by check_out), 'earliest' = oldest stays first (by check_in); it defaults to 'most_recent' when past=true and 'earliest' otherwise. The resolved order is returned in meta.sort. Returns slim rows with computed nights and is_back_to_back fields. Each row has a `kind`: 'guest_booking' (a paying guest) or 'owner_stay' (dates the owner reserved for themselves, no guest revenue) — pass `kind` to filter to one, or omit to get both. There is no status column — cancellations are deletions, so you cannot ask for cancelled stays. GUEST NAME LOOKUPS DEGRADE INSTEAD OF FAILING, and meta.match_mode says how: 'exact' means real substring matches; 'fuzzy' means nothing matched exactly and these are the closest spellings — good candidates, but confirm before acting. When a fuzzy retry finds the guest yet your OTHER filters exclude every one of their stays, the rows come back empty with an explanatory meta.note; read it, because 'this guest has no stays in that date range' and 'there is no such guest' are different answers and only one of them means you should stop looking. Never report a guest as not found without checking meta.note first.",
+    "Find guest reservations (stays) by property, guest name, Hostaway reservation id, or date range. Use convenience flags current_only/upcoming/past for relative-time questions ('who's there now', 'this week's arrivals'); pass reference_date in the user's local timezone so 'today' aligns with their clock. Property filtering: use property_id for one property; use property_ids for multiple (e.g. 'check-ins this week at these N properties') — always prefer the batched call + a date range over looping property_id one ID at a time. Resolve names with find_properties first. ORDERING: `sort` controls direction — 'most_recent' = latest stays first (by check_out), 'earliest' = oldest stays first (by check_in); it defaults to 'most_recent' when past=true and 'earliest' otherwise. The resolved order is returned in meta.sort. Returns slim rows with computed nights and is_back_to_back fields. Each row has a `kind`: 'guest_booking' (a paying guest) or 'owner_stay' (dates the owner reserved for themselves, no guest revenue; normalized from whichever PMS the property syncs from) — pass `kind` to filter to one, or omit to get both. There is no status column — cancellations are deletions, so you cannot ask for cancelled stays. GUEST NAME LOOKUPS DEGRADE INSTEAD OF FAILING, and meta.match_mode says how: 'exact' means real substring matches; 'fuzzy' means nothing matched exactly and these are the closest spellings — good candidates, but confirm before acting. When a fuzzy retry finds the guest yet your OTHER filters exclude every one of their stays, the rows come back empty with an explanatory meta.note; read it, because 'this guest has no stays in that date range' and 'there is no such guest' are different answers and only one of them means you should stop looking. Never report a guest as not found without checking meta.note first.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -591,7 +591,7 @@ export const findReservations: ToolDefinition<Input, ReservationRow[]> = {
       hostaway_reservation_id: {
         type: 'integer',
         description:
-          'Exact match on the upstream Hostaway reservation id. Useful when the user pastes a Hostaway link or number.',
+          'Exact match on the upstream Hostaway reservation id. Useful when the user pastes a Hostaway link or number. Hostaway only — reservations synced from another PMS cannot be looked up by this field.',
       },
       ids: {
         type: 'array',
