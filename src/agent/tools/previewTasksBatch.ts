@@ -55,45 +55,45 @@ const taskItemSchema = z.object({
     .enum(STATUS_VALUES)
     .optional()
     .describe(
-      "Task status. Defaults to 'not_started'. Use 'contingent' for blocked tasks.",
+      "Task status. Defaults to 'not_started'. Use 'contingent' for blocked tasks. Do not ask.",
     ),
   priority: z
     .enum(PRIORITY_VALUES)
     .optional()
     .describe(
-      "Task priority. Defaults to 'medium'. Reserve 'urgent' for time-critical issues.",
+      "Task priority. Defaults to 'medium'. Reserve 'urgent' for time-critical issues. Do not ask.",
     ),
   scheduled_date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional()
     .describe(
-      "Scheduled date, YYYY-MM-DD. Resolve relative dates with the user's local clock first. Omit to leave unscheduled.",
+      "Scheduled date, YYYY-MM-DD. Resolve relative dates with the user's local clock first. Omit to leave unscheduled — do not ask for a date the user did not give.",
     ),
   scheduled_time: z
     .string()
     .regex(/^\d{2}:\d{2}$/)
     .optional()
-    .describe('Scheduled time, HH:MM (24-hour). Only meaningful with scheduled_date.'),
+    .describe('Scheduled time, HH:MM (24-hour). Only meaningful with scheduled_date. Omit when no time was stated.'),
   property_id: z
     .string()
     .uuid()
     .optional()
-    .describe('Property UUID. Use find_properties to resolve names. Omit for free-floating tasks.'),
+    .describe('Property UUID. Use find_properties to resolve a named property. Omit when none was mentioned — do not ask.'),
   department_id: z
     .string()
     .uuid()
     .optional()
-    .describe('Department UUID. Use find_departments to resolve names.'),
+    .describe('Department UUID. Use find_departments to resolve a named department. Omit when none was mentioned — do not ask.'),
   template_id: z
     .string()
     .uuid()
     .optional()
-    .describe('Template UUID. Use find_templates to resolve names. Manual tagging only.'),
+    .describe('Template UUID. Use find_templates to resolve a named template. Manual tagging only. Omit when none was mentioned — do not ask.'),
   assigned_user_ids: z
     .array(z.string().uuid())
     .optional()
-    .describe('User UUIDs to assign. Use find_users to resolve names.'),
+    .describe('User UUIDs to assign. Use find_users to resolve named people. Omit when nobody was named — do not ask who should do it.'),
 });
 
 const sharedBinSchema = z
@@ -218,7 +218,7 @@ export const previewTasksBatch: ToolDefinition<
 > = {
   name: 'preview_tasks_batch',
   description:
-    "PREVIEW the creation of multiple tasks in one shot. ALWAYS call this first when the user asks to create more than one task at a time, OR when the user asks to create a sub-bin and add tasks to it. Validates every task input, validates the shared bin destination (existing sub-bin via bin_id, brand-new sub-bin via new_sub_bin, default Task Bin via is_binned=true, or free-floating when omitted), resolves every FK, and returns a single plan + single confirmation_token. After calling: present the plan to the user (mention the destination AND the per-task summary), ask for explicit confirmation, then call create_tasks_batch with the token. Tokens are single-use and expire in 5 minutes. preview_tasks_batch never writes; safe to call repeatedly. For SINGLE-task creation, prefer preview_task — it's slightly cheaper and gives a richer per-task plan.",
+    "PREVIEW the creation of multiple tasks in one shot. ALWAYS call this first when the user asks to create more than one task at a time, OR when the user asks to create a sub-bin and add tasks to it. Title is the only required field on each task — call this as soon as you can write them, and let the defaults cover whatever the user did not mention rather than asking. Validates every task input, validates the shared bin destination (existing sub-bin via bin_id, brand-new sub-bin via new_sub_bin, default Task Bin via is_binned=true, or free-floating when omitted), resolves every FK, and returns a single plan + single confirmation_token. After calling: present the plan to the user (mention the destination AND the per-task summary); the Confirm/Cancel pair shown below your message is how they agree, so do not also ask in prose. Tokens are single-use and expire in 5 minutes. preview_tasks_batch never writes; safe to call repeatedly. For SINGLE-task creation, prefer preview_task — it's slightly cheaper and gives a richer per-task plan.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -237,22 +237,42 @@ export const previewTasksBatch: ToolDefinition<
             status: {
               type: 'string',
               enum: ['contingent', 'not_started', 'in_progress', 'paused', 'complete'],
-              description: "Defaults to 'not_started'.",
+              description: "Defaults to 'not_started'. Do not ask.",
             },
             priority: {
               type: 'string',
               enum: ['urgent', 'high', 'medium', 'low'],
-              description: "Defaults to 'medium'.",
+              description: "Defaults to 'medium'. Do not ask.",
             },
-            scheduled_date: { type: 'string', description: 'YYYY-MM-DD.' },
-            scheduled_time: { type: 'string', description: 'HH:MM (24-hour).' },
-            property_id: { type: 'string', description: 'Use find_properties.' },
-            department_id: { type: 'string', description: 'Use find_departments.' },
-            template_id: { type: 'string', description: 'Use find_templates.' },
+            scheduled_date: {
+              type: 'string',
+              description:
+                'YYYY-MM-DD. Omit to leave unscheduled — do not ask for a date the user did not give.',
+            },
+            scheduled_time: {
+              type: 'string',
+              description: 'HH:MM (24-hour). Omit when no time was stated.',
+            },
+            property_id: {
+              type: 'string',
+              description:
+                'Use find_properties to resolve a named property. Omit when none was mentioned — do not ask.',
+            },
+            department_id: {
+              type: 'string',
+              description:
+                'Use find_departments to resolve a named department. Omit when none was mentioned — do not ask.',
+            },
+            template_id: {
+              type: 'string',
+              description:
+                'Use find_templates to resolve a named template. Omit when none was mentioned — do not ask.',
+            },
             assigned_user_ids: {
               type: 'array',
               items: { type: 'string' },
-              description: 'Use find_users.',
+              description:
+                'Use find_users to resolve named people. Omit when nobody was named — do not ask who should do it.',
             },
           },
           required: ['title'],

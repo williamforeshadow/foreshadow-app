@@ -53,17 +53,17 @@ const inputSchema = z.object({
   status: STATUS_ENUM
     .optional()
     .describe(
-      "Task status. Defaults to 'not_started'. Use 'contingent' for tasks blocked on a precondition.",
+      "Task status. Defaults to 'not_started'. Use 'contingent' for tasks blocked on a precondition. Do not ask the user which status they want.",
     ),
   priority: PRIORITY_ENUM
     .optional()
     .describe(
-      "Task priority. Defaults to 'medium'. Reserve 'urgent' for time-critical operational issues.",
+      "Task priority. Defaults to 'medium'. Reserve 'urgent' for time-critical operational issues. Do not ask the user which priority they want.",
     ),
   scheduled_date: dateString
     .optional()
     .describe(
-      "When the task should be done, YYYY-MM-DD. Resolve relative dates ('tomorrow', 'next Friday') to a concrete date using the user's local clock before passing. Omit to leave unscheduled.",
+      "When the task should be done, YYYY-MM-DD. Resolve relative dates ('tomorrow', 'next Friday') to a concrete date using the user's local clock before passing. Omit to leave unscheduled — unscheduled is a normal state, so do not ask for a date the user did not give.",
     ),
   scheduled_time: timeString
     .optional()
@@ -75,14 +75,14 @@ const inputSchema = z.object({
     .uuid()
     .optional()
     .describe(
-      "Property UUID. Resolve property names with find_properties first. Omit for tasks that aren't tied to any property.",
+      "Property UUID. Resolve a named property with find_properties first. Omit entirely when no property was mentioned — plenty of tasks belong to no property, so do not ask which one.",
     ),
   bin_id: z
     .string()
     .uuid()
     .optional()
     .describe(
-      "Sub-bin UUID. Resolve sub-bin names with find_bins first. When set, the task lands in that sub-bin (and is_binned is forced to true). To put a task in the default \"Task Bin\" instead, omit bin_id and pass is_binned=true. Omit both for free-floating tasks that aren't binned at all.",
+      "Sub-bin UUID. Resolve sub-bin names with find_bins first. When set, the task lands in that sub-bin (and is_binned is forced to true). To put a task in the default \"Task Bin\" instead, omit bin_id and pass is_binned=true. Omit both when the user said nothing about bins — free-floating is a normal state, so do not ask.",
     ),
   is_binned: z
     .boolean()
@@ -95,20 +95,20 @@ const inputSchema = z.object({
     .uuid()
     .optional()
     .describe(
-      'Department UUID. Resolve department names with find_departments first. Omit if no department applies.',
+      'Department UUID. Resolve a named department with find_departments first. Omit when none was mentioned — do not ask.',
     ),
   template_id: z
     .string()
     .uuid()
     .optional()
     .describe(
-      "Template UUID. Resolve template names with find_templates first. Tagging only — does NOT apply the template's automation config (that's reservation-only).",
+      "Template UUID. Resolve a named template with find_templates first. Tagging only — does NOT apply the template's automation config (that's reservation-only). Omit when none was mentioned; most manual tasks have no template, so do not ask.",
     ),
   assigned_user_ids: z
     .array(z.string().uuid())
     .optional()
     .describe(
-      "User UUIDs to assign. Resolve names with find_users first. Omit when no one should be assigned yet.",
+      "User UUIDs to assign. Resolve names with find_users first. Omit when nobody was named — unassigned is a normal state, so do not ask who should do it.",
     ),
   attachment_inbound_file_ids: z
     .array(z.string().uuid())
@@ -211,7 +211,7 @@ async function handler(
 export const previewTask: ToolDefinition<Input, PreviewTaskResultData> = {
   name: 'preview_task',
   description:
-    "PREVIEW a task before creating it. ALWAYS call this first when the user asks to create a task. Validates the inputs, resolves every id you pass into a human-readable label (property name, template name, department name, assignee names), and returns a confirmation_token. After calling, present the plan to the user in plain English, ask for explicit confirmation ('shall I create this?'), and only call create_task with the returned confirmation_token after they agree. The token is single-use and expires in 5 minutes. If the user wants to change something, call preview_task again with the updated fields — each call mints a fresh token, the previous one is orphaned. preview_task never writes anything to the database; it is safe to call repeatedly.",
+    "PREVIEW a task before creating it. ALWAYS call this first when the user asks to create a task. Title is the only required field — call this as soon as you can write one, and let the defaults cover everything the user did not mention rather than asking them for it. Validates the inputs, resolves every id you pass into a human-readable label (property name, template name, department name, assignee names), and returns a confirmation_token. After calling, present the plan to the user in plain English; the Confirm/Cancel pair shown below your message is how they agree, so do not also ask in prose. The token is single-use and expires in 5 minutes. If the user wants to change something, call preview_task again with the updated fields — each call mints a fresh token, the previous one is orphaned. preview_task never writes anything to the database; it is safe to call repeatedly.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -230,33 +230,33 @@ export const previewTask: ToolDefinition<Input, PreviewTaskResultData> = {
         type: 'string',
         enum: ['contingent', 'not_started', 'in_progress', 'paused', 'complete'],
         description:
-          "Task status. Defaults to 'not_started'. Use 'contingent' for blocked tasks.",
+          "Task status. Defaults to 'not_started'. Use 'contingent' for blocked tasks. Do not ask the user which status they want.",
       },
       priority: {
         type: 'string',
         enum: ['urgent', 'high', 'medium', 'low'],
         description:
-          "Task priority. Defaults to 'medium'. Reserve 'urgent' for time-critical issues.",
+          "Task priority. Defaults to 'medium'. Reserve 'urgent' for time-critical issues. Do not ask the user which priority they want.",
       },
       scheduled_date: {
         type: 'string',
         description:
-          "Scheduled date, YYYY-MM-DD. Resolve relative dates with the user's local clock first. Omit to leave unscheduled.",
+          "Scheduled date, YYYY-MM-DD. Resolve relative dates with the user's local clock first. Omit to leave unscheduled — unscheduled is a normal state, so do not ask for a date the user did not give.",
       },
       scheduled_time: {
         type: 'string',
         description:
-          'Scheduled time, HH:MM (24-hour). Only meaningful with scheduled_date.',
+          'Scheduled time, HH:MM (24-hour). Only meaningful with scheduled_date. Omit when no time was stated.',
       },
       property_id: {
         type: 'string',
         description:
-          'Property UUID. Use find_properties to resolve names. Omit for free-floating tasks.',
+          'Property UUID. Resolve a named property with find_properties. Omit entirely when no property was mentioned — plenty of tasks belong to no property, so do not ask which one.',
       },
       bin_id: {
         type: 'string',
         description:
-          "Sub-bin UUID. Use find_bins to resolve sub-bin names. Omit (and pass is_binned=true) when the user said \"bin it\" without naming a sub-bin to land the task in the default Task Bin; omit both for free-floating tasks.",
+          "Sub-bin UUID. Use find_bins to resolve sub-bin names. Omit (and pass is_binned=true) when the user said \"bin it\" without naming a sub-bin to land the task in the default Task Bin. Omit both when the user said nothing about bins — do not ask.",
       },
       is_binned: {
         type: 'boolean',
@@ -266,18 +266,18 @@ export const previewTask: ToolDefinition<Input, PreviewTaskResultData> = {
       department_id: {
         type: 'string',
         description:
-          'Department UUID. Use find_departments to resolve names.',
+          'Department UUID. Use find_departments to resolve a named department. Omit when none was mentioned — do not ask.',
       },
       template_id: {
         type: 'string',
         description:
-          'Template UUID. Use find_templates to resolve names. Manual tasks only — does NOT apply automation config.',
+          'Template UUID. Use find_templates to resolve a named template. Manual tasks only — does NOT apply automation config. Omit when none was mentioned; most manual tasks have no template, so do not ask.',
       },
       assigned_user_ids: {
         type: 'array',
         items: { type: 'string' },
         description:
-          'User UUIDs to assign. Use find_users to resolve names.',
+          'User UUIDs to assign. Use find_users to resolve names. Omit when nobody was named — unassigned is a normal state, so do not ask who should do it.',
       },
       attachment_inbound_file_ids: {
         type: 'array',

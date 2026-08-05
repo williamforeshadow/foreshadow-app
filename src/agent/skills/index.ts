@@ -34,6 +34,7 @@ const SKILL_FILES = [
   'aggregating-questions.md',
   'visual-handoff.md',
   'conversation-recall.md',
+  'assume-competence.md',
 ] as const;
 
 const SKILLS_DIR = join(process.cwd(), 'src', 'agent', 'skills');
