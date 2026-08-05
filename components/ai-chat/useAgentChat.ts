@@ -31,7 +31,31 @@ export interface AgentMessage {
   // Structured task rows from any find_tasks call this turn. The tasks the
   // answer actually links to render as cards below the text.
   tasks?: TaskRow[];
+  // Files sent with a user message, echoed back into the bubble so the thread
+  // shows what was attached where.
+  attachments?: { id: string; name: string }[];
 }
+
+/**
+ * A file in the composer, from the moment it's picked to the moment it's sent.
+ *
+ * Uploading happens on pick, not on send: by the time the user hits send the
+ * bytes are already staged and the message carries nothing but ids. That keeps
+ * send fast and lets a failed upload surface while there's still something to
+ * do about it.
+ */
+export interface ComposerAttachment {
+  /** Stable local key. Survives the upload, unlike the server id. */
+  key: string;
+  /** inbound_file_id once staged; null while in flight or after a failure. */
+  id: string | null;
+  name: string;
+  size: number;
+  status: 'uploading' | 'ready' | 'error';
+  error?: string;
+}
+
+let attachmentKeySeq = 0;
 
 // Same-origin link interception: the agent emits markdown links to in-app
 // routes (e.g. /tasks/<uuid>). Callers route these through Next's client router
@@ -82,12 +106,94 @@ export interface UseAgentChat {
     pendingActionIds: string[],
     action: 'confirm' | 'cancel',
   ) => Promise<void>;
+  /** Files staged for the next message. */
+  attachments: ComposerAttachment[];
+  /** Stage picked files immediately; they upload in the background. */
+  addAttachments: (files: File[]) => void;
+  /** Drop one from the composer, deleting it server-side if it landed. */
+  removeAttachment: (key: string) => void;
+  /** True while any pick is still uploading — send waits for it. */
+  isUploading: boolean;
 }
 
 export function useAgentChat(): UseAgentChat {
   const { user } = useAuth();
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const isUploading = attachments.some((a) => a.status === 'uploading');
+
+  const addAttachments = useCallback((files: File[]) => {
+    if (files.length === 0) return;
+    const picked = files.map((file) => ({
+      entry: {
+        key: `att-${Date.now()}-${attachmentKeySeq++}`,
+        id: null,
+        name: file.name || 'upload',
+        size: file.size,
+        status: 'uploading' as const,
+      },
+      file,
+    }));
+    setAttachments((prev) => [...prev, ...picked.map((p) => p.entry)]);
+
+    // One request per file so a single rejection (too large, storage hiccup)
+    // marks only its own chip instead of failing the whole selection.
+    for (const { entry, file } of picked) {
+      const body = new FormData();
+      body.append('file', file);
+      void (async () => {
+        try {
+          const res = await fetch('/api/agent/attachments', {
+            method: 'POST',
+            body,
+          });
+          const data = await res.json();
+          const staged = Array.isArray(data?.attachments)
+            ? data.attachments[0]
+            : null;
+          if (!res.ok || data?.error || !staged?.id) {
+            throw new Error(data?.error || 'Upload failed');
+          }
+          setAttachments((prev) =>
+            prev.map((a) =>
+              a.key === entry.key
+                ? { ...a, id: staged.id, status: 'ready' as const }
+                : a,
+            ),
+          );
+        } catch (err) {
+          setAttachments((prev) =>
+            prev.map((a) =>
+              a.key === entry.key
+                ? {
+                    ...a,
+                    status: 'error' as const,
+                    error: err instanceof Error ? err.message : 'Upload failed',
+                  }
+                : a,
+            ),
+          );
+        }
+      })();
+    }
+  }, []);
+
+  const removeAttachment = useCallback((key: string) => {
+    setAttachments((prev) => {
+      const target = prev.find((a) => a.key === key);
+      // Best-effort cleanup of the staged copy. If it fails the row is simply
+      // left unconsumed and ages out of the carry-forward window; nothing the
+      // user needs to hear about.
+      if (target?.id) {
+        void fetch(
+          `/api/agent/attachments?id=${encodeURIComponent(target.id)}`,
+          { method: 'DELETE' },
+        ).catch(() => {});
+      }
+      return prev.filter((a) => a.key !== key);
+    });
+  }, []);
 
   const runCommand = useCallback(
     async (command: string) => {
@@ -153,10 +259,28 @@ export function useAgentChat(): UseAgentChat {
         }
       }
 
+      // Only fully-staged files ride along. Anything still uploading or failed
+      // is left in the composer rather than silently dropped from a message
+      // the user thinks carried it.
+      const sending = attachments.filter(
+        (a): a is ComposerAttachment & { id: string } =>
+          a.status === 'ready' && !!a.id,
+      );
+
       setMessages((prev) => [
         ...prev,
-        { id: `user-${Date.now()}`, role: 'user', content: message },
+        {
+          id: `user-${Date.now()}`,
+          role: 'user',
+          content: message,
+          ...(sending.length > 0
+            ? {
+                attachments: sending.map((a) => ({ id: a.id, name: a.name })),
+              }
+            : {}),
+        },
       ]);
+      setAttachments((prev) => prev.filter((a) => a.status !== 'ready'));
       setIsLoading(true);
 
       try {
@@ -174,6 +298,9 @@ export function useAgentChat(): UseAgentChat {
             prompt: message,
             user_id: user.id,
             client_tz: clientTz,
+            ...(sending.length > 0
+              ? { inbound_file_ids: sending.map((a) => a.id) }
+              : {}),
           }),
         });
         const data = await res.json();
@@ -221,7 +348,7 @@ export function useAgentChat(): UseAgentChat {
         setIsLoading(false);
       }
     },
-    [user, isLoading, runCommand],
+    [user, isLoading, runCommand, attachments],
   );
 
   const handleConfirmAction = useCallback(
@@ -309,5 +436,15 @@ export function useAgentChat(): UseAgentChat {
     [user],
   );
 
-  return { messages, isLoading, submitMessage, runCommand, handleConfirmAction };
+  return {
+    messages,
+    isLoading,
+    submitMessage,
+    runCommand,
+    handleConfirmAction,
+    attachments,
+    addAttachments,
+    removeAttachment,
+    isUploading,
+  };
 }

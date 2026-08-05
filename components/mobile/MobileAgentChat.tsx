@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import { useRouter } from 'next/navigation';
-import { ArrowUp, Sparkles, X } from 'lucide-react';
+import { ArrowUp, Paperclip, Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/authContext';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -22,6 +22,10 @@ import {
   useAgentChat,
 } from '@/components/ai-chat/useAgentChat';
 import { TaskAttachment } from '@/components/ai-chat/TaskAttachment';
+import {
+  ComposerAttachments,
+  MessageAttachments,
+} from '@/components/ai-chat/ComposerAttachments';
 import { taskRowToCardItem } from '@/components/ai-chat/taskCardMapping';
 import type { TaskRow } from '@/src/agent/tools/findTasks';
 import styles from './MobileAgentChat.module.css';
@@ -108,11 +112,21 @@ export function MobileAgentChat() {
   const visualInset = useKeyboardInset();
   const nativeInset = useNativeKeyboardHeight();
   const keyboardInset = Math.max(visualInset, nativeInset);
-  const { messages, isLoading, submitMessage, runCommand, handleConfirmAction } =
-    useAgentChat();
+  const {
+    messages,
+    isLoading,
+    submitMessage,
+    runCommand,
+    handleConfirmAction,
+    attachments,
+    addAttachments,
+    removeAttachment,
+    isUploading,
+  } = useAgentChat();
 
   const [inputValue, setInputValue] = useState('');
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const fieldRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
@@ -280,10 +294,13 @@ export function MobileAgentChat() {
     [],
   );
 
+  // Uploads finish before a message can carry them, so the send button waits
+  // rather than quietly sending without the file the user just picked.
+  const canSend = !!inputValue.trim() && !isLoading && !isUploading && !!user;
+
   const send = () => {
-    const text = inputValue.trim();
-    if (!text || isLoading || !user) return;
-    submitMessage(text);
+    if (!canSend) return;
+    submitMessage(inputValue.trim());
     setInputValue('');
   };
 
@@ -354,7 +371,12 @@ export function MobileAgentChat() {
                   }`}
                 >
                   {msg.role === 'user' ? (
-                    <div className={styles.userBubble}>{msg.content}</div>
+                    <div className={styles.userBubble}>
+                      {msg.content}
+                      {msg.attachments && (
+                        <MessageAttachments attachments={msg.attachments} />
+                      )}
+                    </div>
                   ) : (
                     <div
                       className={`${styles.assistant}${
@@ -467,31 +489,65 @@ export function MobileAgentChat() {
           </div>
         )}
         <div ref={fieldRef} className={styles.field}>
-          <Sparkles size={18} className={styles.fieldIcon} aria-hidden />
-          <textarea
-            ref={taRef}
-            className={styles.textarea}
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-            }}
-            rows={1}
-            placeholder={user ? 'Ask the agent…' : 'Sign in to chat'}
-            aria-label="Ask the agent"
+          <ComposerAttachments
+            attachments={attachments}
+            onRemove={removeAttachment}
           />
-          <button
-            type="button"
-            className={styles.sendButton}
-            onClick={send}
-            disabled={isLoading || !inputValue.trim() || !user}
-            aria-label="Send"
-          >
-            <ArrowUp size={16} />
-          </button>
+          <div className={styles.fieldRow}>
+            <Sparkles size={18} className={styles.fieldIcon} aria-hidden />
+            <textarea
+              ref={taRef}
+              className={styles.textarea}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+              rows={1}
+              placeholder={
+                !user
+                  ? 'Sign in to chat'
+                  : attachments.length > 0
+                    ? 'Say what to do with it…'
+                    : 'Ask the agent…'
+              }
+              aria-label="Ask the agent"
+            />
+            {/* iOS surfaces its own sheet here — Photo Library, Take Photo,
+                Choose File — so no Capacitor plugin is involved. No accept
+                filter: the destination decides what it will take. */}
+            <button
+              type="button"
+              className={styles.attachButton}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!user}
+              aria-label="Attach a file"
+            >
+              <Paperclip size={16} />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                addAttachments(Array.from(e.target.files ?? []));
+                if (fileInputRef.current) fileInputRef.current.value = '';
+              }}
+            />
+            <button
+              type="button"
+              className={styles.sendButton}
+              onClick={send}
+              disabled={!canSend}
+              aria-label="Send"
+            >
+              <ArrowUp size={16} />
+            </button>
+          </div>
         </div>
       </div>
     </>

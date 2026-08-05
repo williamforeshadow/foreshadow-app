@@ -11,7 +11,7 @@ import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } 
 const inputSchema = slackFileAttachmentInputSchema;
 type Input = z.infer<typeof inputSchema>;
 
-export interface PreviewSlackFileAttachmentData {
+export interface PreviewFileAttachmentData {
   plan: SlackFileAttachmentPlan;
   confirmation_token: string;
   expires_at: string;
@@ -21,7 +21,7 @@ export interface PreviewSlackFileAttachmentData {
 async function handler(
   input: Input,
   ctx: ToolContext,
-): Promise<ToolResult<PreviewSlackFileAttachmentData>> {
+): Promise<ToolResult<PreviewFileAttachmentData>> {
   // Org guard: the attachment service is org-blind and every target id is
   // model-supplied — validate the top-level target (task or property) belongs
   // to the caller's org BEFORE previewing. Child ids (room/attribute/account)
@@ -93,6 +93,10 @@ async function handler(
 
   const minted = mintSlackFileAttachmentToken(result.canonicalInput);
   const pendingActionId = await maybeCreatePendingAction(ctx, {
+    // The persisted kind keeps its original name: it's pinned by a check
+    // constraint on agent_pending_actions and written into rows that may
+    // still be awaiting a click. The tool the model sees is surface-neutral;
+    // the storage key stays where it was.
     kind: 'slack_file_attachment',
     canonicalInput: { input: result.canonicalInput },
     preview: result.plan,
@@ -109,13 +113,13 @@ async function handler(
   };
 }
 
-export const previewSlackFileAttachmentTool: ToolDefinition<
+export const previewFileAttachmentTool: ToolDefinition<
   Input,
-  PreviewSlackFileAttachmentData
+  PreviewFileAttachmentData
 > = {
-  name: 'preview_slack_file_attachment',
+  name: 'preview_file_attachment',
   description:
-    'PREVIEW attaching a Slack-uploaded inbound file to the app. Use inbound_file_id values from the Slack uploaded-files context. Destinations: task_attachment, property_document, property_room_photo, property_attribute_photo, property_tech_account_photo. Always preview, present the plan, get explicit confirmation, then call commit_slack_file_attachment with the returned token.',
+    'PREVIEW filing a file the user uploaded into the app. Works on every surface — Slack uploads and in-app chat attachments both arrive as inbound_file_id values in the uploaded-files context block, and this tool handles them identically. Destinations: task_attachment, property_document, property_room_photo, property_attribute_photo, property_tech_account_photo. Always preview, present the plan, get explicit confirmation, then call commit_file_attachment with the returned token.',
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -130,12 +134,12 @@ export const previewSlackFileAttachmentTool: ToolDefinition<
           'property_tech_account_photo',
         ],
         description:
-          'Where to attach the Slack file: a task attachment, Property Knowledge document, room photo, attribute photo, or tech account photo.',
+          'Where to file the uploaded file: a task attachment, Property Knowledge document, room photo, attribute photo, or tech account photo.',
       },
       inbound_file_id: {
         type: 'string',
         description:
-          'UUID from the Slack uploaded-files context block. Do not invent this id.',
+          'UUID from the uploaded-files context block. Do not invent this id.',
       },
       task_id: {
         type: 'string',

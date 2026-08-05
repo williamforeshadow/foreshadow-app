@@ -360,8 +360,39 @@
   border: 1px solid var(--border);
   border-radius: 0.75rem;
   background: var(--background);
-  padding: 0.375rem 0.5rem 0.375rem 0.75rem;
+  /* Symmetric padding now that a button sits on each end of the row. */
+  padding: 0.375rem 0.5rem;
   transition: border-color 0.12s;
+}
+
+/* Attach button. Deliberately quieter than the send button: it's a secondary
+ * action sitting next to the primary one, so it reads as chrome until hovered
+ * rather than competing with the filled circle opposite it. */
+.attachButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.attachButton:hover:not(:disabled) {
+  color: var(--foreground);
+  background: var(--muted);
+}
+
+.attachButton:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .inputBox:focus-within {

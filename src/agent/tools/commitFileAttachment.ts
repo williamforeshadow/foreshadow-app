@@ -11,20 +11,20 @@ const inputSchema = z.object({
     .string()
     .uuid()
     .describe(
-      'Single-use token returned by preview_slack_file_attachment. Tokens expire after 5 minutes.',
+      'Single-use token returned by preview_file_attachment. Tokens expire after 5 minutes.',
     ),
 });
 
 type Input = z.infer<typeof inputSchema>;
 
-export interface CommitSlackFileAttachmentData {
+export interface CommitFileAttachmentData {
   plan: SlackFileAttachmentPlan;
   row: unknown;
 }
 
 async function handler(
   input: Input,
-): Promise<ToolResult<CommitSlackFileAttachmentData>> {
+): Promise<ToolResult<CommitFileAttachmentData>> {
   const consumed = consumeSlackFileAttachmentToken(input.confirmation_token);
   if (!consumed.ok) {
     return {
@@ -34,9 +34,9 @@ async function handler(
         message:
           consumed.reason === 'expired'
             ? 'The confirmation token has expired. Tokens are valid for 5 minutes.'
-            : 'No matching confirmation token. Tokens are issued only by preview_slack_file_attachment and are single-use.',
+            : 'No matching confirmation token. Tokens are issued only by preview_file_attachment and are single-use.',
         hint:
-          'Call preview_slack_file_attachment, present the plan to the user, get explicit confirmation, then call this tool with the new token.',
+          'Call preview_file_attachment, present the plan to the user, get explicit confirmation, then call this tool with the new token.',
       },
     };
   }
@@ -49,8 +49,8 @@ async function handler(
         code: result.error.code,
         message: result.error.message,
         hint: result.error.field
-          ? `The "${result.error.field}" field is invalid. Re-run preview_slack_file_attachment.`
-          : 'Re-run preview_slack_file_attachment.',
+          ? `The "${result.error.field}" field is invalid. Re-run preview_file_attachment.`
+          : 'Re-run preview_file_attachment.',
       },
     };
   }
@@ -59,13 +59,13 @@ async function handler(
   return { ok: true, data: { plan: result.plan, row: result.row }, meta };
 }
 
-export const commitSlackFileAttachmentTool: ToolDefinition<
+export const commitFileAttachmentTool: ToolDefinition<
   Input,
-  CommitSlackFileAttachmentData
+  CommitFileAttachmentData
 > = {
-  name: 'commit_slack_file_attachment',
+  name: 'commit_file_attachment',
   description:
-    'COMMIT a previewed-and-confirmed Slack inbound file attachment. Takes ONLY a confirmation_token from preview_slack_file_attachment. Use after the user explicitly confirms the preview plan.',
+    'COMMIT a previewed-and-confirmed file attachment. Takes ONLY a confirmation_token from preview_file_attachment. Use after the user explicitly confirms the preview plan.',
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -73,7 +73,7 @@ export const commitSlackFileAttachmentTool: ToolDefinition<
       confirmation_token: {
         type: 'string',
         description:
-          'Single-use token from preview_slack_file_attachment. Required.',
+          'Single-use token from preview_file_attachment. Required.',
       },
     },
     required: ['confirmation_token'],

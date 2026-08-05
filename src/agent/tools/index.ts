@@ -37,8 +37,8 @@ import { commitPropertyContactBatchTool } from './commitPropertyContactBatch';
 import { previewCommentsBatch } from './previewCommentsBatch';
 import { addCommentsBatch } from './addCommentsBatch';
 import { declareFollowup } from './declareFollowup';
-import { previewSlackFileAttachmentTool } from './previewSlackFileAttachment';
-import { commitSlackFileAttachmentTool } from './commitSlackFileAttachment';
+import { previewFileAttachmentTool } from './previewFileAttachment';
+import { commitFileAttachmentTool } from './commitFileAttachment';
 import { findConversations } from './findConversations';
 import { readConversationThread } from './readConversationThread';
 import { concierge } from './concierge';
@@ -91,8 +91,8 @@ export const TOOLS: ReadonlyArray<ToolDefinition<unknown, unknown>> = [
   previewCommentsBatch as unknown as ToolDefinition<unknown, unknown>,
   addCommentsBatch as unknown as ToolDefinition<unknown, unknown>,
   declareFollowup as unknown as ToolDefinition<unknown, unknown>,
-  previewSlackFileAttachmentTool as unknown as ToolDefinition<unknown, unknown>,
-  commitSlackFileAttachmentTool as unknown as ToolDefinition<unknown, unknown>,
+  previewFileAttachmentTool as unknown as ToolDefinition<unknown, unknown>,
+  commitFileAttachmentTool as unknown as ToolDefinition<unknown, unknown>,
   findConversations as unknown as ToolDefinition<unknown, unknown>,
   readConversationThread as unknown as ToolDefinition<unknown, unknown>,
   concierge as unknown as ToolDefinition<unknown, unknown>,

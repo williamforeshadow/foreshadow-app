@@ -49,7 +49,7 @@ For **write tools** (the `preview*` / `commit*` / `create*` / `update*` / `delet
 `findProperties`, `findReservations` *(fixed)*, `findTasks`, `findUsers`, `findTemplates`, `findDepartments`, `findBins`, `findConversations`, `readConversationThread`, `findConciergeTraining`, `getPropertyKnowledge`, `getPropertyKnowledgeForGuest`.
 
 **Write (preview/commit pairs — audit for correctness + the confirm flow):**
-`previewTask`/`createTask`, `previewBin`/`createBin`, `previewTasksBatch`/`createTasksBatch`, `previewTaskUpdate`/`updateTask`, `previewTasksUpdateBatch`/`updateTasksBatch`, `previewTaskDelete`/`deleteTask`, `previewComment`/`addComment`, `previewPropertyNoteUpsert`/`commitPropertyNoteUpsert`, `previewPropertyNoteDelete`/`commitPropertyNoteDelete`, `previewPropertyContactUpsert`/`commitPropertyContactUpsert`, `previewPropertyContactDelete`/`commitPropertyContactDelete`, `previewPropertyKnowledgeWrite`/`commitPropertyKnowledgeWrite`, `previewSlackFileAttachment`/`commitSlackFileAttachment`.
+`previewTask`/`createTask`, `previewBin`/`createBin`, `previewTasksBatch`/`createTasksBatch`, `previewTaskUpdate`/`updateTask`, `previewTasksUpdateBatch`/`updateTasksBatch`, `previewTaskDelete`/`deleteTask`, `previewComment`/`addComment`, `previewPropertyNoteUpsert`/`commitPropertyNoteUpsert`, `previewPropertyNoteDelete`/`commitPropertyNoteDelete`, `previewPropertyContactUpsert`/`commitPropertyContactUpsert`, `previewPropertyContactDelete`/`commitPropertyContactDelete`, `previewPropertyKnowledgeWrite`/`commitPropertyKnowledgeWrite`, `previewFileAttachment`/`commitFileAttachment`.
 
 **Delegation:** `concierge` (runs the guest-facing Concierge sub-agent; read its handler but its internals are out of scope here).
 

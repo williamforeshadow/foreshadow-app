@@ -285,12 +285,15 @@
 /* The liquid-glass input bar — floats over the drawer, blurring the messages
    that scroll behind it. Opaque enough to stay readable, with the top-rim sheen
    the pill uses and a hairline that survives on white. */
+/* The bubble is a column: an optional attachment-chip row stacked above the
+ * input row, so chips push the field taller instead of squeezing the textarea.
+ * `.fieldRow` carries the horizontal layout the bubble itself used to. */
 .field {
   position: relative;
   pointer-events: auto;
   display: flex;
-  align-items: flex-end;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: stretch;
   border-radius: 1.375rem;
   padding: 0.4375rem 0.4375rem 0.4375rem 0.875rem;
   border: 1px solid rgba(0, 0, 0, 0.12);
@@ -309,6 +312,36 @@
     0 2px 12px rgba(0, 0, 0, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
+.fieldRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+/* Attach button. Quieter than the send button beside it — chrome until
+ * pressed, so it doesn't compete with the filled send circle. */
+.attachButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  transition: opacity 0.15s ease;
+}
+
+.attachButton:active:not(:disabled) {
+  opacity: 0.55;
+}
+
+.attachButton:disabled {
+  opacity: 0.4;
+}
+
 .field::before {
   content: '';
   position: absolute;

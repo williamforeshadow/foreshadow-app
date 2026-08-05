@@ -59,7 +59,7 @@ async function handler(
       error: {
         code: 'invalid_input',
         message:
-          'Slack file attachments on Property Knowledge compound writes are supported only for room or attribute photo destinations.',
+          'File attachments on Property Knowledge compound writes are supported only for room or attribute photo destinations.',
       },
     };
   }
@@ -203,7 +203,7 @@ export const previewPropertyKnowledgeWriteTool: ToolDefinition<
         type: 'array',
         items: { type: 'string' },
         description:
-          'Slack-only: inbound_file_id UUIDs to attach as photos after an upsert_room or upsert_attribute write. Use only ids from the Slack uploaded-files context block.',
+          'inbound_file_id UUIDs to attach as photos after an upsert_room or upsert_attribute write. Use only ids from the uploaded-files context block.',
       },
       attachment_caption: {
         type: 'string',

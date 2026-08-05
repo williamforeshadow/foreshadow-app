@@ -14,6 +14,7 @@ import {
   ArrowUp,
   Maximize2,
   Minimize2,
+  Paperclip,
   Sparkles,
   X,
 } from 'lucide-react';
@@ -27,65 +28,18 @@ import { ProjectCard } from '@/components/windows/projects/ProjectCard';
 import type { TaskRow } from '@/src/agent/tools/findTasks';
 import { TaskAttachment } from './TaskAttachment';
 import { taskRowToCardItem } from './taskCardMapping';
+import {
+  isSameOriginHref,
+  referencedTasks,
+  toRelativeHref,
+  useAgentChat,
+} from './useAgentChat';
+import { ComposerAttachments, MessageAttachments } from './ComposerAttachments';
 import styles from './AiChatPanel.module.css';
 
-// Same-origin link interception: the agent emits markdown links to in-app
-// routes (e.g. /tasks/<uuid>). Route those through Next's client router so
-// clicking one doesn't hard-reload the page and drop the chat.
-function isSameOriginHref(href: string): boolean {
-  if (!href) return false;
-  if (href.startsWith('/')) return true;
-  if (typeof window === 'undefined') return false;
-  try {
-    return new URL(href, window.location.origin).origin === window.location.origin;
-  } catch {
-    return false;
-  }
-}
-
-function toRelativeHref(href: string): string {
-  if (href.startsWith('/')) return href;
-  if (typeof window === 'undefined') return href;
-  try {
-    const u = new URL(href, window.location.origin);
-    return `${u.pathname}${u.search}${u.hash}`;
-  } catch {
-    return href;
-  }
-}
-
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  // When the agent returns a write preview, the server hands back a durable
-  // pending-action id; the chat shows Confirm/Cancel until it's resolved.
-  // Every pending action this turn registered. The chat shows a SINGLE
-  // Confirm/Cancel pair below the message; clicking commits (or cancels)
-  // every id in this array together via /api/agent/confirm.
-  pendingActionIds?: string[];
-  confirmation?: 'pending' | 'confirming' | 'done' | 'cancelled' | 'error';
-  /**
-   * Status colouring for a committed/cancelled/failed result message.
-   * Green means the write landed — the same meaning --task-green carries
-   * in the task panel, not a decorative accent.
-   */
-  variant?: 'success' | 'error';
-  // Structured task rows from any find_tasks call this turn. The tasks the
-  // answer actually links to render as kanban-style cards below the text.
-  tasks?: TaskRow[];
-}
-
-// Pick the tasks the answer text actually references — matched by the
-// /tasks/<id> deep link the agent emits — ordered by where they appear in
-// the prose so the card stack reads top-to-bottom with the text.
-function referencedTasks(content: string, tasks: TaskRow[]): TaskRow[] {
-  return tasks
-    .map((t) => ({ t, idx: content.indexOf(`/tasks/${t.task_id}`) }))
-    .filter((x) => x.idx >= 0)
-    .sort((a, b) => a.idx - b.idx)
-    .map((x) => x.t);
-}
+// The conversation itself — sending, confirming, attachments — lives in
+// useAgentChat, shared with the mobile sheet. This component owns the docked
+// panel's chrome and composer only.
 
 const EXAMPLE_PROMPT = 'What needs my attention today?';
 
@@ -150,11 +104,39 @@ export function AiChatPanel() {
     useAiChat();
   const keyboardInset = useKeyboardInset();
 
+  const {
+    messages,
+    isLoading,
+    submitMessage,
+    runCommand,
+    handleConfirmAction,
+    attachments,
+    addAttachments,
+    removeAttachment,
+    isUploading,
+  } = useAgentChat();
+
   const [inputValue, setInputValue] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // The composer clears itself; the hook owns the conversation, not the input.
+  const send = useCallback(
+    (text: string) => {
+      void submitMessage(text);
+      setInputValue('');
+    },
+    [submitMessage],
+  );
+
+  const runCommandAndClear = useCallback(
+    (command: string) => {
+      void runCommand(command);
+      setInputValue('');
+    },
+    [runCommand],
+  );
 
   const handleInternalNav = useCallback(
     (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
@@ -220,248 +202,22 @@ export function AiChatPanel() {
 
   // Whether the current open() carried a prompt (the mobile compose-then-open
   // flow). If so, skip auto-focus so the keyboard stays down and the answer is
-  // readable. Captured at the open transition (render-time, not an effect).
+  // readable. Derived at the open transition — state rather than a ref, so the
+  // focus effect below re-runs with the right value instead of reading a value
+  // mutated mid-render.
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
-  const skipFocusRef = useRef(false);
+  const [skipFocus, setSkipFocus] = useState(false);
   if (isOpen !== prevIsOpen) {
     setPrevIsOpen(isOpen);
-    if (isOpen) skipFocusRef.current = !!pendingPrompt;
+    if (isOpen) setSkipFocus(!!pendingPrompt);
   }
 
   // Focus the input when the panel opens (unless a prompt was submitted on open).
   useEffect(() => {
-    if (!isOpen || skipFocusRef.current) return;
+    if (!isOpen || skipFocus) return;
     const id = window.setTimeout(() => textareaRef.current?.focus(), 60);
     return () => window.clearTimeout(id);
-  }, [isOpen]);
-
-  // Run a deterministic slash command (e.g. /myassignments) — no LLM.
-  const runCommand = useCallback(
-    async (command: string) => {
-      if (!user || isLoading) return;
-      setMessages((prev) => [
-        ...prev,
-        { id: `user-${Date.now()}`, role: 'user', content: command },
-      ]);
-      setInputValue('');
-      setIsLoading(true);
-      try {
-        const res = await fetch('/api/agent/command', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command, user_id: user.id }),
-        });
-        const data = await res.json();
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `assistant-${Date.now()}`,
-            role: 'assistant',
-            content:
-              !res.ok || data.error
-                ? `Error: ${data.error || 'Something went wrong'}`
-                : data.answer,
-            tasks:
-              !res.ok || data.error || !Array.isArray(data.tasks)
-                ? undefined
-                : data.tasks,
-          },
-        ]);
-      } catch (err) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `assistant-${Date.now()}`,
-            role: 'assistant',
-            content: `Error: ${
-              err instanceof Error ? err.message : 'Failed to run command'
-            }`,
-          },
-        ]);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [user, isLoading],
-  );
-
-  // Send a free-text prompt to the agent (or route a known slash command).
-  const submitMessage = useCallback(
-    async (text: string) => {
-      const message = text.trim();
-      if (!message || isLoading || !user) return;
-
-      if (message.startsWith('/')) {
-        const lower = message.toLowerCase();
-        const cmd =
-          AGENT_COMMANDS.find((c) => c.name === lower) ??
-          AGENT_COMMANDS.find((c) => c.name.startsWith(lower));
-        if (cmd) {
-          runCommand(cmd.name);
-          return;
-        }
-      }
-
-      setMessages((prev) => [
-        ...prev,
-        { id: `user-${Date.now()}`, role: 'user', content: message },
-      ]);
-      setInputValue('');
-      setIsLoading(true);
-
-      try {
-        let clientTz: string | undefined;
-        try {
-          clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        } catch {
-          clientTz = undefined;
-        }
-
-        const res = await fetch('/api/agent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: message,
-            user_id: user.id,
-            client_tz: clientTz,
-          }),
-        });
-        const data = await res.json();
-
-        if (!res.ok || data.error) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `assistant-${Date.now()}`,
-              role: 'assistant',
-              content: `Error: ${data.error || 'Something went wrong'}`,
-            },
-          ]);
-        } else {
-          const ids: string[] = Array.isArray(data.pending_action_ids)
-            ? data.pending_action_ids.filter(
-                (v: unknown): v is string =>
-                  typeof v === 'string' && v.length > 0,
-              )
-            : [];
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `assistant-${Date.now()}`,
-              role: 'assistant',
-              content: data.answer,
-              pendingActionIds: ids.length > 0 ? ids : undefined,
-              confirmation: ids.length > 0 ? 'pending' : undefined,
-              tasks: Array.isArray(data.tasks) ? data.tasks : undefined,
-            },
-          ]);
-        }
-      } catch (err) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `assistant-${Date.now()}`,
-            role: 'assistant',
-            content: `Error: ${
-              err instanceof Error ? err.message : 'Failed to get response'
-            }`,
-          },
-        ]);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [user, isLoading, runCommand],
-  );
-
-  // Confirm or cancel previewed writes — commits server-side, no LLM turn.
-  // Takes the full array of pending action ids registered this turn; the
-  // server loops them in order and reports a single combined result.
-  const handleConfirmAction = useCallback(
-    async (
-      messageId: string,
-      pendingActionIds: string[],
-      action: 'confirm' | 'cancel',
-    ) => {
-      if (!user || pendingActionIds.length === 0) return;
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === messageId ? { ...m, confirmation: 'confirming' } : m,
-        ),
-      );
-
-      const settle = (
-        state: NonNullable<Message['confirmation']>,
-        resultText: string,
-        // Present when the agent had registered a dependent next step
-        // (declare_followup) and the server ran it after the commit landed.
-        continuation?: { text: string; pending_action_ids?: string[] },
-      ) => {
-        setMessages((prev) => [
-          ...prev.map((m) =>
-            m.id === messageId ? { ...m, confirmation: state } : m,
-          ),
-          {
-            id: `assistant-${Date.now()}`,
-            role: 'assistant',
-            content: resultText,
-            variant:
-              state === 'done' ? 'success' : state === 'error' ? 'error' : undefined,
-          },
-          // Its own message, carrying its own Confirm/Cancel pair when the
-          // continuation previewed further writes.
-          ...(continuation
-            ? [
-                {
-                  id: `assistant-${Date.now()}-cont`,
-                  role: 'assistant' as const,
-                  content: continuation.text,
-                  // 'pending' is what gates the Confirm/Cancel pair in the
-                  // renderer; without it a continuation that previewed further
-                  // writes would show no buttons at all.
-                  ...(continuation.pending_action_ids?.length
-                    ? {
-                        pendingActionIds: continuation.pending_action_ids,
-                        confirmation: 'pending' as const,
-                      }
-                    : {}),
-                },
-              ]
-            : []),
-        ]);
-      };
-
-      try {
-        const res = await fetch('/api/agent/confirm', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pending_action_ids: pendingActionIds,
-            action,
-            user_id: user.id,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok || data.error) {
-          settle('error', `Error: ${data.error || 'Something went wrong'}`);
-          return;
-        }
-        const resolved: NonNullable<Message['confirmation']> =
-          data.status === 'committed'
-            ? 'done'
-            : data.status === 'cancelled'
-              ? 'cancelled'
-              : 'error';
-        settle(resolved, data.text, data.continuation);
-      } catch (err) {
-        settle(
-          'error',
-          `Error: ${err instanceof Error ? err.message : 'Failed to confirm'}`,
-        );
-      }
-    },
-    [user],
-  );
+  }, [isOpen, skipFocus]);
 
   // Auto-submit a prompt handed to open() — the mobile compose-then-open flow,
   // where the pill's composer types the message and the panel appears with it
@@ -476,11 +232,23 @@ export function AiChatPanel() {
     return () => window.clearTimeout(id);
   }, [isOpen, pendingPrompt, submitMessage, clearPendingPrompt]);
 
+  const canSend = !!inputValue.trim() && !isLoading && !isUploading && !!user;
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      submitMessage(inputValue);
+      if (canSend) send(inputValue);
     }
+  };
+
+  // Pasting a screenshot straight into the composer is the fastest path from
+  // "I just grabbed this" to "file it on the task", so treat pasted files the
+  // same as picked ones. Text pastes fall through to the textarea untouched.
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const files = Array.from(e.clipboardData.files);
+    if (files.length === 0) return;
+    e.preventDefault();
+    addAttachments(files);
   };
 
   // Slash-command autocomplete.
@@ -560,21 +328,21 @@ export function AiChatPanel() {
                     <button
                       type="button"
                       className={styles.chip}
-                      onClick={() => runCommand('/myassignments')}
+                      onClick={() => runCommandAndClear('/myassignments')}
                     >
                       My assignments
                     </button>
                     <button
                       type="button"
                       className={styles.chip}
-                      onClick={() => runCommand('/dailyoutlook')}
+                      onClick={() => runCommandAndClear('/dailyoutlook')}
                     >
                       Daily outlook
                     </button>
                     <button
                       type="button"
                       className={styles.chip}
-                      onClick={() => submitMessage(EXAMPLE_PROMPT)}
+                      onClick={() => send(EXAMPLE_PROMPT)}
                     >
                       {EXAMPLE_PROMPT}
                     </button>
@@ -672,7 +440,12 @@ export function AiChatPanel() {
                               )}
                           </>
                         ) : (
-                          <p>{msg.content}</p>
+                          <>
+                            <p>{msg.content}</p>
+                            {msg.attachments && (
+                              <MessageAttachments attachments={msg.attachments} />
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
@@ -705,7 +478,7 @@ export function AiChatPanel() {
                       key={c.name}
                       type="button"
                       className={styles.commandMenuItem}
-                      onClick={() => runCommand(c.name)}
+                      onClick={() => runCommandAndClear(c.name)}
                     >
                       <span className={styles.commandName}>{c.name}</span>
                       <span className={styles.commandDesc}>
@@ -715,26 +488,56 @@ export function AiChatPanel() {
                   ))}
                 </div>
               )}
+              <ComposerAttachments
+                attachments={attachments}
+                onRemove={removeAttachment}
+              />
               <div className={styles.inputBox}>
+                <button
+                  type="button"
+                  className={styles.attachButton}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!user}
+                  title="Attach a file"
+                  aria-label="Attach a file"
+                >
+                  <Paperclip size={15} />
+                </button>
+                {/* No accept filter: the agent files whatever the user thinks
+                    is worth filing, and the destination enforces its own rules
+                    at commit time. */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    addAttachments(Array.from(e.target.files ?? []));
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
+                />
                 <textarea
                   ref={textareaRef}
                   className={styles.textarea}
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
                   placeholder={
-                    user
-                      ? 'Ask anything, or type / for commands…'
-                      : 'Sign in to chat'
+                    !user
+                      ? 'Sign in to chat'
+                      : attachments.length > 0
+                        ? 'Say what to do with it…'
+                        : 'Ask anything, or type / for commands…'
                   }
                   rows={1}
                 />
                 <button
                   type="button"
                   className={styles.sendButton}
-                  onClick={() => submitMessage(inputValue)}
-                  disabled={isLoading || !inputValue.trim() || !user}
-                  title="Send"
+                  onClick={() => send(inputValue)}
+                  disabled={!canSend}
+                  title={isUploading ? 'Waiting for upload…' : 'Send'}
                 >
                   <ArrowUp size={15} />
                 </button>

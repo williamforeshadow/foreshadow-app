@@ -114,7 +114,7 @@ const inputSchema = z.object({
     .array(z.string().uuid())
     .optional()
     .describe(
-      'Slack-only: inbound_file_id UUIDs to attach after this task is created.',
+      'inbound_file_id UUIDs to attach once this task is created. Works on every surface — use ids from the uploaded-files context block.',
     ),
 });
 
@@ -130,7 +130,7 @@ export interface PreviewTaskResultData {
   confirmation_token: string;
   /** ISO8601 expiration timestamp for the token. */
   expires_at: string;
-  /** Durable Slack button-confirmation id. Present only on Slack previews. */
+  /** Durable button-confirmation id backing the Confirm/Cancel pair. */
   pending_action_id?: string | null;
 }
 
@@ -283,7 +283,7 @@ export const previewTask: ToolDefinition<Input, PreviewTaskResultData> = {
         type: 'array',
         items: { type: 'string' },
         description:
-          'Slack-only: inbound_file_id UUIDs to attach after the task is created. Use only ids from the Slack uploaded-files context block.',
+          'inbound_file_id UUIDs to attach once the task is created, so one Confirm creates the task AND files the uploads. Use only ids from the uploaded-files context block.',
       },
     },
     required: ['title'],

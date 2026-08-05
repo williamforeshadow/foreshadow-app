@@ -6,6 +6,11 @@ import { runAgent, type AgentActor, WRITE_TOOL_NAMES } from '@/src/agent/runAgen
 import { applyBackstops } from '@/src/agent/backstops';
 import { extractPendingActionIds } from '@/src/server/agent/slackConfirmationBlocks';
 import { setPendingActionFollowup } from '@/src/server/agent/pendingActions';
+import {
+  formatInboundFilesForAgent,
+  listRecentInboundFiles,
+  loadInboundFilesForUser,
+} from '@/src/server/agent/inboundFiles';
 import type { TaskRow } from '@/src/agent/tools/findTasks';
 
 // POST /api/agent
@@ -34,9 +39,19 @@ export async function POST(req: NextRequest) {
 
   let prompt: string;
   let clientTz: string | undefined;
+  let inboundFileIds: string[] = [];
   try {
     const body = await req.json();
     prompt = body?.prompt;
+    // Files the user attached to THIS message, staged earlier by
+    // /api/agent/attachments. Ids only — ownership is re-checked below, so a
+    // forged id buys nothing. Tolerant of junk: a malformed entry is dropped
+    // rather than failing the whole message.
+    if (Array.isArray(body?.inbound_file_ids)) {
+      inboundFileIds = body.inbound_file_ids.filter(
+        (v: unknown): v is string => typeof v === 'string' && v.length > 0,
+      );
+    }
     // NOTE: body.user_id is intentionally IGNORED. The acting user comes from
     // the verified Supabase session below — trusting a client-supplied id let
     // any caller impersonate any user (and thereby scope the agent to any
@@ -94,16 +109,57 @@ export async function POST(req: NextRequest) {
     role: appUser.role,
   };
 
+  // Uploaded-file context, mirroring what the Slack route builds from a
+  // message's files[]. Two sources, one block: the files attached to this
+  // message, then anything the user staged recently and hasn't filed yet — so
+  // "actually, put it on the Maple task instead" still resolves a turn later.
+  //
+  // The model only ever sees names, types and sizes here. Bytes stay in the
+  // staging bucket until a commit tool moves them.
+  const attachedFiles = await loadInboundFilesForUser({
+    ids: inboundFileIds,
+    appUserId: userId,
+    source: 'web',
+  });
+  const attachedIds = new Set(attachedFiles.map((f) => f.id));
+  const carryForward = (
+    await listRecentInboundFiles({ appUserId: userId, source: 'web' })
+  ).filter((f) => !attachedIds.has(f.id));
+  const filesBlock = formatInboundFilesForAgent(
+    [...attachedFiles, ...carryForward],
+    'web',
+  );
+  const contextBlocks = filesBlock ? [filesBlock] : undefined;
+
   await supabase.from('ai_chat_messages').insert({
     user_id: userId,
     role: 'user',
     content: prompt,
+    ...(attachedFiles.length > 0
+      ? {
+          metadata: {
+            inbound_files: attachedFiles.map((f) => ({
+              id: f.id,
+              name: f.name,
+              file_type: f.file_type,
+            })),
+          },
+        }
+      : {}),
   });
 
   try {
     // db: the user's session-bound client — RLS enforces org isolation on
     // every tool query at the database layer.
-    const result = await runAgent({ history, prompt, clientTz, actor, orgId, db: userDb });
+    const result = await runAgent({
+      history,
+      prompt,
+      clientTz,
+      actor,
+      orgId,
+      db: userDb,
+      contextBlocks,
+    });
 
     // Write-claim backstop: if the model claimed a side-effect happened
     // but no write tool succeeded, swap in a safe message before the user
