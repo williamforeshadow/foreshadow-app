@@ -80,21 +80,32 @@ export function markdownToMrkdwn(input: string): string {
 }
 
 /**
- * Strip a leading "<@U123ABC>" mention (and any surrounding whitespace)
- * from a message. Used to clean the bot's own mention out of the prompt
- * before handing it to the agent — the agent doesn't need to see "<@U123>"
- * and the system prompt would just confuse it.
+ * Strip EVERY "<@U123ABC>" mention of the bot from a message. Used to clean
+ * the bot's own mention out of the prompt before handing it to the agent —
+ * the agent doesn't need to see "<@U123>" and it just causes confusion.
  *
  * Only strips the bot's own user id; other @-mentions in the message are
- * preserved (they're meaningful context).
+ * preserved (they're meaningful context, and resolveMentionsInText turns
+ * them into names the agent can act on).
+ *
+ * Not anchored, deliberately. This used to match `^\s*<@bot>\s*` on the
+ * theory that channel mentions always arrive as "<@bot> do the thing" — but
+ * people invoke the bot mid-sentence just as often ("order a filter for 120
+ * island @Foreshadow make a task for me and Gabe"). An anchored pattern left
+ * that one in place, resolveMentionsInText could not map the bot's own id to
+ * an app user, and the agent opened its reply by apologizing for failing to
+ * resolve a Slack ID that was its own name — burying the actual answer.
+ *
+ * Replaced with a space rather than "" so stripping a mid-sentence mention
+ * doesn't glue the surrounding words together; runs of whitespace are then
+ * collapsed back to one.
  */
 export function stripBotMention(text: string, botUserId: string | null): string {
   if (!botUserId) return text.trim();
-  // The pattern matches "<@U123ABC>" optionally followed by whitespace.
-  // Slack always uses angle brackets and the U-prefixed id, so this is
-  // safe to do greedily at the start of the string.
-  const re = new RegExp(`^\\s*<@${botUserId}>\\s*`, 'i');
-  return text.replace(re, '').trim();
+  // Accept the "<@Uxxx|display name>" variant too — older Slack clients send
+  // it, and it names the same user.
+  const re = new RegExp(`<@${botUserId}(?:\\|[^>]*)?>`, 'gi');
+  return text.replace(re, ' ').replace(/[^\S\n]{2,}/g, ' ').trim();
 }
 
 /**

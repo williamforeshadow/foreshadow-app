@@ -252,30 +252,44 @@ const SLACK_MENTION_RE = /<@([UW][A-Z0-9]+)(?:\|[^>]*)?>/g;
  *     or scope issue) → leave the original `<@U…>` token untouched.
  *     Better to surface the noise than to silently rewrite to garbage.
  *
- * The bot's own `<@Ubot>` mention is stripped earlier by `stripBotMention`
- * (channel-mention path); this helper runs after that, so it never sees
- * the bot id. If the bot id slips through (DM path with someone copy-
- * pasting), the resolution will succeed and produce `[Foreshadow] (user_id: …)`
- * — harmless because the agent won't call find_users on itself.
+ * The bot's own `<@Ubot>` mention is normally stripped earlier by
+ * `stripBotMention` (channel-mention path). Pass `botUserId` anyway: the DM
+ * path doesn't call the stripper at all, and a bot mention that reaches this
+ * function does NOT resolve to an app user (the bot has no row in `users`),
+ * so it falls through to the "leave the original token" branch below and the
+ * agent sees a raw `<@U…>` string. It then tries to make sense of its own id
+ * as a person — the failure that had it apologizing for an unresolvable
+ * mention instead of answering. When `botUserId` is given we drop those
+ * tokens outright.
  */
 export async function resolveMentionsInText(
   web: WebClient,
   text: string,
+  botUserId?: string | null,
 ): Promise<string> {
   if (!text) return text;
+  // Drop the bot's own mentions before anything else — they're an invocation,
+  // never a person the agent should reason about.
+  let working = text;
+  if (botUserId) {
+    const botRe = new RegExp(`<@${botUserId}(?:\\|[^>]*)?>`, 'gi');
+    working = working.replace(botRe, ' ').replace(/[^\S\n]{2,}/g, ' ').trim();
+  }
+  if (!working) return working;
+
   // Collect unique Slack user ids first so we resolve each at most once,
   // even if the user @-tagged the same person multiple times in one
   // message.
   const uniqueIds: string[] = [];
   const seen = new Set<string>();
-  for (const match of text.matchAll(SLACK_MENTION_RE)) {
+  for (const match of working.matchAll(SLACK_MENTION_RE)) {
     const id = match[1];
     if (id && !seen.has(id)) {
       seen.add(id);
       uniqueIds.push(id);
     }
   }
-  if (uniqueIds.length === 0) return text;
+  if (uniqueIds.length === 0) return working;
 
   // Resolve in parallel — resolveSlackUser is cached, so the worst case
   // is N parallel users.info calls on first contact and zero thereafter.
@@ -295,7 +309,7 @@ export async function resolveMentionsInText(
   );
   const map = new Map(resolved);
 
-  return text.replace(SLACK_MENTION_RE, (whole, slackId: string) => {
+  return working.replace(SLACK_MENTION_RE, (whole, slackId: string) => {
     const id = map.get(slackId);
     if (!id) return whole; // unresolved → leave original token
     const displayName = id.appUserName;

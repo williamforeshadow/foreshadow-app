@@ -161,27 +161,16 @@ export async function POST(req: NextRequest) {
       contextBlocks,
     });
 
-    // Write-claim backstop: if the model claimed a side-effect happened
-    // but no write tool succeeded, swap in a safe message before the user
-    // sees it. The flag is persisted in metadata so reviewers can spot
-    // masked rows quickly. (The read-claim mask was removed — see
-    // backstops.ts for the rationale.)
-    const masked = applyBackstops(result.text, result.toolCalls, { prompt });
-    if (masked.writeMasked) {
-      console.warn('[agent] masked hallucinated write claim', {
-        user_id: userId,
-        prompt,
-        original: masked.originalIfMasked,
-      });
-    }
-    const finalText = masked.text;
-
     // Durable confirmation buttons: if any preview tools registered pending
     // actions this turn, hand the FULL list to the client so the single
     // Confirm/Cancel pair below the message commits (or cancels) every
     // preview from the turn atomically. Suppress entirely when a commit
     // tool already succeeded in the same turn — the write is done, so a
     // button would double-commit.
+    //
+    // Resolved BEFORE the backstops because the phantom-button mask needs the
+    // post-suppression list: it asks "will a button actually render?", and a
+    // turn that already committed answers no.
     const committedThisTurn = result.toolCalls.some(
       (c) =>
         WRITE_TOOL_NAMES.has(c.name) &&
@@ -190,6 +179,31 @@ export async function POST(req: NextRequest) {
     );
     const allPendingActionIds = extractPendingActionIds(result.toolCalls);
     const pendingActionIds = committedThisTurn ? [] : allPendingActionIds;
+
+    // Backstops: swap in a safe message when the model claimed a side-effect
+    // that no write tool produced, or pointed at a Confirm button this turn
+    // never created. Both flags are persisted in metadata so reviewers can
+    // spot masked rows quickly. (The read-claim mask was removed — see
+    // backstops.ts for the rationale.)
+    const masked = applyBackstops(result.text, result.toolCalls, {
+      prompt,
+      pendingActionIds,
+    });
+    if (masked.writeMasked) {
+      console.warn('[agent] masked hallucinated write claim', {
+        user_id: userId,
+        prompt,
+        original: masked.originalIfMasked,
+      });
+    }
+    if (masked.buttonMasked) {
+      console.warn('[agent] masked phantom confirm-button claim', {
+        user_id: userId,
+        prompt,
+        original: masked.originalIfMasked,
+      });
+    }
+    const finalText = masked.text;
 
     // Attach any follow-up the model registered (declare_followup) to the
     // bundle, so /api/agent/confirm can finish the plan on the same click
@@ -215,6 +229,7 @@ export async function POST(req: NextRequest) {
               : { ...base, error: c.output.error };
           }),
           ...(masked.writeMasked ? { masked_write_claim: true } : {}),
+          ...(masked.buttonMasked ? { masked_button_claim: true } : {}),
         },
       });
     }

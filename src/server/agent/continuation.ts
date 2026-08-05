@@ -149,8 +149,15 @@ export async function maybeRunContinuation({
       : {}),
   });
 
-  const masked = applyBackstops(result.text, result.toolCalls, { prompt });
+  // Extracted before the backstops so the phantom-button mask knows whether
+  // this continuation actually staged anything. A continuation that finishes
+  // the plan outright registers no ids and needs no button; one that previews
+  // further writes gets its own Confirm/Cancel pair from this list.
   const pendingActionIds = extractPendingActionIds(result.toolCalls);
+  const masked = applyBackstops(result.text, result.toolCalls, {
+    prompt,
+    pendingActionIds,
+  });
 
   // Carry the depth forward (+1) onto anything this turn queued, and record any
   // further follow-up it declared. This is what makes the cap actually bind.

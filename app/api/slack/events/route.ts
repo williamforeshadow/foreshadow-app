@@ -375,10 +375,12 @@ async function handleSlackMessage(
     return;
   }
 
-  // Channel mentions arrive as "<@U123BOT> do the thing"; we strip the
-  // leading bot mention so the prompt the agent sees is just "do the thing".
-  // DMs don't have that prefix — the user typed straight at the bot —
-  // so we pass the raw text through.
+  // Channel mentions carry the bot's own "<@U123BOT>" token wherever the user
+  // typed it — leading ("<@bot> do the thing") or mid-sentence ("do the thing
+  // <@bot> for me"). stripBotMention removes every occurrence so the prompt the
+  // agent sees is just the request. DMs don't need it — the user typed straight
+  // at the bot — but resolveMentionsInText below gets botUserId on both paths
+  // so a pasted self-mention can't reach the agent either way.
   const rawText = event.text ?? '';
   const stripped = (
     kind === 'channel_mention' ? stripBotMention(rawText, botUserId) : rawText
@@ -389,7 +391,7 @@ async function handleSlackMessage(
   // the agent answer "what's on Rae's plate?" without doing a fuzzy
   // find_users call — we already know exactly who Rae is. See
   // resolveMentionsInText for the resolution rules.
-  let prompt = await resolveMentionsInText(web, stripped);
+  let prompt = await resolveMentionsInText(web, stripped, botUserId);
   const hasFiles = (event.files?.length ?? 0) > 0;
 
   if (!prompt && !hasFiles) {
@@ -660,9 +662,26 @@ async function handleSlackMessage(
     contextBlocks,
   });
 
-  const masked = applyBackstops(result.text, result.toolCalls, { prompt });
+  // Resolved before the backstops so the phantom-button mask can tell whether
+  // a Confirm button will actually be attached to this message. Slack renders
+  // buttons straight from this list (buildConfirmationBlocks below), so an
+  // empty list means a "Confirm below" line has nothing to point at.
+  const pendingActionIds = extractPendingActionIds(result.toolCalls);
+
+  const masked = applyBackstops(result.text, result.toolCalls, {
+    prompt,
+    pendingActionIds,
+  });
   if (masked.writeMasked) {
     console.warn('[slack] masked hallucinated write claim', {
+      user_id: identity.appUserId,
+      slack_user: event.user,
+      kind,
+      original: masked.originalIfMasked,
+    });
+  }
+  if (masked.buttonMasked) {
+    console.warn('[slack] masked phantom confirm-button claim', {
       user_id: identity.appUserId,
       slack_user: event.user,
       kind,
@@ -692,6 +711,7 @@ async function handleSlackMessage(
           : { ...base, error: c.output.error };
       }),
       ...(masked.writeMasked ? { masked_write_claim: true } : {}),
+      ...(masked.buttonMasked ? { masked_button_claim: true } : {}),
     },
   });
 
@@ -711,7 +731,6 @@ async function handleSlackMessage(
   // affordance and stacking cards under it adds noise without value.
   const taskUrls = extractTaskUrlsFromText(mrkdwnText).map((url) => ({ url }));
   const extras = taskUrls.length > 0 ? await buildTaskMessageExtras(taskUrls) : {};
-  const pendingActionIds = extractPendingActionIds(result.toolCalls);
   // Attach any follow-up the model registered (declare_followup) so the
   // Confirm button can finish the plan without another user message. Depth 0:
   // this turn came from a real Slack message.
