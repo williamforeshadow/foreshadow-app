@@ -1,5 +1,6 @@
 import type { ToolCallTrace } from './runAgent';
 import { WRITE_TOOL_NAMES } from './runAgent';
+import { claimsConfirmButton } from './claims';
 
 // Hallucination backstops.
 //
@@ -28,25 +29,17 @@ import { WRITE_TOOL_NAMES } from './runAgent';
 const ACTION_CLAIM_RE =
   /\b(?:I(?:'ve|\s+have)?\s+(?:created|scheduled|assigned|updated|deleted|cancelled|completed|marked)|has\s+been\s+(?:created|scheduled|updated|deleted|cancelled|completed))\b/i;
 
-// Forward-looking sibling of ACTION_CLAIM_RE: "Confirm below to create it",
-// "press Confirm", "use the buttons below". ACTION_CLAIM_RE is past-tense only,
-// so a message that promises a button rather than claiming a completed write
-// sailed straight through it.
-//
-// That gap had teeth. On 2026-08-05 the agent answered a task request with a
-// correct-looking plan ending "Confirm below to create it" — having called
-// only find_properties. No preview tool ran, so no pending action existed and
-// no buttons rendered. The user sat waiting under a message that looked like
-// success, then gave up and re-asked two minutes later.
-//
-// Claiming a button is exactly as falsifiable as claiming a write, and cheaper
-// to check: either the turn registered pending action ids or it did not.
-const BUTTON_CLAIM_RE =
-  /\b(?:confirm|cancel)\b[^.!?\n]{0,30}\bbelow\b|\b(?:press|tap|hit|click|use)\s+(?:the\s+)?(?:["'*_]*(?:confirm|cancel)\b|buttons?\b)/i;
-
 /**
  * Replace a reply that tells the user to press a Confirm button when this turn
  * registered no pending action, so no button exists.
+ *
+ * This is the SECOND line of defense, and should almost never fire. runAgent
+ * catches the same condition while the loop is still open and takes another
+ * turn to actually stage the write (see selfCorrectPhantomButton there), so by
+ * the time a message reaches here it has already had a chance to fix itself.
+ * What's left is the case where the model was told to preview and still
+ * wouldn't — at which point silence is worse than an honest correction,
+ * because the user is otherwise waiting on a button that will never render.
  *
  * `pendingActionIds` must be the list the caller is actually going to render
  * from — post-suppression, not the raw extraction. A turn that already
@@ -58,7 +51,7 @@ export function maskPhantomButtonClaim(
   pendingActionIds: string[],
 ): { text: string; replaced: boolean; original?: string } {
   if (pendingActionIds.length > 0) return { text, replaced: false };
-  if (!BUTTON_CLAIM_RE.test(text)) return { text, replaced: false };
+  if (!claimsConfirmButton(text)) return { text, replaced: false };
 
   return {
     text: "I described that plan but didn't actually stage it, so there are no Confirm buttons below and nothing has been created. Tell me to go ahead and I'll set it up properly.",

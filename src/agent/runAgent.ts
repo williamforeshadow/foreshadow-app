@@ -12,6 +12,7 @@ import { toAnthropicTools } from './tools';
 import type { ToolContext } from './tools/types';
 import { dispatchToolUse, type ToolCallTrace } from './dispatch';
 import { SKILLS_BLOCK } from './skills';
+import { claimsConfirmButton, extractPendingActionIds } from './claims';
 import { getAnthropic, MODEL } from './anthropic';
 import { todayInTz } from '@/src/lib/dates';
 
@@ -78,6 +79,13 @@ const MAX_TOKENS = 2048;
 // Hard ceiling on iterations. A well-behaved tool catalog should never need
 // more than 3-4 round-trips for a single user question; this is a safety net.
 const MAX_ITERATIONS = 10;
+
+// Fed back as a user turn when the model claims a Confirm button it never
+// created. Phrased as a correction to act on rather than a scolding: the goal
+// is a staged write on the next turn, not an apology to the user (who has not
+// seen anything yet and never will see the discarded attempt).
+const PHANTOM_BUTTON_CORRECTION =
+  'Your last reply pointed at a Confirm button, but you did not call any preview tool this turn, so no button exists and the user would be left waiting for one. Fix it now: if you have enough to stage the write — a title alone is enough for a task — call the appropriate preview tool and then give the plan. If you genuinely cannot stage it, reply again without mentioning buttons or confirming, and say plainly what you need. Do not apologize or mention this correction; the user never saw the previous attempt.';
 
 // Prompt caching (see also src/server/messages/draftReply.ts, which does the
 // same for the Concierge). This loop re-sends a large fixed prefix on EVERY
@@ -494,6 +502,9 @@ export async function runAgent({
     followup,
   };
 
+  // Guards the one-shot phantom-button correction below.
+  let selfCorrectedPhantomButton = false;
+
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     const response = await anthropic.messages.create({
       model: MODEL,
@@ -515,6 +526,33 @@ export async function runAgent({
         .map((b) => b.text)
         .join('\n')
         .trim();
+
+      // Phantom-button self-correction. The model sometimes writes the plan
+      // and the "Confirm below" line without ever calling the preview tool
+      // that would create those buttons — the reply reads like success while
+      // nothing is staged, and the user waits under it for a control that
+      // never appears.
+      //
+      // Rather than shipping that and apologizing (which is what the mask in
+      // backstops.ts does, and which still costs the user a round trip), spend
+      // one more iteration: tell the model what's wrong and let it either
+      // stage the write for real or drop the button language. The user only
+      // ever sees the corrected turn.
+      //
+      // Once per run. If the model ignores the correction, stop and let the
+      // backstop mask handle it rather than spending iterations the real work
+      // may still need — a model that refused the explicit instruction once is
+      // not obviously going to take it the second time.
+      if (
+        !selfCorrectedPhantomButton &&
+        claimsConfirmButton(text) &&
+        extractPendingActionIds(toolCalls).length === 0
+      ) {
+        selfCorrectedPhantomButton = true;
+        conversation.push({ role: 'user', content: PHANTOM_BUTTON_CORRECTION });
+        continue;
+      }
+
       return { text, toolCalls, followup: followup.instruction };
     }
 

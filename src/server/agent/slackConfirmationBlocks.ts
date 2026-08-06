@@ -1,25 +1,14 @@
 import type { Block } from '@slack/types';
-import type { ToolCallTrace } from '@/src/agent/runAgent';
 import {
   AGENT_CANCEL_ACTION_ID,
   AGENT_CONFIRM_ACTION_ID,
 } from './pendingActions';
 
-export function extractPendingActionIds(toolCalls: ToolCallTrace[]): string[] {
-  const ids: string[] = [];
-  const seen = new Set<string>();
-  for (const call of toolCalls) {
-    if (!call.output.ok) continue;
-    const data = call.output.data;
-    if (!data || typeof data !== 'object') continue;
-    const id = (data as { pending_action_id?: unknown }).pending_action_id;
-    if (typeof id === 'string' && id.length > 0 && !seen.has(id)) {
-      ids.push(id);
-      seen.add(id);
-    }
-  }
-  return ids;
-}
+// Re-exported so existing importers keep their import path. The definition
+// moved to src/agent/claims.ts because runAgent needs it too, and importing
+// this module there would drag Slack Block types (and pendingActions, and
+// supabase) into the agent loop.
+export { extractPendingActionIds } from '@/src/agent/claims';
 
 // Encode an ordered list of pending-action ids into a single Slack button
 // `value` field. Comma-separated is short and trivial to parse on the
