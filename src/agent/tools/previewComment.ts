@@ -69,7 +69,7 @@ async function handler(
         message:
           'Cannot author a comment without a resolved actor. Comments are authored as the talking-to user; this surface did not resolve one.',
         hint:
-          'This is a server-side configuration fault, not something the user can work around by switching surfaces — both Slack and the web chat normally resolve a verified author. Tell the user commenting is temporarily unavailable and report it.',
+          'This is a server-side configuration fault, not something the user can work around — a verified author is normally resolved before every run. Tell the user commenting is temporarily unavailable and report it. Do not suggest they post from somewhere else.',
       },
     };
   }

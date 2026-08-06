@@ -115,6 +115,13 @@
   color: var(--foreground);
 }
 
+/* Toggle state for the history button — the body swaps to the session list, so
+   the control has to read as held down rather than as a one-shot action. */
+.iconButtonActive {
+  background: color-mix(in srgb, var(--muted-foreground) 22%, transparent);
+  color: var(--foreground);
+}
+
 /* ── Body ────────────────────────────────────────────────────────────── */
 .body {
   flex: 1;

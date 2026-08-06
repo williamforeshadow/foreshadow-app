@@ -12,9 +12,11 @@ import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowUp,
+  History,
   Maximize2,
   Minimize2,
   Paperclip,
+  SquarePen,
   Sparkles,
   X,
 } from 'lucide-react';
@@ -35,6 +37,7 @@ import {
   useAgentChat,
 } from './useAgentChat';
 import { ComposerAttachments, MessageAttachments } from './ComposerAttachments';
+import { SessionList } from './SessionList';
 import styles from './AiChatPanel.module.css';
 
 // The conversation itself — sending, confirming, attachments — lives in
@@ -107,6 +110,13 @@ export function AiChatPanel() {
   const {
     messages,
     isLoading,
+    sessions,
+    sessionId,
+    isHydrating,
+    newSession,
+    switchSession,
+    renameSession,
+    deleteSession,
     submitMessage,
     runCommand,
     handleConfirmAction,
@@ -116,6 +126,7 @@ export function AiChatPanel() {
     isUploading,
   } = useAgentChat();
 
+  const [showHistory, setShowHistory] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -126,6 +137,8 @@ export function AiChatPanel() {
     (text: string) => {
       void submitMessage(text);
       setInputValue('');
+      // Sending is a decision to be in the conversation, not to keep browsing.
+      setShowHistory(false);
     },
     [submitMessage],
   );
@@ -264,7 +277,9 @@ export function AiChatPanel() {
       ? styles.fullscreen
       : styles.docked;
 
-  const isEmpty = messages.length === 0 && !isLoading;
+  // Hydration counts as "not empty" so switching to a saved chat doesn't flash
+  // the welcome screen on the way to its messages.
+  const isEmpty = messages.length === 0 && !isLoading && !isHydrating;
 
   return (
     <AnimatePresence>
@@ -287,6 +302,28 @@ export function AiChatPanel() {
               Ask Foreshadow
             </span>
             <div className={styles.headerActions}>
+              <button
+                type="button"
+                className={styles.iconButton}
+                onClick={() => {
+                  newSession();
+                  setShowHistory(false);
+                }}
+                title="New chat"
+                aria-label="New chat"
+              >
+                <SquarePen size={15} />
+              </button>
+              <button
+                type="button"
+                className={`${styles.iconButton}${showHistory ? ` ${styles.iconButtonActive}` : ''}`}
+                onClick={() => setShowHistory((v) => !v)}
+                title="Chat history"
+                aria-label="Chat history"
+                aria-expanded={showHistory}
+              >
+                <History size={15} />
+              </button>
               {!isMobile && (
                 <button
                   type="button"
@@ -314,7 +351,18 @@ export function AiChatPanel() {
 
           <div className={styles.body}>
             <div className={styles.bodyInner}>
-              {isEmpty ? (
+              {showHistory ? (
+                <SessionList
+                  sessions={sessions}
+                  activeId={sessionId}
+                  onSelect={(id) => {
+                    void switchSession(id);
+                    setShowHistory(false);
+                  }}
+                  onRename={renameSession}
+                  onDelete={deleteSession}
+                />
+              ) : isEmpty ? (
                 <div className={styles.welcome}>
                   <div className={styles.welcomeIcon}>
                     <Sparkles size={20} />

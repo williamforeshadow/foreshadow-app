@@ -119,7 +119,7 @@ export const previewFileAttachmentTool: ToolDefinition<
 > = {
   name: 'preview_file_attachment',
   description:
-    'PREVIEW filing a file the user uploaded into the app. Works on every surface — Slack uploads and in-app chat attachments both arrive as inbound_file_id values in the uploaded-files context block, and this tool handles them identically. Destinations: task_attachment, property_document, property_room_photo, property_attribute_photo, property_tech_account_photo. Always preview, present the plan, get explicit confirmation, then call commit_file_attachment with the returned token.',
+    'PREVIEW filing a file the user uploaded into the app. Whatever they uploaded arrives as an inbound_file_id in the uploaded-files context block, and this tool files it. Destinations: task_attachment, property_document, property_room_photo, property_attribute_photo, property_tech_account_photo. Always preview, present the plan, get explicit confirmation, then call commit_file_attachment with the returned token.',
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -160,7 +160,7 @@ export const previewFileAttachmentTool: ToolDefinition<
       title: {
         type: 'string',
         description:
-          'Optional title for destination=property_document. Defaults to Slack file title/name.',
+          "Optional title for destination=property_document. Defaults to the uploaded file's title/name.",
       },
       notes: {
         type: 'string',

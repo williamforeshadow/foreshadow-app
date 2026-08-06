@@ -69,24 +69,53 @@ function urlOf(input: RequestInfo | URL): string {
   return input.url;
 }
 
+type PatchedWindow = Window & { __foreshadowDemoFetch?: typeof window.fetch };
+
+/**
+ * Swap `fetch` for one that answers every /api/agent* call with canned copy.
+ *
+ * Installed during RENDER, not in an effect, and that timing is the whole
+ * point: React runs a child's effects before its parent's, so an effect here
+ * would land after <AiChatPanel/> had already fired its own mount-time
+ * requests — it restores the user's saved chats on mount — and one real call
+ * would reach the API from a page whose contract (see the header) is that none
+ * ever do.
+ *
+ * Idempotent via the window marker, so a StrictMode double render can't stack
+ * patches or capture an already-patched fetch as the "original".
+ */
+function installDemoFetch(): void {
+  if (typeof window === 'undefined') return;
+  const w = window as PatchedWindow;
+  if (w.__foreshadowDemoFetch) return;
+
+  const original = window.fetch;
+  w.__foreshadowDemoFetch = original;
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (urlOf(input).includes('/api/agent')) {
+      // Mimic the real "thinking" pause so the loading animation shows.
+      await new Promise((r) => setTimeout(r, 850));
+      return new Response(JSON.stringify({ answer: CANNED_ANSWER }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return original(input, init);
+  };
+}
+
 export default function DemoAgentPage() {
-  // Intercept the agent endpoints with a canned reply. Installed on mount,
-  // before any user interaction, and restored on unmount.
+  installDemoFetch();
+
+  // Restore on unmount. Only the teardown needs to be an effect — the install
+  // has to have happened before this component's children mounted.
   useEffect(() => {
-    const original = window.fetch;
-    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (urlOf(input).includes('/api/agent')) {
-        // Mimic the real "thinking" pause so the loading animation shows.
-        await new Promise((r) => setTimeout(r, 850));
-        return new Response(JSON.stringify({ answer: CANNED_ANSWER }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      return original(input, init);
-    };
     return () => {
-      window.fetch = original;
+      const w = window as PatchedWindow;
+      if (w.__foreshadowDemoFetch) {
+        window.fetch = w.__foreshadowDemoFetch;
+        delete w.__foreshadowDemoFetch;
+      }
     };
   }, []);
 

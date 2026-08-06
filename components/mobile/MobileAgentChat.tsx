@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import { useRouter } from 'next/navigation';
-import { ArrowUp, Paperclip, Sparkles, X } from 'lucide-react';
+import { ArrowUp, History, Paperclip, Sparkles, SquarePen, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/authContext';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -22,6 +22,7 @@ import {
   useAgentChat,
 } from '@/components/ai-chat/useAgentChat';
 import { TaskAttachment } from '@/components/ai-chat/TaskAttachment';
+import { SessionList } from '@/components/ai-chat/SessionList';
 import {
   ComposerAttachments,
   MessageAttachments,
@@ -115,6 +116,12 @@ export function MobileAgentChat() {
   const {
     messages,
     isLoading,
+    sessions,
+    sessionId,
+    newSession,
+    switchSession,
+    renameSession,
+    deleteSession,
     submitMessage,
     runCommand,
     handleConfirmAction,
@@ -124,6 +131,7 @@ export function MobileAgentChat() {
     isUploading,
   } = useAgentChat();
 
+  const [showHistory, setShowHistory] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -302,6 +310,8 @@ export function MobileAgentChat() {
     if (!canSend) return;
     submitMessage(inputValue.trim());
     setInputValue('');
+    // Sending is a decision to be in the conversation, not to keep browsing.
+    setShowHistory(false);
   };
 
   const trimmedInput = inputValue.trim().toLowerCase();
@@ -347,6 +357,28 @@ export function MobileAgentChat() {
           aria-label="Foreshadow AI chat"
         >
           <div ref={headerRef} className={styles.header}>
+            <div className={styles.headerActions}>
+              <button
+                type="button"
+                className={styles.closeButton}
+                onClick={() => {
+                  newSession();
+                  setShowHistory(false);
+                }}
+                aria-label="New chat"
+              >
+                <SquarePen size={17} />
+              </button>
+              <button
+                type="button"
+                className={`${styles.closeButton}${showHistory ? ` ${styles.headerButtonActive}` : ''}`}
+                onClick={() => setShowHistory((v) => !v)}
+                aria-label="Chat history"
+                aria-expanded={showHistory}
+              >
+                <History size={17} />
+              </button>
+            </div>
             <button
               type="button"
               className={styles.closeButton}
@@ -363,7 +395,19 @@ export function MobileAgentChat() {
             style={{ maxHeight: scrollMaxHeight }}
           >
             <div className={styles.messages}>
-              {messages.map((msg) => (
+              {showHistory && (
+                <SessionList
+                  sessions={sessions}
+                  activeId={sessionId}
+                  onSelect={(id) => {
+                    void switchSession(id);
+                    setShowHistory(false);
+                  }}
+                  onRename={renameSession}
+                  onDelete={deleteSession}
+                />
+              )}
+              {!showHistory && messages.map((msg) => (
                 <div
                   key={msg.id}
                   className={`${styles.row} ${
@@ -447,7 +491,7 @@ export function MobileAgentChat() {
                   )}
                 </div>
               ))}
-              {isLoading && (
+              {!showHistory && isLoading && (
                 <div className={`${styles.row} ${styles.rowAssistant}`}>
                   <div className={styles.loadingDots}>
                     <span className={styles.loadingDot} />

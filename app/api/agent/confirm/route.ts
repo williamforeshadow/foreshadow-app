@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
 import { requireAuthContext } from '@/lib/requireAuthContext';
 import {
   confirmPendingAction,
@@ -7,6 +6,7 @@ import {
   loadPendingActionsByIds,
 } from '@/src/server/agent/pendingActions';
 import { maybeRunContinuation } from '@/src/server/agent/continuation';
+import { appendMessage, resolveWebSession } from '@/src/server/agent/memory';
 
 // POST /api/agent/confirm
 //
@@ -91,8 +91,14 @@ function aggregate(
 export async function POST(req: NextRequest) {
   let actionIds: string[];
   let action: 'confirm' | 'cancel';
+  let requestedSessionId: string | undefined;
   try {
     const body = await req.json();
+    // The conversation the outcome belongs to. Unsent today; Phase 2's switcher
+    // supplies it so a confirm clicked in one session can't land in another.
+    if (typeof body?.session_id === 'string' && body.session_id.length > 0) {
+      requestedSessionId = body.session_id;
+    }
     // Accept the new array shape OR the legacy singular field.
     const rawArray = body?.pending_action_ids;
     const rawSingular = body?.pending_action_id;
@@ -131,7 +137,13 @@ export async function POST(req: NextRequest) {
   if (authCtx instanceof NextResponse) return authCtx;
   const userId = authCtx.appUser.id;
 
-  const supabase = getSupabaseServer();
+  // Same session the preview turn ran in — the outcome is part of that
+  // conversation, not a new one.
+  const sessionId = await resolveWebSession({
+    appUserId: userId,
+    orgId: authCtx.orgId,
+    sessionId: requestedSessionId,
+  });
 
   // Read the bundle BEFORE committing: the rows carry any follow-up the agent
   // registered and the turn's continuation depth, both stamped at preview time.
@@ -159,14 +171,21 @@ export async function POST(req: NextRequest) {
   // Persist the outcome so the next agent turn sees it. One user row and
   // one assistant row per bundle (not per action) keeps history compact
   // and matches what the user clicked.
-  await supabase.from('ai_chat_messages').insert({
-    user_id: userId,
+  await appendMessage({
+    sessionId,
+    appUserId: userId,
+    surface: 'web',
     role: 'user',
     content: action === 'confirm' ? 'Confirmed.' : 'Cancelled.',
-    metadata: { pending_action_ids: actionIds },
+    // A button press, not something the user typed. The agent needs the turn
+    // to know what happened; the transcript shouldn't replay it as a chat
+    // bubble the user never saw. See loadSessionMessages.
+    metadata: { pending_action_ids: actionIds, kind: 'confirmation_click' },
   });
-  await supabase.from('ai_chat_messages').insert({
-    user_id: userId,
+  await appendMessage({
+    sessionId,
+    appUserId: userId,
+    surface: 'web',
     role: 'assistant',
     content: combined.text,
     metadata: {
@@ -188,8 +207,10 @@ export async function POST(req: NextRequest) {
       : null;
 
   if (continuation) {
-    await supabase.from('ai_chat_messages').insert({
-      user_id: userId,
+    await appendMessage({
+      sessionId,
+      appUserId: userId,
+      surface: 'web',
       role: 'assistant',
       content: continuation.text,
       metadata: {

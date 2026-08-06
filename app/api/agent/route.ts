@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
-import { getSupabaseServer } from '@/lib/supabaseServer';
 import { requireAuthContext } from '@/lib/requireAuthContext';
+import {
+  appendMessage,
+  loadHistory,
+  resolveWebSession,
+  WEB_HISTORY_LIMIT,
+} from '@/src/server/agent/memory';
+import { maybeTitleSession } from '@/src/server/agent/sessions';
 import { runAgent, type AgentActor, WRITE_TOOL_NAMES } from '@/src/agent/runAgent';
 import { applyBackstops } from '@/src/agent/backstops';
 import { extractPendingActionIds } from '@/src/server/agent/slackConfirmationBlocks';
@@ -20,13 +25,10 @@ import type { TaskRow } from '@/src/agent/tools/findTasks';
 // thin shell that handles HTTP, conversation memory, and persistence; all
 // LLM + tool dispatch lives in src/agent/runAgent. Hallucination backstops
 // live in src/agent/backstops and are shared with the Slack route.
-
-const MEMORY_WINDOW = 15; // user+assistant message pairs to replay as history
-
-interface ChatMessageRow {
-  role: string;
-  content: string;
-}
+//
+// Memory is scoped to a WEB session (src/server/agent/memory.ts), not to the
+// user. Slack runs its own sessions, so a conversation started there no longer
+// bleeds into this panel.
 
 export async function POST(req: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -40,9 +42,16 @@ export async function POST(req: NextRequest) {
   let prompt: string;
   let clientTz: string | undefined;
   let inboundFileIds: string[] = [];
+  let requestedSessionId: string | undefined;
   try {
     const body = await req.json();
     prompt = body?.prompt;
+    // Which conversation to continue. Nothing sends this yet — the session
+    // switcher is Phase 2 — and it is verified against the caller before use,
+    // so a forged id reaches nobody else's chat.
+    if (typeof body?.session_id === 'string' && body.session_id.length > 0) {
+      requestedSessionId = body.session_id;
+    }
     // Files the user attached to THIS message, staged earlier by
     // /api/agent/attachments. Ids only — ownership is re-checked below, so a
     // forged id buys nothing. Tolerant of junk: a malformed entry is dropped
@@ -79,29 +88,23 @@ export async function POST(req: NextRequest) {
   const { supabase: userDb, appUser, orgId } = authCtx;
   const userId = appUser.id;
 
-  const supabase = getSupabaseServer();
+  // The conversation this turn belongs to. Resolves to the caller's most
+  // recent live web session (creating one on first use) until Phase 2 starts
+  // passing an explicit id.
+  const sessionId = await resolveWebSession({
+    appUserId: userId,
+    orgId,
+    sessionId: requestedSessionId,
+  });
 
   // Pull recent conversation history. We persist only final assistant text
   // (no tool_use / tool_result blocks) so the history we replay is plain
   // text on both sides — the agent will re-invoke tools as needed.
-  // Memory stays on the service client but is keyed by the VERIFIED user id.
-  let history: MessageParam[] = [];
-  const { data, error } = await supabase
-    .from('ai_chat_messages')
-    .select('role, content')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(MEMORY_WINDOW * 2);
+  const history = await loadHistory(sessionId, WEB_HISTORY_LIMIT);
 
-  if (!error && data) {
-    history = (data as ChatMessageRow[])
-      .reverse()
-      .filter((m) => m.role === 'user' || m.role === 'assistant')
-      .map((m) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      }));
-  }
+  // Name the session after the message that opened it. No-ops once it has a
+  // title, so a rename the user typed is never clobbered.
+  await maybeTitleSession(sessionId, prompt);
 
   const actor: AgentActor = {
     appUserId: appUser.id,
@@ -131,8 +134,10 @@ export async function POST(req: NextRequest) {
   );
   const contextBlocks = filesBlock ? [filesBlock] : undefined;
 
-  await supabase.from('ai_chat_messages').insert({
-    user_id: userId,
+  await appendMessage({
+    sessionId,
+    appUserId: userId,
+    surface: 'web',
     role: 'user',
     content: prompt,
     ...(attachedFiles.length > 0
@@ -211,28 +216,35 @@ export async function POST(req: NextRequest) {
     // real user message.
     await setPendingActionFollowup(pendingActionIds, result.followup, 0);
 
-    if (userId) {
-      await supabase.from('ai_chat_messages').insert({
-        user_id: userId,
-        role: 'assistant',
-        content: finalText,
-        // Store a per-call trace of which tools fired, what input the model
-        // passed, and the outcome envelope (meta on success, error on
-        // failure). We deliberately drop `data` to keep rows small but keep
-        // everything we need to diagnose hallucinations and silent empties
-        // after the fact.
-        metadata: {
-          tool_calls: result.toolCalls.map((c) => {
-            const base = { name: c.name, input: c.input, ok: c.output.ok };
-            return c.output.ok
-              ? { ...base, meta: c.output.meta }
-              : { ...base, error: c.output.error };
-          }),
-          ...(masked.writeMasked ? { masked_write_claim: true } : {}),
-          ...(masked.buttonMasked ? { masked_button_claim: true } : {}),
-        },
-      });
-    }
+    await appendMessage({
+      sessionId,
+      appUserId: userId,
+      surface: 'web',
+      role: 'assistant',
+      content: finalText,
+      // Store a per-call trace of which tools fired, what input the model
+      // passed, and the outcome envelope (meta on success, error on
+      // failure). We deliberately drop `data` to keep rows small but keep
+      // everything we need to diagnose hallucinations and silent empties
+      // after the fact.
+      metadata: {
+        tool_calls: result.toolCalls.map((c) => {
+          const base = { name: c.name, input: c.input, ok: c.output.ok };
+          return c.output.ok
+            ? { ...base, meta: c.output.meta }
+            : { ...base, error: c.output.error };
+        }),
+        ...(masked.writeMasked ? { masked_write_claim: true } : {}),
+        ...(masked.buttonMasked ? { masked_button_claim: true } : {}),
+        // Needed to put the Confirm/Cancel pair back after a reload. Without
+        // it a refresh mid-preview would strand a staged write with no way to
+        // commit it. Rehydration only re-renders buttons for actions that are
+        // still pending, so recording them on every turn is safe.
+        ...(pendingActionIds.length > 0
+          ? { pending_action_ids: pendingActionIds }
+          : {}),
+      },
+    });
 
     // Surface the structured task rows returned by any find_tasks call this
     // turn so the chat can render them as kanban-style cards. Deduped by
@@ -255,6 +267,9 @@ export async function POST(req: NextRequest) {
       tool_calls: result.toolCalls,
       pending_action_ids: pendingActionIds,
       tasks: Array.from(taskCardMap.values()),
+      // Which conversation this landed in. Phase 2's switcher echoes it back on
+      // the next request; harmless for the current client, which ignores it.
+      session_id: sessionId,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown server error';

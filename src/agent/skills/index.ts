@@ -15,9 +15,11 @@ import { join } from 'path';
 // Production bundling: Next.js's file tracer only includes files
 // referenced via static imports by default. The .md files here are
 // referenced via runtime fs.readFileSync, so they must be explicitly
-// included via `outputFileTracingIncludes` in next.config — see the
-// `/api/agent/**` entry there. Forget to update that and the prod
-// deployment will 500 with ENOENT (dev still works fine).
+// included via `outputFileTracingIncludes` in next.config. Because this
+// read happens at MODULE LOAD, every route that imports runAgent — even
+// transitively, like the two confirm handlers via continuation.ts — needs
+// covering, not just /api/agent. Forget one and that deployment 500s with
+// ENOENT (dev still works fine).
 //
 // Adding a skill:
 //   1. Drop `your-skill.md` in this folder (short, imperative prose).

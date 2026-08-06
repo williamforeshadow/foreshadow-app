@@ -116,8 +116,9 @@ export function stripBotMention(text: string, botUserId: string | null): string 
  * to render task enumerations as bare linked titles ("- [Task](url)")
  * since the Block Kit cards we attach below the message already carry
  * status / property / due / priority. The model usually obeys, but the
- * conversation-memory window (loadHistory in the Slack route) feeds
- * prior assistant turns back in — and many of those turns predate the
+ * conversation-memory window (loadReplayedHistory, keyed on the thread's
+ * agent session) feeds prior assistant turns back in — and many of those
+ * turns predate the
  * "no inline metadata" rule and DO append " — Property | Date" tails.
  * In-context examples occasionally outweigh the system prompt, so the
  * model echoes the old format. This function is the deterministic

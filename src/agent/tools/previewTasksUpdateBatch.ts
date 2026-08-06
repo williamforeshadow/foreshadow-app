@@ -112,7 +112,7 @@ export const previewTasksUpdateBatch: ToolDefinition<
 > = {
   name: 'preview_tasks_update_batch',
   description:
-    "PREVIEW updates to multiple existing tasks as one confirmable batch. Use this instead of calling preview_task_update repeatedly when the user asks to apply the same kind of change to more than one task, such as setting department/priority/status/assignees across a list. Returns one confirmation_token and, on Slack, one pending_action_id for the entire batch. Present one plan covering all changed tasks; if some tasks are already up to date, say they will be skipped. If change_count is 0, tell the user nothing would change and do not commit.",
+    "PREVIEW updates to multiple existing tasks as one confirmable batch. Use this instead of calling preview_task_update repeatedly when the user asks to apply the same kind of change to more than one task, such as setting department/priority/status/assignees across a list. Returns one confirmation_token and one pending_action_id for the entire batch. Present one plan covering all changed tasks; if some tasks are already up to date, say they will be skipped. If change_count is 0, tell the user nothing would change and do not commit.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,

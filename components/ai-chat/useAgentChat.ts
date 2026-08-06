@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { AGENT_COMMANDS } from '@/src/lib/agentCommands';
 import type { TaskRow } from '@/src/agent/tools/findTasks';
+import type { SessionSummary } from '@/src/server/agent/sessions';
 
 // The agent conversation, lifted out of AiChatPanel so a second surface (the
 // mobile bottom-sheet chat) can drive the same wiring — /api/agent for free
@@ -93,9 +94,23 @@ export function referencedTasks(content: string, tasks: TaskRow[]): TaskRow[] {
     .map((x) => x.t);
 }
 
+export type { SessionSummary };
+
 export interface UseAgentChat {
   messages: AgentMessage[];
   isLoading: boolean;
+  /** The user's saved conversations, newest activity first. */
+  sessions: SessionSummary[];
+  /** The conversation on screen. Null before the first message creates one. */
+  sessionId: string | null;
+  /** True while a switched-to conversation is being fetched. */
+  isHydrating: boolean;
+  /** Clear the panel and start fresh. The row is created by the first message. */
+  newSession: () => void;
+  /** Load a saved conversation into the panel. */
+  switchSession: (id: string) => Promise<void>;
+  renameSession: (id: string, title: string) => Promise<void>;
+  deleteSession: (id: string) => Promise<void>;
   /** Send free text to the agent (routes to a slash command when it matches). */
   submitMessage: (text: string) => Promise<void>;
   /** Run a deterministic slash command (no LLM turn). */
@@ -116,12 +131,170 @@ export interface UseAgentChat {
   isUploading: boolean;
 }
 
+/** Turn a rehydrated row into the shape the renderer already understands. */
+function toAgentMessage(raw: HydratedMessageDto): AgentMessage {
+  const pendingActionIds =
+    Array.isArray(raw.pending_action_ids) && raw.pending_action_ids.length > 0
+      ? raw.pending_action_ids
+      : undefined;
+  return {
+    id: raw.id,
+    role: raw.role,
+    content: raw.content,
+    ...(raw.attachments?.length ? { attachments: raw.attachments } : {}),
+    ...(raw.variant ? { variant: raw.variant } : {}),
+    // Only actions the server confirmed are still live come back with ids, so
+    // 'pending' here always means a button that will really commit something.
+    ...(pendingActionIds
+      ? { pendingActionIds, confirmation: 'pending' as const }
+      : {}),
+  };
+}
+
+interface HydratedMessageDto {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  attachments?: { id: string; name: string }[];
+  pending_action_ids?: string[];
+  variant?: 'success' | 'error';
+}
+
 export function useAgentChat(): UseAgentChat {
   const { user } = useAuth();
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isHydrating, setIsHydrating] = useState(false);
   const isUploading = attachments.some((a) => a.status === 'uploading');
+
+  // Guards the hydration effect against a race: switching conversations (or
+  // starting a new one) while an older fetch is still in flight must not let
+  // that fetch paint stale messages over the newer choice.
+  const activeLoad = useRef(0);
+
+  const refreshSessions = useCallback(async (): Promise<SessionSummary[]> => {
+    try {
+      const res = await fetch('/api/agent/sessions');
+      if (!res.ok) return [];
+      const data = await res.json();
+      const list: SessionSummary[] = Array.isArray(data?.sessions)
+        ? data.sessions
+        : [];
+      setSessions(list);
+      return list;
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const hydrate = useCallback(async (id: string) => {
+    const token = ++activeLoad.current;
+    setIsHydrating(true);
+    try {
+      const res = await fetch(`/api/agent/sessions/${id}/messages`);
+      const data = await res.json();
+      if (token !== activeLoad.current) return;
+      if (!res.ok) {
+        setMessages([]);
+        return;
+      }
+      const raw: HydratedMessageDto[] = Array.isArray(data?.messages)
+        ? data.messages
+        : [];
+      setMessages(raw.map(toAgentMessage));
+    } catch {
+      if (token === activeLoad.current) setMessages([]);
+    } finally {
+      if (token === activeLoad.current) setIsHydrating(false);
+    }
+  }, []);
+
+  // On sign-in, restore the conversation the user was last in. Before this the
+  // server kept remembering conversations the browser discarded on refresh —
+  // the agent knew what you'd said and the screen didn't.
+  useEffect(() => {
+    if (!user) {
+      setSessions([]);
+      setSessionId(null);
+      setMessages([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const list = await refreshSessions();
+      if (cancelled || list.length === 0) return;
+      // Only adopt the most recent if the user hasn't already started typing
+      // into a fresh one while this was loading.
+      setSessionId((current) => {
+        if (current !== null) return current;
+        void hydrate(list[0].id);
+        return list[0].id;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, refreshSessions, hydrate]);
+
+  const newSession = useCallback(() => {
+    // Purely local — no row until the first message. Bumping the load token
+    // cancels any hydration still in flight so it can't repaint this.
+    activeLoad.current++;
+    setIsHydrating(false);
+    setSessionId(null);
+    setMessages([]);
+  }, []);
+
+  const switchSession = useCallback(
+    async (id: string) => {
+      if (id === sessionId) return;
+      setSessionId(id);
+      setMessages([]);
+      await hydrate(id);
+    },
+    [sessionId, hydrate],
+  );
+
+  const renameSession = useCallback(async (id: string, title: string) => {
+    const clean = title.trim();
+    if (!clean) return;
+    // Optimistic: the list is the user's own text echoed back, and a failed
+    // rename is recoverable by trying again.
+    setSessions((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, title: clean } : s)),
+    );
+    try {
+      await fetch(`/api/agent/sessions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: clean }),
+      });
+    } catch {
+      /* leave the optimistic title; the next refresh corrects it */
+    }
+  }, []);
+
+  const deleteSession = useCallback(
+    async (id: string) => {
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+      // Deleting the conversation you're looking at empties the panel; the
+      // alternative (silently jumping to another one) loses your place.
+      if (id === sessionId) {
+        activeLoad.current++;
+        setSessionId(null);
+        setMessages([]);
+      }
+      try {
+        await fetch(`/api/agent/sessions/${id}`, { method: 'DELETE' });
+      } catch {
+        /* archived or not, it's gone from this list until the next refresh */
+      }
+    },
+    [sessionId],
+  );
 
   const addAttachments = useCallback((files: File[]) => {
     if (files.length === 0) return;
@@ -298,12 +471,23 @@ export function useAgentChat(): UseAgentChat {
             prompt: message,
             user_id: user.id,
             client_tz: clientTz,
+            ...(sessionId ? { session_id: sessionId } : {}),
             ...(sending.length > 0
               ? { inbound_file_ids: sending.map((a) => a.id) }
               : {}),
           }),
         });
         const data = await res.json();
+
+        // A first message in a fresh panel creates the row server-side; adopt
+        // the id so the rest of the conversation lands in the same place, and
+        // pull the list again to pick up its auto-derived title.
+        if (typeof data?.session_id === 'string' && data.session_id) {
+          if (data.session_id !== sessionId) {
+            setSessionId(data.session_id);
+          }
+          void refreshSessions();
+        }
 
         if (!res.ok || data.error) {
           setMessages((prev) => [
@@ -348,7 +532,7 @@ export function useAgentChat(): UseAgentChat {
         setIsLoading(false);
       }
     },
-    [user, isLoading, runCommand, attachments],
+    [user, isLoading, runCommand, attachments, sessionId, refreshSessions],
   );
 
   const handleConfirmAction = useCallback(
@@ -412,6 +596,9 @@ export function useAgentChat(): UseAgentChat {
             pending_action_ids: pendingActionIds,
             action,
             user_id: user.id,
+            // Land the outcome in the conversation the buttons belong to, not
+            // whichever one happens to be open by the time they're clicked.
+            ...(sessionId ? { session_id: sessionId } : {}),
           }),
         });
         const data = await res.json();
@@ -433,12 +620,19 @@ export function useAgentChat(): UseAgentChat {
         );
       }
     },
-    [user],
+    [user, sessionId],
   );
 
   return {
     messages,
     isLoading,
+    sessions,
+    sessionId,
+    isHydrating,
+    newSession,
+    switchSession,
+    renameSession,
+    deleteSession,
     submitMessage,
     runCommand,
     handleConfirmAction,

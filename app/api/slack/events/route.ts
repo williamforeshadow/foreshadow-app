@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { WebClient } from '@slack/web-api';
 import type { Block } from '@slack/types';
-import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
-import { getSupabaseServer } from '@/lib/supabaseServer';
 import { createSupabaseAsUser } from '@/lib/supabaseAsUser';
 import { runAgent } from '@/src/agent/runAgent';
 import { applyBackstops } from '@/src/agent/backstops';
@@ -40,6 +38,13 @@ import {
 } from '@/src/server/agent/pendingActions';
 import { maybeRunContinuation } from '@/src/server/agent/continuation';
 import {
+  appendMessage,
+  loadReplayedHistory,
+  resolveSlackSession,
+  setMessageSlackTs,
+  SLACK_HISTORY_LIMIT,
+} from '@/src/server/agent/memory';
+import {
   blocksWithoutConfirmation,
   buildConfirmationBlocks,
   buildResultAttachments,
@@ -55,8 +60,8 @@ interface MessageExtras {
 // POST /api/slack/events
 //
 // Slack Events API webhook. Mirrors the in-app /api/agent surface: same
-// runAgent, same backstops, same conversation memory in ai_chat_messages —
-// just with Slack-shaped IO at the edges.
+// runAgent, same backstops, same ai_chat_messages store — just with
+// Slack-shaped IO at the edges, and its own conversation scope.
 //
 // Three entry points are supported:
 //   - app_mention          → @-mention in a channel; we reply in-thread.
@@ -131,7 +136,10 @@ interface MessageExtras {
 //   6. Background:
 //        a. channel_mention / dm:
 //           - Resolve Slack user → app user (via email match in users table).
-//           - Pull recent ai_chat_messages history for that app user.
+//           - Resolve the agent session for this CONVERSATION — one per
+//             channel thread, one per DM channel — and replay its history.
+//             Not the user's history: a thread is a shared conversation,
+//             and the web panel is a different one entirely.
 //           - For channel mentions inside an existing thread: pull the
 //             surrounding thread via conversations.replies (requires
 //             channels:history / groups:history) and inject as ambient
@@ -161,8 +169,6 @@ interface MessageExtras {
 //             event's unfurl_id + source pair (the modern parameter form
 //             that Slack reliably honours across composer-preview and
 //             post-send contexts; legacy channel + ts silently no-ops).
-
-const MEMORY_WINDOW = 15;
 
 interface SlackEventEnvelope {
   type: string;
@@ -221,11 +227,6 @@ function classifySlackEvent(event: SlackInnerEvent | undefined): SlackKind | nul
     return 'dm';
   }
   return null;
-}
-
-interface ChatMessageRow {
-  role: string;
-  content: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -408,7 +409,16 @@ async function handleSlackMessage(
       'I uploaded file(s) in Slack. Help me decide where to attach them in Foreshadow.';
   }
 
-  const supabase = getSupabaseServer();
+  // The conversation this message belongs to. `threadTs` is already exactly the
+  // right key: the thread root for a channel mention, undefined in a DM (which
+  // collapses to one fixed session per DM channel). So the agent's memory
+  // boundary and the boundary a human sees in Slack are the same boundary.
+  const sessionId = await resolveSlackSession({
+    appUserId: identity.appUserId,
+    orgId: identity.orgId,
+    channelId: event.channel,
+    threadTs,
+  });
 
   if (!hasFiles && isBareConfirmation(prompt)) {
     // Confirm ALL active pending actions in this user+thread, not just
@@ -423,12 +433,14 @@ async function handleSlackMessage(
     });
     if (active.length >= 1) {
       const activeIds = active.map((a) => a.id);
-      await supabase.from('ai_chat_messages').insert({
-        user_id: identity.appUserId,
+      await appendMessage({
+        sessionId,
+        appUserId: identity.appUserId,
+        surface: 'slack',
         role: 'user',
         content: prompt,
+        slackMessageTs: event.ts,
         metadata: {
-          surface: 'slack',
           slack_kind: kind,
           slack_channel: event.channel,
           ...(threadTs ? { slack_thread_ts: threadTs } : {}),
@@ -478,12 +490,13 @@ async function handleSlackMessage(
         }
         combinedText = parts.join('\n');
       }
-      await supabase.from('ai_chat_messages').insert({
-        user_id: identity.appUserId,
+      const resultMessageId = await appendMessage({
+        sessionId,
+        appUserId: identity.appUserId,
+        surface: 'slack',
         role: 'assistant',
         content: combinedText,
         metadata: {
-          surface: 'slack',
           slack_kind: kind,
           slack_channel: event.channel,
           ...(threadTs ? { slack_thread_ts: threadTs } : {}),
@@ -501,12 +514,13 @@ async function handleSlackMessage(
       // same way the button path does, or the thread reads as still waiting.
       await retireConfirmationButtons(web, event.channel, active, 'confirmed');
 
-      await postReply(web, event.channel, threadTs, combinedText, {
+      const resultTs = await postReply(web, event.channel, threadTs, combinedText, {
         attachments: buildResultAttachments(
           combinedText,
           perActionResults.every((r) => r.ok) ? 'committed' : 'failed',
         ),
       });
+      await setMessageSlackTs(resultMessageId, resultTs);
 
       // Same continuation the button path gets — typing "yes" and clicking
       // Confirm must behave identically.
@@ -528,12 +542,14 @@ async function handleSlackMessage(
           extras,
         );
         await setPendingActionMessageTs(continuation.pendingActionIds, ts);
-        await supabase.from('ai_chat_messages').insert({
-          user_id: identity.appUserId,
+        await appendMessage({
+          sessionId,
+          appUserId: identity.appUserId,
+          surface: 'slack',
           role: 'assistant',
           content: continuation.text,
+          slackMessageTs: ts,
           metadata: {
-            surface: 'slack',
             slack_channel: event.channel,
             ...(threadTs ? { slack_thread_ts: threadTs } : {}),
             continuation_of: activeIds,
@@ -544,12 +560,17 @@ async function handleSlackMessage(
     }
   }
 
-  // Pull recent history from ai_chat_messages, same as the in-app route.
-  // This means Slack and in-app share memory (a deliberate choice — see
-  // chat thread). Per-thread / per-DM Slack scoping isn't built yet; if it
-  // becomes needed we can layer a slack_thread_ts column onto the table
-  // without breaking the in-app side.
-  const history = await loadHistory(identity.appUserId);
+  // Replay this CONVERSATION's history — the thread's, or the DM's. Slack and
+  // the web panel used to share one per-user transcript, so a request started
+  // in one could be finished in the other; they are separate sessions now.
+  //
+  // `seenMessageTs` is what keeps this and the thread reader below from
+  // double-feeding: the reader supplies everything in the thread that isn't
+  // already replayed here.
+  const { messages: history, seenMessageTs } = await loadReplayedHistory(
+    sessionId,
+    SLACK_HISTORY_LIMIT,
+  );
 
   // Pull surrounding thread for channel mentions in an existing thread.
   // The bot has no idea what the conversation was about from the
@@ -570,6 +591,11 @@ async function handleSlackMessage(
       channel: event.channel,
       threadTs: event.thread_ts,
       excludeTs: event.ts,
+      // Everything already replayed above is skipped, so the reader fills in
+      // exactly the gap: side-conversation between humans, plus anything the
+      // bot posted from a non-agent path (assignment cards, outlooks,
+      // notifications) that stored memory has no record of.
+      seenMessageTs,
     });
     const block = formatThreadAsContext(threadMessages);
     if (block) {
@@ -609,12 +635,16 @@ async function handleSlackMessage(
     contextBlocks = [...(contextBlocks ?? []), carryForwardBlock];
   }
 
-  await supabase.from('ai_chat_messages').insert({
-    user_id: identity.appUserId,
+  await appendMessage({
+    sessionId,
+    appUserId: identity.appUserId,
+    surface: 'slack',
     role: 'user',
     content: prompt,
+    // This turn IS event.ts, so the next mention in the thread replays it as a
+    // real user turn instead of the reader pasting it in as ambient text.
+    slackMessageTs: event.ts,
     metadata: {
-      surface: 'slack',
       slack_kind: kind,
       slack_channel: event.channel,
       ...(threadTs ? { slack_thread_ts: threadTs } : {}),
@@ -695,12 +725,13 @@ async function handleSlackMessage(
   // re-seed itself every turn. See stripTaskListMetadata for rationale.
   const finalText = stripTaskListMetadata(masked.text);
 
-  await supabase.from('ai_chat_messages').insert({
-    user_id: identity.appUserId,
+  const assistantMessageId = await appendMessage({
+    sessionId,
+    appUserId: identity.appUserId,
+    surface: 'slack',
     role: 'assistant',
     content: finalText,
     metadata: {
-      surface: 'slack',
       slack_kind: kind,
       slack_channel: event.channel,
       ...(threadTs ? { slack_thread_ts: threadTs } : {}),
@@ -744,6 +775,9 @@ async function handleSlackMessage(
   }
   const postedTs = await postReply(web, event.channel, threadTs, mrkdwnText, extras);
   await setPendingActionMessageTs(pendingActionIds, postedTs);
+  // Persisted before posting (so a Slack failure costs the message, not the
+  // memory), which is why the ts lands in a second step.
+  await setMessageSlackTs(assistantMessageId, postedTs);
 }
 
 // Pure unfurl entry point. No agent, no persistence, no allowlist — just
@@ -818,26 +852,6 @@ async function retireConfirmationButtons(
       console.warn('[slack] could not retire confirmation buttons', { ts, err });
     }
   }
-}
-
-async function loadHistory(appUserId: string): Promise<MessageParam[]> {
-  const supabase = getSupabaseServer();
-  const { data, error } = await supabase
-    .from('ai_chat_messages')
-    .select('role, content')
-    .eq('user_id', appUserId)
-    .order('created_at', { ascending: false })
-    .limit(MEMORY_WINDOW * 2);
-
-  if (error || !data) return [];
-
-  return (data as ChatMessageRow[])
-    .reverse()
-    .filter((m) => m.role === 'user' || m.role === 'assistant')
-    .map((m) => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    }));
 }
 
 async function postReply(

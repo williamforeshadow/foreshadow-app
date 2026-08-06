@@ -1,0 +1,16 @@
+import type { SurfacePrompt } from './types';
+
+// Slack — @-mentions in channel threads and DMs with the bot. Slack mrkdwn is
+// not markdown: no headings, single-asterisk bold, and "- " renders as a
+// literal dash rather than a bullet. Block Kit carries the cards and the
+// Confirm/Cancel pair.
+
+export const SLACK_SURFACE: SurfacePrompt = {
+  rendering: `- You are answering inside Slack. Keep replies short, plain text. Use bold sparingly with single-asterisk syntax (*bold*). Do not use markdown headings (#, ##) — Slack does not render them.
+- Slack renders "* " as a real bullet glyph but renders "- " literally as a dash, so "* " is the only bullet marker that looks right here.`,
+
+  enumeration: `- Slack-specific (STRICT): when a task line is just enumeration (e.g. "here are the tasks assigned to Rae"), the ENTIRE line is the bullet + a single markdown link whose label is just the task title. That means: "* [Task title](task_url)" and NOTHING ELSE on that line. No em-dash. No pipe. No property name. No address. No date. No time. No status. No priority. No assignee. No emoji. No parenthetical. The Block Kit card we attach below the message already shows property + status + due, so any inline metadata duplicates it and adds visual noise.
+- For single-task answers, a brief one-sentence wrapper (e.g. "Found it — [Task title](url).") is fine; the rule applies specifically to enumerated bullet lines.`,
+
+  confirmation: `- Every write preview registers a pending action unless it is a no-op, and the message carries a SINGLE Confirm/Cancel pair — one click commits (or cancels) every preview from this turn atomically. The user can see those buttons, so do not announce them. Never tell the user to type "yes", "go", or to hand you internal ids — the buttons are the confirmation path.`,
+};

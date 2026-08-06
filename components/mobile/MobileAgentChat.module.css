@@ -78,8 +78,21 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  /* New-chat and history sit left, close stays right, so the destructive-ish
+     control keeps the corner the user already reaches for. */
+  justify-content: space-between;
   padding: 0.5rem 0.5rem 0.125rem;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.headerButtonActive {
+  background: color-mix(in srgb, var(--foreground) 12%, transparent);
+  color: var(--foreground);
 }
 .closeButton {
   display: flex;
