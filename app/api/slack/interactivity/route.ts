@@ -185,7 +185,9 @@ async function handleInteraction(
       }
       await web.chat.postMessage({
         channel: channelId,
-        text: only.text,
+        // No top-level `text` on purpose — the attachment renders it, and
+        // setting both made every result appear twice. Its `fallback` covers
+        // notifications.
         attachments: buildResultAttachments(
           only.text,
           actionId === AGENT_CANCEL_ACTION_ID
@@ -234,7 +236,7 @@ async function handleInteraction(
   try {
     await web.chat.postMessage({
       channel: channelId,
-      text: combined,
+      // See the single-action path: the attachment is the only renderer.
       attachments: buildResultAttachments(
         combined,
         actionId === AGENT_CANCEL_ACTION_ID

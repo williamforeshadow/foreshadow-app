@@ -160,6 +160,20 @@ function formatCount(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+/**
+ * Uppercase the first character.
+ *
+ * These result strings used to open with a fixed "Done - " prefix, so an
+ * interpolated verb ("created", "cleared", "saved") could stay lowercase.
+ * Without the prefix the verb usually leads the sentence and has to be
+ * capitalized where it's used. Replaces the hand-written
+ * `verb === 'cleared' ? 'Cleared' : 'Updated'` ternaries that were already
+ * doing this in the failure branches.
+ */
+function sentenceCase(text: string): string {
+  return text.length > 0 ? text[0].toUpperCase() + text.slice(1) : text;
+}
+
 function slackTaskLink(taskId: string, title: string) {
   return `<${taskUrl(taskId)}|${title || 'Task'}>`;
 }
@@ -702,8 +716,8 @@ async function executeCreateTask(
     failed.length > 0
       ? `Created ${taskLink}, but ${formatCount(failed.length, 'attachment')} failed. ${failed[0].error}`
       : attached > 0
-        ? `Done - created ${taskLink} and attached ${formatCount(attached, 'file')}.`
-        : `Done - created ${taskLink}.`;
+        ? `Created ${taskLink} and attached ${formatCount(attached, 'file')}.`
+        : `Created ${taskLink}.`;
 
   return {
     ok: failed.length === 0,
@@ -741,8 +755,8 @@ async function executeUpdateTask(
     status: 'committed',
     text:
       count > 0
-        ? `Done - updated ${taskLink} (${formatCount(count, 'change')}).`
-        : `Done - ${taskLink} was already up to date.`,
+        ? `Updated ${taskLink} (${formatCount(count, 'change')}).`
+        : `${taskLink} was already up to date.`,
     result,
   };
 }
@@ -767,7 +781,7 @@ async function executeDeleteTask(
   return {
     ok: true,
     status: 'committed',
-    text: `Done - deleted "${result.deleted.title}".`,
+    text: `Deleted "${result.deleted.title}".`,
     result,
   };
 }
@@ -803,7 +817,7 @@ async function executeCreateTasksBatch(
     text:
       failed > 0
         ? `Created ${formatCount(created, 'task')}, but ${formatCount(failed, 'task')} failed. ${result.result.failures[0]?.error.message ?? ''}`.trim()
-        : `Done - created ${formatCount(created, 'task')}.${binText}`,
+        : `Created ${formatCount(created, 'task')}.${binText}`,
     error: result.result.failures[0]?.error.message,
     result,
   };
@@ -840,7 +854,7 @@ async function executeUpdateTasksBatch(
     text:
       failed > 0
         ? `Updated ${formatCount(updated, 'task')}, but ${formatCount(failed, 'task')} failed. ${result.result.failures[0]?.error.message ?? ''}`.trim()
-        : `Done - updated ${formatCount(updated, 'task')}.${skippedText}`,
+        : `Updated ${formatCount(updated, 'task')}.${skippedText}`,
     error: result.result.failures[0]?.error.message,
     result,
   };
@@ -866,7 +880,7 @@ async function executeCreateBin(
   return {
     ok: true,
     status: 'committed',
-    text: `Done - created sub-bin "${result.bin.name}".`,
+    text: `Created sub-bin "${result.bin.name}".`,
     result,
   };
 }
@@ -891,7 +905,7 @@ async function executeAddComment(
   return {
     ok: true,
     status: 'committed',
-    text: 'Done - added the comment.',
+    text: 'Added the comment.',
     result,
   };
 }
@@ -918,8 +932,8 @@ async function executePropertyKnowledgeWrite(
     failed.length > 0
       ? `${result.plan.summary}, but ${formatCount(failed.length, 'attachment')} failed. ${failed[0].error}`
       : attached > 0
-        ? `Done - ${result.plan.summary} and attached ${formatCount(attached, 'file')}.`
-        : `Done - ${result.plan.summary}.`;
+        ? `${sentenceCase(result.plan.summary)} and attached ${formatCount(attached, 'file')}.`
+        : `${sentenceCase(result.plan.summary)}.`;
 
   return {
     ok: failed.length === 0,
@@ -962,7 +976,7 @@ async function executePropertyKnowledgeBatch(
       ok: false,
       status: 'failed',
       text:
-        `${verb === 'cleared' ? 'Cleared' : 'Updated'} ` +
+        `${sentenceCase(verb)} ` +
         `${formatCount(result.results.length, 'property', 'properties')}${roomText}, ` +
         `but ${formatCount(result.failures.length, 'property', 'properties')} failed: ${names}. ` +
         `${result.failures[0].error?.message ?? ''}`.trim(),
@@ -974,7 +988,7 @@ async function executePropertyKnowledgeBatch(
   return {
     ok: true,
     status: 'committed',
-    text: `Done - ${verb} ${formatCount(result.results.length, 'property', 'properties')}${roomText}.`,
+    text: `${sentenceCase(verb)} ${formatCount(result.results.length, 'property', 'properties')}${roomText}.`,
     result,
   };
 }
@@ -1008,7 +1022,7 @@ async function executePropertyContactBatch(
       ok: false,
       status: 'failed',
       text:
-        `${verb === 'removed' ? 'Removed' : 'Saved'} "${name}" on ` +
+        `${sentenceCase(verb)} "${name}" on ` +
         `${formatCount(changed.length, 'property', 'properties')}, but ` +
         `${formatCount(result.failures.length, 'property', 'properties')} failed: ${names}. ` +
         `${result.failures[0].error?.message ?? ''}`.trim(),
@@ -1020,7 +1034,7 @@ async function executePropertyContactBatch(
   return {
     ok: true,
     status: 'committed',
-    text: `Done - ${verb} "${name}" on ${formatCount(changed.length, 'property', 'properties')}.${noopText}`,
+    text: `${sentenceCase(verb)} "${name}" on ${formatCount(changed.length, 'property', 'properties')}.${noopText}`,
     result,
   };
 }
@@ -1059,7 +1073,7 @@ async function executeAddCommentsBatch(
   return {
     ok: true,
     status: 'committed',
-    text: `Done - commented on ${formatCount(result.results.length, 'task')}.`,
+    text: `Commented on ${formatCount(result.results.length, 'task')}.`,
     result,
   };
 }
@@ -1079,16 +1093,16 @@ async function executePropertyContactUpsert(
     };
   }
 
-  const changeText =
-    result.mode === 'update' && result.changes?.length === 0
-      ? 'was already up to date'
-      : result.mode === 'create'
-        ? 'created'
-        : 'updated';
+  // The no-op case needs the contact to lead the sentence — with the verb
+  // first it reads as "Was already up to date "Joe's Plumbing"". The old
+  // "Done - " prefix hid that; without it the two shapes have to differ.
+  const noChange = result.mode === 'update' && result.changes?.length === 0;
   return {
     ok: true,
     status: 'committed',
-    text: `Done - ${changeText} "${result.contact.name}".`,
+    text: noChange
+      ? `"${result.contact.name}" was already up to date.`
+      : `${result.mode === 'create' ? 'Created' : 'Updated'} "${result.contact.name}".`,
     result,
   };
 }
@@ -1111,7 +1125,7 @@ async function executePropertyContactDelete(
   return {
     ok: true,
     status: 'committed',
-    text: `Done - deleted "${result.snapshot.name}".`,
+    text: `Deleted "${result.snapshot.name}".`,
     result,
   };
 }
@@ -1133,7 +1147,7 @@ async function executeSlackFileAttachment(
   return {
     ok: true,
     status: 'committed',
-    text: `Done - ${result.plan.summary}`,
+    text: `${sentenceCase(result.plan.summary)}`,
     result,
   };
 }

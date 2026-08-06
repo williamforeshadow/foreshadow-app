@@ -468,7 +468,7 @@
 
 /* ── Confirmation result status ──────────────────────────────────────────
  * The message posted after a Confirm/Cancel is status output, not prose:
- * "Done - created X", "Committed 3 of 3", "Failed 1". Colour it so the
+ * "Created X", "Committed 3 of 3", "Failed 1". Colour it so the
  * outcome is readable at a glance without re-reading the sentence.
  *
  * Green carries the same single meaning it does in the task panel

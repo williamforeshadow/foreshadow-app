@@ -862,23 +862,39 @@ async function postReply(
         ] as Block[])
       : undefined;
 
+  // Attachments (buildResultAttachments) already render `text` inside a
+  // coloured bar, and Slack renders top-level `text` ABOVE that — so setting
+  // both printed every commit result twice. When the caller supplies
+  // attachments and no blocks, the attachment is the sole renderer and its
+  // `fallback` carries the notification copy.
+  const textRenderedByAttachment = !blocks && !!extras.attachments;
+
+  // Assembled separately and cast at the call: ChatPostMessageArguments is a
+  // union requiring one of text/blocks/attachments, and spreading `text`
+  // conditionally makes it optional, which no longer satisfies any member.
+  // `textRenderedByAttachment` only ever drops `text` when attachments are
+  // present, so the union is satisfied at runtime either way.
+  const args = {
+    channel,
+    // Only set thread_ts when we actually want to thread. For DMs we
+    // omit it so the reply sits flat in the conversation.
+    ...(threadTs ? { thread_ts: threadTs } : {}),
+    ...(textRenderedByAttachment ? {} : { text }),
+    ...(blocks ? { blocks } : {}),
+    ...(extras.attachments ? { attachments: extras.attachments as never } : {}),
+    // Disable Slack's auto-link unfurling so unrelated URLs the agent
+    // might surface (wifi networks, doc links from property knowledge,
+    // etc.) don't get generic OG-tag previews stacked under the
+    // message. Our own task cards ride along in `blocks` above, which
+    // doesn't depend on this flag.
+    unfurl_links: false,
+    unfurl_media: false,
+  };
+
   try {
-    const posted = await web.chat.postMessage({
-      channel,
-      // Only set thread_ts when we actually want to thread. For DMs we
-      // omit it so the reply sits flat in the conversation.
-      ...(threadTs ? { thread_ts: threadTs } : {}),
-      text,
-      ...(blocks ? { blocks } : {}),
-      ...(extras.attachments ? { attachments: extras.attachments as never } : {}),
-      // Disable Slack's auto-link unfurling so unrelated URLs the agent
-      // might surface (wifi networks, doc links from property knowledge,
-      // etc.) don't get generic OG-tag previews stacked under the
-      // message. Our own task cards ride along in `blocks` above, which
-      // doesn't depend on this flag.
-      unfurl_links: false,
-      unfurl_media: false,
-    });
+    const posted = await web.chat.postMessage(
+      args as Parameters<typeof web.chat.postMessage>[0],
+    );
     return typeof posted.ts === 'string' ? posted.ts : undefined;
   } catch (err) {
     console.error('[slack] chat.postMessage failed', { channel, threadTs, err });

@@ -82,6 +82,13 @@ function isAgentConfirmationActions(block: Record<string, unknown>): boolean {
  * Emoji markers are deliberately not used: the agent is instructed never to
  * emit them (src/agent/skills/no-emojis.md), and result text is read as part
  * of the same conversation.
+ *
+ * The attachment is the ONLY place this text should be rendered. Callers must
+ * not also pass it as the message's top-level `text` — Slack renders that
+ * above the attachment, which showed every result twice ("Done - created X"
+ * once in plain text and again inside the coloured bar). `fallback` carries
+ * the notification/screen-reader copy that top-level `text` would otherwise
+ * have provided.
  */
 export function buildResultAttachments(
   text: string,
@@ -96,6 +103,7 @@ export function buildResultAttachments(
   return [
     {
       color,
+      fallback: text,
       blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }],
     },
   ];
