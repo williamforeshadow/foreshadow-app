@@ -8,9 +8,10 @@ import { updateTasksBatch } from '@/src/server/tasks/updateTasksBatch';
 import { createBin } from '@/src/server/bins/createBin';
 import { addComment } from '@/src/server/comments/addComment';
 import {
-  commitPropertyKnowledgeWrite,
-  type PropertyKnowledgeWriteInput,
-} from '@/src/server/properties/propertyKnowledgeWrite';
+  commitPropertyKnowledgeOperations,
+  type PropertyKnowledgeOperationsCommitResult,
+  type PropertyKnowledgeOperationsInput,
+} from '@/src/server/properties/propertyKnowledgeOperations';
 import {
   commitPropertyKnowledgeBatch,
   type PropertyKnowledgeBatchInput,
@@ -66,9 +67,7 @@ interface CreateTaskPendingInput {
 }
 
 interface PropertyKnowledgePendingInput {
-  input: PropertyKnowledgeWriteInput;
-  attachment_inbound_file_ids?: string[];
-  attachment_caption?: string | null;
+  input: PropertyKnowledgeOperationsInput;
 }
 
 interface PropertyKnowledgeBatchPendingInput {
@@ -679,6 +678,56 @@ function requireRowOrg(
   return { ok: true, orgId: row.org_id };
 }
 
+/**
+ * Property Knowledge services are org-blind — they take a property_id and
+ * write. The tool layer org-checks that id at preview time, but the id then
+ * sits frozen in canonical_input until someone clicks Confirm, so the commit
+ * path has to re-assert it rather than inherit the preview's word for it.
+ *
+ * Returns the org on success so callers keep the same shape as requireRowOrg.
+ */
+async function requirePropertiesInRowOrg(
+  row: PendingActionRow,
+  propertyIds: string[],
+  action: string,
+): Promise<{ ok: true; orgId: string } | { ok: false; result: PendingExecutionResult }> {
+  const org = requireRowOrg(row, action);
+  if (!org.ok) return org;
+
+  const ids = Array.from(new Set(propertyIds));
+  if (ids.length === 0) return org;
+
+  const { data, error } = await getSupabaseServer()
+    .from('properties')
+    .select('id')
+    .in('id', ids)
+    .eq('org_id', org.orgId);
+  if (error) {
+    return {
+      ok: false,
+      result: {
+        ok: false,
+        status: 'failed',
+        text: `I could not ${action}: ${error.message}`,
+        error: error.message,
+      },
+    };
+  }
+  const visible = new Set(((data ?? []) as Array<{ id: string }>).map((r) => r.id));
+  if (ids.some((id) => !visible.has(id))) {
+    return {
+      ok: false,
+      result: {
+        ok: false,
+        status: 'failed',
+        text: `I could not ${action}: that property is not in your organization.`,
+        error: 'property_not_in_org',
+      },
+    };
+  }
+  return org;
+}
+
 async function executeCreateTask(
   row: PendingActionRow,
 ): Promise<PendingExecutionResult> {
@@ -910,37 +959,151 @@ async function executeAddComment(
   };
 }
 
+/**
+ * Translate a canonical_input written before Property Knowledge writes became
+ * operation lists.
+ *
+ * Pending rows live 5 minutes, so at most that much traffic can straddle a
+ * deploy — but a row clicked inside that window would otherwise find no
+ * `operations` and throw under the user's Confirm button. Delete this once a
+ * deploy cycle has passed.
+ */
+function adaptLegacyPropertyKnowledgeInput(
+  stored: PropertyKnowledgePendingInput & {
+    attachment_inbound_file_ids?: string[];
+    attachment_caption?: string | null;
+  },
+): PropertyKnowledgeOperationsInput {
+  const input = stored.input as PropertyKnowledgeOperationsInput & {
+    action?: string;
+    room_id?: string;
+    attribute_id?: string;
+    item_id?: string;
+    document_id?: string;
+    fields?: Record<string, unknown>;
+  };
+  if (Array.isArray(input.operations)) return input;
+
+  const photos = stored.attachment_inbound_file_ids?.length
+    ? {
+        inbound_file_ids: stored.attachment_inbound_file_ids,
+        caption: stored.attachment_caption ?? null,
+      }
+    : undefined;
+  const fields = input.fields ?? {};
+  const base = {
+    property_id: input.property_id,
+    actor_user_id: input.actor_user_id ?? null,
+    source: input.source,
+  };
+
+  switch (input.action) {
+    case 'upsert_room':
+      return {
+        ...base,
+        operations: [
+          {
+            op: 'upsert_room',
+            room: input.room_id
+              ? { room_id: input.room_id }
+              : {
+                  title: String(fields.title ?? 'New room'),
+                  scope: (fields.scope as 'interior' | 'exterior') ?? 'interior',
+                },
+            ...(photos ? { photos } : {}),
+          },
+        ],
+      } as PropertyKnowledgeOperationsInput;
+    case 'upsert_attribute':
+      // The old shape addressed the room by id; there is no title to match on,
+      // so the id form is the faithful translation.
+      return {
+        ...base,
+        operations: [
+          {
+            op: 'upsert_attribute',
+            room: { room_id: String(fields.room_id ?? '') },
+            fields: Object.fromEntries(
+              Object.entries(fields).filter(([k]) => k !== 'room_id'),
+            ),
+            ...(photos ? { photos } : {}),
+          },
+        ],
+      } as PropertyKnowledgeOperationsInput;
+    case 'upsert_access_item':
+      return { ...base, operations: [{ op: 'upsert_access_item', fields }] } as PropertyKnowledgeOperationsInput;
+    case 'upsert_connectivity':
+      return { ...base, operations: [{ op: 'upsert_connectivity', fields }] } as PropertyKnowledgeOperationsInput;
+    case 'update_document':
+      return {
+        ...base,
+        operations: [{ op: 'update_document', document_id: input.document_id, fields }],
+      } as PropertyKnowledgeOperationsInput;
+    case 'delete_document':
+      return {
+        ...base,
+        operations: [{ op: 'delete_document', document_id: input.document_id }],
+      } as PropertyKnowledgeOperationsInput;
+    case 'delete_room':
+      return {
+        ...base,
+        operations: [{ op: 'delete_room', room: { room_id: input.room_id } }],
+      } as PropertyKnowledgeOperationsInput;
+    default:
+      // delete_access_item and delete_attribute addressed a row by id that the
+      // operations shape reaches by name; there is nothing faithful to build.
+      return input;
+  }
+}
+
+/** Fold a per-operation commit result into the one line the Confirm button shows. */
+function propertyKnowledgeResultText(
+  result: PropertyKnowledgeOperationsCommitResult,
+): string {
+  const failedOps = result.failures;
+  const failedAttachments = result.results.flatMap((r) => r.attachments.filter((a) => !a.ok));
+  const parts = [sentenceCase(result.summary)];
+  if (failedOps.length > 0 && failedOps[0].error) {
+    parts.push(failedOps[0].error.message);
+  } else if (failedAttachments.length > 0 && failedAttachments[0].error) {
+    parts.push(failedAttachments[0].error);
+  }
+  if (result.drift.length > 0) parts.push(result.drift[0].note);
+  return `${parts.join('. ').replace(/\.\.$/, '.')}.`.replace(/\.\.$/, '.');
+}
+
 async function executePropertyKnowledgeWrite(
   row: PendingActionRow,
 ): Promise<PendingExecutionResult> {
   const stored = row.canonical_input as PropertyKnowledgePendingInput;
-  const result = await commitPropertyKnowledgeWrite(stored.input);
-  if (!result.ok) {
+  const input = adaptLegacyPropertyKnowledgeInput(stored);
+  const org = await requirePropertiesInRowOrg(
+    row,
+    [input.property_id],
+    'update Property Knowledge',
+  );
+  if (!org.ok) return org.result;
+  const committed = await commitPropertyKnowledgeOperations(input);
+  if (!committed.ok) {
     return {
       ok: false,
       status: 'failed',
-      text: `I could not update Property Knowledge: ${result.error.message}`,
-      error: result.error.message,
-      result,
+      text: `I could not update Property Knowledge: ${committed.error.message}`,
+      error: committed.error.message,
+      result: committed,
     };
   }
 
-  const attachments = await attachPropertyKnowledgeFiles(stored, result.row);
-  const attached = attachments.filter((a) => a.ok).length;
-  const failed = attachments.filter((a) => !a.ok);
-  const text =
-    failed.length > 0
-      ? `${result.plan.summary}, but ${formatCount(failed.length, 'attachment')} failed. ${failed[0].error}`
-      : attached > 0
-        ? `${sentenceCase(result.plan.summary)} and attached ${formatCount(attached, 'file')}.`
-        : `${sentenceCase(result.plan.summary)}.`;
-
+  const result = committed.result;
+  const landed = result.results.filter((r) => r.ok && r.mode !== 'noop').length;
   return {
-    ok: failed.length === 0,
-    status: failed.length === 0 ? 'committed' : 'failed',
-    text,
-    error: failed[0]?.error,
-    result: { write: result, attachments },
+    ok: result.ok,
+    // Anything that landed means this row was acted on. Marking it 'failed'
+    // would invite a retry that double-writes the operations that succeeded.
+    status: landed > 0 || result.ok ? 'committed' : 'failed',
+    text: propertyKnowledgeResultText(result),
+    error: result.failures[0]?.error?.message,
+    result,
   };
 }
 
@@ -948,6 +1111,12 @@ async function executePropertyKnowledgeBatch(
   row: PendingActionRow,
 ): Promise<PendingExecutionResult> {
   const stored = row.canonical_input as PropertyKnowledgeBatchPendingInput;
+  const org = await requirePropertiesInRowOrg(
+    row,
+    stored.input.property_ids,
+    'update Property Knowledge',
+  );
+  if (!org.ok) return org.result;
   const result = await commitPropertyKnowledgeBatch(stored.input);
   if (!result.ok) {
     return {
@@ -959,36 +1128,32 @@ async function executePropertyKnowledgeBatch(
     };
   }
 
-  // Each property commits independently, so report the split rather than a
-  // single verb. Naming the properties that failed matters more than the count
-  // — the operator needs to know which ones to go fix.
-  const created = result.results.filter((r) => r.created_room).length;
-  const roomText =
-    created > 0
-      ? ` (created ${formatCount(created, 'room')} along the way)`
-      : '';
-  // Deletes must not report as "updated" — the operator is being told what
-  // happened to their data, and the two are not interchangeable.
-  const verb = stored.input.action.startsWith('delete_') ? 'cleared' : 'updated';
-  if (result.failures.length > 0) {
-    const names = result.failures.map((f) => f.property_name).join(', ');
-    return {
-      ok: false,
-      status: 'failed',
-      text:
-        `${sentenceCase(verb)} ` +
-        `${formatCount(result.results.length, 'property', 'properties')}${roomText}, ` +
-        `but ${formatCount(result.failures.length, 'property', 'properties')} failed: ${names}. ` +
-        `${result.failures[0].error?.message ?? ''}`.trim(),
-      error: result.failures[0].error?.message,
-      result,
-    };
-  }
+  // Each property runs the operations independently, so report the split rather
+  // than a single verb. The service already builds that sentence; this only adds
+  // the two things the operator most wants confirmed actually happened.
+  const attached = result.results.reduce(
+    (n, p) => n + p.results.reduce((m, o) => m + o.attachments.filter((a) => a.ok).length, 0),
+    0,
+  );
+  const roomsCreated = result.results.reduce(
+    (n, p) =>
+      n + p.results.filter((o) => o.ok && o.mode === 'create' && o.subject.type === 'room').length,
+    0,
+  );
+  const extras = [
+    roomsCreated > 0 ? `created ${formatCount(roomsCreated, 'room')}` : null,
+    attached > 0 ? `attached ${formatCount(attached, 'photo')}` : null,
+  ].filter(Boolean);
+  const suffix = extras.length > 0 ? ` (${extras.join(', ')})` : '';
+  const landed = result.results.filter((r) => r.ok).length;
 
   return {
-    ok: true,
-    status: 'committed',
-    text: `${sentenceCase(verb)} ${formatCount(result.results.length, 'property', 'properties')}${roomText}.`,
+    ok: result.failures.length === 0,
+    // Some properties committing means this row was acted on; a 'failed' status
+    // would invite a retry that double-writes everything that already landed.
+    status: landed > 0 || result.failures.length === 0 ? 'committed' : 'failed',
+    text: `${sentenceCase(result.summary)}${suffix}`.replace(/\.(\s\()/, '$1'),
+    error: result.failures[0]?.summary,
     result,
   };
 }
@@ -1152,56 +1317,6 @@ async function executeSlackFileAttachment(
   };
 }
 
-async function attachPropertyKnowledgeFiles(
-  stored: PropertyKnowledgePendingInput,
-  row: unknown,
-) {
-  const input = stored.input;
-  const ids = stored.attachment_inbound_file_ids ?? [];
-  if (ids.length === 0) return [];
-
-  if (input.action !== 'upsert_attribute' && input.action !== 'upsert_room') {
-    return ids.map((inboundFileId) => ({
-      inbound_file_id: inboundFileId,
-      ok: false as const,
-      error: 'Attachments are only supported for room or attribute writes.',
-    }));
-  }
-
-  const rowId =
-    typeof row === 'object' && row !== null && 'id' in row
-      ? String((row as { id?: unknown }).id ?? '')
-      : '';
-  const targetId =
-    rowId ||
-    (input.action === 'upsert_attribute' ? input.attribute_id : input.room_id) ||
-    '';
-  if (!targetId) {
-    return ids.map((inboundFileId) => ({
-      inbound_file_id: inboundFileId,
-      ok: false as const,
-      error: 'Could not determine the created Property Knowledge target id.',
-    }));
-  }
-
-  return attachFiles(ids, (inboundFileId) =>
-    input.action === 'upsert_attribute'
-      ? {
-          destination: 'property_attribute_photo',
-          inbound_file_id: inboundFileId,
-          property_id: input.property_id,
-          attribute_id: targetId,
-          caption: stored.attachment_caption ?? null,
-        }
-      : {
-          destination: 'property_room_photo',
-          inbound_file_id: inboundFileId,
-          property_id: input.property_id,
-          room_id: targetId,
-          caption: stored.attachment_caption ?? null,
-        },
-  );
-}
 
 async function attachFiles(
   inboundFileIds: string[] | undefined,

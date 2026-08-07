@@ -1,40 +1,24 @@
 import { z } from 'zod';
 import {
-  previewPropertyKnowledgeWrite,
-  propertyKnowledgeWriteInputSchema,
-  type PropertyKnowledgeWritePlan,
-} from '@/src/server/properties/propertyKnowledgeWrite';
+  previewPropertyKnowledgeOperations,
+  propertyKnowledgeOperationSchema,
+  MAX_OPERATIONS,
+  type PropertyKnowledgeOperationsPlan,
+} from '@/src/server/properties/propertyKnowledgeOperations';
 import { mintPropertyKnowledgeWriteToken } from '@/src/server/properties/propertyKnowledgeWriteConfirmation';
 import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
 import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
 const inputSchema = z
   .object({
-    action: z.enum([
-      'upsert_access_item',
-      'delete_access_item',
-      'upsert_connectivity',
-      'upsert_room',
-      'delete_room',
-      'upsert_attribute',
-      'delete_attribute',
-      'update_document',
-      'delete_document',
-    ]),
     property_id: z.string().uuid(),
-    item_id: z.string().uuid().optional(),
-    room_id: z.string().uuid().optional(),
-    attribute_id: z.string().uuid().optional(),
-    document_id: z.string().uuid().optional(),
-    fields: z.record(z.string(), z.unknown()).optional(),
-    attachment_inbound_file_ids: z.array(z.string().uuid()).optional(),
-    attachment_caption: z.string().nullable().optional(),
+    operations: z.array(propertyKnowledgeOperationSchema).min(1).max(MAX_OPERATIONS),
   })
   .passthrough();
 type Input = z.infer<typeof inputSchema>;
 
 export interface PreviewPropertyKnowledgeWriteData {
-  plan: PropertyKnowledgeWritePlan;
+  plan: PropertyKnowledgeOperationsPlan;
   confirmation_token: string;
   expires_at: string;
   pending_action_id?: string | null;
@@ -44,48 +28,16 @@ async function handler(
   input: Input,
   ctx: ToolContext,
 ): Promise<ToolResult<PreviewPropertyKnowledgeWriteData>> {
-  const {
-    attachment_inbound_file_ids,
-    attachment_caption,
-    ...primaryInput
-  } = input;
-  if (
-    attachment_inbound_file_ids?.length &&
-    input.action !== 'upsert_attribute' &&
-    input.action !== 'upsert_room'
-  ) {
-    return {
-      ok: false,
-      error: {
-        code: 'invalid_input',
-        message:
-          'File attachments on Property Knowledge compound writes are supported only for room or attribute photo destinations.',
-      },
-    };
-  }
-
-  const parsedPrimary = propertyKnowledgeWriteInputSchema.safeParse(primaryInput);
-  if (!parsedPrimary.success) {
-    const first = parsedPrimary.error.issues[0];
-    return {
-      ok: false,
-      error: {
-        code: 'invalid_input',
-        message: first?.message ?? 'invalid input',
-        hint: first?.path.join('.') || undefined,
-      },
-    };
-  }
-
-  // Org guard: the write service is org-blind and property_id is model-supplied,
-  // so validate the property belongs to the caller's org BEFORE previewing.
-  // The commit tool only accepts tokens minted here, so this covers commits too.
+  // Org guard: the operations service is org-blind and property_id is
+  // model-supplied, so validate the property belongs to the caller's org BEFORE
+  // previewing. The commit tool only accepts tokens minted here, so this covers
+  // commits too; the pending-action executor re-checks at click time.
   const org = requireOrgId(ctx);
   if (typeof org !== 'string') return org;
   const { data: propRow, error: propErr } = await ctx.db
     .from('properties')
     .select('id')
-    .eq('id', parsedPrimary.data.property_id)
+    .eq('id', input.property_id)
     .eq('org_id', org)
     .maybeSingle();
   if (propErr) {
@@ -96,20 +48,18 @@ async function handler(
       ok: false,
       error: {
         code: 'not_found',
-        message: `No property found with id ${parsedPrimary.data.property_id}.`,
+        message: `No property found with id ${input.property_id}.`,
         hint: 'Call find_properties to resolve a property name into a valid id.',
       },
     };
   }
 
-  const enriched = {
-    ...parsedPrimary.data,
+  const result = await previewPropertyKnowledgeOperations({
+    property_id: input.property_id,
+    operations: input.operations,
     actor_user_id: ctx.actor?.appUserId ?? null,
-    source:
-      ctx.surface === 'slack' ? ('agent_slack' as const) : ('agent_web' as const),
-  };
-
-  const result = await previewPropertyKnowledgeWrite(enriched);
+    source: ctx.surface === 'slack' ? 'agent_slack' : 'agent_web',
+  });
   if (!result.ok) {
     return {
       ok: false,
@@ -122,14 +72,11 @@ async function handler(
       },
     };
   }
+
   const minted = mintPropertyKnowledgeWriteToken(result.canonicalInput);
   const pendingActionId = await maybeCreatePendingAction(ctx, {
     kind: 'property_knowledge_write',
-    canonicalInput: {
-      input: result.canonicalInput,
-      attachment_inbound_file_ids: attachment_inbound_file_ids ?? [],
-      attachment_caption: attachment_caption ?? null,
-    },
+    canonicalInput: { input: result.canonicalInput },
     preview: result.plan,
   });
   return {
@@ -140,7 +87,11 @@ async function handler(
       expires_at: minted.expires_at,
       pending_action_id: pendingActionId,
     },
-    meta: { returned: 1, limit: 1, truncated: false },
+    meta: {
+      returned: result.plan.operations.length,
+      limit: MAX_OPERATIONS,
+      truncated: false,
+    },
   };
 }
 
@@ -150,68 +101,91 @@ export const previewPropertyKnowledgeWriteTool: ToolDefinition<
 > = {
   name: 'preview_property_knowledge_write',
   description:
-    "PREVIEW writes to Property Knowledge sections that are not Information or Activity: Access items, Connectivity, Interior/Exterior rooms, Interior/Exterior attributes, and Document metadata/deletes. Access is a list of items — use upsert_access_item to create (omit item_id) or update (supply item_id) an access item (a code, key, or parking detail), and delete_access_item to remove one. Also handles wifi/router details, creating/updating/deleting rooms + room attributes, and editing/deleting existing documents. It does NOT upload new document files, and it does NOT write property Information or Activity. The specialized contact tool still handles Vendor contacts. Required workflow: call this preview tool, present the plan/diff to the user, get explicit confirmation, then call commit_property_knowledge_write with the returned token. If plan.changes is empty on an update, tell the user nothing would change and do not commit.",
+    "PREVIEW any number of Property Knowledge writes on ONE property, as an ORDERED LIST of operations that all commit under a single Confirm. This covers Access items, Connectivity, Interior/Exterior rooms and attributes, existing Document metadata/deletes, and room/attribute photos. Put EVERY edit the user asked for into `operations` — one call, however many changes. \"Create a Gate room, add a gate-code attribute and a lockbox attribute to it, and attach this photo to the lockbox one\" is ONE call with three operations, never three calls and never two turns. Rooms are named, not id'd: an attribute operation carries `room` { title, scope }, and if that room does not exist yet it is CREATED first, inside this same confirmation, and the attribute is written into it — so you never need to create a room and ask the user to come back. Later operations land in rooms earlier operations create. Photos ride on the operation that owns their target via `photos`, so a plan with two attributes and two photos knows which photo goes where; never use preview_file_attachment for a room or attribute you are writing in this same request. Targets are matched by name and RE-RESOLVED at commit, so re-running a plan updates in place instead of duplicating. The returned plan lists every operation with its mode (create/update/noop/skipped), the rooms that will be created, and the photos that will attach; present it and get explicit confirmation, then call commit_property_knowledge_write with the token. Operations run in order — if one fails, the operations that depended on it are skipped and independent ones still run, so report which landed. If every operation is a noop, tell the user nothing would change and do not commit. For the SAME operations across MANY properties use preview_property_knowledge_batch. Vendor contacts have their own tool.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
     properties: {
-      action: {
-        type: 'string',
-        enum: [
-          'upsert_access_item',
-          'delete_access_item',
-          'upsert_connectivity',
-          'upsert_room',
-          'delete_room',
-          'upsert_attribute',
-          'delete_attribute',
-          'update_document',
-          'delete_document',
-        ],
-        description:
-          'Which Property Knowledge write to preview. upsert_access_item/upsert_room/upsert_attribute create when the id is omitted and update when the id is supplied.',
-      },
       property_id: {
         type: 'string',
         description: 'Property UUID. Resolve names with find_properties first.',
       },
-      item_id: {
-        type: 'string',
-        description:
-          'Access item UUID for updating/deleting an access item, or omitted when creating one.',
-      },
-      room_id: {
-        type: 'string',
-        description:
-          'Room UUID for updating/deleting a room, or omitted when creating a room.',
-      },
-      attribute_id: {
-        type: 'string',
-        description:
-          'Attribute UUID for updating/deleting an attribute, or omitted when creating one.',
-      },
-      document_id: {
-        type: 'string',
-        description: 'Document UUID for metadata edits or deletion.',
-      },
-      fields: {
-        type: 'object',
-        description:
-          "Fields for the selected action. Access item fields: type (one of entry_code, backup_code, team_code, owner_code, building_code, lobby_code, gate_code, elevator, parking_garage_code, mailbox_code, amenity_code, intercom_code, storage_code, lockbox_code, lockbox_location, key_location, fob_keycard, alarm_code, parking_spot, parking_type, parking_location, guest_parking_pass, ev_charger, other), label (defaults from type; required for 'other'), value (the code/number; for a parking_type item it must be assigned/street/garage/other), notes (optional). Connectivity fields: wifi_ssid, wifi_password, wifi_router_location. Room fields: scope ('interior'|'exterior'), title, notes, sort_order. Attribute fields: room_id, tags (array of: appliance, amenity, safety, quirk, utility, access, other), title, body, sort_order. Document fields: title, notes, tag. Pass null to clear nullable text fields.",
-      },
-      attachment_inbound_file_ids: {
+      operations: {
         type: 'array',
-        items: { type: 'string' },
+        minItems: 1,
+        maxItems: MAX_OPERATIONS,
         description:
-          'inbound_file_id UUIDs to attach as photos after an upsert_room or upsert_attribute write. Use only ids from the uploaded-files context block.',
-      },
-      attachment_caption: {
-        type: 'string',
-        description:
-          'Optional caption to apply to room/attribute photos attached by attachment_inbound_file_ids.',
+          'Ordered list of writes to apply to this property in one confirmation. Include every edit the user asked for.',
+        items: {
+          type: 'object',
+          properties: {
+            op: {
+              type: 'string',
+              enum: [
+                'upsert_room',
+                'delete_room',
+                'upsert_attribute',
+                'delete_attribute',
+                'upsert_access_item',
+                'delete_access_item',
+                'upsert_connectivity',
+                'update_document',
+                'delete_document',
+              ],
+              description:
+                'Which write this operation performs. Upserts create when the target is absent and update when it is present — there are no separate add/edit operations.',
+            },
+            room: {
+              type: 'object',
+              description:
+                'Required for room and attribute operations. Normally { title, scope } — the room is matched by that name and CREATED if missing (set create_if_missing false to fail instead). Use { room_id } only to address one exact existing row, e.g. when renaming it.',
+              properties: {
+                title: { type: 'string', description: 'Room title, matched case-insensitively, e.g. "Gate".' },
+                scope: {
+                  type: 'string',
+                  enum: ['interior', 'exterior'],
+                  description: 'Which side of Property Knowledge the room lives on.',
+                },
+                create_if_missing: {
+                  type: 'boolean',
+                  description: 'Default true — create the room when it is not there.',
+                },
+                room_id: { type: 'string', description: 'Address one exact room by id instead of by name.' },
+              },
+            },
+            title: {
+              type: 'string',
+              description: 'delete_attribute only: the title of the attribute to remove from that room.',
+            },
+            document_id: {
+              type: 'string',
+              description: 'update_document / delete_document only: the document UUID.',
+            },
+            fields: {
+              type: 'object',
+              description:
+                "Fields for this operation. Room: notes, sort_order, and title ONLY to rename an existing room (scope and the matching title come from `room`). Attribute: title (REQUIRED — the match key within its room), tags (array of appliance, amenity, safety, quirk, utility, access, other), body, sort_order; never pass room_id. Access item: type (one of entry_code, backup_code, team_code, owner_code, building_code, lobby_code, gate_code, elevator, parking_garage_code, mailbox_code, amenity_code, intercom_code, storage_code, lockbox_code, lockbox_location, key_location, fob_keycard, alarm_code, parking_spot, parking_type, parking_location, guest_parking_pass, ev_charger, other), label (defaults from type; required for 'other'), value (for a parking_type item it must be assigned/street/garage/other), notes. delete_access_item: type, and label when the type is 'other'. Connectivity: wifi_ssid, wifi_password, wifi_router_location. Document: title, notes, tag. Pass null to clear a nullable text field.",
+            },
+            photos: {
+              type: 'object',
+              description:
+                'Room and attribute operations only. Uploaded images to attach to THIS operation\'s room or attribute once it exists. Use ids only from the uploaded-files context block.',
+              properties: {
+                inbound_file_ids: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'inbound_file_id UUIDs to attach.',
+                },
+                caption: { type: 'string', description: 'Optional caption applied to these photos.' },
+              },
+              required: ['inbound_file_ids'],
+            },
+          },
+          required: ['op'],
+        },
       },
     },
-    required: ['action', 'property_id'],
+    required: ['property_id', 'operations'],
     additionalProperties: false,
   },
   handler,

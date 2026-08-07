@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import {
-  commitPropertyKnowledgeWrite,
-  type PropertyKnowledgeWritePlan,
-} from '@/src/server/properties/propertyKnowledgeWrite';
+  commitPropertyKnowledgeOperations,
+  type PropertyKnowledgeOperationsCommitResult,
+} from '@/src/server/properties/propertyKnowledgeOperations';
 import { consumePropertyKnowledgeWriteToken } from '@/src/server/properties/propertyKnowledgeWriteConfirmation';
 import type { ToolDefinition, ToolMeta, ToolResult } from './types';
 
@@ -18,8 +18,7 @@ const inputSchema = z.object({
 type Input = z.infer<typeof inputSchema>;
 
 export interface CommitPropertyKnowledgeWriteData {
-  plan: PropertyKnowledgeWritePlan;
-  row: unknown;
+  result: PropertyKnowledgeOperationsCommitResult;
 }
 
 async function handler(
@@ -41,22 +40,29 @@ async function handler(
     };
   }
 
-  const result = await commitPropertyKnowledgeWrite(consumed.input);
-  if (!result.ok) {
+  const committed = await commitPropertyKnowledgeOperations(consumed.input);
+  if (!committed.ok) {
     return {
       ok: false,
       error: {
-        code: result.error.code,
-        message: result.error.message,
-        hint: result.error.field
-          ? `The "${result.error.field}" field is invalid. Re-run preview_property_knowledge_write.`
+        code: committed.error.code,
+        message: committed.error.message,
+        hint: committed.error.field
+          ? `The "${committed.error.field}" field is invalid. Re-run preview_property_knowledge_write.`
           : 'Re-run preview_property_knowledge_write.',
       },
     };
   }
 
-  const meta: ToolMeta = { returned: 1, limit: 1, truncated: false };
-  return { ok: true, data: { plan: result.plan, row: result.row }, meta };
+  // ok:true with a non-empty failures array is a PARTIAL success — operations
+  // that depended on a failure were skipped while independent ones still ran.
+  const result = committed.result;
+  const meta: ToolMeta = {
+    returned: result.results.length,
+    limit: result.results.length,
+    truncated: false,
+  };
+  return { ok: true, data: { result }, meta };
 }
 
 export const commitPropertyKnowledgeWriteTool: ToolDefinition<
@@ -65,7 +71,7 @@ export const commitPropertyKnowledgeWriteTool: ToolDefinition<
 > = {
   name: 'commit_property_knowledge_write',
   description:
-    'COMMIT a previewed-and-confirmed Property Knowledge write. Takes ONLY a confirmation_token from preview_property_knowledge_write. Use after the user explicitly confirms the preview plan. Returns the applied plan and resulting/deleted row snapshot.',
+    'COMMIT a previewed-and-confirmed Property Knowledge operations plan. Takes ONLY a confirmation_token from preview_property_knowledge_write. Use after the user explicitly confirms. Returns a per-operation result: each operation with its actual mode, the rows written, the photos attached, a failures array, and a drift array. This can return ok:true WITH failures — operations run in order, so a failure skips the operations that depended on it while independent ones still land. Narrate that split honestly rather than claiming full success, and mention any drift (e.g. a room that was planned as a create but existed by the time it ran).',
   inputSchema,
   jsonSchema: {
     type: 'object' as const,

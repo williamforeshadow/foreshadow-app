@@ -33,9 +33,9 @@ const DOCUMENT_TAGS = ['lease', 'appliance_manual', 'inspection', 'insurance', '
 const DEFAULT_ROOM_TITLE = 'New room';
 
 const nullableString = z.union([z.string(), z.null()]);
-const sourceSchema = z.enum(['web', 'agent_slack', 'agent_web', 'system']).optional();
+export const sourceSchema = z.enum(['web', 'agent_slack', 'agent_web', 'system']).optional();
 
-const accessItemFieldsSchema = z
+export const accessItemFieldsSchema = z
   .object({
     type: z.string().optional(),
     label: nullableString.optional(),
@@ -45,12 +45,12 @@ const accessItemFieldsSchema = z
   })
   .strict();
 
-const connectivityFieldsSchema = z
+export const connectivityFieldsSchema = z
   .object(Object.fromEntries(CONNECTIVITY_FIELDS.map((f) => [f, nullableString.optional()])))
   .strict()
   .refine((v) => Object.keys(v).length > 0, 'at least one connectivity field is required');
 
-const roomFieldsSchema = z
+export const roomFieldsSchema = z
   .object({
     scope: z.enum(['interior', 'exterior']).optional(),
     title: nullableString.optional(),
@@ -59,7 +59,7 @@ const roomFieldsSchema = z
   })
   .strict();
 
-const attributeFieldsSchema = z
+export const attributeFieldsSchema = z
   .object({
     room_id: z.string().uuid().optional(),
     tags: z.array(z.enum(ATTRIBUTE_TAGS as [AttributeTag, ...AttributeTag[]])).optional(),
@@ -69,7 +69,7 @@ const attributeFieldsSchema = z
   })
   .strict();
 
-const documentFieldsSchema = z
+export const documentFieldsSchema = z
   .object({
     title: z.string().optional(),
     notes: nullableString.optional(),
@@ -725,6 +725,40 @@ async function commitDocument(
   return { ok: true, plan: { ...plan, changes }, row: data };
 }
 
+/**
+ * Plan one write against an already-resolved property.
+ *
+ * Callers that issue many writes against the same property (the operations
+ * layer, and the batch fan-out beneath it) use this so the property row is read
+ * once per property instead of once per write.
+ */
+export async function planPropertyKnowledgeWriteFor(
+  supabase: Supabase,
+  input: PropertyKnowledgeWriteInput,
+  property: { id: string; name: string },
+): Promise<PreviewPropertyKnowledgeWriteResult> {
+  if (input.action === 'upsert_connectivity') return planSingleton(supabase, input, property);
+  if (input.action === 'upsert_access_item' || input.action === 'delete_access_item') return planAccessItem(supabase, input, property);
+  if (input.action === 'upsert_room' || input.action === 'delete_room') return planRoom(supabase, input, property);
+  if (input.action === 'upsert_attribute' || input.action === 'delete_attribute') return planAttribute(supabase, input, property);
+  return planDocument(supabase, input, property);
+}
+
+/** Commit one already-planned write. Pair with planPropertyKnowledgeWriteFor. */
+export async function commitPropertyKnowledgeWriteFor(
+  supabase: Supabase,
+  input: PropertyKnowledgeWriteInput,
+  plan: PropertyKnowledgeWritePlan,
+): Promise<PropertyKnowledgeWriteResult> {
+  if (input.action === 'upsert_connectivity') return commitSingleton(supabase, input, plan);
+  if (input.action === 'upsert_access_item' || input.action === 'delete_access_item') return commitAccessItem(supabase, input, plan);
+  if (input.action === 'upsert_room' || input.action === 'delete_room') return commitRoom(supabase, input, plan);
+  if (input.action === 'upsert_attribute' || input.action === 'delete_attribute') return commitAttribute(supabase, input, plan);
+  return commitDocument(supabase, input, plan);
+}
+
+export { loadProperty as loadPropertyForKnowledgeWrite };
+
 export async function previewPropertyKnowledgeWrite(
   rawInput: unknown,
 ): Promise<PreviewPropertyKnowledgeWriteResult> {
@@ -737,11 +771,7 @@ export async function previewPropertyKnowledgeWrite(
   const supabase = getSupabaseServer();
   const prop = await loadProperty(supabase, input.property_id);
   if (!prop.ok) return { ok: false, error: prop.error };
-  if (input.action === 'upsert_connectivity') return planSingleton(supabase, input, prop.property);
-  if (input.action === 'upsert_access_item' || input.action === 'delete_access_item') return planAccessItem(supabase, input, prop.property);
-  if (input.action === 'upsert_room' || input.action === 'delete_room') return planRoom(supabase, input, prop.property);
-  if (input.action === 'upsert_attribute' || input.action === 'delete_attribute') return planAttribute(supabase, input, prop.property);
-  return planDocument(supabase, input, prop.property);
+  return planPropertyKnowledgeWriteFor(supabase, input, prop.property);
 }
 
 export async function commitPropertyKnowledgeWrite(
@@ -749,11 +779,5 @@ export async function commitPropertyKnowledgeWrite(
 ): Promise<PropertyKnowledgeWriteResult> {
   const preview = await previewPropertyKnowledgeWrite(rawInput);
   if (!preview.ok) return { ok: false, error: preview.error };
-  const input = preview.canonicalInput;
-  const supabase = getSupabaseServer();
-  if (input.action === 'upsert_connectivity') return commitSingleton(supabase, input, preview.plan);
-  if (input.action === 'upsert_access_item' || input.action === 'delete_access_item') return commitAccessItem(supabase, input, preview.plan);
-  if (input.action === 'upsert_room' || input.action === 'delete_room') return commitRoom(supabase, input, preview.plan);
-  if (input.action === 'upsert_attribute' || input.action === 'delete_attribute') return commitAttribute(supabase, input, preview.plan);
-  return commitDocument(supabase, input, preview.plan);
+  return commitPropertyKnowledgeWriteFor(getSupabaseServer(), preview.canonicalInput, preview.plan);
 }

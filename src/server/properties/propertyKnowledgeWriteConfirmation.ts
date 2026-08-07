@@ -1,11 +1,11 @@
 import crypto from 'node:crypto';
-import type { PropertyKnowledgeWriteInput } from './propertyKnowledgeWrite';
+import type { PropertyKnowledgeOperationsInput } from './propertyKnowledgeOperations';
 import type { PropertyKnowledgeBatchInput } from './propertyKnowledgeWriteBatch';
 
 const TOKEN_TTL_MS = 5 * 60 * 1000;
 
 interface Entry {
-  input: PropertyKnowledgeWriteInput;
+  input: PropertyKnowledgeOperationsInput;
   expiresAtMs: number;
 }
 
@@ -26,7 +26,7 @@ export interface MintedToken {
 }
 
 export type ConsumeOutcome =
-  | { ok: true; input: PropertyKnowledgeWriteInput }
+  | { ok: true; input: PropertyKnowledgeOperationsInput }
   | { ok: false; reason: 'unknown' | 'expired' };
 
 export type ConsumeBatchOutcome =
@@ -43,7 +43,7 @@ function pruneExpired(now: number): void {
 }
 
 export function mintPropertyKnowledgeWriteToken(
-  input: PropertyKnowledgeWriteInput,
+  input: PropertyKnowledgeOperationsInput,
 ): MintedToken {
   const now = Date.now();
   pruneExpired(now);

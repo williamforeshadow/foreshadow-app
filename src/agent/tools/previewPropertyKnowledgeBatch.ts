@@ -3,30 +3,18 @@ import {
   previewPropertyKnowledgeBatch,
   type PropertyKnowledgeBatchPlan,
 } from '@/src/server/properties/propertyKnowledgeWriteBatch';
+import {
+  propertyKnowledgeOperationSchema,
+  MAX_OPERATIONS,
+} from '@/src/server/properties/propertyKnowledgeOperations';
 import { mintPropertyKnowledgeBatchToken } from '@/src/server/properties/propertyKnowledgeWriteConfirmation';
 import { maybeCreatePendingAction } from '@/src/server/agent/pendingActions';
 import { requireOrgId, type ToolContext, type ToolDefinition, type ToolResult } from './types';
 
 const inputSchema = z
   .object({
-    action: z.enum([
-      'upsert_access_item',
-      'upsert_connectivity',
-      'upsert_room',
-      'upsert_attribute',
-      'delete_access_item',
-      'delete_room',
-      'delete_attribute',
-    ]),
     property_ids: z.array(z.string().uuid()).min(1).max(25),
-    fields: z.record(z.string(), z.unknown()),
-    room: z
-      .object({
-        title: z.string().min(1).max(120),
-        scope: z.enum(['interior', 'exterior']),
-        create_if_missing: z.boolean().optional(),
-      })
-      .optional(),
+    operations: z.array(propertyKnowledgeOperationSchema).min(1).max(MAX_OPERATIONS),
   })
   .passthrough();
 type Input = z.infer<typeof inputSchema>;
@@ -45,11 +33,11 @@ async function handler(
   const org = requireOrgId(ctx);
   if (typeof org !== 'string') return org;
 
-  // Org guard, same shape as the single-write tool but across the whole list:
-  // the batch service is org-blind and every property_id is model-supplied, so
-  // any id outside the caller's org has to be rejected BEFORE we read or plan
-  // anything. Rejecting the whole batch (rather than silently dropping the
-  // stray id) keeps the confirmed plan equal to what the operator was shown.
+  // Org guard across the whole list: the batch service is org-blind and every
+  // property_id is model-supplied, so any id outside the caller's org has to be
+  // rejected BEFORE we read or plan anything. Rejecting the whole batch (rather
+  // than silently dropping the stray id) keeps the confirmed plan equal to what
+  // the operator was shown.
   const { data: rows, error } = await ctx.db
     .from('properties')
     .select('id')
@@ -72,7 +60,8 @@ async function handler(
   }
 
   const result = await previewPropertyKnowledgeBatch({
-    ...input,
+    property_ids: input.property_ids,
+    operations: input.operations,
     actor_user_id: ctx.actor?.appUserId ?? null,
     source: ctx.surface === 'slack' ? 'agent_slack' : 'agent_web',
   });
@@ -104,9 +93,9 @@ async function handler(
       pending_action_id: pendingActionId,
     },
     meta: {
-      returned: result.plan.steps.length,
+      returned: result.plan.properties.length,
       limit: 25,
-      truncated: false,
+      truncated: result.plan.truncated,
     },
   };
 }
@@ -117,25 +106,11 @@ export const previewPropertyKnowledgeBatchTool: ToolDefinition<
 > = {
   name: 'preview_property_knowledge_batch',
   description:
-    "PREVIEW the SAME Property Knowledge write applied to MANY properties at once — one plan, one confirmation, one click. Use this instead of looping preview_property_knowledge_write whenever the user says 'all', 'every', 'each', or names more than one property (e.g. 'the gate code is 3252 at all the Long Branch properties', 'update the wifi password at these four', 'remove the old gate code everywhere'). Supported actions: upsert_access_item, upsert_connectivity, upsert_room, upsert_attribute, delete_access_item, delete_room, delete_attribute. Deletes locate their target by the same name fields the matching upsert uses, and a property that does not have the target is reported as a no-op rather than a failure — it is already in the state the user asked for. Deleting a room also removes its attributes and photos, so present that before the user confirms. Targets are matched BY NAME per property, not by id, so the same fields work across the whole list and re-running updates in place instead of duplicating. For upsert_attribute you MUST pass `room` { title, scope } instead of fields.room_id: the room is resolved per property and, when missing, CREATED as part of this same confirmation before the attribute is written into it — so 'add a gate code attribute under an exterior Gate room at all three' is ONE preview and ONE Confirm, never two rounds. The returned plan lists every property with its mode (create/update/noop), any room that will be created first, and a `failures` array for properties that could not be planned; present those honestly. Then call commit_property_knowledge_batch with the token. For a write to ONE property, or for document metadata edits and deletes (which address a single uploaded file by id), use preview_property_knowledge_write instead.",
+    "PREVIEW the SAME ordered list of Property Knowledge operations applied to MANY properties (2-25) at once — one plan, one confirmation, one click. Reach for this instead of looping the single tool whenever the user says 'all', 'every', 'each', or names more than one property. It takes the SAME `operations` array as preview_property_knowledge_write, so everything that tool can do in one pass this one can do across a list: create a room and put two attributes in it, add several attributes to an existing room, attach photos, set access items and connectivity — all in one confirmation. Targets are matched BY NAME per property (access item by type, room by title+scope, attribute by title within its room), so you do NOT need get_property_knowledge per property first; resolve the property_ids with find_properties and go. Rooms named by an attribute operation are CREATED per property when missing, inside this same confirmation. Because ids are per-property, room { room_id } and the two document operations are rejected here — use preview_property_knowledge_write for those. If the operations carry photos, the SAME uploaded file is copied onto every property (a photo is usually of one physical place, so say that plainly when you present the plan); the plan reports it as photos_fanout. The plan returns shared_operations (the list, described once), a per-property breakdown with each operation's mode (create/update/noop/skipped), rooms_to_create, totals, a failures array for properties that could not be planned, and `uniform` — when uniform is true, describe the operations once for the whole set rather than repeating them per property. Then call commit_property_knowledge_batch with the token. For a single property, use preview_property_knowledge_write.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
     properties: {
-      action: {
-        type: 'string',
-        enum: [
-          'upsert_access_item',
-          'upsert_connectivity',
-          'upsert_room',
-          'upsert_attribute',
-          'delete_access_item',
-          'delete_room',
-          'delete_attribute',
-        ],
-        description:
-          'Which write to apply to every property in the list. Deletes match their target by the same name fields as the matching upsert. Document edits are not batchable (a document is one uploaded file addressed by id) — use preview_property_knowledge_write.',
-      },
       property_ids: {
         type: 'array',
         items: { type: 'string' },
@@ -144,35 +119,65 @@ export const previewPropertyKnowledgeBatchTool: ToolDefinition<
         description:
           'Property UUIDs to write to (1-25). Resolve names with find_properties first. Every id must belong to your organization or the whole batch is rejected.',
       },
-      fields: {
-        type: 'object',
+      operations: {
+        type: 'array',
+        minItems: 1,
+        maxItems: MAX_OPERATIONS,
         description:
-          "Fields applied to every property. Access item: type (entry_code, gate_code, lockbox_code, parking_spot, other, ...), label, value, notes. Connectivity: wifi_ssid, wifi_password, wifi_router_location. Room: scope ('interior'|'exterior') and title, both required. Attribute: title (REQUIRED — it is the per-property match key), tags (array of appliance, amenity, safety, quirk, utility, access, other), body. Never pass room_id here; use the `room` object.",
-      },
-      room: {
-        type: 'object',
-        description:
-          'Attribute batches only (upsert AND delete), and REQUIRED for them. Names the containing room per property. On upsert, if no room with this title and scope exists on a property it is created first, in the same confirmation, and the attribute is written into it — set create_if_missing to false to fail on those properties instead. On delete, a missing room is simply a no-op; deleting never creates.',
-        properties: {
-          title: {
-            type: 'string',
-            description: 'Room title to match case-insensitively, e.g. "Gate".',
+          "Ordered list of writes applied to EVERY property in the list. Same shape as preview_property_knowledge_write's operations, minus update_document/delete_document and minus room { room_id } — both address one row on one property. Total operations x properties must not exceed 100, and photo copies (files x properties) must not exceed 20.",
+        items: {
+          type: 'object',
+          properties: {
+            op: {
+              type: 'string',
+              enum: [
+                'upsert_room',
+                'delete_room',
+                'upsert_attribute',
+                'delete_attribute',
+                'upsert_access_item',
+                'delete_access_item',
+                'upsert_connectivity',
+              ],
+              description:
+                'Which write to apply on every property. Upserts create when the target is absent on that property and update when present. Deletes match by the same name fields as the matching upsert, and a property that lacks the target is a noop rather than a failure — it is already in the state the user asked for.',
+            },
+            room: {
+              type: 'object',
+              description:
+                'Required for room and attribute operations. Must be { title, scope } — resolved per property, and created there if missing. Set create_if_missing false to fail on properties that lack it instead. room_id is rejected in a batch.',
+              properties: {
+                title: { type: 'string', description: 'Room title, matched case-insensitively per property.' },
+                scope: { type: 'string', enum: ['interior', 'exterior'] },
+                create_if_missing: { type: 'boolean' },
+              },
+              required: ['title', 'scope'],
+            },
+            title: {
+              type: 'string',
+              description: 'delete_attribute only: title of the attribute to remove from that room.',
+            },
+            fields: {
+              type: 'object',
+              description:
+                "Fields applied to every property. Attribute: title (REQUIRED — the per-property match key), tags, body. Room: notes, sort_order. Access item: type, label, value, notes. Connectivity: wifi_ssid, wifi_password, wifi_router_location. Never pass room_id.",
+            },
+            photos: {
+              type: 'object',
+              description:
+                'Room and attribute operations only. The same uploaded image is copied onto every property. Use sparingly — a photo usually belongs to one property.',
+              properties: {
+                inbound_file_ids: { type: 'array', items: { type: 'string' } },
+                caption: { type: 'string' },
+              },
+              required: ['inbound_file_ids'],
+            },
           },
-          scope: {
-            type: 'string',
-            enum: ['interior', 'exterior'],
-            description: 'Which side of Property Knowledge the room lives on.',
-          },
-          create_if_missing: {
-            type: 'boolean',
-            description:
-              'Default true — create the room when a property lacks it. Set false to require the room already exist.',
-          },
+          required: ['op'],
         },
-        required: ['title', 'scope'],
       },
     },
-    required: ['action', 'property_ids', 'fields'],
+    required: ['property_ids', 'operations'],
     additionalProperties: false,
   },
   handler,

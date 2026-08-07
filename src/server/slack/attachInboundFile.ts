@@ -107,6 +107,14 @@ function isImage(file: InboundFileRow) {
   return file.mime_type?.startsWith('image/') || file.file_type === 'image';
 }
 
+/**
+ * Rooms lost their `type` dropdown in the knowledge refactor, so `scope`
+ * (interior/exterior) is the only fallback left when a room has no title.
+ */
+function roomLabel(room: { title: string | null; scope: string | null }) {
+  return room.title || (room.scope ? `${room.scope} room` : 'room');
+}
+
 async function loadInboundFile(
   supabase: Supabase,
   inboundFileId: string,
@@ -206,7 +214,7 @@ async function buildPlan(
   if (input.destination === 'property_room_photo') {
     const { data, error } = await supabase
       .from('property_rooms')
-      .select('id, title, type')
+      .select('id, title, scope')
       .eq('id', input.room_id)
       .eq('property_id', input.property_id)
       .maybeSingle();
@@ -217,8 +225,8 @@ async function buildPlan(
       plan: {
         destination: input.destination,
         inbound_file: file,
-        target: { type: 'property_room_photo', id: data.id, label: data.title || data.type },
-        summary: `Add "${file.name}" as a photo on room "${data.title || data.type}".`,
+        target: { type: 'property_room_photo', id: data.id, label: roomLabel(data) },
+        summary: `Add "${file.name}" as a photo on room "${roomLabel(data)}".`,
       },
       canonicalInput: input,
     };
