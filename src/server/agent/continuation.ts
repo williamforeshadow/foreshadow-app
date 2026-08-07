@@ -7,6 +7,12 @@ import {
   setPendingActionFollowup,
   type PendingActionRow,
 } from './pendingActions';
+import { loadSessionPinnedFileIds } from './memory';
+import {
+  formatInboundFilesForAgent,
+  loadInboundFilesForReplay,
+} from './inboundFiles';
+import { renderInboundFilesAsMedia } from './inboundFileVision';
 
 // Continuing a plan after the user clicks Confirm.
 //
@@ -48,6 +54,15 @@ interface ContinuationInputs {
   /** Per-action outcome text, same order, as shown to the user. */
   results: Array<{ ok: boolean; text: string }>;
   surface: AgentSurface;
+  /**
+   * The session the confirmed bundle came from.
+   *
+   * Not on PendingActionRow, but every caller has it in scope. Used only to
+   * carry the conversation's attachments into the continuation: a follow-up
+   * like "…then put the model number from that photo in the description" has
+   * to be able to see the photo, and the continuation runs with no history.
+   */
+  sessionId?: string | null;
 }
 
 /**
@@ -59,6 +74,7 @@ export async function maybeRunContinuation({
   rows,
   results,
   surface,
+  sessionId,
 }: ContinuationInputs): Promise<ContinuationResult | null> {
   if (rows.length === 0) return null;
 
@@ -129,9 +145,28 @@ export async function maybeRunContinuation({
     'and stop — do not invent extra work.',
   ].join('\n');
 
+  // The continuation still runs with NO history, deliberately: the prompt above
+  // is self-contained, and replaying a 200-row transcript would let old turns
+  // pull against the instruction the agent registered for itself.
+  //
+  // Attachments are not "context" in that sense. A follow-up step that has to
+  // read something off a photo cannot do its job blind, and the photo is the
+  // one piece of the conversation the synthetic prompt can't restate. So: no
+  // text history, and the same media the recent turns carried.
+  const pinnedIds = await loadSessionPinnedFileIds(sessionId ?? null);
+  const pinnedFiles = await loadInboundFilesForReplay(pinnedIds);
+  const media = await renderInboundFilesAsMedia(pinnedFiles);
+  const filesBlock = formatInboundFilesForAgent(
+    pinnedFiles,
+    surface === 'slack' ? 'slack' : 'web',
+    media,
+  );
+
   const result = await runAgent({
     history: [],
     prompt,
+    promptMedia: media.blocks,
+    ...(filesBlock ? { contextBlocks: [filesBlock] } : {}),
     surface,
     actor,
     orgId,

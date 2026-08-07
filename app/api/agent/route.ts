@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthContext } from '@/lib/requireAuthContext';
 import {
   appendMessage,
-  loadHistory,
+  loadReplayedHistory,
   resolveWebSession,
   WEB_HISTORY_LIMIT,
 } from '@/src/server/agent/memory';
+import { renderInboundFilesAsMedia } from '@/src/server/agent/inboundFileVision';
 import { maybeTitleSession } from '@/src/server/agent/sessions';
 import { runAgent, type AgentActor, WRITE_TOOL_NAMES } from '@/src/agent/runAgent';
 import { applyBackstops } from '@/src/agent/backstops';
@@ -100,7 +101,7 @@ export async function POST(req: NextRequest) {
   // Pull recent conversation history. We persist only final assistant text
   // (no tool_use / tool_result blocks) so the history we replay is plain
   // text on both sides — the agent will re-invoke tools as needed.
-  const history = await loadHistory(sessionId, WEB_HISTORY_LIMIT);
+  const history = await loadReplayedHistory(sessionId, WEB_HISTORY_LIMIT);
 
   // Name the session after the message that opened it. No-ops once it has a
   // title, so a rename the user typed is never clobbered.
@@ -128,9 +129,24 @@ export async function POST(req: NextRequest) {
   const carryForward = (
     await listRecentInboundFiles({ appUserId: userId, source: 'web' })
   ).filter((f) => !attachedIds.has(f.id));
+
+  // What the model actually looks at this turn: the files on THIS message,
+  // plus any carry-forward file the history has no record of showing.
+  //
+  // The exclusion matters. A carry-forward file that history already replayed
+  // is on screen at the turn it arrived on — rendering it again here would put
+  // the same photo in the prompt twice and make "Image 2" ambiguous. But a file
+  // staged and never sent, or sent on a turn that has since aged past the media
+  // cap, has never been seen at all, so it gets promoted into this turn.
+  const orphaned = carryForward.filter((f) => !history.replayedFileIds.has(f.id));
+  const render = await renderInboundFilesAsMedia([...attachedFiles, ...orphaned], {
+    startLabel: history.nextLabel,
+  });
+
   const filesBlock = formatInboundFilesForAgent(
     [...attachedFiles, ...carryForward],
     'web',
+    render,
   );
   const contextBlocks = filesBlock ? [filesBlock] : undefined;
 
@@ -157,8 +173,10 @@ export async function POST(req: NextRequest) {
     // db: the user's session-bound client — RLS enforces org isolation on
     // every tool query at the database layer.
     const result = await runAgent({
-      history,
+      history: history.messages,
+      historyHasMedia: history.hasMedia,
       prompt,
+      promptMedia: render.blocks,
       clientTz,
       actor,
       orgId,

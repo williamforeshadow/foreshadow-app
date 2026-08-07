@@ -372,7 +372,12 @@ async function postContinuation(
 ): Promise<void> {
   let continuation;
   try {
-    continuation = await maybeRunContinuation({ rows, results, surface: 'slack' });
+    continuation = await maybeRunContinuation({
+      rows,
+      results,
+      surface: 'slack',
+      sessionId: memo?.sessionId ?? null,
+    });
   } catch (err) {
     console.error('[slack/interactivity] continuation failed', { channelId, err });
     return;

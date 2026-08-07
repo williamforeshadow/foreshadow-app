@@ -23,6 +23,21 @@ export type InboundFileSource = 'slack' | 'web';
 
 export type InboundFileType = 'image' | 'video' | 'document' | 'other';
 
+/**
+ * How far along a file is toward being something the model can look at.
+ *
+ * 'pending' is the resting state of every row that predates vision and of
+ * every row whose prep hasn't run yet — it is not an error, and the read side
+ * resolves it on demand. 'unsupported' is terminal; 'failed' is retryable.
+ * See inboundFileVisionPrep.ts for the transitions.
+ */
+export type VisionStatus =
+  | 'pending'
+  | 'ready'
+  | 'text'
+  | 'unsupported'
+  | 'failed';
+
 export interface InboundFile {
   id: string;
   slack_file_id: string | null;
@@ -33,11 +48,26 @@ export interface InboundFile {
   size_bytes: number | null;
   storage_bucket: string;
   storage_path: string;
+  vision_status: VisionStatus;
+  /** Anthropic Files API id, once the artifact has been uploaded. */
+  anthropic_file_id: string | null;
+  /** What we actually uploaded — image/jpeg for a transcoded HEIC. */
+  vision_media_type: string | null;
+  /** Why this file can't be shown, phrased for the model to repeat. */
+  vision_note: string | null;
 }
 
-/** The column list every read in this module selects. */
+/**
+ * The column list every read in this module selects.
+ *
+ * vision_text is deliberately absent. It can hold 200KB, and the carry-forward
+ * query lists up to ten rows on every single turn — dragging that text through
+ * a list query to throw it away would be the most expensive thing on the hot
+ * path. The render side selects it explicitly for the handful of files it is
+ * about to turn into content blocks.
+ */
 export const INBOUND_FILE_COLUMNS =
-  'id, slack_file_id, name, title, mime_type, file_type, size_bytes, storage_bucket, storage_path';
+  'id, slack_file_id, name, title, mime_type, file_type, size_bytes, storage_bucket, storage_path, vision_status, anthropic_file_id, vision_media_type, vision_note';
 
 /**
  * Bucket a file into the four coarse types the destination tables understand.
@@ -214,31 +244,91 @@ export async function loadInboundFilesForUser(args: {
 }
 
 /**
+ * Load staged files by id for REPLAY — showing the model something it was
+ * already shown earlier in this conversation.
+ *
+ * Deliberately does neither of the two filters loadInboundFilesForUser applies:
+ *
+ * consumed_at, because filing a photo must not erase it from the conversation
+ * where it was discussed. The user confirms "attach it to the Maple task", the
+ * row is marked consumed, and the very next question is usually still about
+ * the photo. Dropping it there would be the exact amnesia this feature exists
+ * to prevent.
+ *
+ * app_user_id, because a Slack thread session is shared. Scoping to the acting
+ * user would blank out a teammate's photo mid-thread — everyone else in the
+ * thread can see it, so the agent should too.
+ *
+ * That is not a hole. These ids come from metadata WE wrote server-side onto a
+ * message row of this session; the session lookup is the trust boundary, and
+ * re-checking ownership here would be both redundant and wrong.
+ */
+export async function loadInboundFilesForReplay(
+  ids: string[],
+): Promise<InboundFile[]> {
+  if (ids.length === 0) return [];
+  const supabase = getSupabaseServer();
+  const { data, error } = await supabase
+    .from(INBOUND_FILES_TABLE)
+    .select(INBOUND_FILE_COLUMNS)
+    .in('id', ids);
+
+  if (error) {
+    console.error('[inbound files] replay load failed', error);
+    return [];
+  }
+  return (data ?? []) as InboundFile[];
+}
+
+/**
  * Render staged files as the context block the model reads.
  *
- * Plain text on purpose — the model gets handles and metadata, never bytes.
+ * This block is the handle list — the ids the filing tools take — and, when a
+ * render is supplied, the manifest of what the model can and cannot see this
+ * turn. The two are independent on purpose: a file the model can't open is
+ * still one it can file, and the block has to make that distinction legible
+ * rather than leaving the model to guess from a filename.
+ *
  * `where` names the surface the user uploaded from so the prompt reads
  * naturally on both ("Slack uploaded files" / "Uploaded files").
  */
 export function formatInboundFilesForAgent(
   files: InboundFile[],
   where: 'slack' | 'web' = 'web',
+  render?: { files: Array<{ fileId: string; visible: boolean; note: string }> },
 ): string | null {
   if (files.length === 0) return null;
+
+  const byId = new Map(
+    (render?.files ?? []).map((f) => [f.fileId, f] as const),
+  );
+
   const lines = files.map((file, index) => {
     const size =
       file.size_bytes == null
         ? 'unknown size'
         : `${(file.size_bytes / 1024 / 1024).toFixed(2)} MB`;
-    return `${index + 1}. inbound_file_id=${file.id}; name="${file.name}"; type=${file.file_type}; mime=${file.mime_type || 'unknown'}; size=${size}`;
+    const base = `${index + 1}. inbound_file_id=${file.id}; name="${file.name}"; type=${file.file_type}; mime=${file.mime_type || 'unknown'}; size=${size}`;
+    const seen = byId.get(file.id);
+    if (!seen) return base;
+    return seen.visible
+      ? `${base}; visible: yes (${seen.note})`
+      : `${base}; visible: no — ${seen.note}`;
   });
+
   const heading =
     where === 'slack'
       ? 'Slack uploaded files available for this conversation:'
       : 'Files the user has uploaded in this chat:';
-  return [
-    heading,
-    ...lines,
+
+  const closing = [
     'Use these inbound_file_id values directly with preview_file_attachment. Never ask the user to provide inbound file IDs; they cannot see them. If the user confirms a task creation and file attachment in a later message, these files are still available here until consumed. Do not claim a file was attached unless the matching commit tool succeeds.',
-  ].join('\n');
+  ];
+  if (byId.size > 0) {
+    closing.push(
+      'The `visible:` clause is authoritative. A file marked `visible: yes` is one whose contents are in this conversation — read it and answer from what is actually there. A file marked `visible: no` is one you have the name, type and size of and nothing else; say plainly that you cannot open it, give the reason shown, and do not guess at its contents from its filename.',
+    );
+  }
+
+  return [heading, ...lines, ...closing].join('\n');
 }

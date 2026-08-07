@@ -203,7 +203,7 @@ export async function POST(req: NextRequest) {
   // follow-up, depth cap), which is the overwhelmingly common path.
   const continuation =
     action === 'confirm'
-      ? await maybeRunContinuation({ rows, results, surface: 'web' })
+      ? await maybeRunContinuation({ rows, results, surface: 'web', sessionId })
       : null;
 
   if (continuation) {

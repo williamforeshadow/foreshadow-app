@@ -161,6 +161,7 @@ export async function listRecentSlackInboundFiles(
 
 export function formatSlackInboundFilesForAgent(
   files: CapturedSlackInboundFile[],
+  render?: { files: Array<{ fileId: string; visible: boolean; note: string }> },
 ): string | null {
-  return formatInboundFilesForAgent(files, 'slack');
+  return formatInboundFilesForAgent(files, 'slack', render);
 }

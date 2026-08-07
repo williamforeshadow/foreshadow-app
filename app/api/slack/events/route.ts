@@ -27,8 +27,10 @@ import {
   captureSlackInboundFiles,
   formatSlackInboundFilesForAgent,
   listRecentSlackInboundFiles,
+  type CapturedSlackInboundFile,
   type SlackInboundFileEvent,
 } from '@/src/server/slack/inboundFiles';
+import { renderInboundFilesAsMedia } from '@/src/server/agent/inboundFileVision';
 import {
   confirmPendingAction,
   isBareConfirmation,
@@ -405,8 +407,12 @@ async function handleSlackMessage(
     return;
   }
   if (!prompt && hasFiles) {
+    // A wordless upload used to be treated as a filing request, because filing
+    // was the only thing the agent could do with a file. Now that it can look,
+    // the standing instruction shouldn't decide for the user what they wanted —
+    // most photos dropped without a caption are a question, not a filing job.
     prompt =
-      'I uploaded file(s) in Slack. Help me decide where to attach them in Foreshadow.';
+      'I uploaded file(s) in Slack with no message. Look at what I sent and respond to it — that might mean answering the obvious question about it, flagging what you see, or offering to file it somewhere in Foreshadow.';
   }
 
   // The conversation this message belongs to. `threadTs` is already exactly the
@@ -528,6 +534,7 @@ async function handleSlackMessage(
         rows: active,
         results: perActionResults,
         surface: 'slack',
+        sessionId,
       });
       if (continuation) {
         const extras: MessageExtras = {};
@@ -567,10 +574,8 @@ async function handleSlackMessage(
   // `seenMessageTs` is what keeps this and the thread reader below from
   // double-feeding: the reader supplies everything in the thread that isn't
   // already replayed here.
-  const { messages: history, seenMessageTs } = await loadReplayedHistory(
-    sessionId,
-    SLACK_HISTORY_LIMIT,
-  );
+  const history = await loadReplayedHistory(sessionId, SLACK_HISTORY_LIMIT);
+  const { seenMessageTs } = history;
 
   // Pull surrounding thread for channel mentions in an existing thread.
   // The bot has no idea what the conversation was about from the
@@ -603,9 +608,10 @@ async function handleSlackMessage(
     }
   }
 
+  let capturedFiles: CapturedSlackInboundFile[] = [];
   const capturedFileIds = new Set<string>();
   if (event.files?.length) {
-    const inboundFiles = await captureSlackInboundFiles({
+    capturedFiles = await captureSlackInboundFiles({
       files: event.files,
       botToken,
       teamId,
@@ -615,11 +621,7 @@ async function handleSlackMessage(
       slackUserId: event.user,
       appUserId: identity.appUserId,
     });
-    inboundFiles.forEach((file) => capturedFileIds.add(file.id));
-    const fileBlock = formatSlackInboundFilesForAgent(inboundFiles);
-    if (fileBlock) {
-      contextBlocks = [...(contextBlocks ?? []), fileBlock];
-    }
+    capturedFiles.forEach((file) => capturedFileIds.add(file.id));
   }
 
   const recentInboundFiles = await listRecentSlackInboundFiles({
@@ -630,7 +632,28 @@ async function handleSlackMessage(
   const carryForwardFiles = recentInboundFiles.filter(
     (file) => !capturedFileIds.has(file.id),
   );
-  const carryForwardBlock = formatSlackInboundFilesForAgent(carryForwardFiles);
+
+  // One render across both groups so attachment labels don't collide, and so
+  // a carry-forward file the history already replayed isn't shown twice. See
+  // the equivalent block in app/api/agent/route.ts.
+  const orphanedFiles = carryForwardFiles.filter(
+    (file) => !history.replayedFileIds.has(file.id),
+  );
+  const render = await renderInboundFilesAsMedia(
+    [...capturedFiles, ...orphanedFiles],
+    { startLabel: history.nextLabel },
+  );
+
+  if (capturedFiles.length > 0) {
+    const fileBlock = formatSlackInboundFilesForAgent(capturedFiles, render);
+    if (fileBlock) {
+      contextBlocks = [...(contextBlocks ?? []), fileBlock];
+    }
+  }
+  const carryForwardBlock = formatSlackInboundFilesForAgent(
+    carryForwardFiles,
+    render,
+  );
   if (carryForwardBlock) {
     contextBlocks = [...(contextBlocks ?? []), carryForwardBlock];
   }
@@ -649,6 +672,19 @@ async function handleSlackMessage(
       slack_channel: event.channel,
       ...(threadTs ? { slack_thread_ts: threadTs } : {}),
       slack_user_id: event.user,
+      // Pins these files to THIS turn so a later turn replays them as media on
+      // the message that carried them, matching what the web route does. Slack
+      // never recorded this, which is why a photo dropped in a DM was invisible
+      // to every subsequent question about it.
+      ...(capturedFiles.length > 0
+        ? {
+            inbound_files: capturedFiles.map((f) => ({
+              id: f.id,
+              name: f.name,
+              file_type: f.file_type,
+            })),
+          }
+        : {}),
     },
   });
 
@@ -671,8 +707,10 @@ async function handleSlackMessage(
   }
 
   const result = await runAgent({
-    history,
+    history: history.messages,
+    historyHasMedia: history.hasMedia,
     prompt,
+    promptMedia: render.blocks,
     clientTz: identity.tz ?? undefined,
     surface: 'slack',
     orgId: identity.orgId,

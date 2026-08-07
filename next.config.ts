@@ -31,6 +31,17 @@ const nextConfig: NextConfig = {
     '/api/agent/**': ['./src/agent/skills/**/*.md'],
     '/api/slack/**': ['./src/agent/skills/**/*.md'],
   },
+  // iPhone photos reach the model through libheif compiled to WebAssembly
+  // (heic-convert -> heic-decode -> libheif-js). sharp is already in the tree
+  // and would be the obvious tool, but its prebuilt libvips carries the
+  // AVIF-only libheif build — it cannot decode HEIC at all.
+  //
+  // The emscripten glue does its own runtime resolution of the .wasm payload,
+  // which the bundler rewrites into something that no longer resolves. Leaving
+  // these external keeps them as plain node_modules requires at runtime. Same
+  // failure shape as the skills-folder tracing above: fine in dev, ENOENT in
+  // prod, on the first Slack message that happens to carry a photo.
+  serverExternalPackages: ['heic-convert', 'heic-decode', 'libheif-js'],
 };
 
 export default nextConfig;

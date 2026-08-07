@@ -28,7 +28,14 @@ export function getAnthropic(): Anthropic {
   return client;
 }
 
-// Sonnet 4.6 — the production model for tool-grounded ops chat: fast, cheap,
-// tight on instruction-following and structured tool use. Shared so the agent
-// loop and the draft generator stay on the same model.
+// Sonnet 5 — the production model for tool-grounded ops chat: fast, cheap,
+// tight on instruction-following and structured tool use, and high-resolution
+// on vision (2576px long edge). Shared so the agent loop and the draft
+// generator stay on the same model.
 export const MODEL = 'claude-sonnet-5';
+
+// Uploaded photos and PDFs reach the model as Files API references rather than
+// inline base64, so the bytes are sent once instead of on every turn of the
+// conversation they belong to. Both the upload and any request that references
+// a file_id need this flag, so it lives next to the client.
+export const FILES_BETA = 'files-api-2025-04-14';

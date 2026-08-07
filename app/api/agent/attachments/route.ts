@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { requireAuthContext } from '@/lib/requireAuthContext';
 import {
@@ -8,6 +9,10 @@ import {
   safeName,
   stageInboundFile,
 } from '@/src/server/agent/inboundFiles';
+import {
+  deleteVisionArtifact,
+  ensureVisionArtifacts,
+} from '@/src/server/agent/inboundFileVisionPrep';
 
 // POST /api/agent/attachments
 //
@@ -104,6 +109,20 @@ export async function POST(req: NextRequest) {
       }),
     );
 
+    // Resolve what the model will actually look at — transcode a HEIC, upload
+    // to the Files API, extract a spreadsheet — AFTER responding. The composer
+    // blocks its send button on this request, and a 10MB iPhone photo through
+    // a WASM decoder plus an upload is several seconds the user would spend
+    // staring at a spinner.
+    //
+    // Nothing depends on this finishing. The render path prepares anything
+    // still pending on first use, so a cold start, a timeout, or a deploy that
+    // kills the lambda mid-prep costs a little latency on the next turn and
+    // nothing else.
+    after(async () => {
+      await ensureVisionArtifacts(staged.map((s) => s.id));
+    });
+
     return NextResponse.json({ attachments: staged });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Upload failed';
@@ -145,6 +164,11 @@ export async function DELETE(req: NextRequest) {
     // Already consumed, already gone, or never theirs — all the same answer.
     return NextResponse.json({ error: 'Attachment not found' }, { status: 404 });
   }
+
+  // Anthropic files have no TTL, so the copy uploaded for the model outlives
+  // the row unless we say otherwise. Without this, every chip a user adds and
+  // then removes leaves an orphan against the org's storage quota.
+  await deleteVisionArtifact(row.id);
 
   await supabase.storage
     .from(row.storage_bucket || INBOUND_FILES_BUCKET)

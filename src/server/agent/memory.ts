@@ -1,5 +1,10 @@
-import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
+import type { BetaMessageParam } from '@anthropic-ai/sdk/resources/beta/messages';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { loadInboundFilesForReplay } from './inboundFiles';
+import {
+  renderInboundFilesAsMedia,
+  MEDIA_LIMITS,
+} from './inboundFileVision';
 
 // Agent conversation memory — the single place that decides WHICH conversation
 // a message belongs to and what gets replayed into the next turn.
@@ -61,10 +66,11 @@ interface ChatMessageRow {
   role: string;
   content: string;
   slack_message_ts: string | null;
+  metadata: Record<string, unknown> | null;
 }
 
 export interface ReplayedHistory {
-  messages: MessageParam[];
+  messages: BetaMessageParam[];
   /**
    * Slack ts of every message in `messages` that has one.
    *
@@ -75,6 +81,29 @@ export interface ReplayedHistory {
    * game for the reader to supply. See src/slack/thread.ts.
    */
   seenMessageTs: Set<string>;
+  /** True when any replayed turn carries media. Arms runAgent's history cache breakpoint. */
+  hasMedia: boolean;
+  /** Next free attachment label, so this turn's render continues the numbering. */
+  nextLabel: number;
+  /** Files actually re-sent as media, so a caller doesn't render the same photo twice. */
+  replayedFileIds: Set<string>;
+}
+
+/** `metadata.inbound_files` as written by the two agent routes. */
+interface PinnedFile {
+  id: string;
+  name?: string;
+}
+
+function pinnedFilesOf(metadata: Record<string, unknown> | null): PinnedFile[] {
+  const raw = metadata?.inbound_files;
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((entry) => {
+    const id = (entry as { id?: unknown } | null)?.id;
+    if (typeof id !== 'string') return [];
+    const name = (entry as { name?: unknown }).name;
+    return [{ id, name: typeof name === 'string' ? name : undefined }];
+  });
 }
 
 /**
@@ -88,7 +117,7 @@ export interface ReplayedHistory {
 export async function loadHistory(
   sessionId: string | null,
   limit: number,
-): Promise<MessageParam[]> {
+): Promise<BetaMessageParam[]> {
   return (await loadReplayedHistory(sessionId, limit)).messages;
 }
 
@@ -103,12 +132,18 @@ export async function loadReplayedHistory(
   sessionId: string | null,
   limit: number,
 ): Promise<ReplayedHistory> {
-  const empty: ReplayedHistory = { messages: [], seenMessageTs: new Set() };
+  const empty: ReplayedHistory = {
+    messages: [],
+    seenMessageTs: new Set(),
+    hasMedia: false,
+    nextLabel: 1,
+    replayedFileIds: new Set(),
+  };
   if (!sessionId) return empty;
 
   const { data, error } = await getSupabaseServer()
     .from('ai_chat_messages')
-    .select('role, content, slack_message_ts')
+    .select('role, content, slack_message_ts, metadata')
     .eq('session_id', sessionId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -122,17 +157,143 @@ export async function loadReplayedHistory(
     .reverse()
     .filter((m) => m.role === 'user' || m.role === 'assistant');
 
+  const seenMessageTs = new Set(
+    rows.map((m) => m.slack_message_ts).filter((ts): ts is string => !!ts),
+  );
+
+  // Which turns carried attachments. Walked newest-first so that when the caps
+  // bind it's the oldest photo that drops out of view, not the one the user is
+  // most likely still talking about.
+  const pinnedByRow = rows.map((row) => pinnedFilesOf(row.metadata));
+  const newestFirst: string[] = [];
+  for (let i = rows.length - 1; i >= 0; i--) {
+    for (const pin of pinnedByRow[i]) {
+      if (newestFirst.length >= MEDIA_LIMITS.maxFiles) break;
+      newestFirst.push(pin.id);
+    }
+  }
+  // Selected newest-first so the cap sheds the OLDEST attachment; rendered
+  // oldest-first so "Image 1" is the first thing the user sent. Getting this
+  // backwards labels the newest photo as Image 1 and every reference the model
+  // makes to an earlier one points at the wrong picture.
+  const candidateIds = [...newestFirst].reverse();
+
+  if (candidateIds.length === 0) {
+    return {
+      messages: rows.map((m) => ({
+        role: m.role as MemoryRole,
+        content: m.content,
+      })),
+      seenMessageTs,
+      hasMedia: false,
+      nextLabel: 1,
+      replayedFileIds: new Set(),
+    };
+  }
+
+  // Ignores consumed_at on purpose — see loadInboundFilesForReplay. A photo the
+  // user already filed onto a task is still the subject of the conversation.
+  const files = await loadInboundFilesForReplay(candidateIds);
+  const byId = new Map(files.map((f) => [f.id, f]));
+
+  // One render across the whole session so labels are globally monotonic
+  // oldest -> newest. Rendering per-row would restart at "Image 1" on every
+  // turn that had an upload, and the model would wire descriptions to the
+  // wrong picture.
+  const ordered = candidateIds
+    .map((id) => byId.get(id))
+    .filter((f): f is NonNullable<typeof f> => Boolean(f));
+  const render = await renderInboundFilesAsMedia(ordered, { startLabel: 1 });
+
+  const blocksByFile = new Map<string, (typeof render.blocks)[number]>();
+  render.visibleIds.forEach((id, index) => {
+    blocksByFile.set(id, render.blocks[index]);
+  });
+
+  const replayedFileIds = new Set(render.visibleIds);
+  let hasMedia = false;
+
+  const messages: BetaMessageParam[] = rows.map((row, index) => {
+    const pins = pinnedByRow[index];
+    if (pins.length === 0) {
+      // Byte-identical to what this row replayed before vision existed. Every
+      // text-only conversation keeps its cached prefix exactly as it was.
+      return { role: row.role as MemoryRole, content: row.content };
+    }
+
+    const shown = pins.filter((p) => replayedFileIds.has(p.id));
+    const hidden = pins.filter((p) => !replayedFileIds.has(p.id));
+
+    if (shown.length === 0) {
+      // The attachment is real, we just can't show it here — say so in place
+      // rather than leaving a message that reads as though nothing was sent.
+      const names = hidden
+        .map((p) => p.name || byId.get(p.id)?.name)
+        .filter(Boolean)
+        .join(', ');
+      const note = names
+        ? `\n\n[Attachment(s) from this message — ${names} — are no longer in view. Say so if asked; do not describe what you can no longer see.]`
+        : '\n\n[Attachment(s) from this message are no longer in view.]';
+      return { role: row.role as MemoryRole, content: `${row.content}${note}` };
+    }
+
+    hasMedia = true;
+    const media = shown
+      .map((p) => blocksByFile.get(p.id))
+      .filter((b): b is NonNullable<typeof b> => Boolean(b));
+
+    return {
+      role: row.role as MemoryRole,
+      content: [
+        ...media,
+        { type: 'text' as const, text: row.content || '(no message)' },
+      ],
+    };
+  });
+
   return {
-    messages: rows.map((m) => ({
-      role: m.role as MemoryRole,
-      content: m.content,
-    })),
-    seenMessageTs: new Set(
-      rows
-        .map((m) => m.slack_message_ts)
-        .filter((ts): ts is string => !!ts),
-    ),
+    messages,
+    seenMessageTs,
+    hasMedia,
+    nextLabel: render.nextLabel,
+    replayedFileIds,
   };
+}
+
+/**
+ * The attachment ids pinned to the tail of a session, oldest-first.
+ *
+ * Split out for the post-Confirm continuation, which deliberately runs with an
+ * empty history but still has to be able to look at the photo the turn was
+ * about ("...then put the model number in the description").
+ */
+export async function loadSessionPinnedFileIds(
+  sessionId: string | null,
+  limit = 40,
+): Promise<string[]> {
+  if (!sessionId) return [];
+  const { data, error } = await getSupabaseServer()
+    .from('ai_chat_messages')
+    .select('metadata')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error || !data) {
+    if (error) {
+      console.error('[agent memory] pinned file read failed', { sessionId, error });
+    }
+    return [];
+  }
+
+  const ids: string[] = [];
+  for (const row of data as Array<{ metadata: Record<string, unknown> | null }>) {
+    for (const pin of pinnedFilesOf(row.metadata)) {
+      if (ids.length >= MEDIA_LIMITS.maxFiles) break;
+      if (!ids.includes(pin.id)) ids.push(pin.id);
+    }
+  }
+  return ids.reverse();
 }
 
 export interface AppendMessageArgs {
