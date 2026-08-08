@@ -3,7 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import { useRouter } from 'next/navigation';
-import { ArrowUp, History, Paperclip, Sparkles, SquarePen } from 'lucide-react';
+import {
+  ArrowUp,
+  History,
+  Paperclip,
+  Plus,
+  Search,
+  Sparkles,
+  SquarePen,
+  X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/authContext';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -22,7 +31,7 @@ import {
   useAgentChat,
 } from '@/components/ai-chat/useAgentChat';
 import { TaskAttachment } from '@/components/ai-chat/TaskAttachment';
-import { SessionList } from '@/components/ai-chat/SessionList';
+import { MobileSessionList } from './MobileSessionList';
 import {
   ComposerAttachments,
   MessageAttachments,
@@ -62,6 +71,8 @@ const DISMISS_PX = 96;
 const DISMISS_VELOCITY = 0.5; // px/ms
 // The grab strip along the drawer's top edge, level with the corner buttons.
 const DRAG_STRIP = 56;
+// What the New chat pill reserves at the bottom of the chats screen.
+const NEW_CHAT_H = 64;
 
 function TaskCardCarousel({
   cards,
@@ -141,7 +152,11 @@ export function MobileAgentChat() {
     isUploading,
   } = useAgentChat();
 
+  // The chats screen is a mode, not a popover: it takes the whole drawer, and
+  // `searching` swaps its top strip for a filter field.
   const [showHistory, setShowHistory] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
   const [inputValue, setInputValue] = useState('');
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -238,15 +253,24 @@ export function MobileAgentChat() {
     };
   }, [isOpen]);
 
-  // Escape closes.
+  // Escape backs out one layer at a time — search, then the chats screen, then
+  // the chat itself — rather than throwing away three states at once.
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
+      if (e.key !== 'Escape') return;
+      if (searching) {
+        setSearching(false);
+        setQuery('');
+      } else if (showHistory) {
+        setShowHistory(false);
+      } else {
+        close();
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [isOpen, close]);
+  }, [isOpen, close, searching, showHistory]);
 
   // Grow the textarea with its content (capped, then it scrolls internally).
   useEffect(() => {
@@ -266,7 +290,10 @@ export function MobileAgentChat() {
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [shouldRender]);
+    // The chats screen unmounts the input entirely, so the observer has to be
+    // re-attached to the new element on the way back — not left watching a node
+    // that's no longer in the document.
+  }, [shouldRender, showHistory]);
 
   // Keep the newest message in view as messages arrive, the keyboard toggles,
   // or the geometry shifts (all change how tall the scroll region is).
@@ -331,12 +358,21 @@ export function MobileAgentChat() {
   // rather than quietly sending without the file the user just picked.
   const canSend = !!inputValue.trim() && !isLoading && !isUploading && !!user;
 
+  // Leaving the chats screen always drops the filter with it — coming back to a
+  // list still narrowed by a search from two conversations ago reads as data
+  // loss.
+  const leaveHistory = () => {
+    setShowHistory(false);
+    setSearching(false);
+    setQuery('');
+  };
+
   const send = () => {
     if (!canSend) return;
     submitMessage(inputValue.trim());
     setInputValue('');
     // Sending is a decision to be in the conversation, not to keep browsing.
-    setShowHistory(false);
+    leaveHistory();
   };
 
   // A downward pull dismisses the sheet. It arms from the strip along the top
@@ -418,10 +454,14 @@ export function MobileAgentChat() {
   // padding-bottom) is what iOS reliably bounds a scroll container by, so
   // scrolling engages as soon as the thread can't fit above the input — not
   // only once it fills the whole screen.
+  // The chats screen has no composer — a text box implies a conversation to
+  // type into, and none is selected — so what the bottom reserves there is the
+  // New chat pill instead.
+  const bottomReserve = showHistory ? NEW_CHAT_H : 8 + inputH + GAP;
   const scrollMaxHeight =
     keyboardInset > 0
-      ? `calc(85dvh - ${keyboardInset + 8 + inputH + GAP}px)`
-      : `calc(85dvh - ${8 + inputH + GAP}px - env(safe-area-inset-bottom))`;
+      ? `calc(85dvh - ${keyboardInset + bottomReserve}px)`
+      : `calc(85dvh - ${bottomReserve}px - env(safe-area-inset-bottom))`;
 
   // While dragging, both layers are driven inline with transitions off so they
   // track the finger; on release the classes take over again.
@@ -453,36 +493,79 @@ export function MobileAgentChat() {
           role="dialog"
           aria-label="Foreshadow AI chat"
         >
-          {/* Floating chrome: history top-left, new chat top-right, with the
-              thread running underneath and fading out behind them. Siblings of
-              the scroll region, not children, so its fade mask leaves them
-              alone. */}
-          <button
-            type="button"
-            className={`${styles.cornerButton} ${styles.cornerLeft}${
-              showHistory ? ` ${styles.cornerButtonActive}` : ''
-            }`}
-            onClick={() => setShowHistory((v) => !v)}
-            aria-label="Chat history"
-            aria-expanded={showHistory}
-          >
-            <History size={17} />
-          </button>
-          <button
-            type="button"
-            className={`${styles.cornerButton} ${styles.cornerRight}`}
-            onClick={() => {
-              newSession();
-              setShowHistory(false);
-            }}
-            aria-label="New chat"
-          >
-            <SquarePen size={17} />
-          </button>
+          {/* Floating chrome: history top-left, with the thread running
+              underneath and fading out behind it. Siblings of the scroll
+              region, not children, so its fade mask leaves them alone.
+              The right corner is new-chat in the conversation and search on the
+              chats screen, where new-chat moves to the pill at the bottom. */}
+          {searching ? (
+            <div className={styles.searchBar}>
+              <Search size={16} className={styles.searchIcon} aria-hidden />
+              <input
+                className={styles.searchInput}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search chats"
+                aria-label="Search chats"
+                autoFocus
+              />
+              <button
+                type="button"
+                className={styles.searchClose}
+                onClick={() => {
+                  setSearching(false);
+                  setQuery('');
+                }}
+                aria-label="Close search"
+              >
+                <X size={17} />
+              </button>
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                className={`${styles.cornerButton} ${styles.cornerLeft}${
+                  showHistory ? ` ${styles.cornerButtonActive}` : ''
+                }`}
+                onClick={() => {
+                  if (showHistory) {
+                    leaveHistory();
+                  } else {
+                    setShowHistory(true);
+                    // Browsing isn't typing; the keyboard has no business
+                    // covering half the list.
+                    taRef.current?.blur();
+                  }
+                }}
+                aria-label="Chat history"
+                aria-expanded={showHistory}
+              >
+                <History size={17} />
+              </button>
+              <button
+                type="button"
+                className={`${styles.cornerButton} ${styles.cornerRight}`}
+                onClick={() => {
+                  if (showHistory) {
+                    setSearching(true);
+                  } else {
+                    newSession();
+                    leaveHistory();
+                  }
+                }}
+                aria-label={showHistory ? 'Search chats' : 'New chat'}
+              >
+                {showHistory ? <Search size={17} /> : <SquarePen size={17} />}
+              </button>
+            </>
+          )}
 
           <div
             ref={scrollRef}
-            className={styles.messagesScroll}
+            className={`${styles.messagesScroll}${
+              searching ? ` ${styles.messagesScrollSearching}` : ''
+            }`}
             style={{
               maxHeight: scrollMaxHeight,
               // Nothing to scroll mid-drag: the sheet is the thing moving, and
@@ -492,12 +575,13 @@ export function MobileAgentChat() {
           >
             <div className={styles.messages}>
               {showHistory && (
-                <SessionList
+                <MobileSessionList
                   sessions={sessions}
                   activeId={sessionId}
+                  query={query}
                   onSelect={(id) => {
                     void switchSession(id);
-                    setShowHistory(false);
+                    leaveHistory();
                   }}
                   onRename={renameSession}
                   onDelete={deleteSession}
@@ -601,99 +685,129 @@ export function MobileAgentChat() {
         </div>
       )}
 
+      {/* The chats screen gets a New chat pill where the composer would be. A
+          composer there would invite typing into a conversation that hasn't
+          been chosen yet. */}
+      {showHistory && (
+        <div
+          className={`${styles.inputWrap} ${styles.newChatWrap} ${
+            shown ? styles.inputShown : styles.inputHidden
+          }`}
+          style={{
+            bottom: keyboardInset,
+            paddingBottom: inputPadBottom,
+            ...dragStyle,
+          }}
+        >
+          <button
+            type="button"
+            className={styles.newChatPill}
+            onClick={() => {
+              newSession();
+              leaveHistory();
+            }}
+          >
+            <Plus size={18} />
+            New chat
+          </button>
+        </div>
+      )}
+
       {/* Floating input — a separate fixed layer pinned above the keyboard,
           independent of the drawer. pointer-events pass through the wrapper so
           taps beside the field fall through to the backdrop. */}
-      <div
-        className={`${styles.inputWrap} ${
-          shown ? styles.inputShown : styles.inputHidden
-        }`}
-        style={{
-          bottom: keyboardInset,
-          paddingBottom: inputPadBottom,
-          ...dragStyle,
-        }}
-      >
-        {showCommandMenu && (
-          <div className={styles.commandMenu}>
-            {commandMatches.map((c) => (
-              <button
-                key={c.name}
-                type="button"
-                className={styles.commandMenuItem}
-                onClick={() => {
-                  runCommand(c.name);
-                  setInputValue('');
-                }}
-              >
-                <span className={styles.commandName}>{c.name}</span>
-                <span className={styles.commandDesc}>{c.description}</span>
-              </button>
-            ))}
-          </div>
-        )}
-        <div ref={fieldRef} className={styles.field}>
-          <ComposerAttachments
-            attachments={attachments}
-            onRemove={removeAttachment}
-          />
-          <div className={styles.fieldRow}>
-            <Sparkles size={18} className={styles.fieldIcon} aria-hidden />
-            <textarea
-              ref={taRef}
-              className={styles.textarea}
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  send();
-                }
-              }}
-              rows={1}
-              placeholder={
-                !user
-                  ? 'Sign in to chat'
-                  : attachments.length > 0
-                    ? 'Say what to do with it…'
-                    : 'Ask the agent…'
-              }
-              aria-label="Ask the agent"
+      {!showHistory && (
+        <div
+          className={`${styles.inputWrap} ${
+            shown ? styles.inputShown : styles.inputHidden
+          }`}
+          style={{
+            bottom: keyboardInset,
+            paddingBottom: inputPadBottom,
+            ...dragStyle,
+          }}
+        >
+          {showCommandMenu && (
+            <div className={styles.commandMenu}>
+              {commandMatches.map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  className={styles.commandMenuItem}
+                  onClick={() => {
+                    runCommand(c.name);
+                    setInputValue('');
+                  }}
+                >
+                  <span className={styles.commandName}>{c.name}</span>
+                  <span className={styles.commandDesc}>{c.description}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <div ref={fieldRef} className={styles.field}>
+            <ComposerAttachments
+              attachments={attachments}
+              onRemove={removeAttachment}
             />
-            {/* iOS surfaces its own sheet here — Photo Library, Take Photo,
+            <div className={styles.fieldRow}>
+              <Sparkles size={18} className={styles.fieldIcon} aria-hidden />
+              <textarea
+                ref={taRef}
+                className={styles.textarea}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    send();
+                  }
+                }}
+                rows={1}
+                placeholder={
+                  !user
+                    ? 'Sign in to chat'
+                    : attachments.length > 0
+                      ? 'Say what to do with it…'
+                      : 'Ask the agent…'
+                }
+                aria-label="Ask the agent"
+              />
+              {/* iOS surfaces its own sheet here — Photo Library, Take Photo,
                 Choose File — so no Capacitor plugin is involved. No accept
                 filter: the destination decides what it will take. */}
-            <button
-              type="button"
-              className={styles.attachButton}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!user}
-              aria-label="Attach a file"
-            >
-              <Paperclip size={16} />
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={(e) => {
-                addAttachments(Array.from(e.target.files ?? []));
-                if (fileInputRef.current) fileInputRef.current.value = '';
-              }}
-            />
-            <button
-              type="button"
-              className={styles.sendButton}
-              onClick={send}
-              disabled={!canSend}
-              aria-label="Send"
-            >
-              <ArrowUp size={16} />
-            </button>
+              <button
+                type="button"
+                className={styles.attachButton}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={!user}
+                aria-label="Attach a file"
+              >
+                <Paperclip size={16} />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  addAttachments(Array.from(e.target.files ?? []));
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
+              />
+              <button
+                type="button"
+                className={styles.sendButton}
+                onClick={send}
+                disabled={!canSend}
+                aria-label="Send"
+              >
+                <ArrowUp size={16} />
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

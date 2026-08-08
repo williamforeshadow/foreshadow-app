@@ -124,6 +124,63 @@
   background: color-mix(in srgb, var(--foreground) 12%, var(--card));
 }
 
+/* Search replaces the corner buttons outright rather than squeezing between
+   them: on the chats screen the field IS the top strip. */
+.searchBar {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.75rem;
+  right: 0.75rem;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.searchIcon {
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 0.25rem;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--foreground);
+}
+.searchInput::placeholder {
+  color: var(--muted-foreground);
+}
+
+.searchClose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+:global(.dark) .searchClose {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(38, 38, 44, 0.62);
+}
+.searchClose:active {
+  opacity: 0.6;
+}
+
 /* ── Messages ────────────────────────────────────────────────────────── */
 /* A plain block scroll container — NOT display:flex. As a flex parent it would
    shrink its .messages child (flex-shrink) when capped by max-height, squishing
@@ -146,6 +203,14 @@
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--foreground) 20%, transparent)
     transparent;
+}
+
+/* The search field is a taller strip than the corner buttons, so the list has
+   further to clear and the fade has further to run. */
+.messagesScrollSearching {
+  padding-top: 58px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 54px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 54px);
 }
 .messagesScroll::-webkit-scrollbar {
   width: 4px;
@@ -277,6 +342,45 @@
   .inputHidden {
     transform: none;
   }
+}
+
+/* New chat takes the composer's slot on the chats screen — same fixed layer, so
+   it rides the swipe with everything else — but sits right-aligned as a pill
+   rather than spanning the width, because it's an action, not a field. */
+.newChatWrap {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.newChatPill {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.625rem 1.125rem 0.625rem 0.875rem;
+  border-radius: 1.375rem;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
+  box-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  color: var(--foreground);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+:global(.dark) .newChatPill {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(38, 38, 44, 0.62);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.newChatPill:active {
+  opacity: 0.6;
 }
 
 .commandMenu {

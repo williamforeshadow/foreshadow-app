@@ -13,8 +13,11 @@ import styles from './SessionList.module.css';
  * Coarse "when" label. Coarse on purpose: the list is for finding a
  * conversation again, and "2 days ago" locates it as well as a timestamp
  * would while staying readable at 11px.
+ *
+ * Exported for the mobile chats screen, which draws its own rows but must not
+ * grow a second opinion about how a chat's age is worded.
  */
-function relativeTime(iso: string | null): string {
+export function relativeTime(iso: string | null): string {
   if (!iso) return 'No messages';
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return '';
