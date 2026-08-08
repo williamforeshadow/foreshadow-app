@@ -24,9 +24,15 @@
 	<true/>
 	<!-- Required by the file picker the agent chat's attach button opens.
 	     WKWebView presents "Take Photo" as one of its options, and iOS
-	     terminates the app on that tap if the camera key is missing. -->
+	     terminates the app on that tap if the camera key is missing.
+	     That input carries no accept filter on purpose, so the sheet offers
+	     "Take Photo or Video" and the picker configures an audio device,
+	     which makes the microphone key as load-bearing as the camera one,
+	     even though the app never records anything on its own. -->
 	<key>NSCameraUsageDescription</key>
 	<string>Take a photo to attach to a task or property.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Record sound when you attach a video to a task or property.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Attach photos from your library to a task or property.</string>
 	<key>UIBackgroundModes</key>
