@@ -78,6 +78,13 @@
   color: var(--muted-foreground);
 }
 
+/* Wraps the ⋯ and swallows the events its portalled menu sends up the React
+   tree; see RowMenu. Layout-neutral. */
+.rowMenu {
+  display: flex;
+  flex-shrink: 0;
+}
+
 /* The ⋯ trigger. Quiet until the row is hovered or the menu is open, so a long
    list isn't a column of dots — but always present for touch and for keyboard
    focus, which have no hover to reveal it. */

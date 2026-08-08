@@ -56,44 +56,51 @@ function RowMenu({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <AdaptivePicker
-      open={open}
-      onOpenChange={setOpen}
-      title={session.title || 'Untitled chat'}
-      align="end"
-      // The popover defaults to z-50 and the chat panel is z-90, so without
-      // this the menu opens behind the list it belongs to.
-      contentClassName="z-[95]"
-      trigger={
-        <button
-          type="button"
-          className={styles.rowAction}
-          aria-label="Chat actions"
-          // The row is a button too; opening the menu must not also switch
-          // conversations.
-          onClick={(e) => e.stopPropagation()}
-        >
-          <MoreHorizontal size={15} />
-        </button>
-      }
+    // The popover portals out of the row in the DOM but stays a child of it in
+    // the React tree, and React events follow the React tree — so without this
+    // every menu click also reaches the row's onClick and switches
+    // conversations instead of renaming or deleting one.
+    <span
+      className={styles.rowMenu}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
     >
-      <TaskOptionRow
-        onSelect={() => {
-          setOpen(false);
-          onRenameStart();
-        }}
+      <AdaptivePicker
+        open={open}
+        onOpenChange={setOpen}
+        title={session.title || 'Untitled chat'}
+        align="end"
+        // The popover defaults to z-50 and the chat panel is z-90, so without
+        // this the menu opens behind the list it belongs to.
+        contentClassName="z-[95]"
+        trigger={
+          <button
+            type="button"
+            className={styles.rowAction}
+            aria-label="Chat actions"
+          >
+            <MoreHorizontal size={15} />
+          </button>
+        }
       >
-        Rename
-      </TaskOptionRow>
-      <TaskOptionRow
-        onSelect={() => {
-          setOpen(false);
-          onDelete();
-        }}
-      >
-        <span style={{ color: '#d97757' }}>Delete</span>
-      </TaskOptionRow>
-    </AdaptivePicker>
+        <TaskOptionRow
+          onSelect={() => {
+            setOpen(false);
+            onRenameStart();
+          }}
+        >
+          Rename
+        </TaskOptionRow>
+        <TaskOptionRow
+          onSelect={() => {
+            setOpen(false);
+            onDelete();
+          }}
+        >
+          <span style={{ color: '#d97757' }}>Delete</span>
+        </TaskOptionRow>
+      </AdaptivePicker>
+    </span>
   );
 }
 
