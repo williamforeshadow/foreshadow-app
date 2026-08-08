@@ -1,13 +1,24 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Check, Pencil, Trash2 } from 'lucide-react';
+import { MoreHorizontal } from 'lucide-react';
+import {
+  TaskOptionRow,
+} from '@/components/tasks/detail/primitives/TaskSheet';
+import { AdaptivePicker } from '@/components/tasks/detail/primitives/AdaptivePicker';
 import type { SessionSummary } from './useAgentChat';
+import { groupSessions } from './sessionGroups';
 import styles from './SessionList.module.css';
 
 // Saved conversations. Presentational — the hook owns the data and the
 // mutations, so the docked panel and the mobile sheet render the same list
 // without a second copy of the wiring drifting away from the first.
+//
+// Row actions hang off a ⋯ button wired to AdaptivePicker, the same primitive
+// the task detail panel uses for editing a field: a popover here, a bottom
+// sheet if the panel is ever narrow. Previously they were a pencil and a trash
+// can revealed on hover, which meant a permanent column of icons on any device
+// without one.
 
 /**
  * Coarse "when" label. Coarse on purpose: the list is for finding a
@@ -34,15 +45,67 @@ export function relativeTime(iso: string | null): string {
   });
 }
 
+function RowMenu({
+  session,
+  onRenameStart,
+  onDelete,
+}: {
+  session: SessionSummary;
+  onRenameStart: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <AdaptivePicker
+      open={open}
+      onOpenChange={setOpen}
+      title={session.title || 'Untitled chat'}
+      align="end"
+      // The popover defaults to z-50 and the chat panel is z-90, so without
+      // this the menu opens behind the list it belongs to.
+      contentClassName="z-[95]"
+      trigger={
+        <button
+          type="button"
+          className={styles.rowAction}
+          aria-label="Chat actions"
+          // The row is a button too; opening the menu must not also switch
+          // conversations.
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MoreHorizontal size={15} />
+        </button>
+      }
+    >
+      <TaskOptionRow
+        onSelect={() => {
+          setOpen(false);
+          onRenameStart();
+        }}
+      >
+        Rename
+      </TaskOptionRow>
+      <TaskOptionRow
+        onSelect={() => {
+          setOpen(false);
+          onDelete();
+        }}
+      >
+        <span style={{ color: '#d97757' }}>Delete</span>
+      </TaskOptionRow>
+    </AdaptivePicker>
+  );
+}
+
 export function SessionList({
   sessions,
-  activeId,
+  query = '',
   onSelect,
   onRename,
   onDelete,
 }: {
   sessions: SessionSummary[];
-  activeId: string | null;
+  query?: string;
   onSelect: (id: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
@@ -55,8 +118,20 @@ export function SessionList({
     if (renamingId) inputRef.current?.select();
   }, [renamingId]);
 
-  if (sessions.length === 0) {
-    return <p className={styles.empty}>No saved chats yet.</p>;
+  const needle = query.trim().toLowerCase();
+  const shown = needle
+    ? sessions.filter((s) => (s.title || '').toLowerCase().includes(needle))
+    : sessions;
+  // Filter first, group second: a search matching one month renders one header
+  // rather than a run of empty ones.
+  const groups = groupSessions(shown);
+
+  if (shown.length === 0) {
+    return (
+      <p className={styles.empty}>
+        {needle ? `No chats match “${query.trim()}”.` : 'No saved chats yet.'}
+      </p>
+    );
   }
 
   const commitRename = (id: string) => {
@@ -67,89 +142,76 @@ export function SessionList({
 
   return (
     <div className={styles.list}>
-      {sessions.map((s) => {
-        const isRenaming = renamingId === s.id;
-        return (
-          <div
-            key={s.id}
-            role="button"
-            tabIndex={0}
-            className={`${styles.row}${s.id === activeId ? ` ${styles.rowActive}` : ''}`}
-            // Renaming turns the row into a text field; clicking into it must
-            // not also switch conversations out from under the edit.
-            onClick={() => {
-              if (!isRenaming) onSelect(s.id);
-            }}
-            onKeyDown={(e) => {
-              if (isRenaming) return;
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onSelect(s.id);
-              }
-            }}
-          >
-            {isRenaming ? (
-              <input
-                ref={inputRef}
-                className={styles.renameInput}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                onBlur={() => commitRename(s.id)}
+      {groups.map((group) => (
+        <div key={group.key} className={styles.group}>
+          <p className={styles.groupLabel}>{group.label}</p>
+          {group.sessions.map((s) => {
+            const isRenaming = renamingId === s.id;
+            return (
+              <div
+                key={s.id}
+                role="button"
+                tabIndex={0}
+                // No selected-row highlight: the list reads as titles, and
+                // hover is what tells you where the pointer is.
+                className={styles.row}
+                // Renaming turns the row into a text field; clicking into it
+                // must not also switch conversations out from under the edit.
+                onClick={() => {
+                  if (!isRenaming) onSelect(s.id);
+                }}
                 onKeyDown={(e) => {
-                  e.stopPropagation();
-                  if (e.key === 'Enter') {
+                  if (isRenaming) return;
+                  if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    commitRename(s.id);
-                  } else if (e.key === 'Escape') {
-                    e.preventDefault();
-                    setRenamingId(null);
-                  }
-                }}
-              />
-            ) : (
-              <span className={styles.rowMain}>
-                <span className={styles.rowTitle}>{s.title || 'Untitled chat'}</span>
-                <span className={styles.rowMeta}>
-                  {relativeTime(s.last_message_at)}
-                </span>
-              </span>
-            )}
-
-            <span className={styles.rowActions}>
-              <button
-                type="button"
-                className={styles.rowAction}
-                title={isRenaming ? 'Save name' : 'Rename'}
-                aria-label={isRenaming ? 'Save name' : 'Rename chat'}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isRenaming) {
-                    commitRename(s.id);
-                  } else {
-                    setDraft(s.title || '');
-                    setRenamingId(s.id);
+                    onSelect(s.id);
                   }
                 }}
               >
-                {isRenaming ? <Check size={13} /> : <Pencil size={13} />}
-              </button>
-              <button
-                type="button"
-                className={`${styles.rowAction} ${styles.rowActionDanger}`}
-                title="Delete"
-                aria-label="Delete chat"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(s.id);
-                }}
-              >
-                <Trash2 size={13} />
-              </button>
-            </span>
-          </div>
-        );
-      })}
+                {isRenaming ? (
+                  <input
+                    ref={inputRef}
+                    className={styles.renameInput}
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onBlur={() => commitRename(s.id)}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitRename(s.id);
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setRenamingId(null);
+                      }
+                    }}
+                  />
+                ) : (
+                  <>
+                    <span className={styles.rowMain}>
+                      <span className={styles.rowTitle}>
+                        {s.title || 'Untitled chat'}
+                      </span>
+                      <span className={styles.rowMeta}>
+                        {relativeTime(s.last_message_at)}
+                      </span>
+                    </span>
+                    <RowMenu
+                      session={s}
+                      onRenameStart={() => {
+                        setDraft(s.title || '');
+                        setRenamingId(s.id);
+                      }}
+                      onDelete={() => onDelete(s.id)}
+                    />
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }

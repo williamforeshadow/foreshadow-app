@@ -138,7 +138,6 @@ export function MobileAgentChat() {
     messages,
     isLoading,
     sessions,
-    sessionId,
     newSession,
     switchSession,
     renameSession,
@@ -523,26 +522,27 @@ export function MobileAgentChat() {
             </div>
           ) : (
             <>
-              <button
-                type="button"
-                className={`${styles.cornerButton} ${styles.cornerLeft}${
-                  showHistory ? ` ${styles.cornerButtonActive}` : ''
-                }`}
-                onClick={() => {
-                  if (showHistory) {
-                    leaveHistory();
-                  } else {
+              {/* On the chats screen the left corner names the screen instead
+                  of offering a way to it — you're already here. Getting back to
+                  a conversation is tapping one, including the one you left. */}
+              {showHistory ? (
+                <h2 className={styles.screenTitle}>Chats</h2>
+              ) : (
+                <button
+                  type="button"
+                  className={`${styles.cornerButton} ${styles.cornerLeft}`}
+                  onClick={() => {
                     setShowHistory(true);
                     // Browsing isn't typing; the keyboard has no business
                     // covering half the list.
                     taRef.current?.blur();
-                  }
-                }}
-                aria-label="Chat history"
-                aria-expanded={showHistory}
-              >
-                <History size={17} />
-              </button>
+                  }}
+                  aria-label="Chat history"
+                  aria-expanded={false}
+                >
+                  <History size={19} />
+                </button>
+              )}
               <button
                 type="button"
                 className={`${styles.cornerButton} ${styles.cornerRight}`}
@@ -556,7 +556,7 @@ export function MobileAgentChat() {
                 }}
                 aria-label={showHistory ? 'Search chats' : 'New chat'}
               >
-                {showHistory ? <Search size={17} /> : <SquarePen size={17} />}
+                {showHistory ? <Search size={19} /> : <SquarePen size={19} />}
               </button>
             </>
           )}
@@ -577,7 +577,6 @@ export function MobileAgentChat() {
               {showHistory && (
                 <MobileSessionList
                   sessions={sessions}
-                  activeId={sessionId}
                   query={query}
                   onSelect={(id) => {
                     void switchSession(id);

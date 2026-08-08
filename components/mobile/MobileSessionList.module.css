@@ -2,7 +2,10 @@
  * them and nothing else — no icons riding along, because on touch they'd be
  * permanently visible (there's no hover to reveal them) and a list of chats
  * would read as a column of buttons. Rename and delete live behind a long
- * press instead.
+ * press, which opens the task panel's TaskSheet.
+ *
+ * There is no selected-row highlight. The only feedback a row gives is the
+ * press itself.
  *
  * Colour note matches the rest of the chat: the design tokens are whole color
  * values, used directly as var(--token), never wrapped in hsl(). */
@@ -19,6 +22,22 @@
   color: var(--muted-foreground);
 }
 
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Not sticky: the group is a divider in a short list, not a section index. */
+.groupLabel {
+  padding: 1.25rem 0.25rem 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+.group:first-child .groupLabel {
+  padding-top: 0.25rem;
+}
+
 .row {
   display: flex;
   flex-direction: column;
@@ -32,18 +51,28 @@
   background: transparent;
   border: none;
   /* iOS would otherwise answer the long press with its own selection callout,
-     which fights the menu we're opening. */
+     which fights the sheet we're opening. */
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
+  transition:
+    transform 0.12s ease,
+    background 0.12s ease;
 }
 
+/* The whole of a row's feedback: it gives under the finger and lets go. */
 .row:active {
-  background: color-mix(in oklab, var(--foreground) 7%, transparent);
+  transform: scale(0.985);
+  background: color-mix(in oklab, var(--foreground) 5%, transparent);
 }
 
-.rowActive {
-  background: color-mix(in oklab, var(--foreground) 9%, transparent);
+@media (prefers-reduced-motion: reduce) {
+  .row {
+    transition: background 0.12s ease;
+  }
+  .row:active {
+    transform: none;
+  }
 }
 
 .rowTitle {
@@ -75,83 +104,4 @@
 
 .renameInput:focus {
   border-color: color-mix(in oklab, var(--foreground) 35%, transparent);
-}
-
-/* ── Long-press menu ─────────────────────────────────────────────────────
- * Fixed to the screen rather than the row: it has to clear the drawer, which
- * clips its own overflow, and a sheet at the bottom is where a thumb already
- * is. Above the drawer (81) and the input layer (82). */
-.menuBackdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 90;
-  border: none;
-  margin: 0;
-  padding: 0;
-  background: rgba(0, 0, 0, 0.3);
-  cursor: default;
-}
-
-.menu {
-  position: fixed;
-  z-index: 91;
-  left: 0.75rem;
-  right: 0.75rem;
-  bottom: calc(env(safe-area-inset-bottom) + 0.75rem);
-  display: flex;
-  flex-direction: column;
-  padding: 0.375rem;
-  border-radius: 1rem;
-  background: var(--card);
-  border: 1px solid var(--border);
-  box-shadow: 0 12px 40px -8px rgba(0, 0, 0, 0.45);
-}
-
-.menuTitle {
-  padding: 0.5rem 0.75rem 0.625rem;
-  font-size: 0.8125rem;
-  color: var(--muted-foreground);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 0.375rem;
-}
-
-.menuItem {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.8125rem 0.75rem;
-  border-radius: 0.625rem;
-  border: none;
-  background: transparent;
-  color: var(--foreground);
-  font-size: 1rem;
-  text-align: left;
-  cursor: pointer;
-}
-
-.menuItem:active {
-  background: color-mix(in oklab, var(--foreground) 8%, transparent);
-}
-
-.menuDanger {
-  color: var(--destructive);
-}
-
-.menuCancel {
-  margin-top: 0.375rem;
-  padding: 0.8125rem 0.75rem;
-  border-radius: 0.625rem;
-  border: none;
-  background: color-mix(in oklab, var(--foreground) 6%, transparent);
-  color: var(--foreground);
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.menuCancel:active {
-  background: color-mix(in oklab, var(--foreground) 12%, transparent);
 }

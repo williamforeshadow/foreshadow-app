@@ -16,6 +16,7 @@ import {
   Maximize2,
   Minimize2,
   Paperclip,
+  Search,
   SquarePen,
   Sparkles,
   X,
@@ -111,7 +112,6 @@ export function AiChatPanel() {
     messages,
     isLoading,
     sessions,
-    sessionId,
     isHydrating,
     newSession,
     switchSession,
@@ -126,11 +126,24 @@ export function AiChatPanel() {
     isUploading,
   } = useAgentChat();
 
+  // Browsing chats is a mode, not a popover, and `searching` swaps the header
+  // title for a filter field. Mirrors the mobile sheet so the two read alike.
   const [showHistory, setShowHistory] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
   const [inputValue, setInputValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Leaving the chats screen always drops the filter with it — coming back to a
+  // list still narrowed by a search from two conversations ago reads as data
+  // loss.
+  const leaveHistory = useCallback(() => {
+    setShowHistory(false);
+    setSearching(false);
+    setQuery('');
+  }, []);
 
   // The composer clears itself; the hook owns the conversation, not the input.
   const send = useCallback(
@@ -138,9 +151,9 @@ export function AiChatPanel() {
       void submitMessage(text);
       setInputValue('');
       // Sending is a decision to be in the conversation, not to keep browsing.
-      setShowHistory(false);
+      leaveHistory();
     },
-    [submitMessage],
+    [submitMessage, leaveHistory],
   );
 
   const runCommandAndClear = useCallback(
@@ -297,17 +310,52 @@ export function AiChatPanel() {
           aria-label="Foreshadow AI chat"
         >
           <header className={styles.header}>
-            <span className={styles.title}>
-              <Sparkles size={14} className={styles.titleIcon} />
-              Ask Foreshadow
-            </span>
+            {/* The header names what you're looking at. Browsing chats is a
+                different screen, not a popover over the conversation, so it
+                takes the title — and only then offers a way to search. */}
+            {searching ? (
+              <div className={styles.searchBar}>
+                <Search size={14} className={styles.searchIcon} aria-hidden />
+                <input
+                  className={styles.searchInput}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search chats"
+                  aria-label="Search chats"
+                  autoFocus
+                />
+              </div>
+            ) : (
+              <span className={styles.title}>
+                <Sparkles size={14} className={styles.titleIcon} />
+                {showHistory ? 'Chats' : 'Ask Foreshadow'}
+              </span>
+            )}
             <div className={styles.headerActions}>
+              {showHistory && (
+                <button
+                  type="button"
+                  className={`${styles.iconButton}${searching ? ` ${styles.iconButtonActive}` : ''}`}
+                  onClick={() => {
+                    if (searching) {
+                      setSearching(false);
+                      setQuery('');
+                    } else {
+                      setSearching(true);
+                    }
+                  }}
+                  title={searching ? 'Close search' : 'Search chats'}
+                  aria-label={searching ? 'Close search' : 'Search chats'}
+                >
+                  {searching ? <X size={15} /> : <Search size={15} />}
+                </button>
+              )}
               <button
                 type="button"
                 className={styles.iconButton}
                 onClick={() => {
                   newSession();
-                  setShowHistory(false);
+                  leaveHistory();
                 }}
                 title="New chat"
                 aria-label="New chat"
@@ -317,7 +365,10 @@ export function AiChatPanel() {
               <button
                 type="button"
                 className={`${styles.iconButton}${showHistory ? ` ${styles.iconButtonActive}` : ''}`}
-                onClick={() => setShowHistory((v) => !v)}
+                onClick={() => {
+                  if (showHistory) leaveHistory();
+                  else setShowHistory(true);
+                }}
                 title="Chat history"
                 aria-label="Chat history"
                 aria-expanded={showHistory}
@@ -354,10 +405,10 @@ export function AiChatPanel() {
               {showHistory ? (
                 <SessionList
                   sessions={sessions}
-                  activeId={sessionId}
+                  query={query}
                   onSelect={(id) => {
                     void switchSession(id);
-                    setShowHistory(false);
+                    leaveHistory();
                   }}
                   onRename={renameSession}
                   onDelete={deleteSession}

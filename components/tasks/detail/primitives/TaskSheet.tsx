@@ -11,17 +11,24 @@ export function TaskSheet({
   onOpenChange,
   title,
   children,
+  className,
+  overlayClassName,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   children: React.ReactNode;
+  /** For callers that live above the sheet's default z-50 — the agent chat
+   *  drawer, for one. Pass the same z to both or the dim lands behind. */
+  className?: string;
+  overlayClassName?: string;
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        className="task-detail border-t p-0 rounded-t-[18px] gap-0"
+        overlayClassName={overlayClassName}
+        className={`task-detail border-t p-0 rounded-t-[18px] gap-0 ${className ?? ''}`}
         style={{
           background: 'var(--task-surface-1)',
           borderColor: 'var(--task-line)',

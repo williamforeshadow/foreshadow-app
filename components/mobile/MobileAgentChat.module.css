@@ -89,8 +89,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   border: 1px solid rgba(0, 0, 0, 0.1);
   background: rgba(255, 255, 255, 0.72);
@@ -119,9 +119,22 @@
 .cornerButton:active {
   opacity: 0.6;
 }
-.cornerButtonActive {
+
+/* Names the chats screen from the corner the History button would occupy in a
+   conversation. Plain text, no chip: it isn't pressable. */
+.screenTitle {
+  position: absolute;
+  top: 0.5rem;
+  left: 1rem;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  height: 38px;
+  margin: 0;
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--foreground);
-  background: color-mix(in srgb, var(--foreground) 12%, var(--card));
 }
 
 /* Search replaces the corner buttons outright rather than squeezing between
@@ -145,7 +158,7 @@
 .searchInput {
   flex: 1;
   min-width: 0;
-  height: 34px;
+  height: 38px;
   padding: 0 0.25rem;
   border: none;
   background: transparent;
@@ -162,8 +175,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   flex-shrink: 0;
   border-radius: 50%;
   border: 1px solid rgba(0, 0, 0, 0.1);
@@ -194,12 +207,12 @@
   overscroll-behavior: contain;
   /* Top padding clears the floating corner buttons, so at rest the thread
      starts below them and only meets them once it scrolls. */
-  padding: 50px 1rem 0;
+  padding: 54px 1rem 0;
   /* …and when it does, it fades out rather than colliding with them. The mask
      is on the scroll box, so it stays put while the content moves through it.
      It must not wrap the buttons (they're siblings) or they'd fade too. */
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 46px);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 46px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 50px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 50px);
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--foreground) 20%, transparent)
     transparent;
