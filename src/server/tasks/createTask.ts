@@ -4,6 +4,7 @@ import {
   notifyTaskCreatedAssigned,
   type NotificationActor,
 } from '@/src/server/notifications/notify';
+import { isTiptapDoc, plainTextToTiptap } from './descriptionDoc';
 
 // Service: create a manually-authored task.
 //
@@ -145,34 +146,6 @@ export interface CreateTaskOptions {
 }
 
 // ---------- helpers ---------------------------------------------------------
-
-function plainTextToTiptap(text: string): Record<string, unknown> {
-  // Split on blank lines to produce one paragraph per chunk. Empty input
-  // returns an empty doc so the column is `{type: 'doc', content: []}`
-  // rather than null — matches what an empty Tiptap editor emits.
-  const paragraphs = text
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
-  if (paragraphs.length === 0) {
-    return { type: 'doc', content: [] };
-  }
-  return {
-    type: 'doc',
-    content: paragraphs.map((p) => ({
-      type: 'paragraph',
-      content: [{ type: 'text', text: p }],
-    })),
-  };
-}
-
-function isTiptapDoc(value: unknown): value is Record<string, unknown> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    (value as { type?: unknown }).type === 'doc'
-  );
-}
 
 type Supabase = ReturnType<typeof getSupabaseServer>;
 

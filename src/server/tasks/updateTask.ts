@@ -11,6 +11,12 @@ import {
   notifyTaskUnassigned,
   type NotificationActor,
 } from '@/src/server/notifications/notify';
+import {
+  describeDescription,
+  descriptionChanged,
+  isTiptapDoc,
+  plainTextToTiptap,
+} from './descriptionDoc';
 
 // Service: update an existing manually-authored task.
 //
@@ -144,31 +150,6 @@ export interface UpdateTaskOptions {
 
 // ---------- helpers --------------------------------------------------------
 
-function plainTextToTiptap(text: string): Record<string, unknown> {
-  const paragraphs = text
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
-  if (paragraphs.length === 0) {
-    return { type: 'doc', content: [] };
-  }
-  return {
-    type: 'doc',
-    content: paragraphs.map((p) => ({
-      type: 'paragraph',
-      content: [{ type: 'text', text: p }],
-    })),
-  };
-}
-
-function isTiptapDoc(value: unknown): value is Record<string, unknown> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    (value as { type?: unknown }).type === 'doc'
-  );
-}
-
 type Supabase = ReturnType<typeof getSupabaseServer>;
 
 interface FkCheck {
@@ -266,37 +247,6 @@ interface ChangePlanArgs {
   willCompleteNow: boolean;
 }
 
-function fmtDescription(desc: unknown): string | null {
-  if (desc == null) return null;
-  // Best-effort flatten of a Tiptap doc to a one-line preview. Plain
-  // strings (rare here — normally the column already holds JSON)
-  // pass through as-is.
-  if (typeof desc === 'string') {
-    const trimmed = desc.trim();
-    return trimmed.length === 0
-      ? null
-      : trimmed.length <= 80
-        ? trimmed
-        : trimmed.slice(0, 77) + '...';
-  }
-  if (isTiptapDoc(desc)) {
-    const parts: string[] = [];
-    const visit = (node: unknown): void => {
-      if (!node || typeof node !== 'object') return;
-      const n = node as { type?: string; text?: string; content?: unknown[] };
-      if (n.type === 'text' && typeof n.text === 'string') {
-        parts.push(n.text);
-      }
-      if (Array.isArray(n.content)) n.content.forEach(visit);
-    };
-    visit(desc);
-    const flat = parts.join(' ').trim();
-    if (flat.length === 0) return null;
-    return flat.length <= 80 ? flat : flat.slice(0, 77) + '...';
-  }
-  return null;
-}
-
 function diffAssignments(
   prev: Array<{ user_id: string; name: string }>,
   next: Array<{ user_id: string; name: string }>,
@@ -317,20 +267,21 @@ function computeChanges(args: ChangePlanArgs): UpdateTaskFieldChange[] {
     changes.push({ field: 'title', before: existing.title, after: input.title });
   }
   if (input.description !== undefined) {
-    const beforePreview = fmtDescription(existing.description);
-    let afterPreview: string | null = null;
-    if (input.description == null) {
-      afterPreview = null;
-    } else if (typeof input.description === 'string') {
-      afterPreview = fmtDescription(input.description);
-    } else if (isTiptapDoc(input.description)) {
-      afterPreview = fmtDescription(input.description);
-    }
-    if (beforePreview !== afterPreview) {
+    // Compare the FULL structured content, not a display preview. Comparing
+    // previews meant any edit past the preview's cutoff produced an empty diff
+    // — so the model was told nothing would change, while a commit bundled with
+    // some other field still wrote the new text the user never saw.
+    const after =
+      input.description == null || typeof input.description === 'string'
+        ? input.description
+        : isTiptapDoc(input.description)
+          ? input.description
+          : null;
+    if (descriptionChanged(existing.description, after)) {
       changes.push({
         field: 'description',
-        before: beforePreview,
-        after: afterPreview,
+        before: describeDescription(existing.description),
+        after: describeDescription(after),
       });
     }
   }

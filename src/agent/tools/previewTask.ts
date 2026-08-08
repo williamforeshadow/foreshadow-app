@@ -44,6 +44,7 @@ const inputSchema = z.object({
     .string()
     .min(1, 'title is required')
     .describe('Plain-text task title. Required. Keep concise.'),
+  // Markdown-ish lines become real Tiptap structure — see descriptionDoc.ts.
   description: z
     .string()
     .optional()
@@ -224,7 +225,7 @@ export const previewTask: ToolDefinition<Input, PreviewTaskResultData> = {
       description: {
         type: 'string',
         description:
-          "Plain-text description. Multi-paragraph supported (blank lines between paragraphs). Omit when there's nothing to add.",
+          "Task description. Write it as you naturally would and the formatting is preserved as real rich text: each line is its own paragraph, \"- item\" lines become a bulleted list, \"1. item\" a numbered one, \"## Heading\" a heading, and \"[ ] item\" / \"[x] item\" tickable checkboxes. Reach for a list whenever the content IS a list — a punch list, several issues, steps — rather than cramming items into one sentence with semicolons. Use checkboxes only when the items are things someone will work through and tick off; a list that merely describes the property should stay bullets. Omit when there's nothing to add.",
       },
       status: {
         type: 'string',

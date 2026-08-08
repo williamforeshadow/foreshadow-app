@@ -10,6 +10,7 @@ import {
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { pushToUser } from '@/src/server/notifications/apns';
 import { taskPath, taskUrl } from '@/src/lib/links';
+import { descriptionChanged } from '@/src/server/tasks/descriptionDoc';
 import { todayInTz, currentHourInTz, DEFAULT_TIMEZONE } from '@/src/lib/dates';
 import { lookupSlackUserByEmail } from '@/src/slack/identity';
 import {
@@ -1088,7 +1089,10 @@ export async function notifyTaskDescriptionChanged(args: {
 }) {
   const before = descriptionPreview(args.beforeDescription);
   const after = descriptionPreview(args.afterDescription);
-  if ((before ?? '') === (after ?? '')) return;
+  // Gate on the real content, not these previews. They truncate at 160
+  // characters, so comparing them meant an edit past that point notified
+  // nobody — the assignees were simply never told.
+  if (!descriptionChanged(args.beforeDescription, args.afterDescription)) return;
   const supabase = getSupabaseServer();
   const task = await loadTaskContext(supabase, args.taskId);
   if (!task) return;

@@ -65,7 +65,7 @@ const inputSchema = z.object({
     .nullable()
     .optional()
     .describe(
-      "New plain-text description (multi-paragraph supported, blank lines between paragraphs). Pass null to clear the description. Omit to leave unchanged.",
+      'New description, replacing the existing one in full. Markdown-style lines become real rich text: "- item" a bulleted list, "1. item" a numbered one, "## Heading" a heading, "[ ] item" a checkbox. Pass null to clear the description. Omit to leave unchanged.',
     ),
   status: STATUS_ENUM.optional().describe(
     "New status. Setting status='complete' also sets completed_at to now; transitioning away from 'complete' clears completed_at.",
@@ -223,7 +223,7 @@ export const previewTaskUpdate: ToolDefinition<Input, PreviewTaskUpdateResultDat
       description: {
         type: ['string', 'null'],
         description:
-          'New plain-text description. Pass null to clear. Omit to leave unchanged.',
+          'New description, replacing the existing one in full. Formatting is preserved as real rich text: each line is its own paragraph, "- item" lines become a bulleted list, "1. item" a numbered one, "## Heading" a heading, and "[ ] item" / "[x] item" tickable checkboxes. Reach for a list whenever the content IS a list rather than joining items with semicolons; use checkboxes only for things someone will tick off. When adding to an existing description, send the full new text including what you are keeping. Pass null to clear. Omit to leave unchanged.',
       },
       status: {
         type: 'string',
