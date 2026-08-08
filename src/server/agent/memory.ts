@@ -381,18 +381,31 @@ export interface ResolveWebSessionArgs {
    * An explicit session to continue. Verified against the caller before use — a
    * client-supplied id must never reach another user's conversation. Falls back
    * to the most recent session when absent or not theirs.
-   *
-   * Nothing sends this yet; Phase 2's session switcher will.
    */
   sessionId?: string | null;
+  /**
+   * The user pressed "New chat". Skips the most-recent fallback and opens a
+   * fresh conversation.
+   *
+   * This exists because "no session id" is two different situations and only
+   * one of them wants a new row: a deliberately-started chat, and a client that
+   * simply hasn't hydrated yet. Without a way to tell them apart the fallback
+   * swallowed every new chat into the previous one, and no user ever had more
+   * than a single web session.
+   */
+  forceNew?: boolean;
 }
 
 /**
  * The web session to run this turn against, creating one if needed.
  *
- * With no session UI yet, "most recent live session" reproduces exactly what the
- * user has today: one continuous web conversation. Phase 2 changes only which id
- * arrives here, not this function's contract.
+ * Three ways in, in order of how much the caller knows:
+ *   - an explicit id, verified as theirs — continue that conversation
+ *   - forceNew — they pressed "New chat"; open a fresh one
+ *   - neither — their most recent, which is where a client that hasn't
+ *     hydrated yet belongs
+ *
+ * The last case is a fallback for ignorance, never a way to start a chat.
  */
 export async function resolveWebSession(
   args: ResolveWebSessionArgs,
@@ -414,6 +427,16 @@ export async function resolveWebSession(
     console.warn('[agent memory] web session id not usable; falling back', {
       sessionId: args.sessionId,
       appUserId: args.appUserId,
+    });
+  }
+
+  // Asked for outright. Note this is checked BEFORE the most-recent lookup, so
+  // "New chat" can't be answered with an existing conversation.
+  if (args.forceNew) {
+    return insertSession({
+      orgId: args.orgId,
+      ownerUserId: args.appUserId,
+      surface: 'web',
     });
   }
 

@@ -44,14 +44,20 @@ export async function POST(req: NextRequest) {
   let clientTz: string | undefined;
   let inboundFileIds: string[] = [];
   let requestedSessionId: string | undefined;
+  let wantsNewSession = false;
   try {
     const body = await req.json();
     prompt = body?.prompt;
-    // Which conversation to continue. Nothing sends this yet — the session
-    // switcher is Phase 2 — and it is verified against the caller before use,
+    // Which conversation to continue. Verified against the caller before use,
     // so a forged id reaches nobody else's chat.
     if (typeof body?.session_id === 'string' && body.session_id.length > 0) {
       requestedSessionId = body.session_id;
+    }
+    // "New chat", as opposed to a client that just doesn't know its id yet.
+    // Only the first message of a fresh panel carries this; every message
+    // after it carries the id that came back on this one.
+    if (body?.new_session === true) {
+      wantsNewSession = true;
     }
     // Files the user attached to THIS message, staged earlier by
     // /api/agent/attachments. Ids only — ownership is re-checked below, so a
@@ -89,13 +95,13 @@ export async function POST(req: NextRequest) {
   const { supabase: userDb, appUser, orgId } = authCtx;
   const userId = appUser.id;
 
-  // The conversation this turn belongs to. Resolves to the caller's most
-  // recent live web session (creating one on first use) until Phase 2 starts
-  // passing an explicit id.
+  // The conversation this turn belongs to: the id the panel sent, a brand new
+  // one when they pressed "New chat", or their most recent otherwise.
   const sessionId = await resolveWebSession({
     appUserId: userId,
     orgId,
     sessionId: requestedSessionId,
+    forceNew: wantsNewSession,
   });
 
   // Pull recent conversation history. We persist only final assistant text

@@ -175,6 +175,14 @@ export function useAgentChat(): UseAgentChat {
   // that fetch paint stale messages over the newer choice.
   const activeLoad = useRef(0);
 
+  // "This blank panel is a conversation the user started, not one we haven't
+  // looked up yet." A null sessionId means both things, and the server treats
+  // them differently — without this the first message of every new chat gets
+  // appended to the previous one. A ref rather than state: nothing renders
+  // from it, and submitMessage must read the value at send time rather than
+  // whatever its closure captured.
+  const startingNewSession = useRef(false);
+
   const refreshSessions = useCallback(async (): Promise<SessionSummary[]> => {
     try {
       const res = await fetch('/api/agent/sessions');
@@ -220,14 +228,17 @@ export function useAgentChat(): UseAgentChat {
       setSessions([]);
       setSessionId(null);
       setMessages([]);
+      startingNewSession.current = false;
       return;
     }
     let cancelled = false;
     void (async () => {
       const list = await refreshSessions();
       if (cancelled || list.length === 0) return;
-      // Only adopt the most recent if the user hasn't already started typing
-      // into a fresh one while this was loading.
+      // Don't adopt the most recent if the user got ahead of this fetch and
+      // opened a new chat. Both states read as a null sessionId, so the id
+      // alone can't tell them apart — that's what the ref is for.
+      if (startingNewSession.current) return;
       setSessionId((current) => {
         if (current !== null) return current;
         void hydrate(list[0].id);
@@ -243,6 +254,7 @@ export function useAgentChat(): UseAgentChat {
     // Purely local — no row until the first message. Bumping the load token
     // cancels any hydration still in flight so it can't repaint this.
     activeLoad.current++;
+    startingNewSession.current = true;
     setIsHydrating(false);
     setSessionId(null);
     setMessages([]);
@@ -251,6 +263,9 @@ export function useAgentChat(): UseAgentChat {
   const switchSession = useCallback(
     async (id: string) => {
       if (id === sessionId) return;
+      // Opening a saved conversation cancels a pending new one; otherwise the
+      // next message would open a third.
+      startingNewSession.current = false;
       setSessionId(id);
       setMessages([]);
       await hydrate(id);
@@ -281,9 +296,12 @@ export function useAgentChat(): UseAgentChat {
     async (id: string) => {
       setSessions((prev) => prev.filter((s) => s.id !== id));
       // Deleting the conversation you're looking at empties the panel; the
-      // alternative (silently jumping to another one) loses your place.
+      // alternative (silently jumping to another one) loses your place. What's
+      // left reads as a new chat, so it has to behave as one — otherwise the
+      // next message lands in whatever conversation happens to be newest.
       if (id === sessionId) {
         activeLoad.current++;
+        startingNewSession.current = true;
         setSessionId(null);
         setMessages([]);
       }
@@ -471,7 +489,11 @@ export function useAgentChat(): UseAgentChat {
             prompt: message,
             user_id: user.id,
             client_tz: clientTz,
-            ...(sessionId ? { session_id: sessionId } : {}),
+            ...(sessionId
+              ? { session_id: sessionId }
+              : startingNewSession.current
+                ? { new_session: true }
+                : {}),
             ...(sending.length > 0
               ? { inbound_file_ids: sending.map((a) => a.id) }
               : {}),
@@ -483,6 +505,9 @@ export function useAgentChat(): UseAgentChat {
         // the id so the rest of the conversation lands in the same place, and
         // pull the list again to pick up its auto-derived title.
         if (typeof data?.session_id === 'string' && data.session_id) {
+          // Cleared on the response rather than on send: if the request fails
+          // there is no row yet, and retrying still means "new chat".
+          startingNewSession.current = false;
           if (data.session_id !== sessionId) {
             setSessionId(data.session_id);
           }
