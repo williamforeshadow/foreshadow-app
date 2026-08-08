@@ -41,7 +41,8 @@ export type KnowledgeTargetData =
         schedule: string | null;
         notes: string | null;
       };
-    };
+    }
+  | { kind: 'policy'; policy: { title: string; body: string | null } };
 
 export interface ProposedKnowledgeData {
   id: string;
@@ -49,7 +50,7 @@ export interface ProposedKnowledgeData {
   guest_visible: boolean;
   /** The message that triggered the draft; the bubble anchors here. */
   triggering_message_id: string | null;
-  /** Structured target (room_note | attribute). Null only for legacy rows. */
+  /** Structured target (see KnowledgeTargetData). Null only for legacy rows. */
   target: KnowledgeTargetData | null;
   status?: 'pending' | 'accepted' | 'dismissed';
   decided_by_name?: string | null;
@@ -158,9 +159,10 @@ export function ProposedKnowledge({
   const isRoomNote = target?.kind === 'room_note';
   const isConnectivity = target?.kind === 'connectivity';
   const isContact = target?.kind === 'contact';
+  const isPolicy = target?.kind === 'policy';
   const contactIsUpdate = target?.kind === 'contact' && !!target.contact.id;
   // Interior areas are "rooms"; exterior areas are "areas". Room labels only
-  // apply to the room kinds — connectivity/contact are roomless.
+  // apply to the room kinds — connectivity/contact/policy are roomless.
   const scope =
     target && (target.kind === 'room_note' || target.kind === 'attribute')
       ? target.room.scope === 'exterior'
@@ -178,12 +180,21 @@ export function ProposedKnowledge({
   const [error, setError] = useState<string | null>(null);
   const justify = align === 'start' ? 'justify-start' : 'justify-end';
 
-  // Inline-editable draft, seeded from the target.
+  // Inline-editable draft, seeded from the target. Policies share the title/body
+  // pair with attributes — same two fields, same accept payload.
   const [title, setTitle] = useState(
-    target?.kind === 'attribute' ? target.attribute.title : '',
+    target?.kind === 'attribute'
+      ? target.attribute.title
+      : target?.kind === 'policy'
+        ? target.policy.title
+        : '',
   );
   const [body, setBody] = useState(
-    target?.kind === 'attribute' ? target.attribute.body ?? '' : '',
+    target?.kind === 'attribute'
+      ? target.attribute.body ?? ''
+      : target?.kind === 'policy'
+        ? target.policy.body ?? ''
+        : '',
   );
   const [tags, setTags] = useState<AttributeTag[]>(
     target?.kind === 'attribute' ? target.attribute.tags : [],
@@ -215,10 +226,11 @@ export function ProposedKnowledge({
     target?.kind === 'contact' ? target.contact.tags : [],
   );
   // Visibility: room knowledge defaults Unlocked (usually guest-shareable);
-  // connectivity/contact follow the concierge's suggested guest_visible (wifi
-  // unlocked, a vendor/contact locked).
+  // connectivity/contact/policy follow the concierge's suggested guest_visible
+  // (wifi unlocked, a vendor/contact locked, a policy whichever it judged — an
+  // internal departure instruction is not a "no parties").
   const [unlocked, setUnlocked] = useState(
-    isConnectivity || isContact ? proposal.guest_visible : true,
+    isConnectivity || isContact || isPolicy ? proposal.guest_visible : true,
   );
 
   const accept = useCallback(async () => {
@@ -234,6 +246,9 @@ export function ProposedKnowledge({
         payload.title = title;
         payload.body = body;
         payload.tags = tags;
+      } else if (target?.kind === 'policy') {
+        payload.title = title;
+        payload.body = body;
       } else if (target?.kind === 'room_note') {
         payload.notes = notes;
       } else if (target?.kind === 'connectivity') {
@@ -318,7 +333,9 @@ export function ProposedKnowledge({
         ? 'connectivity'
         : target?.kind === 'contact'
           ? 'vendors'
-          : scope;
+          : target?.kind === 'policy'
+            ? 'policies'
+            : scope;
     const href = propertyId ? `/properties/${propertyId}/knowledge/${knowledgeSlug}` : null;
     return (
       <div className={`mt-4 flex ${justify}`}>
@@ -386,7 +403,9 @@ export function ProposedKnowledge({
               ? contactIsUpdate
                 ? 'Update · Vendors & Contacts'
                 : 'Vendors & Contacts'
-              : `${roomTitle || noun}${isRoomNote ? ` · ${noteKindLabel}` : ''}`}
+              : isPolicy
+                ? 'Policies & Instructions'
+                : `${roomTitle || noun}${isRoomNote ? ` · ${noteKindLabel}` : ''}`}
         </div>
 
         {!target ? (
@@ -394,9 +413,10 @@ export function ProposedKnowledge({
           <p className="whitespace-pre-wrap break-words px-0.5 text-[13px] leading-relaxed text-foreground">
             {proposal.summary}
           </p>
-        ) : isAttribute ? (
+        ) : isAttribute || isPolicy ? (
           // No visible inputs — the draft reads like text (à la the proposed
           // reply), title bumped up and body smaller, but both stay editable.
+          // Attributes and policies are the same title+body pair.
           <div className="flex flex-col gap-1.5">
             <input
               value={title}
@@ -407,7 +427,7 @@ export function ProposedKnowledge({
             <AutoTextarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              placeholder="Add details"
+              placeholder={isPolicy ? 'The rule in full' : 'Add details'}
               rows={1}
               className="w-full resize-none rounded bg-transparent px-0.5 text-[13px] leading-relaxed text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:bg-black/[0.03] dark:focus:bg-white/[0.04]"
             />

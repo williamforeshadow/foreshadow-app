@@ -21,7 +21,8 @@ import type { GuestMessageRecord } from '@/lib/messages';
 // something durable about the PROPERTY worth saving for next time?" pass. The
 // operator-facing sibling of draftReply/draftTask. It reads the conversation AND
 // the property's current knowledge tree, and proposes additions (a room note, a
-// room attribute, a wifi detail, or a vendor/contact) — rarely. The result
+// room attribute, a stay-wide policy, a wifi detail, or a vendor/contact) —
+// rarely. The result
 // compounds: an accepted, guest-visible
 // fact later informs the concierge's replies.
 //
@@ -58,11 +59,18 @@ export interface ContactFields {
   notes: string | null;
 }
 
+export interface PolicyFields {
+  /** Short label — also the key the write path matches an existing policy on. */
+  title: string;
+  body: string | null;
+}
+
 export type KnowledgeTarget =
   | { kind: 'room_note'; room: RoomRef; notes: string }
   | { kind: 'attribute'; room: RoomRef; attribute: { tags: AttributeTag[]; title: string; body: string | null } }
   | { kind: 'connectivity'; fields: ConnectivityFields }
-  | { kind: 'contact'; contact: ContactFields };
+  | { kind: 'contact'; contact: ContactFields }
+  | { kind: 'policy'; policy: PolicyFields };
 
 export interface KnowledgeProposalDraft {
   target: KnowledgeTarget;
@@ -87,7 +95,9 @@ Ground every proposal ONLY in what the conversation actually established — nev
 UPDATES & CORRECTIONS: a fact that CHANGES or corrects a value already on file, or already listed as awaiting review, IS worth proposing — save the corrected value (for example a new wifi password, or a vendor whose schedule changed). Only skip it when the value is unchanged (already exactly on file or already proposed).
 
 WHERE to put each fact (choose the best target):
-- A discrete thing tied to a specific room/area — an appliance, amenity, safety item, utility, or a quirk about a particular object → an ATTRIBUTE under that room. Tag it appropriately (you may apply multiple tags). Use an existing room when one fits (reference its id); if the relevant room clearly exists in the property but isn't in the list, create it (set room.id to null and give scope + title). For a property-wide fact not tied to a specific room, create or reuse a general/whole-property area (scope "interior") and attach the attribute there.
+- A discrete thing tied to a specific room/area — an appliance, amenity, safety item, utility, or a quirk about a particular object → an ATTRIBUTE under that room. Tag it appropriately (you may apply multiple tags). Use an existing room when one fits (reference its id); if the relevant room clearly exists in the property but isn't in the list, create it (set room.id to null and give scope + title). If a PHYSICAL fact genuinely belongs to no single room (e.g. the whole house has hard water), create or reuse a general/whole-property area (scope "interior") and attach the attribute there — but only for physical facts, never for a rule or an instruction, which have their own target below.
+- A rule, policy, or standing instruction that governs the STAY, the WHOLE property, or the guest's conduct generally → a POLICY. Checkout time and departure steps, quiet hours, occupancy limits, parties or events, smoking, pets, trash day, parking policy. Give it a short title ("Checkout", "Quiet hours", "No parties") and put the rule in full in the body.
+- ATTRIBUTE or POLICY? The test is SCOPE, not grammar. A fact that governs ONE object or area stays an ATTRIBUTE on that object even when it is phrased as a rule: "only toilet paper down the toilet" is a Toilet attribute, "don't run the mini-split with the windows open" is a mini-split attribute. A rule that reaches across the property or the whole stay is a POLICY: "no parties", "quiet hours from 10pm", "checkout is 4pm — start the dishwasher and take the trash out". Do NOT file a stay-wide rule as an attribute under a general area; that is what the POLICY target is for.
 - A general characteristic of a room or area ITSELF — its layout, condition, or a standing quirk (e.g. "basement tends to smell") → a ROOM NOTE on that room's notes. (A person or service is NOT a room note — see CONTACT below.)
 - The property's Wi-Fi — network name (SSID), password, or router location, often a correction to what's on file → a CONNECTIVITY target carrying whichever of these fields (${LOCKABLE_CONNECTIVITY_FIELDS.join(', ')}) were established.
 - A person, company, or recurring vendor/service tied to the property — a cleaner, landscaper, pool service, trash/recycling pickup, HOA, handyman, emergency contact, or the owner — especially a recurring one someone (usually the host) mentions in passing (e.g. "heads up, the landscapers come 10am Friday") → a CONTACT. Capture whatever was given: name, role, phone, email, schedule. A recurring schedule alone is enough — do not wait for a phone number; give the contact a sensible name/role. Tag with one or more of: ${CONTACT_TAGS.join(', ')}. If the fact UPDATES a contact already on file (e.g. that vendor's schedule or number changed), set contact.id to that contact's id and restate its details including the change; otherwise set contact.id to null to create a new one.
@@ -98,12 +108,13 @@ VISIBILITY: set guest_visible true when this is something you'd happily share wi
 
 Output: respond with ONLY a single JSON object, no prose, no code fences:
 {"proposals": [{"target": <Target>, "summary": string, "guest_visible": boolean, "reasoning": string}], "reasoning": string}
-"proposals" is an array of zero or more (usually zero or one). "summary" is a short human-readable line like "Living Room - quirk: TV must be on HDMI 2" or "Contact - Landscaping (maintenance): Fridays 10am".
+"proposals" is an array of zero or more (usually zero or one). "summary" is a short human-readable line like "Living Room - quirk: TV must be on HDMI 2", "Contact - Landscaping (maintenance): Fridays 10am", or "Policy - Checkout: 4pm, start the dishwasher".
 A <Target> is exactly one of:
 - {"kind":"room_note","room":{"id":string|null,"scope":"interior"|"exterior","title":string|null},"notes":string}
 - {"kind":"attribute","room":{"id":string|null,"scope":"interior"|"exterior","title":string|null},"attribute":{"tags":string[],"title":string,"body":string|null}}
 - {"kind":"connectivity","fields":{"wifi_ssid":string|null,"wifi_password":string|null,"wifi_router_location":string|null}}
 - {"kind":"contact","contact":{"id":string|null,"tags":string[],"name":string,"role":string|null,"phone":string|null,"email":string|null,"schedule":string|null,"notes":string|null}}
+- {"kind":"policy","policy":{"title":string,"body":string|null}}
 Keep "reasoning" to one short sentence.`;
 
 interface KnowledgeRoom {
@@ -168,6 +179,21 @@ async function loadKnowledgeContext(propertyId: string | null): Promise<{
     lines.push('Wi-Fi on file: (none)');
   }
 
+  // Policies & instructions on file. Roomless, keyed by title — surfaced so the
+  // model dedups against them instead of re-proposing the same rule on every
+  // message, and so it can tell a changed value (checkout moved to 4pm) from a
+  // repeat.
+  const policies = (knowledge.policies as Array<Record<string, unknown>> | null) ?? [];
+  lines.push('Policies & instructions on file (stay-wide rules — do NOT re-propose one already here):');
+  if (policies.length === 0) {
+    lines.push('- (none yet)');
+  } else {
+    for (const p of policies) {
+      const body = p.body ? ` — ${String(p.body).slice(0, 120)}` : '';
+      lines.push(`- "${(p.title as string) || 'policy'}"${body}`);
+    }
+  }
+
   // Vendors/contacts on file — with ids so a proposal can reference one to UPDATE
   // it, and with real values so the model can tell an unchanged fact from a change.
   const rawContacts = (knowledge.contacts as Array<Record<string, unknown>> | null) ?? [];
@@ -219,6 +245,11 @@ function describePendingTarget(raw: unknown): string | null {
     if (s(c.schedule)) bits.push(`schedule "${s(c.schedule)}"`);
     if (s(c.phone)) bits.push(`phone "${s(c.phone)}"`);
     return `Contact — "${s(c.name) || 'contact'}"${bits.length ? ` (${bits.join(', ')})` : ''}`;
+  }
+  if (kind === 'policy') {
+    const p = (t.policy as Record<string, unknown> | null) ?? {};
+    const body = s(p.body);
+    return `Policy — "${s(p.title) || 'policy'}"${body ? `: ${body.slice(0, 100)}` : ''}`;
   }
   const room = (t.room as Record<string, unknown> | null) ?? {};
   const where = `${room.scope === 'exterior' ? 'Exterior' : 'Interior'} → ${s(room.title) || 'room'}`;
@@ -312,6 +343,15 @@ function parseTarget(
     if (!fields.wifi_ssid && !fields.wifi_password && !fields.wifi_router_location) return null;
     return { kind: 'connectivity', fields };
   }
+  if (kind === 'policy') {
+    const p =
+      t.policy && typeof t.policy === 'object' ? (t.policy as Record<string, unknown>) : null;
+    if (!p) return null;
+    const title = typeof p.title === 'string' ? p.title.trim() : '';
+    if (!title) return null;
+    const body = typeof p.body === 'string' && p.body.trim() ? p.body.trim() : null;
+    return { kind: 'policy', policy: { title, body } };
+  }
   if (kind === 'contact') {
     const c =
       t.contact && typeof t.contact === 'object' ? (t.contact as Record<string, unknown>) : null;
@@ -393,6 +433,10 @@ export function describeTarget(target: KnowledgeTarget): string {
     const tags = target.contact.tags.join('/');
     const verb = target.contact.id ? 'Contact update' : 'Contact';
     return `${verb} — ${target.contact.name}${tags ? ` (${tags})` : ''}`;
+  }
+  if (target.kind === 'policy') {
+    const body = target.policy.body;
+    return `Policy — ${target.policy.title}${body ? `: ${body.slice(0, 80)}` : ''}`;
   }
   const where = `${target.room.scope === 'exterior' ? 'Exterior' : 'Interior'} → ${target.room.title || 'room'}`;
   if (target.kind === 'room_note') return `${where} — note: ${target.notes.slice(0, 80)}`;

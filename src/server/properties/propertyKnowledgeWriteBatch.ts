@@ -165,24 +165,37 @@ function validateBatchable(
   return null;
 }
 
+/** How one shared operation is named in the plan the model presents. */
+function operationLabel(op: PropertyKnowledgeOperation): string {
+  // Policies are roomless and keyed by title, so they match neither of the
+  // shapes below (no `room`, and their `fields` carries no label/type).
+  if (op.op === 'upsert_policy') {
+    return `policy "${String((op.fields as { title?: string }).title ?? 'policy')}"`;
+  }
+  if (op.op === 'delete_policy') return `policy "${op.title}"`;
+
+  if ('room' in op && 'title' in op.room) {
+    if (op.op === 'upsert_attribute') {
+      return `${String((op.fields as { title?: string }).title ?? 'attribute')} (in ${op.room.scope} "${op.room.title}")`;
+    }
+    if (op.op === 'delete_attribute') {
+      return `${op.title} (in ${op.room.scope} "${op.room.title}")`;
+    }
+    return `${op.room.scope} room "${op.room.title}"`;
+  }
+
+  if ('fields' in op) {
+    const f = op.fields as { label?: string; type?: string };
+    return String(f.label ?? f.type ?? 'connectivity');
+  }
+  return op.op;
+}
+
 function sharedOperations(operations: PropertyKnowledgeOperation[]) {
   return operations.map((op, index) => ({
     index,
     op: op.op,
-    label:
-      'room' in op && 'title' in op.room
-        ? op.op === 'upsert_attribute'
-          ? `${String((op.fields as { title?: string }).title ?? 'attribute')} (in ${op.room.scope} "${op.room.title}")`
-          : op.op === 'delete_attribute'
-            ? `${op.title} (in ${op.room.scope} "${op.room.title}")`
-            : `${op.room.scope} room "${op.room.title}"`
-        : 'fields' in op
-          ? String(
-              (op.fields as { label?: string; type?: string }).label ??
-                (op.fields as { type?: string }).type ??
-                'connectivity',
-            )
-          : op.op,
+    label: operationLabel(op),
   }));
 }
 

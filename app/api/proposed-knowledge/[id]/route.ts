@@ -9,15 +9,17 @@ import {
 } from '@/lib/propertyKnowledgeVisibility';
 import { commitPropertyKnowledgeWrite } from '@/src/server/properties/propertyKnowledgeWrite';
 import { upsertPropertyContact } from '@/src/server/properties/upsertPropertyContact';
+import { upsertPropertyPolicy } from '@/src/server/properties/upsertPropertyPolicy';
 import type { KnowledgeTarget } from '@/src/server/messages/draftKnowledge';
 
 // Accept / dismiss a concierge-proposed knowledge addition.
 //
 // A proposed_knowledge row carries a structured `target`. Accepting (the human
 // click is the confirmation) replays it through the SAME non-token property
-// write path the Knowledge UI uses — a room note, an attribute, a wifi
-// (connectivity) update, or a new vendor/contact — and, when the reviewer chose
-// guest-visible, unlocks the item's fields via property_knowledge_visibility.
+// write path the Knowledge UI uses — a room note, an attribute, a stay-wide
+// policy, a wifi (connectivity) update, or a new vendor/contact — and, when the
+// reviewer chose guest-visible, unlocks the item's fields via
+// property_knowledge_visibility.
 
 export const maxDuration = 60;
 
@@ -252,6 +254,34 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       visibilityEntries = Object.keys(fields).map((field) => ({
         type: 'connectivity_field' as const,
         resourceId: field,
+      }));
+    } else if (target.kind === 'policy') {
+      // Roomless title+body. The reviewer's inline edits reuse the same title /
+      // body overrides the attribute branch reads.
+      const policyTitle = editTitle && editTitle !== '' ? editTitle : target.policy.title;
+      const policyBody =
+        editBody !== undefined
+          ? editBody.trim() === ''
+            ? null
+            : editBody.trim()
+          : target.policy.body;
+      const result = await upsertPropertyPolicy({
+        property_id: propertyId,
+        title: policyTitle,
+        body: policyBody,
+        actor_user_id: actorId,
+        source: 'web',
+      });
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error.message }, { status: 500 });
+      }
+      resourceType = 'policy';
+      resourceId = result.policy.id;
+      // All-or-nothing, like a room or attribute: title without body (or the
+      // reverse) is not a shareable rule.
+      visibilityEntries = RESOURCE_FIELD_SETS.policy_field.map((field) => ({
+        type: 'policy_field' as const,
+        resourceId: encodeFieldResourceId(resourceId, field),
       }));
     } else if (target.kind === 'contact') {
       const c = target.contact;

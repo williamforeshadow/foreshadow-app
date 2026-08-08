@@ -118,6 +118,7 @@ async function resetKnowledge(orgId) {
   await db.from('property_attributes').delete().in('property_id', ids);
   await db.from('property_rooms').delete().in('property_id', ids);
   await db.from('property_access_items').delete().in('property_id', ids);
+  await db.from('property_policies').delete().in('property_id', ids);
   await db.from('property_connectivity').delete().in('property_id', ids);
   await db.from('property_knowledge_activity_log').delete().in('property_id', ids);
   return props;
@@ -207,6 +208,7 @@ async function cmdPurge() {
     await db.from('property_attributes').delete().in('property_id', ids);
     await db.from('property_rooms').delete().in('property_id', ids);
     await db.from('property_access_items').delete().in('property_id', ids);
+    await db.from('property_policies').delete().in('property_id', ids);
     await db.from('property_connectivity').delete().in('property_id', ids);
     await db.from('property_knowledge_activity_log').delete().in('property_id', ids);
     await db.from('properties').delete().in('id', ids);
@@ -655,6 +657,90 @@ const CASES = {
       committed.result.results.every((r) => r.mode === 'noop'),
       committed.result.results.map((r) => r.mode),
     );
+  },
+
+  // 11. Policies & Instructions — roomless rows matched by title, so the same
+  // operation creates then updates, and a delete for an absent title is a noop.
+  async 11(ctx) {
+    const p = ctx.bravo;
+    const create = {
+      property_id: p.id,
+      operations: [
+        { op: 'upsert_policy', fields: { title: 'Checkout', body: '11am. Start the dishwasher.' } },
+        { op: 'upsert_policy', fields: { title: 'No parties', body: 'HOA enforces. No events of any size.' } },
+      ],
+    };
+
+    const preview = await call('preview', 'single', create);
+    check('preview ok', preview.ok, preview.error);
+    eq('operations planned', preview.plan.operations.length, 2);
+    eq('op0 mode', preview.plan.operations[0].mode, 'create');
+    check('policies need no room', preview.plan.operations[0].room === null, preview.plan.operations[0].room);
+
+    const committed = await call('commit', 'single', create);
+    check('commit ok', committed.result.ok, committed.result.failures);
+
+    const { data: rows } = await db
+      .from('property_policies')
+      .select('id, title, body')
+      .eq('property_id', p.id)
+      .order('title');
+    eq('policies in db', rows.length, 2);
+    eq('first title', rows[0].title, 'Checkout');
+
+    // Re-running with a changed body must UPDATE the same row, matched on the
+    // title — case-insensitively, which is the whole point of name resolution.
+    const update = {
+      property_id: p.id,
+      operations: [{ op: 'upsert_policy', fields: { title: 'checkout', body: '4pm now.' } }],
+    };
+    const updatePreview = await call('preview', 'single', update);
+    eq('rematched by title', updatePreview.plan.operations[0].mode, 'update');
+    await call('commit', 'single', update);
+
+    const { data: after } = await db
+      .from('property_policies')
+      .select('id, title, body')
+      .eq('property_id', p.id);
+    eq('still 2 policies', after.length, 2);
+    const checkout = after.find((r) => r.title.toLowerCase() === 'checkout');
+    eq('body updated', checkout.body, '4pm now.');
+
+    // Delete by title, plus a delete for something that was never there.
+    const del = {
+      property_id: p.id,
+      operations: [
+        { op: 'delete_policy', title: 'No parties' },
+        { op: 'delete_policy', title: 'Never existed' },
+      ],
+    };
+    const delPreview = await call('preview', 'single', del);
+    eq('absent policy is a noop', delPreview.plan.noop_count, 1);
+    const delCommitted = await call('commit', 'single', del);
+    check('delete commit ok', delCommitted.result.ok, delCommitted.result.failures);
+
+    const { data: left } = await db.from('property_policies').select('id').eq('property_id', p.id);
+    eq('one policy left', left.length, 1);
+
+    // The same list across many properties — policies are batchable.
+    const batchInput = {
+      property_ids: [ctx.alpha.id, ctx.charlie.id],
+      operations: [{ op: 'upsert_policy', fields: { title: 'Quiet hours', body: '10pm to 8am.' } }],
+    };
+    const batch = await call('preview', 'batch', batchInput);
+    check('batch preview ok', batch.ok, batch.error);
+    check('batch marked uniform', batch.plan.uniform === true, batch.plan.uniform);
+    const batchCommitted = await call('commit', 'batch', batchInput);
+    check(
+      'batch commit ok',
+      batchCommitted.ok && batchCommitted.failures.length === 0,
+      batchCommitted.failures,
+    );
+    const { data: fanned } = await db
+      .from('property_policies')
+      .select('property_id')
+      .in('property_id', [ctx.alpha.id, ctx.charlie.id]);
+    eq('one policy per property', fanned.length, 2);
   },
 };
 

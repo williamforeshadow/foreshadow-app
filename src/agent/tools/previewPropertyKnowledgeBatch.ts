@@ -106,7 +106,7 @@ export const previewPropertyKnowledgeBatchTool: ToolDefinition<
 > = {
   name: 'preview_property_knowledge_batch',
   description:
-    "PREVIEW the SAME ordered list of Property Knowledge operations applied to MANY properties (2-25) at once — one plan, one confirmation, one click. Reach for this instead of looping the single tool whenever the user says 'all', 'every', 'each', or names more than one property. It takes the SAME `operations` array as preview_property_knowledge_write, so everything that tool can do in one pass this one can do across a list: create a room and put two attributes in it, add several attributes to an existing room, attach photos, set access items and connectivity — all in one confirmation. Targets are matched BY NAME per property (access item by type, room by title+scope, attribute by title within its room), so you do NOT need get_property_knowledge per property first; resolve the property_ids with find_properties and go. Rooms named by an attribute operation are CREATED per property when missing, inside this same confirmation. Because ids are per-property, room { room_id } and the two document operations are rejected here — use preview_property_knowledge_write for those. If the operations carry photos, the SAME uploaded file is copied onto every property (a photo is usually of one physical place, so say that plainly when you present the plan); the plan reports it as photos_fanout. The plan returns shared_operations (the list, described once), a per-property breakdown with each operation's mode (create/update/noop/skipped), rooms_to_create, totals, a failures array for properties that could not be planned, and `uniform` — when uniform is true, describe the operations once for the whole set rather than repeating them per property. Then call commit_property_knowledge_batch with the token. For a single property, use preview_property_knowledge_write.",
+    "PREVIEW the SAME ordered list of Property Knowledge operations applied to MANY properties (2-25) at once — one plan, one confirmation, one click. Reach for this instead of looping the single tool whenever the user says 'all', 'every', 'each', or names more than one property. It takes the SAME `operations` array as preview_property_knowledge_write, so everything that tool can do in one pass this one can do across a list: create a room and put two attributes in it, add several attributes to an existing room, attach photos, set access items and connectivity — all in one confirmation. Targets are matched BY NAME per property (access item by type, room by title+scope, attribute by title within its room, policy by title), so you do NOT need get_property_knowledge per property first; resolve the property_ids with find_properties and go. Rooms named by an attribute operation are CREATED per property when missing, inside this same confirmation. Because ids are per-property, room { room_id } and the two document operations are rejected here — use preview_property_knowledge_write for those. If the operations carry photos, the SAME uploaded file is copied onto every property (a photo is usually of one physical place, so say that plainly when you present the plan); the plan reports it as photos_fanout. The plan returns shared_operations (the list, described once), a per-property breakdown with each operation's mode (create/update/noop/skipped), rooms_to_create, totals, a failures array for properties that could not be planned, and `uniform` — when uniform is true, describe the operations once for the whole set rather than repeating them per property. Then call commit_property_knowledge_batch with the token. For a single property, use preview_property_knowledge_write.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -138,6 +138,8 @@ export const previewPropertyKnowledgeBatchTool: ToolDefinition<
                 'upsert_access_item',
                 'delete_access_item',
                 'upsert_connectivity',
+                'upsert_policy',
+                'delete_policy',
               ],
               description:
                 'Which write to apply on every property. Upserts create when the target is absent on that property and update when present. Deletes match by the same name fields as the matching upsert, and a property that lacks the target is a noop rather than a failure — it is already in the state the user asked for.',
@@ -155,12 +157,13 @@ export const previewPropertyKnowledgeBatchTool: ToolDefinition<
             },
             title: {
               type: 'string',
-              description: 'delete_attribute only: title of the attribute to remove from that room.',
+              description:
+                'delete_attribute: title of the attribute to remove from that room. delete_policy: title of the policy to remove.',
             },
             fields: {
               type: 'object',
               description:
-                "Fields applied to every property. Attribute: title (REQUIRED — the per-property match key), tags, body. Room: notes, sort_order. Access item: type, label, value, notes. Connectivity: wifi_ssid, wifi_password, wifi_router_location. Never pass room_id.",
+                "Fields applied to every property. Attribute: title (REQUIRED — the per-property match key), tags, body. Room: notes, sort_order. Access item: type, label, value, notes. Connectivity: wifi_ssid, wifi_password, wifi_router_location. Policy: title (REQUIRED — the per-property match key), body, sort_order. Never pass room_id.",
             },
             photos: {
               type: 'object',

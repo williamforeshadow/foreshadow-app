@@ -21,6 +21,10 @@ import {
   upsertPropertyAccessItem,
   deletePropertyAccessItem,
 } from '@/src/server/properties/upsertPropertyAccessItem';
+import {
+  upsertPropertyPolicy,
+  deletePropertyPolicy,
+} from '@/src/server/properties/upsertPropertyPolicy';
 
 const CONNECTIVITY_FIELDS = [
   'wifi_ssid',
@@ -63,6 +67,16 @@ export const attributeFieldsSchema = z
   .object({
     room_id: z.string().uuid().optional(),
     tags: z.array(z.enum(ATTRIBUTE_TAGS as [AttributeTag, ...AttributeTag[]])).optional(),
+    title: nullableString.optional(),
+    body: nullableString.optional(),
+    sort_order: z.number().finite().optional(),
+  })
+  .strict();
+
+// Policies & Instructions. `title` is the match key AND the label, so it is
+// required on create; the operations layer resolves an existing policy by it.
+export const policyFieldsSchema = z
+  .object({
     title: nullableString.optional(),
     body: nullableString.optional(),
     sort_order: z.number().finite().optional(),
@@ -128,6 +142,21 @@ export const propertyKnowledgeWriteInputSchema = z.discriminatedUnion('action', 
     action: z.literal('delete_attribute'),
     property_id: z.string().uuid(),
     attribute_id: z.string().uuid(),
+    actor_user_id: z.string().nullable().optional(),
+    source: sourceSchema,
+  }),
+  z.object({
+    action: z.literal('upsert_policy'),
+    property_id: z.string().uuid(),
+    policy_id: z.string().uuid().optional(),
+    fields: policyFieldsSchema,
+    actor_user_id: z.string().nullable().optional(),
+    source: sourceSchema,
+  }),
+  z.object({
+    action: z.literal('delete_policy'),
+    property_id: z.string().uuid(),
+    policy_id: z.string().uuid(),
     actor_user_id: z.string().nullable().optional(),
     source: sourceSchema,
   }),
@@ -424,6 +453,134 @@ async function commitAccessItem(
   });
   if (!res.ok) return { ok: false, error: { code: res.error.code, message: res.error.message, field: res.error.field } };
   return { ok: true, plan: { ...plan, changes: res.changes ?? plan.changes }, row: res.item };
+}
+
+// --- Policies (a collection; delegates to upsertPropertyPolicy) ---------------
+
+async function planPolicy(
+  supabase: Supabase,
+  input: Extract<PropertyKnowledgeWriteInput, { action: 'upsert_policy' | 'delete_policy' }>,
+  property: { id: string; name: string },
+): Promise<PreviewPropertyKnowledgeWriteResult> {
+  if (input.action === 'delete_policy') {
+    const { data, error } = await supabase
+      .from('property_policies')
+      .select('id, title')
+      .eq('id', input.policy_id)
+      .eq('property_id', input.property_id)
+      .maybeSingle();
+    if (error) return { ok: false, error: { code: 'db_error', message: error.message } };
+    if (!data)
+      return {
+        ok: false,
+        error: {
+          code: 'not_found',
+          message: `No policy ${input.policy_id} on this property.`,
+          field: 'policy_id',
+        },
+      };
+    const label = (data as { title?: string }).title || 'policy';
+    return {
+      ok: true,
+      plan: {
+        action: input.action,
+        mode: 'delete',
+        property: { property_id: property.id, name: property.name },
+        subject: { type: 'policy', id: input.policy_id, label },
+        changes: [],
+        summary: `Delete policy "${label}"`,
+      },
+      canonicalInput: input,
+    };
+  }
+
+  const f = input.fields;
+  const isUpdate = !!input.policy_id;
+  let before: Record<string, unknown> | null = null;
+  if (input.policy_id) {
+    const { data, error } = await supabase
+      .from('property_policies')
+      .select('id, title, body, sort_order')
+      .eq('id', input.policy_id)
+      .eq('property_id', input.property_id)
+      .maybeSingle();
+    if (error) return { ok: false, error: { code: 'db_error', message: error.message } };
+    if (!data)
+      return {
+        ok: false,
+        error: {
+          code: 'not_found',
+          message: `No policy ${input.policy_id} on this property.`,
+          field: 'policy_id',
+        },
+      };
+    before = data as Record<string, unknown>;
+  }
+  const title = normalizeNullable(f.title) ?? (before?.title as string | null | undefined) ?? null;
+  if (!title) {
+    return {
+      ok: false,
+      error: {
+        code: 'invalid_input',
+        message: 'fields.title is required — it is how the policy is named and matched.',
+        field: 'fields.title',
+      },
+    };
+  }
+  const after: Record<string, unknown> = {
+    title,
+    body: 'body' in f ? normalizeNullable(f.body) : ((before?.body as string | null) ?? null),
+  };
+  const changes = diffFields(before, after, ['title', 'body']);
+  return {
+    ok: true,
+    plan: {
+      action: input.action,
+      mode: isUpdate ? 'update' : 'create',
+      property: { property_id: property.id, name: property.name },
+      subject: { type: 'policy', id: input.policy_id ?? null, label: title },
+      changes,
+      summary: `${isUpdate ? 'Update' : 'Add'} policy "${title}"`,
+    },
+    canonicalInput: input,
+  };
+}
+
+async function commitPolicy(
+  _supabase: Supabase,
+  input: Extract<PropertyKnowledgeWriteInput, { action: 'upsert_policy' | 'delete_policy' }>,
+  plan: PropertyKnowledgeWritePlan,
+): Promise<PropertyKnowledgeWriteResult> {
+  if (input.action === 'delete_policy') {
+    const res = await deletePropertyPolicy(
+      input.property_id,
+      input.policy_id,
+      input.actor_user_id ?? null,
+      source(input),
+    );
+    if (!res.ok)
+      return {
+        ok: false,
+        error: { code: res.error.code, message: res.error.message, field: res.error.field },
+      };
+    return { ok: true, plan, row: { id: input.policy_id } };
+  }
+  const f = input.fields;
+  const res = await upsertPropertyPolicy({
+    property_id: input.property_id,
+    ...(input.policy_id ? { policy_id: input.policy_id } : {}),
+    ...('title' in f ? { title: f.title } : {}),
+    ...('body' in f ? { body: f.body } : {}),
+    ...('sort_order' in f ? { sort_order: f.sort_order } : {}),
+    actor_user_id: input.actor_user_id ?? null,
+    source: source(input),
+  });
+  if (!res.ok)
+    return {
+      ok: false,
+      error: { code: res.error.code, message: res.error.message, field: res.error.field },
+    };
+  return { ok: true, plan: { ...plan, changes: res.changes ?? plan.changes }, row: res.policy };
 }
 
 async function planRoom(
@@ -741,6 +898,7 @@ export async function planPropertyKnowledgeWriteFor(
   if (input.action === 'upsert_access_item' || input.action === 'delete_access_item') return planAccessItem(supabase, input, property);
   if (input.action === 'upsert_room' || input.action === 'delete_room') return planRoom(supabase, input, property);
   if (input.action === 'upsert_attribute' || input.action === 'delete_attribute') return planAttribute(supabase, input, property);
+  if (input.action === 'upsert_policy' || input.action === 'delete_policy') return planPolicy(supabase, input, property);
   return planDocument(supabase, input, property);
 }
 
@@ -754,6 +912,7 @@ export async function commitPropertyKnowledgeWriteFor(
   if (input.action === 'upsert_access_item' || input.action === 'delete_access_item') return commitAccessItem(supabase, input, plan);
   if (input.action === 'upsert_room' || input.action === 'delete_room') return commitRoom(supabase, input, plan);
   if (input.action === 'upsert_attribute' || input.action === 'delete_attribute') return commitAttribute(supabase, input, plan);
+  if (input.action === 'upsert_policy' || input.action === 'delete_policy') return commitPolicy(supabase, input, plan);
   return commitDocument(supabase, input, plan);
 }
 

@@ -38,6 +38,7 @@ interface Brief {
   contacts: Rec[];
   rooms: Rec[];
   documents: Rec[];
+  policies: Rec[];
 }
 
 interface GuestAccessData {
@@ -153,14 +154,16 @@ interface RoomsGroup {
   blocks: RoomBlock[];
 }
 
-interface AccessGroup {
-  kind: 'access';
-  key: 'access';
+// A flat list of package toggles with no nesting — access items and policies.
+// (Rooms need their own group because their attributes nest underneath.)
+interface PackagesGroup {
+  kind: 'packages';
+  key: string;
   title: string;
   packages: Package[];
 }
 
-type Group = FieldsGroup | RoomsGroup | AccessGroup;
+type Group = FieldsGroup | RoomsGroup | PackagesGroup;
 
 function roomPackage(room: Rec): Package {
   const id = String(room.id);
@@ -304,7 +307,7 @@ export default function GuestAccessTab() {
         photos: [],
       });
     }
-    if (accessPkgs.length) out.push({ kind: 'access', key: 'access', title: 'Access', packages: accessPkgs });
+    if (accessPkgs.length) out.push({ kind: 'packages', key: 'access', title: 'Access', packages: accessPkgs });
 
     // Connectivity (singleton)
     if (brief.connectivity) {
@@ -365,6 +368,26 @@ export default function GuestAccessTab() {
     }));
     if (blocks.length) out.push({ kind: 'rooms', key: 'rooms', title: 'Rooms & areas', blocks });
 
+    // Policies & Instructions — one all-or-nothing toggle per policy. Unlike
+    // access items, the full field set is always covered (title + body), so a
+    // body filled in later is shared without re-toggling.
+    const policyPkgs: Package[] = (brief.policies ?? []).map((raw) => {
+      const p = raw as Rec;
+      const id = String(p.id);
+      return {
+        key: id,
+        type: 'policy_field' as const,
+        resourceIds: RESOURCE_FIELD_SETS.policy_field.map((f) => encodeFieldResourceId(id, f)),
+        label: (p.title as string) || 'Policy',
+        notesPreview: hasContent(p.body) ? preview(p.body) : undefined,
+        tags: [],
+        photos: [],
+      };
+    });
+    if (policyPkgs.length) {
+      out.push({ kind: 'packages', key: 'policies', title: 'Policies & instructions', packages: policyPkgs });
+    }
+
     // Documents
     const docItems: FieldItem[] = [];
     for (const d of brief.documents) {
@@ -397,9 +420,9 @@ export default function GuestAccessTab() {
             <Lock className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent-3)] dark:text-[var(--accent-1)]" aria-hidden />
             <p className="text-[13px] leading-relaxed text-neutral-700 dark:text-[#cbc9c4]">
               Everything is <span className="font-medium">hidden from the Concierge by default</span>. Unlock only what
-              you’re comfortable the guest-facing AI relaying to guests. Rooms and attributes toggle as a whole; access,
-              wifi, contacts, and documents unlock field by field. The operator-facing assistant still sees everything
-              regardless.
+              you’re comfortable the guest-facing AI relaying to guests. Rooms, attributes, and policies toggle as a
+              whole; access, wifi, contacts, and documents unlock field by field. The operator-facing assistant still
+              sees everything regardless.
             </p>
           </div>
         </div>
@@ -413,8 +436,8 @@ export default function GuestAccessTab() {
 
         {groups.length === 0 ? (
           <div className="py-10 text-center text-[13px] text-neutral-400 dark:text-[#66645f]">
-            No property knowledge has been added yet. Add access, wifi, rooms, attributes, or documents in the other tabs,
-            then unlock what guests can see here.
+            No property knowledge has been added yet. Add access, wifi, rooms, attributes, policies, or documents in the
+            other tabs, then unlock what guests can see here.
           </div>
         ) : (
           groups.map((group) =>
@@ -473,7 +496,7 @@ export default function GuestAccessTab() {
                   ))}
                 </div>
               </section>
-            ) : group.kind === 'access' ? (
+            ) : group.kind === 'packages' ? (
               <section key={group.key} className="mb-8">
                 <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-neutral-500 dark:text-[#66645f]">
                   {group.title}

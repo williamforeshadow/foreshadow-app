@@ -116,6 +116,7 @@ function summarize(
         asArray(d.tech_accounts).length +
         asArray(d.rooms).length +
         asArray(d.attributes).length +
+        asArray(d.policies).length +
         (d.connectivity ? 1 : 0);
       return {
         facts,

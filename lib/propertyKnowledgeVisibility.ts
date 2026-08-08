@@ -17,6 +17,7 @@ export const VISIBILITY_RESOURCE_TYPES = [
   'contact_field',
   'document_field',
   'tech_account_field',
+  'policy_field',
 ] as const;
 
 export type VisibilityResourceType = (typeof VISIBILITY_RESOURCE_TYPES)[number];
@@ -45,6 +46,7 @@ export const RESOURCE_FIELD_SETS: Record<VisibilityResourceType, readonly string
   contact_field: ['name', 'role', 'phone', 'email', 'schedule', 'preferences', 'notes'],
   document_field: ['title', 'notes', 'file'],
   tech_account_field: ['service_name', 'username', 'password', 'notes', 'photos'],
+  policy_field: ['title', 'body'],
 };
 
 /** True when `field` is a valid lockable field for the resource type. */

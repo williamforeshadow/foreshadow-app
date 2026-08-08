@@ -101,7 +101,7 @@ export const previewPropertyKnowledgeWriteTool: ToolDefinition<
 > = {
   name: 'preview_property_knowledge_write',
   description:
-    "PREVIEW any number of Property Knowledge writes on ONE property, as an ORDERED LIST of operations that all commit under a single Confirm. This covers Access items, Connectivity, Interior/Exterior rooms and attributes, existing Document metadata/deletes, and room/attribute photos. Put EVERY edit the user asked for into `operations` — one call, however many changes. \"Create a Gate room, add a gate-code attribute and a lockbox attribute to it, and attach this photo to the lockbox one\" is ONE call with three operations, never three calls and never two turns. Rooms are named, not id'd: an attribute operation carries `room` { title, scope }, and if that room does not exist yet it is CREATED first, inside this same confirmation, and the attribute is written into it — so you never need to create a room and ask the user to come back. Later operations land in rooms earlier operations create. Photos ride on the operation that owns their target via `photos`, so a plan with two attributes and two photos knows which photo goes where; never use preview_file_attachment for a room or attribute you are writing in this same request. Targets are matched by name and RE-RESOLVED at commit, so re-running a plan updates in place instead of duplicating. The returned plan lists every operation with its mode (create/update/noop/skipped), the rooms that will be created, and the photos that will attach; present it and get explicit confirmation, then call commit_property_knowledge_write with the token. Operations run in order — if one fails, the operations that depended on it are skipped and independent ones still run, so report which landed. If every operation is a noop, tell the user nothing would change and do not commit. For the SAME operations across MANY properties use preview_property_knowledge_batch. Vendor contacts have their own tool.",
+    "PREVIEW any number of Property Knowledge writes on ONE property, as an ORDERED LIST of operations that all commit under a single Confirm. This covers Access items, Connectivity, Interior/Exterior rooms and attributes, Policies & Instructions, existing Document metadata/deletes, and room/attribute photos. Put EVERY edit the user asked for into `operations` — one call, however many changes. \"Create a Gate room, add a gate-code attribute and a lockbox attribute to it, and attach this photo to the lockbox one\" is ONE call with three operations, never three calls and never two turns. Rooms are named, not id'd: an attribute operation carries `room` { title, scope }, and if that room does not exist yet it is CREATED first, inside this same confirmation, and the attribute is written into it — so you never need to create a room and ask the user to come back. Later operations land in rooms earlier operations create. Photos ride on the operation that owns their target via `photos`, so a plan with two attributes and two photos knows which photo goes where; never use preview_file_attachment for a room or attribute you are writing in this same request. Targets are matched by name and RE-RESOLVED at commit, so re-running a plan updates in place instead of duplicating. The returned plan lists every operation with its mode (create/update/noop/skipped), the rooms that will be created, and the photos that will attach; present it and get explicit confirmation, then call commit_property_knowledge_write with the token. Operations run in order — if one fails, the operations that depended on it are skipped and independent ones still run, so report which landed. If every operation is a noop, tell the user nothing would change and do not commit. For the SAME operations across MANY properties use preview_property_knowledge_batch. Vendor contacts have their own tool.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -129,6 +129,8 @@ export const previewPropertyKnowledgeWriteTool: ToolDefinition<
                 'upsert_access_item',
                 'delete_access_item',
                 'upsert_connectivity',
+                'upsert_policy',
+                'delete_policy',
                 'update_document',
                 'delete_document',
               ],
@@ -155,7 +157,8 @@ export const previewPropertyKnowledgeWriteTool: ToolDefinition<
             },
             title: {
               type: 'string',
-              description: 'delete_attribute only: the title of the attribute to remove from that room.',
+              description:
+                'delete_attribute: the title of the attribute to remove from that room. delete_policy: the title of the policy to remove.',
             },
             document_id: {
               type: 'string',
@@ -164,7 +167,7 @@ export const previewPropertyKnowledgeWriteTool: ToolDefinition<
             fields: {
               type: 'object',
               description:
-                "Fields for this operation. Room: notes, sort_order, and title ONLY to rename an existing room (scope and the matching title come from `room`). Attribute: title (REQUIRED — the match key within its room), tags (array of appliance, amenity, safety, quirk, utility, access, other), body, sort_order; never pass room_id. Access item: type (one of entry_code, backup_code, team_code, owner_code, building_code, lobby_code, gate_code, elevator, parking_garage_code, mailbox_code, amenity_code, intercom_code, storage_code, lockbox_code, lockbox_location, key_location, fob_keycard, alarm_code, parking_spot, parking_type, parking_location, guest_parking_pass, ev_charger, other), label (defaults from type; required for 'other'), value (for a parking_type item it must be assigned/street/garage/other), notes. delete_access_item: type, and label when the type is 'other'. Connectivity: wifi_ssid, wifi_password, wifi_router_location. Document: title, notes, tag. Pass null to clear a nullable text field.",
+                "Fields for this operation. Room: notes, sort_order, and title ONLY to rename an existing room (scope and the matching title come from `room`). Attribute: title (REQUIRED — the match key within its room), tags (array of appliance, amenity, safety, quirk, utility, access, other), body, sort_order; never pass room_id. Access item: type (one of entry_code, backup_code, team_code, owner_code, building_code, lobby_code, gate_code, elevator, parking_garage_code, mailbox_code, amenity_code, intercom_code, storage_code, lockbox_code, lockbox_location, key_location, fob_keycard, alarm_code, parking_spot, parking_type, parking_location, guest_parking_pass, ev_charger, other), label (defaults from type; required for 'other'), value (for a parking_type item it must be assigned/street/garage/other), notes. delete_access_item: type, and label when the type is 'other'. Connectivity: wifi_ssid, wifi_password, wifi_router_location. Policy: title (REQUIRED — the match key, a short label like \"Checkout\" or \"Quiet hours\"), body (the rule in full), sort_order. Document: title, notes, tag. Pass null to clear a nullable text field.",
             },
             photos: {
               type: 'object',

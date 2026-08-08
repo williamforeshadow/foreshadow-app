@@ -78,7 +78,7 @@ async function handler(
 export const getPropertyKnowledge: ToolDefinition<Input, PropertyKnowledge> = {
   name: 'get_property_knowledge',
   description:
-    'Fetch everything Foreshadow knows about a single property in one call: profile (address, beds/baths, Hostaway link), access codes and parking, wifi and tech-account credentials, vendor contacts (with tags, schedule, owner preferences), interior + exterior rooms with their attributes, and documents. Use after find_properties has resolved a name into a property_id. Photos return as storage paths only.',
+    'Fetch everything Foreshadow knows about a single property in one call: profile (address, beds/baths, Hostaway link), access codes and parking, wifi and tech-account credentials, vendor contacts (with tags, schedule, owner preferences), interior + exterior rooms with their attributes, policies & instructions (stay-wide rules like checkout time, quiet hours, no parties), and documents. Use after find_properties has resolved a name into a property_id. Photos return as storage paths only.',
   inputSchema,
   jsonSchema: {
     type: 'object' as const,

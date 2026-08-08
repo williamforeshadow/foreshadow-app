@@ -27,6 +27,7 @@ import {
   attributeFieldsSchema,
   connectivityFieldsSchema,
   documentFieldsSchema,
+  policyFieldsSchema,
   roomFieldsSchema,
   sourceSchema,
   planPropertyKnowledgeWriteFor,
@@ -100,6 +101,16 @@ export const propertyKnowledgeOperationSchema = z.discriminatedUnion('op', [
     room: roomRefSchema,
     title: z.string().min(1),
   }),
+  /**
+   * Policies & Instructions — roomless title+body rows for rules that apply to
+   * the stay or the whole property. `title` is the match key, so the same op
+   * creates or updates without the caller choosing.
+   */
+  z.object({ op: z.literal('upsert_policy'), fields: policyFieldsSchema }),
+  z.object({
+    op: z.literal('delete_policy'),
+    title: z.string().min(1),
+  }),
   z.object({ op: z.literal('upsert_access_item'), fields: accessItemFieldsSchema }),
   z.object({
     op: z.literal('delete_access_item'),
@@ -137,6 +148,8 @@ export const BATCHABLE_OPS: readonly PropertyKnowledgeOperationKind[] = [
   'upsert_access_item',
   'delete_access_item',
   'upsert_connectivity',
+  'upsert_policy',
+  'delete_policy',
 ];
 
 // --- plan types ------------------------------------------------------------
@@ -493,6 +506,20 @@ async function findAttributeId(
   return { ok: true, id: rows.find((r) => sameTitle(r.title, title))?.id ?? null };
 }
 
+async function findPolicyId(
+  supabase: Supabase,
+  propertyId: string,
+  title: string,
+): Promise<{ ok: true; id: string | null } | { ok: false; error: PropertyKnowledgeWriteError }> {
+  const { data, error } = await supabase
+    .from('property_policies')
+    .select('id, title')
+    .eq('property_id', propertyId);
+  if (error) return { ok: false, error: { code: 'db_error', message: error.message } };
+  const rows = (data ?? []) as Array<{ id: string; title: string | null }>;
+  return { ok: true, id: rows.find((r) => sameTitle(r.title, title))?.id ?? null };
+}
+
 /**
  * What an operation compiles down to, once its targets are resolved.
  *
@@ -545,6 +572,49 @@ async function resolveOperation(
       input: (op.op === 'update_document'
         ? { ...base, action: 'update_document', document_id: op.document_id, fields: op.fields }
         : { ...base, action: 'delete_document', document_id: op.document_id }) as PropertyKnowledgeWriteInput,
+      room: null,
+    };
+  }
+
+  if (op.op === 'upsert_policy' || op.op === 'delete_policy') {
+    const title = op.op === 'delete_policy' ? op.title : (op.fields.title as string | undefined) ?? '';
+    if (!title) {
+      return {
+        kind: 'error',
+        error: {
+          code: 'invalid_input',
+          message: 'fields.title is required — it is how the policy is matched.',
+          field: 'fields.title',
+        },
+        room: null,
+      };
+    }
+    const found = await findPolicyId(supabase, input.property_id, title);
+    if (!found.ok) return { kind: 'error', error: found.error, room: null };
+    if (op.op === 'delete_policy') {
+      // Deleting a policy that isn't there is already the state asked for.
+      if (!found.id) {
+        return {
+          kind: 'noop',
+          label: title,
+          reason: `No policy titled "${title}" on this property.`,
+          room: null,
+        };
+      }
+      return {
+        kind: 'write',
+        input: { ...base, action: 'delete_policy', policy_id: found.id } as PropertyKnowledgeWriteInput,
+        room: null,
+      };
+    }
+    return {
+      kind: 'write',
+      input: {
+        ...base,
+        action: 'upsert_policy',
+        ...(found.id ? { policy_id: found.id } : {}),
+        fields: op.fields,
+      } as PropertyKnowledgeWriteInput,
       room: null,
     };
   }
@@ -851,6 +921,9 @@ function stepSummary(
     case 'upsert_access_item':
     case 'delete_access_item':
       return `${verb} access item "${label}"`;
+    case 'upsert_policy':
+    case 'delete_policy':
+      return `${verb} policy "${label}"`;
     case 'upsert_connectivity':
       return `${verb} connectivity info`;
     default:

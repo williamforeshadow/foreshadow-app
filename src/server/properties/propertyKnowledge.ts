@@ -1,6 +1,6 @@
 import { getSupabaseServer } from '@/lib/supabaseServer';
 
-// Shared property-knowledge loader — the single 8-read dossier query used by the
+// Shared property-knowledge loader — the single 9-read dossier query used by the
 // get_property_knowledge agent tool (full, ops-facing) and the
 // get_property_knowledge_for_guest tool (filtered to the unlocked allowlist).
 // Pulls every "Knowledge" section the UI exposes. Photos are metadata only
@@ -39,6 +39,11 @@ export interface PropertyKnowledge {
   contacts: Json[];
   rooms: Json[];
   documents: Json[];
+  /**
+   * Policies & Instructions (property_policies) — roomless title+body rules and
+   * standing instructions that apply to the stay or the whole property.
+   */
+  policies: Json[];
   warnings?: string[];
 }
 
@@ -64,6 +69,7 @@ export async function loadPropertyKnowledge(
     contactsRes,
     roomsRes,
     docsRes,
+    policiesRes,
   ] = await Promise.all([
     supabase.from('properties').select(PROPERTY_COLUMNS).eq('id', propertyId).maybeSingle(),
     supabase
@@ -111,6 +117,12 @@ export async function loadPropertyKnowledge(
       .eq('property_id', propertyId)
       .order('tag', { ascending: true })
       .order('created_at', { ascending: false }),
+    supabase
+      .from('property_policies')
+      .select('id, title, body, sort_order')
+      .eq('property_id', propertyId)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true }),
   ]);
 
   if (propertyRes.error) {
@@ -130,6 +142,7 @@ export async function loadPropertyKnowledge(
   note('contacts', contactsRes.error);
   note('rooms', roomsRes.error);
   note('documents', docsRes.error);
+  note('policies', policiesRes.error);
 
   return {
     property: propertyRes.data as PropertyRow,
@@ -139,6 +152,7 @@ export async function loadPropertyKnowledge(
     contacts: contactsRes.error ? [] : ((contactsRes.data as Json[] | null) ?? []),
     rooms: roomsRes.error ? [] : ((roomsRes.data as Json[] | null) ?? []),
     documents: docsRes.error ? [] : ((docsRes.data as Json[] | null) ?? []),
+    policies: policiesRes.error ? [] : ((policiesRes.data as Json[] | null) ?? []),
     ...(warnings.length > 0 ? { warnings } : {}),
   };
 }

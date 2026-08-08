@@ -20,6 +20,7 @@ import { requireAuthContext } from '@/lib/requireAuthContext';
 //      property_attributes: Array<{ tags, title, body, photos: [...] }>,
 //    }>,
 //    documents: Array<{ tag, title, notes, storage_path, ... }>,
+//    policies: Array<{ title, body, sort_order }>,
 //  }
 
 export async function GET(
@@ -40,6 +41,7 @@ export async function GET(
     contactsRes,
     roomsRes,
     docsRes,
+    policiesRes,
   ] = await Promise.all([
     supabase
       .from('properties')
@@ -95,6 +97,12 @@ export async function GET(
       .eq('property_id', id)
       .order('tag', { ascending: true })
       .order('created_at', { ascending: false }),
+    supabase
+      .from('property_policies')
+      .select('id, title, body, sort_order')
+      .eq('property_id', id)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true }),
   ]);
 
   if (propertyRes.error) {
@@ -117,6 +125,7 @@ export async function GET(
     ['contacts', contactsRes],
     ['rooms', roomsRes],
     ['documents', docsRes],
+    ['policies', policiesRes],
   ] as const) {
     if (res.error) {
       warnings.push(`${key}: ${res.error.message}`);
@@ -131,6 +140,7 @@ export async function GET(
     contacts: contactsRes.error ? [] : contactsRes.data ?? [],
     rooms: roomsRes.error ? [] : roomsRes.data ?? [],
     documents: docsRes.error ? [] : docsRes.data ?? [],
+    policies: policiesRes.error ? [] : policiesRes.data ?? [],
     ...(warnings.length > 0 ? { warnings } : {}),
   });
 }
