@@ -42,9 +42,9 @@ import styles from './MobileAgentChat.module.css';
 //      is up, its lower portion simply sits behind the keyboard; the input
 //      floats over it (messages scroll behind the glass).
 //
-// The drawer only exists once a conversation does: tapping the pill first shows
-// just the floating input over the dimmed app. The first send brings the drawer
-// up behind the input.
+// Both layers arrive together when the pill is tapped: the drawer rises to its
+// full height (empty until messages arrive) with the input floating in front of
+// it, so the chat reads as a place you've entered rather than a lone text field.
 //
 // Mounted once in AppChrome (mobile only) so the conversation survives route
 // changes. Closing is explicit (backdrop tap / Escape); dismissing the keyboard
@@ -151,9 +151,10 @@ export function MobileAgentChat() {
   if (isOpen && !shouldRender) setShouldRender(true);
   if (!isOpen && shown) setShown(false);
 
-  // The drawer only exists once there's something to show.
-  const hasConversation = messages.length > 0 || isLoading;
-  const drawerMounted = shouldRender && hasConversation;
+  // The drawer is part of opening the chat, not a reward for sending: it mounts
+  // with the overlay and simply starts empty. That also puts the new-chat and
+  // history buttons (which live in its header) within reach from a fresh chat.
+  const drawerMounted = shouldRender;
   const [drawerIn, setDrawerIn] = useState(false);
 
   // Enter the overlay just after mount so the input transitions up.
@@ -170,8 +171,8 @@ export function MobileAgentChat() {
     return () => window.clearTimeout(t);
   }, [isOpen, shouldRender]);
 
-  // Slide the drawer up the first time it mounts (a beat after it appears), so
-  // it reads as rising behind the input rather than snapping in.
+  // Slide the drawer up a beat after it mounts, so it rises behind the input
+  // rather than snapping in.
   useEffect(() => {
     if (!drawerMounted) {
       setDrawerIn(false);

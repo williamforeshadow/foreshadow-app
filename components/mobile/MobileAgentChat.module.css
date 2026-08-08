@@ -1,7 +1,8 @@
 /* Mobile agent chat — two independent layers.
  *
  * The conversation DRAWER is anchored to the bottom of the screen and always
- * renders down to it (it never lifts). The INPUT bubble is a separate floating
+ * renders down to it (it never lifts); it goes up with the overlay and starts
+ * empty. The INPUT bubble is a separate floating
  * layer pinned above the software keyboard; it's the only thing that tracks the
  * keyboard, so the two read as related-but-separate surfaces rather than one
  * stapled block. The input floats over the drawer, and messages scroll behind
@@ -235,8 +236,10 @@
   padding-left: 0.75rem;
   padding-right: 0.75rem;
   pointer-events: none; /* only the field + menu capture taps */
+  /* Same duration/curve as the drawer: they now enter together and should read
+     as one motion. */
   transition:
-    transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 300ms cubic-bezier(0.16, 1, 0.3, 1),
     opacity 200ms ease;
   will-change: transform;
 }
