@@ -75,41 +75,53 @@
   }
 }
 
-.header {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  /* New-chat and history sit left, close stays right, so the destructive-ish
-     control keeps the corner the user already reaches for. */
-  justify-content: space-between;
-  padding: 0.5rem 0.5rem 0.125rem;
-}
-
-.headerActions {
-  display: flex;
-  align-items: center;
-  gap: 0.125rem;
-}
-
-.headerButtonActive {
-  background: color-mix(in srgb, var(--foreground) 12%, transparent);
-  color: var(--foreground);
-}
-.closeButton {
+/* ── Floating corner chrome ──────────────────────────────────────────────
+ * History and new-chat sit ON the thread rather than in a header that reserves
+ * height, so the conversation gets the drawer's full height and passes under
+ * them. That means they need their own surface to stay legible over text —
+ * the same glass the input bubble uses, so the two read as one material.
+ * There is no close button: the sheet is dismissed by swiping it down (or a
+ * backdrop tap / Escape). */
+.cornerButton {
+  position: absolute;
+  top: 0.5rem;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 0.5rem;
-  background: transparent;
-  border: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
   color: var(--muted-foreground);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.12s, color 0.12s, opacity 0.12s;
 }
-.closeButton:active {
-  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+:global(.dark) .cornerButton {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(38, 38, 44, 0.62);
+  box-shadow:
+    0 1px 6px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.cornerLeft {
+  left: 0.75rem;
+}
+.cornerRight {
+  right: 0.75rem;
+}
+.cornerButton:active {
+  opacity: 0.6;
+}
+.cornerButtonActive {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 12%, var(--card));
 }
 
 /* ── Messages ────────────────────────────────────────────────────────── */
@@ -123,7 +135,14 @@
   overflow-anchor: none;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  padding: 0 1rem;
+  /* Top padding clears the floating corner buttons, so at rest the thread
+     starts below them and only meets them once it scrolls. */
+  padding: 50px 1rem 0;
+  /* …and when it does, it fades out rather than colliding with them. The mask
+     is on the scroll box, so it stays put while the content moves through it.
+     It must not wrap the buttons (they're siblings) or they'd fade too. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 46px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 46px);
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--foreground) 20%, transparent)
     transparent;
