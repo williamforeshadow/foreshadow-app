@@ -3,13 +3,18 @@ import { requireAuthContext } from '@/lib/requireAuthContext';
 
 // GET /api/properties/[id]/knowledge-proposals
 //
-// The property-scoped action queue of PENDING concierge knowledge proposals —
-// the same proposed_knowledge rows that surface in guest threads, gathered in
-// one place so operators can review a week's worth at once instead of hunting
-// through conversations. Pending only; newest first. Each row carries provenance
-// (which conversation/guest produced it) for a "view thread" link.
+// The property-scoped action queue of concierge knowledge proposals — the same
+// proposed_knowledge rows that surface in guest threads, gathered in one place so
+// operators can review a week's worth at once instead of hunting through
+// conversations. Newest first. Each row carries provenance (which
+// conversation/guest produced it) for a "view thread" link.
 //
-// Accepting/dismissing still goes through /api/proposed-knowledge/[id] — this
+// Returns two lists. `proposals` is the pending queue. `dismissed` exists because
+// a rejection now permanently blocks the concierge from re-proposing that exact
+// content — so "why will this never come back?" has to be answerable somewhere,
+// and a mis-click has to be undoable (PATCH /api/proposed-knowledge/[id]).
+//
+// Accepting/dismissing/restoring go through /api/proposed-knowledge/[id] — this
 // route is read-only. proposed_knowledge is org-scoped, so we confirm the
 // property belongs to the caller's org and filter by org_id defensively.
 
@@ -40,22 +45,26 @@ export async function GET(
   const { data: rows, error } = await supabase
     .from('proposed_knowledge')
     .select(
-      'id, summary, guest_visible, triggering_message_id, target, conversation_id, generated_at',
+      'id, summary, guest_visible, triggering_message_id, target, conversation_id, generated_at, status, decided_at, decided_by',
     )
     .eq('property_id', propertyId)
     .eq('org_id', orgId)
-    .eq('status', 'pending')
+    .in('status', ['pending', 'dismissed'])
     .order('generated_at', { ascending: false });
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const rowsArr = (rows ?? []) as Array<Record<string, unknown>>;
+  const allRows = (rows ?? []) as Array<Record<string, unknown>>;
+  const rowsArr = allRows.filter((r) => r.status === 'pending');
+  const dismissedRows = allRows
+    .filter((r) => r.status === 'dismissed')
+    .sort((a, b) => String(b.decided_at ?? '').localeCompare(String(a.decided_at ?? '')));
 
   // Provenance: resolve each proposal's conversation to a guest name + channel.
   const convIds = Array.from(
     new Set(
-      rowsArr
+      [...rowsArr, ...dismissedRows]
         .map((r) => r.conversation_id as string | null)
         .filter((v): v is string => !!v),
     ),
@@ -99,5 +108,38 @@ export async function GET(
     };
   });
 
-  return NextResponse.json({ proposals });
+  // Who dismissed each rejected proposal, batched by distinct decider id (same
+  // shape as the thread route's lookup).
+  const deciderNames = new Map<string, string>();
+  const deciderIds = Array.from(
+    new Set(
+      dismissedRows
+        .map((r) => r.decided_by as string | null)
+        .filter((v): v is string => !!v),
+    ),
+  );
+  if (deciderIds.length) {
+    const { data: deciders } = await supabase.from('users').select('id, name').in('id', deciderIds);
+    for (const u of (deciders ?? []) as Array<{ id: string; name: string | null }>) {
+      deciderNames.set(u.id, u.name ?? '');
+    }
+  }
+
+  const dismissed = dismissedRows.map((r) => {
+    const conversationId = (r.conversation_id as string | null) ?? null;
+    const conv = conversationId ? convById.get(conversationId) : undefined;
+    const decidedBy = (r.decided_by as string | null) ?? null;
+    return {
+      id: r.id as string,
+      summary: (r.summary as string | null) ?? '',
+      target: (r.target as Record<string, unknown> | null) ?? null,
+      decided_by_name: decidedBy ? deciderNames.get(decidedBy) ?? null : null,
+      decided_at: (r.decided_at as string | null) ?? null,
+      conversation_id: conversationId,
+      guest_name: conv?.guest_name ?? null,
+      channel: conv?.channel ?? null,
+    };
+  });
+
+  return NextResponse.json({ proposals, dismissed });
 }

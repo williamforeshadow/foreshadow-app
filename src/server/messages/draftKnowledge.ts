@@ -92,7 +92,11 @@ Save it when it's a discovered fix or quirk (e.g. the TV only works on a certain
 
 Ground every proposal ONLY in what the conversation actually established — never invent details, names, times, or numbers.
 
-UPDATES & CORRECTIONS: a fact that CHANGES or corrects a value already on file, or already listed as awaiting review, IS worth proposing — save the corrected value (for example a new wifi password, or a vendor whose schedule changed). Only skip it when the value is unchanged (already exactly on file or already proposed).
+DUPLICATES vs CORRECTIONS — one rule, and it governs every block below:
+Compare on the VALUE, never on the title. Three blocks tell you what is already on the record: the property's current knowledge, proposals awaiting review, and proposals the team REJECTED. All three show you the actual values.
+- Same subject, same value → do NOT propose it. Restating it in different words, in more detail, or under a different title is still the same fact, and it is still a duplicate. "I could word this better" is never a reason to propose.
+- Same subject, materially DIFFERENT value → DO propose the new value. A different number, time, location, amount, or instruction is a correction, and corrections are wanted.
+A rejection applies to the specific content that was rejected, not to the subject it was about. The team turning down one value never bars you from proposing a genuinely different value for that same subject later.
 
 WHERE to put each fact (choose the best target):
 - A discrete thing tied to a specific room/area — an appliance, amenity, safety item, utility, or a quirk about a particular object → an ATTRIBUTE under that room. Tag it appropriately (you may apply multiple tags). Use an existing room when one fits (reference its id); if the relevant room clearly exists in the property but isn't in the list, create it (set room.id to null and give scope + title). If a PHYSICAL fact genuinely belongs to no single room (e.g. the whole house has hard water), create or reuse a general/whole-property area (scope "interior") and attach the attribute there — but only for physical facts, never for a rule or an instruction, which have their own target below.
@@ -122,7 +126,12 @@ interface KnowledgeRoom {
   scope: string;
   title: string | null;
   notes: string | null;
-  attributes: Array<{ tags: AttributeTag[]; title: string }>;
+  /**
+   * `body` is carried, not dropped: it is the VALUE, and comparing values is the
+   * only way the model can tell a duplicate from a correction. A title-only view
+   * made it re-propose facts already on file, reworded.
+   */
+  attributes: Array<{ tags: AttributeTag[]; title: string; body: string | null }>;
 }
 
 interface KnowledgeContact {
@@ -130,15 +139,27 @@ interface KnowledgeContact {
   name: string;
 }
 
-/** Compact the property's current knowledge into prompt text for placement + dedup. */
-async function loadKnowledgeContext(propertyId: string | null): Promise<{
+interface KnowledgePolicy {
+  title: string;
+  body: string | null;
+}
+
+export interface KnowledgeContextResult {
   block: string;
   rooms: KnowledgeRoom[];
   contacts: KnowledgeContact[];
-}> {
-  if (!propertyId) return { block: '(no property linked)', rooms: [], contacts: [] };
+  /** Live policies, as rendered into the block. */
+  policies: KnowledgePolicy[];
+}
+
+/** Compact the property's current knowledge into prompt text for placement + dedup. */
+export async function loadKnowledgeContext(
+  propertyId: string | null,
+): Promise<KnowledgeContextResult> {
+  const empty = { rooms: [], contacts: [], policies: [] };
+  if (!propertyId) return { block: '(no property linked)', ...empty };
   const knowledge = await loadPropertyKnowledge(propertyId);
-  if (!knowledge) return { block: '(property knowledge unavailable)', rooms: [], contacts: [] };
+  if (!knowledge) return { block: '(property knowledge unavailable)', ...empty };
 
   const rooms: KnowledgeRoom[] = (knowledge.rooms as unknown as Array<Record<string, unknown>>).map((r) => ({
     id: r.id as string,
@@ -148,6 +169,7 @@ async function loadKnowledgeContext(propertyId: string | null): Promise<{
     attributes: ((r.property_attributes as Array<Record<string, unknown>> | null) ?? []).map((a) => ({
       tags: normalizeTags(a.tags),
       title: (a.title as string | null) ?? '',
+      body: (a.body as string | null) ?? null,
     })),
   }));
 
@@ -160,7 +182,13 @@ async function loadKnowledgeContext(propertyId: string | null): Promise<{
       const label = room.title || room.scope;
       const noteStr = room.notes ? ` | room note: "${room.notes.slice(0, 120)}"` : '';
       const attrStr = room.attributes.length
-        ? ` | attributes: ${room.attributes.map((a) => `${a.tags.join('/') || 'untagged'} "${a.title}"`).join(', ')}`
+        ? ` | attributes: ${room.attributes
+            .map((a) => {
+              const tags = a.tags.join('/') || 'untagged';
+              const body = a.body ? ` = "${a.body.slice(0, 120)}"` : '';
+              return `${tags} "${a.title}"${body}`;
+            })
+            .join('; ')}`
         : '';
       lines.push(`- [id: ${room.id}] ${room.scope} "${label}"${noteStr}${attrStr}`);
     }
@@ -183,14 +211,19 @@ async function loadKnowledgeContext(propertyId: string | null): Promise<{
   // model dedups against them instead of re-proposing the same rule on every
   // message, and so it can tell a changed value (checkout moved to 4pm) from a
   // repeat.
-  const policies = (knowledge.policies as Array<Record<string, unknown>> | null) ?? [];
+  const policies: KnowledgePolicy[] = (
+    (knowledge.policies as Array<Record<string, unknown>> | null) ?? []
+  ).map((p) => ({
+    title: (p.title as string) || 'policy',
+    body: (p.body as string | null) ?? null,
+  }));
   lines.push('Policies & instructions on file (stay-wide rules — do NOT re-propose one already here):');
   if (policies.length === 0) {
     lines.push('- (none yet)');
   } else {
     for (const p of policies) {
-      const body = p.body ? ` — ${String(p.body).slice(0, 120)}` : '';
-      lines.push(`- "${(p.title as string) || 'policy'}"${body}`);
+      const body = p.body ? ` — ${p.body.slice(0, 120)}` : '';
+      lines.push(`- "${p.title}"${body}`);
     }
   }
 
@@ -220,7 +253,7 @@ async function loadKnowledgeContext(propertyId: string | null): Promise<{
     }
   }
 
-  return { block: lines.join('\n'), rooms, contacts };
+  return { block: lines.join('\n'), rooms, contacts, policies };
 }
 
 /** Value-aware, one-line description of a stored proposal target (for pending dedup). */
@@ -256,38 +289,88 @@ function describePendingTarget(raw: unknown): string | null {
   if (kind === 'room_note') return `${where} — note: "${(s(t.notes) ?? '').slice(0, 100)}"`;
   if (kind === 'attribute') {
     const a = (t.attribute as Record<string, unknown> | null) ?? {};
-    return `${where} — ${s(a.title) || 'attribute'}`;
+    const body = s(a.body);
+    return `${where} — ${s(a.title) || 'attribute'}${body ? ` = "${body.slice(0, 120)}"` : ''}`;
   }
   return null;
 }
 
 /**
- * Pending proposals for the whole PROPERTY (across every thread) — value-aware, so
- * the model dedups true repeats yet still proposes a correction when a value here
- * has since changed. Falls back to the conversation when no property is linked.
+ * How many rejected proposals per property reach the prompt. Rejections are
+ * permanent, so this list only grows; the cap keeps the prompt bounded. Newest
+ * first, and a truncation is logged — a rejection dropped in silence reads to the
+ * model as one that never happened.
  */
-async function loadPendingProposalDigest(
+const MAX_REJECTED_LINES = 60;
+
+export interface ProposalDigests {
+  /** Awaiting review. A changed value for one of these is a correction. */
+  pending: string[];
+  /** Reviewed and turned down. These values should never be proposed again. */
+  rejected: string[];
+}
+
+/**
+ * Proposals already on the record for the whole PROPERTY (across every thread),
+ * split by what the model should do with them. Both lists are value-aware: the
+ * model compares on the VALUE, because that is what separates a duplicate from a
+ * correction. Falls back to the conversation when no property is linked.
+ */
+export async function loadProposalDigests(
   propertyId: string | null,
   conversationId: string,
-): Promise<string[]> {
+): Promise<ProposalDigests> {
+  const empty: ProposalDigests = { pending: [], rejected: [] };
   const base = getSupabaseServer()
     .from('proposed_knowledge')
-    .select('target, summary')
-    .eq('status', 'pending');
+    .select('target, summary, status, decided_at')
+    .in('status', ['pending', 'dismissed'])
+    .order('decided_at', { ascending: false, nullsFirst: true });
   const { data, error } = await (propertyId
     ? base.eq('property_id', propertyId)
     : base.eq('conversation_id', conversationId));
-  if (error) return [];
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const row of (data ?? []) as Array<{ target: unknown; summary: string | null }>) {
+  if (error) return empty;
+
+  const rows = (data ?? []) as Array<{
+    target: unknown;
+    summary: string | null;
+    status: string;
+  }>;
+
+  const pending: string[] = [];
+  const rejected: string[] = [];
+  const seenPending = new Set<string>();
+  const seenRejected = new Set<string>();
+  let rejectedDropped = 0;
+
+  for (const row of rows) {
     const line = describePendingTarget(row.target) ?? (row.summary ?? '').trim();
-    if (line && !seen.has(line)) {
-      seen.add(line);
-      out.push(line);
+    if (!line) continue;
+    if (row.status === 'pending') {
+      if (seenPending.has(line)) continue;
+      seenPending.add(line);
+      pending.push(line);
+      continue;
     }
+    // dismissed
+    if (seenRejected.has(line)) continue;
+    if (rejected.length >= MAX_REJECTED_LINES) {
+      rejectedDropped += 1;
+      continue;
+    }
+    seenRejected.add(line);
+    rejected.push(line);
   }
-  return out;
+
+  if (rejectedDropped > 0) {
+    console.warn('[knowledge triage] rejected digest truncated', {
+      propertyId,
+      shown: rejected.length,
+      dropped: rejectedDropped,
+    });
+  }
+
+  return { pending, rejected };
 }
 
 function parseRoomRef(raw: unknown, rooms: KnowledgeRoom[]): RoomRef | null {
@@ -441,7 +524,8 @@ export function describeTarget(target: KnowledgeTarget): string {
   const where = `${target.room.scope === 'exterior' ? 'Exterior' : 'Interior'} → ${target.room.title || 'room'}`;
   if (target.kind === 'room_note') return `${where} — note: ${target.notes.slice(0, 80)}`;
   const tagLabel = target.attribute.tags.join('/') || 'attribute';
-  return `${where} — ${tagLabel}: ${target.attribute.title}`;
+  const attrBody = target.attribute.body;
+  return `${where} — ${tagLabel}: ${target.attribute.title}${attrBody ? ` — ${attrBody.slice(0, 80)}` : ''}`;
 }
 
 export async function generateProposedKnowledgeFromContext(
@@ -455,9 +539,9 @@ export async function generateProposedKnowledgeFromContext(
   }
 
   const propertyId = ctx.conversation.property_id ?? null;
-  const [{ block: knowledgeBlock, rooms, contacts }, pendingDigest] = await Promise.all([
+  const [{ block: knowledgeBlock, rooms, contacts }, digests] = await Promise.all([
     loadKnowledgeContext(propertyId),
-    loadPendingProposalDigest(propertyId, ctx.conversation.id),
+    loadProposalDigests(propertyId, ctx.conversation.id),
   ]);
 
   const propertyName =
@@ -469,14 +553,21 @@ export async function generateProposedKnowledgeFromContext(
   const userParts = [
     propertyName ? `Property: ${propertyName}` : 'Property: (unnamed)',
     '',
-    'Current property knowledge (do NOT propose anything already here):',
+    'Current property knowledge — already saved. Do NOT propose a fact whose value is already here, in any wording:',
     knowledgeBlock,
   ];
-  if (pendingDigest.length) {
+  if (digests.pending.length) {
     userParts.push(
       '',
-      'Already proposed and awaiting review (do NOT duplicate — but DO propose a correction if one of these values has since changed):',
-      pendingDigest.map((s) => `- ${s}`).join('\n'),
+      'Already proposed and AWAITING REVIEW. Each line shows the value that was proposed. Do NOT propose one of these values again; DO propose when the conversation establishes a materially different value for the same subject:',
+      digests.pending.map((s) => `- ${s}`).join('\n'),
+    );
+  }
+  if (digests.rejected.length) {
+    userParts.push(
+      '',
+      'Previously proposed and REJECTED by the team — reviewed and turned down. Do NOT propose any of these values again, in any wording. A rejection applies to the specific content below, not to the subject it was about: if the conversation now establishes a materially different value for the same subject, proposing that new value is correct:',
+      digests.rejected.map((s) => `- ${s}`).join('\n'),
     );
   }
   userParts.push(
@@ -507,6 +598,7 @@ export async function generateProposedKnowledgeFromContext(
     console.warn('[knowledge triage] unparseable model output', { raw: text.slice(0, 200) });
     return { proposals: [], reasoning: 'Unparseable triage output.' };
   }
+
   return parsed;
 }
 

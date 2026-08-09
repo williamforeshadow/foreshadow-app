@@ -370,6 +370,51 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   });
 }
 
+// PATCH — restore a dismissed proposal to pending (un-dismiss).
+//
+// A dismissal is a permanent block: the triage prompt lists rejected content and
+// the generator drops anything matching it, so a mis-click would otherwise mean
+// that fact could never be proposed again. This is the escape hatch.
+export async function PATCH(_request: Request, context: { params: Promise<{ id: string }> }) {
+  const ctx = await requireAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
+
+  const { id } = await context.params;
+
+  const { data, error } = await supabase
+    .from('proposed_knowledge')
+    .update({
+      status: 'pending',
+      decided_by: null,
+      decided_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .eq('status', 'dismissed')
+    .select('id')
+    .maybeSingle();
+
+  if (error) {
+    // 23505 = the pending dedupe index: an identical proposal is already waiting,
+    // so there is nothing to restore. Not a server fault.
+    if (error.code === '23505') {
+      return NextResponse.json(
+        { error: 'An identical proposal is already pending review.' },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  if (!data) {
+    return NextResponse.json(
+      { error: 'That proposal is not dismissed, so there is nothing to restore.' },
+      { status: 409 },
+    );
+  }
+  return NextResponse.json({ ok: true, restored: true });
+}
+
 // DELETE — dismiss.
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
   const ctx = await requireAuthContext();

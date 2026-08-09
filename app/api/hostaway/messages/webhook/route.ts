@@ -105,14 +105,24 @@ export async function POST(request: Request) {
 
     // Idempotent insert — unique(org_id, hostaway_message_id) + ignoreDuplicates
     // makes Hostaway's retries / out-of-order redelivery safe (per-org scoped).
-    const { error } = await supabase
+    //
+    // The `select` is what makes the retry safe for the AI hooks too, not just for
+    // the row: ON CONFLICT DO NOTHING returns no row, so a null result means we
+    // already had this message. Without it the code could not tell an insert from
+    // an ignored duplicate, and every redelivery ran the generators again —
+    // producing a second reply draft, a second task, and a second knowledge
+    // proposal for one guest message.
+    const { data: insertedRow, error } = await supabase
       .from('guest_messages')
-      .upsert(row, { onConflict: 'org_id,hostaway_message_id', ignoreDuplicates: true });
+      .upsert(row, { onConflict: 'org_id,hostaway_message_id', ignoreDuplicates: true })
+      .select('id')
+      .maybeSingle();
 
     if (error) {
       console.error('[Hostaway Messages] insert error:', error.message);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+    const isNewMessage = Boolean(insertedRow);
 
     // Off the response path: pull the whole thread so host/outbound replies
     // (which never webhook to us) get synced. Idempotent; failures are logged
@@ -128,6 +138,20 @@ export async function POST(request: Request) {
           err,
         });
       }
+      // The generators run for a message we haven't seen before, never for a
+      // redelivery. The thread sync above still runs either way: it's idempotent,
+      // and a retry may be the first chance to pull host replies that landed since.
+      //
+      // Accepted trade-off: if a first delivery stored the message but died before
+      // getting here, the retry no longer regenerates. That's rare and recoverable
+      // (the on-complete hook, and "Regenerate" in the inbox), where duplicate
+      // drafts were happening on every retry.
+      if (!isNewMessage) {
+        console.log('[Hostaway Messages] redelivery — skipping AI hooks', {
+          hostawayMessageId: msg.hostawayMessageId,
+        });
+        return;
+      }
       // Eager Concierge draft: once the thread is synced, if the guest is now
       // awaiting a reply, draft one and store it so it's waiting in the inbox.
       // Best-effort — never fails the webhook (the helper swallows its errors).
@@ -142,7 +166,11 @@ export async function POST(request: Request) {
       await maybeGenerateProposedKnowledgeForExternal(msg.hostawayConversationId);
     });
 
-    return NextResponse.json({ ok: true, reservation_linked: reservationId != null });
+    return NextResponse.json({
+      ok: true,
+      reservation_linked: reservationId != null,
+      duplicate: !isNewMessage,
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('[Hostaway Messages] Error:', err);

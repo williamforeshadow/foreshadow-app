@@ -37,6 +37,13 @@ export async function generateAndStoreProposedKnowledge(
     reasoning: p.reasoning || result.reasoning || null,
   }));
 
+  // Whether a proposal duplicates something the property already knows is the
+  // MODEL's call, not this layer's: the triage prompt shows it the current
+  // knowledge, the pending queue, and the rejected list, all with their values,
+  // and it decides. Titles here are free text the model writes fresh each run, so
+  // matching on them would be guessing — and a wrong guess either merges two
+  // distinct facts or buries a real correction. See draftKnowledge.ts.
+  //
   // Insert one row at a time rather than as a batch. The partial unique index
   // (property_id, md5(target)) WHERE status='pending' — migration
   // 20260716140000 — is what actually stops concurrent triage runs from writing
