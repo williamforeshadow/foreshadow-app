@@ -26,7 +26,8 @@ import { ScheduledItemsCell, DayKanban } from './timeline';
 import { TimelineNavBar } from './timeline/TimelineNavBar';
 import { WeatherWidgetTrigger } from './timeline/WeatherWidgetTrigger';
 import { statusBackground } from './timeline/timelineStatus';
-import { RESERVATION_BAR_DIAGONAL_PX } from '@/components/properties/schedule/scheduleDates';
+import { RESERVATION_BAR_DIAGONAL_PX, reservationBarTipShading } from '@/components/properties/schedule/scheduleDates';
+import { ReservationBarTips } from '@/components/properties/schedule/ReservationBarTips';
 import { ProjectCard } from './projects/ProjectCard';
 import { scheduleTaskToCardItem } from './timeline/scheduleTaskCardMapping';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
@@ -208,6 +209,9 @@ function ReservationHoverBar({
   style,
   showLabel,
   labelPaddingPx,
+  labelMaxWidthPx,
+  tipLeft,
+  tipRight,
   formatDate,
   onOpen,
 }: {
@@ -218,6 +222,12 @@ function ReservationHoverBar({
   style: React.CSSProperties;
   showLabel: boolean;
   labelPaddingPx: number;
+  // Hard cap on the name's width so it ellipsizes before it can slide under a
+  // task chip painted in a later cell. Undefined = nothing in the way; the
+  // bar's own overflow-hidden is the only limit.
+  labelMaxWidthPx?: number;
+  tipLeft: boolean;
+  tipRight: boolean;
   formatDate: (d: Date) => string;
   onOpen: (id: string) => void;
 }) {
@@ -297,8 +307,23 @@ function ReservationHoverBar({
           onOpen(reservation.id);
         }}
       >
+        <ReservationBarTips left={tipLeft} right={tipRight} />
         {showLabel && (
-          <span className="truncate" style={{ paddingLeft: labelPaddingPx, paddingRight: labelPaddingPx }}>
+          <span
+            className="truncate"
+            style={{
+              paddingLeft: labelPaddingPx,
+              // The right padding only exists to keep the name off the
+              // check-out slant. When the cap is what stops the text, that
+              // slant is nowhere near it, so the padding would just eat width
+              // the name could be using.
+              paddingRight: labelMaxWidthPx != null ? 0 : labelPaddingPx,
+              // box-sizing is border-box app-wide, so the cap has to cover the
+              // left padding too — it's measured from the bar's left edge,
+              // which is where that padding starts.
+              maxWidth: labelMaxWidthPx != null ? labelMaxWidthPx + labelPaddingPx : undefined,
+            }}
+          >
             {guestLabel}
           </span>
         )}
@@ -1435,6 +1460,45 @@ export default function TimelineWindow({
                           const leftDiagonal = startsBeforeRange ? '0px' : `${diagonalPx}px`;
                           const rightDiagonal = flushRight ? '0px' : `${diagonalPx}px`;
                           const clipPath = `polygon(${leftDiagonal} 0%, 100% 0%, calc(100% - ${rightDiagonal}) 100%, 0% 100%)`;
+                          // Darken the acute tips — but only on edges that are
+                          // a real check-in / check-out. A bar that runs off
+                          // the visible range renders flush with no slant, and
+                          // shading that edge would imply a boundary that isn't
+                          // there.
+                          const tipShading = reservationBarTipShading({
+                            left: !startsBeforeRange,
+                            right: !flushRight,
+                          });
+
+                          // The guest name is painted INSIDE the bar, but task
+                          // chips are painted in the CELLS (z-16, over the bar's
+                          // z-15) anchored 2px from each cell's left edge. So a
+                          // name long enough to run past the check-in cell slides
+                          // underneath the first chip of the next occupied cell.
+                          // Cap the label at that chip's leading edge and let it
+                          // ellipsize instead of being covered.
+                          //
+                          // Only cells AFTER the check-in one can obstruct: the
+                          // check-in cell's own chips sit at its bottom-left,
+                          // which START_FRAC already clears. An expanded row
+                          // draws no chips at all, so there's nothing to dodge.
+                          const CHIP_INSET_PX = 2;   // ScheduledItemsCell's left-0.5
+                          const LABEL_GUTTER_PX = 4; // breathing room before the chip
+                          let labelMaxWidthPx: number | undefined;
+                          if (cw > 0 && !startsBeforeRange && !expandedProperties.has(property)) {
+                            const labelStart = START_FRAC * cw + diagonalPx + 6;
+                            for (let j = idx + 1; j < idx + span && j < dateRange.length; j++) {
+                              const d = dateRange[j];
+                              const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                              const occupied = displayedScheduledTasks.some(
+                                (t) => t.property_name === property && t.scheduled_date === key,
+                              );
+                              if (!occupied) continue;
+                              const chipEdge = (j - idx) * cw + CHIP_INSET_PX;
+                              labelMaxWidthPx = Math.max(0, chipEdge - LABEL_GUTTER_PX - labelStart);
+                              break; // first obstruction wins
+                            }
+                          }
 
                           // Reservation bar color — single shared lavender.
                           // Status (not_started / in_progress / complete) is
@@ -1472,6 +1536,7 @@ export default function TimelineWindow({
                             width: widthStyle,
                             zIndex: 15,
                             clipPath,
+                            backgroundImage: tipShading,
                             borderRadius: startsBeforeRange && flushRight
                               ? '0'
                               : startsBeforeRange
@@ -1489,6 +1554,9 @@ export default function TimelineWindow({
                               style={barStyle}
                               showLabel={!startsBeforeRange}
                               labelPaddingPx={diagonalPx + 6}
+                              tipLeft={!startsBeforeRange}
+                              tipRight={!flushRight}
+                              labelMaxWidthPx={labelMaxWidthPx}
                               formatDate={formatDate}
                               onOpen={openReservationViewer}
                             />

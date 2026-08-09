@@ -7,6 +7,58 @@ import { parseISO } from 'date-fns';
 // week/month views. Tune here, not in the individual components.
 export const RESERVATION_BAR_DIAGONAL_PX = 8;
 
+// Horizontal thickness of the solid line that caps the slanted tip. Measured
+// horizontally because that's how the clip polygon is expressed; the line reads
+// ~6% thinner than this perpendicular to the edge, which is the dimension the
+// eye judges.
+export const RESERVATION_BAR_TIP_EDGE_PX = 1.5;
+
+// How far the tip shading reaches into the bar, as a multiple of the slant.
+// 2.5x reads as "the point has depth"; much longer starts to look like a
+// vignette on short bars, much shorter like a hard edge.
+export const RESERVATION_BAR_TIP_FADE_RATIO = 2.5;
+
+/**
+ * `background-image` layers that darken the acute tips of a reservation bar so
+ * the check-in / check-out ends read as deliberate points rather than as a
+ * strip that happens to stop.
+ *
+ * Two things make this work without any geometry of its own:
+ *  - The bar's clip-path already cuts the parallelogram, and a clip-path clips
+ *    the element's background too — so a plain horizontal fade automatically
+ *    takes the slant's shape, darkest at the acute corner (bottom-left on
+ *    check-in, top-right on check-out) and fanning out along the diagonal.
+ *  - Backgrounds paint UNDER borders, so the bar's `border-t` rim light
+ *    survives the shading intact.
+ *
+ * Stops are in px, not %, so a one-night bar and a two-week bar get identically
+ * sized tips.
+ *
+ * Pass `left`/`right` only for edges that are a REAL check-in / check-out. An
+ * edge that runs off the visible range (or wraps to the next week) renders
+ * flush with no slant, and shading it would imply a boundary that isn't there —
+ * so the gradient doubles as the signal for "this is where the stay actually
+ * begins/ends."
+ *
+ * Returns undefined when neither end is shaded, so it can be spread into a
+ * style object without painting an empty layer.
+ */
+export function reservationBarTipShading(opts: {
+  left: boolean;
+  right: boolean;
+  diagonalPx?: number;
+}): string | undefined {
+  const diagonal = opts.diagonalPx ?? RESERVATION_BAR_DIAGONAL_PX;
+  const fade = Math.round(diagonal * RESERVATION_BAR_TIP_FADE_RATIO);
+  // Theme-aware: a black wash needs roughly double the alpha on the dark fill
+  // to register at all. Token pair lives in globals.css.
+  const shade = 'var(--res-bar-tip-shade)';
+  const layers: string[] = [];
+  if (opts.left) layers.push(`linear-gradient(90deg, ${shade}, transparent ${fade}px)`);
+  if (opts.right) layers.push(`linear-gradient(270deg, ${shade}, transparent ${fade}px)`);
+  return layers.length > 0 ? layers.join(', ') : undefined;
+}
+
 // Reservation dates come as YYYY-MM-DD strings or ISO timestamps. We always
 // want the local-day, so slice + parse explicitly to dodge timezone shifts.
 export function toDateOnly(raw: string): Date {

@@ -6,6 +6,8 @@ import { X, Plus, ChevronRight } from 'lucide-react';
 import { type TaskRowItem } from './TaskRow';
 import { MobileTaskRow } from './MobileTaskRow';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
+import { reservationBarTipShading } from '@/components/properties/schedule/scheduleDates';
+import { ReservationBarTips } from '@/components/properties/schedule/ReservationBarTips';
 
 // Shared "click a day → see its schedule" detail panel.
 //
@@ -229,6 +231,14 @@ export function DayDetailPanel({
                   // bar's diagonalPx + 6 inner padding pattern).
                   const paddingLeft = cutLeft ? diagonalPx + 8 : 12;
                   const paddingRight = cutRight ? diagonalPx + 8 : 12;
+                  // Same tip shading as the timeline bars, scaled off this
+                  // row's wider 12px cut. A mid-stay row has no cut on either
+                  // side, so it stays flat.
+                  const tipShading = reservationBarTipShading({
+                    left: cutLeft,
+                    right: cutRight,
+                    diagonalPx,
+                  });
                   return (
                     <button
                       key={res.id}
@@ -240,15 +250,21 @@ export function DayDetailPanel({
                       style={{
                         clipPath,
                         borderRadius,
+                        backgroundImage: tipShading,
                         paddingLeft,
                         paddingRight,
                       }}
-                      className={`w-full flex items-center justify-between gap-3 py-2.5 text-left border-t bg-[var(--turnover-purple-bg)] border-[var(--turnover-purple-border)] transition-colors ${
+                      className={`relative w-full flex items-center justify-between gap-3 py-2.5 text-left border-t bg-[var(--turnover-purple-bg)] border-[var(--turnover-purple-border)] transition-colors ${
                         clickable
                           ? 'hover:bg-[var(--turnover-purple-bg-hover)] cursor-pointer'
                           : 'cursor-default'
                       }`}
                     >
+                      <ReservationBarTips
+                        left={cutLeft}
+                        right={cutRight}
+                        diagonalPx={diagonalPx}
+                      />
                       <span className="text-[13px] font-medium text-[#1a1a18] dark:text-[#f0efed] truncate">
                         {res.guest_name || 'No guest'}
                       </span>

@@ -18,7 +18,9 @@ import { useIsMobile } from '@/lib/useIsMobile';
 import {
   toDateOnly,
   RESERVATION_BAR_DIAGONAL_PX,
+  reservationBarTipShading,
 } from '@/components/properties/schedule/scheduleDates';
+import { ReservationBarTips } from '@/components/properties/schedule/ReservationBarTips';
 
 // ---- Types ---------------------------------------------------------------
 
@@ -545,6 +547,13 @@ export function MonthGrid({
                     ? '0px'
                     : `${BAR_DIAGONAL_PX}px`;
                   const clipPath = `polygon(${leftDiag} 0%, 100% 0%, calc(100% - ${rightDiag}) 100%, 0% 100%)`;
+                  // Darken the acute tips of a real check-in / check-out. A
+                  // week-wrapped edge is flush with no slant, and a block has
+                  // no slant at all, so neither gets shading.
+                  const tipShading = reservationBarTipShading({
+                    left: !isBlock && !bar.startsBefore,
+                    right: !isBlock && !bar.endsAfter,
+                  });
 
                   const borderRadius =
                     bar.startsBefore && bar.endsAfter
@@ -568,6 +577,7 @@ export function MonthGrid({
                         top,
                         height: BAR_HEIGHT,
                         clipPath,
+                        backgroundImage: tipShading,
                         borderRadius,
                       }}
                       title={
@@ -578,6 +588,10 @@ export function MonthGrid({
                         format(toDateOnly(r.check_out), 'MMM d')
                       }
                     >
+                      <ReservationBarTips
+                        left={!isBlock && !bar.startsBefore}
+                        right={!isBlock && !bar.endsAfter}
+                      />
                       {/* Only label the segment where the reservation
                           actually starts; continuation bars in later weeks
                           stay empty so the name doesn't repeat. Title

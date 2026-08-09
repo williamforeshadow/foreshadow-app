@@ -19,6 +19,8 @@ import type { FilterOption } from '@/components/tasks/TaskFilterBar';
 // Same flat status ramp the desktop Schedule uses — mobile kept a private
 // copy of the old marble map, which is exactly how the two drifted apart.
 import { statusBackground } from '@/components/windows/timeline/timelineStatus';
+import { reservationBarTipShading } from '@/components/properties/schedule/scheduleDates';
+import { ReservationBarTips } from '@/components/properties/schedule/ReservationBarTips';
 
 // Mobile task dots are kept to a SINGLE row per cell; any remainder collapses
 // into a trailing "+N" circle. Week cells (72px) fit more dots than month
@@ -574,6 +576,14 @@ export default function MobileTimelineView({
                         const leftDiag = startsBeforeRange ? '0px' : `${diagonalPx}px`;
                         const rightDiag = flushRight ? '0px' : `${diagonalPx}px`;
                         const clipPath = `polygon(${leftDiag} 0%, 100% 0%, calc(100% - ${rightDiag}) 100%, 0% 100%)`;
+                        // Tip shading on real check-in / check-out edges only —
+                        // scaled off this view's own diagonal, which is wider in
+                        // week view than month.
+                        const tipShading = reservationBarTipShading({
+                          left: !startsBeforeRange,
+                          right: !flushRight,
+                          diagonalPx,
+                        });
 
                         const borderRadius = `${startsBeforeRange ? '0' : '8'}px ${flushRight ? '0' : '8'}px ${flushRight ? '0' : '8'}px ${startsBeforeRange ? '0' : '8'}px`;
 
@@ -605,10 +615,16 @@ export default function MobileTimelineView({
                               width: widthValue,
                               zIndex: 15,
                               clipPath,
+                              backgroundImage: tipShading,
                               borderRadius,
                             }}
                             title={resLabel}
                           >
+                            <ReservationBarTips
+                              left={!startsBeforeRange}
+                              right={!flushRight}
+                              diagonalPx={diagonalPx}
+                            />
                             {!startsBeforeRange && (
                               <span
                                 className="truncate whitespace-nowrap"

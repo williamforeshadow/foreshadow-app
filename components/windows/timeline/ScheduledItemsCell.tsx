@@ -20,6 +20,8 @@ interface ScheduledItemsCellProps {
   tasks: (Task & { property_name: string })[];
   projects?: never[];
   viewMode?: 'week' | 'month';
+  // Property row is expanded into its per-task card row — suppresses the cell
+  // chips entirely, since the cards below say the same thing in full.
   expanded?: boolean;
   onTaskClick?: (task: Task) => void;
 }
@@ -97,9 +99,9 @@ function TaskIcon({
   const Icon = getDepartmentIcon(dept?.icon);
   const isContingent = task.status === 'contingent';
   // One size for both views now. Week chips were 22px against a 44px row; the
-  // row is --schedule-row-h (35px) and 0.8 of 22 is 18 — which is what month
-  // already used, so the two collapsed onto the same value rather than week
-  // keeping a size that would fill nearly the whole row.
+  // row is --schedule-row-h and 0.8 of 22 is 18 — which is what month already
+  // used, so the two collapsed onto the same value rather than week keeping a
+  // size that would fill nearly the whole row.
   const box = 'w-[18px] h-[18px]';
   const glyph = 'w-3 h-3';
 
@@ -154,6 +156,14 @@ export function ScheduledItemsCell({
     .sort(byScheduleThenTitle);
 
   if (scheduledTasks.length === 0) {
+    return null;
+  }
+
+  // Property row is expanded: the detail row below renders every one of these
+  // tasks as a full card, in this same column and uncapped — so the chips would
+  // only restate, in a lossier form, what's already spelled out underneath.
+  // Collapsing the row brings them straight back.
+  if (expanded) {
     return null;
   }
 
@@ -241,29 +251,23 @@ export function ScheduledItemsCell({
 
   return (
     <div className="absolute bottom-0.5 left-0.5 z-[16]">
-      {expanded ? (
-        // Property row is expanded — the full per-task list renders in the
-        // detail row below (same TaskRowList), so the cell shows icons only.
-        iconRow
-      ) : (
-        <HoverCard openDelay={0} closeDelay={100}>
-          <HoverCardTrigger asChild>
-            <div className="cursor-pointer">{iconRow}</div>
-          </HoverCardTrigger>
-          <HoverCardContent
-            side="bottom"
-            align="start"
-            sideOffset={4}
-            collisionPadding={16}
-            className="w-72 p-1 bg-white dark:bg-[var(--timeline-surface-4)] border border-[rgba(30,25,20,0.08)] dark:border-[var(--timeline-border-strong)] shadow-lg"
-          >
-            <HoverCardArrow className="fill-white dark:fill-[var(--timeline-surface-4)]" />
-            <div className="max-h-48 overflow-y-auto subtle-scrollbar">
-              <TaskRowList tasks={scheduledTasks} onTaskClick={(t) => onTaskClick?.(t)} />
-            </div>
-          </HoverCardContent>
-        </HoverCard>
-      )}
+      <HoverCard openDelay={0} closeDelay={100}>
+        <HoverCardTrigger asChild>
+          <div className="cursor-pointer">{iconRow}</div>
+        </HoverCardTrigger>
+        <HoverCardContent
+          side="bottom"
+          align="start"
+          sideOffset={4}
+          collisionPadding={16}
+          className="w-72 p-1 bg-white dark:bg-[var(--timeline-surface-4)] border border-[rgba(30,25,20,0.08)] dark:border-[var(--timeline-border-strong)] shadow-lg"
+        >
+          <HoverCardArrow className="fill-white dark:fill-[var(--timeline-surface-4)]" />
+          <div className="max-h-48 overflow-y-auto subtle-scrollbar">
+            <TaskRowList tasks={scheduledTasks} onTaskClick={(t) => onTaskClick?.(t)} />
+          </div>
+        </HoverCardContent>
+      </HoverCard>
     </div>
   );
 }

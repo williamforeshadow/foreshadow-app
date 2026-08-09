@@ -69,17 +69,24 @@
      RESERVATION_BAR_DIAGONAL_PX), so shortening the row without shortening
      the bar steepens every slant on the page.
 
-     These are the originals (200 / 240 / 44 / 28) scaled by 0.8, which holds
-     the cell's aspect ratio to within 0.6% of what it was: 192/35 = 5.49
-     against 240/44 = 5.45. That matters because an expanded row is
-     auto-height — the task cards inside it are sized by the COLUMN, so the
-     column is what decides whether they still read as rectangles.
+     The widths are the originals (200 / 240) scaled by 0.8. The payoff is
+     horizontal: at 1440 the content card is ~1166px wide, and 176 + 5x192 =
+     1136 fits five day columns where 200 + 240 fit four. Column width is also
+     what sizes the task cards in an expanded row (which is auto-height), so
+     it's the number that decides whether those still read as rectangles —
+     don't trade it away.
 
-     The payoff is horizontal: at 1440 the content card is ~1166px wide, and
-     176 + 5x192 = 1136 fits five day columns where 200 + 240 fit four. */
+     Row height is NOT on that leash, and no longer tracks the 0.8 scale: it
+     only has to hold the bar plus a margin, so it was trimmed 35 -> 28 to take
+     the slack out from above and below the reservation bar. That leaves a 3px
+     inset, which is about the floor — much tighter and the bar reads as if it
+     were drawing the horizontal gridlines itself. The bar's own
+     height is what must not move — the 8px slant is a fixed HORIZONTAL offset
+     over that height, so shrinking the bar steepens every slant on the page.
+     Shortening the row alone just re-centres it. */
   --schedule-property-col: 176px;
   --schedule-day-col: 192px;
-  --schedule-row-h: 35px;
+  --schedule-row-h: 28px;
   --schedule-bar-h: 22px;
   /* Centres the bar in the row, keeping it clear of both horizontal borders
      so they read as grid lines rather than as the bar's own outline. */
@@ -231,6 +238,17 @@
   --turnover-purple-bg-hover: rgba(167, 139, 250, 0.40);
   --turnover-purple-border:   rgba(167, 139, 250, 0.55);
 
+  /* Shading at the acute tips of a reservation bar's check-in / check-out
+     slant (see reservationBarTipShading in scheduleDates.ts). Dark mode runs
+     roughly double this alpha — a black wash over the near-black bar fill
+     barely registers at the light-mode strength. Kept under ~0.20 in light so
+     the guest name, which sits inside the fade, stays comfortably legible. */
+  --res-bar-tip-shade: rgba(0, 0, 0, 0.14);
+  /* The solid line capping the slant itself — deliberately well clear of the
+     wash's starting alpha so the tip terminates in a defined edge instead of
+     just fading out. */
+  --res-bar-tip-edge:  rgba(0, 0, 0, 0.26);
+
   /* Concierge proposal bubbles (Reply / Knowledge / Task). Same frosted-glass
      recipe as the turnover cards (low-alpha tint over .glass-card blur), but the
      three hues are intentionally DESATURATED versions of the vivid amber / cyan /
@@ -358,6 +376,10 @@
   --turnover-purple-bg:       rgba(167, 139, 250, 0.18);
   --turnover-purple-bg-hover: rgba(167, 139, 250, 0.28);
   --turnover-purple-border:   rgba(167, 139, 250, 0.45);
+
+  /* Dark-mode reservation-bar tip shading — see the :root note. */
+  --res-bar-tip-shade: rgba(0, 0, 0, 0.28);
+  --res-bar-tip-edge:  rgba(0, 0, 0, 0.42);
 
   /* Dark-mode proposal tints — lighter alphas than light mode (see :root note). */
   --proposal-reply-bg:        rgba(206, 170, 92, 0.15);
