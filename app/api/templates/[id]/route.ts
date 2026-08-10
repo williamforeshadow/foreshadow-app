@@ -80,7 +80,7 @@ export async function PUT(
     const { supabase } = ctx;
 
     const body = await request.json();
-    const { name, description, fields, department_id } = body;
+    const { name, description, fields, department_id, informs_readiness } = body;
 
     if (!name || !fields) {
       return NextResponse.json(
@@ -96,6 +96,7 @@ export async function PUT(
         description,
         fields,
         department_id: department_id || null,
+        ...(typeof informs_readiness === 'boolean' ? { informs_readiness } : {}),
         updated_at: new Date().toISOString()
       })
       .eq('id', id)

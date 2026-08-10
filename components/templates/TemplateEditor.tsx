@@ -12,7 +12,9 @@ import {
   MetaChip,
   RowIconButton,
   SectionLabel,
+  ToggleRow,
 } from '@/components/ui/panel/PanelForm';
+import InfoTooltip from './InfoTooltip';
 import { DeptGlyph } from '@/components/tasks/DeptGlyph';
 import {
   FieldTypeGlyph,
@@ -74,6 +76,7 @@ interface TemplateEditorProps {
   initialDepartmentId?: string | null;
   initialDescription?: string;
   initialFields?: FieldDefinition[];
+  initialInformsReadiness?: boolean;
 }
 
 export default function TemplateEditor({
@@ -82,6 +85,7 @@ export default function TemplateEditor({
   initialDepartmentId = null,
   initialDescription = '',
   initialFields = [],
+  initialInformsReadiness = false,
 }: TemplateEditorProps) {
   const router = useRouter();
   const isEditing = !!templateId;
@@ -90,6 +94,7 @@ export default function TemplateEditor({
   const [departmentId, setDepartmentId] = useState<string | null>(initialDepartmentId);
   const { departments, deptIconMap } = useDepartments();
   const [formDescription, setFormDescription] = useState(initialDescription);
+  const [informsReadiness, setInformsReadiness] = useState(initialInformsReadiness);
   const [fields, setFields] = useState<FieldDefinition[]>(initialFields);
   const [formErrors, setFormErrors] = useState<{ name?: string }>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -156,6 +161,7 @@ export default function TemplateEditor({
         department_id: departmentId,
         description: formDescription || null,
         fields,
+        informs_readiness: informsReadiness,
       };
 
       if (isEditing) {
@@ -308,6 +314,14 @@ export default function TemplateEditor({
               style={{ color: 'var(--task-ink-1)' }}
             />
           </div>
+
+          <ToggleRow
+            label="Informs property readiness"
+            hint={<InfoTooltip text="Tasks from this template scheduled between a check-out and the next check-in gate the property's readiness indicator on the Schedule" />}
+            checked={informsReadiness}
+            onChange={() => setInformsReadiness((v) => !v)}
+            disabled={isSaving}
+          />
 
           <SectionLabel>Fields</SectionLabel>
 

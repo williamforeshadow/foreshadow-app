@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     const { supabase, orgId } = ctx;
 
     const body = await request.json();
-    const { name, description, fields, department_id } = body;
+    const { name, description, fields, department_id, informs_readiness } = body;
 
     if (!name || !fields) {
       return NextResponse.json(
@@ -60,6 +60,7 @@ export async function POST(request: Request) {
         description,
         fields,
         department_id: department_id || null,
+        informs_readiness: typeof informs_readiness === 'boolean' ? informs_readiness : false,
         org_id: orgId,
       })
       .select()

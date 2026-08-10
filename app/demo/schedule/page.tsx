@@ -81,7 +81,18 @@ function makeMockFetch(original: typeof fetch): typeof fetch {
       return json({ answer: CANNED_ANSWER });
     }
 
-    // Supabase — the Schedule's data
+    // The Schedule's data. useTimeline reads these via /api routes (the
+    // direct-Supabase reads moved server-side with RLS); the /rest/v1
+    // variants are kept for anything still reading the client SDK.
+    if (url.includes('/api/turnovers')) {
+      await delay(150);
+      return json({ data: getDemoTurnovers() });
+    }
+    if (url.includes('/api/recurring-tasks')) {
+      await delay(150);
+      return json({ data: getDemoRecurringRows() });
+    }
+    if (url.includes('/api/calendar-blocks')) return json({ blocks: [] });
     if (url.includes('/rest/v1/rpc/get_property_turnovers')) {
       await delay(150);
       return json(getDemoTurnovers());

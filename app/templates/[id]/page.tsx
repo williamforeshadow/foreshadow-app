@@ -20,6 +20,7 @@ interface Template {
   department_id: string | null;
   description: string | null;
   fields: FieldDefinition[];
+  informs_readiness?: boolean;
 }
 
 export default function EditTemplatePage({ params }: { params: Promise<{ id: string }> }) {
@@ -68,6 +69,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
       initialDepartmentId={template.department_id}
       initialDescription={template.description || ''}
       initialFields={template.fields}
+      initialInformsReadiness={template.informs_readiness ?? false}
     />
   );
 }

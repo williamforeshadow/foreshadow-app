@@ -143,6 +143,9 @@ function buildTask(
     task_id: `t-${seq}`,
     template_id: undefined,
     template_name: title,
+    // Turnover tasks gate readiness in the demo so the property rows show
+    // the ready / needs-attention icons.
+    informs_readiness: true,
     title,
     description: null,
     priority: ['low', 'medium', 'high'][seq % 3],
@@ -190,6 +193,12 @@ export function getDemoTurnovers(): Turnover[] {
         taskSeq += 1;
         return buildTask(prop, title, tStatus, checkOutOff, user(taskSeq), dept(taskSeq), taskSeq);
       });
+
+      // Leave one past-stay turnover task open on every third property so the
+      // demo shows both readiness states (amber loader vs violet check).
+      if (si === 1 && pi % 3 === 1 && tasks.length > 0) {
+        tasks[0].status = 'not_started';
+      }
 
       out.push({
         id: `res-${resSeq}`,

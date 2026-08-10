@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger, PopoverClose } from '@/components/ui/popover';
 import { useTimeline } from '@/lib/useTimeline';
-import { getActiveTurnoverForProperty } from '@/lib/turnoverUtils';
+import { getPropertyReadiness } from '@/lib/propertyReadiness';
 import {
   DndContext,
   DragOverlay,
@@ -44,7 +44,7 @@ import {
   DESKTOP_TIMELINE_DETAIL_PANEL_FLEX,
   DESKTOP_TASK_PANEL_SLOT,
 } from '@/lib/detailPanelGeometry';
-import { ClipboardCheck, Filter as FilterIcon } from 'lucide-react';
+import { CircleCheck, Loader, Filter as FilterIcon } from 'lucide-react';
 import { CompactSearch } from '@/components/ui/compact-search';
 import { RowsIcon, KanbanColumnsIcon } from './timeline/TimelineViewIcons';
 import type { Task, User } from '@/lib/types';
@@ -1260,7 +1260,7 @@ export default function TimelineWindow({
             {displayedProperties.map((property) => {
               const propertyReservations = getReservationsForProperty(property);
               const propertyBlocks = getBlocksForProperty(property);
-              const activeTurnover = getActiveTurnoverForProperty(propertyReservations);
+              const readiness = getPropertyReadiness(propertyReservations);
 
               // Y axis carries the HEADER tone, not the axis tone, so the
               // property column reads as one continuous band running down from
@@ -1302,13 +1302,17 @@ export default function TimelineWindow({
                         <span className="flex-1 min-w-0 truncate pr-14">{property}</span>
                       );
                     })()}
-                    {activeTurnover && (() => {
+                    {readiness && (() => {
                       return (
                         <Popover>
                           <PopoverTrigger asChild>
                             <div className="absolute right-0 top-0 bottom-0 w-16 flex items-center justify-end pr-2 cursor-pointer">
-                              <div className="flex items-center px-2 py-1 rounded-lg bg-[rgba(30,25,20,0.06)] dark:bg-[rgba(255,255,255,0.06)] text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.10)] dark:hover:bg-[rgba(255,255,255,0.10)] transition-colors">
-                                <ClipboardCheck className="w-3 h-3" />
+                              <div className="flex items-center px-2 py-1 rounded-lg bg-[rgba(30,25,20,0.06)] dark:bg-[rgba(255,255,255,0.06)] hover:bg-[rgba(30,25,20,0.10)] dark:hover:bg-[rgba(255,255,255,0.10)] transition-colors">
+                                {readiness.state === 'ready' ? (
+                                  <CircleCheck className="w-3 h-3 text-[#4C4869] dark:text-[#6e6a8a]" />
+                                ) : (
+                                  <Loader className="w-3 h-3 text-[#dc4a3a] dark:text-[#d97757]" />
+                                )}
                               </div>
                             </div>
                           </PopoverTrigger>
@@ -1325,11 +1329,11 @@ export default function TimelineWindow({
                             
                             <div className="px-2 py-2">
                               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
-                                Active Turnover: ({activeTurnover.completed_tasks || 0}/{activeTurnover.total_tasks || 0})
+                                Property Readiness: ({readiness.completed}/{readiness.total})
                               </p>
                               <div className="flex flex-col gap-2 max-h-40 overflow-y-auto subtle-scrollbar">
-                                {activeTurnover.tasks && activeTurnover.tasks.length > 0 ? (
-                                  activeTurnover.tasks.map((task) => {
+                                {readiness.tasks.length > 0 ? (
+                                  readiness.tasks.map((task) => {
                                     const rowStyle = getRowStyles(task.status);
                                     return (
                                       <div 
@@ -1340,7 +1344,7 @@ export default function TimelineWindow({
                                           setFloatingData({
                                             type: 'task',
                                             item: task,
-                                            propertyName: activeTurnover.property_name,
+                                            propertyName: readiness.reservation.property_name,
                                           });
                                         }}
                                       >
@@ -1349,7 +1353,7 @@ export default function TimelineWindow({
                                     );
                                   })
                                 ) : (
-                                  <p className="text-sm text-muted-foreground px-1">No tasks</p>
+                                  <p className="text-sm text-muted-foreground px-1">No readiness tasks scheduled</p>
                                 )}
                               </div>
                             </div>

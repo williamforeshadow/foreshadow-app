@@ -59,6 +59,12 @@ export interface Task {
   task_id: string;
   template_id?: string;
   template_name?: string;
+  /**
+   * Mirror of templates.informs_readiness, joined live by
+   * get_property_turnovers. When true, this task gates the property-readiness
+   * indicator on the Schedule (see lib/propertyReadiness.ts).
+   */
+  informs_readiness?: boolean;
   title?: string | null;
   description?: TiptapJSON | null;
   priority?: string | null;
@@ -91,6 +97,8 @@ export interface TaskTemplate {
   department_name?: string | null;
   sections?: TaskTemplateSection[];
   fields?: TaskTemplateField[];
+  /** Tasks from this template gate the Schedule's property-readiness icon. */
+  informs_readiness?: boolean;
 }
 
 export interface TaskTemplateSection {
