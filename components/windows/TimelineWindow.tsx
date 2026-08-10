@@ -209,7 +209,7 @@ function ReservationHoverBar({
   style,
   showLabel,
   labelPaddingPx,
-  labelMaxWidthPx,
+  labelMaxWidth,
   tipLeft,
   tipRight,
   formatDate,
@@ -223,9 +223,10 @@ function ReservationHoverBar({
   showLabel: boolean;
   labelPaddingPx: number;
   // Hard cap on the name's width so it ellipsizes before it can slide under a
-  // task chip painted in a later cell. Undefined = nothing in the way; the
-  // bar's own overflow-hidden is the only limit.
-  labelMaxWidthPx?: number;
+  // task chip painted in a later cell. A CSS length (px when the column has
+  // been measured, else a calc() off the declared column width). Undefined =
+  // nothing in the way; the bar's own overflow-hidden is the only limit.
+  labelMaxWidth?: string;
   tipLeft: boolean;
   tipRight: boolean;
   formatDate: (d: Date) => string;
@@ -317,11 +318,11 @@ function ReservationHoverBar({
               // check-out slant. When the cap is what stops the text, that
               // slant is nowhere near it, so the padding would just eat width
               // the name could be using.
-              paddingRight: labelMaxWidthPx != null ? 0 : labelPaddingPx,
-              // box-sizing is border-box app-wide, so the cap has to cover the
-              // left padding too — it's measured from the bar's left edge,
+              paddingRight: labelMaxWidth ? 0 : labelPaddingPx,
+              // box-sizing is border-box app-wide, so this already covers the
+              // left padding — the cap is measured from the bar's left edge,
               // which is where that padding starts.
-              maxWidth: labelMaxWidthPx != null ? labelMaxWidthPx + labelPaddingPx : undefined,
+              maxWidth: labelMaxWidth,
             }}
           >
             {guestLabel}
@@ -1482,11 +1483,22 @@ export default function TimelineWindow({
                           // check-in cell's own chips sit at its bottom-left,
                           // which START_FRAC already clears. An expanded row
                           // draws no chips at all, so there's nothing to dodge.
+                          //
+                          // Deliberately NOT gated on `cw > 0`. The cap works out
+                          // to (cells - START_FRAC) * columnWidth + inset - gutter,
+                          // and the label's own left padding cancels against the
+                          // border-box max-width, so all that's needed is a column
+                          // width. colWidth is 0 until the grid's tracks resolve,
+                          // which on a cold load is AFTER this renders — gating on
+                          // it meant the cap silently did nothing until something
+                          // remounted the grid (a Kanban round-trip), then worked
+                          // until the next refresh. The bars themselves hide that,
+                          // since their %-fallback mirrors these same fractions.
                           const CHIP_INSET_PX = 2;   // ScheduledItemsCell's left-0.5
                           const LABEL_GUTTER_PX = 4; // breathing room before the chip
-                          let labelMaxWidthPx: number | undefined;
-                          if (cw > 0 && !startsBeforeRange && !expandedProperties.has(property)) {
-                            const labelStart = START_FRAC * cw + diagonalPx + 6;
+                          const TRAIL_PX = CHIP_INSET_PX - LABEL_GUTTER_PX; // -2px
+                          let labelMaxWidth: string | undefined;
+                          if (!startsBeforeRange && !expandedProperties.has(property)) {
                             for (let j = idx + 1; j < idx + span && j < dateRange.length; j++) {
                               const d = dateRange[j];
                               const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -1494,8 +1506,20 @@ export default function TimelineWindow({
                                 (t) => t.property_name === property && t.scheduled_date === key,
                               );
                               if (!occupied) continue;
-                              const chipEdge = (j - idx) * cw + CHIP_INSET_PX;
-                              labelMaxWidthPx = Math.max(0, chipEdge - LABEL_GUTTER_PX - labelStart);
+                              const cells = j - idx - START_FRAC;
+                              // Measured width when we have it (columns are 1fr and
+                              // can exceed the declared minimum on a wide grid);
+                              // otherwise the declared column, which is exact
+                              // whenever the minimum is what applies.
+                              // Spelled as an explicit +/- term: "+ -2px" parses
+                              // in Chromium but isn't worth relying on in the
+                              // iOS WKWebView the app also ships in.
+                              const trail = TRAIL_PX < 0
+                                ? `- ${Math.abs(TRAIL_PX)}px`
+                                : `+ ${TRAIL_PX}px`;
+                              labelMaxWidth = cw > 0
+                                ? `${Math.max(0, cells * cw + TRAIL_PX)}px`
+                                : `calc(${cells} * var(--schedule-day-col) ${trail})`;
                               break; // first obstruction wins
                             }
                           }
@@ -1556,7 +1580,7 @@ export default function TimelineWindow({
                               labelPaddingPx={diagonalPx + 6}
                               tipLeft={!startsBeforeRange}
                               tipRight={!flushRight}
-                              labelMaxWidthPx={labelMaxWidthPx}
+                              labelMaxWidth={labelMaxWidth}
                               formatDate={formatDate}
                               onOpen={openReservationViewer}
                             />
