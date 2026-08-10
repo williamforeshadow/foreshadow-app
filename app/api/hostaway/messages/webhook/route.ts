@@ -5,6 +5,7 @@ import { ingestConversation } from '@/src/server/messages/ingest';
 import { maybeGenerateProposedReplyForExternal } from '@/src/server/messages/proposedReply';
 import { maybeGenerateProposedTaskForExternal } from '@/src/server/messages/proposedTask';
 import { maybeGenerateProposedKnowledgeForExternal } from '@/src/server/messages/proposedKnowledge';
+import { claimConciergeHooks } from '@/src/server/messages/conciergeHookClaim';
 import { resolveHostawayIntegrationByWebhookSecret, hostawayCredsFor } from '@/lib/pmsIntegrations';
 
 // Hostaway guest-message webhook receiver.
@@ -105,13 +106,6 @@ export async function POST(request: Request) {
 
     // Idempotent insert — unique(org_id, hostaway_message_id) + ignoreDuplicates
     // makes Hostaway's retries / out-of-order redelivery safe (per-org scoped).
-    //
-    // The `select` is what makes the retry safe for the AI hooks too, not just for
-    // the row: ON CONFLICT DO NOTHING returns no row, so a null result means we
-    // already had this message. Without it the code could not tell an insert from
-    // an ignored duplicate, and every redelivery ran the generators again —
-    // producing a second reply draft, a second task, and a second knowledge
-    // proposal for one guest message.
     const { data: insertedRow, error } = await supabase
       .from('guest_messages')
       .upsert(row, { onConflict: 'org_id,hostaway_message_id', ignoreDuplicates: true })
@@ -123,6 +117,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     const isNewMessage = Boolean(insertedRow);
+
+    // Resolve the row id even when we did NOT insert it. ON CONFLICT DO NOTHING
+    // returns no row, and that is not the same thing as "already handled": the
+    // every-minute outbound poll writes message rows too, with realtime side
+    // effects off, so it regularly gets here first. The generators are gated on
+    // an explicit claim below, not on who won this insert.
+    let messageId = insertedRow?.id ?? null;
+    if (!messageId) {
+      const { data: existingRow } = await supabase
+        .from('guest_messages')
+        .select('id')
+        .eq('org_id', orgId)
+        .eq('hostaway_message_id', msg.hostawayMessageId)
+        .maybeSingle();
+      messageId = (existingRow as { id: string } | null)?.id ?? null;
+    }
 
     // Off the response path: pull the whole thread so host/outbound replies
     // (which never webhook to us) get synced. Idempotent; failures are logged
@@ -138,16 +148,28 @@ export async function POST(request: Request) {
           err,
         });
       }
-      // The generators run for a message we haven't seen before, never for a
-      // redelivery. The thread sync above still runs either way: it's idempotent,
-      // and a retry may be the first chance to pull host replies that landed since.
+      // The generators run exactly once per message, for whoever claims them.
+      // The thread sync above still runs either way: it's idempotent, and a
+      // retry may be the first chance to pull host replies that landed since.
       //
-      // Accepted trade-off: if a first delivery stored the message but died before
-      // getting here, the retry no longer regenerates. That's rare and recoverable
-      // (the on-complete hook, and "Regenerate" in the inbox), where duplicate
-      // drafts were happening on every retry.
-      if (!isNewMessage) {
-        console.log('[Hostaway Messages] redelivery — skipping AI hooks', {
+      // Claiming, rather than checking whether this delivery inserted the row,
+      // is what keeps a Hostaway retry from drafting twice WITHOUT also letting
+      // the outbound poll's insert suppress the generators entirely. Both used
+      // to look identical from here — a row this delivery didn't create — and
+      // the poll wins that race often, because Hostaway's webhook lands a median
+      // of 23s after the guest hits send.
+      //
+      // Accepted trade-off, unchanged: a delivery that claims and then dies
+      // leaves the message un-triaged, recoverable through the inbox rather than
+      // by retry. That is the price of never drafting twice.
+      if (!messageId) {
+        console.warn('[Hostaway Messages] no message row to claim — skipping AI hooks', {
+          hostawayMessageId: msg.hostawayMessageId,
+        });
+        return;
+      }
+      if (!(await claimConciergeHooks(messageId))) {
+        console.log('[Hostaway Messages] AI hooks already claimed — skipping', {
           hostawayMessageId: msg.hostawayMessageId,
         });
         return;
