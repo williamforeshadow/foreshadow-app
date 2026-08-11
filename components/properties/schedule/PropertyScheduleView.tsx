@@ -11,7 +11,8 @@ import {
   type ScheduleBlock,
   type ScheduleTask,
 } from './MonthGrid';
-import { ReservationDetailPanel } from './ReservationDetailPanel';
+import { ReservationContextPanel } from '@/components/reservations/ReservationContextPanel';
+import type { ReservationContextTask } from '@/components/reservations/useReservationContext';
 import {
   PropertyTaskDetailOverlay,
   type OverlayTaskInput,
@@ -59,6 +60,10 @@ export default function PropertyScheduleView() {
     null
   );
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  // Bumped after any task mutation so the reservation panel's associated-task
+  // list (a separate reservation-window-tasks query) re-fetches alongside the
+  // schedule grid.
+  const [tasksRefreshKey, setTasksRefreshKey] = useState(0);
 
   // Strict single-panel rule (both directions):
   //   global → local: close our locals when context overlays open
@@ -169,6 +174,18 @@ export default function PropertyScheduleView() {
       setSelectedTask(overlayInput);
     },
     [property.id, property.name, closeGlobals]
+  );
+
+  // Task clicks coming from inside the reservation panel: the panel's tasks
+  // are ReservationContextTask — a structural superset of OverlayTaskInput —
+  // so they hand straight to the shared task overlay.
+  const handlePanelTaskClick = useCallback(
+    (task: ReservationContextTask) => {
+      closeGlobals();
+      setSelectedReservation(null);
+      setSelectedTask(task);
+    },
+    [closeGlobals]
   );
 
   // Day panel support: filter tasks + reservations to a single calendar day
@@ -409,11 +426,17 @@ export default function PropertyScheduleView() {
               : DESKTOP_DETAIL_PANEL_FLEX
           }
         >
-          <ReservationDetailPanel
-            reservation={selectedReservation}
-            allTasks={tasks}
-            onClose={() => setSelectedReservation(null)}
-            onOpenTask={handleTaskClick}
+          <ReservationContextPanel
+            reservationId={selectedReservation.id}
+            header={{
+              title:
+                selectedReservation.kind === 'owner_stay'
+                  ? 'Owner Stay'
+                  : selectedReservation.guest_name || 'Unnamed guest',
+              onClose: () => setSelectedReservation(null),
+            }}
+            onOpenTask={handlePanelTaskClick}
+            tasksRefreshKey={tasksRefreshKey}
           />
         </div>
       )}
@@ -425,7 +448,10 @@ export default function PropertyScheduleView() {
       <PropertyTaskDetailOverlay
         task={selectedTask}
         onClose={() => setSelectedTask(null)}
-        onTaskUpdated={fetchSchedule}
+        onTaskUpdated={() => {
+          fetchSchedule();
+          setTasksRefreshKey((k) => k + 1);
+        }}
         onOpenInPage={
           selectedTask
             ? () => {

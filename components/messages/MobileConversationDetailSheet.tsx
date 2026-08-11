@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
-import { ConversationDetailPanel } from '@/components/messages/ConversationDetailPanel';
+import { ReservationContextPanel } from '@/components/reservations/ReservationContextPanel';
 import type { ProposedTaskData } from '@/components/messages/ProposedTask';
-import type { ReservationContextTask } from '@/components/messages/useReservationContext';
+import type { ReservationContextTask } from '@/components/reservations/useReservationContext';
 import type { ConversationRow } from '@/lib/conversations';
 
 // Mobile "top sheet" for the conversation's reservation context — the same
-// ConversationDetailPanel the desktop right rail renders (reservation summary,
+// ReservationContextPanel the desktop right rail renders (reservation summary,
 // sentiment, associated + proposed tasks). Slides down from the top over the
 // thread, opened from the top-bar "details" button. Backdrop tap or the close
 // button dismisses it.
@@ -119,7 +119,7 @@ export function MobileConversationDetailSheet({
             its inner overflow never engages and the details get clipped. Making
             this wrapper the scroller sidesteps that entirely. */}
         <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar [-webkit-overflow-scrolling:touch]">
-          <ConversationDetailPanel
+          <ReservationContextPanel
             conversation={conversation}
             proposedTasks={proposedTasks}
             tasksRefreshKey={tasksRefreshKey}

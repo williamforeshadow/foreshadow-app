@@ -12,14 +12,14 @@ import { useIsMobile } from '@/lib/useIsMobile';
 import { useMessages } from '@/components/messages/MessagesProvider';
 import { toast } from '@/components/ui/toast';
 import { ConversationThread } from '@/components/messages/ConversationThread';
-import { ConversationDetailPanel } from '@/components/messages/ConversationDetailPanel';
+import { ReservationContextPanel } from '@/components/reservations/ReservationContextPanel';
 import { ConversationOverflowMenu } from '@/components/messages/ConversationOverflowMenu';
 import { MobileConversationDetailSheet } from '@/components/messages/MobileConversationDetailSheet';
 import { ProposedTaskEditorOverlay } from '@/components/messages/ProposedTaskEditorOverlay';
 import { PropertyTaskDetailOverlay } from '@/components/properties/tasks/PropertyTaskDetailOverlay';
 import type { ProposedTaskData } from '@/components/messages/ProposedTask';
 import type { ProposedKnowledgeData } from '@/components/messages/ProposedKnowledge';
-import type { ReservationContextTask } from '@/components/messages/useReservationContext';
+import type { ReservationContextTask } from '@/components/reservations/useReservationContext';
 import type { ConversationRow } from '@/lib/conversations';
 import type { GuestMessageRecord } from '@/lib/messages';
 import { taskPath } from '@/src/lib/links';
@@ -447,7 +447,7 @@ export default function ConversationPage() {
           onProposedKnowledgeChange={load}
           aside={
             <aside className="msg-divider hidden w-80 shrink-0 overflow-hidden border-l lg:block">
-              <ConversationDetailPanel
+              <ReservationContextPanel
                 conversation={conversation}
                 onOpenTask={openTaskDetail}
                 tasksRefreshKey={tasksRefreshKey}

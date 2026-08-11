@@ -10,22 +10,19 @@ import React, {
   useState,
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type {
-  ScheduleReservation,
-  ScheduleTask,
-} from '@/components/properties/schedule/MonthGrid';
 import type { OverlayTaskInput } from '@/components/properties/tasks/PropertyTaskDetailOverlay';
 import { taskPath } from '@/src/lib/links';
 
 // Reservation Viewer
 // ------------------
 // App-wide hook that lets any clickable affordance (notably the key icon
-// rendered next to reservation-bound task titles) request the
-// ReservationDetailPanel for a given reservation_id without each surface
-// having to wire its own state. The provider also owns the fetch + the
-// "task-overlay-on-top" state so that surface-level <ReservationDetailOverlay>
-// instances are pure render-from-context — no per-surface duplication of
-// loading or refetching logic.
+// rendered next to reservation-bound task titles) request the shared
+// reservation panel for a given reservation_id without each surface having
+// to wire its own state. Data fetching lives in the panel itself
+// (ReservationContextPanel → useReservationContext, a react-query cache
+// keyed by reservation id); this provider only owns the open/close +
+// "task-overlay-on-top" state so surface-level <ReservationDetailOverlay>
+// instances are pure render-from-context.
 //
 // Mounting model
 // --------------
@@ -45,15 +42,6 @@ import { taskPath } from '@/src/lib/links';
 // badge instead of a clickable button — clicking would re-open the same
 // reservation that's already on screen.
 
-export interface ReservationDetailData {
-  reservation: ScheduleReservation & {
-    property_id?: string | null;
-    property_name?: string | null;
-  };
-  tasks: ScheduleTask[];
-  window: { start: string; end: string };
-}
-
 interface ReservationViewerContextValue {
   open: (reservationId: string) => void;
   close: () => void;
@@ -65,15 +53,8 @@ interface ReservationViewerContextValue {
    * reservation it already lives inside.
    */
   currentReservationId: string | null;
-  /** The id the overlay is currently fetching/showing (null when closed). */
+  /** The id the overlay is currently showing (null when closed). */
   modalReservationId: string | null;
-
-  // Data state — owned by the provider so multiple overlay mounts (or none)
-  // don't duplicate fetches.
-  data: ReservationDetailData | null;
-  loading: boolean;
-  error: string | null;
-  refetch: () => void;
 
   // Task overlay state. When a row inside the reservation panel is clicked
   // we capture the converted overlay input here; the surface's <PropertyTaskDetailOverlay>
@@ -93,10 +74,6 @@ export const NOOP_VALUE: ReservationViewerContextValue = {
   close: () => {},
   currentReservationId: null,
   modalReservationId: null,
-  data: null,
-  loading: false,
-  error: null,
-  refetch: () => {},
   selectedTask: null,
   setSelectedTask: () => {},
 };
@@ -116,9 +93,6 @@ export function ReservationViewerProvider({
   const [modalReservationId, setModalReservationId] = useState<string | null>(
     null
   );
-  const [data, setData] = useState<ReservationDetailData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<OverlayTaskInput | null>(
     null
   );
@@ -135,6 +109,12 @@ export function ReservationViewerProvider({
   const close = useCallback(() => {
     setModalReservationId(null);
   }, []);
+  // NOTE: modalReservationId flips to null both when the panel is dismissed
+  // *and* when a task row inside the panel is clicked (the swap below clears
+  // the reservation as part of opening the task). selectedTask is owned by:
+  //   - open(rid):                  clears it before opening
+  //   - setSelectedTaskExclusive:   sets/clears it directly
+  //   - the task overlay's onClose: clears it via setSelectedTask(null)
   const setSelectedTaskExclusive = useCallback(
     (task: OverlayTaskInput | null) => {
       if (task) setModalReservationId(null);
@@ -142,62 +122,6 @@ export function ReservationViewerProvider({
     },
     []
   );
-
-  // Fetch when the target id changes; reset server-fetched state on close.
-  // NOTE: Do not clear `selectedTask` here. modalReservationId flips to null
-  // both when the panel is dismissed *and* when a task row inside the panel
-  // is clicked (setSelectedTaskExclusive clears the reservation as part of
-  // the swap). Clobbering selectedTask in this effect would break the
-  // reservation → task transition. selectedTask is owned by:
-  //   - open(rid):                  clears it before opening
-  //   - setSelectedTaskExclusive:   sets/clears it directly
-  //   - the task overlay's onClose: clears it via setSelectedTask(null)
-  useEffect(() => {
-    if (!modalReservationId) {
-      setData(null);
-      setError(null);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    fetch(`/api/reservations/${modalReservationId}/with-window-tasks`)
-      .then(async (res) => {
-        const body = await res.json();
-        if (!res.ok)
-          throw new Error(body?.error || 'Failed to load reservation');
-        return body as ReservationDetailData;
-      })
-      .then((body) => {
-        if (cancelled) return;
-        setData(body);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err.message || 'Failed to load reservation');
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [modalReservationId]);
-
-  const refetch = useCallback(() => {
-    if (!modalReservationId) return;
-    fetch(`/api/reservations/${modalReservationId}/with-window-tasks`)
-      .then(async (res) => {
-        const body = await res.json();
-        if (!res.ok) throw new Error(body?.error || 'Failed to refetch');
-        return body as ReservationDetailData;
-      })
-      .then(setData)
-      .catch((err) =>
-        console.error('[ReservationViewer] refetch failed:', err)
-      );
-  }, [modalReservationId]);
 
   const value = useMemo<ReservationViewerContextValue>(
     () => ({
@@ -207,10 +131,6 @@ export function ReservationViewerProvider({
       // target. Inline panels override this for their own subtree.
       currentReservationId: modalReservationId,
       modalReservationId,
-      data,
-      loading,
-      error,
-      refetch,
       selectedTask,
       setSelectedTask: setSelectedTaskExclusive,
     }),
@@ -218,10 +138,6 @@ export function ReservationViewerProvider({
       open,
       close,
       modalReservationId,
-      data,
-      loading,
-      error,
-      refetch,
       selectedTask,
       setSelectedTaskExclusive,
     ]

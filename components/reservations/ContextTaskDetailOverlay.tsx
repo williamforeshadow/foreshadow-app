@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { useReservationViewer } from '@/lib/reservationViewerContext';
 import { PropertyTaskDetailOverlay } from '@/components/properties/tasks/PropertyTaskDetailOverlay';
 import { taskPath } from '@/src/lib/links';
@@ -22,16 +23,20 @@ import { taskPath } from '@/src/lib/links';
 // don't briefly render the dialog over the new route during the navigation.
 export function ContextTaskDetailOverlay() {
   const router = useRouter();
-  const { selectedTask, setSelectedTask, refetch } = useReservationViewer();
+  const queryClient = useQueryClient();
+  const { selectedTask, setSelectedTask } = useReservationViewer();
   return (
     <PropertyTaskDetailOverlay
       task={selectedTask}
       onClose={() => setSelectedTask(null)}
-      // refetch only matters when the task was opened from inside the
-      // reservation panel (i.e. modalReservationId was set before the swap).
-      // After the swap modalReservationId is null, so refetch is a no-op
-      // and surface-local data stays authoritative.
-      onTaskUpdated={refetch}
+      // The reservation panel's associated-task lists live in the
+      // reservation-window-tasks react-query cache. Invalidate the whole
+      // family after a mutation so any reservation panel re-opened next
+      // shows the edit (we no longer know which reservation the task came
+      // from — the swap already cleared modalReservationId).
+      onTaskUpdated={() =>
+        queryClient.invalidateQueries({ queryKey: ['reservation-window-tasks'] })
+      }
       onOpenInPage={
         selectedTask
           ? () => {

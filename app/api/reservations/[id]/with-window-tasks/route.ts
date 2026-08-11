@@ -92,6 +92,17 @@ export async function GET(
   const resolvedPropertyName: string | null =
     propertyRow?.name || reservation.property_name || null;
 
+  // The guest conversation linked to this reservation (if any) — lets the
+  // panel's "Message guest" action deep-link into the inbox. Most recent
+  // wins on the off-chance a reservation has more than one thread.
+  const { data: conversationRows } = await supabase
+    .from('conversations')
+    .select('id')
+    .eq('reservation_id', reservation.id)
+    .order('last_message_at', { ascending: false, nullsFirst: false })
+    .limit(1);
+  const conversationId: string | null = conversationRows?.[0]?.id ?? null;
+
   let tasksQuery = supabase
     .from('turnover_tasks')
     .select(
@@ -192,6 +203,7 @@ export async function GET(
       property_name: resolvedPropertyName,
       channel: reservation.channel ?? null,
       nights,
+      conversation_id: conversationId,
     },
     tasks: transformedTasks,
     window: { start, end },

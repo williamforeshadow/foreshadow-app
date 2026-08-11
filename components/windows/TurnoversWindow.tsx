@@ -5,16 +5,13 @@ import { useRouter } from 'next/navigation';
 import TurnoverCards from '@/components/TurnoverCards';
 import { useTurnovers } from '@/lib/useTurnovers';
 import { TurnoverFilterBar } from './turnovers';
-import { ReservationDetailPanel } from '@/components/properties/schedule/ReservationDetailPanel';
+import { ReservationContextPanel } from '@/components/reservations/ReservationContextPanel';
+import type { ReservationContextTask } from '@/components/reservations/useReservationContext';
 import {
   PropertyTaskDetailOverlay,
   type OverlayTaskInput,
 } from '@/components/properties/tasks/PropertyTaskDetailOverlay';
-import type {
-  ScheduleReservation,
-  ScheduleTask,
-} from '@/components/properties/schedule/MonthGrid';
-import type { Task, Turnover, User } from '@/lib/types';
+import type { Turnover, User } from '@/lib/types';
 import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import { taskPath } from '@/src/lib/links';
@@ -22,115 +19,22 @@ import { taskPath } from '@/src/lib/links';
 // Turnovers window. Two-pane layout:
 //   - Left: filterable + sortable list of turnover cards (one per active /
 //     upcoming reservation), powered by the get_property_turnovers RPC.
-//   - Right: shared ReservationDetailPanel from the property Schedule tab —
-//     same component, same "associated tasks" semantics. A task is associated
-//     with a turnover purely by virtue of its scheduled_date falling inside
-//     [check_in, next_check_in); rescheduling re-associates it naturally.
+//   - Right: the shared ReservationContextPanel (same panel as the messages
+//     right rail, Schedule tab, and the global reservation viewer). It
+//     self-fetches via /api/reservations/[id]/with-window-tasks — a card's
+//     `id` IS its reservation id — and applies the same minute-precise
+//     turnover-window task filter as the RPC, so the card progress bar and
+//     the panel's task list agree.
 //
 // Clicking a task inside the panel opens the shared PropertyTaskDetailOverlay
 // (the same one Schedule / Bins / Tasks use), which owns all editing /
 // comments / attachments / time-tracking plumbing internally. Only one detail
 // layer is visible at a time — while a task overlay is open we hide the
 // reservation panel, mirroring PropertyScheduleView.
-//
-// "Associated tasks" hydration: the RPC's per-card `tasks` array is already
-// minute-precise filtered to [check_in @ defaultCheckInTime,
-// next_check_in @ defaultCheckInTime), so we feed the panel from it directly
-// instead of doing a separate window-scoped fetch. Net: one less HTTP hop per
-// card click and the card progress bar + the panel's task list are guaranteed
-// to come from the same source.
 
 interface TurnoversWindowProps {
   users: User[];
   currentUser: User | null;
-}
-
-function reservationFromTurnover(
-  card: Turnover
-): (ScheduleReservation & { property_name?: string }) | null {
-  if (!card.check_in || !card.check_out) return null;
-  return {
-    id: card.id,
-    guest_name: card.guest_name || null,
-    check_in: card.check_in.slice(0, 10),
-    check_out: card.check_out.slice(0, 10),
-    next_check_in: card.next_check_in ? card.next_check_in.slice(0, 10) : null,
-    property_name: card.property_name,
-  };
-}
-
-// Adapter: RPC `Task` (jsonb_agg row from get_property_turnovers) → the
-// `ScheduleTask` shape ReservationDetailPanel + PropertyTaskDetailOverlay
-// consume. Most fields map 1:1; bin_name / created_at / updated_at are
-// non-essential RPC omissions (the overlay keys mutations on task_id).
-// property_id IS carried through — the scheduled-date picker needs it
-// to load the property's reservations.
-function turnoverTaskToScheduleTask(
-  task: Task,
-  fallbackPropertyName: string | null
-): ScheduleTask {
-  return {
-    task_id: task.task_id,
-    title: task.title ?? null,
-    template_name: task.template_name ?? null,
-    scheduled_date: task.scheduled_date ?? null,
-    scheduled_time: task.scheduled_time ?? null,
-    status: task.status,
-    reservation_id: task.reservation_id ?? null,
-    is_automated: task.template_id != null,
-    assigned_users: (task.assigned_users || []).map((u) => ({
-      user_id: u.user_id,
-      name: u.name,
-      avatar: u.avatar ?? null,
-      role: u.role,
-    })),
-    property_id: task.property_id ?? null,
-    property_name: task.property_name ?? fallbackPropertyName,
-    template_id: task.template_id ?? null,
-    description: task.description ?? null,
-    priority: task.priority ?? undefined,
-    department_id: task.department_id ?? null,
-    department_name: task.department_name ?? null,
-    form_metadata: task.form_metadata ?? null,
-    bin_id: task.bin_id ?? null,
-    bin_name: null,
-    is_binned: !!task.is_binned,
-  };
-}
-
-function scheduleTaskToOverlay(
-  task: ScheduleTask,
-  fallbackPropertyId: string | null,
-  fallbackPropertyName: string | null
-): OverlayTaskInput {
-  return {
-    task_id: task.task_id,
-    reservation_id: task.reservation_id,
-    property_id: task.property_id ?? fallbackPropertyId,
-    property_name: task.property_name ?? fallbackPropertyName,
-    template_id: task.template_id ?? null,
-    template_name: task.template_name ?? null,
-    title: task.title ?? null,
-    description: task.description ?? null,
-    priority: task.priority ?? 'medium',
-    department_id: task.department_id ?? null,
-    department_name: task.department_name ?? null,
-    status: task.status,
-    scheduled_date: task.scheduled_date,
-    scheduled_time: task.scheduled_time,
-    form_metadata: task.form_metadata ?? null,
-    bin_id: task.bin_id ?? null,
-    bin_name: task.bin_name ?? null,
-    is_binned: !!task.is_binned,
-    created_at: task.created_at ?? '',
-    updated_at: task.updated_at ?? '',
-    assigned_users: (task.assigned_users || []).map((u) => ({
-      user_id: u.user_id,
-      name: u.name,
-      avatar: u.avatar,
-      role: u.role,
-    })),
-  };
 }
 
 function TurnoversWindowContent(props: TurnoversWindowProps) {
@@ -171,6 +75,10 @@ function TurnoversWindowContent(props: TurnoversWindowProps) {
   // One detail layer at a time. selectedTask, when set, takes precedence and
   // hides the reservation panel beneath.
   const [selectedTask, setSelectedTask] = useState<OverlayTaskInput | null>(null);
+  // Bumped after any task mutation so the reservation panel's associated-task
+  // list re-fetches (its data lives in the reservation-window-tasks query,
+  // separate from the turnovers RPC that feeds the cards).
+  const [tasksRefreshKey, setTasksRefreshKey] = useState(0);
 
   // Strict single-panel rule: when any global detail panel (reservation
   // overlay or context task overlay) opens, close every local panel here.
@@ -178,17 +86,6 @@ function TurnoversWindowContent(props: TurnoversWindowProps) {
     closeSelectedCard();
     setSelectedTask(null);
   });
-
-  // Tasks for the selected card's reservation window. Sourced directly from
-  // the RPC payload — `selectedCard.tasks` is already minute-precise filtered
-  // and sorted by get_property_turnovers, so no second fetch is required.
-  const windowTasks = useMemo<ScheduleTask[]>(() => {
-    if (!selectedCard) return [];
-    const fallbackPropertyName = selectedCard.property_name ?? null;
-    return (selectedCard.tasks || []).map((t) =>
-      turnoverTaskToScheduleTask(t, fallbackPropertyName)
-    );
-  }, [selectedCard]);
 
   // Clearing the card also tears down any open task overlay so we never
   // leave a stale right-pane behind.
@@ -206,25 +103,15 @@ function TurnoversWindowContent(props: TurnoversWindowProps) {
     }
   }, [selectedCard]);
 
+  // ReservationContextTask is a structural superset of OverlayTaskInput, so
+  // the panel's tasks hand straight to the standard task overlay — same as
+  // the messages surface.
   const handleOpenTask = useCallback(
-    (task: ScheduleTask) => {
+    (task: ReservationContextTask) => {
       closeGlobals();
-      setSelectedTask(
-        scheduleTaskToOverlay(
-          task,
-          // Fallback to the card's property_id for any legacy task
-          // row whose own property_id is null.
-          selectedCard?.property_id ?? null,
-          selectedCard?.property_name ?? null
-        )
-      );
+      setSelectedTask(task);
     },
-    [selectedCard?.property_id, selectedCard?.property_name, closeGlobals]
-  );
-
-  const reservationForPanel = useMemo(
-    () => (selectedCard ? reservationFromTurnover(selectedCard) : null),
-    [selectedCard]
+    [closeGlobals]
   );
 
   return (
@@ -291,10 +178,12 @@ function TurnoversWindowContent(props: TurnoversWindowProps) {
         )}
       </div>
 
-      {/* Right Panel — Reservation detail (same component the Schedule tab
-          uses). Absolute right-side overlay (shared geometry); hidden while
-          a task overlay is open so we never stack two detail layers. */}
-      {selectedCard && reservationForPanel && !selectedTask && (
+      {/* Right Panel — the shared reservation context panel (messages rail /
+          Schedule tab / global viewer). Absolute right-side overlay (shared
+          geometry); hidden while a task overlay is open so we never stack
+          two detail layers. The header title mirrors the card: owner stays
+          read "Owner Stay" (the endpoint doesn't ship `kind`). */}
+      {selectedCard && !selectedTask && (
         <div
           ref={rightPanelRef}
           className={DESKTOP_DETAIL_PANEL_FLEX}
@@ -304,23 +193,31 @@ function TurnoversWindowContent(props: TurnoversWindowProps) {
             ).scrollTop;
           }}
         >
-          <ReservationDetailPanel
-            reservation={reservationForPanel}
-            allTasks={windowTasks}
-            onClose={closeSelectedCard}
+          <ReservationContextPanel
+            reservationId={selectedCard.id}
+            header={{
+              title:
+                selectedCard.kind === 'owner_stay'
+                  ? 'Owner Stay'
+                  : selectedCard.guest_name || 'Unnamed guest',
+              onClose: closeSelectedCard,
+            }}
             onOpenTask={handleOpenTask}
+            tasksRefreshKey={tasksRefreshKey}
           />
         </div>
       )}
 
       {/* Task detail overlay — shared with Schedule / Tasks / Bins. Anchors
           to the relative wrapper above. Mutations inside refetch the
-          turnovers RPC so both the card progress bar and the panel's task
-          list reflect edits the moment the overlay closes. */}
+          turnovers RPC (card progress bar) and bump the panel's task list. */}
       <PropertyTaskDetailOverlay
         task={selectedTask}
         onClose={() => setSelectedTask(null)}
-        onTaskUpdated={fetchTurnovers}
+        onTaskUpdated={() => {
+          fetchTurnovers();
+          setTasksRefreshKey((k) => k + 1);
+        }}
         onOpenInPage={
           selectedTask
             ? () => {

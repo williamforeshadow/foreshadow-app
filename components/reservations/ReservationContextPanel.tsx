@@ -1,23 +1,45 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, MessageCircle, X } from 'lucide-react';
 import { canonicalChannelLabel } from '@/lib/bookingChannel';
+import { toast } from '@/components/ui/toast';
+import { conversationPath } from '@/src/lib/links';
 import { ProjectCard, type DraggableProjectItem } from '@/components/windows/projects/ProjectCard';
 import { ProposedTask, type ProposedTaskData } from '@/components/messages/ProposedTask';
 import { filterTasksInTurnoverWindow } from '@/components/properties/schedule/scheduleDates';
 import { useOperationsSettings } from '@/lib/operationsSettingsContext';
+import { ReservationContextOverride } from '@/lib/reservationViewerContext';
 import type { ConversationRow } from '@/lib/conversations';
 import type { ProjectStatus, ProjectPriority, User } from '@/lib/types';
 import {
   useReservationContext,
   type ReservationContextTask,
-} from '@/components/messages/useReservationContext';
+} from '@/components/reservations/useReservationContext';
 
-// Right-hand context panel for the open conversation: the stay at a glance on
-// top (property, dates, progress through the stay), then associated tasks. For
-// inquiry threads (no booked reservation) it shows the guest + property from
-// the conversation and a "no booking yet" note.
+// Shared reservation context panel — the single reservation detail surface for
+// the whole app. Renders the stay at a glance (property, dates + org check-in/
+// out times, nights, guest contact, channel, next check-in / turnover gap),
+// then the associated tasks as the same ProjectCards used everywhere else.
+//
+// Four hosts share it:
+//   - Messages right rail + mobile top sheet (via ConversationDetailPanel
+//     semantics: pass `conversation`; no header — the conversation header
+//     above already names the guest). Conversation-only extras (inquiry
+//     state, sentiment, proposed-task toggle) render only in this mode.
+//   - Turnovers window right pane (pass `reservationId` + `header`).
+//   - Property Schedule tab (same).
+//   - Global reservation viewer overlay / key-icon (same).
+//
+// Data comes from useReservationContext → /api/reservations/[id]/with-window-tasks
+// (one round-trip: reservation row + tasks in the turnover window). The
+// coarse date-range task set is narrowed here to the precise window
+// [check_in @ check-in-time, next_check_in @ check-in-time) so every host
+// lists identical associated tasks.
+//
+// The content is wrapped in <ReservationContextOverride>, so any key
+// affordance inside renders as a static badge instead of re-opening the
+// reservation that's already on screen.
 
 function fmtDate(d: string | null | undefined): string {
   if (!d) return '—';
@@ -28,7 +50,7 @@ function fmtDate(d: string | null | undefined): string {
   return `${months[m - 1]} ${day}, ${y}`;
 }
 
-function nightsBetween(start: string | null | undefined, end: string | null | undefined): number | null {
+function daysBetween(start: string | null | undefined, end: string | null | undefined): number | null {
   if (!start || !end) return null;
   const s = Date.parse(`${start.slice(0, 10)}T00:00:00Z`);
   const e = Date.parse(`${end.slice(0, 10)}T00:00:00Z`);
@@ -157,15 +179,34 @@ function reservationTaskToCardItem(t: ReservationContextTask): DraggableProjectI
   };
 }
 
-export function ConversationDetailPanel({
+export interface ReservationContextPanelHeader {
+  /** Override the header title; defaults to the fetched guest name. Hosts
+   *  that know the stay is an owner stay pass 'Owner Stay' here (the
+   *  reservation row itself doesn't ship `kind` through this endpoint). */
+  title?: string;
+  onClose: () => void;
+}
+
+export function ReservationContextPanel({
+  reservationId: reservationIdProp,
   conversation,
+  header,
   onOpenTask,
   tasksRefreshKey = 0,
   proposedTasks = [],
   onOpenProposal,
   onProposedTaskChange,
 }: {
-  conversation: ConversationRow | undefined;
+  /** Direct reservation target (Turnovers / Schedule / global viewer). When
+   *  omitted, falls back to conversation.reservation_id (messages hosts). */
+  reservationId?: string | null;
+  /** Messages hosts pass the open conversation to unlock the conversation-only
+   *  sections: inquiry/cancelled states, sentiment, and the proposed-tasks
+   *  toggle, plus guest/date fallbacks while the reservation link syncs. */
+  conversation?: ConversationRow;
+  /** Renders a guest-name header with a close button. Hosts whose chrome
+   *  already names the guest (messages) omit it. */
+  header?: ReservationContextPanelHeader;
   /** Open an associated task in the standard task detail panel. */
   onOpenTask?: (task: ReservationContextTask) => void;
   /** Bump to re-fetch the associated tasks (e.g. after an edit in the panel). */
@@ -178,17 +219,18 @@ export function ConversationDetailPanel({
   /** Re-fetch after a proposal is accepted/dismissed from the panel. */
   onProposedTaskChange?: () => void;
 }) {
-  const reservationId = conversation?.reservation_id ?? null;
-  const { reservation, tasks, loading } = useReservationContext(
+  const reservationId =
+    reservationIdProp ?? conversation?.reservation_id ?? null;
+  const { reservation, tasks, loading, error } = useReservationContext(
     reservationId,
     tasksRefreshKey,
   );
 
   // The endpoint returns a coarse date-range set; narrow it to the precise
   // turnover window [check_in @ check-in-time, next_check_in @ check-in-time)
-  // — the same filter the turnovers-page ReservationDetailPanel applies, so the
-  // two panels list identical associated tasks. Check-in time is the org-wide
-  // default from operations_settings (there's no per-property check-in time).
+  // — the same filter the turnovers RPC applies, so every surface lists
+  // identical associated tasks. Check-in time is the org-wide default from
+  // operations_settings (there's no per-property check-in time).
   const { settings } = useOperationsSettings();
   const defaultCheckInTime = (settings.default_check_in_time || '15:00').slice(0, 5);
   const defaultCheckOutTime = (settings.default_check_out_time || '11:00').slice(0, 5);
@@ -208,28 +250,40 @@ export function ConversationDetailPanel({
   // The sentiment summary is collapsed by default (just the label + pill); the
   // operator expands it to read the summary. Reset closed per conversation.
   const [sentimentOpen, setSentimentOpen] = useState(false);
-  const [prevConvId, setPrevConvId] = useState<string | undefined>(conversation?.id);
-  if (conversation?.id !== prevConvId) {
-    setPrevConvId(conversation?.id);
+  const [prevKey, setPrevKey] = useState<string | undefined>(
+    conversation?.id ?? reservationId ?? undefined,
+  );
+  const currentKey = conversation?.id ?? reservationId ?? undefined;
+  if (currentKey !== prevKey) {
+    setPrevKey(currentKey);
     setTaskView('associated');
     setSentimentOpen(false);
   }
 
-  if (!conversation) return null;
+  if (!conversation && !reservationId) return null;
 
   // Inquiry vs booked is driven by the conversation's own booking_state, NOT by
   // whether a reservation row is linked — a conversation can be booked before
   // its reservation has synced/linked, in which case we show what we have.
-  const isInquiry = conversation.booking_state === 'inquiry';
-  const isCancelled = conversation.booking_state === 'cancelled';
+  // Non-conversation hosts always target a concrete reservation, so both
+  // flags are simply false there.
+  const isInquiry = conversation?.booking_state === 'inquiry';
+  const isCancelled = conversation?.booking_state === 'cancelled';
   const hasReservation = !!reservationId;
   const propertyName =
-    reservation?.property_name ?? conversation.property_name ?? null;
-  const channel = conversation.channel ? canonicalChannelLabel(conversation.channel) : null;
-  const checkIn = reservation?.check_in ?? conversation.check_in ?? null;
-  const checkOut = reservation?.check_out ?? conversation.check_out ?? null;
-  const nights = reservation?.nights ?? nightsBetween(checkIn, checkOut);
+    reservation?.property_name ?? conversation?.property_name ?? null;
+  const channelRaw = reservation?.channel ?? conversation?.channel ?? null;
+  const channel = channelRaw ? canonicalChannelLabel(channelRaw) : null;
+  const checkIn = reservation?.check_in ?? conversation?.check_in ?? null;
+  const checkOut = reservation?.check_out ?? conversation?.check_out ?? null;
+  const nights = reservation?.nights ?? daysBetween(checkIn, checkOut);
   const { primary: propPrimary, sub: propSub } = splitPropertyName(propertyName);
+
+  // Next check-in → the turnover window's upper bound. Surfaced with the gap
+  // between stays so an operator can see turnover pressure at a glance
+  // ("Same-day turnover" being the urgent case). Null = no next booking.
+  const nextCheckIn = reservation?.next_check_in ?? null;
+  const turnoverGap = daysBetween(checkOut, nextCheckIn);
 
   // Guest contact + party size come from the linked reservation (booked threads
   // only — inquiries have no reservation row). Check-in/out times are org-wide.
@@ -243,20 +297,22 @@ export function ConversationDetailPanel({
   );
   // The tasks section shows when there's a reservation (associated tasks) or any
   // pending proposal to review. Without a reservation, "Associated" is N/A, so
-  // there's no toggle — just the proposed list.
+  // there's no toggle — just the proposed list. The toggle itself is a
+  // conversation-only affordance (proposals belong to a conversation).
   const showTasks = hasReservation || pendingProposals.length > 0;
+  const showTaskToggle = !!conversation && hasReservation;
   const effectiveView: 'associated' | 'proposed' = hasReservation ? taskView : 'proposed';
 
-  const sentimentPill = sentimentMeta(conversation.sentiment);
+  const sentimentPill = sentimentMeta(conversation?.sentiment);
 
-  return (
-    <div className="flex h-full flex-col overflow-y-auto overlay-scrollbar">
-      {/* Reservation. No section label, no status pill and no guest hero: the
-          conversation header now spans this column too and already names the
-          guest, so all three were repeating it directly below itself. The
-          panel opens on the property instead. */}
+  const body = (
+    <>
+      {/* Reservation. In conversation mode there's no section label, status
+          pill or guest hero: the conversation header spans this column and
+          already names the guest, so the panel opens on the property.
+          Standalone hosts get the guest via the `header` prop instead. */}
       <div className="msg-divider border-b">
-        {isInquiry ? (
+        {isInquiry && conversation ? (
           <div className="space-y-3 px-4 pb-4 pt-4">
             <Field label="Property" value={propertyName ?? '—'} />
             {conversation.check_in || conversation.check_out ? (
@@ -271,15 +327,15 @@ export function ConversationDetailPanel({
                 : 'Inquiry — no booking yet'}
             </div>
           </div>
+        ) : hasReservation && error && !reservation ? (
+          <div className="px-4 pb-4 pt-4 text-sm text-red-500">{error}</div>
         ) : hasReservation && loading && !reservation ? (
           <div className="px-4 pb-4 pt-4">
             <DetailSkeleton />
           </div>
         ) : (
           <>
-            {/* Property — same house icon as the app sidebar's Properties nav.
-                First row in the panel now, so no top border: the header above
-                already closes the gap. */}
+            {/* Property — same house icon as the app sidebar's Properties nav. */}
             <div className="flex items-center gap-3 px-4 py-3.5">
               <PropertyIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
               <div className="min-w-0">
@@ -326,6 +382,19 @@ export function ConversationDetailPanel({
                 />
                 <GridField label="Guests" value={guestCount != null ? guestCount : '—'} />
                 <GridField label="Channel" value={channel ?? '—'} />
+                {nextCheckIn ? (
+                  <GridField
+                    label="Next check-in"
+                    value={<span className="tabular-nums">{fmtDate(nextCheckIn)}</span>}
+                    sub={
+                      turnoverGap === 0
+                        ? 'Same-day turnover'
+                        : turnoverGap != null
+                          ? `${turnoverGap} day${turnoverGap === 1 ? '' : 's'} between stays`
+                          : undefined
+                    }
+                  />
+                ) : null}
               </div>
 
               {guestEmail ? (
@@ -344,11 +413,37 @@ export function ConversationDetailPanel({
                 </div>
               ) : null}
 
+              {/* Message guest — standalone hosts only (in conversation mode
+                  the panel already lives beside the thread). Opens the linked
+                  conversation in a NEW browser tab so the operator keeps
+                  their current surface; when the reservation has no thread
+                  yet, says so in a toast instead. */}
+              {!conversation && hasReservation ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (reservation?.conversation_id) {
+                      window.open(
+                        conversationPath(reservation.conversation_id),
+                        '_blank',
+                        'noopener,noreferrer'
+                      );
+                    } else {
+                      toast.info('No conversation with this guest yet');
+                    }
+                  }}
+                  className="mt-4 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[rgba(30,25,20,0.1)] text-[12px] font-medium text-[var(--accent-3)] transition-colors hover:bg-[var(--accent-bg-soft)] dark:border-white/10 dark:text-[var(--accent-1)] dark:hover:bg-[var(--accent-bg-soft-dark)]"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" aria-hidden />
+                  Message guest
+                </button>
+              ) : null}
+
               {isCancelled ? (
                 <div className="msg-well mt-4 rounded-lg px-3 py-2 text-xs leading-relaxed text-muted-foreground">
                   Reservation cancelled
                 </div>
-              ) : !hasReservation ? (
+              ) : conversation && !hasReservation ? (
                 <div className="msg-well mt-4 rounded-lg px-3 py-2 text-xs leading-relaxed text-muted-foreground">
                   Booked — syncing full reservation details
                 </div>
@@ -358,61 +453,63 @@ export function ConversationDetailPanel({
         )}
       </div>
 
-      {/* Sentiment — a coarse read of the guest's disposition (positive/neutral/
-          negative) as a pill, collapsed by default. When a summary exists the
-          row is a disclosure toggle that reveals the 1-2 sentence summary.
+      {/* Sentiment — conversation-only: a coarse read of the guest's disposition
+          (positive/neutral/negative) as a pill, collapsed by default. When a
+          summary exists the row is a disclosure toggle that reveals it.
           Generated eagerly on inbound and read here; null until first generated. */}
-      <div className="msg-divider border-b px-4 py-4">
-        {conversation.sentiment_summary ? (
-          <>
-            <button
-              type="button"
-              onClick={() => setSentimentOpen((o) => !o)}
-              aria-expanded={sentimentOpen}
-              className="flex w-full items-center justify-between gap-2 text-left"
-            >
+      {conversation ? (
+        <div className="msg-divider border-b px-4 py-4">
+          {conversation.sentiment_summary ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setSentimentOpen((o) => !o)}
+                aria-expanded={sentimentOpen}
+                className="flex w-full items-center justify-between gap-2 text-left"
+              >
+                <h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Sentiment
+                </h2>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  {sentimentPill ? (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${sentimentPill.className}`}
+                    >
+                      {sentimentPill.label}
+                    </span>
+                  ) : null}
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${
+                      sentimentOpen ? 'rotate-180' : ''
+                    }`}
+                    aria-hidden
+                  />
+                </span>
+              </button>
+              {sentimentOpen ? (
+                <p className="mt-2 text-sm leading-relaxed text-foreground">
+                  {conversation.sentiment_summary}
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <div className="flex items-center justify-between gap-2">
               <h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 Sentiment
               </h2>
-              <span className="flex shrink-0 items-center gap-1.5">
-                {sentimentPill ? (
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${sentimentPill.className}`}
-                  >
-                    {sentimentPill.label}
-                  </span>
-                ) : null}
-                <ChevronDown
-                  className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${
-                    sentimentOpen ? 'rotate-180' : ''
-                  }`}
-                  aria-hidden
-                />
-              </span>
-            </button>
-            {sentimentOpen ? (
-              <p className="mt-2 text-sm leading-relaxed text-foreground">
-                {conversation.sentiment_summary}
-              </p>
-            ) : null}
-          </>
-        ) : (
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Sentiment
-            </h2>
-            <span className="shrink-0 text-xs text-muted-foreground">No summary yet</span>
-          </div>
-        )}
-      </div>
+              <span className="shrink-0 text-xs text-muted-foreground">No summary yet</span>
+            </div>
+          )}
+        </div>
+      ) : null}
 
       {/* Tasks — associated (created) tasks within the turnover window, with a
-          toggle to review this conversation's pending task proposals. Both
+          conversation-only toggle to review pending task proposals. Both
           render as the same card; proposals add inline accept/dismiss. */}
       {showTasks ? (
         <div className="px-4 py-4">
           <h2 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tasks</h2>
-          {hasReservation ? (
+          {showTaskToggle ? (
             <div className="mb-3 msg-well flex gap-0.5 rounded-lg p-0.5">
               {(
                 [
@@ -489,7 +586,46 @@ export function ConversationDetailPanel({
           )}
         </div>
       ) : null}
-    </div>
+    </>
+  );
+
+  // Headerless (messages) mode keeps the historical single-scroller root so
+  // the mobile top sheet's wrapper-owned scrolling keeps working (the panel's
+  // percentage height collapses to content height there by design).
+  if (!header) {
+    return (
+      <ReservationContextOverride id={reservationId}>
+        <div className="flex h-full flex-col overflow-y-auto overlay-scrollbar">{body}</div>
+      </ReservationContextOverride>
+    );
+  }
+
+  const title =
+    header.title ?? reservation?.guest_name ?? (loading ? '…' : 'Unnamed guest');
+
+  return (
+    <ReservationContextOverride id={reservationId}>
+      <div className="h-full w-full flex flex-col bg-white dark:bg-background">
+        <div className="flex items-start justify-between gap-3 px-4 pt-5 pb-4 border-b border-[rgba(30,25,20,0.06)] dark:border-white/5">
+          <div className="flex flex-col gap-1 min-w-0">
+            <div className="text-[10px] italic font-medium tracking-[0.08em] uppercase text-neutral-400 dark:text-[#66645f]">
+              Reservation
+            </div>
+            <div className="text-[18px] font-semibold text-neutral-900 dark:text-[#f0efed] truncate">
+              {title}
+            </div>
+          </div>
+          <button
+            onClick={header.onClose}
+            className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full hover:bg-neutral-100 dark:hover:bg-white/5 text-neutral-500 dark:text-[#a09e9a]"
+            aria-label="Close"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto overlay-scrollbar">{body}</div>
+      </div>
+    </ReservationContextOverride>
   );
 }
 

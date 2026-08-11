@@ -50,15 +50,21 @@ export interface ReservationContext {
   /** The next reservation's check-in — the turnover window's upper bound
    *  (null when there's no next booking → open-ended window). */
   next_check_in: string | null;
+  property_id?: string | null;
   property_name: string | null;
   channel: string | null;
   nights: number | null;
+  /** The guest conversation linked to this reservation, when one exists —
+   *  target for the panel's "Message guest" deep link. */
+  conversation_id: string | null;
 }
 
 /**
- * Fetch a reservation + its associated turnover tasks for the conversation
- * detail panel. Reuses /api/reservations/[id]/with-window-tasks. No-ops (returns
- * nulls) when reservationId is null — i.e. inquiry threads with no booking.
+ * Fetch a reservation + its associated turnover tasks for the shared
+ * reservation context panel (messages right rail, Turnovers window, Schedule
+ * tab, global reservation viewer). Reuses /api/reservations/[id]/with-window-tasks.
+ * No-ops (returns nulls) when reservationId is null — i.e. inquiry threads
+ * with no booking.
  */
 const EMPTY_TASKS: ReservationContextTask[] = [];
 
@@ -99,5 +105,8 @@ export function useReservationContext(
     reservation: query.data?.reservation ?? null,
     tasks: query.data?.tasks ?? EMPTY_TASKS,
     loading: query.isLoading,
+    error: query.error
+      ? query.error.message || 'Failed to load reservation'
+      : null,
   };
 }
