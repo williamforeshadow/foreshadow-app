@@ -210,13 +210,18 @@ async function toBoundedJpeg(bytes: Buffer): Promise<Buffer> {
     .toBuffer();
 }
 
-async function prepareImage(
-  row: PrepRow,
+/**
+ * The shared image-normalisation half of prepareImage, split out so the
+ * OpenAI render path (loadRenderableByAnthropicFileId below) can produce the
+ * exact same pixels from the stored original without an Anthropic upload.
+ */
+async function normalizeImage(
+  mimeType: string | null,
   bytes: Buffer,
   kind: 'image-direct' | 'image-heif' | 'image-convert',
-): Promise<PrepOutcome> {
+): Promise<{ payload: Buffer; mediaType: string }> {
   let payload = bytes;
-  let mediaType = (row.mime_type || 'image/jpeg').toLowerCase();
+  let mediaType = (mimeType || 'image/jpeg').toLowerCase();
 
   if (kind === 'image-heif') {
     const convert = (await import('heic-convert')).default;
@@ -239,6 +244,15 @@ async function prepareImage(
     mediaType = 'image/jpeg';
   }
 
+  return { payload, mediaType };
+}
+
+async function prepareImage(
+  row: PrepRow,
+  bytes: Buffer,
+  kind: 'image-direct' | 'image-heif' | 'image-convert',
+): Promise<PrepOutcome> {
+  const { payload, mediaType } = await normalizeImage(row.mime_type, bytes, kind);
   const fileId = await uploadToAnthropic(payload, row.name, mediaType);
   return { status: 'ready', anthropicFileId: fileId, mediaType };
 }
@@ -497,6 +511,95 @@ export async function invalidateVisionArtifacts(
   if (error) {
     console.error('[vision prep] invalidate failed', error);
   }
+}
+
+/**
+ * A renderable inline copy of a prepared file, for providers that can't
+ * resolve Anthropic file ids (the OpenAI agent path in
+ * src/agent/modelProvider.ts).
+ */
+export interface InlineRenderable {
+  kind: 'image' | 'pdf';
+  /** data: URL — image/* for images, application/pdf for documents. */
+  dataUrl: string;
+  filename: string;
+}
+
+/**
+ * In-process cache so a photo that stays in view for a whole conversation is
+ * downloaded and transcoded once per lambda, not once per model iteration.
+ * Values are bounded (images normalise to ≤2576px JPEG, PDFs cap at 12MB), and
+ * the FIFO cap keeps a long-lived process from accumulating every attachment
+ * it has ever seen.
+ */
+const inlineRenderableCache = new Map<string, InlineRenderable | null>();
+const INLINE_CACHE_MAX = 24;
+
+/**
+ * Resolve an anthropic_file_id back to inline bytes from the stored original.
+ *
+ * Mirrors prepareImage/preparePdf exactly — same normalisation, same size
+ * ceiling — so the OpenAI path sees the same pixels the Anthropic path does.
+ * Returns null (never throws) when the row is gone, the download fails, or the
+ * format can't be normalised; the caller degrades to a placeholder sentence.
+ */
+export async function loadRenderableByAnthropicFileId(
+  anthropicFileId: string,
+): Promise<InlineRenderable | null> {
+  if (inlineRenderableCache.has(anthropicFileId)) {
+    return inlineRenderableCache.get(anthropicFileId) ?? null;
+  }
+
+  let result: InlineRenderable | null = null;
+  try {
+    const supabase = getSupabaseServer();
+    const { data, error } = await supabase
+      .from(INBOUND_FILES_TABLE)
+      .select('id, name, mime_type, storage_bucket, storage_path, vision_media_type')
+      .eq('anthropic_file_id', anthropicFileId)
+      .maybeSingle();
+    if (error || !data) throw new Error(error?.message ?? 'row not found');
+
+    const row = data as PrepRow & { vision_media_type: string | null };
+    const { data: blob, error: dlError } = await supabase.storage
+      .from(row.storage_bucket)
+      .download(row.storage_path);
+    if (dlError || !blob) throw new Error(dlError?.message ?? 'no data');
+    const bytes = Buffer.from(await blob.arrayBuffer());
+
+    if (row.vision_media_type === 'application/pdf') {
+      if (bytes.byteLength > MAX_PDF_BYTES) throw new Error('pdf too large');
+      result = {
+        kind: 'pdf',
+        dataUrl: `data:application/pdf;base64,${bytes.toString('base64')}`,
+        filename: row.name,
+      };
+    } else {
+      const kind = resolveKind(row.mime_type, row.name);
+      if (kind !== 'image-direct' && kind !== 'image-heif' && kind !== 'image-convert') {
+        throw new Error(`not an image: ${kind}`);
+      }
+      const { payload, mediaType } = await normalizeImage(row.mime_type, bytes, kind);
+      result = {
+        kind: 'image',
+        dataUrl: `data:${mediaType};base64,${payload.toString('base64')}`,
+        filename: row.name,
+      };
+    }
+  } catch (err) {
+    console.warn('[vision prep] inline renderable failed', {
+      anthropicFileId,
+      err: err instanceof Error ? err.message : err,
+    });
+    result = null;
+  }
+
+  if (inlineRenderableCache.size >= INLINE_CACHE_MAX) {
+    const oldest = inlineRenderableCache.keys().next().value;
+    if (oldest !== undefined) inlineRenderableCache.delete(oldest);
+  }
+  inlineRenderableCache.set(anthropicFileId, result);
+  return result;
 }
 
 /**

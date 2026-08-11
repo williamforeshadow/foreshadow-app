@@ -13,7 +13,7 @@ import { toAnthropicTools } from './tools';
 import type { ToolContext } from './tools/types';
 import { dispatchToolUse, type ToolCallTrace } from './dispatch';
 import { claimsConfirmButton, extractPendingActionIds } from './claims';
-import { getAnthropic, MODEL, FILES_BETA } from './anthropic';
+import { createModelMessage } from './modelProvider';
 import {
   buildSystemPrompt,
   type AgentActor,
@@ -341,8 +341,6 @@ export async function runAgent({
   slack,
   contextBlocks,
 }: RunAgentInput): Promise<RunAgentOutput> {
-  const anthropic = getAnthropic();
-
   // Compose the user message: ambient context first (so the model
   // reads background before the request), then the prompt itself
   // separated by a clear marker. We put context inside the user turn
@@ -421,14 +419,12 @@ export async function runAgent({
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     let response;
     try {
-      response = await anthropic.beta.messages.create({
-        model: MODEL,
+      response = await createModelMessage({
         max_tokens: MAX_TOKENS,
-        thinking: { type: 'disabled' },
         system: systemPrompt,
         tools,
         messages: withRollingCacheBreakpoint(conversation),
-        betas: [FILES_BETA],
+        files: true,
       });
     } catch (err) {
       // A file_id the API can't resolve — deleted on Anthropic's side, or a

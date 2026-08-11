@@ -9,7 +9,12 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { loadConciergeImages } from './attachmentImages';
-import { getAnthropic, MODEL } from '@/src/agent/anthropic';
+import { createModelMessage } from '@/src/agent/modelProvider';
+import type {
+  BetaTool,
+  BetaTextBlockParam,
+  BetaMessageParam,
+} from '@anthropic-ai/sdk/resources/beta/messages';
 import { dispatchTool, type ToolCallTrace } from '@/src/agent/dispatchTool';
 import { getPropertyKnowledgeForGuest } from '@/src/agent/tools/getPropertyKnowledgeForGuest';
 import { checkPropertyAvailability } from '@/src/agent/tools/checkPropertyAvailability';
@@ -396,7 +401,6 @@ export async function generateGuestReplyDraftFromContext(
     systemBlocks.push({ type: 'text', text: buildReplyGateClause(opts.replySensitivity!) });
   }
 
-  const client = getAnthropic();
   // Per-tool master switches (operations_settings). A disabled tool is simply
   // never offered to the model; core-infra tools (ALWAYS_ON_CONCIERGE_TOOLS) are
   // exempt so the indexed procedures stay loadable. Errors degrade to the full set.
@@ -454,13 +458,11 @@ export async function generateGuestReplyDraftFromContext(
   const trace: ToolCallTrace[] = [];
 
   for (let i = 0; i < MAX_DRAFT_ITERATIONS; i++) {
-    const response = await client.messages.create({
-      model: MODEL,
+    const response = await createModelMessage({
       max_tokens: DRAFT_MAX_TOKENS,
-      thinking: { type: 'disabled' },
-      system: systemBlocks,
-      tools,
-      messages: conversation,
+      system: systemBlocks as BetaTextBlockParam[],
+      tools: tools as BetaTool[],
+      messages: conversation as BetaMessageParam[],
     });
 
     // Prompt-cache observability: a creation on the first pass, reads on later
@@ -470,7 +472,10 @@ export async function generateGuestReplyDraftFromContext(
       `[concierge draft] pass ${i} cache: created=${u.cache_creation_input_tokens ?? 0} read=${u.cache_read_input_tokens ?? 0} input=${u.input_tokens}`,
     );
 
-    conversation.push({ role: 'assistant', content: response.content });
+    conversation.push({
+      role: 'assistant',
+      content: response.content as unknown as MessageParam['content'],
+    });
 
     if (response.stop_reason !== 'tool_use') {
       const draft = response.content
