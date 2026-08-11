@@ -27,7 +27,7 @@ export async function GET(
     const { data, error } = await supabase
       .from('properties')
       .select(
-        'id, name, hostaway_name, hostaway_listing_id, is_active, address_street, address_city, address_state, address_zip, address_country, latitude, longitude, bedrooms, bathrooms, timezone, created_at, updated_at'
+        'id, name, hostaway_name, hostaway_listing_id, parent_property_id, is_active, address_street, address_city, address_state, address_zip, address_country, latitude, longitude, bedrooms, bathrooms, timezone, created_at, updated_at'
       )
       .eq('id', id)
       .maybeSingle();
@@ -65,6 +65,7 @@ const EDITABLE_FIELDS = new Set([
   'bedrooms',
   'bathrooms',
   'timezone',
+  'parent_property_id',
 ]);
 
 // PATCH /api/properties/:id — update any subset of the editable fields.
@@ -122,6 +123,14 @@ export async function PATCH(
             { status: 400 },
           );
         }
+      } else if (key === 'parent_property_id') {
+        if (value !== null && typeof value !== 'string') {
+          return NextResponse.json(
+            { error: 'parent_property_id must be a property id or null' },
+            { status: 400 }
+          );
+        }
+        directUpdates[key] = value === '' ? null : value;
       } else {
         directUpdates[key] = value;
       }
@@ -163,7 +172,13 @@ export async function PATCH(
         .eq('id', id);
 
       if (updateErr) {
-        return NextResponse.json({ error: updateErr.message }, { status: 500 });
+        // The parent-shape trigger raises plain exceptions (self-parent,
+        // chained hierarchy, cross-org) — surface those as user errors.
+        const status =
+          'parent_property_id' in directUpdates && (updateErr as any).code === 'P0001'
+            ? 400
+            : 500;
+        return NextResponse.json({ error: updateErr.message }, { status });
       }
     }
 
@@ -171,7 +186,7 @@ export async function PATCH(
     const { data, error: fetchErr } = await supabase
       .from('properties')
       .select(
-        'id, name, hostaway_name, hostaway_listing_id, is_active, address_street, address_city, address_state, address_zip, address_country, latitude, longitude, bedrooms, bathrooms, timezone, created_at, updated_at'
+        'id, name, hostaway_name, hostaway_listing_id, parent_property_id, is_active, address_street, address_city, address_state, address_zip, address_country, latitude, longitude, bedrooms, bathrooms, timezone, created_at, updated_at'
       )
       .eq('id', id)
       .maybeSingle();

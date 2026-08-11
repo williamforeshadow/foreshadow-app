@@ -6,6 +6,7 @@ type PropertyRow = {
   name: string;
   hostaway_name: string | null;
   hostaway_listing_id: number | null;
+  parent_property_id: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -50,7 +51,7 @@ export async function GET(req: NextRequest) {
 
     let query = supabase
       .from('properties')
-      .select('id, name, hostaway_name, hostaway_listing_id, is_active, created_at, updated_at')
+      .select('id, name, hostaway_name, hostaway_listing_id, parent_property_id, is_active, created_at, updated_at')
       .order('name', { ascending: true });
 
     if (!includeInactive) {
@@ -71,6 +72,7 @@ export async function GET(req: NextRequest) {
       name: p.name,
       hostaway_name: p.hostaway_name ?? null,
       hostaway_listing_id: p.hostaway_listing_id ?? null,
+      parent_property_id: p.parent_property_id ?? null,
       is_active: p.is_active,
       created_at: p.created_at,
       updated_at: p.updated_at,

@@ -10,6 +10,13 @@ type TimelineData = {
   recurringTasks: any[];
   blocks: any[];
   properties: string[];
+  /**
+   * Parent/child occupancy relations, keyed by property NAME (the timeline's
+   * row key): each name maps to the related names — its parent unit and/or
+   * its child units — whose reservations and blocks it inherits. Siblings
+   * are never related to each other.
+   */
+  relatedNames: Record<string, string[]>;
 };
 
 const EMPTY: any[] = [];
@@ -37,10 +44,29 @@ async function fetchTimelineData(): Promise<TimelineData> {
   // this null and fall back to showing everything (prior behavior). Rows
   // with no property (general recurring tasks) are always kept.
   let activeNames: Set<string> | null = null;
+  // Parent/child relations by property name — ONE DIRECTION ONLY: a child
+  // row inherits its parent's stays, never the reverse. When the parent
+  // (the whole house) is booked, that stay genuinely occupies every child
+  // unit's entire space, so ghosting it onto each child row is accurate.
+  // When a CHILD is booked, it occupies only part of the parent's space —
+  // showing a full reservation bar on the parent's row would misrepresent
+  // the whole house as rented out, so a child's booking never appears on
+  // the parent's row. (The parent still can't be booked as a whole while a
+  // child is occupied — that unavailability is enforced by the occupancy
+  // snapshot / availability engine, not by a visible bar here.)
+  const relatedNames: Record<string, string[]> = {};
   if (propertiesRes.ok) {
     try {
       const pj = await propertiesRes.json();
-      activeNames = new Set<string>((pj.properties || []).map((p: any) => p.name));
+      const props: any[] = pj.properties || [];
+      activeNames = new Set<string>(props.map((p: any) => p.name));
+      const nameById = new Map<string, string>(props.map((p: any) => [p.id, p.name]));
+      for (const p of props) {
+        if (!p.parent_property_id) continue;
+        const parentName = nameById.get(p.parent_property_id);
+        if (!parentName) continue; // parent inactive/hidden → no inheritance row
+        (relatedNames[p.name] ??= []).push(parentName);
+      }
     } catch {
       /* leave null → unfiltered */
     }
@@ -108,17 +134,33 @@ async function fetchTimelineData(): Promise<TimelineData> {
 
   // Unique properties from turnovers, recurring tasks, AND blocks — so a
   // property with only a block (no turnovers) still gets a timeline row.
-  const uniqueProps = Array.from(
-    new Set([
+  const namesWithContent = new Set(
+    [
       ...reservations.map((r: any) => r.property_name),
       ...recurringTasks.map((t: any) => t.property_name),
       ...blocks.map((b: any) => b.property_name),
-    ])
-  )
-    .filter(Boolean)
-    .sort() as string[];
+    ].filter(Boolean)
+  );
+  // A child with no rows of its own still gets a row when its PARENT has
+  // content — the inherited stay must be visible on it. This only runs
+  // parent → child (relatedNames only maps child → parent), so a child's
+  // own booking never manufactures a row for the parent.
+  const childrenByParentName = new Map<string, string[]>();
+  for (const [childName, parents] of Object.entries(relatedNames)) {
+    for (const parentName of parents) {
+      const list = childrenByParentName.get(parentName);
+      if (list) list.push(childName);
+      else childrenByParentName.set(parentName, [childName]);
+    }
+  }
+  for (const name of Array.from(namesWithContent)) {
+    for (const child of childrenByParentName.get(name as string) ?? []) {
+      namesWithContent.add(child);
+    }
+  }
+  const uniqueProps = Array.from(namesWithContent).sort() as string[];
 
-  return { reservations, recurringTasks, blocks, properties: uniqueProps };
+  return { reservations, recurringTasks, blocks, properties: uniqueProps, relatedNames };
 }
 
 // Timeline data lives in a shared React Query cache: both timelines (desktop
@@ -142,6 +184,7 @@ export function useTimeline() {
   const blocks = query.data?.blocks ?? EMPTY;
   const recurringTasks = query.data?.recurringTasks ?? EMPTY;
   const properties = query.data?.properties ?? EMPTY_PROPS;
+  const relatedNames = query.data?.relatedNames;
 
   // setState-compatible wrappers over the shared cache, preserving the
   // optimistic-update API TimelineWindow relies on. cancelQueries drops any
@@ -227,13 +270,29 @@ export function useTimeline() {
     return date.toDateString() === today.toDateString();
   }, []);
 
+  // Own rows first, then rows inherited from the parent/child units. An
+  // inherited row is the SAME reservation object shape with `inherited: true`
+  // stamped on, so renderers can ghost it and readiness can treat it as
+  // occupancy-only (it drives no tasks on this row).
   const getReservationsForProperty = useCallback((propertyName: string) => {
-    return reservations.filter(r => r.property_name === propertyName);
-  }, [reservations]);
+    const own = reservations.filter(r => r.property_name === propertyName);
+    const related = relatedNames?.[propertyName];
+    if (!related || related.length === 0) return own;
+    const inherited = reservations
+      .filter(r => related.includes(r.property_name))
+      .map(r => ({ ...r, inherited: true, tasks: [] }));
+    return [...own, ...inherited];
+  }, [reservations, relatedNames]);
 
   const getBlocksForProperty = useCallback((propertyName: string) => {
-    return blocks.filter(b => b.property_name === propertyName);
-  }, [blocks]);
+    const own = blocks.filter(b => b.property_name === propertyName);
+    const related = relatedNames?.[propertyName];
+    if (!related || related.length === 0) return own;
+    const inherited = blocks
+      .filter(b => related.includes(b.property_name))
+      .map(b => ({ ...b, inherited: true }));
+    return [...own, ...inherited];
+  }, [blocks, relatedNames]);
 
   const getBlockPosition = useCallback((checkIn: string, checkOut: string) => {
     const checkInDate = new Date(checkIn);

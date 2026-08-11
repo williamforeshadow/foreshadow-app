@@ -21,6 +21,7 @@ import {
   useToast,
 } from '@/components/properties/form/FormPrimitives';
 import { useOperationsSettings } from '@/lib/operationsSettingsContext';
+import { useProperties } from '@/lib/queries/useProperties';
 import { TIMEZONE_OPTIONS, TIMEZONE_GROUPS } from '@/src/lib/timezones';
 
 // Information tab: name, address, bed/bath, active-state toggle, and
@@ -39,6 +40,7 @@ interface DraftFields {
   bedrooms: string;
   bathrooms: string;
   timezone: string; // '' = inherit org default
+  parent_property_id: string; // '' = standalone (no parent)
 }
 
 function toDraft(p: PropertyProfile): DraftFields {
@@ -54,6 +56,7 @@ function toDraft(p: PropertyProfile): DraftFields {
     bedrooms: p.bedrooms == null ? '' : String(p.bedrooms),
     bathrooms: p.bathrooms == null ? '' : String(p.bathrooms),
     timezone: p.timezone ?? '',
+    parent_property_id: p.parent_property_id ?? '',
   };
 }
 
@@ -75,6 +78,7 @@ export default function PropertyInformationTab() {
   const propertyId = params?.id as string;
   const { property, applyLocalPatch, refresh } = usePropertyContext();
   const { settings: opsSettings } = useOperationsSettings();
+  const { properties: allProperties } = useProperties();
 
   // Drafts are seeded from the context property but then diverge freely.
   // When refresh() lands with new values we re-seed on demand via Discard
@@ -207,6 +211,10 @@ export default function PropertyInformationTab() {
       if (draft.timezone !== original.timezone) {
         patch.timezone = draft.timezone === '' ? null : draft.timezone;
       }
+      if (draft.parent_property_id !== original.parent_property_id) {
+        patch.parent_property_id =
+          draft.parent_property_id === '' ? null : draft.parent_property_id;
+      }
     } catch (err: any) {
       setSaveError(err.message || 'Invalid input');
       setSaving(false);
@@ -234,6 +242,15 @@ export default function PropertyInformationTab() {
       setSaving(false);
     }
   };
+
+  // Unit hierarchy is one level deep: a property with children can't become
+  // a child, and a property that's already a child can't be picked as parent.
+  const childUnits = allProperties.filter(
+    (p) => p.parent_property_id === propertyId
+  );
+  const eligibleParents = allProperties.filter(
+    (p) => p.id && p.id !== propertyId && !p.parent_property_id
+  );
 
   if (!property || !draft) {
     // The shell renders its own loading/error state; once it lets us
@@ -396,6 +413,45 @@ export default function PropertyInformationTab() {
                   />
                 </Field>
               </div>
+            </FieldGroup>
+
+            <Subheading label="Unit hierarchy" />
+            <FieldGroup>
+              {childUnits.length > 0 ? (
+                <div className="py-1">
+                  <div className="text-[13px] font-medium text-neutral-800 dark:text-[#f0efed]">
+                    Parent unit
+                  </div>
+                  <p className="text-[12px] text-neutral-500 dark:text-[#66645f] mt-0.5 leading-snug">
+                    This property encompasses{' '}
+                    {childUnits.map((c) => c.name).join(', ')}. Bookings here
+                    occupy those units, and their bookings make this one
+                    unavailable. Remove the parent setting on each child to
+                    change this.
+                  </p>
+                </div>
+              ) : (
+                <Field
+                  label="Part of (parent property)"
+                  hint={
+                    draft.parent_property_id !== ''
+                      ? 'Bookings on the parent occupy this unit, and bookings here make the parent unavailable. Task automations still run only for the property a guest actually booked.'
+                      : 'Set this if the unit is physically part of a larger bookable property (e.g. a studio inside a whole-house listing).'
+                  }
+                >
+                  <Select
+                    value={draft.parent_property_id}
+                    onChange={(e) => updateDraft('parent_property_id', e.target.value)}
+                  >
+                    <option value="">None — standalone property</option>
+                    {eligibleParents.map((p) => (
+                      <option key={p.id!} value={p.id!}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              )}
             </FieldGroup>
           </section>
 

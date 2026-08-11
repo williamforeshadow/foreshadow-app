@@ -34,6 +34,9 @@ export interface ScheduleReservation {
   // 'block' = a manual/maintenance calendar block (slate, non-interactive) —
   // synthesized from a ScheduleBlock so it shares the bar lane-packing.
   kind?: 'guest_booking' | 'owner_stay' | 'block';
+  // Stay lives on a parent/child unit of this property — rendered as a
+  // translucent, dashed "ghost" bar since the occupancy is inherited.
+  inherited?: boolean;
 }
 
 // A manual/maintenance calendar block (not a reservation). Rendered as a bar
@@ -518,9 +521,16 @@ export function MonthGrid({
 
                   // Color by kind: guest = neutral stone, owner stay = amber,
                   // manual/maintenance block = slate (and non-interactive).
+                  // Inherited (parent/child unit) stays get the same hue at
+                  // lower alpha with a dashed rim — a ghost of the real bar.
+                  const isInherited = !!r.inherited;
                   const barColor = isBlock
                     ? 'bg-[rgba(88,90,102,0.30)] border-[rgba(88,90,102,0.55)] dark:bg-[rgba(138,140,152,0.20)] dark:border-[rgba(138,140,152,0.42)]'
-                    : isOwnerStay
+                    : isInherited
+                      ? isOwnerStay
+                        ? 'border-dashed bg-[rgba(180,130,60,0.14)] border-[rgba(180,130,60,0.40)] dark:bg-[rgba(214,158,74,0.10)] dark:border-[rgba(214,158,74,0.32)]'
+                        : 'border-dashed bg-[rgba(120,113,108,0.14)] border-[rgba(120,113,108,0.40)] dark:bg-[rgba(168,158,150,0.10)] dark:border-[rgba(168,158,150,0.32)]'
+                      : isOwnerStay
                       ? 'bg-[rgba(180,130,60,0.26)] border-[rgba(180,130,60,0.55)] dark:bg-[rgba(214,158,74,0.20)] dark:border-[rgba(214,158,74,0.45)]'
                       : 'bg-[rgba(120,113,108,0.28)] border-[rgba(120,113,108,0.55)] dark:bg-[rgba(168,158,150,0.18)] dark:border-[rgba(168,158,150,0.45)]';
                   const barRing = isOwnerStay

@@ -3,6 +3,7 @@ import {
   refreshPropertyAvailability,
   type RefreshableProperty,
 } from './refreshPropertyAvailability';
+import { getOccupancyCohorts } from './occupancyCohort';
 
 // computeAvailability — the single source of truth for "is this property free".
 //
@@ -125,37 +126,49 @@ export async function computeAvailability(
   const from = toDateOnly(window.from)!;
   const to = toDateOnly(window.to)!;
 
-  // --- Freshness: refresh this one property unless told not to / recently done.
+  // --- Parent/child cohort: a whole-house booking occupies each child unit
+  // and a child booking makes the parent busy, so the property's busy set is
+  // the union over itself + its parent + its children (never siblings). The
+  // result stays opaque, so an inherited conflict is indistinguishable from a
+  // direct one — exactly right for guest-facing callers.
+  const cohorts = await getOccupancyCohorts([propertyId], supabase);
+  const cohortIds = Array.from(cohorts.cohortByProperty.get(propertyId) ?? [propertyId]);
+
+  // --- Freshness: refresh every stale cohort member unless told not to. The
+  // related units' PMS calendars are part of this property's answer now, so
+  // they must be just as fresh. Refreshes run in parallel; `fresh` reports on
+  // the requested property itself, preserving the pre-cohort contract.
   let fresh = false;
   if (!opts.skipRefresh) {
-    const last = lastRefreshedAt.get(propertyId) ?? 0;
-    if (Date.now() - last >= REFRESH_TTL_MS) {
-      const { data: propRow } = await supabase
+    const staleIds = cohortIds.filter(
+      (id) => Date.now() - (lastRefreshedAt.get(id) ?? 0) >= REFRESH_TTL_MS,
+    );
+    if (staleIds.length > 0) {
+      const { data: propRows } = await supabase
         .from('properties')
         .select('id, org_id, hostaway_listing_id, is_active')
-        .eq('id', propertyId)
-        .maybeSingle();
-      if (propRow) {
-        try {
-          const result = await refreshPropertyAvailability(
-            propRow as RefreshableProperty,
-            supabase,
-          );
-          if (result.refreshed) {
-            fresh = true;
-            lastRefreshedAt.set(propertyId, Date.now());
+        .in('id', staleIds);
+      await Promise.all(
+        ((propRows ?? []) as RefreshableProperty[]).map(async (propRow) => {
+          try {
+            const result = await refreshPropertyAvailability(propRow, supabase);
+            if (result.refreshed) {
+              lastRefreshedAt.set(propRow.id, Date.now());
+              if (propRow.id === propertyId) fresh = true;
+            }
+          } catch (err) {
+            // Graceful fallback: keep going with existing native data. Never let a
+            // PMS hiccup (rate limit, 403, timeout) fail the availability answer.
+            console.error('[computeAvailability] refresh failed; using cached native data', {
+              propertyId: propRow.id,
+              err: err instanceof Error ? err.message : err,
+            });
           }
-        } catch (err) {
-          // Graceful fallback: keep going with existing native data. Never let a
-          // PMS hiccup (rate limit, 403, timeout) fail the availability answer.
-          console.error('[computeAvailability] refresh failed; using cached native data', {
-            propertyId,
-            err: err instanceof Error ? err.message : err,
-          });
-        }
-      }
-    } else {
-      // Within the TTL — data is already fresh from a refresh moments ago.
+        }),
+      );
+    }
+    // Within the TTL — data is already fresh from a refresh moments ago.
+    if (!fresh && Date.now() - (lastRefreshedAt.get(propertyId) ?? 0) < REFRESH_TTL_MS) {
       fresh = true;
     }
   }
@@ -167,13 +180,13 @@ export async function computeAvailability(
     supabase
       .from('reservations')
       .select('check_in, check_out')
-      .eq('property_id', propertyId)
+      .in('property_id', cohortIds)
       .lte('check_in', to)
       .gte('check_out', from),
     supabase
       .from('calendar_blocks')
       .select('start_date, end_date')
-      .eq('property_id', propertyId)
+      .in('property_id', cohortIds)
       .lte('start_date', to)
       .gte('end_date', from),
   ]);

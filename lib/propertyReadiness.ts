@@ -41,7 +41,8 @@ export function getPropertyReadiness(reservations: Turnover[]): PropertyReadines
 
   const now = new Date();
 
-  // Occupied: ready-or-not doesn't matter mid-stay.
+  // Occupied: ready-or-not doesn't matter mid-stay. A stay INHERITED from a
+  // parent/child unit counts — the guest is physically in this space too.
   const occupying = real.find((r) => {
     const checkIn = r.check_in ? new Date(r.check_in) : null;
     const checkOut = new Date(r.check_out!);
@@ -52,9 +53,12 @@ export function getPropertyReadiness(reservations: Turnover[]): PropertyReadines
   // Governing vacancy: the latest checkout already in the past. (When its
   // next_check_in has also passed, that next reservation is itself either
   // occupied — handled above — or checked out, in which case it is the later
-  // checkout and wins this reduce anyway.)
+  // checkout and wins this reduce anyway.) Inherited stays are excluded:
+  // their turnover tasks belong to the unit the guest actually booked, so
+  // they can't testify to THIS row's readiness.
   let governing: Turnover | null = null;
   for (const r of real) {
+    if ((r as Turnover & { inherited?: boolean }).inherited) continue;
     const checkOut = new Date(r.check_out!);
     if (checkOut > now) continue;
     if (!governing || checkOut > new Date(governing.check_out!)) governing = r;

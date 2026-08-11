@@ -44,7 +44,7 @@ export async function GET(
 
   const { data: property, error: propertyError } = await supabase
     .from('properties')
-    .select('id, name')
+    .select('id, name, parent_property_id')
     .eq('id', propertyId)
     .maybeSingle();
 
@@ -54,6 +54,16 @@ export async function GET(
   if (!property) {
     return NextResponse.json({ error: 'Property not found' }, { status: 404 });
   }
+
+  // Parent/child display, ONE DIRECTION ONLY: when this property is a child,
+  // pull in its PARENT's reservations/blocks (flagged `inherited`) — a
+  // whole-house booking genuinely occupies this unit's entire space. Never
+  // the reverse: a child's booking occupies only part of the parent's
+  // space, so a parent's own calendar never shows a child's stay as if the
+  // whole property were booked. (Mirrors the Schedule/Timeline window.)
+  const cohortIds = property.parent_property_id
+    ? [propertyId, property.parent_property_id]
+    : [propertyId];
 
   // Compute month window plus a 7-day buffer on each side (to cover the
   // surrounding rows of a 6-week grid). All comparisons are on the date
@@ -90,7 +100,7 @@ export async function GET(
       kind
     `
     )
-    .eq('property_id', propertyId)
+    .in('property_id', cohortIds)
     .lte('check_in', windowEnd)
     .gte('check_out', windowStart)
     .order('check_in', { ascending: true });
@@ -147,7 +157,7 @@ export async function GET(
   const { data: blocks, error: blocksError } = await supabase
     .from('calendar_blocks')
     .select('id, property_id, start_date, end_date, note')
-    .eq('property_id', propertyId)
+    .in('property_id', cohortIds)
     .lte('start_date', windowEnd)
     .gte('end_date', windowStart)
     .order('start_date', { ascending: true });
@@ -196,8 +206,14 @@ export async function GET(
   return NextResponse.json({
     property: { id: property.id, name: property.name },
     window: { start: windowStart, end: windowEnd, year, month },
-    reservations: reservations || [],
-    blocks: blocks || [],
+    reservations: (reservations || []).map((r: any) => ({
+      ...r,
+      inherited: r.property_id !== propertyId,
+    })),
+    blocks: (blocks || []).map((b: any) => ({
+      ...b,
+      inherited: b.property_id !== propertyId,
+    })),
     tasks: transformedTasks,
   });
 }

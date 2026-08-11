@@ -162,7 +162,12 @@ export function formatOccupancy(
   occupancy: PropertyOccupancy | null | undefined
 ): { label: string; detail: string | null } | null {
   if (!occupancy) return null;
-  const label = OCCUPANCY_LABELS[occupancy.status] ?? occupancy.status;
+  // Inherited occupancy names its source ON THE STATE LINE — "Occupied (via
+  // parent)" — keeping the date line short enough that "Until 10am Aug 31"
+  // never truncates. The stay/block lives on the parent (whole-house) or a
+  // child unit, not on this property's own calendar; the tooltip spells it out.
+  const baseLabel = OCCUPANCY_LABELS[occupancy.status] ?? occupancy.status;
+  const label = occupancy.via ? `${baseLabel} (via ${occupancy.via})` : baseLabel;
   if (!occupancy.until) {
     // Nothing scheduled inside the horizon. Only worth saying out loud when the
     // property is free — "occupied with no end in sight" is a data smell, not a
@@ -186,11 +191,16 @@ export function occupancyTitle(
   occupancy: PropertyOccupancy | null | undefined
 ): string | undefined {
   if (!occupancy) return undefined;
+  const viaClause = occupancy.via
+    ? occupancy.via === 'parent'
+      ? ' — the whole-property parent listing is booked'
+      : ' — a child unit of this property is booked'
+    : '';
   const base =
     occupancy.status === 'occupied'
-      ? 'Someone is in the unit'
+      ? `Someone is in the unit${viaClause}`
       : occupancy.status === 'blocked'
-      ? 'Blocked on the calendar — no guest'
+      ? `Blocked on the calendar — no guest${occupancy.via ? ` (via ${occupancy.via} listing)` : ''}`
       : 'Nobody in the unit';
   if (!occupancy.until) {
     return `${base} — nothing scheduled in the next few months.`;

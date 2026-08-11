@@ -1576,7 +1576,18 @@ export default function TimelineWindow({
                           // into a sticker. Light now uses white at partial
                           // alpha, landing between the fill and the white cell
                           // so the edge still registers against both.
-                          const barColorClass = isOwnerStay
+                          // A stay inherited from a parent/child unit renders
+                          // as a GHOST of the real bar: translucent fill (the
+                          // gridlines bleeding through are intentional — it
+                          // reads as an echo, not a booking of this row) and a
+                          // dashed rim. Same hue family so owner stays keep
+                          // their amber identity.
+                          const isInherited = !!(startingReservation as any).inherited;
+                          const barColorClass = isInherited
+                            ? isOwnerStay
+                              ? 'bg-[rgba(233,213,168,0.40)] border-dashed border-[rgba(180,140,60,0.35)] dark:bg-[rgba(67,57,31,0.45)] dark:border-[rgba(214,158,74,0.30)]'
+                              : 'bg-[rgba(217,215,214,0.45)] border-dashed border-[rgba(120,113,108,0.30)] dark:bg-[rgba(52,50,52,0.50)] dark:border-[rgba(168,158,150,0.30)]'
+                            : isOwnerStay
                             ? 'bg-[#e9d5a8] border-[rgba(255,255,255,0.5)] dark:bg-[#43391f] dark:border-[rgba(214,158,74,0.45)]'
                             : 'bg-[#d9d7d6] border-[rgba(255,255,255,0.55)] dark:bg-[#343234] dark:border-[rgba(168,158,150,0.45)]';
 

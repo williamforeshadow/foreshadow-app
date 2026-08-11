@@ -8,6 +8,7 @@ import type {
   PropertyOccupancy,
   PropertyOccupancyState,
 } from '@/lib/types';
+import { getOccupancyCohorts } from './occupancyCohort';
 
 // occupancySnapshot — batched "is anyone in the unit RIGHT NOW, and until when".
 //
@@ -71,6 +72,13 @@ interface BusyInterval {
   start: string;
   end: string;
   kind: 'occupied' | 'blocked';
+  /**
+   * Which unit the interval actually lives on, relative to the property it
+   * was attributed to: null = a direct booking/block on the property itself;
+   * 'parent'/'child' = inherited from the related unit. Surfaces in the
+   * snapshot as `via` so rows can say "occupied … via parent listing".
+   */
+  via: 'parent' | 'child' | null;
 }
 
 /** Reservations/blocks store timestamptz or date; we only ever want the day. */
@@ -116,7 +124,7 @@ export async function getOccupancySnapshot(
 
   // --- Org clock + per-property timezone.
   // Resolution order matches opsToday: property.timezone → org default → UTC.
-  const [settingsRes, propsRes] = await Promise.all([
+  const [settingsRes, propsRes, cohorts] = await Promise.all([
     opts.orgId
       ? supabase
           .from('operations_settings')
@@ -125,6 +133,10 @@ export async function getOccupancySnapshot(
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
     supabase.from('properties').select('id, timezone').in('id', ids),
+    // Parent/child expansion: a whole-house booking occupies each child unit
+    // and a child booking makes the parent busy, so the interval queries
+    // cover every cohort member and attribution fans back out below.
+    getOccupancyCohorts(ids, supabase),
   ]);
   if (propsRes.error) throw new Error(`occupancy (properties): ${propsRes.error.message}`);
 
@@ -153,19 +165,21 @@ export async function getOccupancySnapshot(
   const queryFrom = addDays(nowKeys[0].slice(0, 10), -1);
   const queryTo = addDays(nowKeys[nowKeys.length - 1].slice(0, 10), horizonDays);
 
-  // --- Pull both native sources once for the whole set.
+  // --- Pull both native sources once for the whole set, widened to every
+  // cohort member so parent/child occupancy is visible from both sides.
   const knownIds = Array.from(nowByProperty.keys());
+  const sourceIds = cohorts.queryIds.length > 0 ? cohorts.queryIds : knownIds;
   const [resRes, blkRes] = await Promise.all([
     supabase
       .from('reservations')
       .select('property_id, check_in, check_out')
-      .in('property_id', knownIds)
+      .in('property_id', sourceIds)
       .lte('check_in', queryTo)
       .gte('check_out', queryFrom),
     supabase
       .from('calendar_blocks')
       .select('property_id, start_date, end_date')
-      .in('property_id', knownIds)
+      .in('property_id', sourceIds)
       .lte('start_date', queryTo)
       .gte('end_date', queryFrom),
   ]);
@@ -173,11 +187,22 @@ export async function getOccupancySnapshot(
   if (blkRes.error) throw new Error(`occupancy (blocks): ${blkRes.error.message}`);
 
   const intervalsByProperty = new Map<string, BusyInterval[]>();
-  const push = (propertyId: string, interval: BusyInterval) => {
+  // An interval on a cohort member applies to every requested property it
+  // affects: itself, plus its parent and its children (never siblings). Each
+  // attribution records the relation so the snapshot can report provenance.
+  const push = (sourcePropertyId: string, interval: Omit<BusyInterval, 'via'>) => {
     if (interval.end <= interval.start) return; // zero-length / bad data
-    const list = intervalsByProperty.get(propertyId);
-    if (list) list.push(interval);
-    else intervalsByProperty.set(propertyId, [interval]);
+    const affected = cohorts.affectedBySource.get(sourcePropertyId) ?? [sourcePropertyId];
+    for (const propertyId of affected) {
+      const relation = cohorts.relationByProperty.get(propertyId)?.get(sourcePropertyId) ?? 'self';
+      const attributed: BusyInterval = {
+        ...interval,
+        via: relation === 'self' ? null : relation,
+      };
+      const list = intervalsByProperty.get(propertyId);
+      if (list) list.push(attributed);
+      else intervalsByProperty.set(propertyId, [attributed]);
+    }
   };
 
   // A stay runs from check-in time on the arrival day to check-out time on the
@@ -222,11 +247,23 @@ export async function getOccupancySnapshot(
     const covering = intervals.filter((i) => i.start <= nowKey && nowKey < i.end);
     // A reservation wins over a block on the same instant — someone physically
     // in the unit is the more important fact.
-    const status: PropertyOccupancyState = covering.some((i) => i.kind === 'occupied')
+    const coveringOccupied = covering.filter((i) => i.kind === 'occupied');
+    const status: PropertyOccupancyState = coveringOccupied.length > 0
       ? 'occupied'
       : covering.length > 0
         ? 'blocked'
         : 'vacant';
+
+    // Provenance of the CURRENT status, mirroring the status precedence: a
+    // direct interval of the status-determining kind beats an inherited one,
+    // so `via` is set only when every such interval is inherited. (A property
+    // can't have both a parent and children — DB-enforced — so the inherited
+    // intervals here are all 'parent' or all 'child', never mixed.)
+    const statusIntervals = status === 'occupied' ? coveringOccupied : covering;
+    const via: PropertyOccupancy['via'] =
+      status === 'vacant' || statusIntervals.some((i) => i.via === null)
+        ? null
+        : statusIntervals[0].via;
 
     let until: string | null = null;
     let untilKind: PropertyOccupancy['until_kind'] = null;
@@ -257,6 +294,7 @@ export async function getOccupancySnapshot(
       status,
       until,
       until_kind: untilKind,
+      via,
       as_of: nowKey,
       timezone,
     });

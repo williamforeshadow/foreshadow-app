@@ -12,6 +12,7 @@ export interface PropertyProfile {
   name: string;
   hostaway_name: string | null;
   hostaway_listing_id: number | null;
+  parent_property_id: string | null;
   is_active: boolean;
   address_street: string | null;
   address_city: string | null;

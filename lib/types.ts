@@ -160,6 +160,14 @@ export interface PropertyOccupancy {
   until: string | null;
   /** What `until` flips to. `null` exactly when `until` is null. */
   until_kind: PropertyOccupancyFlip | null;
+  /**
+   * Set when the CURRENT busy status is inherited from a related unit rather
+   * than a direct booking on this property: 'parent' = the whole-house parent
+   * listing is booked/blocked, 'child' = one of this property's child units
+   * is. Null/absent for direct occupancy and always for `vacant`. When a
+   * direct stay and an inherited one overlap, direct wins and this stays null.
+   */
+  via?: 'parent' | 'child' | null;
   /** The wall-clock moment this snapshot describes, same format as `until`. */
   as_of: string;
   /** IANA timezone the wall-clock values above are expressed in. */
@@ -194,6 +202,8 @@ export interface Turnover {
 export interface PropertyOption {
   id: string | null;
   name: string;
+  /** Parent unit this property is part of (one-level hierarchy), when known. */
+  parent_property_id?: string | null;
 }
 
 // ============================================================================

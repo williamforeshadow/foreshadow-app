@@ -596,7 +596,14 @@ export default function MobileTimelineView({
                         // borders, so those stay visible.
                         const isOwnerStay = startingRes.kind === 'owner_stay';
                         const resLabel = isOwnerStay ? 'Owner Stay' : (startingRes.guest_name || 'No guest');
-                        const bgClass = isOwnerStay
+                        // Ghost styling for stays inherited from a parent/child
+                        // unit — translucent + dashed, same as the desktop grid.
+                        const isInherited = !!(startingRes as any).inherited;
+                        const bgClass = isInherited
+                          ? isOwnerStay
+                            ? 'bg-[rgba(233,213,168,0.40)] border-dashed border-[rgba(180,140,60,0.35)] dark:bg-[rgba(67,57,31,0.45)] dark:border-[rgba(214,158,74,0.30)]'
+                            : 'bg-[rgba(217,215,214,0.45)] border-dashed border-[rgba(120,113,108,0.30)] dark:bg-[rgba(52,50,52,0.50)] dark:border-[rgba(168,158,150,0.30)]'
+                          : isOwnerStay
                           // Top border is a rim light in both themes — lighter
                           // than the fill. See TimelineWindow for the rationale.
                           ? 'bg-[#e9d5a8] border-[rgba(255,255,255,0.5)] dark:bg-[#43391f] dark:border-[rgba(214,158,74,0.45)]'
