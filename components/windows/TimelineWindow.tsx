@@ -1313,7 +1313,7 @@ export default function TimelineWindow({
                             <div className="absolute right-0 top-0 bottom-0 w-16 flex items-center justify-end pr-2 cursor-pointer">
                               <div className="flex items-center px-2 py-1 rounded-lg bg-[rgba(30,25,20,0.06)] dark:bg-[rgba(255,255,255,0.06)] hover:bg-[rgba(30,25,20,0.10)] dark:hover:bg-[rgba(255,255,255,0.10)] transition-colors">
                                 {readiness.state === 'occupied' ? (
-                                  <BedDouble className="w-3 h-3 text-[#9a9892] dark:text-[#66645f]" />
+                                  <BedDouble className="w-3 h-3 text-[#6366F1] dark:text-[#818CF8]" />
                                 ) : readiness.state === 'ready' ? (
                                   <CircleCheck className="w-3 h-3 text-[#4C4869] dark:text-[#6e6a8a]" />
                                 ) : (
