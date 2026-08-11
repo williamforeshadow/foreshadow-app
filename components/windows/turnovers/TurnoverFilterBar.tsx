@@ -12,7 +12,6 @@ import type { CleaningFilters } from '@/lib/types';
 // pill-style multi-select chips for the four turnover-relevant axes.
 //
 // Filter axes (varying field set vs. Schedule):
-//   - Reservation Tasks (turnoverStatus)
 //   - Occupancy (occupied / checked out)
 //   - Schedule (active / upcoming) — formerly "Timeline"
 //   - Property (multi-select, populated from the cards response)
@@ -23,7 +22,7 @@ import type { CleaningFilters } from '@/lib/types';
 interface TurnoverFilterBarProps {
   filters: CleaningFilters;
   setFilterValues: (
-    category: 'turnoverStatus' | 'occupancyStatus' | 'timeline' | 'properties',
+    category: 'occupancyStatus' | 'timeline' | 'properties',
     values: string[]
   ) => void;
   setSearch: (value: string) => void;
@@ -31,12 +30,6 @@ interface TurnoverFilterBarProps {
   getActiveFilterCount: () => number;
   propertyOptions: FilterOption[];
 }
-
-const RESERVATION_TASK_OPTIONS: FilterOption[] = [
-  { value: 'not_started', label: 'Not Started' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'complete', label: 'Complete' },
-];
 
 const OCCUPANCY_OPTIONS: FilterOption[] = [
   { value: 'occupied', label: 'Occupied' },
@@ -87,12 +80,6 @@ export function TurnoverFilterBar({
               active filters never push the row to a second line. The Clear
               button stays outside the lane so it remains visible. */}
           <ChipScrollLane>
-            <MultiSelect
-              label="Reservation Tasks"
-              options={RESERVATION_TASK_OPTIONS}
-              selected={new Set(filters.turnoverStatus)}
-              onChange={(next) => setFilterValues('turnoverStatus', Array.from(next))}
-            />
             <MultiSelect
               label="Occupancy"
               options={OCCUPANCY_OPTIONS}

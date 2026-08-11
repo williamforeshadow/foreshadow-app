@@ -36,7 +36,6 @@ export function useTurnovers() {
   // View state
   const [viewMode, setViewMode] = useState<'cards' | 'json'>('cards');
   const [filters, setFilters] = useState<CleaningFilters>({
-    turnoverStatus: [],
     occupancyStatus: [],
     timeline: [],
     properties: [],
@@ -87,7 +86,7 @@ export function useTurnovers() {
   // filter axes (status/occupancy/timeline/properties); the free-text
   // search is set via `setSearch` instead.
   const toggleFilter = useCallback(
-    (category: 'turnoverStatus' | 'occupancyStatus' | 'timeline' | 'properties', value: string) => {
+    (category: 'occupancyStatus' | 'timeline' | 'properties', value: string) => {
       setFilters(prev => ({
         ...prev,
         [category]: prev[category].includes(value)
@@ -101,7 +100,7 @@ export function useTurnovers() {
   // Bulk setter for a multi-select axis — used by the MultiSelect chip
   // (which emits the full next Set on every change).
   const setFilterValues = useCallback(
-    (category: 'turnoverStatus' | 'occupancyStatus' | 'timeline' | 'properties', values: string[]) => {
+    (category: 'occupancyStatus' | 'timeline' | 'properties', values: string[]) => {
       setFilters(prev => ({ ...prev, [category]: values }));
     },
     []
@@ -113,7 +112,6 @@ export function useTurnovers() {
 
   const clearAllFilters = useCallback(() => {
     setFilters({
-      turnoverStatus: [],
       occupancyStatus: [],
       timeline: [],
       properties: [],
@@ -123,7 +121,6 @@ export function useTurnovers() {
 
   const getActiveFilterCount = useCallback(() => {
     return (
-      filters.turnoverStatus.length +
       filters.occupancyStatus.length +
       filters.timeline.length +
       filters.properties.length +

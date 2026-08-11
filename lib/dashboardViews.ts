@@ -1,7 +1,11 @@
 export type DashboardView = 'turnovers' | 'timeline' | 'projects' | 'tasks';
 
+// NOTE: keys are internal + baked into URLs (?view=turnovers) and
+// localStorage; labels are the client-facing names. 'turnovers' displays as
+// "Reservations" (renamed 2026-08-11) — same pattern as 'timeline' showing
+// "Schedule". Don't rename keys without a URL alias.
 export const DASHBOARD_VIEW_LABELS: Record<DashboardView, string> = {
-  turnovers: 'Turnovers',
+  turnovers: 'Reservations',
   timeline: 'Schedule',
   projects: 'Bins',
   tasks: 'Tasks',

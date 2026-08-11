@@ -1,5 +1,4 @@
 export interface CleaningFilters {
-  turnoverStatus: string[];
   occupancyStatus: string[];
   timeline: string[];  // 'active' | 'upcoming'
   // Property name multi-select. Empty = no property filter.
@@ -12,13 +11,6 @@ export interface CleaningFilters {
 export function applyCleaningFilters(items: any[], filters: CleaningFilters): any[] {
   const searchLower = filters.search.trim().toLowerCase();
   return items.filter(item => {
-    // Turnover Status filter
-    if (filters.turnoverStatus.length > 0) {
-      if (!filters.turnoverStatus.includes(item.turnover_status || 'no_tasks')) {
-        return false;
-      }
-    }
-
     // Occupancy Status filter. Only reservations whose check-in has already
     // happened can have a real occupancy state — upcoming reservations are
     // neither "occupied" nor "checked out" (the guest hasn't arrived yet),

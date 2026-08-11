@@ -123,7 +123,7 @@ function TurnoversWindowContent(props: TurnoversWindowProps) {
       <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,var(--header-scrim),transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
         <div className="pb-1 pl-8 pr-12 pt-6">
           <h1 className="text-[24px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed]">
-            Turnovers
+            Reservations
           </h1>
         </div>
         {response !== null && (
@@ -158,7 +158,7 @@ function TurnoversWindowContent(props: TurnoversWindowProps) {
         {loading && (
           <div className="flex justify-center items-center py-20">
             <p className="text-neutral-500 dark:text-neutral-400">
-              Loading turnovers...
+              Loading reservations...
             </p>
           </div>
         )}
@@ -172,7 +172,7 @@ function TurnoversWindowContent(props: TurnoversWindowProps) {
         {!loading && !error && response === null && (
           <div className="flex justify-center items-center py-20">
             <p className="text-neutral-500 dark:text-neutral-400">
-              No turnovers found
+              No reservations found
             </p>
           </div>
         )}
