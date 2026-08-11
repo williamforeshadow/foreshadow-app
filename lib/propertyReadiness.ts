@@ -1,15 +1,22 @@
 import type { Task, Turnover } from './types';
 
-export interface PropertyReadiness {
-  /** 'ready' when at least one gating task exists and all are complete. */
-  state: 'ready' | 'attention';
-  /** The gating tasks (informs_readiness templates) inside the vacancy window. */
-  tasks: Task[];
-  completed: number;
-  total: number;
-  /** The checked-out reservation whose vacancy window governs the state. */
-  reservation: Turnover;
-}
+export type PropertyReadiness =
+  | {
+      /** 'ready' when at least one gating task exists and all are complete. */
+      state: 'ready' | 'attention';
+      /** The gating tasks (informs_readiness templates) inside the vacancy window. */
+      tasks: Task[];
+      completed: number;
+      total: number;
+      /** The checked-out reservation whose vacancy window governs the state. */
+      reservation: Turnover;
+    }
+  | {
+      /** A stay is in progress — readiness doesn't apply mid-stay. */
+      state: 'occupied';
+      /** The in-house reservation (guest booking or owner stay). */
+      reservation: Turnover;
+    };
 
 /**
  * Derive the Schedule's property-readiness state from a property's
@@ -17,8 +24,9 @@ export interface PropertyReadiness {
  * reservation's windowed task jsonb).
  *
  * Readiness only exists during a vacancy: while a guest (or owner — treated
- * identically) is in the property, and before any checkout has ever
- * happened, there is nothing to be ready for, so this returns null and no
+ * identically) is in the property the state is 'occupied' (informational
+ * icon, no ready/attention judgment), and before any checkout has ever
+ * happened there is nothing to be ready for, so this returns null and no
  * icon renders. During a vacancy, the gating set is the tasks whose template
  * has informs_readiness on, scheduled between the governing check-out and
  * the next check-in (unbounded when there is no next booking). Zero gating
@@ -34,12 +42,12 @@ export function getPropertyReadiness(reservations: Turnover[]): PropertyReadines
   const now = new Date();
 
   // Occupied: ready-or-not doesn't matter mid-stay.
-  const occupied = real.some((r) => {
+  const occupying = real.find((r) => {
     const checkIn = r.check_in ? new Date(r.check_in) : null;
     const checkOut = new Date(r.check_out!);
     return checkIn !== null && now >= checkIn && now < checkOut;
   });
-  if (occupied) return null;
+  if (occupying) return { state: 'occupied', reservation: occupying };
 
   // Governing vacancy: the latest checkout already in the past. (When its
   // next_check_in has also passed, that next reservation is itself either

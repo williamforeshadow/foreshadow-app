@@ -44,7 +44,7 @@ import {
   DESKTOP_TIMELINE_DETAIL_PANEL_FLEX,
   DESKTOP_TASK_PANEL_SLOT,
 } from '@/lib/detailPanelGeometry';
-import { CircleCheck, Loader, Filter as FilterIcon } from 'lucide-react';
+import { BedDouble, CircleCheck, Loader, Filter as FilterIcon } from 'lucide-react';
 import { CompactSearch } from '@/components/ui/compact-search';
 import { RowsIcon, KanbanColumnsIcon } from './timeline/TimelineViewIcons';
 import type { Task, User } from '@/lib/types';
@@ -53,6 +53,10 @@ import { UserAvatar } from '@/components/ui/user-avatar';
 import { useExclusiveDetailPanelHost, useReservationViewer } from '@/lib/reservationViewerContext';
 import { useRouter } from 'next/navigation';
 import { taskPath } from '@/src/lib/links';
+
+// Short stay-date label for the occupied popover ("Aug 8").
+const formatStayDate = (iso: string | undefined) =>
+  iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—';
 
 const getRowStyles = (status: string) => {
   const base = 'relative overflow-hidden rounded-lg';
@@ -1308,7 +1312,9 @@ export default function TimelineWindow({
                           <PopoverTrigger asChild>
                             <div className="absolute right-0 top-0 bottom-0 w-16 flex items-center justify-end pr-2 cursor-pointer">
                               <div className="flex items-center px-2 py-1 rounded-lg bg-[rgba(30,25,20,0.06)] dark:bg-[rgba(255,255,255,0.06)] hover:bg-[rgba(30,25,20,0.10)] dark:hover:bg-[rgba(255,255,255,0.10)] transition-colors">
-                                {readiness.state === 'ready' ? (
+                                {readiness.state === 'occupied' ? (
+                                  <BedDouble className="w-3 h-3 text-[#9a9892] dark:text-[#66645f]" />
+                                ) : readiness.state === 'ready' ? (
                                   <CircleCheck className="w-3 h-3 text-[#4C4869] dark:text-[#6e6a8a]" />
                                 ) : (
                                   <Loader className="w-3 h-3 text-[#dc4a3a] dark:text-[#d97757]" />
@@ -1327,6 +1333,23 @@ export default function TimelineWindow({
                               </PopoverClose>
                             </div>
                             
+                            {readiness.state === 'occupied' ? (
+                              <div className="px-2 py-2">
+                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
+                                  {readiness.reservation.kind === 'owner_stay' ? 'Occupied: Owner Stay' : 'Occupied'}
+                                </p>
+                                <div className="px-1 pb-1">
+                                  <p className="text-sm truncate">
+                                    {readiness.reservation.kind === 'owner_stay'
+                                      ? readiness.reservation.guest_name || 'Owner'
+                                      : readiness.reservation.guest_name || 'Guest'}
+                                  </p>
+                                  <p className="text-sm text-muted-foreground">
+                                    {formatStayDate(readiness.reservation.check_in)} → {formatStayDate(readiness.reservation.check_out)}
+                                  </p>
+                                </div>
+                              </div>
+                            ) : (
                             <div className="px-2 py-2">
                               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
                                 Property Readiness: ({readiness.completed}/{readiness.total})
@@ -1357,6 +1380,7 @@ export default function TimelineWindow({
                                 )}
                               </div>
                             </div>
+                            )}
                           </PopoverContent>
                         </Popover>
                       );
