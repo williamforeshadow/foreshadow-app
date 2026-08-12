@@ -964,10 +964,29 @@ a {
   height: 0;
 }
 
+/* Tailwind's preflight resets list-style to none; restore the markers or
+   toggling a list looks like a no-op. */
 .rich-text-editor-content ul,
 .rich-text-editor-content ol {
   padding-left: 1.25rem;
   margin: 0.35em 0;
+}
+
+.rich-text-editor-content ul {
+  list-style: disc outside;
+}
+
+.rich-text-editor-content ul ul {
+  list-style-type: circle;
+}
+
+.rich-text-editor-content ol {
+  list-style: decimal outside;
+}
+
+/* Task items nest as li > div > p, so match descendants, not children. */
+.rich-text-editor-content li p {
+  margin: 0;
 }
 
 .rich-text-editor-content li {
@@ -996,16 +1015,20 @@ a {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  margin-top: 0.2em;
+  /* Match the first line box (line-height 1.625) so the checkbox centers
+     against the text instead of floating above it. */
+  height: 1.625em;
 }
 
+/* Sized in em so the box tracks the surrounding text instead of towering
+   over it at the panel's 14px body size. */
 .rich-text-editor-content ul[data-type="taskList"] li > label input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
-  width: 1.125rem;
-  height: 1.125rem;
-  border: 2px solid var(--color-neutral-300);
-  border-radius: 0.25rem;
+  width: 1em;
+  height: 1em;
+  border: 1.5px solid var(--color-neutral-300);
+  border-radius: 0.25em;
   cursor: pointer;
   position: relative;
   transition: all 0.15s ease;
@@ -1016,20 +1039,27 @@ a {
   border-color: var(--color-neutral-600);
 }
 
+/* Checked = the app-wide "complete" violet (task status, property
+   readiness), not green, so "done" reads the same everywhere. */
 .rich-text-editor-content ul[data-type="taskList"] li > label input[type="checkbox"]:checked {
-  background: var(--color-emerald-500);
-  border-color: var(--color-emerald-500);
+  background: var(--accent-5);
+  border-color: var(--accent-5);
+}
+
+:is(.dark) .rich-text-editor-content ul[data-type="taskList"] li > label input[type="checkbox"]:checked {
+  background: #6e6a8a;
+  border-color: #6e6a8a;
 }
 
 .rich-text-editor-content ul[data-type="taskList"] li > label input[type="checkbox"]:checked::after {
   content: '';
   position: absolute;
-  left: 3px;
-  top: 0px;
-  width: 5px;
-  height: 9px;
+  left: 0.28em;
+  top: 0.02em;
+  width: 0.28em;
+  height: 0.6em;
   border: solid white;
-  border-width: 0 2px 2px 0;
+  border-width: 0 1.5px 1.5px 0;
   transform: rotate(45deg);
 }
 

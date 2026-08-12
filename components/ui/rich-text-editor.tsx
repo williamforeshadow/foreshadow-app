@@ -1,6 +1,6 @@
 'use client';
 
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor, EditorContent, useEditorState } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
@@ -65,6 +65,22 @@ export function RichTextEditor({
     },
   });
 
+  // Tiptap v3 doesn't re-render on every transaction, so isActive() read at
+  // render time goes stale; subscribe to the flags the toolbar highlights.
+  const active = useEditorState({
+    editor,
+    selector: ({ editor: e }) =>
+      e
+        ? {
+            bold: e.isActive('bold'),
+            italic: e.isActive('italic'),
+            bulletList: e.isActive('bulletList'),
+            orderedList: e.isActive('orderedList'),
+            taskList: e.isActive('taskList'),
+          }
+        : null,
+  });
+
   // Sync content when it changes externally (e.g. switching projects)
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
@@ -93,7 +109,7 @@ export function RichTextEditor({
       {editable && (
         <div className="flex items-center gap-1 pb-2 mb-2 border-b border-neutral-200/60 dark:border-neutral-700/60">
           <ToolbarButton
-            active={editor.isActive('bold')}
+            active={active?.bold ?? false}
             onClick={() => editor.chain().focus().toggleBold().run()}
             title="Bold"
           >
@@ -103,7 +119,7 @@ export function RichTextEditor({
             </svg>
           </ToolbarButton>
           <ToolbarButton
-            active={editor.isActive('italic')}
+            active={active?.italic ?? false}
             onClick={() => editor.chain().focus().toggleItalic().run()}
             title="Italic"
           >
@@ -115,7 +131,7 @@ export function RichTextEditor({
           </ToolbarButton>
           <div className="w-px h-4 bg-neutral-200 dark:bg-neutral-700 mx-0.5" />
           <ToolbarButton
-            active={editor.isActive('bulletList')}
+            active={active?.bulletList ?? false}
             onClick={() => editor.chain().focus().toggleBulletList().run()}
             title="Bullet list"
           >
@@ -125,7 +141,7 @@ export function RichTextEditor({
             </svg>
           </ToolbarButton>
           <ToolbarButton
-            active={editor.isActive('orderedList')}
+            active={active?.orderedList ?? false}
             onClick={() => editor.chain().focus().toggleOrderedList().run()}
             title="Numbered list"
           >
@@ -138,7 +154,7 @@ export function RichTextEditor({
           </ToolbarButton>
           <div className="w-px h-4 bg-neutral-200 dark:bg-neutral-700 mx-0.5" />
           <ToolbarButton
-            active={editor.isActive('taskList')}
+            active={active?.taskList ?? false}
             onClick={addChecklist}
             title="Checklist"
           >
@@ -172,6 +188,11 @@ function ToolbarButton({
   return (
     <button
       type="button"
+      // Keep the tap from stealing focus: on touch, focusing the button first
+      // collapses the editor's text selection, so the toggle lands on a bare
+      // cursor and appears to do nothing.
+      onPointerDown={(e) => e.preventDefault()}
+      onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       title={title}
       className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
