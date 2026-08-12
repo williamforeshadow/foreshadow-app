@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { requireAuthContext } from '@/lib/requireAuthContext';
 import { logProjectActivity } from '@/lib/logProjectActivity';
-import { notifyTaskCommented } from '@/src/server/notifications/notify';
+import {
+  notifyTaskCommented,
+  notifyTaskMentioned,
+} from '@/src/server/notifications/notify';
+import { resolveAndStoreMentions } from '@/src/server/comments/commentMentions';
+import { stripMentionTokens } from '@/lib/mentions';
 
 // GET - List comments for a specific project or task with user details
 export async function GET(request: Request) {
@@ -65,14 +70,17 @@ export async function POST(request: Request) {
   try {
     const ctx = await requireAuthContext();
     if (ctx instanceof NextResponse) return ctx;
-    const { supabase, orgId } = ctx;
+    const { supabase, service, orgId } = ctx;
 
     const body = await request.json();
-    const { project_id, task_id, user_id, comment_content } = body;
+    const { project_id, task_id, comment_content } = body;
+    // Author is the VERIFIED session user — the body's user_id (still sent by
+    // older clients) is ignored rather than trusted.
+    const user_id = ctx.appUser.id;
 
-    if ((!project_id && !task_id) || !user_id || !comment_content) {
+    if ((!project_id && !task_id) || !comment_content) {
       return NextResponse.json(
-        { error: '(project_id or task_id), user_id, and comment_content are required' },
+        { error: '(project_id or task_id) and comment_content are required' },
         { status: 400 }
       );
     }
@@ -110,14 +118,33 @@ export async function POST(request: Request) {
     }
 
     if (task_id) {
+      // Mentions are task-comment-only in phase 1 (matching the notification
+      // pipeline, which is task-scoped). Uses the service client so mention
+      // resolution/storage isn't subject to the author's RLS view.
+      const mentions = await resolveAndStoreMentions({
+        supabase: service,
+        orgId,
+        commentId: data.id,
+        commentContent: comment_content,
+      });
+      const preview = stripMentionTokens(comment_content);
+      const actor = {
+        user_id,
+        name: data.users?.name ?? null,
+      };
       await notifyTaskCommented({
         taskId: task_id,
         commentId: data.id,
-        actor: {
-          user_id,
-          name: data.users?.name ?? null,
-        },
-        commentPreview: comment_content,
+        actor,
+        commentPreview: preview,
+        excludeUserIds: mentions.userIds,
+      });
+      await notifyTaskMentioned({
+        taskId: task_id,
+        commentId: data.id,
+        mentionedUserIds: mentions.userIds,
+        actor,
+        commentPreview: preview,
       });
     }
 

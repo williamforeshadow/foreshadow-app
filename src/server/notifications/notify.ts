@@ -321,6 +321,17 @@ function renderNotification(payload: RenderPayload): RenderedNotification {
     return finalize({ title, body, actorSentence, bodyOverride });
   }
 
+  if (type === 'task_mentioned') {
+    const preview = compactPreview(metadata.comment_preview);
+    const title = `${actor} mentioned you on ${taskName}`;
+    const body = preview
+      ? `${actor} mentioned you: "${preview}"`
+      : `${actor} mentioned you in a comment on ${taskName}.`;
+    const actorSentence = `${escapeMrkdwn(actor)} mentioned you on ${linkTitle(url, taskName)}`;
+    const bodyOverride = preview ? `> ${escapeMrkdwn(preview)}` : null;
+    return finalize({ title, body, actorSentence, bodyOverride });
+  }
+
   if (type === 'task_schedule_changed') {
     const before = formatSchedule(metadata.before_date, metadata.before_time);
     const after = formatSchedule(metadata.after_date, metadata.after_time);
@@ -883,14 +894,22 @@ export async function notifyTaskCommented(args: {
   commentId: string;
   actor?: NotificationActor | null;
   commentPreview?: string | null;
+  /**
+   * Recipients to suppress — used for users @-mentioned in the comment, who
+   * get the more specific task_mentioned notification instead of both.
+   */
+  excludeUserIds?: string[];
 }) {
   const supabase = getSupabaseServer();
   const task = await loadTaskContext(supabase, args.taskId);
   if (!task) return;
+  const excluded = new Set(args.excludeUserIds ?? []);
   await deliverTaskNotification({
     type: 'task_commented',
     taskId: args.taskId,
-    recipientIds: task.assignments.map((a) => a.user_id),
+    recipientIds: task.assignments
+      .map((a) => a.user_id)
+      .filter((id) => !excluded.has(id)),
     actor: args.actor,
     metadata: {
       comment_id: args.commentId,
@@ -898,6 +917,30 @@ export async function notifyTaskCommented(args: {
     },
     dedupeKeyFor: (recipientId) =>
       `task_commented:${args.commentId}:${recipientId}`,
+  });
+}
+
+export async function notifyTaskMentioned(args: {
+  taskId: string;
+  commentId: string;
+  /** Org-validated users.id values parsed from the comment's mention tokens. */
+  mentionedUserIds: string[];
+  actor?: NotificationActor | null;
+  /** Comment text with mention tokens already collapsed to plain "@Name". */
+  commentPreview?: string | null;
+}) {
+  if (args.mentionedUserIds.length === 0) return;
+  await deliverTaskNotification({
+    type: 'task_mentioned',
+    taskId: args.taskId,
+    recipientIds: args.mentionedUserIds,
+    actor: args.actor,
+    metadata: {
+      comment_id: args.commentId,
+      comment_preview: args.commentPreview ?? null,
+    },
+    dedupeKeyFor: (recipientId) =>
+      `task_mentioned:${args.commentId}:${recipientId}`,
   });
 }
 

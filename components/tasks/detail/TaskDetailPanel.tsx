@@ -257,7 +257,7 @@ export function TaskDetailPanel({
           newComment={c.commentsHook.newComment}
           setNewComment={c.commentsHook.setNewComment}
           posting={c.commentsHook.postingComment}
-          onPost={() => void c.commentsHook.postProjectComment(task.task_id, undefined, 'task')}
+          onPost={(text) => void c.commentsHook.postProjectComment(task.task_id, text, 'task')}
           onBack={() => void c.openView('main')}
         />
       )}

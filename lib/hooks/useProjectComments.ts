@@ -57,10 +57,11 @@ export function useProjectComments({ currentUser }: UseProjectCommentsProps) {
       const data = await res.json();
       if (data.success && data.data) {
         setProjectComments(prev => [...prev, data.data]);
-        // Only clear hook's newComment if we used it
-        if (!commentText) {
-          setNewComment('');
-        }
+        // Clear the hook's composer state on success. Callers with their own
+        // composer state pass commentText and leave newComment at '' — and the
+        // comments view passes commentText too (mention tokens applied), so
+        // clearing unconditionally is what keeps its composer in sync.
+        setNewComment('');
       }
     } catch (err) {
       console.error('Error posting comment:', err);

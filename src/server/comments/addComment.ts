@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { getSupabaseServer } from '@/lib/supabaseServer';
-import { notifyTaskCommented } from '@/src/server/notifications/notify';
+import {
+  notifyTaskCommented,
+  notifyTaskMentioned,
+} from '@/src/server/notifications/notify';
+import { resolveAndStoreMentions } from '@/src/server/comments/commentMentions';
+import { stripMentionTokens } from '@/lib/mentions';
 
 // Service: add a comment to a task.
 //
@@ -15,9 +20,11 @@ import { notifyTaskCommented } from '@/src/server/notifications/notify';
 //   - log activity (the existing /api/project-comments route does so for
 //     project comments only — task comments don't have an activity log
 //     yet, matching the existing route's behaviour at line 95)
-//   - resolve mentions, thread replies, or any rich-text features. The
-//     comment_content column is plain text, rendered with whitespace-
-//     pre-wrap by the UI; that's the contract this service preserves.
+//   - thread replies or rich-text features. The comment_content column is
+//     plain text (with inline @[Name](uuid) mention tokens — see
+//     lib/mentions.ts), rendered with whitespace-pre-wrap by the UI.
+//     Mentions ARE resolved: tokens are re-parsed server-side, validated
+//     org-scoped, stored in comment_mentions, and notified (task_mentioned).
 //
 // Authorship binding:
 //   - The author user_id is REQUIRED and FK-validated. The agent tool
@@ -210,11 +217,32 @@ export async function addComment(
     created_at: string;
   };
 
+  const mentions = await resolveAndStoreMentions({
+    supabase,
+    orgId,
+    commentId: row.id,
+    commentContent: row.comment_content,
+  });
+
+  // Previews go through stripMentionTokens so Slack/push copy reads
+  // "@Billy" rather than the raw @[Billy](uuid) token. Mentioned users are
+  // excluded from the generic comment notification — they get the more
+  // specific task_mentioned one below instead.
+  const preview = stripMentionTokens(row.comment_content);
+  const actor = { user_id: row.user_id, name: userLookup.value.name };
   await notifyTaskCommented({
     taskId: row.task_id,
     commentId: row.id,
-    actor: { user_id: row.user_id, name: userLookup.value.name },
-    commentPreview: row.comment_content,
+    actor,
+    commentPreview: preview,
+    excludeUserIds: mentions.userIds,
+  });
+  await notifyTaskMentioned({
+    taskId: row.task_id,
+    commentId: row.id,
+    mentionedUserIds: mentions.userIds,
+    actor,
+    commentPreview: preview,
   });
 
   return {
