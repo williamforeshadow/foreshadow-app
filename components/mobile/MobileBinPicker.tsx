@@ -114,7 +114,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
 
   if (loadingBins) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="flex min-h-[60vh] items-center justify-center">
         <LoadingState />
       </div>
     );

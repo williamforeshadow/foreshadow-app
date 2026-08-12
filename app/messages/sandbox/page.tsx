@@ -288,7 +288,7 @@ export default function MessagesSandboxPage() {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-8">
+          <div className="flex min-h-[40vh] items-center justify-center">
             <LoadingState />
           </div>
         ) : convos.length === 0 ? (

@@ -368,7 +368,7 @@ export default function ConciergeSettingsPage() {
       </Section>
 
       {loading && !state && (
-        <div className="flex justify-center">
+        <div className="flex min-h-[40vh] items-center justify-center">
           <LoadingState />
         </div>
       )}

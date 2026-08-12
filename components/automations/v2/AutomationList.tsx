@@ -154,7 +154,7 @@ export default function AutomationList() {
           )}
 
           {loading ? (
-            <div className="flex justify-center px-[18px] py-12">
+            <div className="flex min-h-[50vh] flex-1 items-center justify-center px-[18px]">
               <LoadingState />
             </div>
           ) : automations.length === 0 ? (
