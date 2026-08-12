@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { LoadingState } from '@/components/ui/loading-state';
 
 interface PropertyOption {
   id: string;
@@ -287,7 +288,9 @@ export default function MessagesSandboxPage() {
         </div>
 
         {loading ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
+          <div className="flex justify-center py-8">
+            <LoadingState />
+          </div>
         ) : convos.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
             No sandbox conversations yet. Create one above.

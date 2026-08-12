@@ -17,6 +17,7 @@ import {
   History,
   type LucideIcon,
 } from 'lucide-react';
+import { LoadingState } from '@/components/ui/loading-state';
 import { PropertyProvider, usePropertyContext } from './PropertyContext';
 
 // ---- Tab definitions -------------------------------------------------------
@@ -156,7 +157,7 @@ function ShellBody({
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="w-7 h-7 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin" />
+        <LoadingState />
       </div>
     );
   }

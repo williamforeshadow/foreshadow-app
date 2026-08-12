@@ -6,6 +6,7 @@ import { createSupabaseClient } from '@/lib/supabaseAuth';
 import { useRouter } from 'next/navigation';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { NotificationPreferencesPanel } from '@/components/notifications/NotificationPreferencesPanel';
+import { LoadingState } from '@/components/ui/loading-state';
 import Link from 'next/link';
 
 export default function ProfilePage() {
@@ -35,7 +36,7 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center bg-background">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+        <LoadingState />
       </div>
     );
   }

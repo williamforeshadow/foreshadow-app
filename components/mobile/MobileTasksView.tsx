@@ -23,6 +23,7 @@ import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
 import { projectToTaskInput } from '@/components/tasks/detail/taskInput';
 import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
+import { LoadingState } from '@/components/ui/loading-state';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import { useBackNavigation } from '@/lib/navigationHistoryTracker';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -335,8 +336,8 @@ function MobileTasksViewContent() {
       {/* List */}
       <div className="flex-1 overflow-y-auto pb-mobile-bubble">
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="w-7 h-7 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin" />
+          <div className="flex h-full items-center justify-center">
+            <LoadingState />
           </div>
         ) : error ? (
           <div className="flex items-center justify-center py-16">

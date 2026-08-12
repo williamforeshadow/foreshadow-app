@@ -15,6 +15,7 @@ import type { Turnover, User } from '@/lib/types';
 import { DESKTOP_DETAIL_PANEL_FLEX } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import { taskPath } from '@/src/lib/links';
+import { LoadingState } from '@/components/ui/loading-state';
 
 // Turnovers window. Two-pane layout:
 //   - Left: filterable + sortable list of turnover cards (one per active /
@@ -156,10 +157,8 @@ function TurnoversWindowContent(props: TurnoversWindowProps) {
         )}
 
         {loading && (
-          <div className="flex justify-center items-center py-20">
-            <p className="text-neutral-500 dark:text-neutral-400">
-              Loading reservations...
-            </p>
+          <div className="flex h-full justify-center items-center">
+            <LoadingState />
           </div>
         )}
 

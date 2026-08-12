@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { qk } from '@/lib/queries/keys';
 import { fetchJson } from '@/lib/queries/fetchJson';
 import { WindowHeader } from '@/components/ui/window-header';
+import { LoadingState } from '@/components/ui/loading-state';
 
 interface PropertyRow {
   id: string;
@@ -240,8 +241,8 @@ export default function PropertiesPage() {
         {/* Content */}
         <div className="flex-1 overflow-auto pb-mobile-bubble">
           {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <div className="w-7 h-7 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin" />
+            <div className="flex h-full items-center justify-center">
+              <LoadingState />
             </div>
           ) : error ? (
             <div className="flex items-center justify-center py-16">
@@ -593,7 +594,7 @@ function AddPropertyModal({
               <div className="flex-1 overflow-auto px-5 pb-2 min-h-[160px]">
                 {listingsLoading ? (
                   <div className="flex items-center justify-center py-8">
-                    <div className="w-5 h-5 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin" />
+                    <LoadingState />
                   </div>
                 ) : listingsError ? (
                   <div className="py-4 text-[13px] text-red-600 dark:text-red-400">

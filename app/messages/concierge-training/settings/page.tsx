@@ -7,6 +7,7 @@ import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { WindowHeader } from '@/components/ui/window-header';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { cn } from '@/lib/utils';
+import { LoadingState } from '@/components/ui/loading-state';
 
 // Concierge Settings — the single home for "how the concierge behaves" config.
 // Houses the autonomous-proposal master switches, the two sensitivity dials, and
@@ -367,7 +368,9 @@ export default function ConciergeSettingsPage() {
       </Section>
 
       {loading && !state && (
-        <p className="text-center text-sm text-muted-foreground">Loading…</p>
+        <div className="flex justify-center">
+          <LoadingState />
+        </div>
       )}
     </div>
   );

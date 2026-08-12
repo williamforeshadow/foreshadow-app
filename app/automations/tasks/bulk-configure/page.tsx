@@ -3,6 +3,7 @@
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import BulkAutomationConfigEditor from '@/components/templates/BulkAutomationConfigEditor';
+import { PageLoading } from '@/components/ui/loading-state';
 
 function BulkConfigureContent() {
   const searchParams = useSearchParams();
@@ -32,13 +33,7 @@ function BulkConfigureContent() {
 
 export default function BulkConfigureAutomationPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="h-screen bg-neutral-50 dark:bg-background flex items-center justify-center">
-          <p className="text-neutral-500">Loading...</p>
-        </div>
-      }
-    >
+    <Suspense fallback={<PageLoading className="h-screen bg-neutral-50 dark:bg-background" />}>
       <BulkConfigureContent />
     </Suspense>
   );

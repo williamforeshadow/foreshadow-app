@@ -16,6 +16,7 @@ import {
 } from '@/lib/propertyKnowledgeVisibility';
 import { type AttributeTag } from '@/lib/propertyAttributes';
 import { TagChips } from '@/components/properties/cards/TagChip';
+import { LoadingState } from '@/components/ui/loading-state';
 import { resolvePublicPhotoUrl } from '@/components/properties/cards/PhotoGrid';
 
 // Guest Visibility tab — control over what the Concierge (the guest-facing
@@ -407,7 +408,7 @@ export default function GuestAccessTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="w-6 h-6 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin" />
+        <LoadingState />
       </div>
     );
   }

@@ -23,6 +23,7 @@ import type { Project, User } from '@/lib/types';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
 import type { FilterOption } from '@/components/tasks/TaskFilterBar';
+import { LoadingState } from '@/components/ui/loading-state';
 
 // ============================================================================
 // Types
@@ -723,7 +724,7 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
           <div className={`flex-1 min-h-0 flex flex-col mobile-kanban-wrapper${kanbanDragging ? ' is-dragging' : ''}`}>
             {loadingTasks ? (
               <div className="flex items-center justify-center h-full">
-                <div className="w-7 h-7 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin" />
+                <LoadingState />
               </div>
             ) : tasks.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full">

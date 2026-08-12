@@ -3,6 +3,7 @@
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import PropertyFieldsEditor from '@/components/templates/PropertyFieldsEditor';
+import { PageLoading } from '@/components/ui/loading-state';
 
 function FieldsContent() {
   const searchParams = useSearchParams();
@@ -22,13 +23,7 @@ function FieldsContent() {
 
 export default function PropertyFieldsPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="h-screen bg-neutral-50 dark:bg-background flex items-center justify-center">
-          <p className="text-neutral-500">Loading...</p>
-        </div>
-      }
-    >
+    <Suspense fallback={<PageLoading className="h-screen bg-neutral-50 dark:bg-background" />}>
       <FieldsContent />
     </Suspense>
   );

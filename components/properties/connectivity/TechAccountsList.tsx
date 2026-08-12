@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/apiFetch';
 import { qk } from '@/lib/queries/keys';
 import { fetchJson } from '@/lib/queries/fetchJson';
+import { LoadingState } from '@/components/ui/loading-state';
 import {
   KIND_CHIP_CLASSES,
   KIND_LABELS,
@@ -194,7 +195,7 @@ export function TechAccountsList({ propertyId }: { propertyId: string }) {
 
       {loading ? (
         <div className="py-6 flex items-center justify-center">
-          <div className="w-5 h-5 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin" />
+          <LoadingState />
         </div>
       ) : loadError ? (
         <div className="py-6 text-center text-[13px] text-neutral-500 dark:text-[#a09e9a]">

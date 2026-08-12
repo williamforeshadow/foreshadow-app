@@ -15,6 +15,7 @@ import { type TaskDetailInput } from '@/components/tasks/detail/taskInput';
 import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
 import { TaskRow, TaskListHeader, type TaskRowItem } from '@/components/tasks/TaskRow';
 import { MobileTaskRow } from '@/components/tasks/MobileTaskRow';
+import { LoadingState } from '@/components/ui/loading-state';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { DESKTOP_TASK_PANEL_SLOT } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
@@ -728,8 +729,8 @@ function PropertyTasksViewContent({
         {/* List */}
         <div className="flex-1 overflow-auto">
           {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <div className="w-7 h-7 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin" />
+            <div className="flex h-full items-center justify-center">
+              <LoadingState />
             </div>
           ) : error ? (
             <div className="flex items-center justify-center py-16">

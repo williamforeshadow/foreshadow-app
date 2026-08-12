@@ -6,6 +6,7 @@ import { useKeyboardInset } from '@/lib/useKeyboardInset';
 import { useUsers, type AppUser } from '@/lib/useUsers';
 import { parseMentionTokens, formatMentionToken } from '@/lib/mentions';
 import { MonoLabel, IconButton } from './HeaderSections';
+import { LoadingState } from '@/components/ui/loading-state';
 
 function initials(name: string | undefined): string {
   return (name ?? '?')
@@ -192,7 +193,7 @@ export function CommentsView({
 
       <div ref={listRef} className="flex-1 overflow-y-auto px-[18px] py-4">
         {loading ? (
-          <MonoLabel>Loading…</MonoLabel>
+          <LoadingState size={4} />
         ) : comments.length === 0 ? (
           <MonoLabel>No comments yet</MonoLabel>
         ) : (

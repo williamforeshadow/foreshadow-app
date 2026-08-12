@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/apiFetch';
 import { qk } from '@/lib/queries/keys';
 import { fetchJson } from '@/lib/queries/fetchJson';
+import { LoadingState } from '@/components/ui/loading-state';
 import {
   CONTACT_TAGS,
   CONTACT_TAG_LABELS,
@@ -167,7 +168,7 @@ export default function PropertyVendorsTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="w-6 h-6 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin" />
+        <LoadingState />
       </div>
     );
   }

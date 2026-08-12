@@ -9,6 +9,7 @@ import { UserAvatar } from '@/components/ui/user-avatar';
 import { RowsIcon } from '@/components/windows/timeline/TimelineViewIcons';
 import TasksIcon from '@/components/icons/TasksIcon';
 import { useAiChat } from '@/components/ai-chat/AiChatProvider';
+import { LoadingState } from '@/components/ui/loading-state';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -398,7 +399,7 @@ export default function Sidebar() {
             </DropdownMenu>
           ) : loading ? (
             <div className="flex items-center justify-center px-4 py-4">
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-800 dark:border-neutral-700 dark:border-t-white" />
+              <LoadingState />
             </div>
           ) : (
             <div className="flex items-center justify-between gap-3 px-3 py-3">

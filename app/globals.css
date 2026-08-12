@@ -1194,12 +1194,28 @@ a {
   background-size: 200% 100%;
 }
 
+/* Pixel-grid loader (components/ui/loading-state.tsx): cells rest dim and
+   pulse bright on a staggered delay. */
+@keyframes pixel-on {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  40% {
+    opacity: 0.95;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .msg-in {
     animation: none;
   }
   .msg-shimmer {
     animation: none;
+  }
+  /* !important beats the inline animation style; the grid freezes dim. */
+  .pixel-cell {
+    animation: none !important;
   }
 }
 

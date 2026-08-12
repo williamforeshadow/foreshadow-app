@@ -22,6 +22,7 @@ import { TranscriptScript } from '@/components/messages/TranscriptScript';
 import { ExampleTranscriptField } from '@/components/messages/ExampleTranscriptField';
 import InfoTooltip from '@/components/templates/InfoTooltip';
 import { cn } from '@/lib/utils';
+import { LoadingState } from '@/components/ui/loading-state';
 
 // CRUD-backed training lives under two categories (reply / task). Property
 // knowledge is on/off only and lives entirely on the Settings page now.
@@ -213,7 +214,9 @@ export default function ConciergeTrainingPage() {
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div>
+        <div className="flex justify-center py-12">
+          <LoadingState />
+        </div>
       ) : visibleRules.length === 0 ? (
         <div className="rounded-xl border border-dashed border-black/[0.12] py-12 text-center dark:border-white/[0.12]">
           <p className="mb-4 text-sm text-muted-foreground">

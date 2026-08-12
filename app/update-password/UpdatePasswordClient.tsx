@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowRight, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { LoadingState } from '@/components/ui/loading-state';
 import { createSupabaseClient } from '@/lib/supabaseAuth';
 import { useAuth } from '@/lib/authContext';
 
@@ -60,7 +61,7 @@ export default function UpdatePasswordClient() {
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#f6f5f2] text-neutral-950 dark:bg-[#111114] dark:text-white">
-        <div className="h-7 w-7 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-900 dark:border-neutral-700 dark:border-t-white" />
+        <LoadingState />
       </main>
     );
   }

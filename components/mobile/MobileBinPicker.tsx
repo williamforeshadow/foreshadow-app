@@ -2,6 +2,7 @@
 
 import { useState, memo, useMemo } from 'react';
 import type { ProjectBin } from '@/lib/types';
+import { LoadingState } from '@/components/ui/loading-state';
 
 interface MobileBinPickerProps {
   bins: ProjectBin[];
@@ -114,7 +115,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
   if (loadingBins) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="w-7 h-7 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin" />
+        <LoadingState />
       </div>
     );
   }

@@ -13,6 +13,7 @@ import { PRIORITY_ICONS, PRIORITY_TITLE } from '@/lib/taskPriorityIcons';
 import type { Project, Task, PropertyOccupancy } from '@/lib/types';
 import { OccupancyFootnote } from '@/components/tasks/MobileTaskRow';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
+import { LoadingState } from '@/components/ui/loading-state';
 import type {
   FilterOption,
   SortKey,
@@ -517,8 +518,8 @@ export default function MobileMyAssignmentsView({
   // Loading / error / auth states
   if (authLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-64">
-        <div className="w-7 h-7 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin mb-3" />
+      <div className="flex flex-1 min-h-[60vh] flex-col items-center justify-center">
+        <LoadingState />
       </div>
     );
   }
@@ -534,8 +535,8 @@ export default function MobileMyAssignmentsView({
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-64">
-        <div className="w-7 h-7 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin" />
+      <div className="flex flex-1 min-h-[60vh] flex-col items-center justify-center">
+        <LoadingState />
       </div>
     );
   }

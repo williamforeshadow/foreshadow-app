@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LoadingState } from '@/components/ui/loading-state';
 
 // Minimal shape from /api/hostaway/listings?available=true
 interface HostawayListing {
@@ -168,7 +169,7 @@ export function LinkHostawayModal({
               <div className="flex-1 overflow-auto px-5 pb-2 min-h-[140px]">
                 {loading ? (
                   <div className="flex items-center justify-center py-8">
-                    <div className="w-5 h-5 border-2 border-neutral-400 dark:border-[#66645f] border-t-transparent rounded-full animate-spin" />
+                    <LoadingState />
                   </div>
                 ) : loadError ? (
                   <div className="py-4 text-[13px] text-red-600 dark:text-red-400">
