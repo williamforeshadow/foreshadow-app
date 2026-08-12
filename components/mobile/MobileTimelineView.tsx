@@ -15,6 +15,7 @@ import type { Task } from '@/lib/types';
 import { DayDetailPanel, type DayDetailReservation } from '@/components/tasks/DayDetailPanel';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
+import { LoadingState } from '@/components/ui/loading-state';
 import type { FilterOption } from '@/components/tasks/TaskFilterBar';
 // Same flat status ramp the desktop Schedule uses — mobile kept a private
 // copy of the old marble map, which is exactly how the two drifted apart.
@@ -315,8 +316,8 @@ export default function MobileTimelineView({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-neutral-500 dark:text-neutral-400">Loading timeline...</div>
+      <div className="flex flex-1 min-h-[60vh] items-center justify-center">
+        <LoadingState />
       </div>
     );
   }
