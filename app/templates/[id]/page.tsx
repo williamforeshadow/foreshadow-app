@@ -48,7 +48,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-neutral-50 dark:bg-background flex items-center justify-center">
+      <div className="h-full bg-neutral-50 dark:bg-background flex items-center justify-center">
         <p className="text-neutral-500">Loading template...</p>
       </div>
     );
@@ -56,7 +56,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
 
   if (error || !template) {
     return (
-      <div className="min-h-screen bg-neutral-50 dark:bg-background flex items-center justify-center">
+      <div className="h-full bg-neutral-50 dark:bg-background flex items-center justify-center">
         <p className="text-red-500">{error || 'Template not found'}</p>
       </div>
     );

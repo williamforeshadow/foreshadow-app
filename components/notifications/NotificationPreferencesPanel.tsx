@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, MessageSquare, Smartphone, ChevronDown, Search } from 'lucide-react';
 import {
   DEFAULT_DUE_TODAY_TIME,
@@ -125,6 +125,10 @@ function ColumnHeader() {
 
 export function NotificationPreferencesPanel() {
   const [global, setGlobal] = useState<PreferenceMap>(defaultGlobal);
+  // Mirror of `global` that updateGlobal can read synchronously. Reading
+  // state via a setGlobal updater's side effect doesn't work — the updater
+  // runs during the NEXT render, after the PATCH body has been built.
+  const globalRef = useRef(global);
   const [propRows, setPropRows] = useState<PropertyPrefRow[]>([]);
   const [properties, setProperties] = useState<{ id: string; name: string }[]>([]);
   const [orgTimezone, setOrgTimezone] = useState('');
@@ -152,6 +156,7 @@ export function NotificationPreferencesPanel() {
       for (const pref of globalRes?.preferences ?? []) {
         if (NOTIFICATION_TYPES.includes(pref.type)) next[pref.type as NotificationType] = pref;
       }
+      globalRef.current = next;
       setGlobal(next);
       if (typeof globalRes?.org_timezone === 'string') setOrgTimezone(globalRes.org_timezone);
       setProperties(
@@ -170,19 +175,19 @@ export function NotificationPreferencesPanel() {
   // ---- global (task) mutations: optimistic, revert on failure --------------
   const updateGlobal = useCallback(
     async (type: NotificationType, patch: Partial<NotificationPreference>) => {
-      let previous: NotificationPreference | undefined;
-      setGlobal((cur) => {
-        previous = cur[type];
-        return { ...cur, [type]: { ...cur[type], ...patch } };
-      });
-      const body = { ...(previous as NotificationPreference), ...patch };
+      const previous = globalRef.current[type];
+      const next = { ...previous, ...patch };
+      globalRef.current = { ...globalRef.current, [type]: next };
+      setGlobal(globalRef.current);
       const res = await fetch('/api/notification-preferences', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(next),
       }).catch(() => null);
-      if ((!res || !res.ok) && previous) {
-        setGlobal((cur) => ({ ...cur, [type]: previous as NotificationPreference }));
+      if (!res || !res.ok) {
+        // Revert just this type; toggles flipped meanwhile stay put.
+        globalRef.current = { ...globalRef.current, [type]: previous };
+        setGlobal(globalRef.current);
       }
     },
     [],

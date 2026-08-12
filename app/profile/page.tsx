@@ -34,7 +34,7 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="h-full flex items-center justify-center bg-background">
         <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
       </div>
     );
@@ -145,7 +145,9 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-4 safe-area-top">
+    // h-full + overflow-y-auto (not min-h-screen): the AppShell card clips to
+    // the viewport, so the page scrolls itself rather than the document.
+    <div className="h-full overflow-y-auto bg-background p-4 safe-area-top">
       <div className="max-w-3xl mx-auto">
         {/* Back Button */}
         <Link 
