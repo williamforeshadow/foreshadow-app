@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
+import { LoadingState } from '@/components/ui/loading-state';
 import { cn } from '@/lib/utils';
 import type { ProjectBin } from '@/lib/types';
 
@@ -107,7 +108,7 @@ export function BinPicker({
   if (loadingBins) {
     return (
       <div className="flex items-center justify-center h-full bg-white dark:bg-card">
-        <p className="text-neutral-500 dark:text-white/50">Loading bins...</p>
+        <LoadingState />
       </div>
     );
   }

@@ -10,6 +10,7 @@ import {
   RowIconButton,
   SectionLabel,
 } from '@/components/ui/panel/PanelForm';
+import { LoadingState } from '@/components/ui/loading-state';
 import { DeptGlyph } from '@/components/tasks/DeptGlyph';
 import DeptIconPicker from '@/components/departments/DeptIconPicker';
 import { cn } from '@/lib/utils';
@@ -241,13 +242,8 @@ export default function DepartmentDetailPage() {
             )}
 
             {loading ? (
-              <div className="px-[18px] py-12 text-center">
-                <p
-                  className="font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
-                  style={{ color: 'var(--task-ink-3)' }}
-                >
-                  Loading department…
-                </p>
+              <div className="flex justify-center px-[18px] py-12">
+                <LoadingState />
               </div>
             ) : notFound ? (
               <div className="px-[18px] py-12 text-center">

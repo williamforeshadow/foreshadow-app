@@ -1,6 +1,7 @@
 'use client';
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { LoadingState } from '@/components/ui/loading-state';
 import type { ActivityLogEntry } from '@/lib/types';
 
 interface ProjectActivitySheetProps {
@@ -27,7 +28,9 @@ export function ProjectActivitySheet({
         </SheetHeader>
         <div className="mt-6 -mx-6 px-6 flex-1 overflow-y-auto">
           {loading ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Loading activity...</p>
+            <div className="flex justify-center py-8">
+              <LoadingState size={4} />
+            </div>
           ) : activities.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No activity recorded yet</p>
           ) : (

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import TemplateEditor from '@/components/templates/TemplateEditor';
+import { LoadingState } from '@/components/ui/loading-state';
 
 interface FieldDefinition {
   id: string;
@@ -49,7 +50,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
   if (loading) {
     return (
       <div className="h-full bg-neutral-50 dark:bg-background flex items-center justify-center">
-        <p className="text-neutral-500">Loading template...</p>
+        <LoadingState />
       </div>
     );
   }

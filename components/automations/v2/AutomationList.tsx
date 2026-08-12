@@ -9,6 +9,7 @@ import {
   SectionLabel,
   ToggleSwitch,
 } from '@/components/ui/panel/PanelForm';
+import { LoadingState } from '@/components/ui/loading-state';
 import { TriggerGlyph } from '@/components/automations/v2/TriggerGlyph';
 import { summarizeTriggerShort } from '@/lib/automations/summarize';
 import type { Automation } from '@/lib/automations/types';
@@ -153,13 +154,8 @@ export default function AutomationList() {
           )}
 
           {loading ? (
-            <div className="px-[18px] py-12 text-center">
-              <p
-                className="font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
-                style={{ color: 'var(--task-ink-3)' }}
-              >
-                Loading automations…
-              </p>
+            <div className="flex justify-center px-[18px] py-12">
+              <LoadingState />
             </div>
           ) : automations.length === 0 ? (
             <div className="px-[18px] py-12 text-center">

@@ -1,6 +1,7 @@
 'use client';
 
 import { UserAvatar } from '@/components/ui/user-avatar';
+import { LoadingState } from '@/components/ui/loading-state';
 import { formatRelative } from '@/src/lib/dates';
 import type { NotificationRecord } from '@/lib/notifications';
 import type { NotificationView } from './useNotificationFeed';
@@ -57,8 +58,8 @@ export function NotificationRows({
 }) {
   if (loading && notifications.length === 0) {
     return (
-      <div className="px-3 py-8 text-center text-sm text-neutral-500">
-        Loading
+      <div className="flex justify-center px-3 py-8">
+        <LoadingState size={4} />
       </div>
     );
   }

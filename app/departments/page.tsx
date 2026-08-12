@@ -15,6 +15,7 @@ import { DeptGlyph } from '@/components/tasks/DeptGlyph';
 import DeptIconPicker from '@/components/departments/DeptIconPicker';
 import { useDepartments } from '@/lib/departmentsContext';
 import { WindowHeader } from '@/components/ui/window-header';
+import { LoadingState } from '@/components/ui/loading-state';
 import type { Department } from '@/lib/types';
 
 /** Matched to the other index pages so the section lines up. */
@@ -191,13 +192,8 @@ export default function DepartmentsPage() {
             )}
 
             {loading ? (
-              <div className="px-[18px] py-12 text-center">
-                <p
-                  className="font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
-                  style={{ color: 'var(--task-ink-3)' }}
-                >
-                  Loading departments…
-                </p>
+              <div className="flex justify-center px-[18px] py-12">
+                <LoadingState />
               </div>
             ) : departments.length === 0 ? (
               <div className="px-[18px] py-12 text-center">

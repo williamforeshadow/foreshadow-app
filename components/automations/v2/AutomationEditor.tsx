@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { LoadingState } from '@/components/ui/loading-state';
 import {
   Select,
   SelectContent,
@@ -522,14 +523,13 @@ export default function AutomationEditor({
       )}
       {loading && (
         <div
-          className="border-b px-6 py-2 text-sm"
+          className="border-b px-6 py-2"
           style={{
             background: 'var(--task-surface-1)',
             borderColor: 'var(--task-line)',
-            color: 'var(--task-ink-3)',
           }}
         >
-          Loading automation…
+          <LoadingState size={3} />
         </div>
       )}
 

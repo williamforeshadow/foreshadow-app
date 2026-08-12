@@ -13,6 +13,7 @@ import {
   SectionLabel,
 } from '@/components/ui/panel/PanelForm';
 import { DeptGlyph } from '@/components/tasks/DeptGlyph';
+import { LoadingState } from '@/components/ui/loading-state';
 import { useDepartments } from '@/lib/departmentsContext';
 import {
   type PropertyTemplateAssignment,
@@ -259,9 +260,7 @@ export default function AutomationsView({ templates, properties }: AutomationsVi
   if (loading) {
     return (
       <div className="panel-form flex h-full items-center justify-center" style={{ background: 'var(--task-surface-0)' }}>
-        <p className="font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]" style={{ color: 'var(--task-ink-3)' }}>
-          Loading automations…
-        </p>
+        <LoadingState />
       </div>
     );
   }

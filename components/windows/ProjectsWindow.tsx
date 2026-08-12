@@ -23,6 +23,7 @@ import type { User, Project } from '@/lib/types';
 import { Filter as FilterIcon } from 'lucide-react';
 import { CompactSearch } from '@/components/ui/compact-search';
 import { WindowHeader } from '@/components/ui/window-header';
+import { LoadingState } from '@/components/ui/loading-state';
 import { TaskFilterBar, type FilterOption } from '@/components/tasks/TaskFilterBar';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
 import { projectToTaskInput, type TaskDetailInput } from '@/components/tasks/detail/taskInput';
@@ -761,7 +762,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
 
         {loadingTasks ? (
           <div className="flex items-center justify-center flex-1">
-            <p className="text-neutral-500">Loading tasks...</p>
+            <LoadingState />
           </div>
         ) : tasks.length === 0 ? (
           <div className="flex items-center justify-center flex-1">

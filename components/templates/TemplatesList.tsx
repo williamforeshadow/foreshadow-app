@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AdaptivePicker } from '@/components/tasks/detail/primitives/AdaptivePicker';
 import { TaskOptionRow } from '@/components/tasks/detail/primitives/TaskSheet';
 import { ChipButton, MetaChip, SectionLabel } from '@/components/ui/panel/PanelForm';
+import { LoadingState } from '@/components/ui/loading-state';
 import { DeptGlyph } from '@/components/tasks/DeptGlyph';
 import { useDepartments } from '@/lib/departmentsContext';
 
@@ -181,13 +182,8 @@ export default function TemplatesList({
           </div>
 
           {loading ? (
-            <div className="px-[18px] py-12 text-center">
-              <p
-                className="font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
-                style={{ color: 'var(--task-ink-3)' }}
-              >
-                Loading templates…
-              </p>
+            <div className="flex justify-center px-[18px] py-12">
+              <LoadingState />
             </div>
           ) : visible.length === 0 ? (
             <div className="px-[18px] py-12 text-center">

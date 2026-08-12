@@ -3,6 +3,7 @@
 import * as React from 'react';
 import DynamicCleaningForm, { type Template } from '@/components/DynamicCleaningForm';
 import { MonoLabel, IconButton } from './sections/HeaderSections';
+import { LoadingState } from '@/components/ui/loading-state';
 
 // The checklist as its own page. Desktop: absolute takeover of the panel;
 // mobile: the panel is already fixed inset-0, so this stacks the same way.
@@ -83,7 +84,9 @@ export function ChecklistPage({
         style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
       >
         {loading ? (
-          <MonoLabel>Loading checklist…</MonoLabel>
+          <div className="flex justify-center py-8">
+            <LoadingState size={4} />
+          </div>
         ) : template ? (
           <DynamicCleaningForm
             cleaningId={taskId}

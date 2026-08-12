@@ -46,6 +46,7 @@ import {
 } from '@/lib/detailPanelGeometry';
 import { BedDouble, CircleCheck, Loader, Filter as FilterIcon } from 'lucide-react';
 import { CompactSearch } from '@/components/ui/compact-search';
+import { LoadingState } from '@/components/ui/loading-state';
 import { RowsIcon, KanbanColumnsIcon } from './timeline/TimelineViewIcons';
 import type { Task, User } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -1068,9 +1069,7 @@ export default function TimelineWindow({
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center bg-white dark:bg-card">
-        <div className="text-center py-12 text-neutral-500 dark:text-neutral-400">
-          Loading timeline...
-        </div>
+        <LoadingState />
       </div>
     );
   }
