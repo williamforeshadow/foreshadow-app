@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchJson } from '@/lib/queries/fetchJson';
 import { apiFetch } from '@/lib/apiFetch';
 import { toast } from '@/components/ui/toast';
 import { useAuth } from '@/lib/authContext';
@@ -20,7 +21,7 @@ import type { ProjectFormFields, User } from '@/lib/types';
 import type { Template } from '@/components/DynamicCleaningForm';
 import { buildFields, type TaskDetailInput } from './taskInput';
 
-export type TaskDetailView = 'main' | 'checklist' | 'comments';
+export type TaskDetailView = 'main' | 'checklist';
 
 interface ControllerArgs {
   task: TaskDetailInput | null;
@@ -141,6 +142,33 @@ export function useTaskDetailController({
       cancelled = true;
     };
   }, [templateId, propertyName, queryClient]);
+
+  // ---- property profile (address line under the title) --------------------
+  // Shares qk.property(id) with the property pages, so a visited property
+  // paints from cache. Demo mode reads whatever the fixture seeded.
+  const taskPropertyId = task?.property_id ?? null;
+  const propertyProfileQuery = useQuery({
+    queryKey: qk.property(taskPropertyId ?? 'none'),
+    queryFn: () =>
+      fetchJson<{
+        property: {
+          address_street: string | null;
+          address_city: string | null;
+          address_state: string | null;
+          address_zip: string | null;
+        };
+      }>(`/api/properties/${taskPropertyId}`).then((d) => d.property),
+    enabled: !!taskPropertyId && !demo,
+    staleTime: 5 * 60_000,
+  });
+  const propertyAddress = useMemo(() => {
+    const p = propertyProfileQuery.data;
+    if (!p) return null;
+    // "1244 Island Ave, San Diego, CA 92101" — drop whatever's missing.
+    const stateZip = [p.address_state, p.address_zip].filter(Boolean).join(' ');
+    const line = [p.address_street, p.address_city, stateZip].filter(Boolean).join(', ');
+    return line || null;
+  }, [propertyProfileQuery.data]);
 
   // formMetadata mirror — updates optimistically as the checklist saves so
   // the progress bar tracks within the form's 800ms debounce.
@@ -469,6 +497,7 @@ export function useTaskDetailController({
     departments,
     allProperties,
     availableTemplates,
+    propertyAddress,
     bins: binsHook.bins,
     // template/checklist
     isTemplated,

@@ -60,15 +60,14 @@ export function TimerRail({
   );
 }
 
-// Thumb-zone action bar: comments button + the primary CTA.
+// Thumb-zone action bar: the primary status CTA matrix. Comments live inline
+// in the scroll body now, so this is status-only.
 export function ActionBar({
   isMobile,
   isContingent,
   isTemplated,
   status,
   checklistComplete,
-  unreadDot,
-  onOpenComments,
   onStart,
   onPause,
   onComplete,
@@ -80,8 +79,6 @@ export function ActionBar({
   isTemplated: boolean;
   status: string;
   checklistComplete: boolean;
-  unreadDot: boolean;
-  onOpenComments: () => void;
   onStart: () => void;
   onPause: () => void;
   onComplete: () => void;
@@ -176,25 +173,6 @@ export function ActionBar({
         paddingBottom: isMobile ? 'calc(0.75rem + env(safe-area-inset-bottom))' : '0.625rem',
       }}
     >
-      {(
-        <button
-          type="button"
-          aria-label="Comments"
-          onClick={onOpenComments}
-          className="relative flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl border transition-transform active:scale-95"
-          style={{ background: 'var(--task-surface-2)', borderColor: 'var(--task-line)', color: 'var(--task-ink-2)' }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 15a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z" />
-          </svg>
-          {unreadDot && (
-            <span
-              className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full"
-              style={{ background: 'var(--task-accent)', boxShadow: '0 0 0 2px var(--task-surface-2)' }}
-            />
-          )}
-        </button>
-      )}
       {cta}
     </div>
   );

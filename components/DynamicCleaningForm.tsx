@@ -27,6 +27,15 @@ export interface Template {
   fields: FieldDefinition[];
 }
 
+// Required marker — sized up so it actually registers next to the label.
+function RequiredStar() {
+  return (
+    <span className="text-red-500 text-[1.2em] leading-none align-middle" aria-hidden>
+      *
+    </span>
+  );
+}
+
 interface DynamicCleaningFormProps {
   cleaningId: string;
   propertyName: string;
@@ -36,6 +45,9 @@ interface DynamicCleaningFormProps {
   readOnly?: boolean;
   onValidationChange?: (allRequiredFilled: boolean) => void;
   onChecklistInteraction?: () => void;
+  /** Render only these fields (a checklist section). State, autosave, and
+   * validation still span the whole template — this is display-only. */
+  visibleFieldIds?: string[];
 }
 
 function DynamicCleaningForm({ 
@@ -47,6 +59,7 @@ function DynamicCleaningForm({
   readOnly = false,
   onValidationChange,
   onChecklistInteraction,
+  visibleFieldIds,
 }: DynamicCleaningFormProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [formValues, setFormValues] = useState<Record<string, any>>({});
@@ -261,29 +274,41 @@ function DynamicCleaningForm({
         return (
           <Field key={field.id}>
             <FieldLabel>
-              {field.label} {field.required && !readOnly && <span className="text-red-500">*</span>}
+              {field.label} {field.required && !readOnly && <RequiredStar />}
             </FieldLabel>
-            <div className={`flex gap-2 ${readOnly ? 'pointer-events-none' : ''}`}>
-              {[1, 2, 3, 4, 5].map((rating) => (
-                <button
-                  key={rating}
-                  type="button"
-                  onClick={() => updateValue(field.id, rating.toString())}
-                  style={{ touchAction: 'manipulation' }}
-                  tabIndex={readOnly ? -1 : undefined}
-                  className={`w-12 h-12 rounded-lg border-2 text-sm font-medium transition-all ${
-                    readOnly
-                      ? 'border-neutral-200 dark:border-neutral-700 text-neutral-400 dark:text-neutral-600 opacity-50'
-                      : value === rating.toString()
-                        ? 'bg-emerald-500 border-emerald-500 text-white'
-                        : 'border-neutral-300 dark:border-neutral-600 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
-                  }`}
-                >
-                  {rating}
-                </button>
-              ))}
+            <div className={`flex w-full justify-center gap-3 py-2 ${readOnly ? 'pointer-events-none opacity-50' : ''}`}>
+              {[1, 2, 3, 4, 5].map((rating) => {
+                const active = Number(value) >= rating;
+                return (
+                  <button
+                    key={rating}
+                    type="button"
+                    onClick={() => updateValue(field.id, rating.toString())}
+                    style={{ touchAction: 'manipulation' }}
+                    tabIndex={readOnly ? -1 : undefined}
+                    aria-label={`${rating} of 5`}
+                    className="transition-transform active:scale-90"
+                  >
+                    <svg
+                      width="32"
+                      height="32"
+                      viewBox="0 0 24 24"
+                      fill={active ? 'currentColor' : 'none'}
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinejoin="round"
+                      className={
+                        active
+                          ? 'text-[#4C4869] dark:text-[#6e6a8a]'
+                          : 'text-neutral-300 dark:text-neutral-600'
+                      }
+                    >
+                      <path d="M12 4.5l2.3 4.9 5.2.7-3.8 3.7.9 5.2-4.6-2.5-4.6 2.5.9-5.2L4.5 10l5.2-.7z" />
+                    </svg>
+                  </button>
+                );
+              })}
             </div>
-            <FieldDescription>Rate from 1 (poor) to 5 (excellent)</FieldDescription>
           </Field>
         );
 
@@ -291,20 +316,20 @@ function DynamicCleaningForm({
         return (
           <Field key={field.id}>
             <FieldLabel>
-              {field.label} {field.required && !readOnly && <span className="text-red-500">*</span>}
+              {field.label} {field.required && !readOnly && <RequiredStar />}
             </FieldLabel>
-            <div className={`flex gap-3 ${readOnly ? 'pointer-events-none' : ''}`}>
+            <div className={`flex w-full justify-center gap-4 py-1 ${readOnly ? 'pointer-events-none' : ''}`}>
               <button
                 type="button"
                 onClick={() => updateValue(field.id, 'yes')}
                 style={{ touchAction: 'manipulation' }}
                 tabIndex={readOnly ? -1 : undefined}
-                className={`flex-1 py-3 px-5 rounded-lg border-2 text-sm font-medium transition-all ${
+                className={`w-32 py-3 px-5 rounded-lg border-2 text-sm font-medium transition-all ${
                   readOnly
                     ? 'border-neutral-200 dark:border-neutral-700 text-neutral-400 dark:text-neutral-600 opacity-50'
                     : value === 'yes'
-                      ? 'bg-emerald-500 border-emerald-500 text-white'
-                      : 'border-neutral-300 dark:border-neutral-600 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
+                      ? 'border-[#4C4869] text-[#4C4869] dark:border-[#6e6a8a] dark:text-[#6e6a8a]'
+                      : 'border-neutral-300 dark:border-neutral-600 hover:border-[#A78BFA]'
                 }`}
               >
                 Yes
@@ -314,12 +339,12 @@ function DynamicCleaningForm({
                 onClick={() => updateValue(field.id, 'no')}
                 style={{ touchAction: 'manipulation' }}
                 tabIndex={readOnly ? -1 : undefined}
-                className={`flex-1 py-3 px-5 rounded-lg border-2 text-sm font-medium transition-all ${
+                className={`w-32 py-3 px-5 rounded-lg border-2 text-sm font-medium transition-all ${
                   readOnly
                     ? 'border-neutral-200 dark:border-neutral-700 text-neutral-400 dark:text-neutral-600 opacity-50'
                     : value === 'no'
-                      ? 'bg-red-500 border-red-500 text-white'
-                      : 'border-neutral-300 dark:border-neutral-600 hover:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
+                      ? 'border-[#4C4869] text-[#4C4869] dark:border-[#6e6a8a] dark:text-[#6e6a8a]'
+                      : 'border-neutral-300 dark:border-neutral-600 hover:border-[#A78BFA]'
                 }`}
               >
                 No
@@ -331,33 +356,35 @@ function DynamicCleaningForm({
       case 'checkbox':
         return (
           <Field key={field.id}>
+            {/* No horizontal padding — the label starts at the same left edge
+                as every other field. */}
             <button
               type="button"
               onClick={readOnly ? undefined : () => updateValue(field.id, !value)}
-              className={`flex items-center justify-between gap-4 p-3 rounded-lg border border-transparent transition-colors w-full text-left ${
-                readOnly
-                  ? 'pointer-events-none'
-                  : 'cursor-pointer group hover:border-neutral-200 dark:hover:border-neutral-700'
+              className={`flex items-center justify-between gap-4 py-2 transition-colors w-full text-left ${
+                readOnly ? 'pointer-events-none' : 'cursor-pointer group'
               }`}
               style={{ touchAction: 'manipulation' }}
               tabIndex={readOnly ? -1 : undefined}
             >
-              <FieldLabel className={`!mb-0 ${readOnly ? '' : ''}`}>
-                {field.label} {field.required && !readOnly && <span className="text-red-500">*</span>}
+              <FieldLabel className="!mb-0">
+                {field.label} {field.required && !readOnly && <RequiredStar />}
               </FieldLabel>
               {/* Read-only still shows the checked state (dimmed) — a locked
-                  checklist must remain legible. */}
-              <div className={`w-7 h-7 rounded-md border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                  checklist must remain legible. Checked = the app-wide
+                  "complete" violet (task status, property readiness, tiptap
+                  checklists), not green. */}
+              <div className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-all flex-shrink-0 ${
                 value
                   ? readOnly
-                    ? 'bg-emerald-500/60 border-transparent opacity-70'
-                    : 'bg-emerald-500 border-emerald-500'
+                    ? 'bg-[#4C4869]/60 dark:bg-[#6e6a8a]/60 border-transparent opacity-70'
+                    : 'bg-[#4C4869] dark:bg-[#6e6a8a] border-transparent'
                   : readOnly
                     ? 'border-neutral-200 dark:border-neutral-700 opacity-50'
-                    : 'border-neutral-300 dark:border-neutral-600 group-hover:border-emerald-400'
+                    : 'border-neutral-300 dark:border-neutral-600 group-hover:border-[#A78BFA]'
               }`}>
                 {value && (
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                   </svg>
                 )}
@@ -371,10 +398,10 @@ function DynamicCleaningForm({
         return (
           <Field key={field.id}>
             <FieldLabel>
-              {field.label} {field.required && !readOnly && <span className="text-red-500">*</span>}
+              {field.label} {field.required && !readOnly && <RequiredStar />}
             </FieldLabel>
             {readOnly ? (
-              <div className="flex items-center gap-2 py-3 px-4 rounded-lg border-2 border-dashed border-neutral-200 dark:border-neutral-700 opacity-50">
+              <div className="flex w-full items-center justify-center gap-2 py-3 px-4 rounded-lg border-2 border-dashed border-neutral-200 dark:border-neutral-700 opacity-50">
                 <svg className="w-5 h-5 text-neutral-400 dark:text-neutral-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
@@ -406,7 +433,7 @@ function DynamicCleaningForm({
         return (
           <Field key={field.id}>
             <FieldLabel>
-              {field.label} {field.required && !readOnly && <span className="text-red-500">*</span>}
+              {field.label} {field.required && !readOnly && <RequiredStar />}
             </FieldLabel>
             <Textarea
               value={value || ''}
@@ -424,22 +451,14 @@ function DynamicCleaningForm({
 
   return (
     <div className={`w-full ${readOnly ? 'opacity-60' : ''}`}>
-      {/* Header — hidden in readOnly preview */}
-      {!readOnly && (
-        <div className="text-center mb-6">
-          <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
-            {template.name}
-          </h3>
-          <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
-            {propertyName}
-          </p>
-        </div>
-      )}
-
+      {/* No header here — ChecklistPage owns the page chrome in both states. */}
       {/* Dynamic Form */}
       <form onSubmit={(e) => { e.preventDefault(); if (!readOnly) saveForm(); }}>
         <div className="space-y-5">
-          {template.fields.map(field => renderField(field))}
+          {(visibleFieldIds
+            ? template.fields.filter(f => visibleFieldIds.includes(f.id))
+            : template.fields
+          ).map(field => renderField(field))}
         </div>
       </form>
     </div>

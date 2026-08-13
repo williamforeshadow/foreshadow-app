@@ -14,7 +14,7 @@ import { TaskOptionRow } from './primitives/TaskSheet';
 import { HeaderBar, TitleSection, DescriptionSection, IconButton } from './sections/HeaderSections';
 import { TimerRail, ActionBar } from './sections/StatusSections';
 import { ContextChips, TaskMetaFields, StepsSection, CrewSection, AttachmentsSection } from './sections/BodySections';
-import { CommentsView } from './sections/CommentsView';
+import { CommentsSection } from './sections/CommentsView';
 
 export interface TaskDetailPanelProps {
   task: TaskDetailInput | null;
@@ -99,6 +99,9 @@ export function TaskDetailPanel({
     <div className="task-detail relative flex h-full w-full flex-col overflow-hidden" style={{ background: 'var(--task-surface-0)' }}>
       <style>{`@keyframes task-pulse { 0%,100%{opacity:.35} 50%{opacity:1} }`}</style>
 
+      {/* Content zone — the checklist takeover overlays this wrapper only, so
+          the ActionBar below stays visible (and live) in both views. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
       {/* header zone */}
       {/* Sticky top bar — only the close/label/menu chrome stays pinned. */}
       <div className="shrink-0 px-[18px] pt-2">
@@ -120,6 +123,14 @@ export function TaskDetailPanel({
             onTitleBlur={() => void c.saveFields()}
             readOnly={editingLocked}
           />
+          {c.propertyAddress && (
+            <div
+              className="mt-0.5 truncate text-[length:var(--task-fs-body-sm)]"
+              style={{ color: 'var(--task-ink-3)' }}
+            >
+              {c.propertyAddress}
+            </div>
+          )}
           {(
             <TimerRail
               running={timerRunning}
@@ -177,7 +188,12 @@ export function TaskDetailPanel({
 
           <div
             className="mt-4 flex flex-col gap-[18px] border-t pt-4"
-            style={{ borderColor: 'var(--task-line-soft)', paddingBottom: '1.25rem' }}
+            style={{
+              borderColor: 'var(--task-line-soft)',
+              // Non-templated tasks have no bottom bar now, so the scroll body
+              // itself must clear the home indicator.
+              paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))',
+            }}
           >
             <CrewSection
               users={c.users}
@@ -214,32 +230,25 @@ export function TaskDetailPanel({
                 readOnly={editingLocked}
               />
             )}
+            <CommentsSection
+              comments={c.commentsHook.projectComments}
+              loading={c.commentsHook.loadingComments}
+              newComment={c.commentsHook.newComment}
+              setNewComment={c.commentsHook.setNewComment}
+              posting={c.commentsHook.postingComment}
+              onPost={(text) => void c.commentsHook.postProjectComment(task.task_id, text, 'task')}
+            />
           </div>
         </div>
       </div>
 
-      <ActionBar
-        isMobile={isMobile}
-        isContingent={c.isContingent}
-        isTemplated={c.isTemplated}
-        status={c.fields.status}
-        checklistComplete={checklistComplete}
-        unreadDot={(task?.unread_comment_count ?? 0) > 0}
-        onOpenComments={() => void c.openView('comments')}
-        onStart={() => void c.handleStart()}
-        onPause={() => void c.handlePause()}
-        onComplete={() => void c.handleComplete()}
-        onReopen={() => c.handleReopen()}
-        onWriteStatus={(s) => c.writeStatus(s)}
-      />
-
-      {/* takeover views */}
+      {/* takeover views (inside the content wrapper — ActionBar stays below) */}
       {c.view === 'checklist' && task && (
         <ChecklistPage
           taskId={task.task_id}
           propertyName={propertyName}
+          propertyAddress={c.propertyAddress}
           template={c.template}
-          templateName={templateName}
           formMetadata={c.formMetadata}
           onSaveForm={c.saveForm}
           readOnly={c.isChecklistReadOnly}
@@ -247,18 +256,34 @@ export function TaskDetailPanel({
           completed={c.progress.completed}
           total={c.progress.total}
           onBack={() => void c.openView('main')}
+          title={c.fields.title}
+          onTitleChange={(v) => c.updateField('title', v, false)}
+          onTitleBlur={() => void c.saveFields()}
+          titleReadOnly={editingLocked}
+          timerRunning={timerRunning}
+          displaySeconds={c.timeHook.displaySeconds}
+          formatTime={c.timeHook.formatTime}
+          onTimerToggle={undefined /* templated: timer is action-driven */}
+          timerToggleDisabled
         />
       )}
-      {c.view === 'comments' && task && (
-        <CommentsView
+      </div>
+
+      {/* Status matrix: checklist view only — the main detail view is
+          button-free for every task. Non-templated tasks change status via
+          the badge; contingent tasks see "Awaiting approval" here. */}
+      {c.view === 'checklist' && (
+        <ActionBar
           isMobile={isMobile}
-          comments={c.commentsHook.projectComments}
-          loading={c.commentsHook.loadingComments}
-          newComment={c.commentsHook.newComment}
-          setNewComment={c.commentsHook.setNewComment}
-          posting={c.commentsHook.postingComment}
-          onPost={(text) => void c.commentsHook.postProjectComment(task.task_id, text, 'task')}
-          onBack={() => void c.openView('main')}
+          isContingent={c.isContingent}
+          isTemplated={c.isTemplated}
+          status={c.fields.status}
+          checklistComplete={checklistComplete}
+          onStart={() => void c.handleStart()}
+          onPause={() => void c.handlePause()}
+          onComplete={() => void c.handleComplete()}
+          onReopen={() => c.handleReopen()}
+          onWriteStatus={(s) => c.writeStatus(s)}
         />
       )}
 

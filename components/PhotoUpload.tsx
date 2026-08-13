@@ -112,9 +112,9 @@ export default function PhotoUpload({
   };
 
   return (
-    <div className="space-y-3">
-      {/* Upload Button */}
-      <div>
+    <div className="w-full space-y-3">
+      {/* Upload Button — centered under the field label */}
+      <div className="flex items-center justify-center gap-2 pt-1">
         <input
           ref={fileInputRef}
           type="file"
@@ -133,7 +133,7 @@ export default function PhotoUpload({
           {uploading ? 'Uploading...' : multiple ? `Upload Photos (${currentPhotos.length}/${maxPhotos})` : 'Upload Photo'}
         </Button>
         {required && currentPhotos.length === 0 && (
-          <span className="text-xs text-red-500 ml-2">Required</span>
+          <span className="text-xs text-red-500">Required</span>
         )}
       </div>
 

@@ -2,10 +2,9 @@
 
 import * as React from 'react';
 import type { Comment } from '@/lib/types';
-import { useKeyboardInset } from '@/lib/useKeyboardInset';
 import { useUsers, type AppUser } from '@/lib/useUsers';
 import { parseMentionTokens, formatMentionToken } from '@/lib/mentions';
-import { MonoLabel, IconButton } from './HeaderSections';
+import { MonoLabel } from './HeaderSections';
 import { LoadingState } from '@/components/ui/loading-state';
 
 function initials(name: string | undefined): string {
@@ -81,29 +80,25 @@ function filterUsers(users: AppUser[], query: string): AppUser[] {
   );
 }
 
-// Full-takeover comments page (mobile push / desktop in-panel takeover).
-export function CommentsView({
-  isMobile,
+// Inline comments: flows in the panel's scroll body (no takeover, no own
+// scroll region). The list renders newest-last with the composer beneath it.
+export function CommentsSection({
   comments,
   loading,
   newComment,
   setNewComment,
   posting,
   onPost,
-  onBack,
 }: {
-  isMobile: boolean;
   comments: Comment[];
   loading: boolean;
   newComment: string;
   setNewComment: (v: string) => void;
   posting: boolean;
   onPost: (text?: string) => void;
-  onBack: () => void;
 }) {
-  const keyboardInset = useKeyboardInset();
-  const listRef = React.useRef<HTMLDivElement>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const endRef = React.useRef<HTMLDivElement>(null);
   const { users } = useUsers();
 
   // Users picked from the typeahead this session, keyed by display name.
@@ -122,9 +117,17 @@ export function CommentsView({
   );
   const open = mention !== null && candidates.length > 0;
 
+  // Keep the composer in view when a comment lands (posting pushes it down).
+  // Only after the initial load — opening the panel must not yank the scroll.
+  const seededRef = React.useRef(false);
   React.useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [comments.length]);
+    if (loading) return;
+    if (!seededRef.current) {
+      seededRef.current = true;
+      return;
+    }
+    endRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [comments.length, loading]);
 
   React.useEffect(() => {
     if (newComment === '') {
@@ -172,71 +175,53 @@ export function CommentsView({
   }, [posting, newComment, onPost]);
 
   return (
-    <div
-      className="absolute inset-0 z-10 flex flex-col"
-      style={{ background: 'var(--task-surface-0)' }}
-    >
-      <div
-        className="flex h-12 shrink-0 items-center justify-between border-b px-[18px]"
-        style={{ borderColor: 'var(--task-line-soft)' }}
-      >
-        <div className="-ml-2">
-          <IconButton label="Back" onClick={onBack}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 5l-7 7 7 7" />
-            </svg>
-          </IconButton>
-        </div>
-        <MonoLabel>Comments</MonoLabel>
-        <div className="w-[26px]" />
-      </div>
+    <div>
+      <MonoLabel className="mb-2.5">
+        Comments{comments.length > 0 ? ` · ${comments.length}` : ''}
+      </MonoLabel>
 
-      <div ref={listRef} className="flex-1 overflow-y-auto px-[18px] py-4">
-        {loading ? (
-          <LoadingState size={4} />
-        ) : comments.length === 0 ? (
-          <MonoLabel>No comments yet</MonoLabel>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {comments.map((c) => (
-              <div key={c.id} className="flex gap-2.5">
-                <div
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-[10px] font-medium"
-                  style={{ background: 'var(--task-accent-soft)', color: 'var(--task-accent)' }}
-                >
-                  {initials(c.user_name)}
+      {loading ? (
+        <LoadingState size={4} />
+      ) : comments.length === 0 ? null : (
+        <div className="mb-3 flex flex-col gap-4">
+          {comments.map((c) => (
+            <div key={c.id} className="flex gap-2.5">
+              <div
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-[10px] font-medium"
+                style={{ background: 'var(--task-accent-soft)', color: 'var(--task-accent)' }}
+              >
+                {initials(c.user_name)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[length:var(--task-fs-body-sm)] font-medium" style={{ color: 'var(--task-ink-1)' }}>
+                    {c.user_name ?? 'Unknown'}
+                  </span>
+                  <span className="font-mono text-[length:var(--task-fs-label)]" style={{ color: 'var(--task-ink-3)' }}>
+                    {new Date(c.created_at).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </span>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-[length:var(--task-fs-body-sm)] font-medium" style={{ color: 'var(--task-ink-1)' }}>
-                      {c.user_name ?? 'Unknown'}
-                    </span>
-                    <span className="font-mono text-[length:var(--task-fs-label)]" style={{ color: 'var(--task-ink-3)' }}>
-                      {new Date(c.created_at).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      })}
-                    </span>
-                  </div>
-                  <div
-                    className="mt-1 rounded-lg rounded-tl-sm px-3 py-2 text-[length:var(--task-fs-body)] leading-relaxed"
-                    style={{ background: 'var(--task-surface-1)', color: 'var(--task-ink-1)' }}
-                  >
-                    <MentionText text={c.comment_content} />
-                  </div>
+                <div
+                  className="mt-1 rounded-lg rounded-tl-sm px-3 py-2 text-[length:var(--task-fs-body)] leading-relaxed"
+                  style={{ background: 'var(--task-surface-1)', color: 'var(--task-ink-1)' }}
+                >
+                  <MentionText text={c.comment_content} />
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-      <div className="relative shrink-0">
+      <div className="relative">
         {open && (
           <div
-            className="absolute inset-x-[18px] bottom-full z-20 mb-2 max-h-56 overflow-y-auto rounded-xl border shadow-lg"
+            className="absolute inset-x-0 bottom-full z-20 mb-2 max-h-56 overflow-y-auto rounded-xl border shadow-lg"
             style={{ background: 'var(--task-surface-2)', borderColor: 'var(--task-line)' }}
             role="listbox"
             aria-label="Mention a teammate"
@@ -277,16 +262,7 @@ export function CommentsView({
           </div>
         )}
 
-        <div
-          className="flex items-end gap-2 border-t px-[18px] pt-2.5"
-          style={{
-            borderColor: 'var(--task-line-soft)',
-            background: 'var(--task-surface-1)',
-            paddingBottom: isMobile
-              ? `calc(0.75rem + ${keyboardInset > 0 ? `${keyboardInset}px` : 'env(safe-area-inset-bottom)'})`
-              : '0.625rem',
-          }}
-        >
+        <div className="flex items-end gap-2">
           <textarea
             ref={textareaRef}
             value={newComment}
@@ -350,6 +326,7 @@ export function CommentsView({
             </svg>
           </button>
         </div>
+        <div ref={endRef} />
       </div>
     </div>
   );
