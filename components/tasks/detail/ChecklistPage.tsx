@@ -89,6 +89,48 @@ export function ChecklistPage({
   const [activeKey, setActiveKey] = React.useState<string | null>(null);
   const active =
     (activeKey && sections.find((s) => s.key === activeKey)) || sections[0] || null;
+  const activeIndex = active ? sections.findIndex((s) => s.key === active.key) : -1;
+
+  // Direction of the last section change (for the slide-in animation).
+  const [slideDir, setSlideDir] = React.useState<0 | 1 | -1>(0);
+  const goToSection = React.useCallback(
+    (key: string) => {
+      const cur = active ? sections.findIndex((s) => s.key === active.key) : -1;
+      const next = sections.findIndex((s) => s.key === key);
+      if (next === -1 || next === cur) return;
+      setSlideDir(next > cur ? 1 : -1);
+      setActiveKey(key);
+    },
+    [sections, active]
+  );
+
+  // Swipe left/right through sections. Horizontal-dominant swipes only, so
+  // vertical checklist scrolling is untouched.
+  const touchStartRef = React.useRef<{ x: number; y: number } | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touchStartRef.current = { x: t.clientX, y: t.clientY };
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start || sections.length < 2 || activeIndex === -1) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+    const next = activeIndex + (dx < 0 ? 1 : -1);
+    if (next >= 0 && next < sections.length) goToSection(sections[next].key);
+  };
+
+  // Keep the active tab visible when swiping moves it off-screen.
+  const tabsRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!active) return;
+    tabsRef.current
+      ?.querySelector(`[data-section-key="${CSS.escape(active.key)}"]`)
+      ?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }, [active?.key, active]);
 
   // Per-section progress for the tab counts.
   const sectionDone = React.useCallback(
@@ -168,6 +210,7 @@ export function ChecklistPage({
         {/* Section tabs — separators carve the checklist into these. */}
         {sections.length > 1 && (
           <div
+            ref={tabsRef}
             className="-mx-[18px] mt-3 flex gap-1.5 overflow-x-auto px-[18px]"
             style={{ scrollbarWidth: 'none' }}
           >
@@ -178,8 +221,9 @@ export function ChecklistPage({
               return (
                 <button
                   key={s.key}
+                  data-section-key={s.key}
                   type="button"
-                  onClick={() => setActiveKey(s.key)}
+                  onClick={() => goToSection(s.key)}
                   className="flex h-[var(--task-ctl-h)] shrink-0 items-center gap-1.5 rounded-lg px-[11px] font-mono text-[length:var(--task-fs-chip)] uppercase tracking-[0.08em] transition-transform active:scale-95"
                   style={{
                     background: isActive ? 'var(--task-surface-2)' : 'transparent',
@@ -202,21 +246,39 @@ export function ChecklistPage({
         )}
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-[18px] py-4 pb-6">
+      <style>{`
+        @keyframes section-in-r { from { opacity: 0; transform: translateX(18px) } }
+        @keyframes section-in-l { from { opacity: 0; transform: translateX(-18px) } }
+      `}</style>
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto px-[18px] py-4 pb-6"
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
         {loading ? (
           <div className="flex justify-center py-8">
             <LoadingState size={4} />
           </div>
         ) : template ? (
-          <DynamicCleaningForm
-            cleaningId={taskId}
-            propertyName={propertyName ?? ''}
-            template={template}
-            formMetadata={formMetadata}
-            onSave={onSaveForm}
-            readOnly={readOnly}
-            visibleFieldIds={active ? active.fields.map((f) => f.id) : undefined}
-          />
+          <div
+            key={active?.key ?? 'all'}
+            style={
+              slideDir !== 0
+                ? { animation: `section-in-${slideDir === 1 ? 'r' : 'l'} 200ms ease-out` }
+                : undefined
+            }
+          >
+            <DynamicCleaningForm
+              cleaningId={taskId}
+              propertyName={propertyName ?? ''}
+              template={template}
+              formMetadata={formMetadata}
+              onSave={onSaveForm}
+              readOnly={readOnly}
+              visibleFieldIds={active ? active.fields.map((f) => f.id) : undefined}
+            />
+          </div>
         ) : (
           <MonoLabel>Checklist unavailable</MonoLabel>
         )}

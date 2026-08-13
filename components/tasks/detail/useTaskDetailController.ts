@@ -189,8 +189,10 @@ export function useTaskDetailController({
   const isTemplated = !!templateId;
   const isAssigned = currentUser ? fields.assigned_staff?.includes(currentUser.id) : false;
   const isContingent = fields.status === 'contingent';
+  // Demo fixtures have no authed user, so the assignee gate would lock the
+  // checklist forever — demo keeps only the status/contingent rules.
   const isChecklistReadOnly =
-    !isAssigned || isContingent || (isTemplated && fields.status !== 'in_progress');
+    (!demo && !isAssigned) || isContingent || (isTemplated && fields.status !== 'in_progress');
 
   const checklistIncomplete = useCallback(() => {
     if (!isTemplated) return false;

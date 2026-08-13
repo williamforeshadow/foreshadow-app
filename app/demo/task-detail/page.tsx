@@ -33,6 +33,7 @@ const DEMO_TEMPLATE: Template = {
     { id: 'f3', type: 'yes-no', label: 'Dishwasher run and emptied?', required: true },
     { id: 'f4', type: 'text', label: 'Damage notes', required: false },
     { id: 'f5', type: 'rating', label: 'Overall readiness', required: true },
+    { id: 'f6', type: 'photos', label: 'Kitchen photos', required: false, options: { maxPhotos: 4 } },
   ],
 };
 

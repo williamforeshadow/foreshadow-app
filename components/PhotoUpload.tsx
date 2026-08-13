@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Button } from '@/components/ui/button';
 import Image from 'next/image';
 
 interface PhotoUploadProps {
@@ -21,7 +20,6 @@ export default function PhotoUpload({
   onChange,
   multiple = false,
   maxPhotos = 5,
-  required = false
 }: PhotoUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,59 +109,71 @@ export default function PhotoUpload({
     }
   };
 
+  const canAdd = multiple ? currentPhotos.length < maxPhotos : currentPhotos.length < 1;
+
   return (
-    <div className="w-full space-y-3">
-      {/* Upload Button — centered under the field label */}
-      <div className="flex items-center justify-center gap-2 pt-1">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/jpeg,image/jpg,image/png,image/webp"
-          multiple={multiple}
-          onChange={handleFileSelect}
-          className="hidden"
-          id={`photo-upload-${fieldId}`}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading || (!multiple && currentPhotos.length >= 1) || (multiple && currentPhotos.length >= maxPhotos)}
-        >
-          {uploading ? 'Uploading...' : multiple ? `Upload Photos (${currentPhotos.length}/${maxPhotos})` : 'Upload Photo'}
-        </Button>
-        {required && currentPhotos.length === 0 && (
-          <span className="text-xs text-red-500">Required</span>
+    <div className="w-full space-y-2">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/jpg,image/png,image/webp"
+        multiple={multiple}
+        onChange={handleFileSelect}
+        className="hidden"
+        id={`photo-upload-${fieldId}`}
+      />
+
+      {/* Photos + add tile share one centered row; the tile IS the button. */}
+      <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+        {currentPhotos.map((url, index) => (
+          <div key={index} className="relative group h-20 w-20 bg-neutral-100 dark:bg-neutral-800 rounded-lg overflow-hidden border border-neutral-300 dark:border-neutral-600">
+            <Image
+              src={url}
+              alt={`Photo ${index + 1}`}
+              fill
+              className="object-cover"
+            />
+            <button
+              type="button"
+              onClick={() => handleRemove(url)}
+              className="absolute top-1.5 right-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Remove photo"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+
+        {canAdd && (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            aria-label={multiple ? 'Add photos' : 'Add photo'}
+            className="flex h-12 w-12 flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-neutral-300 dark:border-neutral-600 text-neutral-400 dark:text-neutral-500 transition-colors hover:border-[#A78BFA] hover:text-[#A78BFA] active:scale-95 disabled:opacity-50"
+          >
+            {uploading ? (
+              <span className="text-xs">…</span>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="7" width="15" height="12" rx="2.5" />
+                <circle cx="8" cy="11.5" r="1.4" />
+                <path d="M4 18l4-3.6a1.6 1.6 0 012.1 0L14 18" />
+                <path d="M19 3v6M16 6h6" />
+              </svg>
+            )}
+            {multiple && !uploading && (
+              <span className="text-[9px] font-medium leading-none">
+                {currentPhotos.length}/{maxPhotos}
+              </span>
+            )}
+          </button>
         )}
       </div>
 
       {/* Error Message */}
       {error && (
-        <p className="text-sm text-red-500">{error}</p>
-      )}
-
-      {/* Photo Grid */}
-      {currentPhotos.length > 0 && (
-        <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
-          {currentPhotos.map((url, index) => (
-            <div key={index} className="relative group aspect-square bg-neutral-100 dark:bg-neutral-800 rounded-lg overflow-hidden border border-neutral-300 dark:border-neutral-600">
-              <Image
-                src={url}
-                alt={`Photo ${index + 1}`}
-                fill
-                className="object-cover"
-              />
-              <button
-                type="button"
-                onClick={() => handleRemove(url)}
-                className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                title="Remove photo"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
+        <p className="text-center text-sm text-red-500">{error}</p>
       )}
     </div>
   );

@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, memo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Field,
-  FieldDescription,
   FieldLabel,
 } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
@@ -318,37 +317,25 @@ function DynamicCleaningForm({
             <FieldLabel>
               {field.label} {field.required && !readOnly && <RequiredStar />}
             </FieldLabel>
-            <div className={`flex w-full justify-center gap-4 py-1 ${readOnly ? 'pointer-events-none' : ''}`}>
-              <button
-                type="button"
-                onClick={() => updateValue(field.id, 'yes')}
-                style={{ touchAction: 'manipulation' }}
-                tabIndex={readOnly ? -1 : undefined}
-                className={`w-32 py-3 px-5 rounded-lg border-2 text-sm font-medium transition-all ${
-                  readOnly
-                    ? 'border-neutral-200 dark:border-neutral-700 text-neutral-400 dark:text-neutral-600 opacity-50'
-                    : value === 'yes'
-                      ? 'border-[#4C4869] text-[#4C4869] dark:border-[#6e6a8a] dark:text-[#6e6a8a]'
-                      : 'border-neutral-300 dark:border-neutral-600 hover:border-[#A78BFA]'
-                }`}
-              >
-                Yes
-              </button>
-              <button
-                type="button"
-                onClick={() => updateValue(field.id, 'no')}
-                style={{ touchAction: 'manipulation' }}
-                tabIndex={readOnly ? -1 : undefined}
-                className={`w-32 py-3 px-5 rounded-lg border-2 text-sm font-medium transition-all ${
-                  readOnly
-                    ? 'border-neutral-200 dark:border-neutral-700 text-neutral-400 dark:text-neutral-600 opacity-50'
-                    : value === 'no'
-                      ? 'border-[#4C4869] text-[#4C4869] dark:border-[#6e6a8a] dark:text-[#6e6a8a]'
-                      : 'border-neutral-300 dark:border-neutral-600 hover:border-[#A78BFA]'
-                }`}
-              >
-                No
-              </button>
+            <div className={`flex w-full justify-center gap-3 py-1 ${readOnly ? 'pointer-events-none' : ''}`}>
+              {(['yes', 'no'] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => updateValue(field.id, option)}
+                  style={{ touchAction: 'manipulation' }}
+                  tabIndex={readOnly ? -1 : undefined}
+                  className={`w-20 py-2 rounded-lg border text-sm font-medium transition-all active:scale-95 ${
+                    readOnly
+                      ? 'border-neutral-200 dark:border-neutral-700 text-neutral-400 dark:text-neutral-600 opacity-50'
+                      : value === option
+                        ? 'border-transparent bg-[#4C4869]/[0.07] dark:bg-[#6e6a8a]/[0.16] text-[#4C4869] dark:text-[#6e6a8a]'
+                        : 'border-neutral-300 dark:border-neutral-600 hover:border-[#A78BFA]'
+                  }`}
+                >
+                  {option === 'yes' ? 'Yes' : 'No'}
+                </button>
+              ))}
             </div>
           </Field>
         );
@@ -356,14 +343,15 @@ function DynamicCleaningForm({
       case 'checkbox':
         return (
           <Field key={field.id}>
-            {/* No horizontal padding — the label starts at the same left edge
-                as every other field. */}
+            {/* px-3/-mx-3 keeps the label flush with every other field's left
+                edge while giving the checked-state tint room to breathe.
+                items-start pins the box to the label's top line. */}
             <button
               type="button"
               onClick={readOnly ? undefined : () => updateValue(field.id, !value)}
-              className={`flex items-center justify-between gap-4 py-2 transition-colors w-full text-left ${
+              className={`-mx-3 flex w-[calc(100%+1.5rem)] items-start justify-between gap-4 rounded-xl px-3 py-2.5 text-left transition-colors duration-200 ${
                 readOnly ? 'pointer-events-none' : 'cursor-pointer group'
-              }`}
+              } ${value ? 'bg-[#4C4869]/[0.07] dark:bg-[#6e6a8a]/[0.16]' : ''}`}
               style={{ touchAction: 'manipulation' }}
               tabIndex={readOnly ? -1 : undefined}
             >
@@ -374,7 +362,7 @@ function DynamicCleaningForm({
                   checklist must remain legible. Checked = the app-wide
                   "complete" violet (task status, property readiness, tiptap
                   checklists), not green. */}
-              <div className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+              <div className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-all flex-shrink-0 group-active:scale-90 ${
                 value
                   ? readOnly
                     ? 'bg-[#4C4869]/60 dark:bg-[#6e6a8a]/60 border-transparent opacity-70'
@@ -384,7 +372,13 @@ function DynamicCleaningForm({
                     : 'border-neutral-300 dark:border-neutral-600 group-hover:border-[#A78BFA]'
               }`}>
                 {value && (
-                  <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg
+                    className="w-3.5 h-3.5 text-white"
+                    style={{ animation: 'check-pop 160ms ease-out' }}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                   </svg>
                 )}
@@ -410,20 +404,15 @@ function DynamicCleaningForm({
                 </span>
               </div>
             ) : (
-              <>
-                <PhotoUpload
-                  cleaningId={cleaningId}
-                  fieldId={field.id}
-                  value={value}
-                  onChange={(newValue) => updateValue(field.id, newValue)}
-                  multiple={field.type === 'photos'}
-                  maxPhotos={field.options?.maxPhotos || 5}
-                  required={field.required}
-                />
-                {field.type === 'photos' && (
-                  <FieldDescription>Upload up to {field.options?.maxPhotos || 5} photos</FieldDescription>
-                )}
-              </>
+              <PhotoUpload
+                cleaningId={cleaningId}
+                fieldId={field.id}
+                value={value}
+                onChange={(newValue) => updateValue(field.id, newValue)}
+                multiple={field.type === 'photos'}
+                maxPhotos={field.options?.maxPhotos || 5}
+                required={field.required}
+              />
             )}
           </Field>
         );
@@ -453,8 +442,9 @@ function DynamicCleaningForm({
     <div className={`w-full ${readOnly ? 'opacity-60' : ''}`}>
       {/* No header here — ChecklistPage owns the page chrome in both states. */}
       {/* Dynamic Form */}
+      <style>{`@keyframes check-pop { from { transform: scale(0.4); opacity: 0 } }`}</style>
       <form onSubmit={(e) => { e.preventDefault(); if (!readOnly) saveForm(); }}>
-        <div className="space-y-5">
+        <div className="space-y-8">
           {(visibleFieldIds
             ? template.fields.filter(f => visibleFieldIds.includes(f.id))
             : template.fields

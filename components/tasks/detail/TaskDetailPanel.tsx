@@ -4,6 +4,8 @@ import * as React from 'react';
 import { useState } from 'react';
 import type { JSONContent } from '@tiptap/react';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { useKeyboardInset } from '@/lib/useKeyboardInset';
+import { useNativeKeyboardHeight } from '@/lib/nativeKeyboard';
 import { AttachmentLightbox } from '@/components/windows/projects/AttachmentLightbox';
 import type { ProjectFormFields } from '@/lib/types';
 import { useTaskDetailController } from './useTaskDetailController';
@@ -14,7 +16,7 @@ import { TaskOptionRow } from './primitives/TaskSheet';
 import { HeaderBar, TitleSection, DescriptionSection, IconButton } from './sections/HeaderSections';
 import { TimerRail, ActionBar } from './sections/StatusSections';
 import { ContextChips, TaskMetaFields, StepsSection, CrewSection, AttachmentsSection } from './sections/BodySections';
-import { CommentsSection } from './sections/CommentsView';
+import { CommentsSection, MobileCommentBar } from './sections/CommentsView';
 
 export interface TaskDetailPanelProps {
   task: TaskDetailInput | null;
@@ -43,6 +45,11 @@ export function TaskDetailPanel({
   const isMobile = useIsMobile() ?? false;
   const c = useTaskDetailController({ task, onSaved, onDeleted, demo });
   const [menuOpen, setMenuOpen] = useState(false);
+  // Keyboard-up detection needs both signals: visualViewport (web/Android)
+  // and the native plugin (which fires regardless of resize mode on iOS).
+  const visualKeyboardInset = useKeyboardInset();
+  const nativeKeyboardInset = useNativeKeyboardHeight();
+  const keyboardUp = Math.max(visualKeyboardInset, nativeKeyboardInset) > 0;
 
   if (!task) return null;
 
@@ -190,9 +197,11 @@ export function TaskDetailPanel({
             className="mt-4 flex flex-col gap-[18px] border-t pt-4"
             style={{
               borderColor: 'var(--task-line-soft)',
-              // Non-templated tasks have no bottom bar now, so the scroll body
-              // itself must clear the home indicator.
-              paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))',
+              // The scroll body must clear the home indicator, plus the
+              // floating comment bar on mobile.
+              paddingBottom: isMobile
+                ? 'calc(5rem + env(safe-area-inset-bottom))'
+                : 'calc(1.25rem + env(safe-area-inset-bottom))',
             }}
           >
             <CrewSection
@@ -237,6 +246,8 @@ export function TaskDetailPanel({
               setNewComment={c.commentsHook.setNewComment}
               posting={c.commentsHook.postingComment}
               onPost={(text) => void c.commentsHook.postProjectComment(task.task_id, text, 'task')}
+              // Mobile posts from the floating bottom bar instead.
+              showComposer={!isMobile}
             />
           </div>
         </div>
@@ -269,10 +280,22 @@ export function TaskDetailPanel({
       )}
       </div>
 
+      {/* Mobile main view: the comment composer floats at the screen bottom
+          (chat-style bubble); the inline section above is list-only. */}
+      {isMobile && c.view === 'main' && task && (
+        <MobileCommentBar
+          newComment={c.commentsHook.newComment}
+          setNewComment={c.commentsHook.setNewComment}
+          posting={c.commentsHook.postingComment}
+          onPost={(text) => void c.commentsHook.postProjectComment(task.task_id, text, 'task')}
+        />
+      )}
+
       {/* Status matrix: checklist view only — the main detail view is
           button-free for every task. Non-templated tasks change status via
-          the badge; contingent tasks see "Awaiting approval" here. */}
-      {c.view === 'checklist' && (
+          the badge; contingent tasks see "Awaiting approval" here. When the
+          keyboard is up on mobile it stays down instead of riding above it. */}
+      {c.view === 'checklist' && !(isMobile && keyboardUp) && (
         <ActionBar
           isMobile={isMobile}
           isContingent={c.isContingent}
