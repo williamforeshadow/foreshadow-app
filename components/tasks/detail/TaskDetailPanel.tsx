@@ -12,6 +12,7 @@ import type { ProjectFormFields } from '@/lib/types';
 import { useTaskDetailController } from './useTaskDetailController';
 import { type TaskDetailInput } from './taskInput';
 import { ChecklistPage } from './ChecklistPage';
+import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
 import { AdaptivePicker } from './primitives/AdaptivePicker';
 import { TaskOptionRow } from './primitives/TaskSheet';
 import { HeaderBar, TitleSection, DescriptionSection, IconButton } from './sections/HeaderSections';
@@ -46,6 +47,9 @@ export function TaskDetailPanel({
   const isMobile = useIsMobile() ?? false;
   const c = useTaskDetailController({ task, onSaved, onDeleted, demo });
   const [menuOpen, setMenuOpen] = useState(false);
+  // Create-task panel launched from the checklist header "+", seeded with
+  // this task's property so it opens locked to the same property.
+  const [creatingOpen, setCreatingOpen] = useState(false);
   // Keyboard-up detection needs both signals: visualViewport (web/Android)
   // and the native plugin (which fires regardless of resize mode on iOS).
   const visualKeyboardInset = useKeyboardInset();
@@ -64,6 +68,20 @@ export function TaskDetailPanel({
   // The top-bar micro-label shows the property name (or nothing when the task
   // has no property).
   const headerLabel = propertyName ?? '';
+
+  // Create-task overlay (self-positions fixed inset-0). Rendered as a sibling
+  // of the panel body in each layout — NOT inside the desktop card, whose
+  // overflow-hidden would clip this non-portaled fixed element.
+  const createPanel = creatingOpen ? (
+    <CreateTaskPanel
+      seed={{
+        property_id: task.property_id ?? null,
+        property_name: propertyName,
+      }}
+      onClose={() => setCreatingOpen(false)}
+      onCreated={() => setCreatingOpen(false)}
+    />
+  ) : null;
 
   const timerRunning = !!c.timeHook.activeTimeEntry;
   const checklistComplete = c.progress.total > 0 && c.progress.completed === c.progress.total;
@@ -274,6 +292,7 @@ export function TaskDetailPanel({
           completed={c.progress.completed}
           total={c.progress.total}
           onBack={() => void c.openView('main')}
+          onCreateTask={() => setCreatingOpen(true)}
           title={c.fields.title}
           timerRunning={timerRunning}
           displaySeconds={c.timeHook.displaySeconds}
@@ -324,27 +343,36 @@ export function TaskDetailPanel({
         style={{ background: 'var(--task-surface-0)' }}
       >
         {body}
+        {createPanel}
       </div>
     );
   }
   if (layout === 'page') {
-    return body;
+    return (
+      <>
+        {body}
+        {createPanel}
+      </>
+    );
   }
   // Desktop 'panel' layout: a floating popup card — vertically centered and
   // right-anchored inside its (transparent) host slot, height-capped so it
   // reads as a compact square-ish card rather than a full-height column, and
   // borderless (shadow alone lifts it off the page).
   return (
-    <div className="pointer-events-none flex h-full w-full items-center justify-end px-4 py-5">
-      <div
-        className="pointer-events-auto flex h-full max-h-[640px] w-full max-w-[760px] flex-col overflow-hidden rounded-2xl"
-        style={{
-          boxShadow:
-            '0 24px 70px -12px rgba(0,0,0,0.55), 0 8px 24px -8px rgba(0,0,0,0.4)',
-        }}
-      >
-        {body}
+    <>
+      <div className="pointer-events-none flex h-full w-full items-center justify-end px-4 py-5">
+        <div
+          className="pointer-events-auto flex h-full max-h-[640px] w-full max-w-[760px] flex-col overflow-hidden rounded-2xl"
+          style={{
+            boxShadow:
+              '0 24px 70px -12px rgba(0,0,0,0.55), 0 8px 24px -8px rgba(0,0,0,0.4)',
+          }}
+        >
+          {body}
+        </div>
       </div>
-    </div>
+      {createPanel}
+    </>
   );
 }

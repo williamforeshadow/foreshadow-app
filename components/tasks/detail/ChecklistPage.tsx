@@ -50,6 +50,7 @@ export function ChecklistPage({
   completed,
   total,
   onBack,
+  onCreateTask,
   title,
   timerRunning,
   displaySeconds,
@@ -68,6 +69,7 @@ export function ChecklistPage({
   completed: number;
   total: number;
   onBack: () => void;
+  onCreateTask: () => void;
   title: string;
   timerRunning: boolean;
   displaySeconds: number;
@@ -161,13 +163,19 @@ export function ChecklistPage({
             </IconButton>
           </div>
           <MonoLabel>{propertyName ?? ''}</MonoLabel>
-          <div className="flex w-[26px] justify-end">
-            {readOnly && (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--task-ink-3)" strokeWidth="1.6" strokeLinecap="round">
-                <rect x="5" y="11" width="14" height="9" rx="2" />
-                <path d="M8 11V8a4 4 0 018 0v3" />
+          {/* Create-task affordance — the app-wide purple "+" — seeded with
+              this task's property. Replaces the old read-only padlock cue. */}
+          <div className="flex w-8 justify-end">
+            <button
+              type="button"
+              onClick={onCreateTask}
+              aria-label="Create task"
+              className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-[var(--accent-3)] text-white transition-colors hover:bg-[var(--accent-4)] active:scale-95 dark:bg-[var(--accent-2)] dark:text-[#1a1a1a] dark:hover:bg-[var(--accent-1)]"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 6v12M6 12h12" />
               </svg>
-            )}
+            </button>
           </div>
         </div>
 
