@@ -14,6 +14,8 @@ import { canonicalChannelLabel } from '@/lib/bookingChannel';
 import type { ConciergeSourcesRecord } from '@/lib/conciergeSources';
 import type { GuestMessageRecord } from '@/lib/messages';
 import { WindowHeader } from '@/components/ui/window-header';
+import { useKeyboardInset } from '@/lib/useKeyboardInset';
+import { useNativeKeyboardHeight } from '@/lib/nativeKeyboard';
 
 /**
  * The full conversation as chat bubbles (guest left, host right). Used as the
@@ -165,6 +167,14 @@ export function ConversationThread({
   const nowMs = Date.now();
   const [composerText, setComposerText] = useState('');
   const [focusSignal, setFocusSignal] = useState(0);
+  // While the composer is focused it lifts itself above the keyboard
+  // (overlay mode — the layout doesn't shrink), so the thread pads its
+  // scroll region by the same inset to keep the newest messages reachable.
+  const [composerFocused, setComposerFocused] = useState(false);
+  const visualKeyboardInset = useKeyboardInset();
+  const nativeKeyboardInset = useNativeKeyboardHeight();
+  const keyboardInset = Math.max(visualKeyboardInset, nativeKeyboardInset);
+  const threadKeyboardPad = composerFocused && keyboardInset > 0 ? keyboardInset : 0;
   const [prevConvId, setPrevConvId] = useState(conversationId);
   const [prevSelSignal, setPrevSelSignal] = useState(startSelectionSignal);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -268,11 +278,12 @@ export function ConversationThread({
     setFocusSignal((n) => n + 1);
   };
 
-  // Keep the newest content (and the proposed reply) in view.
+  // Keep the newest content (and the proposed reply) in view. The keyboard
+  // pad is a dependency so raising the keyboard re-pins the bottom.
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [conversationId, messages.length, lastInboundId, proposedReply, proposedTasks.length, proposedKnowledge.length]);
+  }, [conversationId, messages.length, lastInboundId, proposedReply, proposedTasks.length, proposedKnowledge.length, threadKeyboardPad]);
 
   // "Turn into training" now lives as a header icon (next to the status actions).
   // Clicking it enters selection mode; while selecting, it becomes a compact
@@ -600,7 +611,11 @@ export function ConversationThread({
       {header}
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
-          <div ref={scrollRef} className="overlay-scrollbar min-h-0 flex-1 overflow-y-auto">
+          <div
+            ref={scrollRef}
+            className="overlay-scrollbar min-h-0 flex-1 overflow-y-auto"
+            style={{ paddingBottom: threadKeyboardPad || undefined }}
+          >
             {body}
           </div>
           {showComposer ? (
@@ -611,6 +626,7 @@ export function ConversationThread({
               onChange={setComposerText}
               onSend={onSendMessage}
               focusSignal={focusSignal}
+              onFocusChange={setComposerFocused}
             />
           ) : null}
         </div>

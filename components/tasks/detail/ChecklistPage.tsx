@@ -3,12 +3,8 @@
 import * as React from 'react';
 import DynamicCleaningForm, { type Template, type FieldDefinition } from '@/components/DynamicCleaningForm';
 import { isFieldSatisfied, unwrapValue } from '@/lib/tasks/templateProgress';
-import { useKeyboardInset } from '@/lib/useKeyboardInset';
-import {
-  setChatKeyboardOverlay,
-  useNativeKeyboardHeight,
-} from '@/lib/nativeKeyboard';
-import { MonoLabel, IconButton, TitleSection } from './sections/HeaderSections';
+import { useEditableKeyboardOverlay } from '@/lib/useEditableKeyboardOverlay';
+import { MonoLabel, IconButton } from './sections/HeaderSections';
 import { TimerRail } from './sections/StatusSections';
 import { LoadingState } from '@/components/ui/loading-state';
 
@@ -55,9 +51,6 @@ export function ChecklistPage({
   total,
   onBack,
   title,
-  onTitleChange,
-  onTitleBlur,
-  titleReadOnly,
   timerRunning,
   displaySeconds,
   formatTime,
@@ -76,9 +69,6 @@ export function ChecklistPage({
   total: number;
   onBack: () => void;
   title: string;
-  onTitleChange: (v: string) => void;
-  onTitleBlur: () => void;
-  titleReadOnly?: boolean;
   timerRunning: boolean;
   displaySeconds: number;
   formatTime: (s: number) => string;
@@ -151,45 +141,9 @@ export function ChecklistPage({
   }, [active?.key]);
 
   // Text fields get the comment bar's keyboard treatment: overlay resize mode
-  // armed on touch (before focus), so the screen never moves. WKWebView's own
-  // scroll-into-view is disabled in that mode, so this container does the job
-  // itself — padding by the keyboard inset and scrolling the focused field
-  // above it.
-  const visualInset = useKeyboardInset();
-  const nativeInset = useNativeKeyboardHeight();
-  const keyboardInset = Math.max(visualInset, nativeInset);
-  const [typing, setTyping] = React.useState(false);
-
-  const isTextField = (el: EventTarget | null): el is HTMLElement =>
-    el instanceof HTMLElement && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT');
-
-  const onBodyTouchStartCapture = (e: React.TouchEvent) => {
-    if (isTextField(e.target)) void setChatKeyboardOverlay(true);
-  };
-  const onBodyFocusCapture = (e: React.FocusEvent) => {
-    if (!isTextField(e.target)) return;
-    void setChatKeyboardOverlay(true);
-    setTyping(true);
-  };
-  const onBodyBlurCapture = (e: React.FocusEvent) => {
-    if (!isTextField(e.target)) return;
-    void setChatKeyboardOverlay(false);
-    setTyping(false);
-  };
-  // Never leave overlay mode armed past this page's lifetime.
-  React.useEffect(() => () => void setChatKeyboardOverlay(false), []);
-
-  React.useEffect(() => {
-    if (!typing || keyboardInset === 0) return;
-    const el = document.activeElement;
-    const sc = scrollRef.current;
-    if (!(el instanceof HTMLElement) || !sc || !sc.contains(el)) return;
-    const rect = el.getBoundingClientRect();
-    const visibleBottom = window.innerHeight - keyboardInset - 16;
-    if (rect.bottom > visibleBottom) {
-      sc.scrollBy({ top: rect.bottom - visibleBottom, behavior: 'smooth' });
-    }
-  }, [typing, keyboardInset]);
+  // armed on touch (before focus), so the screen never moves, with the
+  // container scrolling the field above the keyboard itself.
+  const kb = useEditableKeyboardOverlay(scrollRef);
 
   return (
     <div className="absolute inset-0 z-10 flex flex-col" style={{ background: 'var(--task-surface-0)' }}>
@@ -217,12 +171,13 @@ export function ChecklistPage({
           </div>
         </div>
 
-        <TitleSection
-          title={title}
-          onTitleChange={onTitleChange}
-          onTitleBlur={onTitleBlur}
-          readOnly={titleReadOnly}
-        />
+        {/* Static — the title is edited on the main detail view, not here. */}
+        <div
+          className="mt-2 line-clamp-3 w-full text-[length:var(--task-fs-title)] font-medium leading-[1.25] tracking-[-0.02em]"
+          style={{ color: 'var(--task-ink-1)' }}
+        >
+          {title || 'Task'}
+        </div>
         {propertyAddress && (
           <div
             className="mt-0.5 truncate text-[length:var(--task-fs-body-sm)]"
@@ -302,13 +257,11 @@ export function ChecklistPage({
         style={{
           // Overlay mode: the container doesn't shrink with the keyboard, so
           // pad past it — otherwise bottom fields can't scroll into view.
-          paddingBottom: keyboardInset > 0 ? keyboardInset + 24 : undefined,
+          paddingBottom: kb.keyboardPadding,
         }}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
-        onTouchStartCapture={onBodyTouchStartCapture}
-        onFocusCapture={onBodyFocusCapture}
-        onBlurCapture={onBodyBlurCapture}
+        {...kb.handlers}
       >
         {loading ? (
           <div className="flex justify-center py-8">

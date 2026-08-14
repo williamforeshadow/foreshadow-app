@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowUp, Sparkles, Loader2 } from 'lucide-react';
+import { useKeyboardInset } from '@/lib/useKeyboardInset';
+import {
+  setChatKeyboardOverlay,
+  useNativeKeyboardHeight,
+} from '@/lib/nativeKeyboard';
 
 /**
  * Reply composer pinned to the bottom of a conversation thread.
@@ -23,6 +28,7 @@ export function MessageComposer({
   onChange,
   onSend,
   focusSignal,
+  onFocusChange,
 }: {
   guestName?: string | null;
   conversationId?: string;
@@ -32,11 +38,24 @@ export function MessageComposer({
    *  clear the box). Absent ⇒ send surfaces an honest "not wired" note. */
   onSend?: (text: string) => Promise<boolean>;
   focusSignal?: number;
+  /** Fires as the textarea gains/loses focus — the thread uses it to pad its
+   *  scroll region past the keyboard while the composer is lifted. */
+  onFocusChange?: (focused: boolean) => void;
 }) {
   const [note, setNote] = useState<string | null>(null);
   const [drafting, setDrafting] = useState(false);
   const [sending, setSending] = useState(false);
+  const [focused, setFocused] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  // The AI chat's keyboard strategy: flip the WebView to keyboard-overlay
+  // mode on the first touch (before focus, so the screen never shifts and
+  // nothing exposes the window behind the WebView), then lift only this bar
+  // by the measured inset. Restored on blur/unmount. No-op on web/desktop.
+  const visualInset = useKeyboardInset();
+  const nativeInset = useNativeKeyboardHeight();
+  const keyboardInset = Math.max(visualInset, nativeInset);
+  useEffect(() => () => void setChatKeyboardOverlay(false), []);
 
   const firstName = guestName?.trim().split(/\s+/)[0];
   const placeholder = firstName ? `Message ${firstName}…` : 'Write a reply…';
@@ -126,7 +145,14 @@ export function MessageComposer({
   return (
     <div
       className="shrink-0 px-3 pt-2"
-      style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
+      style={{
+        paddingBottom:
+          focused && keyboardInset > 0 ? 8 : 'calc(0.75rem + env(safe-area-inset-bottom))',
+        // Overlay mode keeps the layout full-height, so the bar lifts itself.
+        transform:
+          focused && keyboardInset > 0 ? `translateY(-${keyboardInset}px)` : undefined,
+      }}
+      onTouchStart={() => void setChatKeyboardOverlay(true)}
     >
       {note ? (
         <p role="status" className="mb-2 px-1 text-xs text-muted-foreground">
@@ -142,6 +168,7 @@ export function MessageComposer({
         {conversationId ? (
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={handleDraft}
             disabled={drafting}
             aria-label="Draft a reply with AI"
@@ -165,6 +192,16 @@ export function MessageComposer({
             if (note) setNote(null);
           }}
           onKeyDown={handleKeyDown}
+          onFocus={() => {
+            void setChatKeyboardOverlay(true);
+            setFocused(true);
+            onFocusChange?.(true);
+          }}
+          onBlur={() => {
+            void setChatKeyboardOverlay(false);
+            setFocused(false);
+            onFocusChange?.(false);
+          }}
           placeholder={drafting ? 'Drafting a reply…' : placeholder}
           aria-label="Write a message"
           disabled={drafting || sending}
@@ -173,8 +210,12 @@ export function MessageComposer({
 
         <button
           type="button"
+          // Keep the textarea focused through the tap — otherwise the blur
+          // drops the bar with the keyboard before the click can land.
+          onMouseDown={(e) => e.preventDefault()}
           onClick={handleSend}
           disabled={!trimmed || sending}
+          style={{ touchAction: 'manipulation' }}
           aria-label="Send message"
           className="inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-[var(--accent-3)] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30 dark:bg-[var(--accent-1)] dark:text-[#12121a]"
         >

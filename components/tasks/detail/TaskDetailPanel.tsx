@@ -6,6 +6,7 @@ import type { JSONContent } from '@tiptap/react';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { useKeyboardInset } from '@/lib/useKeyboardInset';
 import { useNativeKeyboardHeight } from '@/lib/nativeKeyboard';
+import { useEditableKeyboardOverlay } from '@/lib/useEditableKeyboardOverlay';
 import { AttachmentLightbox } from '@/components/windows/projects/AttachmentLightbox';
 import type { ProjectFormFields } from '@/lib/types';
 import { useTaskDetailController } from './useTaskDetailController';
@@ -50,6 +51,11 @@ export function TaskDetailPanel({
   const visualKeyboardInset = useKeyboardInset();
   const nativeKeyboardInset = useNativeKeyboardHeight();
   const keyboardUp = Math.max(visualKeyboardInset, nativeKeyboardInset) > 0;
+  // Main-view scroll body: title + description get the overlay-keyboard
+  // treatment (screen stays put, container scrolls the caret above the
+  // keyboard itself).
+  const mainScrollRef = React.useRef<HTMLDivElement>(null);
+  const mainKb = useEditableKeyboardOverlay(mainScrollRef);
 
   if (!task) return null;
 
@@ -122,7 +128,12 @@ export function TaskDetailPanel({
       </div>
 
       {/* scroll body — title, timer, and status scroll with everything else */}
-      <div className="flex-1 overflow-y-auto px-[18px] pt-2" style={{ scrollbarWidth: 'none' }}>
+      <div
+        ref={mainScrollRef}
+        className="flex-1 overflow-y-auto px-[18px] pt-2"
+        style={{ scrollbarWidth: 'none', paddingBottom: mainKb.keyboardPadding }}
+        {...mainKb.handlers}
+      >
         <div className={layout === 'page' ? 'mx-auto w-full max-w-2xl' : undefined}>
           <TitleSection
             title={c.fields.title}
@@ -268,9 +279,6 @@ export function TaskDetailPanel({
           total={c.progress.total}
           onBack={() => void c.openView('main')}
           title={c.fields.title}
-          onTitleChange={(v) => c.updateField('title', v, false)}
-          onTitleBlur={() => void c.saveFields()}
-          titleReadOnly={editingLocked}
           timerRunning={timerRunning}
           displaySeconds={c.timeHook.displaySeconds}
           formatTime={c.timeHook.formatTime}

@@ -286,8 +286,13 @@ export function CommentComposer({
           <button
             type="button"
             aria-label="Send"
+            // preventDefault keeps the textarea focused: without it the tap
+            // blurs the field first, the bar drops with the keyboard, and the
+            // click lands on nothing.
+            onMouseDown={(e) => e.preventDefault()}
             onClick={handlePost}
             disabled={posting || !newComment.trim()}
+            style={{ touchAction: 'manipulation' }}
             className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-[var(--accent-3)] text-white transition-opacity disabled:opacity-30 dark:bg-[var(--accent-1)] dark:text-[#12121a]"
           >
             <ArrowUp size={16} />
