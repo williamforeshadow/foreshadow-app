@@ -3,6 +3,11 @@
 import * as React from 'react';
 import DynamicCleaningForm, { type Template, type FieldDefinition } from '@/components/DynamicCleaningForm';
 import { isFieldSatisfied, unwrapValue } from '@/lib/tasks/templateProgress';
+import { useKeyboardInset } from '@/lib/useKeyboardInset';
+import {
+  setChatKeyboardOverlay,
+  useNativeKeyboardHeight,
+} from '@/lib/nativeKeyboard';
 import { MonoLabel, IconButton, TitleSection } from './sections/HeaderSections';
 import { TimerRail } from './sections/StatusSections';
 import { LoadingState } from '@/components/ui/loading-state';
@@ -145,6 +150,47 @@ export function ChecklistPage({
     scrollRef.current?.scrollTo({ top: 0 });
   }, [active?.key]);
 
+  // Text fields get the comment bar's keyboard treatment: overlay resize mode
+  // armed on touch (before focus), so the screen never moves. WKWebView's own
+  // scroll-into-view is disabled in that mode, so this container does the job
+  // itself — padding by the keyboard inset and scrolling the focused field
+  // above it.
+  const visualInset = useKeyboardInset();
+  const nativeInset = useNativeKeyboardHeight();
+  const keyboardInset = Math.max(visualInset, nativeInset);
+  const [typing, setTyping] = React.useState(false);
+
+  const isTextField = (el: EventTarget | null): el is HTMLElement =>
+    el instanceof HTMLElement && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT');
+
+  const onBodyTouchStartCapture = (e: React.TouchEvent) => {
+    if (isTextField(e.target)) void setChatKeyboardOverlay(true);
+  };
+  const onBodyFocusCapture = (e: React.FocusEvent) => {
+    if (!isTextField(e.target)) return;
+    void setChatKeyboardOverlay(true);
+    setTyping(true);
+  };
+  const onBodyBlurCapture = (e: React.FocusEvent) => {
+    if (!isTextField(e.target)) return;
+    void setChatKeyboardOverlay(false);
+    setTyping(false);
+  };
+  // Never leave overlay mode armed past this page's lifetime.
+  React.useEffect(() => () => void setChatKeyboardOverlay(false), []);
+
+  React.useEffect(() => {
+    if (!typing || keyboardInset === 0) return;
+    const el = document.activeElement;
+    const sc = scrollRef.current;
+    if (!(el instanceof HTMLElement) || !sc || !sc.contains(el)) return;
+    const rect = el.getBoundingClientRect();
+    const visibleBottom = window.innerHeight - keyboardInset - 16;
+    if (rect.bottom > visibleBottom) {
+      sc.scrollBy({ top: rect.bottom - visibleBottom, behavior: 'smooth' });
+    }
+  }, [typing, keyboardInset]);
+
   return (
     <div className="absolute inset-0 z-10 flex flex-col" style={{ background: 'var(--task-surface-0)' }}>
       <div
@@ -253,8 +299,16 @@ export function ChecklistPage({
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto px-[18px] py-4 pb-6"
+        style={{
+          // Overlay mode: the container doesn't shrink with the keyboard, so
+          // pad past it — otherwise bottom fields can't scroll into view.
+          paddingBottom: keyboardInset > 0 ? keyboardInset + 24 : undefined,
+        }}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
+        onTouchStartCapture={onBodyTouchStartCapture}
+        onFocusCapture={onBodyFocusCapture}
+        onBlurCapture={onBodyBlurCapture}
       >
         {loading ? (
           <div className="flex justify-center py-8">

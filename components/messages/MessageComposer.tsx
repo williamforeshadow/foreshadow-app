@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { SendHorizontal, Sparkles, Loader2 } from 'lucide-react';
+import { ArrowUp, Sparkles, Loader2 } from 'lucide-react';
 
 /**
  * Reply composer pinned to the bottom of a conversation thread.
@@ -134,7 +134,11 @@ export function MessageComposer({
         </p>
       ) : null}
 
-      <div className="msg-well flex items-end gap-2 rounded-2xl px-2 py-2 transition-[border-color,box-shadow] focus-within:border-[var(--accent-3)] focus-within:ring-2 focus-within:ring-[var(--accent-ring)] dark:focus-within:ring-[var(--accent-ring-dark)]">
+      {/* Liquid-glass bubble — the same shell as the AI chat input and the
+          task comment bar, so every composer in the app reads as one family.
+          The sparkles button stays: here it's the functional AI-draft action,
+          not decoration. */}
+      <div className="flex items-end gap-2 rounded-[1.375rem] border py-[7px] pl-2.5 pr-[7px] backdrop-blur-[14px] backdrop-saturate-150 border-[rgba(0,0,0,0.12)] bg-[rgba(255,255,255,0.72)] shadow-[0_2px_10px_rgba(0,0,0,0.1),0_1px_2px_rgba(0,0,0,0.06),inset_0_1px_0_rgba(255,255,255,0.7)] dark:border-[rgba(255,255,255,0.12)] dark:bg-[rgba(38,38,44,0.62)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.1)]">
         {conversationId ? (
           <button
             type="button"
@@ -142,12 +146,12 @@ export function MessageComposer({
             disabled={drafting}
             aria-label="Draft a reply with AI"
             title="Draft a reply with AI"
-            className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--accent-3)] transition-colors hover:bg-[var(--accent-bg-soft)] disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-[var(--accent-bg-soft-dark)]"
+            className="mb-[3px] inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--accent-3)] transition-colors hover:bg-[var(--accent-bg-soft)] disabled:cursor-not-allowed disabled:opacity-50 dark:text-[var(--accent-1)] dark:hover:bg-[var(--accent-bg-soft-dark)]"
           >
             {drafting ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden />
             ) : (
-              <Sparkles className="h-4 w-4" aria-hidden />
+              <Sparkles className="h-[18px] w-[18px]" aria-hidden />
             )}
           </button>
         ) : null}
@@ -164,7 +168,7 @@ export function MessageComposer({
           placeholder={drafting ? 'Drafting a reply…' : placeholder}
           aria-label="Write a message"
           disabled={drafting || sending}
-          className="max-h-40 min-h-[1.5rem] flex-1 resize-none bg-transparent py-1 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-70"
+          className="max-h-40 min-h-[24px] flex-1 resize-none self-center bg-transparent py-1 text-[15px] leading-normal text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-70 [scrollbar-width:thin]"
         />
 
         <button
@@ -172,12 +176,12 @@ export function MessageComposer({
           onClick={handleSend}
           disabled={!trimmed || sending}
           aria-label="Send message"
-          className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--accent-3)] text-white transition-[opacity,transform] hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 motion-reduce:transition-none motion-reduce:active:scale-100"
+          className="inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-[var(--accent-3)] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30 dark:bg-[var(--accent-1)] dark:text-[#12121a]"
         >
           {sending ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
           ) : (
-            <SendHorizontal className="h-4 w-4" aria-hidden />
+            <ArrowUp size={16} aria-hidden />
           )}
         </button>
       </div>

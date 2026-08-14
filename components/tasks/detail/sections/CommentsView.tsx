@@ -440,6 +440,7 @@ export function MobileCommentBar({
   const visualInset = useKeyboardInset();
   const nativeInset = useNativeKeyboardHeight();
   const keyboardInset = Math.max(visualInset, nativeInset);
+  const [focused, setFocused] = React.useState(false);
 
   // Overlay mode must be on BEFORE the keyboard starts animating, so it arms
   // on the first touch (which precedes focus) with focus as the fallback for
@@ -452,12 +453,19 @@ export function MobileCommentBar({
   }, []);
   React.useEffect(() => disarmOverlay, [disarmOverlay]);
 
+  // The keyboard events fire for ANY field on the page (title, description…),
+  // so the inset only applies while THIS composer is the one being typed in —
+  // otherwise the bar would double-lift to mid-screen. While another field
+  // has the keyboard up, the bar stays down entirely (same rule as the
+  // checklist ActionBar).
+  if (keyboardInset > 0 && !focused) return null;
+
   return (
     <div
       className="fixed inset-x-0 z-20 px-3"
       style={{
-        bottom: keyboardInset,
-        paddingBottom: keyboardInset > 0 ? 8 : 'calc(env(safe-area-inset-bottom) + 8px)',
+        bottom: focused ? keyboardInset : 0,
+        paddingBottom: keyboardInset > 0 && focused ? 8 : 'calc(env(safe-area-inset-bottom) + 8px)',
       }}
       onTouchStart={armOverlay}
     >
@@ -467,7 +475,11 @@ export function MobileCommentBar({
         posting={posting}
         onPost={onPost}
         variant="bubble"
-        onFocusChange={(focused) => (focused ? armOverlay() : disarmOverlay())}
+        onFocusChange={(f) => {
+          setFocused(f);
+          if (f) armOverlay();
+          else disarmOverlay();
+        }}
       />
     </div>
   );

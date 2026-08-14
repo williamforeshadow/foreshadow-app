@@ -4,6 +4,8 @@ import * as React from 'react';
 import { useRef, useState } from 'react';
 import type { JSONContent } from '@tiptap/react';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { useKeyboardInset } from '@/lib/useKeyboardInset';
+import { useNativeKeyboardHeight } from '@/lib/nativeKeyboard';
 import { useAuth } from '@/lib/authContext';
 import { useDepartments } from '@/lib/departmentsContext';
 import { useProjectBins } from '@/lib/hooks/useProjectBins';
@@ -91,6 +93,12 @@ export function CreateTaskPanel({
   submitLabel = 'Create task',
 }: CreateTaskPanelProps) {
   const isMobile = useIsMobile() ?? false;
+  // Keyboard-up detection (native listener fires in every resize mode; the
+  // visualViewport signal is the web fallback) — the Create bar stays down
+  // instead of riding above the keyboard while typing.
+  const visualKeyboardInset = useKeyboardInset();
+  const nativeKeyboardInset = useNativeKeyboardHeight();
+  const keyboardUp = Math.max(visualKeyboardInset, nativeKeyboardInset) > 0;
   const { allUsers } = useAuth();
   const users = (allUsers as unknown as User[]) ?? [];
   const { departments } = useDepartments();
@@ -474,7 +482,8 @@ export function CreateTaskPanel({
         <div style={{ height: '1.5rem' }} />
       </div>
 
-      {/* Action bar */}
+      {/* Action bar — stays down while the keyboard is up on mobile. */}
+      {!(isMobile && keyboardUp) && (
       <div
         className="shrink-0 border-t px-[18px] pt-3"
         style={{
@@ -492,6 +501,7 @@ export function CreateTaskPanel({
           {c.creating ? 'Creating…' : submitLabel}
         </button>
       </div>
+      )}
     </div>
   );
 
