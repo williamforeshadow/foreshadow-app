@@ -4,11 +4,6 @@ import * as React from 'react';
 import { ArrowUp } from 'lucide-react';
 import type { Comment } from '@/lib/types';
 import { useUsers, type AppUser } from '@/lib/useUsers';
-import { useKeyboardInset } from '@/lib/useKeyboardInset';
-import {
-  setChatKeyboardOverlay,
-  useNativeKeyboardHeight,
-} from '@/lib/nativeKeyboard';
 import { parseMentionTokens, formatMentionToken } from '@/lib/mentions';
 import { MonoLabel } from './HeaderSections';
 import { LoadingState } from '@/components/ui/loading-state';
@@ -86,25 +81,24 @@ function filterUsers(users: AppUser[], query: string): AppUser[] {
   );
 }
 
-// The composer: textarea + send with the @-mention typeahead. Two skins:
-// 'inline' is the flat desktop row inside the comments section; 'bubble' is
-// the mobile floating bar, an exact sibling of the AI chat's liquid-glass
-// input (minus the sparkles icon; the paperclip waits on comment
-// attachments existing at all).
-export function CommentComposer({
+// The Notion-style inline composer: your avatar and a borderless
+// "Add a comment…" row you type straight into, in the page flow (no floating
+// bar). A send circle appears once there's something to post. On mobile the
+// panel's overlay-keyboard treatment (attached to the scroll body) keeps the
+// screen still and scrolls the caret above the keyboard — same behavior as
+// the checklist's text fields.
+function CommentComposer({
+  authorName,
   newComment,
   setNewComment,
   posting,
   onPost,
-  variant,
-  onFocusChange,
 }: {
+  authorName: string | null;
   newComment: string;
   setNewComment: (v: string) => void;
   posting: boolean;
   onPost: (text?: string) => void;
-  variant: 'inline' | 'bubble';
-  onFocusChange?: (focused: boolean) => void;
 }) {
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const { users } = useUsers();
@@ -136,14 +130,13 @@ export function CommentComposer({
     setActiveIndex(0);
   }, [mention?.start, mention?.query]);
 
-  // Bubble: grow with content like the chat input (capped, then scroll).
+  // Grow with content (capped, then scroll internally).
   React.useEffect(() => {
-    if (variant !== 'bubble') return;
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
-  }, [newComment, variant]);
+  }, [newComment]);
 
   const syncMention = React.useCallback((value: string, caret: number) => {
     const found = activeMentionQuery(value, caret);
@@ -179,179 +172,143 @@ export function CommentComposer({
     onPost(applyMentions(newComment.trim(), pickedRef.current));
   }, [posting, newComment, onPost]);
 
-  const textareaProps = {
-    ref: textareaRef,
-    value: newComment,
-    onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setNewComment(e.target.value);
-      syncMention(e.target.value, e.target.selectionStart ?? e.target.value.length);
-    },
-    onSelect: (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
-      const el = e.currentTarget;
-      syncMention(el.value, el.selectionStart ?? el.value.length);
-    },
-    onFocus: () => onFocusChange?.(true),
-    onBlur: () => {
-      setMention(null);
-      onFocusChange?.(false);
-    },
-    onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (open) {
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          setActiveIndex((i) => (i + 1) % candidates.length);
-          return;
-        }
-        if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          setActiveIndex((i) => (i - 1 + candidates.length) % candidates.length);
-          return;
-        }
-        if (e.key === 'Enter' || e.key === 'Tab') {
-          e.preventDefault();
-          selectUser(candidates[activeIndex]);
-          return;
-        }
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          dismissedAtRef.current = mention?.start ?? null;
-          setMention(null);
-          return;
-        }
-      }
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handlePost();
-      }
-    },
-    rows: 1,
-    placeholder: 'Add a comment…',
-  } as const;
-
-  const mentionPopup = open && (
-    <div
-      className="absolute inset-x-0 bottom-full z-20 mb-2 max-h-56 overflow-y-auto rounded-xl border shadow-lg"
-      style={{ background: 'var(--task-surface-2)', borderColor: 'var(--task-line)' }}
-      role="listbox"
-      aria-label="Mention a teammate"
-    >
-      {candidates.map((u, i) => (
-        <button
-          key={u.id}
-          type="button"
-          role="option"
-          aria-selected={i === activeIndex}
-          // onMouseDown so the textarea never loses focus/caret
-          onMouseDown={(e) => {
-            e.preventDefault();
-            selectUser(u);
-          }}
-          onMouseEnter={() => setActiveIndex(i)}
-          className="flex w-full items-center gap-2.5 px-3 py-2 text-left"
-          style={{
-            background: i === activeIndex ? 'var(--task-accent-soft)' : 'transparent',
-          }}
-        >
-          <div
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-mono text-[9px] font-medium"
-            style={{ background: 'var(--task-accent-soft)', color: 'var(--task-accent)' }}
-          >
-            {initials(u.name)}
-          </div>
-          <div className="min-w-0">
-            <div className="truncate text-[length:var(--task-fs-body-sm)] font-medium" style={{ color: 'var(--task-ink-1)' }}>
-              {u.name}
-            </div>
-            <div className="truncate font-mono text-[length:var(--task-fs-label)]" style={{ color: 'var(--task-ink-3)' }}>
-              {u.email}
-            </div>
-          </div>
-        </button>
-      ))}
-    </div>
-  );
-
-  if (variant === 'bubble') {
-    return (
-      <div className="relative">
-        {mentionPopup}
+  return (
+    <div className="relative">
+      {open && (
         <div
-          className="flex items-end gap-2 rounded-[1.375rem] border py-[7px] pl-3.5 pr-[7px] backdrop-blur-[14px] backdrop-saturate-150 border-[rgba(0,0,0,0.12)] bg-[rgba(255,255,255,0.72)] shadow-[0_2px_10px_rgba(0,0,0,0.1),0_1px_2px_rgba(0,0,0,0.06),inset_0_1px_0_rgba(255,255,255,0.7)] dark:border-[rgba(255,255,255,0.12)] dark:bg-[rgba(38,38,44,0.62)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.1)]"
+          className="absolute inset-x-0 bottom-full z-20 mb-2 max-h-56 overflow-y-auto rounded-xl border shadow-lg"
+          style={{ background: 'var(--task-surface-2)', borderColor: 'var(--task-line)' }}
+          role="listbox"
+          aria-label="Mention a teammate"
         >
-          <textarea
-            {...textareaProps}
-            className="max-h-[140px] min-h-[24px] flex-1 resize-none self-center bg-transparent py-1 text-[15px] leading-normal outline-none [scrollbar-width:thin]"
-            style={{ color: 'var(--task-ink-1)' }}
-          />
+          {candidates.map((u, i) => (
+            <button
+              key={u.id}
+              type="button"
+              role="option"
+              aria-selected={i === activeIndex}
+              // onMouseDown so the textarea never loses focus/caret
+              onMouseDown={(e) => {
+                e.preventDefault();
+                selectUser(u);
+              }}
+              onMouseEnter={() => setActiveIndex(i)}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left"
+              style={{
+                background: i === activeIndex ? 'var(--task-accent-soft)' : 'transparent',
+              }}
+            >
+              <div
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-mono text-[9px] font-medium"
+                style={{ background: 'var(--task-accent-soft)', color: 'var(--task-accent)' }}
+              >
+                {initials(u.name)}
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-[length:var(--task-fs-body-sm)] font-medium" style={{ color: 'var(--task-ink-1)' }}>
+                  {u.name}
+                </div>
+                <div className="truncate font-mono text-[length:var(--task-fs-label)]" style={{ color: 'var(--task-ink-3)' }}>
+                  {u.email}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-start gap-2.5">
+        <div
+          className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-[10px] font-medium"
+          style={{ background: 'var(--task-surface-2)', color: 'var(--task-ink-2)' }}
+        >
+          {initials(authorName ?? undefined)}
+        </div>
+        <textarea
+          ref={textareaRef}
+          value={newComment}
+          onChange={(e) => {
+            setNewComment(e.target.value);
+            syncMention(e.target.value, e.target.selectionStart ?? e.target.value.length);
+          }}
+          onSelect={(e) => {
+            const el = e.currentTarget;
+            syncMention(el.value, el.selectionStart ?? el.value.length);
+          }}
+          onBlur={() => setMention(null)}
+          onKeyDown={(e) => {
+            if (open) {
+              if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setActiveIndex((i) => (i + 1) % candidates.length);
+                return;
+              }
+              if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setActiveIndex((i) => (i - 1 + candidates.length) % candidates.length);
+                return;
+              }
+              if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault();
+                selectUser(candidates[activeIndex]);
+                return;
+              }
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                dismissedAtRef.current = mention?.start ?? null;
+                setMention(null);
+                return;
+              }
+            }
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handlePost();
+            }
+          }}
+          rows={1}
+          placeholder="Add a comment…"
+          className="min-h-[28px] flex-1 resize-none self-center bg-transparent py-1 text-[length:var(--task-fs-body)] leading-normal outline-none [scrollbar-width:thin] placeholder:text-[var(--task-ink-3)]"
+          style={{ color: 'var(--task-ink-1)' }}
+        />
+        {newComment.trim() && (
           <button
             type="button"
             aria-label="Send"
-            // preventDefault keeps the textarea focused: without it the tap
-            // blurs the field first, the bar drops with the keyboard, and the
-            // click lands on nothing.
+            // preventDefault keeps the textarea focused through the tap —
+            // otherwise the blur beats the click on mobile.
             onMouseDown={(e) => e.preventDefault()}
             onClick={handlePost}
-            disabled={posting || !newComment.trim()}
+            disabled={posting}
             style={{ touchAction: 'manipulation' }}
-            className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-[var(--accent-3)] text-white transition-opacity disabled:opacity-30 dark:bg-[var(--accent-1)] dark:text-[#12121a]"
+            className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--accent-3)] text-white transition-opacity disabled:opacity-30 dark:bg-[var(--accent-1)] dark:text-[#12121a]"
           >
-            <ArrowUp size={16} />
+            <ArrowUp size={14} />
           </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative">
-      {mentionPopup}
-      <div className="flex items-end gap-2">
-        <textarea
-          {...textareaProps}
-          className="max-h-28 min-h-[46px] flex-1 resize-none rounded-xl border px-3.5 py-3 text-[length:var(--task-fs-body)] outline-none"
-          style={{
-            background: 'var(--task-surface-2)',
-            borderColor: 'var(--task-line)',
-            color: 'var(--task-ink-1)',
-          }}
-        />
-        <button
-          type="button"
-          aria-label="Send"
-          onClick={handlePost}
-          disabled={posting || !newComment.trim()}
-          className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl transition-transform active:scale-95 disabled:opacity-40"
-          style={{ background: 'var(--task-accent)', color: '#0c0c0e' }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 12l16-7-7 16-2.5-6.5z" />
-          </svg>
-        </button>
+        )}
       </div>
     </div>
   );
 }
 
 // Inline comments: flows in the panel's scroll body (no takeover, no own
-// scroll region). The list renders newest-last; on desktop the composer sits
-// beneath it, on mobile the composer is the floating MobileCommentBar
-// instead, so the section is list-only there.
+// scroll region, no floating bar). List newest-last, composer beneath it.
 export function CommentsSection({
   comments,
   loading,
+  authorName,
   newComment,
   setNewComment,
   posting,
   onPost,
-  showComposer = true,
 }: {
   comments: Comment[];
   loading: boolean;
+  /** Current user's display name — seeds the composer avatar. */
+  authorName: string | null;
   newComment: string;
   setNewComment: (v: string) => void;
   posting: boolean;
   onPost: (text?: string) => void;
-  showComposer?: boolean;
 }) {
   const endRef = React.useRef<HTMLDivElement>(null);
 
@@ -411,81 +368,14 @@ export function CommentsSection({
         </div>
       )}
 
-      {showComposer && (
-        <CommentComposer
-          newComment={newComment}
-          setNewComment={setNewComment}
-          posting={posting}
-          onPost={onPost}
-          variant="inline"
-        />
-      )}
-      <div ref={endRef} />
-    </div>
-  );
-}
-
-// Mobile: the comment composer as a floating bar pinned to the bottom of the
-// screen, borrowing the AI chat's keyboard strategy wholesale — while the
-// field is being interacted with, the WebView switches to keyboard-overlay
-// mode (the screen stops moving) and only this bar rides up by the measured
-// keyboard inset. Restored on blur/unmount so every other surface keeps the
-// default resize behavior.
-export function MobileCommentBar({
-  newComment,
-  setNewComment,
-  posting,
-  onPost,
-}: {
-  newComment: string;
-  setNewComment: (v: string) => void;
-  posting: boolean;
-  onPost: (text?: string) => void;
-}) {
-  const visualInset = useKeyboardInset();
-  const nativeInset = useNativeKeyboardHeight();
-  const keyboardInset = Math.max(visualInset, nativeInset);
-  const [focused, setFocused] = React.useState(false);
-
-  // Overlay mode must be on BEFORE the keyboard starts animating, so it arms
-  // on the first touch (which precedes focus) with focus as the fallback for
-  // hardware keyboards / programmatic focus.
-  const armOverlay = React.useCallback(() => {
-    void setChatKeyboardOverlay(true);
-  }, []);
-  const disarmOverlay = React.useCallback(() => {
-    void setChatKeyboardOverlay(false);
-  }, []);
-  React.useEffect(() => disarmOverlay, [disarmOverlay]);
-
-  // The keyboard events fire for ANY field on the page (title, description…),
-  // so the inset only applies while THIS composer is the one being typed in —
-  // otherwise the bar would double-lift to mid-screen. While another field
-  // has the keyboard up, the bar stays down entirely (same rule as the
-  // checklist ActionBar).
-  if (keyboardInset > 0 && !focused) return null;
-
-  return (
-    <div
-      className="fixed inset-x-0 z-20 px-3"
-      style={{
-        bottom: focused ? keyboardInset : 0,
-        paddingBottom: keyboardInset > 0 && focused ? 8 : 'calc(env(safe-area-inset-bottom) + 8px)',
-      }}
-      onTouchStart={armOverlay}
-    >
       <CommentComposer
+        authorName={authorName}
         newComment={newComment}
         setNewComment={setNewComment}
         posting={posting}
         onPost={onPost}
-        variant="bubble"
-        onFocusChange={(f) => {
-          setFocused(f);
-          if (f) armOverlay();
-          else disarmOverlay();
-        }}
       />
+      <div ref={endRef} />
     </div>
   );
 }

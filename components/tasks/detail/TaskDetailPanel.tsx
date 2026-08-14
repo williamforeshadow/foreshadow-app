@@ -17,7 +17,7 @@ import { TaskOptionRow } from './primitives/TaskSheet';
 import { HeaderBar, TitleSection, DescriptionSection, IconButton } from './sections/HeaderSections';
 import { TimerRail, ActionBar } from './sections/StatusSections';
 import { ContextChips, TaskMetaFields, StepsSection, CrewSection, AttachmentsSection } from './sections/BodySections';
-import { CommentsSection, MobileCommentBar } from './sections/CommentsView';
+import { CommentsSection } from './sections/CommentsView';
 
 export interface TaskDetailPanelProps {
   task: TaskDetailInput | null;
@@ -208,11 +208,8 @@ export function TaskDetailPanel({
             className="mt-4 flex flex-col gap-[18px] border-t pt-4"
             style={{
               borderColor: 'var(--task-line-soft)',
-              // The scroll body must clear the home indicator, plus the
-              // floating comment bar on mobile.
-              paddingBottom: isMobile
-                ? 'calc(5rem + env(safe-area-inset-bottom))'
-                : 'calc(1.25rem + env(safe-area-inset-bottom))',
+              // The scroll body must clear the home indicator.
+              paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))',
             }}
           >
             <CrewSection
@@ -253,12 +250,11 @@ export function TaskDetailPanel({
             <CommentsSection
               comments={c.commentsHook.projectComments}
               loading={c.commentsHook.loadingComments}
+              authorName={c.currentUser?.name ?? null}
               newComment={c.commentsHook.newComment}
               setNewComment={c.commentsHook.setNewComment}
               posting={c.commentsHook.postingComment}
               onPost={(text) => void c.commentsHook.postProjectComment(task.task_id, text, 'task')}
-              // Mobile posts from the floating bottom bar instead.
-              showComposer={!isMobile}
             />
           </div>
         </div>
@@ -287,17 +283,6 @@ export function TaskDetailPanel({
         />
       )}
       </div>
-
-      {/* Mobile main view: the comment composer floats at the screen bottom
-          (chat-style bubble); the inline section above is list-only. */}
-      {isMobile && c.view === 'main' && task && (
-        <MobileCommentBar
-          newComment={c.commentsHook.newComment}
-          setNewComment={c.commentsHook.setNewComment}
-          posting={c.commentsHook.postingComment}
-          onPost={(text) => void c.commentsHook.postProjectComment(task.task_id, text, 'task')}
-        />
-      )}
 
       {/* Status matrix: checklist view only — the main detail view is
           button-free for every task. Non-templated tasks change status via
