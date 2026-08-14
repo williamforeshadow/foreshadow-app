@@ -106,14 +106,18 @@ export default function TaskDetailDemoPage() {
   if (!queryClient.getQueryData(qk.templateDetail('demo-template', 'Cortez Hill · 4B'))) {
     queryClient.setQueryData(qk.templateDetail('demo-template', 'Cortez Hill · 4B'), DEMO_TEMPLATE);
     queryClient.setQueryData(qk.templateDetail('demo-template', null), DEMO_TEMPLATE);
-    // Property profile (the panel reads address_street/_city for the fine
-    // print under the title; its query is disabled in demo, cache-only).
-    queryClient.setQueryData(qk.property('demo-prop'), {
-      address_street: '1244 Island Ave',
-      address_city: 'San Diego',
-      address_state: 'CA',
-      address_zip: '92101',
-    });
+    // Properties list (the panel derives the address fine print from the
+    // shared list cache; the demo has no API, so seed it).
+    queryClient.setQueryData(qk.properties, [
+      {
+        id: 'demo-prop',
+        name: 'Cortez Hill · 4B',
+        address_street: '1244 Island Ave',
+        address_city: 'San Diego',
+        address_state: 'CA',
+        address_zip: '92101',
+      },
+    ]);
   }
 
   const fixture = useMemo(() => FIXTURES.find((f) => f.key === fixtureKey)!, [fixtureKey]);

@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 
     let query = supabase
       .from('properties')
-      .select('id, name, hostaway_name, hostaway_listing_id, parent_property_id, is_active, created_at, updated_at')
+      .select('id, name, hostaway_name, hostaway_listing_id, parent_property_id, is_active, address_street, address_city, address_state, address_zip, created_at, updated_at')
       .order('name', { ascending: true });
 
     if (!includeInactive) {

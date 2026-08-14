@@ -136,6 +136,17 @@ export async function POST(request: Request) {
       );
     }
 
+    // Override edits reach pending untouched tasks only — same rule as
+    // template edits (tasks render from their creation-time snapshot).
+    if (field_overrides !== undefined) {
+      const { error: refreshError } = await supabase.rpc('refresh_pending_task_snapshots', {
+        p_template_id: template_id,
+      });
+      if (refreshError) {
+        console.error('Failed to refresh pending task snapshots:', refreshError.message);
+      }
+    }
+
     return NextResponse.json({ assignment: data });
   } catch (err: any) {
     return NextResponse.json(

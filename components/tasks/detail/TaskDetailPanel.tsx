@@ -59,7 +59,7 @@ export function TaskDetailPanel({
 
   if (!task) return null;
 
-  const templateName = task?.template_name ?? null;
+  const templateName = c.templateName;
   const propertyName = task?.property_name ?? null;
   // The top-bar micro-label shows the property name (or nothing when the task
   // has no property).

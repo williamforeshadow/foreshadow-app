@@ -441,14 +441,18 @@ function DynamicCleaningForm({
   return (
     <div className={`w-full ${readOnly ? 'opacity-60' : ''}`}>
       {/* No header here — ChecklistPage owns the page chrome in both states. */}
-      {/* Dynamic Form */}
+      {/* Dynamic Form — hairline separators between fields */}
       <style>{`@keyframes check-pop { from { transform: scale(0.4); opacity: 0 } }`}</style>
       <form onSubmit={(e) => { e.preventDefault(); if (!readOnly) saveForm(); }}>
-        <div className="space-y-8">
+        <div className="divide-y divide-[var(--task-line-soft)]">
           {(visibleFieldIds
             ? template.fields.filter(f => visibleFieldIds.includes(f.id))
             : template.fields
-          ).map(field => renderField(field))}
+          ).map(field => (
+            <div key={field.id} className="py-5 first:pt-1 last:pb-2">
+              {renderField(field)}
+            </div>
+          ))}
         </div>
       </form>
     </div>

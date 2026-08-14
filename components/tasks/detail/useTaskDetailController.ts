@@ -1,8 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchJson } from '@/lib/queries/fetchJson';
+import { useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/apiFetch';
 import { toast } from '@/components/ui/toast';
 import { useAuth } from '@/lib/authContext';
@@ -29,6 +28,35 @@ interface ControllerArgs {
   onDeleted?: (taskId: string) => void;
   /** Demo fixtures mode: saves apply locally, no network. */
   demo?: boolean;
+}
+
+// Rebuild a display-only template from enriched form_metadata ({label, type,
+// value} per field id) — the last-resort renderer for tasks whose template
+// was deleted before snapshots existed. Field order follows insertion order.
+function templateFromMetadata(
+  metadata: Record<string, unknown> | null,
+  templateName: string | null
+): Template | null {
+  if (!metadata) return null;
+  const fields: Template['fields'] = [];
+  for (const [id, raw] of Object.entries(metadata)) {
+    if (id === 'property_name' || id === 'template_id' || id === 'template_name') continue;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const v = raw as { label?: unknown; type?: unknown };
+    if (typeof v.type !== 'string') continue;
+    fields.push({
+      id,
+      type: v.type as Template['fields'][number]['type'],
+      label: typeof v.label === 'string' ? v.label : id,
+      required: false,
+    });
+  }
+  if (fields.length === 0) return null;
+  return {
+    id: (metadata.template_id as string) ?? 'metadata',
+    name: (metadata.template_name as string) ?? templateName ?? 'Checklist',
+    fields,
+  };
 }
 
 // Flush the checklist form's pending debounced save (DynamicCleaningForm
@@ -116,14 +144,31 @@ export function useTaskDetailController({
   }, [taskId]);
 
   // ---- template loading ---------------------------------------------------
+  // Preference order:
+  //   1. template_snapshot on the row — the checklist as it was at creation
+  //      (survives template edits AND deletion; no fetch needed).
+  //   2. Live template fetch — legacy rows from surfaces that don't carry
+  //      the snapshot column yet.
+  //   3. Reconstruction from enriched form_metadata ({label, type, value}) —
+  //      rescues orphaned history (template deleted before snapshots).
   const templateId = task?.template_id ?? null;
   const propertyName = task?.property_name ?? null;
   const [template, setTemplate] = useState<Template | null>(null);
   const [loadingTemplate, setLoadingTemplate] = useState(false);
   useEffect(() => {
     let cancelled = false;
+    const snap = task?.template_snapshot;
+    if (snap && Array.isArray(snap.fields) && snap.fields.length > 0) {
+      setTemplate({
+        id: templateId ?? 'snapshot',
+        name: snap.name ?? task?.template_name ?? 'Checklist',
+        fields: snap.fields as Template['fields'],
+      });
+      setLoadingTemplate(false);
+      return;
+    }
     if (!templateId) {
-      setTemplate(null);
+      setTemplate(templateFromMetadata(task?.form_metadata ?? null, task?.template_name ?? null));
       return;
     }
     setLoadingTemplate(true);
@@ -141,34 +186,22 @@ export function useTaskDetailController({
     return () => {
       cancelled = true;
     };
-  }, [templateId, propertyName, queryClient]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateId, propertyName, queryClient, seedKey]);
 
-  // ---- property profile (address line under the title) --------------------
-  // Shares qk.property(id) with the property pages, so a visited property
-  // paints from cache. Demo mode reads whatever the fixture seeded.
+  // ---- property address (fine print under the title) ----------------------
+  // From the app-wide cached properties list — the property can't change
+  // after creation, and the list is already loaded when any task opens, so
+  // the address paints with the rest of the panel (no per-task fetch).
   const taskPropertyId = task?.property_id ?? null;
-  const propertyProfileQuery = useQuery({
-    queryKey: qk.property(taskPropertyId ?? 'none'),
-    queryFn: () =>
-      fetchJson<{
-        property: {
-          address_street: string | null;
-          address_city: string | null;
-          address_state: string | null;
-          address_zip: string | null;
-        };
-      }>(`/api/properties/${taskPropertyId}`).then((d) => d.property),
-    enabled: !!taskPropertyId && !demo,
-    staleTime: 5 * 60_000,
-  });
   const propertyAddress = useMemo(() => {
-    const p = propertyProfileQuery.data;
+    const p = allProperties.find((x) => x.id === taskPropertyId);
     if (!p) return null;
     // "1244 Island Ave, San Diego, CA 92101" — drop whatever's missing.
     const stateZip = [p.address_state, p.address_zip].filter(Boolean).join(' ');
     const line = [p.address_street, p.address_city, stateZip].filter(Boolean).join(', ');
     return line || null;
-  }, [propertyProfileQuery.data]);
+  }, [allProperties, taskPropertyId]);
 
   // formMetadata mirror — updates optimistically as the checklist saves so
   // the progress bar tracks within the form's 800ms debounce.
@@ -186,7 +219,12 @@ export function useTaskDetailController({
   );
 
   // ---- derived flags (ported semantics) -----------------------------------
-  const isTemplated = !!templateId;
+  // A task is "templated" (checklist-driven status) if it has a live template
+  // link, a creation-time snapshot, or a reconstructed checklist — the last
+  // two keep orphans of deleted templates behaving like what they are.
+  const isTemplated =
+    !!templateId || !!(task?.template_snapshot?.fields?.length ?? 0) || !!template;
+  const templateName = template?.name ?? task?.template_name ?? null;
   const isAssigned = currentUser ? fields.assigned_staff?.includes(currentUser.id) : false;
   const isContingent = fields.status === 'contingent';
   // Demo fixtures have no authed user, so the assignee gate would lock the
@@ -504,6 +542,7 @@ export function useTaskDetailController({
     // template/checklist
     isTemplated,
     template,
+    templateName,
     loadingTemplate,
     formMetadata,
     saveForm,

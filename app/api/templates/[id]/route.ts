@@ -110,6 +110,17 @@ export async function PUT(
       );
     }
 
+    // Tasks render from their creation-time snapshot; edits only reach
+    // pending tasks nobody has touched (not_started/contingent with empty
+    // form_metadata). In-progress, paused, completed, and worked-on tasks
+    // keep the checklist they were created with.
+    const { error: refreshError } = await supabase.rpc('refresh_pending_task_snapshots', {
+      p_template_id: id,
+    });
+    if (refreshError) {
+      console.error('Failed to refresh pending task snapshots:', refreshError.message);
+    }
+
     return NextResponse.json({ template: data });
   } catch (err: any) {
     return NextResponse.json(

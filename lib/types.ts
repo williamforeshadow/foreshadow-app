@@ -204,6 +204,11 @@ export interface PropertyOption {
   name: string;
   /** Parent unit this property is part of (one-level hierarchy), when known. */
   parent_property_id?: string | null;
+  /** Address (from property knowledge) — the task panel's fine-print line. */
+  address_street?: string | null;
+  address_city?: string | null;
+  address_state?: string | null;
+  address_zip?: string | null;
 }
 
 // ============================================================================
@@ -268,6 +273,9 @@ export interface Project {
   bin_id?: string | null;
   is_binned?: boolean;
   template_id?: string | null;
+  /** Creation-time checklist snapshot ({name, fields}) — the task renders
+   *  from this, not the live template. */
+  template_snapshot?: { name?: string; fields?: unknown[] } | null;
   template_name?: string | null;
   title: string;
   description?: TiptapJSON | null;

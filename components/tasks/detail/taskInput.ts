@@ -10,6 +10,8 @@ export interface TaskDetailInput {
   property_name: string | null;
   template_id: string | null;
   template_name: string | null;
+  /** Creation-time checklist snapshot; preferred over the live template. */
+  template_snapshot?: { name?: string; fields?: unknown[] } | null;
   title: string | null;
   description: unknown;
   priority: string;
@@ -55,6 +57,7 @@ export function projectToTaskInput(project: Project, users: User[]): TaskDetailI
     property_name: project.property_name ?? null,
     template_id: project.template_id ?? null,
     template_name: project.template_name ?? null,
+    template_snapshot: project.template_snapshot ?? null,
     title: project.title ?? null,
     description: project.description ?? null,
     priority: project.priority ?? 'medium',
