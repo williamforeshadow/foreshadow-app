@@ -145,7 +145,10 @@ export async function POST(request: Request) {
   try {
     const ctx = await requireAuthContext();
     if (ctx instanceof NextResponse) return ctx;
-    const { supabase, orgId } = ctx;
+    // `service` is used for storage only: storage.objects RLS has avatar-bucket
+    // policies only, so user-scoped writes to project-attachments are denied.
+    // Auth/org checks stay at the route level; DB access stays RLS-governed.
+    const { supabase, service, orgId } = ctx;
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -214,8 +217,7 @@ export async function POST(request: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Upload to getSupabaseServer() Storage
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await service.storage
       .from('project-attachments')
       .upload(fileName, buffer, {
         contentType: file.type || 'application/octet-stream',
@@ -223,7 +225,7 @@ export async function POST(request: Request) {
       });
 
     if (uploadError) {
-      console.error('getSupabaseServer() storage error:', uploadError);
+      console.error('Storage upload error:', uploadError);
       return NextResponse.json(
         { error: uploadError.message || 'Failed to upload file' },
         { status: 500 }
@@ -231,7 +233,7 @@ export async function POST(request: Request) {
     }
 
     // Get public URL
-    const { data: { publicUrl } } = supabase.storage
+    const { data: { publicUrl } } = service.storage
       .from('project-attachments')
       .getPublicUrl(fileName);
 
@@ -279,7 +281,7 @@ export async function POST(request: Request) {
     if (dbError) {
       console.error('Database error:', dbError);
       // Try to clean up the uploaded file
-      await supabase.storage.from('project-attachments').remove([fileName]);
+      await service.storage.from('project-attachments').remove([fileName]);
       return NextResponse.json(
         { error: dbError.message || 'Failed to save attachment record' },
         { status: 500 }
@@ -325,7 +327,9 @@ export async function DELETE(request: Request) {
   try {
     const ctx = await requireAuthContext();
     if (ctx instanceof NextResponse) return ctx;
-    const { supabase } = ctx;
+    // Storage delete uses `service` (see POST); the attachment lookup below
+    // stays on the RLS-governed client, which scopes it to the caller's org.
+    const { supabase, service } = ctx;
 
     const { searchParams } = new URL(request.url);
     const attachmentId = searchParams.get('id');
@@ -358,7 +362,7 @@ export async function DELETE(request: Request) {
 
     // Delete from storage
     if (filePath) {
-      const { error: storageError } = await supabase.storage
+      const { error: storageError } = await service.storage
         .from('project-attachments')
         .remove([filePath]);
 

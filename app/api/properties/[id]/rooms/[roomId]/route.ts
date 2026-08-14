@@ -135,7 +135,9 @@ export async function DELETE(
 ) {
   const ctx = await requireAuthContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, appUser } = ctx;
+  // Storage delete uses `service` (storage.objects RLS only covers avatars);
+  // the lookups below stay on the RLS-governed client.
+  const { supabase, service, appUser } = ctx;
 
   const { id, roomId } = await params;
 
@@ -193,7 +195,7 @@ export async function DELETE(
     .map((p) => p.storage_path)
     .filter((p): p is string => typeof p === 'string' && p.length > 0);
   if (paths.length > 0) {
-    await supabase.storage.from('property-photos').remove(paths);
+    await service.storage.from('property-photos').remove(paths);
   }
 
   const actorUserId = appUser.id;

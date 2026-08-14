@@ -28,7 +28,10 @@ function randomSegment(len = 16) {
 export async function POST(req: NextRequest) {
   const ctx = await requireAuthContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase } = ctx;
+  // Storage ops use the service client: storage.objects RLS has avatar-bucket
+  // policies only, so user-scoped writes to slack-automation-attachments are
+  // denied. Auth/org checks happen at the route level.
+  const { service } = ctx;
 
   const formData = await req.formData().catch(() => null);
   if (!formData) {
@@ -54,7 +57,7 @@ export async function POST(req: NextRequest) {
   const storagePath = `${token}.${ext}`;
 
   const arrayBuf = await file.arrayBuffer();
-  const { error: uploadErr } = await supabase.storage
+  const { error: uploadErr } = await service.storage
     .from(BUCKET)
     .upload(storagePath, arrayBuf, {
       contentType: file.type || 'application/octet-stream',
@@ -65,7 +68,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: uploadErr.message }, { status: 500 });
   }
 
-  const { data: publicData } = supabase.storage
+  const { data: publicData } = service.storage
     .from(BUCKET)
     .getPublicUrl(storagePath);
 

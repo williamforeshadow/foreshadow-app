@@ -22,14 +22,17 @@ export async function DELETE(
 ) {
   const ctx = await requireAuthContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase } = ctx;
+  // Storage ops use the service client: storage.objects RLS has avatar-bucket
+  // policies only, so user-scoped ops on slack-automation-attachments are
+  // denied. Auth is checked above; the id is an unguessable random token.
+  const { service } = ctx;
   const { id } = await params;
 
   if (!ID_RE.test(id)) {
     return NextResponse.json({ error: 'Invalid attachment id' }, { status: 400 });
   }
 
-  const { data: files, error: listErr } = await supabase.storage
+  const { data: files, error: listErr } = await service.storage
     .from(BUCKET)
     .list('', { limit: 1000, search: id });
 
@@ -46,7 +49,7 @@ export async function DELETE(
     return NextResponse.json({ success: true, removed: 0 });
   }
 
-  const { error: removeErr } = await supabase.storage
+  const { error: removeErr } = await service.storage
     .from(BUCKET)
     .remove(matches);
 

@@ -5,7 +5,10 @@ export async function POST(request: Request) {
   try {
     const ctx = await requireAuthContext();
     if (ctx instanceof NextResponse) return ctx;
-    const { supabase } = ctx;
+    // Storage ops use the service client: storage.objects RLS only has
+    // avatar-bucket policies, so user-scoped writes to cleaning-photos are
+    // denied. Auth/org checks happen at the route level.
+    const { service } = ctx;
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -45,8 +48,7 @@ export async function POST(request: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Upload to getSupabaseServer() Storage
-    const { data, error } = await supabase.storage
+    const { data, error } = await service.storage
       .from('cleaning-photos')
       .upload(fileName, buffer, {
         contentType: file.type,
@@ -54,7 +56,7 @@ export async function POST(request: Request) {
       });
 
     if (error) {
-      console.error('getSupabaseServer() storage error:', error);
+      console.error('Storage upload error:', error);
       return NextResponse.json(
         { error: error.message || 'Failed to upload photo' },
         { status: 500 }
@@ -62,7 +64,7 @@ export async function POST(request: Request) {
     }
 
     // Get public URL
-    const { data: { publicUrl } } = supabase.storage
+    const { data: { publicUrl } } = service.storage
       .from('cleaning-photos')
       .getPublicUrl(fileName);
 
@@ -85,7 +87,8 @@ export async function DELETE(request: Request) {
   try {
     const ctx = await requireAuthContext();
     if (ctx instanceof NextResponse) return ctx;
-    const { supabase } = ctx;
+    // Service client for storage (see POST); auth is checked above.
+    const { service } = ctx;
 
     const { searchParams } = new URL(request.url);
     const fileName = searchParams.get('fileName');
@@ -97,7 +100,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const { error } = await supabase.storage
+    const { error } = await service.storage
       .from('cleaning-photos')
       .remove([fileName]);
 

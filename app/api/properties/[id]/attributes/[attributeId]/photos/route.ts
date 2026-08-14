@@ -20,7 +20,10 @@ export async function POST(
 ) {
   const ctx = await requireAuthContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  // `service` is used for storage only: storage.objects RLS has avatar-bucket
+  // policies only, so user-scoped writes to property-photos are denied.
+  // Auth/org checks stay at the route level; DB access stays RLS-governed.
+  const { supabase, service, orgId } = ctx;
 
   const { id, attributeId } = await params;
 
@@ -87,7 +90,7 @@ export async function POST(
   const storagePath = `properties/${id}/attributes/${attributeId}/${token}.${ext}`;
 
   const arrayBuf = await file.arrayBuffer();
-  const { error: uploadErr } = await supabase.storage
+  const { error: uploadErr } = await service.storage
     .from('property-photos')
     .upload(storagePath, arrayBuf, {
       contentType: file.type,
@@ -112,7 +115,7 @@ export async function POST(
   if (insertErr || !photoRow) {
     // Roll back the storage object if the DB insert failed so we don't
     // leak orphaned files.
-    await supabase.storage.from('property-photos').remove([storagePath]);
+    await service.storage.from('property-photos').remove([storagePath]);
     return NextResponse.json(
       { error: insertErr?.message || 'Failed to record photo' },
       { status: 500 }

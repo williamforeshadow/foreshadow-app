@@ -104,7 +104,9 @@ export async function DELETE(
 ) {
   const ctx = await requireAuthContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, appUser } = ctx;
+  // Storage delete uses `service` (storage.objects RLS only covers avatars);
+  // the document lookup below stays on the RLS-governed client.
+  const { supabase, service, appUser } = ctx;
 
   const { id, docId } = await params;
 
@@ -131,7 +133,7 @@ export async function DELETE(
   }
 
   if (doc.storage_path) {
-    await supabase.storage
+    await service.storage
       .from('property-documents')
       .remove([doc.storage_path]);
   }
