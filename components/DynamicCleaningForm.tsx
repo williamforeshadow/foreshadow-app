@@ -92,9 +92,9 @@ function DynamicCleaningForm({
             defaults[field.id] = false;
             break;
           case 'photo':
-            defaults[field.id] = '';
-            break;
           case 'photos':
+            // Multi-photo now; a stored single-string snapshot (legacy 'photo')
+            // is loaded from formMetadata and overrides this default.
             defaults[field.id] = [];
             break;
           case 'text':
@@ -162,9 +162,11 @@ function DynamicCleaningForm({
         case 'checkbox':
           return value === true;
         case 'photo':
-          return value !== undefined && value !== '';
         case 'photos':
-          return Array.isArray(value) && value.length > 0;
+          // Multi-photo now; legacy 'photo' snapshots may still hold a string.
+          return Array.isArray(value)
+            ? value.length > 0
+            : value !== undefined && value !== '';
         default:
           return value !== undefined && value !== '';
       }
@@ -409,9 +411,12 @@ function DynamicCleaningForm({
                 fieldId={field.id}
                 value={value}
                 onChange={(newValue) => updateValue(field.id, newValue)}
-                multiple={field.type === 'photos'}
+                // Both the current 'photos' type and the legacy single 'photo'
+                // type are multi-photo inputs now — the read paths below and in
+                // templateProgress/getTask tolerate the old single-string shape.
+                multiple
                 // Hard cap, not configurable — need more, add a second field.
-                maxPhotos={10}
+                maxPhotos={20}
                 required={field.required}
               />
             )}

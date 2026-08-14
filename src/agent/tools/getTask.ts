@@ -223,12 +223,14 @@ function presentValue(
   const value = unwrapValue(raw);
   if (value === undefined || value === null || value === '') return null;
 
-  if (type === 'photo') {
+  if (type === 'photo' || type === 'photos') {
+    // Multi-photo now; legacy 'photo' snapshots may still hold a single string.
+    if (Array.isArray(value)) {
+      return value.length === 0
+        ? null
+        : `${value.length} photo${value.length === 1 ? '' : 's'}`;
+    }
     return typeof value === 'string' && value !== '' ? '1 photo' : null;
-  }
-  if (type === 'photos') {
-    if (!Array.isArray(value) || value.length === 0) return null;
-    return `${value.length} photo${value.length === 1 ? '' : 's'}`;
   }
   if (
     typeof value === 'string' ||

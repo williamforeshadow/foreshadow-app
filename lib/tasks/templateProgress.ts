@@ -27,9 +27,11 @@ export function isFieldSatisfied(type: FieldDefinition['type'], value: unknown):
     case 'yes-no':
       return value !== '' && value !== null && value !== undefined;
     case 'photo':
-      return typeof value === 'string' && value !== '';
     case 'photos':
-      return Array.isArray(value) && value.length > 0;
+      // Multi-photo now; legacy 'photo' snapshots may still hold a string.
+      return Array.isArray(value)
+        ? value.length > 0
+        : typeof value === 'string' && value !== '';
     case 'separator':
       return true; // excluded from counting; satisfied by definition
     default:

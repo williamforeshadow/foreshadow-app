@@ -19,7 +19,7 @@ export default function PhotoUpload({
   value,
   onChange,
   multiple = false,
-  maxPhotos = 10,
+  maxPhotos = 20,
 }: PhotoUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -123,8 +123,8 @@ export default function PhotoUpload({
         id={`photo-upload-${fieldId}`}
       />
 
-      {/* Photos + add tile share one centered row; the tile IS the button. */}
-      <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+      {/* Photos + add tile share one row, filling left-to-right; tile IS the button. */}
+      <div className="flex flex-wrap items-center justify-start gap-2.5 pt-1">
         {currentPhotos.map((url, index) => (
           <div key={index} className="relative group h-20 w-20 bg-neutral-100 dark:bg-neutral-800 rounded-lg overflow-hidden border border-neutral-300 dark:border-neutral-600">
             <Image

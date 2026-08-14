@@ -587,7 +587,7 @@ export function AttachmentsSection({
             >
               {isImageAttachment(a) ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={a.file_url} alt={a.file_name ?? 'Attachment'} className="h-full w-full object-cover" />
+                <img src={a.url ?? a.file_url} alt={a.file_name ?? 'Attachment'} className="h-full w-full object-cover" />
               ) : (
                 // Non-image (PDF/doc/etc.) — a file tile with its extension;
                 // the lightbox renders the actual file on open.
