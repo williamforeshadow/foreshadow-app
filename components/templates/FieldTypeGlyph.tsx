@@ -15,14 +15,16 @@ export type FieldType =
   | 'photos'
   | 'separator';
 
-/** Full labels — used wherever a type is *chosen* (pickers). */
+/** Full labels — used wherever a type is *chosen* (pickers).
+ *  The legacy single 'photo' type is render-only now: existing fields keep
+ *  working, but new photo fields are always 'photos' (hard cap of 10 — need
+ *  more, add a second field). */
 export const FIELD_TYPE_OPTIONS: { value: FieldType; label: string }[] = [
   { value: 'rating', label: 'Rating (1-5)' },
   { value: 'yes-no', label: 'Yes/No' },
   { value: 'text', label: 'Text' },
   { value: 'checkbox', label: 'Checkbox' },
-  { value: 'photo', label: 'Photo (Single)' },
-  { value: 'photos', label: 'Photos (Multiple)' },
+  { value: 'photos', label: 'Photos' },
   { value: 'separator', label: 'Section Separator' },
 ];
 

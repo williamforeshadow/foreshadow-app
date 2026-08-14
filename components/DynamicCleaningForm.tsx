@@ -410,7 +410,8 @@ function DynamicCleaningForm({
                 value={value}
                 onChange={(newValue) => updateValue(field.id, newValue)}
                 multiple={field.type === 'photos'}
-                maxPhotos={field.options?.maxPhotos || 5}
+                // Hard cap, not configurable — need more, add a second field.
+                maxPhotos={10}
                 required={field.required}
               />
             )}

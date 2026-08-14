@@ -19,7 +19,7 @@ export default function PhotoUpload({
   value,
   onChange,
   multiple = false,
-  maxPhotos = 5,
+  maxPhotos = 10,
 }: PhotoUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
