@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, ArrowDown, ArrowUp, Filter as FilterIcon, X } from 'lucide-react';
+import { useArmKeyboardOverlay } from '@/lib/useEditableKeyboardOverlay';
 import { FilterSelect, type FilterSelectOption } from '@/components/ui/FilterSelect';
 import { FilterDateRange } from '@/components/ui/FilterDateRange';
 import { canonicalChannelLabel } from '@/lib/bookingChannel';
@@ -248,6 +249,8 @@ export function ConversationHeaderActions() {
 export function ConversationSearchField() {
   const { query, setQuery, searchOpen, setSearchOpen } = useMessages();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // Top-anchored search: the bar stays put, the screen must not resize.
+  const overlayProps = useArmKeyboardOverlay();
 
   useEffect(() => {
     if (searchOpen) inputRef.current?.focus();
@@ -272,6 +275,7 @@ export function ConversationSearchField() {
           onKeyDown={(e) => {
             if (e.key === 'Escape') close();
           }}
+          {...overlayProps}
           placeholder="Search guests"
           className="msg-well w-full rounded-lg py-1.5 pl-8 pr-8 text-sm text-foreground transition-[border-color,box-shadow] placeholder:text-muted-foreground focus:border-[var(--accent-3)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)] dark:focus:ring-[var(--accent-ring-dark)]"
         />

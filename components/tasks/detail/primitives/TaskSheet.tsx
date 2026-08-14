@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { useEditableKeyboardOverlay } from '@/lib/useEditableKeyboardOverlay';
 
 // Bottom sheet styled for the task detail panel: rounded top, drag handle,
 // panel-scoped surfaces. Content is arbitrary; pickers compose TaskSheetOption
@@ -23,6 +24,11 @@ export function TaskSheet({
   className?: string;
   overlayClassName?: string;
 }) {
+  // Any sheet content with an editable field gets the overlay-keyboard
+  // treatment; bottom-anchored surfaces must also rise by the inset or the
+  // field ends up behind the keyboard. Inline `bottom` (not transform) so
+  // Radix's slide animation is untouched.
+  const kb = useEditableKeyboardOverlay();
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -32,7 +38,9 @@ export function TaskSheet({
         style={{
           background: 'var(--task-surface-1)',
           borderColor: 'var(--task-line)',
+          bottom: kb.typing && kb.keyboardInset > 0 ? kb.keyboardInset : undefined,
         }}
+        {...kb.handlers}
       >
         <div
           className="mx-auto mt-2.5 h-1 w-9 rounded-full"

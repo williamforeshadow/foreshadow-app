@@ -17,6 +17,7 @@ import { TranscriptScript } from '@/components/messages/TranscriptScript';
 import { ExampleTranscriptField } from '@/components/messages/ExampleTranscriptField';
 import InfoTooltip from '@/components/templates/InfoTooltip';
 import { cn } from '@/lib/utils';
+import { useEditableKeyboardOverlay } from '@/lib/useEditableKeyboardOverlay';
 
 // "Turn into training" — promote selected conversation messages into a concierge
 // training block. The AI structures the selected transcript into a draft block
@@ -61,6 +62,9 @@ export function TurnIntoTrainingDialog({
 }) {
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading');
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Overlay-keyboard treatment for the dialog's fields (auto mode; no-op on
+  // desktop). The DialogContent also recenters in the visible strip.
+  const kb = useEditableKeyboardOverlay();
 
   const [title, setTitle] = useState('');
   const [instructions, setInstructions] = useState('');
@@ -226,6 +230,18 @@ export function TurnIntoTrainingDialog({
         aria-describedby={undefined}
         showCloseButton={false}
         className="flex h-[min(90svh,640px)] flex-col gap-0 overflow-hidden border-[var(--surface-elevated-line)] bg-[var(--surface-elevated)] p-0 shadow-[var(--glass-shadow)] sm:max-w-4xl"
+        // While typing on mobile the keyboard overlays the screen (no
+        // resize), so the centered card recenters itself in the visible
+        // strip above it and caps its height to fit.
+        style={
+          kb.typing && kb.keyboardInset > 0
+            ? {
+                top: `calc((100dvh - ${kb.keyboardInset}px) / 2)`,
+                maxHeight: `calc(100dvh - ${kb.keyboardInset}px - 16px)`,
+              }
+            : undefined
+        }
+        {...kb.handlers}
       >
         <div
           className="liquid-glass-surface pointer-events-none absolute inset-0 -z-10 rounded-[inherit]"

@@ -3,6 +3,7 @@
 import { useState, memo, useMemo } from 'react';
 import type { ProjectBin } from '@/lib/types';
 import { LoadingState } from '@/components/ui/loading-state';
+import { useEditableKeyboardOverlay } from '@/lib/useEditableKeyboardOverlay';
 
 interface MobileBinPickerProps {
   bins: ProjectBin[];
@@ -54,6 +55,10 @@ const MobileBinPicker = memo(function MobileBinPicker({
 
   // Menu state (which bin's "..." menu is open)
   const [menuBinId, setMenuBinId] = useState<string | null>(null);
+
+  // Inline create/rename inputs get the overlay-keyboard treatment (auto
+  // mode — the scrollable ancestor lives in the host view).
+  const kb = useEditableKeyboardOverlay();
 
   // Confirm delete
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -129,6 +134,7 @@ const MobileBinPicker = memo(function MobileBinPicker({
     <div
       className="px-[22px] pb-4 flex flex-col gap-4"
       style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
+      {...kb.handlers}
     >
       {/* Header */}
       <div>

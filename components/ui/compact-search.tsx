@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useArmKeyboardOverlay } from '@/lib/useEditableKeyboardOverlay';
 
 // Compact expandable search: a persistent icon button toggles a small text
 // input alongside it. Stays expanded across blur events so it can be opened
@@ -19,6 +20,8 @@ export function CompactSearch({
   const [expanded, setExpanded] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const open = expanded || !!value;
+  // Keep the screen from resizing under the keyboard (no-op on web/desktop).
+  const overlayProps = useArmKeyboardOverlay();
   useEffect(() => {
     if (expanded) inputRef.current?.focus();
   }, [expanded]);
@@ -47,6 +50,7 @@ export function CompactSearch({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
+          {...overlayProps}
           className="w-28 sm:w-44 px-2 py-1.5 text-[13px] bg-transparent border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] rounded-md focus:outline-none focus:border-[var(--accent-3)] dark:focus:border-[var(--accent-1)] text-neutral-800 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f]"
         />
       )}

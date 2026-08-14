@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { LoadingState } from '@/components/ui/loading-state';
+import { useEditableKeyboardOverlay } from '@/lib/useEditableKeyboardOverlay';
 import { PropertyProvider, usePropertyContext } from './PropertyContext';
 
 // ---- Tab definitions -------------------------------------------------------
@@ -126,6 +127,12 @@ function ShellBody({
   const router = useRouter();
   const pathname = usePathname() || '';
 
+  // Every knowledge tab renders its own scroll container, so the keyboard
+  // treatment attaches once here in auto mode: any input/textarea in any tab
+  // arms overlay resize (screen stays put) and the hook pads + scrolls the
+  // field's own scroller. No-op on desktop.
+  const kb = useEditableKeyboardOverlay();
+
   // Derive the active primary tab + (if Knowledge) the active pill from the
   // current URL. We split the path into segments after `/properties/:id`:
   //   /properties/:id                           → primary=knowledge (redirect target), pill=info
@@ -179,7 +186,7 @@ function ShellBody({
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden" {...kb.handlers}>
       {/* Header + tab strip */}
       <div className="flex-shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
         <div className="px-5 sm:px-8 pt-4 sm:pt-6 pb-0">

@@ -6,6 +6,7 @@ import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, Check, Home, Layers, Spar
 import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { WindowHeader } from '@/components/ui/window-header';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { useEditableKeyboardOverlay } from '@/lib/useEditableKeyboardOverlay';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -528,6 +529,9 @@ function RuleEditorDialog({
   onDeleted: () => void | Promise<void>;
 }) {
   const existing = state.mode === 'edit' ? state.rule : null;
+  // Block text fields get the overlay-keyboard treatment (auto mode finds
+  // the editor's own scroll container). No-op on desktop.
+  const kb = useEditableKeyboardOverlay();
   // Category is implicit — it follows the tab the user was on (create) or the
   // block being edited. No in-dialog type switch.
   const category: TrainingCategory =
@@ -948,7 +952,10 @@ function RuleEditorDialog({
   // header, instead of a cramped floating dialog.
   if (isMobile) {
     return (
-      <div className="safe-area-top fixed inset-0 z-50 flex flex-col bg-[var(--surface-elevated)]">
+      <div
+        className="safe-area-top fixed inset-0 z-50 flex flex-col bg-[var(--surface-elevated)]"
+        {...kb.handlers}
+      >
         <div
           className="liquid-glass-surface pointer-events-none absolute inset-0 -z-10"
           aria-hidden
