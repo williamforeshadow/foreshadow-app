@@ -74,6 +74,10 @@ export async function GET(req: NextRequest) {
       hostaway_listing_id: p.hostaway_listing_id ?? null,
       parent_property_id: p.parent_property_id ?? null,
       is_active: p.is_active,
+      address_street: (p as { address_street?: string | null }).address_street ?? null,
+      address_city: (p as { address_city?: string | null }).address_city ?? null,
+      address_state: (p as { address_state?: string | null }).address_state ?? null,
+      address_zip: (p as { address_zip?: string | null }).address_zip ?? null,
       created_at: p.created_at,
       updated_at: p.updated_at,
     }));
