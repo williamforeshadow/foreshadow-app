@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useMemo, useState } from 'react';
 import { AdaptivePicker } from '@/components/tasks/detail/primitives/AdaptivePicker';
 import { TaskOptionRow } from '@/components/tasks/detail/primitives/TaskSheet';
+import { useIsMobile } from '@/lib/useIsMobile';
 
 // A multi-select filter dropdown that wears the task-detail picker look — the
 // same one the assignee field uses (solid surface, checkmark rows; a bottom
@@ -41,6 +42,7 @@ export function FilterSelect({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const isMobile = useIsMobile() ?? false;
 
   // Reset the search each time the picker closes so it reopens clean.
   const handleOpenChange = (next: boolean) => {
@@ -122,9 +124,12 @@ export function FilterSelect({
     >
       {searchable && (
         <div className="px-1 pb-1.5">
+          {/* No autofocus on mobile: the sheet should open showing the list,
+              not a keyboard covering half of it — and programmatic focus
+              races the overlay-keyboard arming (see TaskSheet). */}
           <input
             type="text"
-            autoFocus
+            autoFocus={!isMobile}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={`Search ${label.toLowerCase()}…`}

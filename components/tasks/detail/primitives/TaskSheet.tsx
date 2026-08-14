@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { useEditableKeyboardOverlay } from '@/lib/useEditableKeyboardOverlay';
+import { setChatKeyboardOverlay } from '@/lib/nativeKeyboard';
 
 // Bottom sheet styled for the task detail panel: rounded top, drag handle,
 // panel-scoped surfaces. Content is arbitrary; pickers compose TaskSheetOption
@@ -29,6 +30,16 @@ export function TaskSheet({
   // field ends up behind the keyboard. Inline `bottom` (not transform) so
   // Radix's slide animation is untouched.
   const kb = useEditableKeyboardOverlay();
+
+  // Arm overlay for the sheet's whole lifetime, not just from first touch:
+  // an autofocused field raises the keyboard with no touch preceding it, and
+  // arming at focus time loses the race against the keyboard animation (the
+  // WebView resizes and the screen jumps). Restored on close.
+  React.useEffect(() => {
+    if (!open) return;
+    void setChatKeyboardOverlay(true);
+    return () => void setChatKeyboardOverlay(false);
+  }, [open]);
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
