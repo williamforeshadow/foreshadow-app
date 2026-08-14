@@ -51,6 +51,11 @@ export function TaskSheet({
           borderColor: 'var(--task-line)',
           bottom: kb.typing && kb.keyboardInset > 0 ? kb.keyboardInset : undefined,
         }}
+        // Radix focuses the first focusable element on open — in a sheet with
+        // a search field that means the keyboard erupts (and races the
+        // overlay arming) before the user asked for it. A sheet opens showing
+        // its list; the keyboard waits for a tap on the field.
+        onOpenAutoFocus={(e) => e.preventDefault()}
         {...kb.handlers}
       >
         <div

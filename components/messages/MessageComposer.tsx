@@ -47,6 +47,7 @@ export function MessageComposer({
   const [sending, setSending] = useState(false);
   const [focused, setFocused] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const lastFocusSignalRef = useRef(focusSignal);
 
   // The AI chat's keyboard strategy: flip the WebView to keyboard-overlay
   // mode on the first touch (before focus, so the screen never shifts and
@@ -75,7 +76,10 @@ export function MessageComposer({
 
   // Parent asked us to take focus (e.g. after "Edit" loaded a proposed reply).
   useEffect(() => {
-    if (focusSignal === undefined) return;
+    // Only an actual bump focuses — the initial value must not raise the
+    // keyboard just because a conversation was opened.
+    if (focusSignal === undefined || focusSignal === lastFocusSignalRef.current) return;
+    lastFocusSignalRef.current = focusSignal;
     const el = taRef.current;
     if (!el) return;
     el.focus();
