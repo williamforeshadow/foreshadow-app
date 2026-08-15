@@ -1,6 +1,8 @@
 'use client';
 
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { Sparkles } from 'lucide-react';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { useAiChat } from '@/components/ai-chat/AiChatProvider';
@@ -41,16 +43,15 @@ export function MobileBottomNav() {
   const isMobile = useIsMobile();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const router = useRouter();
   // Tapping the pill opens the agent chat sheet; the pill hides while it's open.
   const { open: openChat, isOpen: chatOpen } = useAiChat();
 
-  // The tab bar shows only on the tab roots; the agent bubble shows there and on
-  // the Menu's destination pages. Hidden on desktop, before the viewport is
-  // measured, and on every other detail screen (e.g. a message conversation).
-  const showTabs = isTabRoot(pathname);
-  const showBubble = showTabs || isBubbleRoute(pathname);
-  if (!isMobile || !showBubble) return null;
+  // Optimistic highlight for cross-route taps (Messages/Menu): the real
+  // `active` only updates after the navigation commits, which on a slow
+  // connection leaves the tap visually dead. `pendingTab` moves the highlight
+  // immediately; it clears (render-phase adjustment) once the route catches up
+  // — or changes to anything else, e.g. the user tapped a different tab.
+  const [pendingTab, setPendingTab] = useState<TabKey | null>(null);
 
   const tab = searchParams?.get('tab') ?? null;
   const onHome = pathname === '/';
@@ -64,6 +65,23 @@ export function MobileBottomNav() {
           : onHome && tab === 'projects'
             ? 'projects'
             : 'assignments';
+
+  // Once the route-derived tab changes (the pending nav committed, or the user
+  // ended up somewhere else), drop the optimistic override. Render-phase state
+  // adjustment, kept above the early return so hooks run unconditionally.
+  const [prevActive, setPrevActive] = useState<TabKey>(active);
+  if (active !== prevActive) {
+    setPrevActive(active);
+    setPendingTab(null);
+  }
+  const displayedTab = pendingTab ?? active;
+
+  // The tab bar shows only on the tab roots; the agent bubble shows there and on
+  // the Menu's destination pages. Hidden on desktop, before the viewport is
+  // measured, and on every other detail screen (e.g. a message conversation).
+  const showTabs = isTabRoot(pathname);
+  const showBubble = showTabs || isBubbleRoute(pathname);
+  if (!isMobile || !showBubble) return null;
 
   const items: { key: TabKey; label: string; href: string; icon: React.ReactNode }[] = [
     {
@@ -122,9 +140,27 @@ export function MobileBottomNav() {
     },
   ];
 
-  const go = (href: string) => {
+  // The three workspace tabs share the "/" route via ?tab=. When we're already
+  // on "/", switching between them is a pure client-side class flip inside
+  // MobileApp — so bypass the router entirely with native replaceState (which
+  // Next syncs into useSearchParams with no server round trip; a router.push
+  // here costs a full RSC fetch per tap, which reads as tab-bar lag on device).
+  // Cross-route taps (Messages/Menu, or workspace tabs from another route) fall
+  // through to the Link's normal prefetched navigation.
+  const WORKSPACE_TABS: ReadonlySet<TabKey> = new Set(['assignments', 'timeline', 'projects']);
+  const onTabClick = (e: React.MouseEvent, key: TabKey, href: string) => {
     const current = pathname + (searchParams?.toString() ? `?${searchParams.toString()}` : '');
-    if (current !== href) router.push(href);
+    if (current === href) {
+      e.preventDefault();
+      return;
+    }
+    if (onHome && WORKSPACE_TABS.has(key)) {
+      e.preventDefault();
+      window.history.replaceState(null, '', href);
+      return;
+    }
+    // Real navigation: move the highlight now instead of when the route commits.
+    setPendingTab(key);
   };
 
   return (
@@ -154,24 +190,35 @@ export function MobileBottomNav() {
         <div className="pointer-events-auto safe-area-bottom border-t border-neutral-200/60 bg-white/90 backdrop-blur-xl dark:border-[rgba(255,255,255,0.07)] dark:bg-[rgba(26,26,31,0.9)]">
           <div className="grid grid-cols-5 px-1 pb-1 pt-1.5">
           {items.map((it) => {
-          const isActive = active === it.key;
+          const isActive = displayedTab === it.key;
           return (
-            <button
+            <Link
               key={it.key}
-              type="button"
-              onClick={() => go(it.href)}
+              href={it.href}
+              prefetch
+              onClick={(e) => onTabClick(e, it.key, it.href)}
               aria-current={isActive ? 'page' : undefined}
-              className={`flex min-w-0 flex-col items-center gap-1 rounded-lg px-1 py-1 transition-colors ${
-                isActive
-                  ? 'text-[var(--accent-3)] dark:text-[var(--accent-1)]'
-                  : 'text-neutral-500 dark:text-[#66645f]'
-              }`}
+              className="flex min-w-0 flex-col items-center gap-1 rounded-lg px-1 py-1 transition-colors active:opacity-60"
             >
-              {it.icon}
-              <span className="max-w-full truncate text-[10.5px] font-medium leading-none tracking-tight">
-                {it.label}
+              {/* The tint lives on a `display: contents` wrapper, not on the
+                  <Link> itself: globals.css has an unlayered `a { color:
+                  inherit }` reset, which outranks Tailwind's layered color
+                  utilities and would flatten every tab to the same color. The
+                  wrapper is not an <a>, so the utility applies and both the
+                  icon (currentColor) and label inherit it. */}
+              <span
+                className={`contents transition-colors ${
+                  isActive
+                    ? 'text-[var(--accent-3)] dark:text-[var(--accent-1)]'
+                    : 'text-neutral-500 dark:text-[#66645f]'
+                }`}
+              >
+                {it.icon}
+                <span className="max-w-full truncate text-[10.5px] font-medium leading-none tracking-tight">
+                  {it.label}
+                </span>
               </span>
-            </button>
+            </Link>
           );
         })}
           </div>
