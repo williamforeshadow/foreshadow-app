@@ -297,8 +297,8 @@ export function DayDetailPanel({
                 No tasks scheduled for this day.
               </div>
             ) : (
-              <div>
-                {orderedTasks.map((t, idx) => {
+              <div className="flex flex-col gap-2.5">
+                {orderedTasks.map((t) => {
                   const DeptIcon = t.department_id
                     ? getDepartmentIcon(t.department_id)
                     : undefined;
@@ -306,7 +306,6 @@ export function DayDetailPanel({
                     <MobileTaskRow
                       key={t.key}
                       item={t}
-                      isLast={idx === orderedTasks.length - 1}
                       onClick={() => onTaskClick(t.key)}
                       hideProperty={!showPropertyOnRows}
                       departmentIcon={DeptIcon}

@@ -9,6 +9,11 @@ import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
 import type { TaskDetailInput } from '@/components/tasks/detail/taskInput';
 import { TaskRow, TaskListHeader, taskRowMinWidth } from '@/components/tasks/TaskRow';
 import {
+  groupTasksByDate,
+  TaskSectionHeader,
+  useCollapsedSections,
+} from '@/components/tasks/taskDateSections';
+import {
   TaskFilterBar,
   SortSelect,
   type FilterOption,
@@ -85,12 +90,6 @@ interface UnifiedItem {
   raw: RawAssignmentTask;
 }
 
-interface DateGroup {
-  label: string;
-  sublabel?: string;
-  items: UnifiedItem[];
-}
-
 function getRawTaskId(raw: RawAssignmentTask): string {
   return raw.task_id || raw.id || '';
 }
@@ -151,7 +150,8 @@ function MyAssignmentsWindowContent({ currentUser }: MyAssignmentsWindowProps) {
       ? queryError.message
       : 'Failed to fetch assignments'
     : null;
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const { collapsed: collapsedSections, toggle: toggleSection } =
+    useCollapsedSections();
   const [selectedItem, setSelectedItem] = useState<UnifiedItem | null>(null);
 
   // Filter pills + search — mirrors the Tasks page pattern. All state lives
@@ -462,42 +462,10 @@ function MyAssignmentsWindowContent({ currentUser }: MyAssignmentsWindowProps) {
     });
   }, [items, search, statusSel, assigneeSel, prioritySel, deptSel, propSel, binSel, scheduledDateRange]);
 
-  // Group by date
+  // Group by date. The whole list is sorted first — grouping preserves
+  // order, so the user's SortKey/SortDir becomes the within-section order.
+  // The outer per-day sections are structural.
   const { groups, openCount } = useMemo(() => {
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const endOfWeek = new Date(now);
-    const daysUntilSunday = 7 - now.getDay();
-    endOfWeek.setDate(now.getDate() + daysUntilSunday);
-    const endOfWeekStr = `${endOfWeek.getFullYear()}-${String(endOfWeek.getMonth() + 1).padStart(2, '0')}-${String(endOfWeek.getDate()).padStart(2, '0')}`;
-
-    const overdue: UnifiedItem[] = [];
-    const today: UnifiedItem[] = [];
-    const thisWeek: UnifiedItem[] = [];
-    const later: UnifiedItem[] = [];
-    const unscheduled: UnifiedItem[] = [];
-    let open = 0;
-
-    for (const item of filteredItems) {
-      if (item.status === 'complete') continue;
-      open++;
-      const d = item.scheduled_date;
-      if (!d) {
-        unscheduled.push(item);
-      } else if (d === todayStr) {
-        today.push(item);
-      } else if (d > todayStr && d <= endOfWeekStr) {
-        thisWeek.push(item);
-      } else if (d > endOfWeekStr) {
-        later.push(item);
-      } else {
-        overdue.push(item);
-      }
-    }
-
-    // Within-group sort obeys the user's SortKey/SortDir selection. The
-    // outer grouping (overdue / today / this week / later / no date) is
-    // structural and not user-configurable from the Sort pill.
     const statusOrder: Record<string, number> = { in_progress: 0, paused: 1, not_started: 2 };
     const priorityRank: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
     const compareItems = (a: UnifiedItem, b: UnifiedItem): number => {
@@ -527,32 +495,23 @@ function MyAssignmentsWindowContent({ currentUser }: MyAssignmentsWindowProps) {
       }
       return sortDir === 'asc' ? cmp : -cmp;
     };
-    overdue.sort(compareItems);
-    today.sort(compareItems);
-    thisWeek.sort(compareItems);
-    later.sort(compareItems);
-    // Unscheduled rows can't be sorted by scheduled_date — fall back to
-    // status when the user picked that axis.
-    unscheduled.sort((a, b) => {
-      if (sortKey === 'scheduled') {
-        const sa = statusOrder[a.status] ?? 3;
-        const sb = statusOrder[b.status] ?? 3;
-        return sa - sb;
-      }
-      return compareItems(a, b);
+    const sorted = [...filteredItems].sort(compareItems);
+
+    const result = groupTasksByDate(sorted, {
+      includeCompletedSection: false,
+      dayOrder: sortKey === 'scheduled' ? sortDir : 'asc',
     });
 
-    // Overdue and No Date carry no sublabel: a bare count renders right-aligned
-    // in the section header, which puts it directly under the `comments` column
-    // label and reads as a comment total. The "N scheduled" sublabels below say
-    // what they are, so they stay.
-    const result: DateGroup[] = [];
-    if (overdue.length > 0) result.push({ label: 'Overdue', items: overdue });
-    if (today.length > 0) result.push({ label: 'Today', sublabel: `${today.length} scheduled`, items: today });
-    if (thisWeek.length > 0) result.push({ label: 'This week', sublabel: `${thisWeek.length} scheduled`, items: thisWeek });
-    if (later.length > 0) result.push({ label: 'Later', sublabel: `${later.length} scheduled`, items: later });
-    if (unscheduled.length > 0) result.push({ label: 'No Date', items: unscheduled });
+    // Unscheduled rows can't be sorted by scheduled_date — fall back to
+    // status when the user picked that axis.
+    if (sortKey === 'scheduled') {
+      const noDate = result.find((g) => g.kind === 'noDate');
+      noDate?.items.sort(
+        (a, b) => (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3)
+      );
+    }
 
+    const open = filteredItems.filter((i) => i.status !== 'complete').length;
     return { groups: result, openCount: open };
   }, [filteredItems, sortKey, sortDir]);
 
@@ -696,36 +655,15 @@ function MyAssignmentsWindowContent({ currentUser }: MyAssignmentsWindowProps) {
                 <TaskListHeader showOccupancy lockColumnWidths />
               </div>
               {groups.map((group) => {
-                const isCollapsed = collapsedSections.has(group.label);
+                const isCollapsed = collapsedSections.has(group.id);
                 return (
-                  <div key={group.label} className="pt-5">
-                    {/* Section header */}
-                    <button
-                      onClick={() => setCollapsedSections(prev => {
-                        const next = new Set(prev);
-                        if (next.has(group.label)) next.delete(group.label);
-                        else next.add(group.label);
-                        return next;
-                      })}
-                      className="flex items-center justify-between w-full mb-3"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <svg
-                          className={`w-3 h-3 text-neutral-400 dark:text-[#66645f] transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
-                          fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                        <span className="text-[11px] font-semibold text-neutral-600 dark:text-[#a09e9a] uppercase tracking-[0.08em]">
-                          {group.label}
-                        </span>
-                      </div>
-                      {group.sublabel && (
-                        <span className="text-[11px] text-neutral-400 dark:text-[#66645f] tracking-[0.05em] tabular-nums uppercase">
-                          {group.sublabel}
-                        </span>
-                      )}
-                    </button>
+                  <div key={group.id} className="pt-5">
+                    <TaskSectionHeader
+                      label={group.label}
+                      count={group.items.length}
+                      collapsed={isCollapsed}
+                      onToggle={() => toggleSection(group.id)}
+                    />
 
                     {/* Assignment rows */}
                     {!isCollapsed && (
@@ -740,6 +678,7 @@ function MyAssignmentsWindowContent({ currentUser }: MyAssignmentsWindowProps) {
                               item={item}
                               selected={isSelected}
                               isLast={idx === group.items.length - 1}
+                              whenMode={group.kind === 'day' ? 'time' : 'date'}
                               onClick={() => {
                                 if (isSelected) {
                                   closeSelectedItem();

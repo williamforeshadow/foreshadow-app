@@ -21,6 +21,11 @@ import {
   taskRowMinWidth,
   type TaskRowItem,
 } from '@/components/tasks/TaskRow';
+import {
+  groupTasksByDate,
+  TaskSectionHeader,
+  useCollapsedSections,
+} from '@/components/tasks/taskDateSections';
 import { TaskFilterBar, SortSelect } from '@/components/tasks/TaskFilterBar';
 import { CompactSearch } from '@/components/ui/compact-search';
 import { LoadingState } from '@/components/ui/loading-state';
@@ -29,14 +34,6 @@ import { DESKTOP_TASK_PANEL_SLOT } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { taskPath } from '@/src/lib/links';
-
-interface DateGroup {
-  id: string;
-  label: string;
-  sublabel?: string;
-  items: TaskRowData[];
-  defaultCollapsed?: boolean;
-}
 
 interface TasksWindowProps {
   currentUser: User | null;
@@ -48,21 +45,6 @@ interface TasksWindowProps {
    * into the URL while another tab is showing.
    */
   isActive?: boolean;
-}
-
-// ---- Date bucketing -------------------------------------------------------
-
-function todayISO(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-}
-
-function endOfWeekISO(): string {
-  const now = new Date();
-  const eow = new Date(now);
-  const daysUntilSunday = 7 - now.getDay();
-  eow.setDate(now.getDate() + daysUntilSunday);
-  return `${eow.getFullYear()}-${String(eow.getMonth() + 1).padStart(2, '0')}-${String(eow.getDate()).padStart(2, '0')}`;
 }
 
 // Map a TaskRow (from useTasks) into the shared TaskRowItem shape consumed
@@ -200,81 +182,23 @@ function TasksWindowContent({ isActive = true }: TasksWindowProps) {
   // Creation itself lives in useTaskCreate (via CreateTaskPanel) — this
   // surface only reacts to the result.
 
-  // ---- Date-bucket grouping (mirrors PropertyTasksView) -----------------
+  // ---- Per-day grouping (shared across all task surfaces) ----------------
+  // `tasks` arrives pre-sorted by the hook, so grouping just partitions it.
 
-  const groups = useMemo((): DateGroup[] => {
-    const today = todayISO();
-    const eow = endOfWeekISO();
-
-    const overdue: TaskRowData[] = [];
-    const todayBucket: TaskRowData[] = [];
-    const thisWeek: TaskRowData[] = [];
-    const later: TaskRowData[] = [];
-    const unscheduled: TaskRowData[] = [];
-    const completed: TaskRowData[] = [];
-
-    for (const t of tasks) {
-      if (t.status === 'complete') {
-        completed.push(t);
-        continue;
-      }
-      const d = t.scheduled_date;
-      if (!d) unscheduled.push(t);
-      else if (d < today) overdue.push(t);
-      else if (d === today) todayBucket.push(t);
-      else if (d <= eow) thisWeek.push(t);
-      else later.push(t);
-    }
-
-    // Overdue / No date / Completed carry no sublabel: a bare count renders
-    // right-aligned in the section header, which puts it directly under the
-    // `comments` column label and reads as a comment total. The "N scheduled"
-    // sublabels below say what they are, so they stay.
-    const out: DateGroup[] = [];
-    if (overdue.length)
-      out.push({ id: 'overdue', label: 'Overdue', items: overdue });
-    if (todayBucket.length)
-      out.push({
-        id: 'today',
-        label: 'Today',
-        sublabel: `${todayBucket.length} scheduled`,
-        items: todayBucket,
-      });
-    if (thisWeek.length)
-      out.push({
-        id: 'thisWeek',
-        label: 'This week',
-        sublabel: `${thisWeek.length} scheduled`,
-        items: thisWeek,
-      });
-    if (later.length)
-      out.push({ id: 'later', label: 'Later', sublabel: `${later.length} scheduled`, items: later });
-    if (unscheduled.length)
-      out.push({ id: 'noDate', label: 'No date', items: unscheduled });
-    if (completed.length)
-      out.push({
-        id: 'completed',
-        label: 'Completed',
-        items: completed,
-        defaultCollapsed: true,
-      });
-    return out;
-  }, [tasks]);
-
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
-    () => new Set(['completed'])
+  const groups = useMemo(
+    () =>
+      groupTasksByDate(tasks, {
+        includeCompletedSection: true,
+        dayOrder: sort.key === 'scheduled' ? sort.dir : 'asc',
+      }),
+    [tasks, sort.key, sort.dir]
   );
+
+  const { collapsed: collapsedSections, toggle: toggleSection } =
+    useCollapsedSections();
   // Filter pills collapsed behind a funnel icon, mirroring the
   // Schedule / Bins / Turnovers pattern.
   const [filtersExpanded, setFiltersExpanded] = useState(false);
-  const toggleSection = useCallback((id: string) => {
-    setCollapsedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
 
   const detailOpen = selectedTask != null;
 
@@ -423,36 +347,12 @@ function TasksWindowContent({ isActive = true }: TasksWindowProps) {
                 const isCollapsed = collapsedSections.has(group.id);
                 return (
                   <div key={group.id} className="pt-5">
-                    <button
-                      onClick={() => toggleSection(group.id)}
-                      className="flex items-center justify-between w-full mb-3"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <svg
-                          className={`w-3 h-3 text-neutral-400 dark:text-[#66645f] transition-transform ${
-                            isCollapsed ? '-rotate-90' : ''
-                          }`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M19 9l-7 7-7-7"
-                          />
-                        </svg>
-                        <span className="text-[11px] font-semibold text-neutral-600 dark:text-[#a09e9a] uppercase tracking-[0.08em]">
-                          {group.label}
-                        </span>
-                      </div>
-                      {group.sublabel && (
-                        <span className="text-[11px] text-neutral-400 dark:text-[#66645f] tracking-[0.05em] tabular-nums uppercase">
-                          {group.sublabel}
-                        </span>
-                      )}
-                    </button>
+                    <TaskSectionHeader
+                      label={group.label}
+                      count={group.items.length}
+                      collapsed={isCollapsed}
+                      onToggle={() => toggleSection(group.id)}
+                    />
 
                     {!isCollapsed && (
                       <div className="flex flex-col">
@@ -467,6 +367,7 @@ function TasksWindowContent({ isActive = true }: TasksWindowProps) {
                               item={toRowItem(t)}
                               selected={isSelected}
                               isLast={isLast}
+                              whenMode={group.kind === 'day' ? 'time' : 'date'}
                               onClick={() => {
                                 if (isSelected) {
                                   setSelectedTask(null);

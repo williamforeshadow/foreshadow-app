@@ -19,6 +19,11 @@ import type {
 } from '@/lib/types';
 import { MobileTaskRow } from '@/components/tasks/MobileTaskRow';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
+import {
+  groupTasksByDate,
+  TaskSectionHeader,
+  useCollapsedSections,
+} from '@/components/tasks/taskDateSections';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
 import { projectToTaskInput } from '@/components/tasks/detail/taskInput';
 import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
@@ -32,27 +37,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 // the desktop dashboard tab — only the row + detail components swap out for
 // the mobile-friendly variants. Lives at the /tasks route so URL-sync writes
 // don't conflict with any other surface.
-
-interface DateGroup {
-  id: string;
-  label: string;
-  sublabel?: string;
-  items: TaskRowData[];
-  defaultCollapsed?: boolean;
-}
-
-function todayISO(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-}
-
-function endOfWeekISO(): string {
-  const now = new Date();
-  const eow = new Date(now);
-  const daysUntilSunday = 7 - now.getDay();
-  eow.setDate(now.getDate() + daysUntilSunday);
-  return `${eow.getFullYear()}-${String(eow.getMonth() + 1).padStart(2, '0')}-${String(eow.getDate()).padStart(2, '0')}`;
-}
 
 function toRowItem(task: TaskRowData): TaskRowItem {
   return {
@@ -194,62 +178,19 @@ function MobileTasksViewContent() {
 
   // ---- Grouping ---------------------------------------------------------
 
-  const groups = useMemo((): DateGroup[] => {
-    const today = todayISO();
-    const eow = endOfWeekISO();
-    const overdue: TaskRowData[] = [];
-    const todayBucket: TaskRowData[] = [];
-    const thisWeek: TaskRowData[] = [];
-    const later: TaskRowData[] = [];
-    const unscheduled: TaskRowData[] = [];
-    const completed: TaskRowData[] = [];
-
-    for (const t of tasks) {
-      if (t.status === 'complete') {
-        completed.push(t);
-        continue;
-      }
-      const d = t.scheduled_date;
-      if (!d) unscheduled.push(t);
-      else if (d < today) overdue.push(t);
-      else if (d === today) todayBucket.push(t);
-      else if (d <= eow) thisWeek.push(t);
-      else later.push(t);
-    }
-
-    const out: DateGroup[] = [];
-    if (overdue.length)
-      out.push({ id: 'overdue', label: 'Overdue', sublabel: `${overdue.length}`, items: overdue });
-    if (todayBucket.length)
-      out.push({ id: 'today', label: 'Today', sublabel: `${todayBucket.length} scheduled`, items: todayBucket });
-    if (thisWeek.length)
-      out.push({ id: 'thisWeek', label: 'This week', sublabel: `${thisWeek.length} scheduled`, items: thisWeek });
-    if (later.length)
-      out.push({ id: 'later', label: 'Later', sublabel: `${later.length} scheduled`, items: later });
-    if (unscheduled.length)
-      out.push({ id: 'noDate', label: 'No date', sublabel: `${unscheduled.length}`, items: unscheduled });
-    if (completed.length)
-      out.push({
-        id: 'completed',
-        label: 'Completed',
-        sublabel: `${completed.length}`,
-        items: completed,
-        defaultCollapsed: true,
-      });
-    return out;
-  }, [tasks]);
-
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
-    () => new Set(['completed'])
+  // `tasks` arrives pre-sorted by the hook, so grouping just partitions it
+  // into per-day sections that preserve the user's chosen order.
+  const groups = useMemo(
+    () =>
+      groupTasksByDate(tasks, {
+        includeCompletedSection: true,
+        dayOrder: sort.key === 'scheduled' ? sort.dir : 'asc',
+      }),
+    [tasks, sort.key, sort.dir]
   );
-  const toggleSection = useCallback((id: string) => {
-    setCollapsedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
+
+  const { collapsed: collapsedSections, toggle: toggleSection } =
+    useCollapsedSections();
 
   return (
     <div className="h-dvh flex flex-col overflow-hidden bg-white dark:bg-card">
@@ -373,50 +314,25 @@ function MobileTasksViewContent() {
               const isCollapsed = collapsedSections.has(group.id);
               return (
                 <div key={group.id} className="pt-5">
-                  <button
-                    onClick={() => toggleSection(group.id)}
-                    className="flex items-center justify-between w-full mb-3"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <svg
-                        className={`w-3 h-3 text-neutral-400 dark:text-[#66645f] transition-transform ${
-                          isCollapsed ? '-rotate-90' : ''
-                        }`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 9l-7 7-7-7"
-                        />
-                      </svg>
-                      <span className="text-[11px] font-semibold text-neutral-600 dark:text-[#a09e9a] uppercase tracking-[0.08em]">
-                        {group.label}
-                      </span>
-                    </div>
-                    {group.sublabel && (
-                      <span className="text-[11px] text-neutral-400 dark:text-[#66645f] tracking-[0.05em] tabular-nums uppercase">
-                        {group.sublabel}
-                      </span>
-                    )}
-                  </button>
+                  <TaskSectionHeader
+                    label={group.label}
+                    count={group.items.length}
+                    collapsed={isCollapsed}
+                    onToggle={() => toggleSection(group.id)}
+                  />
 
                   {!isCollapsed && (
-                    <div className="flex flex-col">
-                      {group.items.map((t, idx) => {
+                    <div className="flex flex-col gap-2.5">
+                      {group.items.map((t) => {
                         const dept = allDepts.find((d) => d.id === t.department_id);
                         const DeptIcon = getDepartmentIcon(dept?.icon);
                         const isSelected = selectedTask?.task_id === t.task_id;
-                        const isLast = idx === group.items.length - 1;
                         return (
                           <MobileTaskRow
                             key={`task-${t.task_id}`}
                             item={toRowItem(t)}
                             selected={isSelected}
-                            isLast={isLast}
+                            showDateInline={group.kind !== 'day'}
                             onClick={() => {
                               if (isSelected) {
                                 setSelectedTask(null);

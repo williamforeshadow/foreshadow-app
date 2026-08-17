@@ -2,16 +2,19 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useMyAssignments } from '@/lib/queries';
-import { KeyAffordance } from '@/components/tasks/KeyAffordance';
 import { useAuth } from '@/lib/authContext';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
-import { STATUS_ICONS, STATUS_TITLE } from '@/lib/taskStatusIcons';
-import { PRIORITY_ICONS, PRIORITY_TITLE } from '@/lib/taskPriorityIcons';
 import type { Project, Task, PropertyOccupancy } from '@/lib/types';
-import { OccupancyFootnote } from '@/components/tasks/MobileTaskRow';
+import { MobileTaskRow } from '@/components/tasks/MobileTaskRow';
+import {
+  groupTasksByDate,
+  todayISO,
+  TaskSectionHeader,
+  useCollapsedSections,
+} from '@/components/tasks/taskDateSections';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
 import { LoadingState } from '@/components/ui/loading-state';
 import type {
@@ -97,12 +100,6 @@ interface UnifiedItem {
   raw: AssignmentRaw;
 }
 
-interface DateGroup {
-  label: string;
-  sublabel?: string;
-  items: UnifiedItem[];
-}
-
 interface MobileMyAssignmentsViewProps {
   onTaskClick?: BivariantCallback<Task & { id?: string }>;
   onProjectClick?: BivariantCallback<Project & { task_id?: string }>;
@@ -111,54 +108,6 @@ interface MobileMyAssignmentsViewProps {
   /** False while the view is kept mounted but hidden behind another tab. */
   isActive?: boolean;
 }
-
-const STATUS_COLORS: Record<string, string> = {
-  not_started: '#A78BFA',
-  in_progress: '#6366F1',
-  paused: '#8B7FA8',
-  complete: '#4C4869',
-};
-
-const STATUS_MARBLE: Record<string, string> = {
-  not_started: 'radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.35) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.18) 10%, transparent 40%, rgba(255,255,255,0.12) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #A78BFA',
-  in_progress: 'radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.3) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.18) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.15) 10%, transparent 40%, rgba(255,255,255,0.1) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.1) 0%, transparent 55%), #6366F1',
-  paused: 'radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.3) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.2) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.15) 10%, transparent 40%, rgba(255,255,255,0.1) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.08) 0%, transparent 55%), #8B7FA8',
-  complete: 'radial-gradient(ellipse at 25% 35%, rgba(255,255,255,0.25) 0%, transparent 50%), radial-gradient(ellipse at 70% 20%, rgba(255,255,255,0.15) 0%, transparent 45%), linear-gradient(155deg, rgba(255,255,255,0.12) 10%, transparent 40%, rgba(255,255,255,0.08) 75%), radial-gradient(ellipse at 50% 80%, rgba(0,0,0,0.1) 0%, transparent 55%), #4C4869',
-};
-
-const PRIORITY_LABELS: Record<string, string> = {
-  urgent: 'Urgent',
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
-};
-
-function PriorityTag({ priority }: { priority: string }) {
-  if (!priority || priority === 'low') return null;
-  const colorClass =
-    priority === 'urgent'
-      ? 'text-red-500 dark:text-[#d97757]'
-      : priority === 'high'
-        ? 'text-neutral-800 dark:text-[#f0efed]'
-        : 'text-neutral-500 dark:text-[#a09e9a]';
-  const PriorityIcon = PRIORITY_ICONS[priority] ?? PRIORITY_ICONS.medium;
-  return (
-    <span
-      className={`inline-flex items-center gap-1 text-[10.5px] tracking-[0.02em] font-medium pl-2 border-l border-neutral-200 dark:border-[rgba(255,255,255,0.07)] ${colorClass}`}
-      title={PRIORITY_TITLE[priority] ?? priority}
-    >
-      <PriorityIcon size={12} strokeWidth={2} aria-hidden />
-      {PRIORITY_LABELS[priority] || priority}
-    </span>
-  );
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  not_started: 'Not started',
-  in_progress: 'In progress',
-  paused: 'Paused',
-  complete: 'Complete',
-};
 
 export default function MobileMyAssignmentsView({
   onTaskClick,
@@ -213,7 +162,8 @@ export default function MobileMyAssignmentsView({
   const handleNewTask = useCallback(() => {
     router.push('/tasks?newTask=1');
   }, [router]);
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const { collapsed: collapsedSections, toggle: toggleSection } =
+    useCollapsedSections();
 
   // Cached, shared query — remounts (e.g. returning from /messages) paint
   // instantly from cache and refresh in the background. Refetches are
@@ -391,47 +341,11 @@ export default function MobileMyAssignmentsView({
   }, [items, search, statusSel, assigneeSel, deptSel, prioritySel, propSel, scheduledDateRange]);
 
   const { groups, todayTurnoverCount, openCount } = useMemo(() => {
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const todayStr = todayISO();
 
-    const endOfWeek = new Date(now);
-    const dayOfWeek = now.getDay();
-    const daysUntilSunday = 7 - dayOfWeek;
-    endOfWeek.setDate(now.getDate() + daysUntilSunday);
-    const endOfWeekStr = `${endOfWeek.getFullYear()}-${String(endOfWeek.getMonth() + 1).padStart(2, '0')}-${String(endOfWeek.getDate()).padStart(2, '0')}`;
-
-    const overdue: UnifiedItem[] = [];
-    const today: UnifiedItem[] = [];
-    const thisWeek: UnifiedItem[] = [];
-    const later: UnifiedItem[] = [];
-    const unscheduled: UnifiedItem[] = [];
-    let turnoverCount = 0;
-    let open = 0;
-
-    for (const item of filteredItems) {
-      if (item.status === 'complete') continue;
-      open++;
-      const d = item.scheduled_date;
-      if (!d) {
-        unscheduled.push(item);
-      } else if (d === todayStr) {
-        today.push(item);
-        // "Turnover" badge counts reservation-bound tasks scheduled today —
-        // turnovers are the only path that produces reservation_id-linked
-        // tasks, regardless of which template/department spawned them.
-        if (item.raw?.reservation_id) turnoverCount++;
-      } else if (d > todayStr && d <= endOfWeekStr) {
-        thisWeek.push(item);
-      } else if (d > endOfWeekStr) {
-        later.push(item);
-      } else {
-        overdue.push(item);
-      }
-    }
-
-    // Within-group sort honors the user-selected SortKey / SortDir from
-    // the filter bar. Outer grouping (overdue / today / this week / later
-    // / no date) is structural and not user-configurable.
+    // Sort the whole list first — grouping preserves order, so this becomes
+    // the within-section order. The user's SortKey / SortDir come from the
+    // filter bar; the outer date sections are structural.
     const statusOrder: Record<string, number> = { in_progress: 0, paused: 1, not_started: 2 };
     const priorityRank: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
     const compareItems = (a: UnifiedItem, b: UnifiedItem): number => {
@@ -463,49 +377,35 @@ export default function MobileMyAssignmentsView({
       }
       return sortDir === 'asc' ? cmp : -cmp;
     };
-    overdue.sort(compareItems);
-    today.sort(compareItems);
-    thisWeek.sort(compareItems);
-    later.sort(compareItems);
-    unscheduled.sort((a, b) => {
-      if (sortKey === 'scheduled') {
-        const sa = statusOrder[a.status] ?? 3;
-        const sb = statusOrder[b.status] ?? 3;
-        return sa - sb;
-      }
-      return compareItems(a, b);
+    const sorted = [...filteredItems].sort(compareItems);
+
+    const result = groupTasksByDate(sorted, {
+      includeCompletedSection: false,
+      dayOrder: sortKey === 'scheduled' ? sortDir : 'asc',
     });
 
-    const result: DateGroup[] = [];
-    if (overdue.length > 0) result.push({ label: 'Overdue', sublabel: `${overdue.length}`, items: overdue });
-    if (today.length > 0) result.push({ label: 'Today', sublabel: `${today.length} scheduled`, items: today });
-    if (thisWeek.length > 0) result.push({ label: 'This week', sublabel: `${thisWeek.length} scheduled`, items: thisWeek });
-    if (later.length > 0) result.push({ label: 'Later', sublabel: `${later.length} scheduled`, items: later });
-    if (unscheduled.length > 0) result.push({ label: 'No Date', sublabel: `${unscheduled.length}`, items: unscheduled });
+    // Unscheduled rows can't be ordered by scheduled date — fall back to
+    // status when that's the chosen axis.
+    if (sortKey === 'scheduled') {
+      const noDate = result.find((g) => g.kind === 'noDate');
+      noDate?.items.sort(
+        (a, b) => (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3)
+      );
+    }
+
+    let open = 0;
+    let turnoverCount = 0;
+    for (const item of filteredItems) {
+      if (item.status === 'complete') continue;
+      open++;
+      // "Turnover" badge counts reservation-bound tasks scheduled today —
+      // turnovers are the only path that produces reservation_id-linked
+      // tasks, regardless of which template/department spawned them.
+      if (item.scheduled_date === todayStr && item.raw?.reservation_id) turnoverCount++;
+    }
 
     return { groups: result, todayTurnoverCount: turnoverCount, openCount: open };
   }, [filteredItems, sortKey, sortDir]);
-
-  const formatTimeCol = (timeString?: string | null) => {
-    if (!timeString) return null;
-    const [h, m] = timeString.split(':').map(Number);
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const hour12 = h % 12 || 12;
-    return { time: `${hour12}:${String(m).padStart(2, '0')}`, meridiem: ampm };
-  };
-
-  const getDayLabel = (dateStr?: string | null) => {
-    if (!dateStr) return null;
-    const date = new Date(dateStr + 'T00:00:00');
-    return date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
-  };
-
-  const getShortDate = (dateStr?: string | null) => {
-    if (!dateStr) return null;
-    const date = new Date(dateStr + 'T00:00:00');
-    const month = date.toLocaleDateString('en-US', { month: 'short' });
-    return { month, day: date.getDate() };
-  };
 
   const todayFormatted = useMemo(() => {
     const now = new Date();
@@ -644,160 +544,42 @@ export default function MobileMyAssignmentsView({
           </div>
         ) : (
           groups.map((group) => {
-            const isCollapsed = collapsedSections.has(group.label);
+            const isCollapsed = collapsedSections.has(group.id);
             return (
-            <div key={group.label} className="px-[22px] pt-5">
-              {/* Section header */}
-              <button
-                onClick={() => setCollapsedSections(prev => {
-                  const next = new Set(prev);
-                  if (next.has(group.label)) next.delete(group.label);
-                  else next.add(group.label);
-                  return next;
-                })}
-                className="flex items-center justify-between w-full mb-3"
-              >
-                <div className="flex items-center gap-1.5">
-                  <svg
-                    className={`w-3 h-3 text-neutral-400 dark:text-[#66645f] transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
-                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                  <span className="text-[11px] font-semibold text-neutral-600 dark:text-[#a09e9a] uppercase tracking-[0.08em]">
-                    {group.label}
-                  </span>
-                </div>
-                {group.sublabel && (
-                  <span className="text-[11px] text-neutral-400 dark:text-[#66645f] tracking-[0.05em] tabular-nums uppercase">
-                    {group.sublabel}
-                  </span>
-                )}
-              </button>
+              <div key={group.id} className="px-[22px] pt-5">
+                <TaskSectionHeader
+                  label={group.label}
+                  count={group.items.length}
+                  collapsed={isCollapsed}
+                  onToggle={() => toggleSection(group.id)}
+                />
 
-              {/* Assignment rows */}
-              {!isCollapsed && (
-              <div className="flex flex-col">
-                {group.items.map((item, idx) => {
-                  const timeInfo = formatTimeCol(item.scheduled_time);
-                  const dayLabel = getDayLabel(item.scheduled_date);
-                  const dept = allDepts.find(d => d.id === item.department_id);
-                  const DeptIcon = getDepartmentIcon(dept?.icon);
-
-                  const handleRowClick = () => {
-                    if (item.source === 'task') {
-                      onTaskClick?.(item.raw as unknown as Task & { id?: string });
-                    } else {
-                      onProjectClick?.(item.raw as unknown as Project & { task_id?: string });
-                    }
-                  };
-                  return (
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      key={item.key}
-                      onClick={handleRowClick}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleRowClick();
+                {/* Assignment cards */}
+                {!isCollapsed && (
+                  <div className="flex flex-col gap-2.5">
+                    {group.items.map((item) => {
+                      const dept = allDepts.find((d) => d.id === item.department_id);
+                      const DeptIcon = getDepartmentIcon(dept?.icon);
+                      const handleRowClick = () => {
+                        if (item.source === 'task') {
+                          onTaskClick?.(item.raw as unknown as Task & { id?: string });
+                        } else {
+                          onProjectClick?.(item.raw as unknown as Project & { task_id?: string });
                         }
-                      }}
-                      className={`grid grid-cols-[44px_1fr] gap-3.5 py-3.5 text-left transition-colors cursor-pointer active:bg-neutral-100/50 dark:active:bg-[rgba(255,255,255,0.03)] ${
-                        idx < group.items.length - 1 ? 'border-b border-[rgba(30,25,20,0.08)] dark:border-[rgba(255,255,255,0.07)]' : ''
-                      }`}
-                    >
-                      {/* Time column — show all available date/time info */}
-                      <div className="text-right pt-0.5">
-                        {item.scheduled_date || timeInfo ? (
-                          <>
-                            {item.scheduled_date && (() => {
-                              const sd = getShortDate(item.scheduled_date);
-                              return sd ? (
-                                <>
-                                  {dayLabel && (
-                                    <div className="text-[9px] text-neutral-400 dark:text-[#66645f] uppercase tracking-[0.06em] font-medium mb-0.5">{dayLabel}</div>
-                                  )}
-                                  <div className="text-[12px] font-semibold text-neutral-800 dark:text-[#f0efed] leading-none tracking-tight whitespace-nowrap">{sd.month} {sd.day}</div>
-                                </>
-                              ) : null;
-                            })()}
-                            {timeInfo && (
-                              <div className={item.scheduled_date ? 'mt-1' : ''}>
-                                <div className="text-[10px] font-medium text-neutral-400 dark:text-[#66645f] leading-none tracking-tight tabular-nums whitespace-nowrap">
-                                  {timeInfo.time}{timeInfo.meridiem.toLowerCase()}
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <div className="text-[9px] text-neutral-300 dark:text-[#3e3d3a] uppercase tracking-[0.08em] font-medium leading-snug pt-0.5">
-                            no<br />date
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Body */}
-                      <div className="min-w-0">
-                        {/* Title row with dept icon on right */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-1.5 min-w-0 mb-0.5">
-                            <div className="text-[14.5px] font-medium text-neutral-800 dark:text-[#f0efed] leading-snug tracking-tight line-clamp-2 min-w-0">
-                              {item.title}
-                            </div>
-                            <KeyAffordance reservationId={item.reservation_id} size={12} />
-
-                          </div>
-                          {dept && (
-                            <DeptIcon className="w-[15px] h-[15px] text-neutral-400 dark:text-[#66645f] shrink-0 mt-0.5" />
-                          )}
-                        </div>
-                        {item.property_name && (
-                          <div className="text-[12px] text-neutral-500 dark:text-[#66645f] leading-snug truncate">
-                            {item.property_name}
-                          </div>
-                        )}
-                        {/* Metadata row: status icon + label, priority, avatars */}
-                        <div className="flex items-center gap-2 mt-2">
-                          <span
-                            className="inline-flex items-center gap-1 text-[10.5px] tracking-[0.02em] font-medium"
-                            style={{ color: STATUS_COLORS[item.status] || '#A78BFA' }}
-                            title={STATUS_TITLE[item.status] ?? item.status}
-                          >
-                            {(() => {
-                              const StatusIcon = STATUS_ICONS[item.status] ?? STATUS_ICONS.not_started;
-                              return <StatusIcon size={12} strokeWidth={2} aria-hidden />;
-                            })()}
-                            {STATUS_LABELS[item.status] || item.status}
-                          </span>
-                          <PriorityTag priority={item.priority} />
-                          {item.assignees.length > 0 && (
-                            <div className="flex ml-auto">
-                              {item.assignees.slice(0, 3).map((u, i) => (
-                                <div
-                                  key={u.user_id}
-                                  className="w-[20px] h-[20px] rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-[8px] font-semibold text-neutral-600 dark:text-[#a09e9a] overflow-hidden ring-[1.5px] ring-white dark:ring-background"
-                                  style={{ marginLeft: i > 0 ? '-6px' : 0 }}
-                                  title={u.name}
-                                >
-                                  {u.avatar ? (
-                                    <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" />
-                                  ) : (
-                                    u.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <OccupancyFootnote occupancy={item.occupancy} />
-                      </div>
-                    </div>
-                  );
-                })}
+                      };
+                      return (
+                        <MobileTaskRow
+                          key={item.key}
+                          item={item}
+                          showDateInline={group.kind !== 'day'}
+                          onClick={handleRowClick}
+                          departmentIcon={dept ? DeptIcon : undefined}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              )}
-            </div>
             );
           })
         )}

@@ -15,6 +15,11 @@ import { type TaskDetailInput } from '@/components/tasks/detail/taskInput';
 import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
 import { TaskRow, TaskListHeader, type TaskRowItem } from '@/components/tasks/TaskRow';
 import { MobileTaskRow } from '@/components/tasks/MobileTaskRow';
+import {
+  groupTasksByDate,
+  TaskSectionHeader,
+  useCollapsedSections,
+} from '@/components/tasks/taskDateSections';
 import { LoadingState } from '@/components/ui/loading-state';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { DESKTOP_TASK_PANEL_SLOT } from '@/lib/detailPanelGeometry';
@@ -121,14 +126,6 @@ interface UnifiedItem extends TaskRowItem {
   updated_at?: string;
 }
 
-interface DateGroup {
-  id: string;
-  label: string;
-  sublabel?: string;
-  items: UnifiedItem[];
-  defaultCollapsed?: boolean;
-}
-
 // ---- URL persistence ------------------------------------------------------
 
 const URL_KEYS = {
@@ -149,21 +146,6 @@ function parseSet(raw: string | null): Set<string> {
 
 function serializeSet(set: Set<string>): string | null {
   return set.size === 0 ? null : Array.from(set).join(',');
-}
-
-// ---- Date bucketing -------------------------------------------------------
-
-function todayISO(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-}
-
-function endOfWeekISO(): string {
-  const now = new Date();
-  const eow = new Date(now);
-  const daysUntilSunday = 7 - now.getDay();
-  eow.setDate(now.getDate() + daysUntilSunday);
-  return `${eow.getFullYear()}-${String(eow.getMonth() + 1).padStart(2, '0')}-${String(eow.getDate()).padStart(2, '0')}`;
 }
 
 // ---- Component ------------------------------------------------------------
@@ -509,61 +491,14 @@ function PropertyTasksViewContent({
 
   // ---- Grouping (respects the current sort; completed goes to own group) --
 
-  const groups = useMemo((): DateGroup[] => {
-    const today = todayISO();
-    const eow = endOfWeekISO();
-
-    const overdue: UnifiedItem[] = [];
-    const todayBucket: UnifiedItem[] = [];
-    const thisWeek: UnifiedItem[] = [];
-    const later: UnifiedItem[] = [];
-    const unscheduled: UnifiedItem[] = [];
-    const completed: UnifiedItem[] = [];
-
-    for (const item of sortedItems) {
-      if (item.status === 'complete') {
-        completed.push(item);
-        continue;
-      }
-      const d = item.scheduled_date;
-      if (!d) unscheduled.push(item);
-      else if (d < today) overdue.push(item);
-      else if (d === today) todayBucket.push(item);
-      else if (d <= eow) thisWeek.push(item);
-      else later.push(item);
-    }
-
-    const out: DateGroup[] = [];
-    if (overdue.length)
-      out.push({ id: 'overdue', label: 'Overdue', sublabel: `${overdue.length}`, items: overdue });
-    if (todayBucket.length)
-      out.push({
-        id: 'today',
-        label: 'Today',
-        sublabel: `${todayBucket.length} scheduled`,
-        items: todayBucket,
-      });
-    if (thisWeek.length)
-      out.push({
-        id: 'thisWeek',
-        label: 'This week',
-        sublabel: `${thisWeek.length} scheduled`,
-        items: thisWeek,
-      });
-    if (later.length)
-      out.push({ id: 'later', label: 'Later', sublabel: `${later.length} scheduled`, items: later });
-    if (unscheduled.length)
-      out.push({ id: 'noDate', label: 'No date', sublabel: `${unscheduled.length}`, items: unscheduled });
-    if (completed.length)
-      out.push({
-        id: 'completed',
-        label: 'Completed',
-        sublabel: `${completed.length}`,
-        items: completed,
-        defaultCollapsed: true,
-      });
-    return out;
-  }, [sortedItems]);
+  const groups = useMemo(
+    () =>
+      groupTasksByDate(sortedItems, {
+        includeCompletedSection: true,
+        dayOrder: sortKey === 'scheduled' ? sortDir : 'asc',
+      }),
+    [sortedItems, sortKey, sortDir]
+  );
 
   const anyFilterActive = useMemo(
     () =>
@@ -600,17 +535,8 @@ function PropertyTasksViewContent({
 
   // Collapsible section state. "Completed" starts collapsed; user toggles are
   // keyed by group.id and remembered for the session.
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
-    () => new Set(['completed'])
-  );
-  const toggleSection = useCallback((id: string) => {
-    setCollapsedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
+  const { collapsed: collapsedSections, toggle: toggleSection } =
+    useCollapsedSections();
 
   // ---- Detail panel wiring (mirrors MyAssignmentsWindow pattern) ---------
 
@@ -774,39 +700,15 @@ function PropertyTasksViewContent({
                 const isCollapsed = collapsedSections.has(group.id);
                 return (
                   <div key={group.id} className="pt-5">
-                    <button
-                      onClick={() => toggleSection(group.id)}
-                      className="flex items-center justify-between w-full mb-3"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <svg
-                          className={`w-3 h-3 text-neutral-400 dark:text-[#66645f] transition-transform ${
-                            isCollapsed ? '-rotate-90' : ''
-                          }`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M19 9l-7 7-7-7"
-                          />
-                        </svg>
-                        <span className="text-[11px] font-semibold text-neutral-600 dark:text-[#a09e9a] uppercase tracking-[0.08em]">
-                          {group.label}
-                        </span>
-                      </div>
-                      {group.sublabel && (
-                        <span className="text-[11px] text-neutral-400 dark:text-[#66645f] tracking-[0.05em] tabular-nums uppercase">
-                          {group.sublabel}
-                        </span>
-                      )}
-                    </button>
+                    <TaskSectionHeader
+                      label={group.label}
+                      count={group.items.length}
+                      collapsed={isCollapsed}
+                      onToggle={() => toggleSection(group.id)}
+                    />
 
                     {!isCollapsed && (
-                      <div className="flex flex-col">
+                      <div className={isMobile ? 'flex flex-col gap-2.5' : 'flex flex-col'}>
                         {group.items.map((item, idx) => {
                           const dept = allDepts.find((d) => d.id === item.department_id);
                           const DeptIcon = getDepartmentIcon(dept?.icon);
@@ -827,7 +729,7 @@ function PropertyTasksViewContent({
                                 key={item.key}
                                 item={item}
                                 selected={isSelected}
-                                isLast={isLast}
+                                showDateInline={group.kind !== 'day'}
                                 onClick={handleClick}
                                 hideProperty
                                 departmentIcon={DeptIcon}
@@ -840,6 +742,7 @@ function PropertyTasksViewContent({
                               item={item}
                               selected={isSelected}
                               isLast={isLast}
+                              whenMode={group.kind === 'day' ? 'time' : 'date'}
                               onClick={handleClick}
                               hideProperty
                               showBinPill

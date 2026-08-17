@@ -431,6 +431,11 @@ interface TaskRowProps {
   // Floor the task column's width — see TaskListColumnOpts. Must also match the
   // <TaskListHeader> above the list.
   lockColumnWidths?: boolean;
+  // What the leading "when" column shows. 'date' (default) renders the
+  // stacked day/date/time block. 'time' renders only the time — for rows
+  // inside a per-day section, where the section header already names the
+  // date and repeating it on every row is noise.
+  whenMode?: 'date' | 'time';
   // Optional department icon (rendered at the row's top-right).
   departmentIcon?: React.ComponentType<{ className?: string }>;
 }
@@ -534,6 +539,7 @@ export function TaskRow({
   hideComments = false,
   showOccupancy = false,
   lockColumnWidths = false,
+  whenMode = 'date',
   departmentIcon: DeptIcon,
 }: TaskRowProps) {
   const timeInfo = formatTimeCol(item.scheduled_time);
@@ -573,7 +579,16 @@ export function TaskRow({
     >
       {/* Date/time column */}
       <div className="text-right pt-0.5 self-start">
-        {item.scheduled_date || timeInfo ? (
+        {whenMode === 'time' ? (
+          // Per-day section: the header names the date, so the column carries
+          // only the time (or stays empty).
+          timeInfo && (
+            <div className="text-[10px] font-medium text-neutral-400 dark:text-[#66645f] leading-none tracking-tight tabular-nums whitespace-nowrap pt-1">
+              {timeInfo.time}
+              {timeInfo.meridiem.toLowerCase()}
+            </div>
+          )
+        ) : item.scheduled_date || timeInfo ? (
           <>
             {shortDate && (
               <>
