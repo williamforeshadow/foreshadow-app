@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useEffect, useMemo, useState } from 'react';
 import type {
   FilterOption,
   SortKey,
@@ -9,7 +8,7 @@ import type {
   DateRange,
 } from '@/components/tasks/TaskFilterBar';
 import { CompactSearch } from '@/components/ui/compact-search';
-import { useEditableKeyboardOverlay } from '@/lib/useEditableKeyboardOverlay';
+import { TaskSheet, TaskOptionRow } from '@/components/tasks/detail/primitives/TaskSheet';
 
 // Mobile-native filter/sort UX for the global Tasks ledger.
 //
@@ -19,9 +18,12 @@ import { useEditableKeyboardOverlay } from '@/lib/useEditableKeyboardOverlay';
 //     produces a long horizontal scroll AND clips the chip popovers.
 //   - This component collapses everything into a single compact row
 //     (search + Filter button + Sort button + New task) and exposes the
-//     full-fidelity filter UI inside a portalled bottom sheet, so the
-//     sheet is never clipped by parent scroll containers and always
-//     stacks above the task list.
+//     full-fidelity filter UI inside bottom sheets.
+//
+// Both sheets are built on the standard TaskSheet drawer (the same one the
+// task detail's status/priority badge pickers use) so every picker surface
+// in the app shares one drawer language. The filter sheet is a two-level
+// drill-in: a root list of axes, each pushing into its option list.
 //
 // All state stays owned by the parent (same controlled-component pattern
 // as `TaskFilterBar`). The data shapes are 1:1 with `useTasks` outputs.
@@ -294,118 +296,29 @@ export function MobileTaskFilterBar(props: Props) {
 }
 
 // ============================================================================
-// Bottom sheet primitive
+// Filter sheet — two-level drill-in on the standard TaskSheet drawer.
+// Root view lists the wired axes; tapping one shows its option list with the
+// same TaskOptionRow language as the task detail's badge pickers.
 // ============================================================================
 
-function BottomSheet({
-  open,
-  onClose,
-  title,
-  headerRight,
-  children,
-  fullHeight = false,
-}: {
-  open: boolean;
-  onClose: () => void;
-  title: string;
-  headerRight?: React.ReactNode;
-  children: React.ReactNode;
-  fullHeight?: boolean;
-}) {
-  // SSR-safe portal target.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+type SetAxisId =
+  | 'status'
+  | 'assignee'
+  | 'department'
+  | 'bin'
+  | 'origin'
+  | 'priority'
+  | 'property';
+type AxisView = 'root' | SetAxisId | 'dateRange';
 
-  // Editable fields inside the sheet get the overlay-keyboard treatment;
-  // being bottom-anchored, the sheet also rises by the inset while typing.
-  const kb = useEditableKeyboardOverlay();
-
-  // Close on Escape.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
-  // Lock body scroll while open so the sheet captures all gestures.
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
-
-  if (!mounted || !open) return null;
-
-  return createPortal(
-    <div className="fixed inset-0 z-[80]">
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
-      />
-      {/* Sheet */}
-      <div
-        className={`absolute left-0 right-0 bg-white dark:bg-background rounded-t-2xl border-t border-neutral-200 dark:border-[rgba(255,255,255,0.08)] shadow-[0_-8px_32px_rgba(0,0,0,0.18)] flex flex-col`}
-        style={{
-          maxHeight: '88dvh',
-          height: fullHeight ? '88dvh' : 'auto',
-          bottom: kb.typing && kb.keyboardInset > 0 ? kb.keyboardInset : 0,
-        }}
-        {...kb.handlers}
-      >
-        {/* Grabber */}
-        <div className="flex justify-center pt-2 pb-1">
-          <div className="w-10 h-1 rounded-full bg-neutral-300 dark:bg-[rgba(255,255,255,0.15)]" />
-        </div>
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 pt-1 pb-3 border-b border-neutral-200 dark:border-[rgba(255,255,255,0.06)]">
-          <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-[#f0efed]">
-            {title}
-          </h2>
-          <div className="flex items-center gap-2">
-            {headerRight}
-            <button
-              onClick={onClose}
-              className="w-8 h-8 inline-flex items-center justify-center rounded-full text-neutral-500 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.05)] dark:hover:bg-[rgba(255,255,255,0.05)]"
-              aria-label="Close"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
-        </div>
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto overscroll-contain">
-          {children}
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
+interface SetAxis {
+  id: SetAxisId;
+  label: string;
+  options: FilterOption[];
+  selected: Set<string>;
+  onChange: (next: Set<string>) => void;
+  searchable?: boolean;
 }
-
-// ============================================================================
-// Filter sheet
-// ============================================================================
 
 interface FilterSheetProps {
   open: boolean;
@@ -446,152 +359,276 @@ interface FilterSheetProps {
 }
 
 function FilterSheet(props: FilterSheetProps) {
+  const [view, setView] = useState<AxisView>('root');
+
+  // Reset to the root list whenever the sheet closes, so reopening never
+  // lands mid-drill-in.
+  useEffect(() => {
+    if (!props.open) setView('root');
+  }, [props.open]);
+
+  const axes: SetAxis[] = useMemo(() => {
+    const out: SetAxis[] = [];
+    if (props.statusOptions && props.statusSelected && props.onStatusChange)
+      out.push({ id: 'status', label: 'Status', options: props.statusOptions, selected: props.statusSelected, onChange: props.onStatusChange });
+    if (props.assigneeOptions && props.assigneeSelected && props.onAssigneeChange)
+      out.push({ id: 'assignee', label: 'Assignee', options: props.assigneeOptions, selected: props.assigneeSelected, onChange: props.onAssigneeChange, searchable: true });
+    if (props.departmentOptions && props.departmentSelected && props.onDepartmentChange)
+      out.push({ id: 'department', label: 'Department', options: props.departmentOptions, selected: props.departmentSelected, onChange: props.onDepartmentChange });
+    if (props.binOptions && props.binSelected && props.onBinChange)
+      out.push({ id: 'bin', label: 'Bin', options: props.binOptions, selected: props.binSelected, onChange: props.onBinChange });
+    if (props.originOptions && props.originSelected && props.onOriginChange)
+      out.push({ id: 'origin', label: 'Origin', options: props.originOptions, selected: props.originSelected, onChange: props.onOriginChange });
+    if (props.priorityOptions && props.prioritySelected && props.onPriorityChange)
+      out.push({ id: 'priority', label: 'Priority', options: props.priorityOptions, selected: props.prioritySelected, onChange: props.onPriorityChange });
+    if (props.propertyOptions && props.propertySelected && props.onPropertyChange)
+      out.push({ id: 'property', label: 'Property', options: props.propertyOptions, selected: props.propertySelected, onChange: props.onPropertyChange, searchable: true });
+    return out;
+  }, [
+    props.statusOptions, props.statusSelected, props.onStatusChange,
+    props.assigneeOptions, props.assigneeSelected, props.onAssigneeChange,
+    props.departmentOptions, props.departmentSelected, props.onDepartmentChange,
+    props.binOptions, props.binSelected, props.onBinChange,
+    props.originOptions, props.originSelected, props.onOriginChange,
+    props.priorityOptions, props.prioritySelected, props.onPriorityChange,
+    props.propertyOptions, props.propertySelected, props.onPropertyChange,
+  ]);
+
+  const hasDateRange = !!props.scheduledDateRange && !!props.onScheduledDateRangeChange;
+  const activeAxis = view !== 'root' && view !== 'dateRange' ? axes.find((a) => a.id === view) : undefined;
+
+  const title =
+    view === 'root'
+      ? props.activeCount > 0
+        ? `Filters · ${props.activeCount}`
+        : 'Filters'
+      : view === 'dateRange'
+        ? 'Scheduled date'
+        : activeAxis?.label ?? 'Filters';
+
+  const axisSummary = (axis: SetAxis): string => {
+    if (axis.id === 'origin') {
+      return axis.selected.size === 1
+        ? axis.options.find((o) => axis.selected.has(o.value))?.label || ''
+        : '';
+    }
+    return summarizeSet(axis.selected, axis.options);
+  };
+
   return (
-    <BottomSheet
+    <TaskSheet
       open={props.open}
-      onClose={props.onClose}
-      title={
-        props.activeCount > 0
-          ? `Filters · ${props.activeCount}`
-          : 'Filters'
-      }
-      headerRight={
-        props.activeCount > 0 ? (
-          <button
-            onClick={props.onClearAll}
-            className="text-[12px] font-medium text-[var(--accent-3)] dark:text-[var(--accent-1)] uppercase tracking-[0.04em] px-2 py-1"
-          >
-            Clear all
-          </button>
-        ) : undefined
-      }
-      fullHeight
+      onOpenChange={(v) => {
+        if (!v) props.onClose();
+      }}
+      title={title}
     >
-      <div className="divide-y divide-neutral-200 dark:divide-[rgba(255,255,255,0.06)]">
-        {props.statusOptions && props.statusSelected && props.onStatusChange && (
-          <AccordionSection
-            label="Status"
-            summary={summarizeSet(props.statusSelected, props.statusOptions)}
-          >
-            <CheckboxList
-              options={props.statusOptions}
-              selected={props.statusSelected}
-              onChange={props.onStatusChange}
+      {view === 'root' ? (
+        <div className="pb-1">
+          {axes.map((axis) => (
+            <AxisRow
+              key={axis.id}
+              label={axis.label}
+              summary={axisSummary(axis)}
+              onOpen={() => setView(axis.id)}
             />
-          </AccordionSection>
-        )}
-
-        {props.assigneeOptions && props.assigneeSelected && props.onAssigneeChange && (
-          <AccordionSection
-            label="Assignee"
-            summary={summarizeSet(props.assigneeSelected, props.assigneeOptions)}
-          >
-            <CheckboxList
-              options={props.assigneeOptions}
-              selected={props.assigneeSelected}
-              onChange={props.onAssigneeChange}
-              searchable
+          ))}
+          {hasDateRange && (
+            <AxisRow
+              label="Scheduled date"
+              summary={formatRangeSummary(props.scheduledDateRange!)}
+              onOpen={() => setView('dateRange')}
             />
-          </AccordionSection>
-        )}
+          )}
+          {props.activeCount > 0 && (
+            <>
+              <div className="my-1.5 h-px" style={{ background: 'var(--task-line)' }} />
+              <button
+                type="button"
+                onClick={props.onClearAll}
+                className="flex w-full items-center rounded-lg px-2.5 text-left transition-colors min-h-[50px] active:bg-[var(--task-surface-2)] hover:bg-[var(--task-surface-2)]"
+              >
+                <span className="text-[15px]" style={{ color: 'var(--task-ink-3)' }}>
+                  Clear all filters
+                </span>
+              </button>
+            </>
+          )}
+        </div>
+      ) : view === 'dateRange' ? (
+        <div className="pb-1">
+          <BackRow onBack={() => setView('root')} />
+          <DateRangeFields
+            range={props.scheduledDateRange!}
+            onChange={props.onScheduledDateRangeChange!}
+          />
+        </div>
+      ) : activeAxis ? (
+        <AxisOptionList key={activeAxis.id} axis={activeAxis} onBack={() => setView('root')} />
+      ) : null}
+    </TaskSheet>
+  );
+}
 
-        {props.departmentOptions && props.departmentSelected && props.onDepartmentChange && (
-          <AccordionSection
-            label="Department"
-            summary={summarizeSet(
-              props.departmentSelected,
-              props.departmentOptions
-            )}
-          >
-            <CheckboxList
-              options={props.departmentOptions}
-              selected={props.departmentSelected}
-              onChange={props.onDepartmentChange}
-            />
-          </AccordionSection>
-        )}
+// A root-level row: axis label, current selection summary in accent, chevron.
+// Sized and surfaced identically to TaskOptionRow so both levels read as the
+// same drawer.
+function AxisRow({
+  label,
+  summary,
+  onOpen,
+}: {
+  label: string;
+  summary: string;
+  onOpen: () => void;
+}) {
+  const active = !!summary;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-full items-center gap-3 rounded-lg px-2.5 text-left transition-colors min-h-[50px] active:bg-[var(--task-surface-2)] hover:bg-[var(--task-surface-2)]"
+    >
+      <span
+        className="text-[15px] shrink-0"
+        style={{ color: active ? 'var(--task-ink-1)' : 'var(--task-ink-2)' }}
+      >
+        {label}
+      </span>
+      <span className="flex-1 min-w-0 text-right text-[13px] truncate text-[var(--accent-3)] dark:text-[var(--accent-1)]">
+        {summary}
+      </span>
+      <svg
+        className="w-4 h-4 shrink-0"
+        style={{ color: 'var(--task-ink-3)' }}
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+      </svg>
+    </button>
+  );
+}
 
-        {props.binOptions && props.binSelected && props.onBinChange && (
-          <AccordionSection
-            label="Bin"
-            summary={summarizeSet(props.binSelected, props.binOptions)}
-          >
-            <CheckboxList
-              options={props.binOptions}
-              selected={props.binSelected}
-              onChange={props.onBinChange}
-            />
-          </AccordionSection>
-        )}
+// The ‹ back affordance at the top of a drilled-in axis view.
+function BackRow({ onBack }: { onBack: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onBack}
+      className="flex items-center gap-1 px-1 pb-2 text-[13px] font-medium"
+      style={{ color: 'var(--task-ink-3)' }}
+    >
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+      </svg>
+      All filters
+    </button>
+  );
+}
 
-        {props.originOptions && props.originSelected && props.onOriginChange && (
-          <AccordionSection
-            label="Origin"
-            summary={
-              props.originSelected.size === 1
-                ? props.originOptions.find((o) =>
-                    props.originSelected!.has(o.value)
-                  )?.label || ''
-                : ''
-            }
-          >
-            <CheckboxList
-              options={props.originOptions}
-              selected={props.originSelected}
-              onChange={props.onOriginChange}
-            />
-          </AccordionSection>
-        )}
+// Second level: the axis's options as multi-select TaskOptionRows (tapping
+// toggles, the sheet stays open), with optional search and the Select all /
+// Clear shortcuts carried over from the old sheet.
+function AxisOptionList({ axis, onBack }: { axis: SetAxis; onBack: () => void }) {
+  const [query, setQuery] = useState('');
 
-        {props.priorityOptions && props.prioritySelected && props.onPriorityChange && (
-          <AccordionSection
-            label="Priority"
-            summary={summarizeSet(props.prioritySelected, props.priorityOptions)}
-          >
-            <CheckboxList
-              options={props.priorityOptions}
-              selected={props.prioritySelected}
-              onChange={props.onPriorityChange}
-            />
-          </AccordionSection>
-        )}
+  const filtered = useMemo(() => {
+    if (!axis.searchable || !query) return axis.options;
+    const q = query.toLowerCase();
+    return axis.options.filter((o) => o.label.toLowerCase().includes(q));
+  }, [axis.searchable, axis.options, query]);
 
-        {props.propertyOptions && props.propertySelected && props.onPropertyChange && (
-          <AccordionSection
-            label="Property"
-            summary={summarizeSet(props.propertySelected, props.propertyOptions)}
-          >
-            <CheckboxList
-              options={props.propertyOptions}
-              selected={props.propertySelected}
-              onChange={props.onPropertyChange}
-              searchable
-            />
-          </AccordionSection>
-        )}
+  const toggle = (value: string) => {
+    const next = new Set(axis.selected);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    axis.onChange(next);
+  };
 
-        {props.scheduledDateRange && props.onScheduledDateRangeChange && (
-          <AccordionSection
-            label="Scheduled date"
-            summary={formatRangeSummary(props.scheduledDateRange)}
-          >
-            <DateRangePicker
-              range={props.scheduledDateRange}
-              onChange={props.onScheduledDateRangeChange}
-            />
-          </AccordionSection>
-        )}
-      </div>
+  return (
+    <div className="pb-1">
+      <BackRow onBack={onBack} />
 
-      <div className="px-4 py-3">
-        <button
-          onClick={props.onClose}
-          className="w-full px-4 py-2.5 rounded-md bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] text-[13px] font-medium transition-colors"
-        >
-          Done
-        </button>
-      </div>
-    </BottomSheet>
+      {axis.searchable && (
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search…"
+          className="mb-2 w-full rounded-lg border bg-transparent px-3 py-2 text-[14px] focus:outline-none"
+          style={{
+            borderColor: 'var(--task-line)',
+            color: 'var(--task-ink-1)',
+          }}
+        />
+      )}
+
+      {(axis.selected.size > 0 || axis.selected.size < axis.options.length) && (
+        <div className="flex items-center gap-4 px-1 pb-1.5">
+          {axis.selected.size < axis.options.length && (
+            <button
+              type="button"
+              onClick={() => axis.onChange(new Set(axis.options.map((o) => o.value)))}
+              className="text-[11px] uppercase tracking-[0.06em] font-medium"
+              style={{ color: 'var(--task-ink-3)' }}
+            >
+              Select all
+            </button>
+          )}
+          {axis.selected.size > 0 && (
+            <button
+              type="button"
+              onClick={() => axis.onChange(new Set())}
+              className="text-[11px] uppercase tracking-[0.06em] font-medium"
+              style={{ color: 'var(--task-ink-3)' }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+
+      {filtered.length === 0 ? (
+        <p className="px-2.5 py-3 text-[13px]" style={{ color: 'var(--task-ink-3)' }}>
+          No options
+        </p>
+      ) : (
+        filtered.map((opt, idx) => {
+          const prevGroup = idx > 0 ? filtered[idx - 1].group : undefined;
+          const showGroupHeader = !!opt.group && opt.group !== prevGroup;
+          return (
+            <React.Fragment key={opt.value}>
+              {showGroupHeader && (
+                <div
+                  className="mt-1.5 border-t px-2.5 pt-3 pb-1 font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
+                  style={{ borderColor: 'var(--task-line)', color: 'var(--task-ink-3)' }}
+                >
+                  {opt.group}
+                </div>
+              )}
+              <TaskOptionRow
+                selected={axis.selected.has(opt.value)}
+                onSelect={() => toggle(opt.value)}
+              >
+                <span className="flex w-full items-center justify-between gap-3">
+                  <span className="truncate">{opt.label}</span>
+                  {opt.count != null && (
+                    <span
+                      className="shrink-0 text-[12px] tabular-nums"
+                      style={{ color: 'var(--task-ink-3)' }}
+                    >
+                      {opt.count}
+                    </span>
+                  )}
+                </span>
+              </TaskOptionRow>
+            </React.Fragment>
+          );
+        })
+      )}
+    </div>
   );
 }
 
@@ -635,198 +672,8 @@ function formatRangeSummary(range: DateRange): string {
   return '';
 }
 
-// ============================================================================
-// Accordion section
-// ============================================================================
-
-function AccordionSection({
-  label,
-  summary,
-  defaultOpen = false,
-  children,
-}: {
-  label: string;
-  summary?: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  const active = !!summary;
-
-  return (
-    <div>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-3.5 text-left"
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[14px] font-medium text-neutral-800 dark:text-[#f0efed]">
-            {label}
-          </span>
-          {active && (
-            <span className="text-[11px] tabular-nums text-[var(--accent-3)] dark:text-[var(--accent-1)] font-medium truncate max-w-[180px]">
-              · {summary}
-            </span>
-          )}
-        </div>
-        <svg
-          className={`w-4 h-4 text-neutral-400 dark:text-[#66645f] transition-transform shrink-0 ${
-            open ? 'rotate-180' : ''
-          }`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 9l-7 7-7-7"
-          />
-        </svg>
-      </button>
-      {open && <div className="px-4 pb-4">{children}</div>}
-    </div>
-  );
-}
-
-// ============================================================================
-// Checkbox list (with optional search)
-// ============================================================================
-
-function CheckboxList({
-  options,
-  selected,
-  onChange,
-  searchable = false,
-}: {
-  options: FilterOption[];
-  selected: Set<string>;
-  onChange: (next: Set<string>) => void;
-  searchable?: boolean;
-}) {
-  const [query, setQuery] = useState('');
-
-  const filtered = useMemo(() => {
-    if (!searchable || !query) return options;
-    const q = query.toLowerCase();
-    return options.filter((o) => o.label.toLowerCase().includes(q));
-  }, [searchable, query, options]);
-
-  const toggle = (value: string) => {
-    const next = new Set(selected);
-    if (next.has(value)) next.delete(value);
-    else next.add(value);
-    onChange(next);
-  };
-
-  return (
-    <div className="flex flex-col gap-1">
-      {searchable && (
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search..."
-          className="w-full px-3 py-2 mb-1 text-[13px] bg-transparent border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] rounded-md focus:outline-none focus:border-[var(--accent-3)] dark:focus:border-[var(--accent-1)] text-neutral-800 dark:text-[#f0efed] placeholder:text-neutral-400 dark:placeholder:text-[#66645f]"
-        />
-      )}
-      {/* Action row — Select All / Clear. Same shortcut as desktop: gives
-          the chip a one-click "every option" action (e.g. for the bin chip
-          this replaces the old "All bins" sentinel) and a one-click clear.
-          "All selected" and "none selected" are functionally the same in
-          our match logic, but Select All is the obvious gesture for "all". */}
-      {(options.length > 0 && (selected.size > 0 || selected.size < options.length)) && (
-        <div className="flex items-center gap-3 mb-1">
-          {selected.size < options.length && (
-            <button
-              onClick={() => onChange(new Set(options.map((o) => o.value)))}
-              className="text-[11px] uppercase tracking-[0.04em] font-medium text-neutral-500 dark:text-[#a09e9a]"
-            >
-              Select all
-            </button>
-          )}
-          {selected.size > 0 && (
-            <button
-              onClick={() => onChange(new Set())}
-              className="text-[11px] uppercase tracking-[0.04em] font-medium text-neutral-500 dark:text-[#a09e9a]"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      )}
-      <div className="max-h-[40vh] overflow-y-auto">
-        {filtered.length === 0 ? (
-          <p className="text-[12px] text-neutral-400 dark:text-[#66645f] py-2">
-            No options
-          </p>
-        ) : (
-          filtered.map((opt, idx) => {
-            const on = selected.has(opt.value);
-            // Mirror the desktop MultiSelect: insert a thin section header
-            // whenever this option's `group` differs from the previous option's
-            // (e.g. "SUB-BINS" header above the sub-bin entries in the bin
-            // filter, with the unsectioned entries staying ungrouped at top).
-            const prevGroup = idx > 0 ? filtered[idx - 1].group : undefined;
-            const showGroupHeader = !!opt.group && opt.group !== prevGroup;
-            return (
-              <div key={opt.value}>
-                {showGroupHeader && (
-                  <div className="px-1 pt-3 pb-1 mt-1 border-t border-neutral-100 dark:border-[rgba(255,255,255,0.06)]">
-                    <p className="text-[10px] font-semibold text-neutral-400 dark:text-[#66645f] uppercase tracking-[0.06em]">
-                      {opt.group}
-                    </p>
-                  </div>
-                )}
-                <button
-                  onClick={() => toggle(opt.value)}
-                  className="w-full flex items-center gap-3 px-1 py-2.5 text-left text-[13px] text-neutral-700 dark:text-[#f0efed] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] rounded-md"
-                >
-                  <span
-                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                      on
-                        ? 'bg-[var(--accent-3)] dark:bg-[var(--accent-2)] border-[var(--accent-3)] dark:border-[var(--accent-2)]'
-                        : 'border-neutral-300 dark:border-[rgba(255,255,255,0.15)]'
-                    }`}
-                  >
-                    {on && (
-                      <svg
-                        className="w-3 h-3 text-white dark:text-[#1a1a1a]"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={3}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                    )}
-                  </span>
-                  <span className="flex-1 truncate">{opt.label}</span>
-                  {opt.count != null && (
-                    <span className="text-[11px] tabular-nums text-neutral-400 dark:text-[#66645f]">
-                      {opt.count}
-                    </span>
-                  )}
-                </button>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// Date range picker
-// ============================================================================
-
-function DateRangePicker({
+// Scheduled-date drill-in: two date fields + clear, in task-panel ink.
+function DateRangeFields({
   range,
   onChange,
 }: {
@@ -834,33 +681,43 @@ function DateRangePicker({
   onChange: (next: DateRange) => void;
 }) {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 px-1">
       <label className="flex items-center gap-3">
-        <span className="text-[12px] uppercase tracking-[0.04em] text-neutral-500 dark:text-[#66645f] w-12">
+        <span
+          className="w-12 font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
+          style={{ color: 'var(--task-ink-3)' }}
+        >
           From
         </span>
         <input
           type="date"
           value={range.from || ''}
           onChange={(e) => onChange({ ...range, from: e.target.value || null })}
-          className="flex-1 px-3 py-2 text-[13px] bg-transparent border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] rounded-md focus:outline-none focus:border-[var(--accent-3)] dark:focus:border-[var(--accent-1)] text-neutral-800 dark:text-[#f0efed]"
+          className="flex-1 rounded-lg border bg-transparent px-3 py-2 text-[14px] focus:outline-none"
+          style={{ borderColor: 'var(--task-line)', color: 'var(--task-ink-1)' }}
         />
       </label>
       <label className="flex items-center gap-3">
-        <span className="text-[12px] uppercase tracking-[0.04em] text-neutral-500 dark:text-[#66645f] w-12">
+        <span
+          className="w-12 font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
+          style={{ color: 'var(--task-ink-3)' }}
+        >
           To
         </span>
         <input
           type="date"
           value={range.to || ''}
           onChange={(e) => onChange({ ...range, to: e.target.value || null })}
-          className="flex-1 px-3 py-2 text-[13px] bg-transparent border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] rounded-md focus:outline-none focus:border-[var(--accent-3)] dark:focus:border-[var(--accent-1)] text-neutral-800 dark:text-[#f0efed]"
+          className="flex-1 rounded-lg border bg-transparent px-3 py-2 text-[14px] focus:outline-none"
+          style={{ borderColor: 'var(--task-line)', color: 'var(--task-ink-1)' }}
         />
       </label>
       {(range.from || range.to) && (
         <button
+          type="button"
           onClick={() => onChange({ from: null, to: null })}
-          className="self-start text-[11px] uppercase tracking-[0.04em] font-medium text-neutral-500 dark:text-[#a09e9a]"
+          className="self-start px-0.5 py-1 text-[11px] uppercase tracking-[0.06em] font-medium"
+          style={{ color: 'var(--task-ink-3)' }}
         >
           Clear range
         </button>
@@ -870,7 +727,8 @@ function DateRangePicker({
 }
 
 // ============================================================================
-// Sort sheet
+// Sort sheet — the standard drawer: sort keys as option rows, then a small
+// direction section. Every tap applies and closes, like a badge picker.
 // ============================================================================
 
 function SortSheet({
@@ -888,62 +746,53 @@ function SortSheet({
 }) {
   const keys = Object.keys(SORT_KEY_LABELS) as SortKey[];
   return (
-    <BottomSheet open={open} onClose={onClose} title="Sort">
-      <div className="px-2 py-2">
-        {keys.map((k) => {
-          const isActive = sortKey === k;
-          return (
-            <div key={k} className="flex items-stretch gap-1">
-              <button
-                onClick={() => {
-                  onChange(k, sortDir);
-                  onClose();
-                }}
-                className={`flex-1 flex items-center gap-3 px-3 py-3 text-left text-[14px] rounded-md ${
-                  isActive
-                    ? 'text-[var(--accent-3)] dark:text-[var(--accent-1)] font-medium bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)]'
-                    : 'text-neutral-700 dark:text-[#f0efed]'
-                }`}
-              >
-                <span
-                  className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
-                    isActive
-                      ? 'border-[var(--accent-3)] dark:border-[var(--accent-1)]'
-                      : 'border-neutral-300 dark:border-[rgba(255,255,255,0.15)]'
-                  }`}
-                >
-                  {isActive && (
-                    <span className="w-2 h-2 rounded-full bg-[var(--accent-3)] dark:bg-[var(--accent-1)]" />
-                  )}
-                </span>
-                <span>{SORT_KEY_LABELS[k]}</span>
-              </button>
-              <button
-                onClick={() => {
-                  onChange(
-                    k,
-                    isActive && sortDir === 'asc' ? 'desc' : 'asc'
-                  );
-                  onClose();
-                }}
-                className={`px-3 text-[14px] rounded-md ${
-                  isActive
-                    ? 'text-[var(--accent-3)] dark:text-[var(--accent-1)]'
-                    : 'text-neutral-400 dark:text-[#66645f]'
-                }`}
-                aria-label="Toggle direction"
-                title={
-                  isActive
-                    ? `Currently ${sortDir === 'asc' ? 'ascending' : 'descending'}`
-                    : 'Set ascending'
-                }
-              >
-                {isActive ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
-              </button>
-            </div>
-          );
-        })}
+    <TaskSheet
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) onClose();
+      }}
+      title="Sort"
+    >
+      <div className="pb-1">
+        {keys.map((k) => (
+          <TaskOptionRow
+            key={k}
+            selected={k === sortKey}
+            onSelect={() => {
+              onChange(k, sortDir);
+              onClose();
+            }}
+          >
+            {SORT_KEY_LABELS[k]}
+          </TaskOptionRow>
+        ))}
+
+        <div className="my-1.5 h-px" style={{ background: 'var(--task-line)' }} />
+        <div
+          className="px-2.5 pt-2 pb-1 font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
+          style={{ color: 'var(--task-ink-3)' }}
+        >
+          Direction
+        </div>
+        <TaskOptionRow
+          selected={sortDir === 'asc'}
+          onSelect={() => {
+            onChange(sortKey, 'asc');
+            onClose();
+          }}
+        >
+          Ascending
+        </TaskOptionRow>
+        <TaskOptionRow
+          selected={sortDir === 'desc'}
+          onSelect={() => {
+            onChange(sortKey, 'desc');
+            onClose();
+          }}
+        >
+          Descending
+        </TaskOptionRow>
       </div>
-    </BottomSheet>
+    </TaskSheet>
   );
 }
