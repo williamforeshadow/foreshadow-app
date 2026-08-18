@@ -193,7 +193,10 @@ function ShellBody({
       <div className="flex-shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
         {/* Mobile top bar — back chevron with the property name BESIDE it
             (not below), matching every other drill-in page. */}
-        <div className="sm:hidden flex items-center gap-1 min-h-11 px-2 pt-1">
+        <div
+          className="sm:hidden flex items-center gap-1 min-h-11 px-2"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.25rem)' }}
+        >
           <Link
             href="/properties"
             onClick={(e) => {

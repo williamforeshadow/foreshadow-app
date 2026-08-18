@@ -327,12 +327,16 @@ export default function ConversationPage() {
       : null;
 
     return (
-      <div className="h-dvh bg-white dark:bg-card overflow-hidden flex flex-col safe-area-top">
+      <div className="h-dvh bg-white dark:bg-card overflow-hidden flex flex-col">
         {/* Standard page header — back chevron + guest name on one line,
             property · stay dates as the uppercase fine print beneath, all in
-            the shared gradient block. */}
+            the shared gradient block. Safe-area padding lives INSIDE the
+            block so the gradient runs under the notch. */}
         <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,var(--header-scrim),transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
-          <div className="px-2 pt-1 flex items-center gap-1 min-h-11">
+          <div
+            className="px-2 flex items-center gap-1 min-h-11"
+            style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.25rem)' }}
+          >
             <Link
               href="/messages"
               onClick={(e) => {

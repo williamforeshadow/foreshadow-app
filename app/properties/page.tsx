@@ -208,11 +208,15 @@ export default function PropertiesPage() {
   return (
     <div className="flex h-full overflow-hidden">
       <div className="w-full flex flex-col min-w-0">
-        {/* Mobile: standard page header — back arrow + title, fine print,
-            toolbar — in the shared gradient block. (The route layout renders
-            no top bar of its own.) */}
+        {/* Mobile: standard page header — back arrow + title in the shared
+            gradient block. Safe-area padding lives INSIDE the block so the
+            gradient runs under the notch instead of leaving white above.
+            Sync / Add Property are desktop-only affordances. */}
         <div className="sm:hidden flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,var(--header-scrim),transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
-          <div className="px-[22px] pt-2 pb-1">
+          <div
+            className="px-[22px] pb-2"
+            style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
+          >
             <div className="flex items-center gap-2 min-w-0">
               <button
                 onClick={() => goBack('/menu')}
@@ -227,14 +231,6 @@ export default function PropertiesPage() {
                 Properties
               </h1>
             </div>
-          </div>
-          <div className="px-[22px] pb-2">
-            <div className="flex items-center gap-3 text-[11px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
-              <span>Every property in the workspace</span>
-            </div>
-          </div>
-          <div className="px-[22px] pb-3 flex items-center gap-2">
-            {headerActions}
           </div>
         </div>
 

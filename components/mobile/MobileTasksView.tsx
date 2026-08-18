@@ -224,13 +224,6 @@ function MobileTasksViewContent() {
         </div>
       </div>
 
-      {/* Subtitle row — supporting line under the title. */}
-      <div className="px-[22px] pb-2">
-        <div className="flex items-center gap-3 text-[11px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
-          <span>Every task in the workspace</span>
-        </div>
-      </div>
-
       {/* Mobile-native filter bar: compact row + portalled bottom sheets.
           Avoids cramming 8+ desktop chips into a horizontally-scrolling row,
           and renders its sheets via portal so they can't be clipped by the
